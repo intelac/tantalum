@@ -1,0 +1,288 @@
+# Requirements Document
+
+## Introduction
+
+`core-skeleton` 是 Tantalum 的第一个 spec，从零建立底座的骨架，并走通整条环：
+
+输入队列 → 写 journal → `Kernel.step` → 输出队列 → Handler → 结果事件回到输入队列。
+
+完成标准是一次真实提问能端到端跑完十圈（见需求 8），且崩溃后状态可从 journal 重建，每圈发给模型的 prompt 可完整还原。
+
+依据：
+
+- `QAGENT_DESIGN_BRIEF.md`（下称“简报”）
+- 三张设计图：架构图、等待状态图、十圈时间轴
+
+项目没有既有代码，因此简报阶段 0（差距清单）取消，阶段 1 的“只移动代码”改为按三层直接新建。项目定名 Tantalum（Yi 决定），代码标识一律用 `tantalum`；简报中的 `Tantalum` 指同一项目。
+
+### 范围
+
+| 在范围内 | 不在范围内（所属 spec） |
+|---|---|
+| value / kernel / shell 三层与 ArchUnit 守护 | 所有权树、自下而上取消、子 agent（`durable-semantics`） |
+| 三状态内核、可注册转移表 | 工具 replay 策略、`interrupted` 结果、断点续跑（`durable-semantics`） |
+| 五个内核钩子、处理器钩子分离 | 睡眠入存储、park、journal 快照（`durable-semantics`） |
+| 事件先落盘、纯函数回放、重启后重建状态 | Document、完整 Inbox、sections、wraps、激活（`plugin-model`） |
+| Input / Output 两个 Disruptor 与背压规则 | Compaction、两级持久化、遥测（`context-and-ops`） |
+| 五个 Handler、Web 接口、SSE、一个真实模型接入 | 真实身份认证、COBOL 垂直验证（`cobol-vertical` 或之后） |
+| 命令 ID、requestId 去重、事件版本字段 | 跨进程与水平扩展（简报已明确不做） |
+| `steer` 与 `follow-up` 两种提交方式 | `write`、`reject`、撤回排队的提交（`plugin-model`） |
+| 最小前端控制台（需求 11） | 完整产品 UI、审批界面 |
+| 为子 agent、压缩预留字段和边界（D8） | Memory 插件（`plugin-model`） |
+
+### 待批准的架构决定
+
+简报要求架构级问题由 Yi 决定。下列各项是推荐方案，需求按此书写。批准本文档即批准这些决定；如有不同意见，请在 dashboard 上按编号批注。
+
+| # | 问题 | 推荐决定 | 理由 |
+|---|---|---|---|
+| D1 | I2 说“先落盘”，简报 §2.5 却写“调 step、写 journal” | 输入事件 durable 写入 journal 后才调 `Kernel.step`；Decision 不单独落盘，回放时重新计算 | 与架构图一致（输入队列“先写盘”）；单一事实来源 |
+| D2 | 简报 §4.1 假设每个运行只有一条在途命令，但工具是一批并行 | 每个工具一条命令，每个运行最多 `maxParallelTools` 条在途；输出队列容量 ≥ `maxActiveRuns × maxParallelTools`；超出的工具留在状态里，等有空位再发。工具默认独占，声明并行安全才并行（与 DeepSeek Harness 相同） | 容量上界仍然成立，且每个工具有独立 ID，兼容后续的 replay 策略和所有权树 |
+| D3 | 钩子只返回 `Allow | Stop | NeedWork`，但变换类钩子要带数据 | `Allow` 携带可选的不可变数据变更（提示词片段、工具定义）；流程改变只能通过 `Stop` 或 `NeedWork` | 保留三种结果，不新增流程出口 |
+| D4 | 钩子抛异常时“上报并跳过”会让强制插件放行 | `mandatory` 钩子抛异常按 `Stop` 处理（fail-closed）；可选钩子跳过并上报；`beforeToolCall` 抛异常一律拦截该调用；上报以事实形式写入 Decision | 额度和安全类检查不能因为出错而失效；保持内核纯净 |
+| D5 | 简报 §11.2：钩子集合 | 本 spec 实现状态图上的五个：`beforeModelCall`、`beforeToolCall`、`onFailure`、`beforeRunEnd`、`onWorkResult`；其余候选位置留到 1.0 前决定 | 比简报多出的 `onWorkResult` 来自状态图 |
+| D6 | 简报 §11.1：Disruptor 还是普通队列 | 保留 Disruptor：Input Disruptor → cleanroom → Output Disruptor，一律用非阻塞 `tryPublishEvent`（Yi 已决定） | 结构与架构图一致，三段边界清晰，框架成熟（见 `tech.md` 决策 5） |
+| D7 | 简报 §3.2 的转移表与状态图不一致 | 以状态图为行为基线（见需求 2） | 状态图更完整，简报的表标注为“供映射” |
+| D8 | 子 agent、压缩、memory 不在本 spec 实现，但事件一旦写入就不能改语义 | 现在只预留：运行带 `principal` 和 `owner`；子运行计入 `maxActiveRuns`，超限拒绝而不排队；`ModelFailed` 增加 `context_overflow`，`onFailure` 可返回 `NeedWork`；`ModelReplied` 记录 token 用量和实际模型；prompt 由状态投影。memory 放入 `plugin-model`，优先通过工具接入 | 这些字段和边界以后补会影响已写入的 journal 或内核；功能本身留给后续 spec（Yi 已同意预留） |
+
+## Alignment with Product Vision
+
+技术选型见 `.spec-workflow/steering/tech.md`。产品目标以简报为准，这里对齐简报 §1 的四个承诺：
+
+| 承诺 | 本 spec 兑现到什么程度 |
+|---|---|
+| 运行跨越进程生命周期 | 部分：重启后状态完整重建，未完成运行不会被静默重跑；续跑语义由 `durable-semantics` 提供 |
+| 一个进程服务多用户 | 完整：入口限额、事件和进度按用户隔离、单个运行失败不影响其他运行 |
+| 用 journal 精确重放 | 完整：可还原最终状态和每圈 prompt |
+| 插件搞不坏内核 | 完整：分层约束、纯钩子、插件异常隔离 |
+
+## Requirements
+
+### Requirement 1：三层结构与分层守护
+
+**User Story:** 作为底座维护者，我希望分层依赖由测试强制守住，以便内核的纯净不依赖人工自律。
+
+#### Acceptance Criteria
+
+1. WHEN CI 运行 THEN ArchUnit 测试 SHALL 验证依赖方向为 `value ← kernel ← shell`，任何反向引用都使测试失败。
+2. IF `kernel` 依赖 `java.io`、`java.net`、`java.sql`、`java.util.concurrent`、`java.time.Clock`、框架类型，或调用 `Instant.now()` / `System.currentTimeMillis()` THEN 守护测试 SHALL 失败。
+3. IF `value` 中出现 record、interface、enum 以外的类型 THEN 守护测试 SHALL 失败。
+4. WHEN 运行 `value` 和 `kernel` 的测试 THEN 测试 SHALL 不使用 mock、不启动线程。
+5. WHEN 处理器侧钩子接口被定义 THEN 它 SHALL 位于 `shell`，与 `kernel` 中的内核钩子接口物理隔离。
+
+### Requirement 2：纯函数内核与可注册转移表
+
+**User Story:** 作为流程插件作者，我希望通过注册表行扩展流程，以便不修改内核也能改变运行走法。
+
+#### Acceptance Criteria
+
+1. WHEN 调用 `Kernel.step(state, event)` THEN 系统 SHALL 只返回 `Decision(newState, commands, facts)`，相同输入总是得到相同输出。
+2. WHEN 运行处于等待中 THEN 状态 SHALL 表示为 `Awaiting(cmdIds, resumeAt)`；内核固定状态只有 `Deciding`、`Awaiting`、`Ended`，`resumeAt` 是已注册的步骤名。
+3. WHEN 事件到达 THEN 内核 SHALL 用 `(stateName, eventType)` 查注册表决定处理函数，不使用封闭枚举或 switch。
+4. IF 注册的 `(stateName, eventType)` 已存在 THEN 注册 SHALL 失败并报错，内置行同样不可覆盖。
+5. WHEN 内置转移表注册完成 THEN 它 SHALL 覆盖下表的全部行为：
+
+| 当前 | 事件 / 条件 | 经过的钩子 | 下一状态 |
+|---|---|---|---|
+| 新运行 | `UserPrompt` | — | `AwaitingContext` |
+| `AwaitingContext` | `ContextAssembled` | `beforeModelCall` | `AwaitingModel` |
+| `AwaitingModel` | `ModelReplied`，有 `tool_use` | `beforeToolCall`（每个工具） | `AwaitingTools` |
+| `AwaitingModel` | `ModelReplied`，无 `tool_use`，有待处理的 `steer` | `beforeModelCall` | `AwaitingModel` |
+| `AwaitingModel` | `ModelReplied`，无 `tool_use`，无 `steer` | `beforeRunEnd` 返回 `Allow` | `Ended(Completed)` |
+| `AwaitingModel` | `ModelReplied`，无 `tool_use`，无 `steer` | `beforeRunEnd` 返回 `NeedWork` | `AwaitingWork` |
+| `AwaitingTools` | 本批工具全部有结果 | `beforeModelCall` | `AwaitingModel` |
+| `AwaitingModel` | `ModelFailed`，可重试 | `onFailure` | `AwaitingRetry` |
+| `AwaitingModel` | `ModelFailed`，`onFailure` 返回 `NeedWork` | `onFailure` | `AwaitingWork` |
+| `AwaitingModel` | `ModelFailed`，不可重试或已重试 3 次且钩子未返回 `NeedWork`，或钩子返回 `Stop` | `onFailure` | `Ended(Failed)` |
+| `AwaitingRetry` | `TimerFired` | `beforeModelCall` | `AwaitingModel` |
+| `AwaitingWork` | `WorkDone`，需要继续 | `onWorkResult` | `AwaitingModel` |
+| `AwaitingWork` | `WorkDone`，不需要继续 | `onWorkResult`，然后回到 `beforeRunEnd` | `Ended(Completed)` 或再次 `AwaitingWork` |
+| 任意等待状态 | `Cancel` | — | `Ended(Cancelled)` |
+| 任意调用模型前 | `beforeModelCall` 返回 `Stop` | — | `Ended(Stopped)` |
+| 任意调用模型前 | `beforeModelCall` 返回 `NeedWork` | — | `AwaitingWork` |
+| `Ended` | 同一会话有排队的 `follow-up` | — | 新运行的 `AwaitingContext` |
+
+6. WHEN 结果事件的 `cmdId` 不属于当前等待集合（包括运行已结束）THEN 内核 SHALL 不改变运行状态，该事件仍保留在 journal 中。
+   - 例外是工具结果配对：IF 运行在工具有结果之前结束 THEN 内核 SHALL 为每个没有结果的工具调用生成错误结果，使后续 prompt 中的调用与结果一一配对。从未发出的调用使用 `ABORTED_BEFORE_DISPATCH`；已发出但没有结果的调用使用 `TOOL_OUTCOME_UNKNOWN`，文本提示模型只能重试只读或幂等操作，否则先核验外部状态或询问用户。此后才到达的实际结果按本条处理，不再改变历史。
+7. IF step 处理函数抛出异常 THEN 系统 SHALL 只让该运行进入 `Ended(Failed)`，其他运行继续处理。
+
+### Requirement 3：事件先落盘与回放
+
+**User Story:** 作为排障人员，我希望拿 journal 就能重建状态和每圈 prompt，以便精确还原事故现场。
+
+#### Acceptance Criteria
+
+1. WHEN 事件进入 Input Disruptor THEN journal 消费者 SHALL 先把它 durable 写入，cleanroom 消费者依赖前者的进度，之后才调用 `Kernel.step`，并按写入顺序逐个处理。
+2. WHEN 时间信息需要进入内核 THEN shell SHALL 在写入 journal 前把时间戳放进事件，内核不自行取时间。
+3. WHEN `Replay` 处理同一 journal THEN 它 SHALL 作为不启动线程、不执行 I/O 的纯函数得出与原运行相同的状态树。
+4. WHEN 回放某个运行 THEN 系统 SHALL 能还原该运行每一圈发给模型的完整 prompt（system prompt、工具列表、消息）。
+   - 每圈的消息 SHALL 由状态中的消息视图投影得出，而不是直接取全部历史事件。本 spec 不做压缩，视图等于全部消息；后续压缩只改变视图，不改写已有事件。
+5. WHEN 回放时重新算出命令 THEN 系统 SHALL 不执行这些命令，不产生外部副作用。
+6. WHEN 事件写入 journal THEN 它 SHALL 带事件类型和 schema 版本；已写入的类型不删除、不改变语义，新语义使用新类型。
+7. IF 回放遇到未注册的事件类型或版本，或 journal 除文件末尾未完成的写入外存在损坏 THEN 系统 SHALL 拒绝启动并指出位置，不跳过事件。
+8. IF journal 写入失败 THEN 系统 SHALL 停止接受事件、不再调用内核，并把进程置为需要重新打开的状态。
+
+### Requirement 4：重启后的状态
+
+**User Story:** 作为运维人员，我希望重启不丢状态、也不重复执行副作用，以便安全地重启进程。
+
+#### Acceptance Criteria
+
+1. WHEN 进程启动 THEN 系统 SHALL 从 journal 重建全部状态后才开放 Web 接口。
+2. WHEN 重建后存在未结束的运行 THEN 系统 SHALL 将其保持在原等待状态并标记为“待恢复”，不重新发命令，且接口可查询；这类运行可以取消。
+3. WHEN 进程启动 THEN 系统 SHALL 对存储取得独占锁；IF 已有进程持有该锁 THEN 启动 SHALL 失败。
+4. WHEN 第 K 圈杀进程后重启 THEN 测试 SHALL 验证重建状态与 journal 中最后一个已落盘事件一致。
+
+### Requirement 5：环上无阻塞
+
+**User Story:** 作为底座维护者，我希望环上任何一段都不会阻塞，以便内核和 Handler 之间不可能死锁。
+
+#### Acceptance Criteria
+
+1. WHEN cleanroom 写 Output Disruptor 或 Handler 写回 Input Disruptor THEN 系统 SHALL 使用非阻塞 `tryPublishEvent`。
+2. IF 内部路径的 `tryPublishEvent` 失败 THEN 系统 SHALL 视为不变量被破坏，记录错误并报警，不等待；受影响的运行进入 `Ended(Failed)`。
+3. WHEN 系统配置生效 THEN Output Disruptor 容量 SHALL 为 2 的幂且 ≥ `maxActiveRuns × maxParallelTools`，Input Disruptor 容量 SHALL 为 2 的幂且足以同时容纳全部内部结果和外部事件限额，配置不满足时启动失败。
+   - Output Disruptor 的消费者 SHALL 只做分发：Handler 在虚拟线程上执行，慢 Handler 不占用消费者线程。
+4. WHEN 模型一次要求多个工具 THEN 内核 SHALL 按模型顺序调度：连续的并行安全调用组成一组，任一时刻在途数不超过 `maxParallelTools`（默认 10）；其他调用独占执行并构成顺序屏障。全部结果按模型请求的顺序返回给模型。
+   - 工具通过纯函数 `isConcurrencySafe(args)` 声明并行安全。未声明、参数无效、抛异常或返回非 `true` 时，一律按独占处理。
+5. WHEN 输入事件到达 THEN 内部结果和外部用户事件 SHALL 进入同一个 Input Disruptor 以保证全局顺序；外部事件在入口按限额接纳，并为内部结果预留容量，内部结果不因外部负载被拒绝。
+6. IF 某用户的在途事件数超过限额，或活跃运行数已达 `maxActiveRuns` 且提交需要新运行 THEN Web 接口 SHALL 返回 429，不排队，不影响其他用户。
+   - 429 只用于外部提交。以后的子运行同样计入 `maxActiveRuns`，因此第 3 条的 Output Disruptor 容量公式不变；超限时创建 SHALL 立即失败并作为错误结果交给模型，不排队，避免父运行等待自己占用的名额。每棵运行树的子运行上限、深度上限，以及创建子运行额外占用的 Input Disruptor 容量，由 `durable-semantics` 定义。
+7. WHEN 运行背压测试 THEN 测试 SHALL 覆盖 Output Disruptor 满、Input Disruptor 满、外部超限三种情况。
+
+### Requirement 6：内核钩子
+
+**User Story:** 作为插件作者，我希望在固定位置回答问题，且无法在钩子里做 I/O，以便插件搞不坏内核。
+
+#### Acceptance Criteria
+
+1. WHEN 内核到达钩子位置 THEN 它 SHALL 按注册顺序遍历钩子，签名为 `(state, hookContext) -> Allow | Stop(reason) | NeedWork(command)`，只含 value 类型，无异步类型、网络句柄或时钟。
+2. WHEN 钩子返回 `Allow` THEN 它 SHALL 可携带不可变的数据变更（提示词片段、工具定义），流程继续。
+3. WHEN 钩子返回 `Stop` THEN 内核 SHALL 不再调用后续钩子，并按该位置的语义结束运行或拦截工具；被 `beforeToolCall` 拦截的工具以错误结果返回给模型。
+4. WHEN 钩子返回 `NeedWork` THEN 内核 SHALL 发出命令并进入 `AwaitingWork`；结果事件回来后由 `onWorkResult` 决定去向。
+5. IF `mandatory` 钩子抛异常 THEN 内核 SHALL 按 `Stop` 处理。IF 可选钩子抛异常 THEN 内核 SHALL 跳过并上报，但 `beforeToolCall` 抛异常时一律拦截该调用。上报 SHALL 通过 Decision 中的事实传出。
+6. IF 一个钩子需要累计数据（如每日用量）THEN 该数据 SHALL 从事件投影到状态，钩子只读状态；时间取自事件。
+7. WHEN 工具执行完成 THEN `afterToolExecution` SHALL 作为处理器钩子在 ToolHandler 内运行，可以做 I/O，只能修改数据，不能改变流程。
+8. WHEN 验证钩子模型 THEN 系统 SHALL 提供三个示例插件：每日额度（`beforeModelCall` + `Stop`）、只读策略（`beforeToolCall` + `Stop`）、引用核对（`beforeRunEnd` + `NeedWork`）；另提供输出截断（`afterToolExecution`）。全部实现不修改 `kernel` 目录。
+
+### Requirement 7：命令与幂等
+
+**User Story:** 作为 API 调用方，我希望重复提交不会造成重复执行，以便网络重试是安全的。
+
+#### Acceptance Criteria
+
+1. WHEN 内核发出命令 THEN 每条命令 SHALL 带唯一 `cmdId`，该 ID 由事件序号等确定性输入算出，回放时得到相同的值。
+2. WHEN 结果事件产生 THEN 它 SHALL 携带对应的 `cmdId`。
+3. WHEN 同一用户用已存在的 `requestId` 提交 THEN 系统 SHALL 返回已有的提交，不新建运行，重启后同样成立。
+4. IF 提交缺少 `requestId` THEN Web 接口 SHALL 拒绝并返回 400。
+5. WHEN 新运行被创建 THEN 创建事件 SHALL 带 `principal`（提交者，用于隔离和计量）和 `owner`（简报 §6.1 的所有者引用）。本 spec 只有用户发起的运行，`owner` 为其会话；子运行的 `owner` 为创建它的工具命令，语义由 `durable-semantics` 定义。
+
+### Requirement 8：端到端十圈
+
+**User Story:** 作为底座维护者，我希望设计图上的十圈写成逐圈断言，以便改坏回边时测试立刻定位到具体一圈。
+
+#### Acceptance Criteria
+
+1. WHEN 运行 `TheLoopTest` THEN 它 SHALL 不启动线程，向内核喂下表事件序列，并逐圈断言状态和命令：
+
+| 圈 | 事件 | 进入状态 | 命令 |
+|---|---|---|---|
+| 1 | `UserPrompt` | `AwaitingContext` | `AssembleContext` |
+| 2 | `ContextAssembled` | `AwaitingModel` | `CallModel` |
+| 3 | `ModelReplied(symbol_search)` | `AwaitingTools` | `RunTool` |
+| 4 | 工具结果（错误：索引还在建）| `AwaitingModel` | `CallModel` |
+| 5 | `ModelReplied(grep)` | `AwaitingTools` | `RunTool` |
+| 6 | 工具结果 | `AwaitingModel` | `CallModel` |
+| 7 | `ModelReplied(read_symbol)` | `AwaitingTools` | `RunTool` |
+| 8 | 工具结果 | `AwaitingModel` | `CallModel` |
+| 9 | `ModelReplied(无 tool_use)`，`beforeRunEnd` 返回 `NeedWork` | `AwaitingWork` | `DoWork(引用核对)` |
+| 10 | `WorkDone`，通过 | `Ended(Completed)` | — |
+
+2. IF 把工具结果回到 `AwaitingModel` 的回边改坏 THEN `TheLoopTest` SHALL 在第 4 圈失败。
+3. WHEN 工具执行失败 THEN 结果 SHALL 作为错误结果交给模型，不算 `ModelFailed`，运行继续。
+4. WHEN 集成测试以脚本化模型跑相同场景 THEN 系统 SHALL 经过真实的队列、journal、Handler、Web 接口和 SSE 跑完十圈；对该 journal 回放 SHALL 得到相同状态和相同的逐圈 prompt。
+5. WHEN 配置了真实模型的环境变量 THEN 可选的冒烟测试 SHALL 用本地 strata 跑通一次包含至少一次工具调用的运行，并记录每次模型调用的耗时；未配置时跳过，不算失败。配置了 `ANTHROPIC_API_KEY` 时，另一个可选冒烟测试 SHALL 用 Claude 跑通同样的运行。
+
+### Requirement 9：处理器与模型接入
+
+**User Story:** 作为底座使用者，我希望所有 I/O 都在 Handler 里完成，以便内核线程不被慢调用拖住。
+
+#### Acceptance Criteria
+
+1. WHEN 命令从输出队列取出 THEN 对应的 Handler（`ContextHandler`、`ModelHandler`、`ToolHandler`、`WorkHandler`、`TimerHandler`）SHALL 在调用内核的线程之外执行，并把结果作为新事件写回输入队列。
+2. WHEN `ContextHandler` 组装提示词 THEN 它 SHALL 读取 `AGENTS.md` 等配置来源，并把完整的 system prompt 和工具列表放进 `ContextAssembled` 事件。
+3. WHEN `ModelHandler` 调用模型 THEN 它 SHALL 通过一个与供应商无关的 `ModelClient` 接口以流式方式调用；本 spec 提供两个实现：基于官方 Java SDK 的 Claude 实现（默认，模型 `claude-sonnet-5-5`）和 OpenAI 兼容的 HTTP 实现（可选，指向本地 strata）；通过配置选择其一，地址、模型名、首块超时、块间超时和并发上限均可配置，并发上限按实现分别统计。
+   - WHEN 使用 Claude 实现 THEN 系统 SHALL 在启动日志中提示 prompt 会发送到 Anthropic；API Key 只从环境变量 `ANTHROPIC_API_KEY` 读取，缺失时启动失败，错误信息说明如何设置或切换到 strata。
+   - SDK 自带的自动重试 SHALL 关闭，重试只由需求 9 第 4 条的内核路径负责，否则一次 `CallModel` 会对应多次不可见的请求。
+   - `end_turn`、`tool_use`、`max_tokens`、`refusal` 等停止原因 SHALL 规范化后写入结算事件；`refusal` 产生不可重试的 `ModelFailed`，原因为 `refusal`，并保留服务端返回的类别。
+   - 流式分片 SHALL 只作为瞬态进度经 SSE 推送，不写入 journal，也不进入内核。一次模型调用结束时只产生一个结算事件（`ModelReplied` 或 `ModelFailed`）。
+   - WHEN 流中途失败或超时 THEN `ModelFailed` SHALL 携带可重试标记和已收到的部分内容；部分内容用于诊断，不进入后续 prompt。
+   - WHEN 运行在流式过程中被取消 THEN 系统 SHALL 断开连接，并把已收到的文本作为带 `interrupted: true` 的回复写入 journal，使同一会话的下一个 prompt 包含用户已经看到的内容；未完成的工具调用分片丢弃。
+4. WHEN 模型调用失败 THEN 系统 SHALL 产生带可重试标记的 `ModelFailed`；重试退避由内核发 `StartTimer` 命令表达，时长由事件中的数据算出；服务返回 `retry-after` 时 SHALL 写入 `ModelFailed`，退避时长不小于该值。
+   - IF 模型服务明确返回上下文超长 THEN `ModelFailed` SHALL 带原因 `context_overflow` 且不可重试，因为同样的 prompt 重试仍会失败。`ModelClient` SHALL 把服务的错误规范化为该原因，匹配规则可配置，至少覆盖 strata 的实测返回（HTTP 400，消息含 `exceeds the context window`）和 Claude 的 `prompt is too long`、HTTP 413 `request_too_large`（后者尚未实测）。未注册恢复插件时运行进入 `Ended(Failed)`；后续压缩通过 `onFailure` 返回 `NeedWork` 接入，尝试次数由插件负责。无法识别的错误按普通失败处理。
+5. WHEN Handler 代码抛异常 THEN 系统 SHALL 把它转成对应的失败结果事件，不影响其他运行。
+6. WHEN 运行被取消 THEN 系统 SHALL 尽力中断在途 Handler；其迟到的结果按需求 2 第 6 条处理。
+7. WHEN 验证工具通路 THEN 系统 SHALL 提供 `grep` 和读文件两个内置工具，操作限制在配置的工作目录内；`symbol_search`、`read_symbol` 只需在测试中以替身形式存在。
+8. WHEN 模型回复 `content` 为 `null` 或含 `reasoning_content` THEN `ModelClient` SHALL 正常解析，并把完整回复写入 `ModelReplied` 事件，同时记录实际使用的模型名；模型服务返回 token 用量时一并记录，未返回时该字段为空，不估算；后续 prompt SHALL 逐字回传每个带推理内容的 assistant 轮次的 `reasoning_content`，不提供按端点关闭的开关。
+   - WHEN Claude 回复含 `thinking` 块 THEN 系统 SHALL 把完整内容块（含签名）原样写入 `ModelReplied`，并在后续 prompt 中按原样、原顺序回传；对话历史只追加，不编辑已发送的内容，否则签名失效，请求会被拒绝。
+9. IF 模型返回的工具参数不是合法 JSON THEN 系统 SHALL 把它作为错误结果交给模型，不执行该工具。
+10. IF 模型调用数已达并发上限 THEN 后续调用 SHALL 在 Handler 侧等待，不阻塞内核，等待时间计入调用超时。
+11. WHEN 工具注册 THEN 它 SHALL 声明所属的服务端和该服务端的并发上限；未声明时上限为 1，不假定工具服务端支持多线程响应。`isConcurrencySafe` 只表示调用之间逻辑上可重叠，实际并发数 SHALL 同时受 `maxParallelTools` 和服务端上限约束；上限按服务端统计，跨运行、跨用户共享。
+12. IF 工具服务端已达并发上限 THEN 后续调用 SHALL 在 `ToolHandler` 侧等待，不占用 Disruptor 消费者线程；等待时间计入工具超时，运行取消时等待中的调用 SHALL 直接退出，不再发送给服务端。名额 SHALL 只在实际调用服务端期间持有，以后等待子运行时不占名额，也不计入工具超时，否则嵌套调用会等待自己持有的名额。
+13. IF 工具服务端超时、拒绝或连接失败 THEN 该调用 SHALL 以错误结果交给模型，只影响这次调用，同批其他调用的结果和顺序不受影响；系统 SHALL NOT 自动重试结果不明的调用。
+14. WHEN 运行工具并发测试 THEN 测试 SHALL 用一个同一时刻只处理一个请求的替身服务端，验证同批多次调用不会超过上限、结果顺序正确、其他运行的事件处理不被拖慢，且多圈连续调用后不出现名额泄漏。
+
+### Requirement 10：Web 接口与进度推送
+
+**User Story:** 作为浏览器端用户，我希望提问、插话、撤销并实时看到进度，以便掌握长任务的情况。
+
+#### Acceptance Criteria
+
+1. WHEN 用户提问 THEN `ApiController` SHALL 校验请求并把事件放入外部通道，不等待模型结果。
+2. WHEN 运行忙时用户提交 THEN 系统 SHALL 支持 `follow-up`（默认，运行结束后开始下一轮）和 `steer`（在当前模型调用或工具轮之后加入）；队列默认每次放入一条。
+3. WHEN 用户撤销运行 THEN 系统 SHALL 产生 `Cancel` 事件。
+4. WHEN 内核产生事实 THEN `SseHub` SHALL 把它推给该用户的订阅者，且 SHALL NOT 推给其他用户。
+5. IF SSE 订阅者消费缓慢 THEN `SseHub` SHALL 只影响该订阅者（丢弃或断开），不阻塞输出队列。
+6. WHEN SSE 客户端断线重连 THEN 它 SHALL 能从自己的最后事件序号补读该用户的事实。
+7. WHEN 请求到达 THEN 系统 SHALL 从受信任的请求头取得 principal；真实认证不在本 spec 内，因此默认只绑定 `127.0.0.1`。
+
+### Requirement 11：最小前端控制台
+
+**User Story:** 作为底座开发者，我希望在浏览器里发起运行并查看每一圈，以便直接演示和排查十圈与 journal 重放。
+
+#### Acceptance Criteria
+
+1. WHEN 用户打开控制台 THEN 系统 SHALL 提供提问、`steer`、`follow-up` 和撤销操作，全部只通过需求 10 的公开接口。
+2. WHEN 运行进行中 THEN 控制台 SHALL 通过 SSE 实时显示模型的流式输出和等待状态时间轴，并标出每一圈及其 Handler；结算事件到达后以 journal 中的内容替换瞬态分片。
+3. WHEN 用户选中某一圈 THEN 控制台 SHALL 显示由 journal 回放得出的完整 prompt 和模型回复。
+4. IF SSE 连接断开 THEN 控制台 SHALL 显示断线状态，并从最后事件序号自动补读。
+5. WHEN 服务打包 THEN 控制台静态文件 SHALL 包含在可执行 jar 中，由后端托管，不需要单独部署。
+6. WHEN 控制台渲染模型或工具内容 THEN 它 SHALL 按纯文本显示，不把内容当作 HTML 执行。
+
+## Non-Functional Requirements
+
+### Code Architecture and Modularity
+- 代码只归入 `value`、`kernel`、`shell` 三个顶层包；调用内核的线程循环属于 `shell`。 唯一例外是示例插件的 `examples` 包，它不打进可执行 jar，也不被这三层依赖。
+- 接口定义在使用方，单文件保持单一职责。
+- 包和类的设计 SHALL 清晰：包按职责命名，读目录就能知道每部分做什么；design 文档 SHALL 列出完整的包结构和主要类，每个类用一句话说明职责。
+- 类名 SHALL 简单易懂，用领域词表达它是什么（如 `Kernel`、`Journal`、`ToolHandler`）；不用 `Manager`、`Helper`、`Util`、`Impl` 这类含糊的词，也不堆砌修饰词。
+- 第 9 节的扩展检验在本 spec 结束时书面重跑一次：人工审批、多模型路由、流式输出、memory 插件四项写明“加什么、改什么”，且 `kernel` 目录的改动为零。memory 一项的验收标准是在会话 A 写入、在新会话 B 召回并使用，且不同 principal 之间不可见；子 agent 和按对话激活留到实现它们的 spec。
+
+### Performance
+- 单次 `Kernel.step` 在 P99 下不超过 5 ms（不含 journal 写入），由基准测试记录。钩子必须便宜。
+- 慢工具或慢模型 SHALL NOT 延迟其他运行的事件处理；测试用一个被挂起的工具验证。
+
+### Security
+- API Key 只从环境变量读取，SHALL NOT 写入 journal、日志或 SSE。
+- journal 存有完整 prompt 和工具结果，文件权限 SHALL 限制为进程所有者。
+- 工具路径 SHALL 拒绝越出工作目录（包括 `..` 和符号链接），`grep` 不经过 shell 拼接参数。
+- 每个外部调用都有超时。
+
+### Reliability
+- 单个运行或插件失败只影响它自己。
+- journal 事务提交成功后才算落盘，进程崩溃时已提交事件不丢失。
+- 完成标准：`mvn verify` 全部通过，覆盖率不低于 80%，CI 必跑 ArchUnit。
+
+### Usability
+- 用一条命令可启动服务，缺少必需配置时启动失败并给出明确错误。
+- README 说明十圈场景如何运行、如何用 journal 回放某个运行并查看每圈 prompt。

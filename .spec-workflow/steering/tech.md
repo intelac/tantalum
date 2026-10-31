@@ -1,0 +1,201 @@
+# Technology Stack
+
+## Project Type
+
+生产级、通用的 Agent 运行时底座（服务端 + 参考控制台），供他人开发插件和垂直 Agent。架构约束见 `QAGENT_DESIGN_BRIEF.md`。
+
+## Core Technologies
+
+### Primary Language(s)
+- **后端**：Java 25 LTS（record、sealed interface、虚拟线程）
+- **前端**：TypeScript 7.0
+- **工具**：Maven 3.9、pnpm 11、Node 25（仅构建前端时需要）
+
+### Key Dependencies/Libraries
+
+| 层 | 依赖 | 版本 | 用途 |
+|---|---|---|---|
+| value | 无 | — | 只用 JDK |
+| kernel | 无（只依赖 value） | — | 纯函数内核 |
+| shell | Spring Boot（MVC） | 4.1.2 | HTTP、SSE、配置、装配 |
+| shell | LMAX Disruptor | 4.0.0 | Input / Output Disruptor |
+| shell | `sqlite-jdbc` | 3.54.1.0 | journal 存储 |
+| shell | Jackson | 3.1.7（Spring Boot 4.1.2 管理） | 事件与 API 序列化；`anthropic-java` 自带 Jackson 2.21，包名不同，两者并存 |
+| shell | JDK `HttpClient` | JDK 自带 | 调用 OpenAI 兼容模型 |
+| shell | `anthropic-java` | 3.3.0（实施时确认与 Spring Boot 的依赖无冲突） | 调用 Claude |
+| shell | Spring Security | Spring Boot 4.1.2 管理 | 登录、Cookie 会话、Origin 校验 |
+| shell | Bouncy Castle `bcprov-jdk18on` | 1.86 | Argon2id 口令哈希 |
+| 测试 | Playwright | 1.64 | 端到端（脚本化模型，不访问外网） |
+| 测试 | JUnit | 6.1.3（以 Spring Boot 管理的版本为准） | 单元与集成测试 |
+| 测试 | ArchUnit | 1.5.1 | 分层守护 |
+| 测试 | JaCoCo | 实施时取最新稳定版 | 覆盖率 |
+| 前端 | React | 19.3 | 控制台 |
+| 前端 | Vite | 8.3 | 构建 |
+| 前端 | TanStack Query | 5 | 查询与重放数据 |
+| 前端 | Tailwind CSS | 4.3 | 样式 |
+
+### Application Architecture
+
+事件溯源 + 显式状态机 + 单线程 reactor，分三层 `value ← kernel ← shell`。
+
+Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handler、journal 都是普通 Java 类，通过构造函数注入，不使用 Spring 注解，这样插件 SDK 不绑定 Spring。
+
+### Data Storage
+- **Primary storage**：单个 SQLite 文件（WAL 模式），原生 JDBC，不用 ORM。
+- **Caching**：无。内存状态树由 journal 投影得出，不算缓存。
+- **Data formats**：事件以 JSON 存储，带类型名和 schema 版本。
+
+### External Integrations
+- **模型协议**：OpenAI 兼容的 `/v1/chat/completions`，使用流式请求（`stream: true`）。
+- **可选模型：本地 strata**，配置如下。
+
+| 配置 | 默认值 |
+|---|---|
+| `baseUrl` | `http://127.0.0.1:8090/v1` |
+| `model` | `qwen3.8-flash-next-unsloth-ud-q4_k_xl` |
+| `apiKey` | 可选，从环境变量读取；strata 不需要 |
+| 首块超时（含排队） | 300 秒，可配置 |
+| 块间超时 | 60 秒，可配置；`: keep-alive` 算作活动 |
+| 模型并发上限 | 1，可配置 |
+
+- **默认模型：Claude（Yi 决定）**，配置如下。
+
+| 配置 | 默认值 |
+|---|---|
+| `model` | `claude-sonnet-5-5` |
+| `apiKey` | 只从环境变量 `ANTHROPIC_API_KEY` 读取 |
+| `effort` | `medium`（该模型不设时默认 `high`；官方建议智能体编程和多步工具调用从 `medium` 起步） |
+| `max_tokens` | 64000，使用流式 |
+| 拒答回退 | 开启 `fallbacks: "default"`（测试版功能），实际模型记录在 `ModelReplied` |
+| SDK 自动重试 | 关闭，由内核负责 |
+| 首块超时 | 300 秒，可配置 |
+| 块间超时 | 300 秒，可配置。SDK 的类型化事件不含 `ping`，长时间思考时看不到活动信号，所以比 strata 的 60 秒长（初始值，无实测依据） |
+| 思考显示 | `summarized`，控制台能看到进度；不设时默认隐藏，看起来像卡住 |
+| 并发上限 | 4，可配置（初始值，无实测依据） |
+
+- **Authentication**（`console-ui` 起）：用户名加口令登录，Argon2id 哈希存在数据目录的 SQLite 里；会话是内存中的 `HttpOnly`、`SameSite=Strict` Cookie，写操作校验 `Origin`，登录失败限速。第一个用户由 `TANTALUM_ADMIN_USER` / `TANTALUM_ADMIN_PASSWORD` 创建，之后用 `users add|reset|disable` 命令行管理。每个用户的工作目录、会话、运行、回放和 SSE 彼此隔离。默认仍只绑定 `127.0.0.1`。
+
+### Monitoring & Dashboard Technologies
+- **Dashboard Framework**：React 控制台，构建产物由后端静态托管。
+- **Real-time Communication**：SSE。前端用 `fetch` 流式读取，不用 `EventSource`，因为后者不能带自定义请求头。
+- **Visualization**：时间轴用自写 SVG 或 CSS，不引入图表库。
+- **State Management**：服务端（journal）是事实来源，前端不做持久化状态。
+
+## Development Environment
+
+### Build & Development Tools
+- **Build System**：Maven 多模块（`tantalum-value`、`tantalum-kernel`、`tantalum-shell`，以及示例插件 `tantalum-examples`）；前端位于 `console/`，用 Vite 构建。
+- **Package Management**：Maven、pnpm。
+- **Development workflow**：后端用 Spring Boot 启动，前端用 Vite 开发服务器代理 API。
+
+### Code Quality Tools
+- **Static Analysis**：ArchUnit（分层）、编译器 `-Xlint:all`。
+- **Testing Framework**：JUnit；`value` 和 `kernel` 零 mock、零线程；`shell` 用集成测试，模型用脚本化替身。前端用 vitest + Testing Library；端到端用 Playwright，后端是 `tantalum-examples` 测试目录里的 `E2eServer`（Maven profile `e2e`，按关键词回放剧本的模型），`pnpm e2e` 自动启动。
+- **覆盖率**：JaCoCo，不低于 80%。
+
+### Version Control & Collaboration
+- **VCS**：Git（目录尚未初始化）。
+- **Commit 格式**：`<type>: <description>`。
+
+## Deployment & Distribution
+- **Target Platform**：单进程部署，开发环境为 macOS arm64。
+- **Distribution**：Spring Boot 可执行 jar，内含控制台静态文件。
+- **Installation Requirements**：JDK 25；模型服务可用。
+
+## Technical Requirements & Constraints
+
+### Performance Requirements
+- `Kernel.step` P99 不超过 5 ms（不含 journal 写入）。
+- 模型和工具的耗时不影响其他运行的事件处理。
+
+### Compatibility Requirements
+- **Dependency Versions**：Spring Boot 使用正式版；`4.2.0-RC1` 等预发布版本不用。
+- **模型服务**：任何兼容 OpenAI Chat Completions 且支持 `tools` 的服务。
+
+### Security & Compliance
+- 默认模型是云端的 Claude（Yi 决定），完整 prompt 可能含客户代码，会发送到 Anthropic，启动日志会提示。不能外发代码的部署要切换到 strata。
+- journal 文件权限限制为进程所有者。
+
+### Scalability & Reliability
+- 明确不做跨进程和水平扩展：一个进程拥有一份存储，启动时取得独占锁。
+
+## Technical Decisions & Rationale
+
+### Decision Log
+1. **Spring Boot，放在 shell 边缘**：SIer 客户熟悉，认证和监控以后可以直接接入。备选 Javalin 更轻，但这些能力要自己搭。
+2. **不用 Spring AI**：其工具循环、Advisor、ChatMemory 分别与等待状态显式（I3）、内核钩子、journal 作为事实来源（I2）重叠，统一抽象也不利于精确还原 prompt。需要时可以在 shell 中加 `ModelClient` 适配器。
+3. **自写 OpenAI 兼容客户端**：实际只需发送 prompt、取回回复和工具调用。
+4. **SQLite + 原生 JDBC**：满足单进程，journal 是追加写入，不需要 ORM。
+5. **使用 Disruptor（Yi 决定）**：Input Disruptor → cleanroom → Output Disruptor，结构与架构图一致，框架成熟。Input Disruptor 上 journal 消费者在前，cleanroom 消费者依赖其进度，直接表达“先落盘再处理”，并用 `endOfBatch` 批量提交。Disruptor 只存在于 shell；`Kernel.step` 仍是纯函数，不感知它。一律用 `tryPublishEvent`；等待策略用不空转的 `BlockingWaitStrategy`，避免占满 CPU。
+6. **流式调用模型，分片不落盘**：pi 和 DeepSeek Harness 都用流式。分片只作瞬态进度，每次调用结束时写一个结算事件，内核只看到结果（与 DeepSeek Harness 的 `assistant/message` / `assistant/attempt` 同构）。两级持久化仍属于 `context-and-ops`，因此崩溃会丢失进行中那次调用的全部分片。
+7. **React + `fetch` 流式读取 SSE**：生态大，且以后接认证不用换 SSE 客户端。
+8. **工具默认独占，声明后才并行**：沿用 DeepSeek Harness 的 `isConcurrencySafe` 和默认 10 的并发上限，比 pi 默认并行更保守，未声明的工具不会意外并发写入。
+9. **`reasoning_content` 逐字回传**：沿用 DeepSeek Harness 的决定。它曾只在工具轮次回传，导致经网关转发时对话重建出错；开关设错又会静默失败，所以不提供开关。代价是多占输入 token。
+10. **预留对照 pi 和 DeepSeek Harness（2026-10-31）**：压缩都以追加事件替换投影视图，溢出都规范化后压缩并重试一次，我们预留相同的边界。子 agent 都以工具形式接入；DeepSeek Harness 限每棵树 8 个活跃子 agent、深度 1、超限拒绝不排队，以此为后续默认值的参考。memory 在 DeepSeek Harness 中是默认关闭的第三方 MCP 工具，没有内置服务，我们同样优先走工具接入，但多用户隔离是我们额外的要求。
+
+11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。一次只选一个模型，多模型路由不在本 spec。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-and-ops` 必须按此设计。
+
+12. **项目定名 Tantalum（Yi 决定）**：Maven 模块以 `tantalum-` 为前缀，Java 顶层包 `tantalum.*`。`groupId` 暂用 `dev.tantalum`，只在本地构建；对外发布前要确认已取得域名，否则按简报改用 `io.github.<handle>`。
+
+### Claude 实测（2026-10-31）
+
+`claude-opus-5-5`（默认模型改为 Sonnet 5.5 之前测的）流式 + 一个工具，`anthropic-version: 2026-10-21`：HTTP 200，返回 `tool_use`，`stop_reason: tool_use`，用量在 `message_start` 和 `message_delta` 中，事件流含 `ping`。
+
+`claude-sonnet-5-5` + `fallbacks: "default"` + `effort: medium`，同样的请求：HTTP 200，`stop_reason: tool_use`，请求被接受，但这次没有发生拒答。
+
+冒烟测试（task 90、91，走真实客户端和完整的环）：
+- Claude：带工具的运行跑通，上下文超长返回 HTTP 400，消息 `prompt is too long`，被识别为 `context_overflow`。
+- 带签名的 `thinking` 块回传后，下一次请求被接受。`adaptive` 模式下，简单问题常常没有 `thinking` 块，所以这个测试用需要推理的问题。
+- 拒答时实际的回退行为没有测，无法可靠触发拒答。
+
+### Claude 场景测试（2026-11-01，`ClaudeScenarioTest`、`ClaudeCrashRecoveryTest`）
+
+走完整的环（`TestServer` + 真实 `ClaudeClient`），每个场景对应一条需求或一个只有真实模型才暴露的风险，`TANTALUM_SMOKE_CLAUDE=1` 门控。结论：
+
+| 场景 | 结果 | 结论 |
+|---|---|---|
+| 一次运行八步顺序工具链（长任务） | 9 次模型调用，输入 7.3K、输出 0.46K | 多轮工具和长任务正常；**`cacheRead` 全程为 0**：`ClaudeClient` 没有用 prompt caching，长任务的输入 token 随轮次线性累加。待办：给 system 和工具定义加 `cache_control` |
+| 递推题链（high effort） | 6 次调用，2 轮带 thinking | 带签名的 thinking 块经 journal 存取、跨多轮工具回传被接受。adaptive 模式下简单任务不出 thinking，测试在没有 thinking 时按跳过处理 |
+| 每个钩子位置（只读策略、截断、引用核对、工作结果、每日额度、真实 API 错误） | 全部触发 | 钩子链在第一个 `Stop` / `NeedWork` 处短路，**注册顺序决定后面的钩子看不看得到**；`/api/runs/{run}/turns` 回放时内核把同一段 journal 又跑一遍，钩子被再次调用（实测 4 次变 24 次），这正是钩子必须纯函数、不能有副作用的原因 |
+| 模型名不存在（HTTP 404 `not_found_error`） | `INVALID_REQUEST`，不重试，`onFailure` 看到原因 | 失败分类正确 |
+| 流式中取消后继续 | 中断时保留已发出的 15 个字符；追问成功 | Anthropic 接受历史里带 `interrupted` 的部分 assistant 消息 |
+| 三个用户同时提交 | 三个运行的模型调用在时间上重叠 | 并发上限 4 真的并行；工作目录互不可见 |
+| 模型调用进行中杀进程 | journal 止于 `ContextAssembled`；重启后待恢复、不自动重放；撤销后在同一会话继续成功 | Anthropic 接受连续两条用户消息（上一条没有回复） |
+
+### 并发模型与压测（2026-11-01，`ConcurrencyStressTest`）
+
+线程模型：`Kernel.step` 和全部 `KernelHook` 只在 cleanroom 的单个消费者线程上运行，所有用户、所有会话的状态只在这一个线程上相遇，钩子和转移逻辑没有并发问题可言。Handler 每条命令一个虚拟线程；跨线程共享的对象只有 `ToolCatalog`（启动后只读）、`Workspaces`（`ConcurrentHashMap`）、`CallLimiter`（信号量）、`InFlightCommands`、`SubmissionLedger`、`StateView`（volatile 快照）、`SseHub`（`recent` 加锁）、`Transcript`（按会话加锁）、输入环（`ProducerType.MULTI`）。插件对象（`Tool`、`AfterToolHook`、`WorkType`）是单例，被多线程同时调用，必须无状态（README 已写明）。
+
+压测（不用真实模型，进 `mvn verify`）：16 个用户 × 每人 2 个会话同时提交，每个运行里 4 个并行工具 + 被只读策略拦下的 write_file + 截断钩子 + 引用核对工作，其中 4 个运行在模型调用进行中被取消；每轮 92 次模型调用、316 个事件，重复 2 轮。检查的不变量全部成立：每个 prompt 只含自己的文件；SSE 只收到自己的事件；没有 `CommandDropped`；回放得到的 prompt 与实时发给模型的逐个相同；重启后回放重建的对话视图与实时视图逐字节相同，且不会再调用模型。同一用户的多个会话之间只共享工作目录、每用户在途上限和按 principal 投影的状态（如每日额度）；`requestId` 去重按“用户 + requestId”，客户端要保证它全局唯一。
+
+### strata 实测（2026-10-31）
+
+服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。
+
+| 请求 | 结果 |
+|---|---|
+| 非流式 + `tools` | HTTP 200，3.5 秒，返回 `finish_reason: tool_calls` |
+| 流式 + `tools` | HTTP 200，2.8 秒，`tool_calls` 分片返回，含 `: keep-alive` 注释行 |
+| 第一次非流式 + `tools` | 120 秒客户端超时，无响应 |
+| 紧随其后的非流式、无工具 | HTTP 200，耗时 145 秒，但服务端统计的生成时间约 1 秒 |
+
+后两行的慢请求发生时，另一个任务正在使用 strata，生成本身并不慢，时间主要花在等待上。这说明模型调用可能被其他使用者长时间占住，超时和并发上限必须可配置。
+
+对客户端的要求：
+- `content` 可能为 `null`，推理内容在 `reasoning_content` 字段。
+- `arguments` 是 JSON 字符串，解析失败时按工具错误结果返回给模型。
+- `finish_reason: length` 可能导致没有最终内容，`max_tokens` 不能设得太小。
+- 流式响应要跳过 `: keep-alive` 注释行，并拼接 `tool_calls` 分片。
+
+复测（同日，strata 空闲）：
+- 流式响应的最后一个分片带 `usage`，不需要传 `stream_options`；传了结果相同。
+- 上下文超长（560052 token）时 1.2 秒内返回 HTTP 400，类型 `invalid_request_error`，消息含 `request exceeds the context window`，并说明请求不会被截断。
+
+冒烟测试（task 90）：断开后约 0.9 秒 `is_processing` 变为 false，生成确实停止；回传 `reasoning_content` 后请求正常。
+
+## Known Limitations
+- **Disruptor 版本较旧**：4.0.0 发布于 2023-09，以 Java 11 为基线，尚未在 Java 25 上验证；骨架的第一批 task 先做冒烟验证。
+- **SQLite 原生访问**：`sqlite-jdbc` 在 Java 25 上正常工作，但会触发受限方法警告，且未来版本默认会阻止。可执行 jar 的清单要声明 `Enable-Native-Access: ALL-UNNAMED`，测试用 `--enable-native-access=ALL-UNNAMED`。
+- **会话在内存里，没有用户管理界面**：重启后要重新登录；用户只能用命令行管理。目录隔离靠路径校验，不是操作系统沙箱，沙箱另开 spec。
+- **模型并发默认为 1**：strata 的并发能力尚未测试，多用户时模型调用会排队（不阻塞内核）。
+- **strata 与其他任务共用**：其他任务占用时，模型调用可能等待数分钟，甚至超时后进入重试。冒烟测试需要记录模型调用耗时，结果受当时负载影响。

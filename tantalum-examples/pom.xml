@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dev.tantalum</groupId>
+    <artifactId>tantalum</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>tantalum-examples</artifactId>
+
+  <dependencies>
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-shell</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-shell</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <version>1.5.1</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <profiles>
+    <!-- 端到端测试的后端：mvn -P e2e -pl tantalum-examples -am -DskipTests test-compile
+         在编译完测试代码后启动 E2eServer（脚本化模型，固定端口），由 console/playwright.config.ts 调用。 -->
+    <profile>
+      <id>e2e</id>
+      <properties>
+        <tantalum.e2e.port>8097</tantalum.e2e.port>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>e2e-server</id>
+                <phase>test-compile</phase>
+                <goals>
+                  <goal>java</goal>
+                </goals>
+                <configuration>
+                  <mainClass>tantalum.examples.E2eServer</mainClass>
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>${tantalum.e2e.port}</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

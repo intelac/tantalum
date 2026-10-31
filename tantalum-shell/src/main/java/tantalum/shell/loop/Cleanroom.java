@@ -1,0 +1,96 @@
+package tantalum.shell.loop;
+
+import com.lmax.disruptor.EventHandler;
+import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import tantalum.kernel.Kernel;
+import tantalum.shell.conversation.TranscriptItem;
+import tantalum.value.command.Command;
+import tantalum.value.decision.Decision;
+import tantalum.value.decision.Fact;
+import tantalum.value.event.EventEnvelope;
+import tantalum.value.state.KernelState;
+
+/** 输入环的第二个消费者：按序调内核，发布命令、事实和条目变化。只看到已提交的事件，不做 I/O，不等待。 */
+public final class Cleanroom implements EventHandler<InputRing.Slot> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(Cleanroom.class);
+
+    private final Kernel kernel;
+    private final BooleanSupplier halted;
+    private final Predicate<Command> output;
+    private final Projection projection;
+    private final FactListener facts;
+    private final StateView view;
+    private final ResultPublisher results;
+    private KernelState state;
+
+    public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
+                     Projection projection, FactListener facts, StateView view, ResultPublisher results) {
+        this.kernel = kernel;
+        this.state = initial;
+        this.halted = halted;
+        this.output = output;
+        this.projection = projection;
+        this.facts = facts;
+        this.view = view;
+        this.results = results;
+    }
+
+    @Override
+    public void onEvent(InputRing.Slot slot, long sequence, boolean endOfBatch) {
+        if (halted.getAsBoolean()) {
+            return;
+        }
+        EventEnvelope envelope = slot.envelope;
+        long seq = envelope.seq();
+        Decision decision = kernel.step(state, envelope);
+        slot.envelope = null;
+        state = decision.newState();
+        view.publish(state);
+        for (Command command : decision.commands()) {
+            if (!output.test(command)) {
+                results.reportDropped(command, "output ring full");
+            }
+        }
+        int index = 0;
+        for (Fact fact : decision.facts()) {
+            notifyListener(seq, index++, fact);
+        }
+        for (TranscriptItem item : project(envelope, decision)) {
+            notifyListener(seq, index++, envelope, item);
+        }
+        if (endOfBatch) {
+            results.flushDropped();
+        }
+    }
+
+    /** 投影出错只丢这次的条目，环继续。 */
+    private List<TranscriptItem> project(EventEnvelope envelope, Decision decision) {
+        try {
+            return projection.apply(envelope, decision);
+        } catch (RuntimeException failure) {
+            LOG.error("projection failed at seq {}", envelope.seq(), failure);
+            return List.of();
+        }
+    }
+
+    private void notifyListener(long seq, int index, Fact fact) {
+        try {
+            facts.onFact(seq, index, fact);
+        } catch (RuntimeException failure) {
+            LOG.error("fact listener failed", failure);
+        }
+    }
+
+    private void notifyListener(long seq, int index, EventEnvelope envelope, TranscriptItem item) {
+        try {
+            facts.onItem(seq, index, envelope.principal(), item);
+        } catch (RuntimeException failure) {
+            LOG.error("item listener failed", failure);
+        }
+    }
+}

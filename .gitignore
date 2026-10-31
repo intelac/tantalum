@@ -1,0 +1,28 @@
+# build output
+target/
+console/dist/
+console/node_modules/
+console/test-results/
+console/playwright-report/
+
+# local runtime data (journal, sqlite, logs)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+audit.log
+
+# browser automation scratch
+.playwright-mcp/
+
+# secrets: API keys are read only from the environment, never from files in this repo
+.env
+.env.*
+*.key
+
+# editors / os
+.idea/
+.vscode/
+*.iml
+.DS_Store

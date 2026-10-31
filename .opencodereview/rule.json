@@ -1,0 +1,45 @@
+{
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/target/**",
+    ".playwright-mcp/**",
+    ".spec-workflow/**",
+    "console/e2e/**",
+    "console/public/**",
+    "console/test-results/**",
+    ".opencodereview/**"
+  ],
+  "rules": [
+    {
+      "path": "tantalum-value/**/*.java",
+      "rule": "This module holds immutable value types (events, commands, state, ids, json). Enforce: no I/O, no clocks, no randomness, no threads, no Spring or Jackson annotations; records validate their invariants in compact constructors and defensively copy collections; sealed interfaces list every permitted variant; equals/hashCode semantics are value-based. Flag any mutable field, any static mutable state, and any dependency on tantalum.kernel or tantalum.shell.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "tantalum-kernel/**/*.java",
+      "rule": "This is the pure kernel: Kernel.step(state, event) must be a deterministic function of its inputs. Enforce: no I/O, no System.currentTimeMillis/Instant.now, no randomness, no threads or locks, no logging side effects that affect control flow; every decision is derived only from KernelState and the event; hooks (KernelHook) are called in registration order and the chain short-circuits on Stop/NeedWork; state transitions must leave state consistent on every path (run phases, tool rounds, follow-up queues, pending steers). Look hard for: missing transitions (an event type arriving in a state where it is not registered), off-by-one in tool round bookkeeping, lost events after Cancel, replay non-determinism (anything that would make Replay.run differ from the live run), and unbounded growth of session messages or state maps.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "tantalum-shell/src/main/java/tantalum/shell/{loop,handler,journal,sse,boot}/**/*.java",
+      "rule": "Runtime shell: Disruptor rings, journal writer, handlers running one virtual thread per command, SSE fan-out. The kernel runs on a single consumer thread; handlers and HTTP threads are concurrent. Look hard for: shared mutable state touched from several threads without a lock or concurrent collection; lock ordering and deadlock risk between Transcript, SseHub and journal; resource leaks (streams, prepared statements, threads, semaphore permits) on exception or interrupt paths; interrupt handling that swallows InterruptedException; ring backpressure paths that could block the cleanroom thread; SQLite transaction and WAL correctness (events must be durable before the kernel sees them); anything that lets a late result of an aborted command corrupt a newer run; and startup/shutdown ordering bugs.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "tantalum-shell/src/main/java/tantalum/shell/{auth,web,tool,conversation,model,plugin}/**/*.java",
+      "rule": "Multi-user HTTP surface, authentication, tools and model clients. Security first: path traversal and symlink escape out of the per-user workspace; principal always taken from the session, never from headers or request bodies; 404 (not 403) for other users' resources; Origin/CSRF checks on every state-changing endpoint; no API key, password, password hash or full prompt in logs, error messages, SSE or journal of another user; Argon2 parameters and timing-safe comparisons; login throttling cannot be bypassed by changing username case or source; session fixation on login; SSE connections closed on logout and disablement. Also check model clients: streaming parse robustness (partial JSON, keep-alive comments, early EOF), timeouts actually enforced, retries not duplicating side effects, context-overflow classification not misfiring on unrelated 400s, thinking blocks sent back byte-for-byte.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "tantalum-examples/src/main/**/*.java",
+      "rule": "Example plugins. Hooks must be pure (no I/O, no clock); work types and tools must be stateless because one instance is called concurrently from many virtual threads; outputs returned to the model must never include other users' data.",
+      "merge_system_rule": true
+    },
+    {
+      "path": "console/src/**/*.{ts,tsx}",
+      "rule": "React 19 + TypeScript console. Look hard for: XSS through markdown (raw HTML must be skipped, javascript:/data: URLs blocked), anything rendered with dangerouslySetInnerHTML; state consistency between the SSE stream and REST snapshots (items merged by journal seq, no regression to older versions, no duplicate or lost items on reconnect); race conditions in effects (stale closures, missing cleanup, requests resolving after unmount or session switch); memory leaks from subscriptions, timers and event streams; unbounded re-render (useSyncExternalStore snapshot identity, inline arrays as deps); keyboard and screen-reader accessibility of interactive controls; secrets or tokens stored in localStorage.",
+      "merge_system_rule": true
+    }
+  ]
+}

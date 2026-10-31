@@ -1,0 +1,49 @@
+package tantalum.shell.boot;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
+import tantalum.shell.boot.TantalumProperties.Loop;
+
+class TantalumPropertiesTest {
+
+    @Test
+    void defaultsSatisfyTheFormulas() {
+        Loop loop = Loop.defaults();
+        assertEquals(64, loop.maxActiveRuns());
+        assertEquals(10, loop.maxParallelTools());
+        assertEquals(1024, loop.outputRingSize());
+        assertEquals(1024, loop.inputRingSize());
+        assertEquals(640, loop.internalReserve());
+    }
+
+    @Test
+    void outputRingMustHoldEveryCommand() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> new Loop(64, 10, 8, 256, 1024, 512));
+        assertTrue(failure.getMessage().contains("outputRingSize"));
+    }
+
+    @Test
+    void inputRingMustHoldInternalResultsAndExternalLimit() {
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> new Loop(64, 10, 8, 256, 512, 1024));
+        assertTrue(failure.getMessage().contains("inputRingSize"));
+    }
+
+    @Test
+    void ringSizesMustBePowersOfTwo() {
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1000, 1024));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1024, 1000));
+    }
+
+    @Test
+    void limitsMustBePositive() {
+        assertThrows(IllegalArgumentException.class, () -> new Loop(0, 1, 1, 1, 1024, 1024));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 0, 1, 1024, 1024));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 0, 1024, 1024));
+    }
+}

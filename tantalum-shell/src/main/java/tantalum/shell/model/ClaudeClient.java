@@ -1,0 +1,372 @@
+package tantalum.shell.model;
+
+import com.anthropic.client.AnthropicClient;
+import com.anthropic.core.JsonValue;
+import com.anthropic.core.http.StreamResponse;
+import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.errors.AnthropicServiceException;
+import com.anthropic.models.messages.AssistantMessageParam;
+import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.OutputConfig;
+import com.anthropic.models.messages.RawContentBlockDelta;
+import com.anthropic.models.messages.RawContentBlockStartEvent;
+import com.anthropic.models.messages.RawMessageDeltaEvent;
+import com.anthropic.models.messages.RawMessageStartEvent;
+import com.anthropic.models.messages.RawMessageStreamEvent;
+import com.anthropic.models.messages.RedactedThinkingBlockParam;
+import com.anthropic.models.messages.ThinkingBlockParam;
+import com.anthropic.models.messages.ThinkingConfigAdaptive;
+import com.anthropic.models.messages.Tool;
+import com.anthropic.models.messages.ToolResultBlockParam;
+import com.anthropic.models.messages.ToolUseBlockParam;
+import com.anthropic.models.messages.UserMessageParam;
+import java.io.InterruptedIOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import tantalum.shell.journal.JsonText;
+import tantalum.value.json.Json;
+import tantalum.value.model.ContentBlock;
+import tantalum.value.model.FailureReason;
+import tantalum.value.model.Message;
+import tantalum.value.model.Prompt;
+import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.Role;
+import tantalum.value.model.StopReason;
+import tantalum.value.model.TextBlock;
+import tantalum.value.model.TokenUsage;
+import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolResultBlock;
+import tantalum.value.model.ToolSpec;
+
+/**
+ * 用官方 SDK 调 Claude。SDK 必须关闭自动重试，由内核负责重试。
+ * {@code thinking} 块连同签名原样保存和回传；历史只追加，否则签名失效。
+ */
+public final class ClaudeClient implements ModelClient {
+
+    private static final String PROVIDER = "claude";
+    private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
+
+    /** 正在累积的一个内容块。 */
+    private static final class Pending {
+        final String kind;
+        final StringBuilder text = new StringBuilder();
+        final StringBuilder signature = new StringBuilder();
+        String id;
+        String name;
+        String data;
+
+        Pending(String kind) {
+            this.kind = kind;
+        }
+    }
+
+    private final AnthropicClient client;
+    private final String model;
+    private final long maxTokens;
+    private final String effort;
+    private final boolean fallbacks;
+    private final Duration firstChunk;
+    private final Duration betweenChunks;
+    private final OverflowRules overflow;
+
+    public ClaudeClient(AnthropicClient client, String model, long maxTokens, String effort, boolean fallbacks,
+                        Duration firstChunk, Duration betweenChunks, OverflowRules overflow) {
+        this.client = client;
+        this.model = model;
+        this.maxTokens = maxTokens;
+        this.effort = effort;
+        this.fallbacks = fallbacks;
+        this.firstChunk = firstChunk;
+        this.betweenChunks = betweenChunks;
+        this.overflow = overflow;
+    }
+
+    @Override
+    public ModelOutcome call(Prompt prompt, ChunkListener chunks) {
+        StringBuilder visible = new StringBuilder();
+        Map<Long, Pending> blocks = new TreeMap<>();
+        Reply reply = new Reply();
+        StreamResponse<?>[] open = new StreamResponse<?>[1];
+        try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks, () -> closeQuietly(open))) {
+            try {
+                StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params(prompt));
+                open[0] = stream;
+                try (stream) {
+                    stream.stream().forEach(event -> {
+                        watchdog.activity();
+                        apply(event, blocks, reply, visible, chunks);
+                    });
+                }
+                return finish(blocks, reply, visible, watchdog);
+            } catch (AnthropicServiceException failure) {
+                return serviceFailure(failure, visible);
+            } catch (RuntimeException failure) {
+                closeQuietly(open);
+                if (isInterrupt(failure)) {
+                    return new ModelOutcome.Interrupted(visible.toString());
+                }
+                if (watchdog.expired()) {
+                    return timeout(visible);
+                }
+                if (failure instanceof AnthropicIoException) {
+                    return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, visible.toString(), failure.toString());
+                }
+                throw failure;
+            }
+        }
+    }
+
+    private static boolean isInterrupt(Throwable failure) {
+        if (Thread.currentThread().isInterrupted()) {
+            return true;
+        }
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof InterruptedIOException && !(cause instanceof java.net.SocketTimeoutException)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void closeQuietly(StreamResponse<?>[] open) {
+        if (open[0] != null) {
+            open[0].close();
+        }
+    }
+
+    private static ModelOutcome timeout(StringBuilder visible) {
+        return new ModelOutcome.Failed(FailureReason.TIMEOUT, true, null, visible.toString(), "model stream timed out");
+    }
+
+    private ModelOutcome serviceFailure(AnthropicServiceException failure, StringBuilder visible) {
+        int status = failure.statusCode();
+        String detail = "HTTP " + status + ": " + failure.getMessage();
+        Duration retryAfter = failure.headers().values("retry-after").stream()
+                .findFirst().map(OpenAiClient::seconds).orElse(null);
+        if (overflow.matches(status, failure.getMessage())) {
+            return new ModelOutcome.Failed(FailureReason.CONTEXT_OVERFLOW, false, null, visible.toString(), detail);
+        }
+        if (status == 429) {
+            return new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, retryAfter, visible.toString(), detail);
+        }
+        if (status >= 500) {
+            return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, true, retryAfter, visible.toString(), detail);
+        }
+        return new ModelOutcome.Failed(FailureReason.INVALID_REQUEST, false, null, visible.toString(), detail);
+    }
+
+    /** 从事件累积出的回复头信息。 */
+    private static final class Reply {
+        String actualModel;
+        long input;
+        long output;
+        long cacheRead;
+        long cacheWrite;
+        boolean hasUsage;
+        boolean stopped;
+        com.anthropic.models.messages.StopReason stop;
+        String refusal;
+    }
+
+    private void apply(RawMessageStreamEvent event, Map<Long, Pending> blocks, Reply reply, StringBuilder visible,
+                       ChunkListener chunks) {
+        event.messageStart().ifPresent(start -> onStart(start, reply));
+        event.contentBlockStart().ifPresent(start -> blocks.put(start.index(), pending(start)));
+        event.contentBlockDelta().ifPresent(delta ->
+                onDelta(delta.delta(), blocks.get(delta.index()), visible, chunks));
+        event.messageDelta().ifPresent(delta -> onMessageDelta(delta, reply));
+        if (event.isMessageStop()) {
+            reply.stopped = true;
+        }
+    }
+
+    private void onStart(RawMessageStartEvent start, Reply reply) {
+        reply.actualModel = start.message().model().asString();
+        reply.input = start.message().usage().inputTokens();
+        reply.output = start.message().usage().outputTokens();
+        reply.cacheRead = start.message().usage().cacheReadInputTokens().orElse(0L);
+        reply.cacheWrite = start.message().usage().cacheCreationInputTokens().orElse(0L);
+        reply.hasUsage = true;
+    }
+
+    private static Pending pending(RawContentBlockStartEvent start) {
+        RawContentBlockStartEvent.ContentBlock block = start.contentBlock();
+        if (block.isThinking()) {
+            return new Pending("thinking");
+        }
+        if (block.isRedactedThinking()) {
+            Pending redacted = new Pending("redacted_thinking");
+            redacted.data = block.asRedactedThinking().data();
+            return redacted;
+        }
+        if (block.isToolUse()) {
+            Pending tool = new Pending("tool_use");
+            tool.id = block.asToolUse().id();
+            tool.name = block.asToolUse().name();
+            return tool;
+        }
+        return new Pending("text");
+    }
+
+    private static void onDelta(RawContentBlockDelta delta, Pending block, StringBuilder visible, ChunkListener chunks) {
+        delta.text().ifPresent(piece -> {
+            block.text.append(piece.text());
+            visible.append(piece.text());
+            chunks.onText(piece.text());
+        });
+        delta.thinking().ifPresent(piece -> {
+            block.text.append(piece.thinking());
+            chunks.onReasoning(piece.thinking());
+        });
+        delta.signature().ifPresent(piece -> block.signature.append(piece.signature()));
+        delta.inputJson().ifPresent(piece -> block.text.append(piece.partialJson()));
+    }
+
+    private static void onMessageDelta(RawMessageDeltaEvent event, Reply reply) {
+        RawMessageDeltaEvent.Delta delta = event.delta();
+        delta.stopReason().ifPresent(stop -> reply.stop = stop);
+        delta.stopDetails().ifPresent(details -> reply.refusal = details.category().map(Object::toString).orElse("unknown")
+                + details.explanation().map(text -> ": " + text).orElse(""));
+        reply.output = event.usage().outputTokens();
+        event.usage().inputTokens().ifPresent(value -> reply.input = value);
+        event.usage().cacheReadInputTokens().ifPresent(value -> reply.cacheRead = value);
+        event.usage().cacheCreationInputTokens().ifPresent(value -> reply.cacheWrite = value);
+    }
+
+    private ModelOutcome finish(Map<Long, Pending> blocks, Reply reply, StringBuilder visible, StreamWatchdog watchdog) {
+        if (Thread.currentThread().isInterrupted()) {
+            return new ModelOutcome.Interrupted(visible.toString());
+        }
+        if (watchdog.expired()) {
+            return timeout(visible);
+        }
+        if (reply.stop == com.anthropic.models.messages.StopReason.REFUSAL) {
+            return new ModelOutcome.Failed(FailureReason.REFUSAL, false, null, visible.toString(),
+                    "refused: " + reply.refusal);
+        }
+        if (!reply.stopped) {
+            return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, visible.toString(), "stream ended early");
+        }
+        List<ContentBlock> content = new ArrayList<>();
+        blocks.values().forEach(block -> content.add(toBlock(block)));
+        TokenUsage usage = reply.hasUsage ? new TokenUsage(reply.input, reply.output, reply.cacheRead, reply.cacheWrite) : null;
+        return new ModelOutcome.Replied(content, stopReason(reply.stop), reply.actualModel, usage);
+    }
+
+    private static StopReason stopReason(com.anthropic.models.messages.StopReason stop) {
+        if (stop == com.anthropic.models.messages.StopReason.END_TURN) {
+            return StopReason.END_TURN;
+        }
+        if (stop == com.anthropic.models.messages.StopReason.TOOL_USE) {
+            return StopReason.TOOL_USE;
+        }
+        if (stop == com.anthropic.models.messages.StopReason.MAX_TOKENS) {
+            return StopReason.MAX_TOKENS;
+        }
+        return StopReason.OTHER;
+    }
+
+    private static ContentBlock toBlock(Pending block) {
+        return switch (block.kind) {
+            case "thinking" -> {
+                Map<String, Json> raw = new LinkedHashMap<>();
+                raw.put("type", new Json.Str("thinking"));
+                raw.put("thinking", new Json.Str(block.text.toString()));
+                raw.put("signature", new Json.Str(block.signature.toString()));
+                yield new ReasoningBlock(PROVIDER, new Json.Obj(raw));
+            }
+            case "redacted_thinking" -> {
+                Map<String, Json> raw = new LinkedHashMap<>();
+                raw.put("type", new Json.Str("redacted_thinking"));
+                raw.put("data", new Json.Str(block.data));
+                yield new ReasoningBlock(PROVIDER, new Json.Obj(raw));
+            }
+            case "tool_use" -> {
+                String raw = block.text.toString();
+                yield new ToolCallBlock(block.id, block.name, raw, JsonText.parseOrNull(raw.isBlank() ? "{}" : raw));
+            }
+            default -> new TextBlock(block.text.toString());
+        };
+    }
+
+    private MessageCreateParams params(Prompt prompt) {
+        MessageCreateParams.Builder params = MessageCreateParams.builder()
+                .model(model)
+                .maxTokens(maxTokens)
+                .system(prompt.system())
+                .thinking(ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED).build())
+                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
+        prompt.tools().forEach(tool -> params.addTool(tool(tool)));
+        for (Message message : prompt.messages()) {
+            List<ContentBlockParam> blocks = message.content().stream()
+                    .map(ClaudeClient::param).filter(java.util.Objects::nonNull).toList();
+            if (blocks.isEmpty()) {
+                continue;
+            }
+            if (message.role() == Role.USER) {
+                params.addMessage(UserMessageParam.builder().contentOfContentBlockParams(blocks).build());
+            } else {
+                params.addMessage(AssistantMessageParam.builder().contentOfContentBlockParams(blocks).build());
+            }
+        }
+        if (fallbacks) {
+            params.putAdditionalHeader("anthropic-beta", FALLBACK_BETA);
+            params.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
+        }
+        return params.build();
+    }
+
+    private static Tool tool(ToolSpec spec) {
+        Tool.InputSchema.Builder schema = Tool.InputSchema.builder();
+        if (spec.schema() instanceof Json.Obj object) {
+            Map<String, JsonValue> fields = new HashMap<>();
+            object.fields().forEach((key, value) -> {
+                if (!key.equals("type")) {
+                    fields.put(key, JsonValue.from(JsonText.toPlain(value)));
+                }
+            });
+            schema.putAllAdditionalProperties(fields);
+        }
+        return Tool.builder().name(spec.name()).description(spec.description())
+                .inputSchema(schema.build()).eagerInputStreaming(true).build();
+    }
+
+    /** 其他供应商的推理内容和空文本不发送。 */
+    private static ContentBlockParam param(ContentBlock block) {
+        return switch (block) {
+            case TextBlock text -> text.text().isEmpty() ? null : ContentBlockParam.ofText(
+                    com.anthropic.models.messages.TextBlockParam.builder().text(text.text()).build());
+            case ReasoningBlock reasoning -> reasoningParam(reasoning);
+            case ToolCallBlock call -> {
+                ToolUseBlockParam.Input.Builder input = ToolUseBlockParam.Input.builder();
+                if (call.arguments() instanceof Json.Obj object) {
+                    object.fields().forEach((key, value) -> input.putAdditionalProperty(key, JsonValue.from(JsonText.toPlain(value))));
+                }
+                yield ContentBlockParam.ofToolUse(ToolUseBlockParam.builder()
+                        .id(call.id()).name(call.name()).input(input.build()).build());
+            }
+            case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                    .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
+        };
+    }
+
+    private static ContentBlockParam reasoningParam(ReasoningBlock reasoning) {
+        if (!reasoning.provider().equals(PROVIDER) || !(reasoning.raw() instanceof Json.Obj raw)) {
+            return null;
+        }
+        if (raw.fields().get("type") instanceof Json.Str type && type.value().equals("redacted_thinking")) {
+            return ContentBlockParam.ofRedactedThinking(RedactedThinkingBlockParam.builder()
+                    .data(((Json.Str) raw.fields().get("data")).value()).build());
+        }
+        return ContentBlockParam.ofThinking(ThinkingBlockParam.builder()
+                .thinking(((Json.Str) raw.fields().get("thinking")).value())
+                .signature(((Json.Str) raw.fields().get("signature")).value()).build());
+    }
+}

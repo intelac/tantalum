@@ -1,0 +1,59 @@
+package tantalum.kernel.step;
+
+import java.time.Duration;
+import java.util.Set;
+import tantalum.kernel.hook.HookOutcome;
+import tantalum.kernel.hook.HookPoint;
+import tantalum.kernel.table.StepContext;
+import tantalum.value.command.StartTimer;
+import tantalum.value.decision.Decision;
+import tantalum.value.event.ModelFailed;
+import tantalum.value.hook.NeedWork;
+import tantalum.value.hook.Stop;
+import tantalum.value.id.CommandId;
+import tantalum.value.state.EndReason;
+import tantalum.value.state.RunState;
+
+/** 模型失败和重试的处理函数。 */
+public final class RetrySteps {
+
+    static final String AWAITING_RETRY = "AwaitingRetry";
+    private static final int MAX_RETRIES = 3;
+
+    private RetrySteps() {}
+
+    public static Decision modelFailed(StepContext context) {
+        ModelFailed event = (ModelFailed) context.envelope().event();
+        Outcome out = new Outcome(context);
+        RunState run = context.run();
+
+        HookOutcome hook = out.hooks.run(HookPoint.ON_FAILURE, out.state,
+                out.hookContext(run.ref()).withFailure(event));
+        out.report(hook.facts());
+        if (hook.result() instanceof Stop stop) {
+            RunEnd.finish(out, run, EndReason.FAILED, stop.reason());
+        } else if (hook.result() instanceof NeedWork need) {
+            WorkSteps.start(out, run, need, HookPoint.ON_FAILURE);
+        } else if (event.retryable() && run.retries() < MAX_RETRIES) {
+            CommandId id = out.nextCommandId();
+            out.emit(new StartTimer(id, run.ref(), backoff(run.retries(), event.retryAfter())));
+            RunState waiting = run.withRetries(run.retries() + 1);
+            out.put(waiting);
+            out.await(waiting, AWAITING_RETRY, Set.of(id));
+        } else {
+            RunEnd.finish(out, run, EndReason.FAILED, event.detail());
+        }
+        return out.decision();
+    }
+
+    private static Duration backoff(int retries, Duration retryAfter) {
+        Duration exponential = Duration.ofSeconds(1L << retries);
+        return retryAfter != null && retryAfter.compareTo(exponential) > 0 ? retryAfter : exponential;
+    }
+
+    public static Decision timerFired(StepContext context) {
+        Outcome out = new Outcome(context);
+        ModelSteps.callModel(out, context.run(), null);
+        return out.decision();
+    }
+}

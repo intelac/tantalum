@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/core-skeleton/requirements.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-10-31T03:18:35.965Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793416715962_9tz0ir1ht",
+      "approvalTitle": "core-skeleton 需求文档（含 D1–D7 待批准架构决定）"
+    }
+  ]
+}
