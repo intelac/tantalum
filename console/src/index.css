@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "./theme/tokens.css";
+
+/* 把设计变量接到 Tailwind 的工具类上：bg-canvas、text-fg、rounded-lg 等都走变量。 */
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--bg);
+  --color-sidebar: var(--bg-sidebar);
+  --color-raised: var(--bg-raised);
+  --color-muted: var(--bg-muted);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-bubble: var(--bg-bubble);
+  --color-code: var(--bg-code);
+  --color-overlay: var(--bg-overlay);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-fg-inverse: var(--fg-inverse);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-focus: var(--focus);
+  --color-bar-input: var(--bar-input);
+  --color-bar-model: var(--bar-model);
+  --color-bar-tool: var(--bar-tool);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --radius-*: initial;
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-full: 9999px;
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 所有控件的焦点样式一致，只在键盘聚焦时显示。 */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 输入栏这类由外层卡片表示焦点的控件，自己不画焦点环。 */
+.focus-plain:focus-visible {
+  outline: none;
+}

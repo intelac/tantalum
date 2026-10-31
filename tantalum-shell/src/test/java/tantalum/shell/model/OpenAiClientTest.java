@@ -1,0 +1,242 @@
+package tantalum.shell.model;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import tantalum.value.json.Json;
+import tantalum.value.model.ContentBlock;
+import tantalum.value.model.FailureReason;
+import tantalum.value.model.Message;
+import tantalum.value.model.Prompt;
+import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.Role;
+import tantalum.value.model.StopReason;
+import tantalum.value.model.TextBlock;
+import tantalum.value.model.TokenUsage;
+import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolResultBlock;
+import tantalum.value.model.ToolSpec;
+
+class OpenAiClientTest {
+
+    private static final Prompt HI = new Prompt("sys", List.of(), List.of(Message.user("hi")));
+
+    private FakeServer server;
+    private final List<String> chunks = new ArrayList<>();
+    private final ChunkListener listener = new ChunkListener() {
+        @Override public void onText(String text) { chunks.add(text); }
+        @Override public void onReasoning(String text) { chunks.add("r:" + text); }
+    };
+
+    @BeforeEach
+    void start() throws Exception {
+        server = new FakeServer();
+    }
+
+    @AfterEach
+    void stop() {
+        server.close();
+    }
+
+    private OpenAiClient client(Duration first, Duration between) {
+        return new OpenAiClient(server.url(), "qwen", null, 4096, first, between, OverflowRules.defaults());
+    }
+
+    private ModelOutcome call(Prompt prompt) throws Exception {
+        return client(Duration.ofSeconds(5), Duration.ofSeconds(5)).call(prompt, listener);
+    }
+
+    private static String data(String json) {
+        return "data: " + json + "\n\n";
+    }
+
+    private static String delta(String delta) {
+        return data("{\"model\":\"qwen-real\",\"choices\":[{\"index\":0,\"delta\":" + delta + ",\"finish_reason\":null}]}");
+    }
+
+    private static String finish(String reason) {
+        return data("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"" + reason
+                + "\"}],\"usage\":{\"prompt_tokens\":54,\"completion_tokens\":20,\"prompt_tokens_details\":{\"cached_tokens\":49}}}")
+                + "data: [DONE]\n\n";
+    }
+
+    @Test
+    void streamsTextSkipsKeepAliveAndReadsUsage() throws Exception {
+        server.body = ": keep-alive\n\n" + delta("{\"content\":\"Hel\"}") + ": keep-alive\n\n"
+                + delta("{\"content\":\"lo\"}") + finish("stop");
+
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+
+        assertEquals(List.of(new TextBlock("Hello")), reply.content());
+        assertEquals(StopReason.END_TURN, reply.stop());
+        assertEquals("qwen-real", reply.actualModel());
+        assertEquals(new TokenUsage(54, 20, 49, 0), reply.usage());
+        assertEquals(List.of("Hel", "lo"), chunks);
+    }
+
+    @Test
+    void nullContentAndReasoningAreParsed() throws Exception {
+        server.body = delta("{\"content\":null,\"reasoning_content\":\"think\"}") + delta("{\"content\":\"ok\"}") + finish("stop");
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        assertEquals(new ReasoningBlock("openai", new Json.Str("think")), reply.content().get(0));
+        assertEquals(new TextBlock("ok"), reply.content().get(1));
+        assertEquals(List.of("r:think", "ok"), chunks);
+    }
+
+    @Test
+    void toolCallFragmentsAreJoined() throws Exception {
+        server.body = delta("{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"grep\",\"arguments\":\"{\\\"pat\"}}]}")
+                + delta("{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"tern\\\":\\\"x\\\"}\"}}]}")
+                + delta("{\"tool_calls\":[{\"index\":1,\"id\":\"c2\",\"function\":{\"name\":\"read\",\"arguments\":\"{}\"}}]}")
+                + finish("tool_calls");
+
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+
+        ToolCallBlock first = (ToolCallBlock) reply.content().get(0);
+        assertEquals("c1", first.id());
+        assertEquals("{\"pattern\":\"x\"}", first.rawArguments());
+        assertEquals(new Json.Str("x"), ((Json.Obj) first.arguments()).fields().get("pattern"));
+        assertEquals("read", ((ToolCallBlock) reply.content().get(1)).name());
+        assertEquals(StopReason.TOOL_USE, reply.stop());
+    }
+
+    @Test
+    void invalidToolArgumentsAreMarkedNotThrown() throws Exception {
+        server.body = delta("{\"tool_calls\":[{\"index\":0,\"id\":\"c\",\"function\":{\"name\":\"t\",\"arguments\":\"{oops\"}}]}") + finish("length");
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        ToolCallBlock call = (ToolCallBlock) reply.content().getFirst();
+        assertFalse(call.argumentsValid());
+        assertNull(call.arguments());
+        assertEquals(StopReason.MAX_TOKENS, reply.stop());
+    }
+
+    @Test
+    void requestCarriesTheWholePromptInOrder() throws Exception {
+        server.body = finish("stop");
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        List<ContentBlock> assistant = List.of(
+                new ReasoningBlock("openai", new Json.Str("mine")),
+                new ReasoningBlock("claude", new Json.Str("not mine")),
+                new TextBlock("calling"),
+                new ToolCallBlock("c1", "grep", "{\"a\":1}", new Json.Obj(Map.of())));
+        Prompt prompt = new Prompt("sys", List.of(new ToolSpec("grep", "search", schema)), List.of(
+                Message.user("q"),
+                new Message(Role.ASSISTANT, assistant, false),
+                new Message(Role.USER, List.of(new ToolResultBlock("c1", "out", true, null)), false)));
+
+        call(prompt);
+
+        String body = server.requests.getFirst();
+        assertTrue(body.contains("\"stream\":true"), body);
+        assertTrue(body.contains("\"role\":\"system\",\"content\":\"sys\""), body);
+        assertTrue(body.contains("\"reasoning_content\":\"mine\""), body);
+        assertFalse(body.contains("not mine"), body);
+        assertTrue(body.contains("\"tool_call_id\":\"c1\""), body);
+        assertTrue(body.contains("\"arguments\":\"{\\\"a\\\":1}\""), body);
+        assertTrue(body.contains("\"name\":\"grep\""), body);
+        assertTrue(body.contains("\"max_tokens\":4096"), body);
+    }
+
+    @Test
+    void contextOverflowIsNotRetryable() throws Exception {
+        server.status = 400;
+        server.contentType = "application/json";
+        server.body = "{\"error\":{\"message\":\"request exceeds the context window: prompt (560052 tokens)\"}}";
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertEquals(FailureReason.CONTEXT_OVERFLOW, failed.reason());
+        assertFalse(failed.retryable());
+    }
+
+    @Test
+    void rateLimitIsRetryableWithRetryAfter() throws Exception {
+        server.status = 429;
+        server.headers = Map.of("retry-after", "30");
+        server.body = "slow down";
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertEquals(FailureReason.RATE_LIMITED, failed.reason());
+        assertTrue(failed.retryable());
+        assertEquals(Duration.ofSeconds(30), failed.retryAfter());
+    }
+
+    @Test
+    void serverErrorIsRetryableAndBadRequestIsNot() throws Exception {
+        server.status = 503;
+        assertTrue(assertInstanceOf(ModelOutcome.Failed.class, call(HI)).retryable());
+        server.status = 400;
+        ModelOutcome.Failed bad = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertFalse(bad.retryable());
+        assertEquals(FailureReason.INVALID_REQUEST, bad.reason());
+    }
+
+    @Test
+    void connectionFailureIsRetryable() throws Exception {
+        String url = server.url();
+        server.close();
+        ModelOutcome outcome = new OpenAiClient(url, "m", null, 16, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults()).call(HI, listener);
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, outcome);
+        assertEquals(FailureReason.CONNECTION_ERROR, failed.reason());
+        assertTrue(failed.retryable());
+    }
+
+    @Test
+    void streamEndingWithoutFinishIsAFailureWithPartialText() throws Exception {
+        server.body = delta("{\"content\":\"part\"}");
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertTrue(failed.retryable());
+        assertEquals("part", failed.partialText());
+    }
+
+    @Test
+    void silenceTimesOutWithPartialText() throws Exception {
+        server.body = delta("{\"content\":\"part\"}");
+        server.hang = true;
+        server.keepAlive = false;
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class,
+                client(Duration.ofSeconds(5), Duration.ofMillis(100)).call(HI, listener));
+        assertEquals(FailureReason.TIMEOUT, failed.reason());
+        assertEquals("part", failed.partialText());
+        assertTrue(failed.retryable());
+    }
+
+    @Test
+    void keepAliveCommentsCountAsActivity() throws Exception {
+        server.body = delta("{\"content\":\"part\"}");
+        server.hang = true;
+        OpenAiClient client = client(Duration.ofSeconds(5), Duration.ofMillis(200));
+        ModelOutcome[] outcome = new ModelOutcome[1];
+        Thread caller = Thread.ofVirtual().start(() -> outcome[0] = client.call(HI, listener));
+        caller.join(600);
+        assertTrue(caller.isAlive(), "keep-alive must prevent the timeout");
+        caller.interrupt();
+        caller.join(5_000);
+        assertInstanceOf(ModelOutcome.Interrupted.class, outcome[0]);
+    }
+
+    @Test
+    void interruptReturnsWhatWasReceivedAndDisconnects() throws Exception {
+        server.body = delta("{\"content\":\"seen\"}");
+        server.hang = true;
+        OpenAiClient client = client(Duration.ofSeconds(30), Duration.ofSeconds(30));
+        ModelOutcome[] outcome = new ModelOutcome[1];
+        Thread caller = Thread.ofVirtual().start(() -> outcome[0] = client.call(HI, listener));
+        for (int i = 0; i < 500 && chunks.isEmpty(); i++) {
+            Thread.sleep(5);
+        }
+        caller.interrupt();
+        caller.join(5_000);
+        assertEquals("seen", assertInstanceOf(ModelOutcome.Interrupted.class, outcome[0]).text());
+        assertTrue(server.disconnected.await(5, TimeUnit.SECONDS));
+    }
+}
