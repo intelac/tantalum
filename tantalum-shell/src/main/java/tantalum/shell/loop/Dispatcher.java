@@ -48,7 +48,7 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
             if (result != null) {
                 results.publish(command, result);
             }
-        } catch (RuntimeException failure) {
+        } catch (Throwable failure) {
             LOG.error("handler failure path failed for command {}", command.id().value(), failure);
             results.reportDropped(command, failure.toString());
         } finally {
@@ -56,11 +56,14 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
         }
     }
 
+    /** {@code Error}（栈溢出、断言）也要变成结果，否则运行只能等到超时甚至永远挂住。 */
     private static Event execute(Handler handler, Command command) {
         try {
             return handler.handle(command);
         } catch (Exception failure) {
             return handler.failed(command, failure);
+        } catch (Error failure) {
+            return handler.failed(command, new IllegalStateException(failure.toString(), failure));
         }
     }
 }

@@ -20,6 +20,13 @@ class StoreLockTest {
     }
 
     @Test
+    void closeIsIdempotent() throws Exception {
+        StoreLock lock = StoreLock.acquire(dir);
+        lock.close();
+        assertDoesNotThrow(lock::close);
+    }
+
+    @Test
     void lockIsAvailableAgainAfterRelease() throws Exception {
         StoreLock.acquire(dir).close();
         assertDoesNotThrow(() -> StoreLock.acquire(dir).close());

@@ -145,6 +145,9 @@ class AuthApiTest {
     @Test
     void cookieMustBeSecureWhenNotBoundToLoopback() {
         assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie("0.0.0.0", false));
+        // 没设 server.address 时 Spring 绑定全部网卡，不算回环。
+        assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie(null, false));
+        assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie("127.evil.example", false));
         assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie("10.0.0.5", false));
         tantalum.shell.auth.SecurityConfig.requireSecureCookie("10.0.0.5", true);
         tantalum.shell.auth.SecurityConfig.requireSecureCookie("127.0.0.1", false);

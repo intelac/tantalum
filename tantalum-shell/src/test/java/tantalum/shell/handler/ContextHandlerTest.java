@@ -51,6 +51,17 @@ class ContextHandlerTest {
         assertEquals(COMMAND.id(), event.command());
     }
 
+    /** AGENTS.md 若是指向工作目录外的符号链接，不能把外面的文件读进 prompt。 */
+    @Test
+    void agentsFileLinkingOutsideTheWorkspaceIsIgnored(@TempDir Path elsewhere) throws Exception {
+        Path secret = elsewhere.resolve("secret.md");
+        Files.writeString(secret, "TOP SECRET");
+        Files.createSymbolicLink(dir.resolve("AGENTS.md"), secret);
+        ContextAssembled event = assertInstanceOf(ContextAssembled.class,
+                new ContextHandler(tantalum.shell.tool.Workspaces.shared(dir), "Base prompt.", catalog()).handle(COMMAND));
+        assertEquals("Base prompt.", event.system());
+    }
+
     @Test
     void missingAgentsFileIsFine() throws Exception {
         ContextAssembled event = assertInstanceOf(ContextAssembled.class,

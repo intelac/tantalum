@@ -69,7 +69,7 @@ public final class ToolHandler implements Handler {
         Thread worker = Thread.ofVirtual().start(() -> {
             try (permit) {
                 result.complete(tool.run(context, arguments));
-            } catch (Exception failure) {
+            } catch (Throwable failure) {
                 result.completeExceptionally(failure);
             }
         });

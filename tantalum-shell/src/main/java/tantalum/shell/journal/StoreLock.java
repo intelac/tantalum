@@ -36,9 +36,16 @@ public final class StoreLock implements AutoCloseable {
         return new StoreLock(channel, lock);
     }
 
+    /** 可重复调用。 */
     @Override
     public void close() throws IOException {
-        lock.release();
-        channel.close();
+        if (!channel.isOpen()) {
+            return;
+        }
+        try (channel) {
+            if (lock.isValid()) {
+                lock.release();
+            }
+        }
     }
 }

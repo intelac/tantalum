@@ -179,8 +179,9 @@ public final class ClaudeClient implements ModelClient {
                        ChunkListener chunks) {
         event.messageStart().ifPresent(start -> onStart(start, reply));
         event.contentBlockStart().ifPresent(start -> blocks.put(start.index(), pending(start)));
+        // 没有 start 就来 delta 的块按文本块处理，不让一个异常分片把整次回复变成失败。
         event.contentBlockDelta().ifPresent(delta ->
-                onDelta(delta.delta(), blocks.get(delta.index()), visible, chunks));
+                onDelta(delta.delta(), blocks.computeIfAbsent(delta.index(), index -> new Pending("text")), visible, chunks));
         event.messageDelta().ifPresent(delta -> onMessageDelta(delta, reply));
         if (event.isMessageStop()) {
             reply.stopped = true;
@@ -247,7 +248,7 @@ public final class ClaudeClient implements ModelClient {
         if (watchdog.expired()) {
             return timeout(visible);
         }
-        if (reply.stop == com.anthropic.models.messages.StopReason.REFUSAL) {
+        if (com.anthropic.models.messages.StopReason.REFUSAL.equals(reply.stop)) {
             return new ModelOutcome.Failed(FailureReason.REFUSAL, false, null, visible.toString(),
                     "refused: " + reply.refusal);
         }
@@ -260,14 +261,15 @@ public final class ClaudeClient implements ModelClient {
         return new ModelOutcome.Replied(content, stopReason(reply.stop), reply.actualModel, usage);
     }
 
+    /** SDK 的停止原因是值对象不是枚举，用 {@code equals} 比较。 */
     private static StopReason stopReason(com.anthropic.models.messages.StopReason stop) {
-        if (stop == com.anthropic.models.messages.StopReason.END_TURN) {
+        if (com.anthropic.models.messages.StopReason.END_TURN.equals(stop)) {
             return StopReason.END_TURN;
         }
-        if (stop == com.anthropic.models.messages.StopReason.TOOL_USE) {
+        if (com.anthropic.models.messages.StopReason.TOOL_USE.equals(stop)) {
             return StopReason.TOOL_USE;
         }
-        if (stop == com.anthropic.models.messages.StopReason.MAX_TOKENS) {
+        if (com.anthropic.models.messages.StopReason.MAX_TOKENS.equals(stop)) {
             return StopReason.MAX_TOKENS;
         }
         return StopReason.OTHER;

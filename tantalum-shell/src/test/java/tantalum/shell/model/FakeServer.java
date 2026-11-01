@@ -22,6 +22,8 @@ final class FakeServer implements AutoCloseable {
     volatile String contentType = "text/event-stream";
     volatile String body = "";
     volatile boolean hang;
+    /** 接受连接但不回响应头，模拟卡死的上游。 */
+    volatile boolean hangBeforeHeaders;
     /** 挂起期间是否发保活注释。发的话才能察觉客户端断开。 */
     volatile boolean keepAlive = true;
     volatile Map<String, String> headers = Map.of();
@@ -34,6 +36,15 @@ final class FakeServer implements AutoCloseable {
         server.createContext("/", exchange -> {
             hits.incrementAndGet();
             requests.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            if (hangBeforeHeaders) {
+                try {
+                    release.await();
+                } catch (InterruptedException stopping) {
+                    Thread.currentThread().interrupt();
+                }
+                exchange.close();
+                return;
+            }
             exchange.getResponseHeaders().set("content-type", contentType);
             headers.forEach(exchange.getResponseHeaders()::set);
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

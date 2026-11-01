@@ -3,6 +3,7 @@ package tantalum.shell.handler;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import tantalum.shell.plugin.Workspace;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.value.command.Command;
@@ -23,14 +24,23 @@ public final class ContextHandler implements Handler {
         this.catalog = catalog;
     }
 
+    /** {@code AGENTS.md} 也走 {@code Workspace.resolve}：指向目录外的符号链接不会被读进 prompt。 */
     @Override
     public Event handle(Command command) throws IOException {
         String system = basePrompt;
-        Path agents = workspaces.of(command.run().principal()).root().resolve("AGENTS.md");
-        if (Files.isRegularFile(agents)) {
+        Path agents = agentsFile(workspaces.of(command.run().principal()));
+        if (agents != null && Files.isRegularFile(agents)) {
             system = basePrompt + "\n\n" + Files.readString(agents);
         }
         return new ContextAssembled(command.id(), system, catalog.specs());
+    }
+
+    private static Path agentsFile(Workspace workspace) {
+        try {
+            return workspace.resolve("AGENTS.md");
+        } catch (IllegalArgumentException missingOrOutside) {
+            return null;
+        }
     }
 
     @Override

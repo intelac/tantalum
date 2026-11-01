@@ -21,6 +21,7 @@ import tantalum.value.json.Json;
 
 class WorkHandlerTest {
 
+    private static final java.time.Duration TIMEOUT = java.time.Duration.ofSeconds(5);
     private static final RunRef RUN = new RunRef(new Principal("p"), new SessionId("s"), new RunId("r"));
 
     private static DoWork work(String type) {
@@ -36,7 +37,7 @@ class WorkHandlerTest {
 
     @Test
     void dispatchesByType() throws Exception {
-        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(type("a", new WorkResult(new Json.Str("done"), "continue"))));
+        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(type("a", new WorkResult(new Json.Str("done"), "continue"))), TIMEOUT);
         WorkDone done = assertInstanceOf(WorkDone.class, handler.handle(work("a")));
         assertEquals(new Json.Str("done"), done.result());
         assertEquals("continue", done.continueText());
@@ -46,14 +47,14 @@ class WorkHandlerTest {
 
     @Test
     void unknownTypeFails() throws Exception {
-        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of()).handle(work("nope")));
+        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT).handle(work("nope")));
         assertTrue(done.failed());
     }
 
     @Test
     void failureBecomesAFailedResult() {
         WorkDone done = assertInstanceOf(WorkDone.class,
-                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of()).failed(work("a"), new IllegalStateException("boom")));
+                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT).failed(work("a"), new IllegalStateException("boom")));
         assertTrue(done.failed());
         assertEquals(new Json.Str("java.lang.IllegalStateException: boom"), done.result());
     }
@@ -61,6 +62,45 @@ class WorkHandlerTest {
     @Test
     void duplicateTypeFails() {
         WorkType a = type("a", new WorkResult(new Json.Null(), null));
-        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(a, a)));
+        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(a, a), TIMEOUT));
+    }
+
+    private static WorkHandler handler(WorkType... types) {
+        return new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
+                List.of(types), java.time.Duration.ofMillis(200));
+    }
+
+    /** 阻塞的插件不能永久占住命令：超时变成失败结果，插件线程被中断。 */
+    @Test
+    void blockedWorkTimesOutAndIsInterrupted() throws Exception {
+        java.util.concurrent.CountDownLatch interrupted = new java.util.concurrent.CountDownLatch(1);
+        WorkType stuck = new WorkType() {
+            @Override public String name() { return "stuck"; }
+            @Override public WorkResult run(tantalum.shell.plugin.ToolContext context, Json input) {
+                try {
+                    Thread.sleep(java.time.Duration.ofMinutes(1));
+                } catch (InterruptedException expected) {
+                    interrupted.countDown();
+                }
+                return new WorkResult(new Json.Null(), null);
+            }
+        };
+        WorkDone done = assertInstanceOf(WorkDone.class, handler(stuck).handle(work("stuck")));
+        assertTrue(done.failed());
+        assertTrue(((Json.Str) done.result()).value().contains("timed out"));
+        assertTrue(interrupted.await(5, java.util.concurrent.TimeUnit.SECONDS));
+    }
+
+    @Test
+    void throwingWorkBecomesAFailedResult() throws Exception {
+        WorkType broken = new WorkType() {
+            @Override public String name() { return "broken"; }
+            @Override public WorkResult run(tantalum.shell.plugin.ToolContext context, Json input) {
+                throw new StackOverflowError();
+            }
+        };
+        WorkDone done = assertInstanceOf(WorkDone.class, handler(broken).handle(work("broken")));
+        assertTrue(done.failed());
+        assertTrue(((Json.Str) done.result()).value().contains("StackOverflowError"));
     }
 }
