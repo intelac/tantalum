@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/memory/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T01:32:01.239Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793496721234_rww9h64zm",
+      "approvalTitle": "memory spec：需求文档（四层模型、九项决定、八条需求）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T01:52:48.189Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793496721234_rww9h64zm",
+      "approvalTitle": "memory spec：需求文档（四层模型、九项决定、八条需求）"
+    }
+  ]
+}

@@ -40,6 +40,26 @@ class TantalumPropertiesTest {
     }
 
     @Test
+    void memoryLimitsHaveDefaultsAndMustBePositive() {
+        TantalumProperties.Memory memory = TantalumProperties.Memory.defaults();
+        assertEquals(200, memory.maxEntries());
+        assertEquals(16 * 1024, memory.maxIndexBytes());
+        assertEquals(8 * 1024, memory.maxEntryBytes());
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(0, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(1, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(1, 1, -1));
+    }
+
+    @Test
+    void blankKnowledgeDirMeansNoSharedLayer() {
+        assertTrue(TantalumProperties.Knowledge.none().path().isEmpty());
+        assertTrue(new TantalumProperties.Knowledge("  ", 10).path().isEmpty());
+        assertTrue(new TantalumProperties.Knowledge(null, 10).path().isEmpty());
+        assertEquals(java.nio.file.Path.of("/srv/knowledge"), new TantalumProperties.Knowledge("/srv/knowledge", 10).path().orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Knowledge("/x", 0));
+    }
+
+    @Test
     void limitsMustBePositive() {
         assertThrows(IllegalArgumentException.class, () -> new Loop(0, 1, 1, 1, 1024, 1024));
         assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024));

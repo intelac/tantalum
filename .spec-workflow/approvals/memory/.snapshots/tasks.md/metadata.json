@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/memory/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T02:05:34.856Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793498734853_zxiuz6xkc",
+      "approvalTitle": "memory spec：任务清单（23 个任务，7 个阶段）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T02:46:57.875Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793498734853_zxiuz6xkc",
+      "approvalTitle": "memory spec：任务清单（23 个任务，7 个阶段）"
+    }
+  ]
+}

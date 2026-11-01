@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/memory/design.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T01:55:48.458Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793498148455_6k9f2g3je",
+      "approvalTitle": "memory spec：设计文档（memory 包、目录位置修正、工具与接口、面板）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T02:02:58.444Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793498148455_6k9f2g3je",
+      "approvalTitle": "memory spec：设计文档（memory 包、目录位置修正、工具与接口、面板）"
+    }
+  ]
+}
