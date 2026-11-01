@@ -157,6 +157,36 @@ public class ApiController {
         return json(200, response);
     }
 
+    /** 手动压缩。body 可为空或 {@code {"requestId": "...", "instructions": "..."}}；没给 requestId 时每次都是新请求。 */
+    @PostMapping("/api/sessions/{session}/compact")
+    ResponseEntity<String> compact(@PathVariable String session, @RequestBody(required = false) String body) {
+        JsonNode request = null;
+        if (body != null && !body.isBlank()) {
+            try {
+                request = engine.codec().mapper().readTree(body);
+            } catch (JacksonException failure) {
+                return error(400, "body is not valid JSON");
+            }
+        }
+        String requestId = request == null ? null : text(request, "requestId");
+        String instructions = request == null ? null : text(request, "instructions");
+        Engine.Submission result = engine.compact(current(), new SessionId(session),
+                new RequestId(blank(requestId) ? java.util.UUID.randomUUID().toString() : requestId), blank(instructions) ? null : instructions);
+        if (result.status() == 404) {
+            return error(404, "no such session");
+        }
+        if (result.status() == 409) {
+            return error(409, "session is running or has nothing to compact");
+        }
+        if (result.status() != 200) {
+            return error(result.status(), "compaction rejected");
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("submissionId", result.submission().value());
+        response.put("duplicate", result.duplicate());
+        return json(200, response);
+    }
+
     @PostMapping("/api/runs/{run}/cancel")
     ResponseEntity<String> cancel(@PathVariable String run) {
         Principal user = current();

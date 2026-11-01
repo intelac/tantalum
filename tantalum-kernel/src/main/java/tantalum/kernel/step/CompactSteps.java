@@ -15,12 +15,16 @@ import tantalum.value.command.CallModel;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
+import tantalum.value.event.CompactRequested;
+import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.PromptPatch;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
+import tantalum.value.id.RunId;
+import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ToolSpec;
@@ -29,6 +33,7 @@ import tantalum.value.state.Compacting.Trigger;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
+import tantalum.value.state.OwnerRef;
 import tantalum.value.state.Plan;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -37,7 +42,8 @@ import tantalum.value.state.SessionState;
 public final class CompactSteps {
 
     static final String AWAITING_SUMMARY = "AwaitingSummary";
-    static final String COMPACTED = "compacted";
+    public static final String COMPACTED = "compacted";
+    public static final String NOTHING_TO_COMPACT = "nothing to compact";
 
     private CompactSteps() {}
 
@@ -94,6 +100,30 @@ public final class CompactSteps {
         RunEnd.finish(out, run, EndReason.FAILED,
                 compacting.trigger() == Trigger.OVERFLOW ? compacting.originalDetail() : reason);
         return null;
+    }
+
+    /**
+     * 手动压缩（决定 D4）：空闲会话上开一个特殊运行，不追加用户消息，不组装上下文（用会话冻结的 system 和工具）。
+     * 会话正在运行、还没有上下文或视图为空时忽略；接口在发布前已把这些情况拦成 409，只有竞争才会走到这里。
+     */
+    public static Decision requested(StepContext context) {
+        CompactRequested event = (CompactRequested) context.envelope().event();
+        EventEnvelope envelope = context.envelope();
+        SessionState session = context.state().sessions().get(envelope.session());
+        if (session == null || session.activeRun() != null || session.context() == null || session.view().isEmpty()) {
+            return Decision.unchanged(context.state());
+        }
+        Outcome out = new Outcome(context);
+        RunRef ref = new RunRef(envelope.principal(), envelope.session(), new RunId("run-" + envelope.seq()));
+        out.state = out.state.with(session.withActiveRun(ref.run()));
+        RunState run = RunState.start(ref, new OwnerRef.OfSession(envelope.session()))
+                .withContext(session.context().system(), session.context().tools());
+        out.put(run);
+        RunState notStarted = tryStart(out, run, PromptPatch.NONE, Trigger.MANUAL, event.instructions(), null);
+        if (notStarted != null) {
+            RunEnd.finish(out, notStarted, EndReason.FAILED, NOTHING_TO_COMPACT);
+        }
+        return out.decision();
     }
 
     public static Decision summaryReplied(StepContext context) {

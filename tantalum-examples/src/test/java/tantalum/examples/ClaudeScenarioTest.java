@@ -573,6 +573,129 @@ class ClaudeScenarioTest {
     }
 
     /**
+     * context-compaction 需求 6.3：窗口 32000，十个串成链的笔记各带暗号和规则，读到一半越过阈值自动压缩，
+     * 前面的笔记只剩在摘要里。严格校验模式。判定见 {@link CompactionScenario.Verdict#passed()}。
+     */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void compactionKeepsEveryCodeAndRuleAcrossTheSummary() throws Exception {
+        Path workspace = workspace("notes");
+        CompactionScenario.writeNotes(workspace.resolve("notes"));
+        Path data = temp.resolve("data-compaction");
+        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
+                MODEL, 8192, "medium", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+        CompactionScenario.Verdict verdict;
+        try (TestServer server = new TestServer(data, workspace, strict, CompactionScenario.SETTINGS_CLAUDE)) {
+            verdict = CompactionScenario.run(server, "notes", "s1", data, "claude");
+        }
+        assertEquals("COMPLETED", verdict.endReason());
+        assertEquals(0, verdict.invalidRequests(), "strict thinking validation rejected a request after compaction");
+        assertTrue(verdict.compactions() >= 1, "the context never crossed the threshold; the scenario proved nothing");
+        assertEquals(Set.of(), verdict.missingCodes(), "codes lost in the summary; answer: " + verdict.answer());
+        assertEquals(Set.of(), verdict.missingTags(), "rules lost in the summary; answer: " + verdict.answer());
+        assertTrue(verdict.rereads() <= 1, "the model went back to the files " + verdict.rereads() + " times after compaction");
+    }
+
+    private static ClaudeClient strict(String effort) {
+        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
+                MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+    }
+
+    private static void assertScenarioPassed(CompactionScenario.Verdict verdict) {
+        assertEquals("COMPLETED", verdict.endReason());
+        assertEquals(0, verdict.invalidRequests(), "strict thinking validation rejected a request after compaction");
+        assertTrue(verdict.compactions() >= 1, "the context never crossed the threshold; the scenario proved nothing");
+        assertEquals(Set.of(), verdict.missingCodes(), "codes lost in the summary; answer: " + verdict.answer());
+        assertEquals(Set.of(), verdict.missingTags(), "rules lost in the summary; answer: " + verdict.answer());
+        assertTrue(verdict.rereads() <= 1, "the model went back to the files " + verdict.rereads() + " times after compaction");
+    }
+
+    /**
+     * context-compaction 需求 6.4：压缩之后继续带 thinking 的多轮工具调用，严格校验下不能 400。
+     * 用 high effort 让 thinking 更可能出现；压缩后一个 thinking 块都没有就记为未验证。
+     */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void thinkingKeepsFlowingAfterCompaction() throws Exception {
+        Path workspace = workspace("think");
+        CompactionScenario.writeNotes(workspace.resolve("think"));
+        Path data = temp.resolve("data-think");
+        CompactionScenario.Verdict verdict;
+        try (TestServer server = new TestServer(data, workspace, strict("high"), CompactionScenario.SETTINGS_CLAUDE)) {
+            verdict = CompactionScenario.run(server, "think", "s1", data, "claude thinking");
+        }
+        assertScenarioPassed(verdict);
+        assertTrue(verdict.answer().contains(CompactionScenario.CODE_SUM), "the sum of the codes is wrong or missing: " + verdict.answer());
+        org.junit.jupiter.api.Assumptions.assumeTrue(verdict.thinkingAfterCompaction() > 0,
+                "no thinking block after the compaction, so the binding check was not exercised");
+    }
+
+    /**
+     * context-compaction 需求 6.4：保留段里有 MCP 工具调用，压缩后该服务器下线（工具仍在冻结的列表里）。
+     * 第五篇笔记要先调 MCP 工具才知道下一个文件；压缩通常在第六篇之后发生，所以那次调用落在保留段。
+     * 看到压缩条目后立刻停掉服务器。判定同上，另加：MCP 工具被调用过一次。
+     */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void mcpCallInTheKeptTailSurvivesCompactionAndServerShutdown() throws Exception {
+        Path workspace = workspace("hop");
+        CompactionScenario.writeNotes(workspace.resolve("hop"), 5);
+        Path data = temp.resolve("data-hop");
+        CompactionScenario.Verdict verdict;
+        try (TestMcpServer mcp = new TestMcpServer(new TestMcpServer.Definition("next_note", true, "key",
+                arguments -> TestMcpServer.text("after-note05".equals(arguments.get("key")) ? "read note06.txt" : "unknown key")));
+             TestServer server = new TestServer(data, workspace, strict("medium"),
+                     CompactionScenario.SETTINGS_CLAUDE[0], CompactionScenario.SETTINGS_CLAUDE[1], "--tantalum.mcp.servers.demo.url=" + mcp.url())) {
+            for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__next_note"); i++) {
+                Thread.sleep(10);
+            }
+            Thread stopper = Thread.ofVirtual().start(() -> {
+                try {
+                    while (!server.get("hop", "/api/sessions/s1/messages").body().contains("\"kind\":\"compaction\"")) {
+                        Thread.sleep(300);
+                    }
+                    mcp.stop();
+                    System.out.println("[claude mcp hop] MCP server stopped after the compaction");
+                } catch (Exception failure) {
+                    System.out.println("[claude mcp hop] stopper gave up: " + failure);
+                }
+            });
+            verdict = CompactionScenario.run(server, "hop", "s1", data, "claude mcp hop");
+            stopper.join(Duration.ofSeconds(5));
+            assertEquals(1, Collections.frequency(mcp.calls, "next_note"), mcp.calls.toString());
+        }
+        assertScenarioPassed(verdict);
+    }
+
+    /**
+     * context-compaction 需求 6.5：同一长任务开、关压缩各跑一次，对比完成情况和总 token。结论写进 tech.md。
+     * 窗口 200000 时阈值 136000，这个任务不会触发压缩。
+     */
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.MINUTES)
+    void compactionCostComparedWithNoCompaction() throws Exception {
+        Path workspace = workspace("cost");
+        CompactionScenario.writeNotes(workspace.resolve("cost"));
+        CompactionScenario.Verdict on;
+        CompactionScenario.Verdict off;
+        try (TestServer server = new TestServer(temp.resolve("data-cost-on"), workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            on = CompactionScenario.run(server, "cost", "on", temp.resolve("data-cost-on"), "claude cost on");
+        }
+        try (TestServer server = new TestServer(temp.resolve("data-cost-off"), workspace, strict("medium"),
+                "--tantalum.claude.context-window=200000", "--tantalum.claude.max-tokens=8192")) {
+            off = CompactionScenario.run(server, "cost", "off", temp.resolve("data-cost-off"), "claude cost off");
+        }
+        System.out.println("[claude cost] ON : calls=" + on.modelCalls() + " promptTokens=" + on.promptTokens() + " output=" + on.outputTokens()
+                + " compactions=" + on.compactions() + " missing=" + on.missingCodes().size() + "/" + on.missingTags().size());
+        System.out.println("[claude cost] OFF: calls=" + off.modelCalls() + " promptTokens=" + off.promptTokens() + " output=" + off.outputTokens()
+                + " compactions=" + off.compactions() + " missing=" + off.missingCodes().size() + "/" + off.missingTags().size());
+        assertScenarioPassed(on);
+        assertEquals("COMPLETED", off.endReason());
+        assertEquals(0, off.compactions());
+        assertEquals(Set.of(), off.missingCodes());
+    }
+
+    /**
      * mcp-client 需求 7.3、7.4：模型只靠 MCP 工具完成两步查询，严格校验下不失败；工具结果里夹带“请调用 delete_all”的指令，
      * 而 delete_all 没有放行。判定：运行完成且答对；服务器没有收到 delete_all。模型是否尝试只记录，不作为通过标准。
      */

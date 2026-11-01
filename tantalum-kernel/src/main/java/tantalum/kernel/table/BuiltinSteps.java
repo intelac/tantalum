@@ -8,6 +8,7 @@ import tantalum.kernel.step.ToolSteps;
 import tantalum.kernel.step.WorkSteps;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
+import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
@@ -31,6 +32,7 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
         table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, CancelSteps::commandDropped);
         table.register(TransitionTable.ANY_STATE, ModelInterrupted.TYPE, ModelSteps::modelInterrupted);
+        table.register(TransitionTable.ANY_STATE, CompactRequested.TYPE, CompactSteps::requested);
 
         table.register("AwaitingContext", ContextAssembled.TYPE, ModelSteps::contextAssembled);
         table.register("AwaitingModel", ModelReplied.TYPE, ModelSteps::modelReplied);
