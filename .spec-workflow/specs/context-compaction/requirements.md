@@ -6,6 +6,8 @@
 
 快照、回放性能、SSE 断开、关闭顺序移到后续的 `ops-hardening`。
 
+**已有的基础（2026-11-01 提交 491d3ab）：** 会话的 system 和工具已在第一个运行时冻结（`SessionContext`），可变内容变化时追加用户消息。本 spec 只需补上“压缩时重新组装”。
+
 依据：
 
 - pi `docs/compaction.md`：阈值 `contextWindow - reserveTokens`；工具结果之后、下一次模型调用之前检查；保留最近一段原文（默认 20k）；不在工具结果处切开；追加压缩条目；回复因长度被截断也算需要恢复。
@@ -31,7 +33,7 @@
 |---|---|
 | 自动压缩、溢出恢复、长度截断恢复、手动压缩 | 各供应商自带的压缩，如 Anthropic 压缩 beta（违背通用逻辑；实测可用，但不采用） |
 | 保留最近一段原文的摘要式压缩 | 后台提前压缩（先同步，有需要再做） |
-| 会话内 system 和工具稳定 | 裁剪旧工具结果（编辑点之后的 thinking 全部失效） |
+| 压缩时刷新 system 和工具 | 裁剪旧工具结果（编辑点之后的 thinking 全部失效） |
 | 钩子 `beforeCompact` | 自定义摘要、`reset(handoff)`、会话分支 |
 | 压缩的回放、轨迹、界面展示 | 快照和回放性能（`ops-hardening`） |
 | 通用 token 估算 | 调供应商的计数接口（通用逻辑不依赖它） |
@@ -47,8 +49,8 @@
 | C5 | 摘要怎么生成 | 回放当前 prompt，末尾追加指令消息，禁用工具。结构固定：用户目标、已做决定、文件和状态、未完成事项。再次压缩时把旧摘要一并浓缩 | 复用缓存，且不依赖具体模型 |
 | C6 | 失败怎么办 | 自动压缩失败：记录并继续原调用。溢出恢复：只有视图确实变小才重试，每次调用最多一次，否则报原始错误 | 防止无限循环和掩盖真实错误 |
 | C7 | 钩子 | 新增第六个位置 `beforeCompact`，可 `Stop` 拒绝 | 设计简报要求 1.0 前锁定钩子集合 |
-| C8 | 会话内稳定 | 所有模型相同：会话的 system 和工具固定到下一次压缩。记忆索引或 `AGENTS.md` 有变化时，下一个运行开始追加一条用户消息说明。压缩时重新组装 system，变化在此生效 | 实测改 system 或工具会使旧 thinking 失效，追加消息可行。**改变 memory 决定 M4、M7 的实现** |
-| C9 | 新工具何时可用 | 已有会话要到下一次压缩或新会话才看到新工具 | 通用且简单；MCP spec 若需要立即可用，再单独设计。Anthropic 的 `tool_addition` 这次没测通（请求格式不对），不作为依据 |
+| C8 | 压缩时刷新 | 冻结已实现。压缩时重新组装 system 和工具，替换 `SessionContext`；最新的记忆索引和 MCP 工具在此生效 | 实测保留段去掉 thinking 后，更新 system 被接受（200）。压缩本来就换了前缀，这是合法的刷新点 |
+| C9 | 新工具何时可用 | 已有会话要到下一次压缩或新会话才看到新工具，包括 MCP 工具 | 与现有实现一致，通用且简单 |
 
 ## Alignment with Product Vision
 
@@ -102,17 +104,16 @@
 4. WHEN `beforeCompact` 返回 `Stop` THEN 不压缩，按 C6 处理。
 5. WHEN 运行在压缩中被取消 THEN 摘要调用 SHALL 中止，视图不变。
 
-### Requirement 5：会话内稳定
+### Requirement 5：压缩时刷新上下文
 
-**User Story:** 作为部署者，我希望换到强制校验的账号后不会失败。
+**User Story:** 作为用户，我希望压缩后模型用的是最新的记忆和工具。
 
 #### Acceptance Criteria
 
-1. WHEN 同一会话的后续运行开始且没有压缩过 THEN system 和工具定义 SHALL 与上次发送的逐字节相同，工具顺序按名称固定。
-2. WHEN 记忆索引、共享知识或 `AGENTS.md` 有变化 THEN 变化 SHALL 作为一条追加的用户消息告诉模型，已有历史不变；内容也进 journal。
-3. WHEN 压缩发生 THEN system SHALL 重新组装，包含最新记忆索引。
-4. WHEN 已冻结的工具在重启后不存在 THEN 调用它 SHALL 返回错误结果，运行继续。
-5. WHEN 钩子的 `PromptPatch` 每轮变化 THEN 文档 SHALL 说明后果，轨迹里提示检测到的变化。
+1. WHEN 压缩发生 THEN system 和工具 SHALL 重新组装并写进事件，回放不读文件也不连 MCP 服务器；包含最新记忆索引和当前可用的工具。
+2. WHEN 压缩后保留段引用了已不存在的工具 THEN 对应调用和结果 SHALL 仍能发送给模型，不被供应商拒绝；由真实模型测试验证。
+3. WHEN 没有压缩 THEN 现有的冻结行为 SHALL 不变。
+4. WHEN 钩子的 `PromptPatch` 每轮变化 THEN 文档 SHALL 说明它会让缓存和 thinking 校验失效。
 
 ### Requirement 6：通用推理块规则
 
@@ -133,7 +134,7 @@
 2. WHEN 跑不用真实模型的压测 THEN 500 条消息的会话 SHALL 经历多次压缩，回放 prompt 与实时相同，重启后视图逐字节相同。
 3. WHEN 跑真实模型场景 THEN Claude 和本地 qwen SHALL 用同一个用例：小窗口配置下越过压缩点，压缩前读到的事实压缩后还能答对；Claude 的请求带 `prefix_mismatch_behavior: "error"` 发送。strata 不可用时明确记为未验证，不算通过。
 4. WHEN 跑真实模型场景 THEN SHALL 对比同一长任务压缩与不压缩的完成情况和总 token，结论写进 tech.md。
-5. WHEN 跑真实模型场景 THEN 同一会话带 thinking 改记忆，在 error 模式下 SHALL 不失败。
+5. WHEN 跑真实模型场景 THEN 压缩后接着做带 thinking 的多轮工具调用和改记忆，在 error 模式下 SHALL 不失败；保留段含 MCP 工具调用时也一样。
 
 ## Non-Functional Requirements
 
