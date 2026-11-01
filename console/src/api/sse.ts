@@ -65,16 +65,30 @@ export function connectEvents(handlers: SseHandlers, options: SseOptions = {}): 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return "closed";
-      buffer += decoder.decode(value, { stream: true });
-      const parsed = parseSse(buffer);
-      buffer = parsed.rest;
-      for (const event of parsed.events) {
-        if (event.id !== undefined) lastEventId = event.id;
-        handlers.onEvent(event);
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return "closed";
+        buffer += decoder.decode(value, { stream: true });
+        const parsed = parseSse(buffer);
+        buffer = parsed.rest;
+        for (const event of parsed.events) {
+          if (event.id !== undefined) lastEventId = event.id;
+          deliver(event);
+        }
       }
+    } finally {
+      // 不管怎么离开（断线、取消、处理器出错），都把旧流关掉，不留下双流。
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  /** 一条事件处理失败只丢这一条，不当作断线重连。 */
+  function deliver(event: SseEvent): void {
+    try {
+      handlers.onEvent(event);
+    } catch (failure) {
+      console.error("event handler failed", event.event, failure);
     }
   }
 

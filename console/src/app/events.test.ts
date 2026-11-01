@@ -33,4 +33,16 @@ describe("handleEvent", () => {
     handleEvent({ event: "HookReported", data: "{}" }, store, queries);
     expect(store.getOrder("s")).toEqual([]);
   });
+
+  it("drops payloads of the wrong shape instead of throwing", () => {
+    const store = new ConversationStore();
+    const queries = new QueryClient();
+    handleEvent({ event: "item", data: "null" }, store, queries);
+    handleEvent({ event: "item", data: '{"kind":"user"}' }, store, queries);
+    handleEvent({ event: "chunk", data: '{"run":"run-0","kind":"video","text":"x"}' }, store, queries);
+    handleEvent({ event: "chunk", data: '{"run":"run-0","kind":"text","text":5}' }, store, queries);
+    handleEvent({ event: "PhaseChanged", data: '{"run":1}' }, store, queries);
+    expect(store.getOrder("s")).toEqual([]);
+    expect(store.getLive("run-0")).toEqual({ text: "", reasoning: "" });
+  });
 });

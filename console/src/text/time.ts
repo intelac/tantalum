@@ -25,6 +25,7 @@ export function formatDuration(ms: number): string {
 export function clockTime(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
   const sameDay = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  // hourCycle 而不是 hour12:false：部分引擎在 hour12:false 下把零点显示成 24:05。
+  const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   return sameDay ? time : `${date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })} ${time}`;
 }

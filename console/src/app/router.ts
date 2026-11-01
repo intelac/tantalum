@@ -14,7 +14,7 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (parts.length === 0) return { page: "home" };
   if (parts.length === 1 && parts[0] === "login") {
     const next = new URLSearchParams(search).get("next");
-    return next !== null && next.startsWith("/") ? { page: "login", next } : { page: "login" };
+    return next !== null && isLocalPath(next) ? { page: "login", next } : { page: "login" };
   }
   if (parts[0] === "s" && parts[1] !== undefined) {
     const session = decode(parts[1]);
@@ -27,6 +27,11 @@ export function parseRoute(pathname: string, search = ""): Route {
     }
   }
   return { page: "notFound", path: pathname };
+}
+
+/** 登录后的跳转目标只能是站内路径：`//evil.example` 和 `/\evil.example` 都会被浏览器当成别的主机。 */
+export function isLocalPath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
 }
 
 function decode(part: string): string | null {

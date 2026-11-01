@@ -48,6 +48,10 @@ describe("CodeBlock", () => {
     expect(highlight("const a = 1", "ts")).toContain("hljs-keyword");
     expect(highlight("<b>", "nosuchlang")).toBe("&lt;b&gt;");
     expect(highlight('x = "<"', "python")).not.toContain("<\"");
+    // 原型上的名字不是语言。
+    expect(highlight("<b>", "constructor")).toBe("&lt;b&gt;");
+    expect(highlight("<b>", "__proto__")).toBe("&lt;b&gt;");
+    expect(highlight("<b>", "toString")).toBe("&lt;b&gt;");
   });
 
   it("copies the code and shows feedback", async () => {

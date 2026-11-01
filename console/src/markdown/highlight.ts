@@ -63,16 +63,17 @@ const ALIASES: Record<string, string> = {
 
 for (const [name, language] of Object.entries(LANGUAGES)) hljs.registerLanguage(name, language);
 
+/** 围栏语言写成 ```constructor 这类名字时不能取到原型上的属性，只认自己登记过的。 */
 export function normalizeLanguage(language: string | undefined): string | undefined {
   if (language === undefined || language === "") return undefined;
   const lower = language.toLowerCase();
-  return ALIASES[lower] ?? lower;
+  return Object.hasOwn(ALIASES, lower) ? ALIASES[lower] : lower;
 }
 
 /** 返回高亮后的 HTML（已转义），不认识的语言退回纯文本转义。 */
 export function highlight(code: string, language: string | undefined): string {
   const name = normalizeLanguage(language);
-  if (name !== undefined && hljs.getLanguage(name) !== undefined) {
+  if (name !== undefined && Object.hasOwn(LANGUAGES, name)) {
     return hljs.highlight(code, { language: name, ignoreIllegals: true }).value;
   }
   return escapeHtml(code);

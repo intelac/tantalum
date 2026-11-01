@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getTrace, listRuns } from "../api/client";
 import { navigate, tracePath } from "../app/router";
@@ -34,6 +34,8 @@ export function TracePage({ store, session, run }: Props) {
 
   const trace = useQuery({
     queryKey: ["trace", current, live],
+    // 运行状态变化换了缓存键时沿用上一份数据，不闪成空白。
+    placeholderData: keepPreviousData,
     enabled: current !== undefined,
     queryFn: () => getTrace(current as string),
   });

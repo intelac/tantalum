@@ -9,6 +9,15 @@ import { SESSIONS_KEY } from "../shell/useSessions";
 import { seqOf, type ConversationStore } from "../store/ConversationStore";
 import { reportConnection, reportHalted, reportUnauthorized, resetConnection } from "./connection";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasStrings(value: unknown, ...keys: string[]): boolean {
+  return isRecord(value) && keys.every((key) => typeof value[key] === "string");
+}
+
+/** 形状不对的负载直接丢掉：服务端的 bug 或中间人改过的数据不该让整条流重连。 */
 export function handleEvent(event: SseEvent, store: ConversationStore, queries: QueryClient): void {
   let data: unknown;
   try {
@@ -18,17 +27,21 @@ export function handleEvent(event: SseEvent, store: ConversationStore, queries: 
   }
   switch (event.event) {
     case "item": {
+      if (!hasStrings(data, "id", "session", "kind")) return;
       const item = data as Item;
       store.applyItem(item, seqOf(event.id));
       if (item.kind === "user" || item.kind === "run") void queries.invalidateQueries({ queryKey: SESSIONS_KEY });
       break;
     }
     case "chunk": {
+      if (!hasStrings(data, "run", "kind", "text")) return;
       const chunk = data as Chunk;
+      if (chunk.kind !== "text" && chunk.kind !== "reasoning") return;
       store.applyChunk(chunk.run, chunk.kind, chunk.text);
       break;
     }
     case "PhaseChanged": {
+      if (!hasStrings(data, "run", "phase")) return;
       const phase = data as PhaseChanged;
       // 离开模型调用后，以 journal 里结算的条目为准，瞬态分片作废。
       if (phase.phase !== "AwaitingModel") store.clearLive(phase.run);
