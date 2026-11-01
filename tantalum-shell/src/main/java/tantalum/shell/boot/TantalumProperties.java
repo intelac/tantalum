@@ -7,7 +7,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** 全部配置，默认值在 {@code application.properties}。 */
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
-                                 String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge) {
+                                 String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp) {
+
+    /** MCP 服务器，只由管理员配置。没配时可以整个为 null。校验在 {@code McpSettings}。 */
+    public record Mcp(java.util.Map<String, McpServer> servers) {}
+
+    /** 一个远程 MCP 服务器。凭据只从 {@code tokenEnv} 指向的环境变量读取；数字和时长为空时用默认值。 */
+    public record McpServer(String url, String auth, String tokenEnv, java.util.List<String> allow, java.util.List<String> deny,
+                            Integer concurrency, Duration timeout, Integer maxResultBytes, Integer maxTools) {}
 
     /** 每用户长期记忆的上限：条目数、索引总字节、单条正文字节。超限时写入被拒，不自动整理。 */
     public record Memory(int maxEntries, int maxIndexBytes, int maxEntryBytes) {

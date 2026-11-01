@@ -4,21 +4,21 @@
 
 ## 阶段 0：依赖和配置
 
-- [ ] 1. 加入 SDK 依赖和架构规则
+- [x] 1. 加入 SDK 依赖和架构规则
   - File: tantalum-shell/pom.xml, tantalum-shell/src/test/java/tantalum/shell/ArchitectureTest.java, THIRD_PARTY_NOTICES.md
   - mcp-core、mcp-json-jackson3 2.1.0；SDK 类型不得出 `tantalum.shell.mcp`
   - 验证：现有测试全过；Jackson 仍是 Spring Boot 管理的版本；打包后 jar 能启动
   - _Requirements: NFR 架构_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“加入 SDK 依赖和架构规则”，满足需求 NFR 架构，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 现有测试全过；Jackson 仍是 Spring Boot 管理的版本；打包后 jar 能启动 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 2. `McpSettings` 测试和实现
+- [x] 2. `McpSettings` 测试和实现
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/McpSettingsTest.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpSettings.java, tantalum-shell/src/main/java/tantalum/shell/boot/TantalumProperties.java, tantalum-shell/src/main/resources/application.properties
   - 配置项和启动校验
   - 验证：非法名称、URL、缺环境变量、明文 http 带凭据、timeout 超过 tool-timeout 都启动失败且不含凭据；不配置时无影响
   - _Requirements: 1.1–1.4_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`McpSettings` 测试和实现”，满足需求 1.1–1.4，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 非法名称、URL、缺环境变量、明文 http 带凭据、timeout 超过 tool-timeout 都启动失败且不含凭据；不配置时无影响 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 3. `McpToolFilter`、`McpResults` 测试和实现
+- [x] 3. `McpToolFilter`、`McpResults` 测试和实现
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/McpToolFilterTest.java, tantalum-shell/src/test/java/tantalum/shell/mcp/McpResultsTest.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpToolFilter.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpResults.java
   - 纯函数：放行顺序 deny→allow→只读→拒绝；工具名；文本、非文本说明、按 UTF-8 边界截断
   - 验证：null 注解不放行；名称超长或非法被拒；截断不切坏字符

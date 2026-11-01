@@ -20,6 +20,7 @@
 | sqlite-jdbc（含 SQLite） | 3.54.1.0 | Apache-2.0（SQLite 本身为公有领域） | journal 和用户存储 |
 | Bouncy Castle `bcprov-jdk18on` | 1.86 | MIT（Bouncy Castle Licence） | Argon2id 口令哈希 |
 | anthropic-java（含 OkHttp、Kotlin 标准库、Jackson 2） | 3.3.0 | MIT；OkHttp 与 Kotlin 为 Apache-2.0 | 调用 Claude |
+| MCP Java SDK `mcp-core`、`mcp-json-jackson3`（含 Reactor、json-schema-validator） | 2.1.0 | MIT；Reactor 为 Apache-2.0；json-schema-validator 为 Apache-2.0 | 连接 MCP 服务器 |
 | SLF4J | Spring Boot 管理 | MIT | 日志门面 |
 | Logback | Spring Boot 管理 | EPL-1.0 / LGPL-2.1 双许可 | 日志实现 |
 
