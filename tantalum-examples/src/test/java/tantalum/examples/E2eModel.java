@@ -27,6 +27,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code tools}：思考 → grep → 思考 → 两个并行 read_file → 回答；</li>
  *   <li>{@code slow}：一段一段慢慢回答，取消时返回已发出的部分；</li>
  *   <li>{@code fail}：供应商出错；</li>
+ *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>其它：一句思考，然后复述用户的话。</li>
  * </ul>
  */
@@ -53,6 +54,9 @@ public final class E2eModel implements ModelClient {
             if (text.contains("fail")) {
                 return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, false, null, "", "scripted failure");
             }
+            if (text.contains("remember")) {
+                return remember(results, chunks);
+            }
             return echo(text, chunks);
         } catch (InterruptedException cancelled) {
             Thread.currentThread().interrupt();
@@ -69,6 +73,18 @@ public final class E2eModel implements ModelClient {
                     call("read_file", Map.of("path", "notes/world.md")));
             default -> answer(chunks, "两个文件都读到了：\n\n- `notes/hello.md` 里是问候\n- `notes/world.md` 里是回应\n\n```text\nhello e2e\n```");
         };
+    }
+
+    private ModelOutcome remember(int results, ChunkListener chunks) throws InterruptedException {
+        if (results == 0) {
+            Map<String, String> arguments = new java.util.LinkedHashMap<>();
+            arguments.put("name", "e2e-fact");
+            arguments.put("type", "user");
+            arguments.put("description", "e2e 测试写入的记忆");
+            arguments.put("content", "## e2e\n\n这是脚本化模型写入的记忆正文。");
+            return reply(think(chunks, "用户让我记住，写进记忆。"), call("memory_write", arguments));
+        }
+        return answer(chunks, "已记住。");
     }
 
     private ModelOutcome slow(ChunkListener chunks) throws InterruptedException {
@@ -127,7 +143,7 @@ public final class E2eModel implements ModelClient {
             if (raw.length() > 1) {
                 raw.append(',');
             }
-            raw.append('"').append(name).append("\":\"").append(value).append('"');
+            raw.append('"').append(name).append("\":\"").append(value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")).append('"');
             fields.put(name, new Json.Str(value));
         });
         raw.append('}');

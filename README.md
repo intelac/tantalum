@@ -100,6 +100,17 @@ sqlite3 ~/.local/share/tantalum/journal.db "SELECT seq, type, run_id, at FROM ev
 
 journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 
+## 记忆
+
+模型可以替每个用户记住跨会话仍然有用的事实：偏好、纠正过的做法、项目事实、外部链接。四层模型里本版本实现了第三层（个人长期记忆）和第四层（共享知识，只读）；第二层会话摘要属于 `context-and-ops`。
+
+- **存在哪**：每人模式下在 `<workspace>/<用户名>/memory/`，索引 `MEMORY.md` 每条一行，条目 `<name>.md` 带 frontmatter（名称、描述、类型、更新时间）。共用工作目录模式下放到 `<data-dir>/memory/<用户名>/`，这样别人的 `grep` 搜不到。索引以条目文件为准，每次写删后重建。
+- **怎么进 prompt**：运行开始时把记忆指引、共享知识、`AGENTS.md` 和该用户的索引依次拼进 system，写进 `ContextAssembled` 事件；回放不读文件。索引在 system 末尾、钩子追加内容之前，prompt caching 的断点整个运行里稳定。条目正文不常驻，模型用 `memory_read` 按需读。新记忆从下一个运行开始生效。
+- **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令的内容会被拒绝写入。
+- **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。
+- **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
+- **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
+
 ## 写插件
 
 只需要看 `tantalum.shell.plugin`、`tantalum.kernel.hook` 和 `tantalum.value`，示例在 `tantalum-examples`。
@@ -115,7 +126,7 @@ journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数（回放接口会让内核重跑 journal，钩子会被再次调用）。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
 
-超时与失败：`Tool.run` 和 `WorkType.run` 都受 `tantalum.tool-timeout` 约束，到时线程被中断、结果按失败交回；撤销运行也会中断它们，所以阻塞操作要能响应中断。钩子返回 null 按 `Stop` 处理。做“检查”的钩子在 `onWorkResult`/`beforeRunEnd` 里看到 `work.failed()` 时不要放行（示例 `CitationCheckHook` 会 `Stop`），否则检查没做成就等于通过。从 `onFailure` 申请的工作完成后再调模型会占用重试次数，失败持续时最多重试 3 次。
+超时与失败：`Tool.run` 和 `WorkType.run` 都受 `tantalum.tool-timeout` 约束，到时线程被中断、结果按失败交回；撤销运行也会中断它们，所以阻塞操作要能响应中断。钩子返回 null 按 `Stop` 处理。按名单放行的策略钩子（如示例 `ReadOnlyHook`）要把 `memory_write`、`memory_read`、`memory_delete` 加进名单，否则记忆工具会被拦下；记忆目录是用户自己的，不算对工作目录的写操作。做“检查”的钩子在 `onWorkResult`/`beforeRunEnd` 里看到 `work.failed()` 时不要放行（示例 `CitationCheckHook` 会 `Stop`），否则检查没做成就等于通过。从 `onFailure` 申请的工作完成后再调模型会占用重试次数，失败持续时最多重试 3 次。
 
 ## 测试
 
@@ -153,7 +164,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
 | 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-and-ops` |
 | journal 快照（启动时间不随历史增长） | 不适用 | 有 | **没有** | `context-and-ops` |
-| 长期记忆 | 无 | 有（MCP 工具，默认关） | **没有** | `memory`（需求已写） |
+| 长期记忆 | 无 | 有（MCP 工具，默认关） | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | MCP 接入 | 无 | 有 | **没有** | MCP spec，第一版只接只读工具 |
 | 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
@@ -161,4 +172,4 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |
 | 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
 
-顺序（Yi 决定）：`memory` → `context-and-ops` → MCP → 沙箱 → 子 agent。
+顺序（Yi 决定）：`memory`（已完成）→ `context-and-ops` → MCP → 沙箱 → 子 agent。
