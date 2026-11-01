@@ -79,13 +79,13 @@
 
 ## 阶段 3：工具
 
-- [-] 11. 三个记忆工具的测试（先失败）
+- [x] 11. 三个记忆工具的测试（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/MemoryToolsTest.java
   - 覆盖：`memory_write` 新建/覆盖的返回文案；类型错、描述空、超长、记忆已满、像凭据各自的错误结果；`memory_read` 存在/不存在；`memory_delete` 存在/不存在；三者 schema 的 `required`；结果不含绝对路径；两个用户的 `ToolContext` 互不可见
   - _Requirements: 3.1–3.6, 4.2, 7.2, 8.4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“三个记忆工具的测试（先失败）”，满足列出的需求，风格参照 `BuiltinToolsTest` | Restrictions: 只写测试 | Success: 编译通过、因缺实现失败 | 完成后标 [x] 并 log-implementation_
 
-- [-] 12. `MemoryWriteTool`、`MemoryReadTool`、`MemoryDeleteTool` 实现并注册
+- [x] 12. `MemoryWriteTool`、`MemoryReadTool`、`MemoryDeleteTool` 实现并注册
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryWriteTool.java, MemoryReadTool.java, MemoryDeleteTool.java, tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java
   - `server()`=`memory`，并发 16，`isConcurrencySafe` true；用 `ToolArguments.schema(required, optional)`；在 `Engine.assemble()` 注册到 `ToolCatalog`（内置工具之后、插件之前）
   - 验证：任务 11 全过；`ToolCatalogTest`、`ConcurrencyStressTest` 仍过（它的 `ReadOnlyHook` 名单没有 memory 工具，拦下属正常）
@@ -94,13 +94,13 @@
 
 ## 阶段 4：接口
 
-- [ ] 13. `MemoryApiTest`（先失败）
+- [-] 13. `MemoryApiTest`（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/web/MemoryApiTest.java
   - 覆盖：列表（含 `used`/`max`、倒序）、详情、新增（201；400 的每种原因；凭据过滤）、删除（204；404）；alice 访问 bob 的名字和不存在的名字同为 404、同一文案；未登录 401；POST/DELETE 缺 `Origin` 被拒
   - _Requirements: 6.1–6.5, 7.3_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“MemoryApiTest（先失败）”，满足需求 6.1–6.5、7.3，用 `TestServer` | Restrictions: 只写测试 | Success: 编译通过、因缺实现失败 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 14. `MemoryController` 实现
+- [-] 14. `MemoryController` 实现
   - File: tantalum-shell/src/main/java/tantalum/shell/web/MemoryController.java
   - 四个接口；身份 `SecurityContextHolder`；名称不合法按 404；校验与工具同源（`MemoryFormat`、`CredentialGuard`、`MemoryStore.write` 的拒绝原因）
   - 验证：任务 13 全过；`AuthApiTest` 等现有接口测试仍过
