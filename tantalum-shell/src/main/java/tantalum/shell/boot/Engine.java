@@ -95,6 +95,7 @@ public final class Engine implements AutoCloseable {
     private final SubmissionLedger ledger = new SubmissionLedger();
     private final ExternalGate gate;
     private final SseHub hub;
+    private final MemoryStores memories;
     private final TurnQuery turns;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
@@ -117,6 +118,7 @@ public final class Engine implements AutoCloseable {
             this.transcript = parts.transcript;
             this.turns = parts.turns;
             this.hub = parts.hub;
+            this.memories = parts.memories;
             this.writer = parts.writer;
             this.gate = parts.gate;
             this.input = parts.input;
@@ -132,7 +134,7 @@ public final class Engine implements AutoCloseable {
     }
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalWriter writer,
-                            ExternalGate gate, InputRing input, OutputRing output) {}
+                            ExternalGate gate, InputRing input, OutputRing output, MemoryStores memories) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -181,7 +183,7 @@ public final class Engine implements AutoCloseable {
             cleanroom.onEvent(slot, sequence, endOfBatch);
             releaseIfExternal(envelope);
         });
-        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output);
+        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output, memories);
     }
 
     private static void closeQuietly(AutoCloseable resource) {
@@ -263,6 +265,11 @@ public final class Engine implements AutoCloseable {
 
     public KernelState state() {
         return view.current();
+    }
+
+    /** 每用户的长期记忆，接口和工具共用同一份实例。 */
+    public MemoryStores memories() {
+        return memories;
     }
 
     public SseHub hub() {
