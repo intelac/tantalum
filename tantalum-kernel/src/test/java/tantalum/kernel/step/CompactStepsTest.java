@@ -31,6 +31,8 @@ import tantalum.value.hook.HookResult;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.RunId;
+import tantalum.value.state.RunState;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
@@ -340,7 +342,7 @@ class CompactStepsTest {
         assertEquals("AwaitingModel", loop.phase());
         CallModel retry = onlyCall(loop);
         String kept = ((tantalum.value.model.ToolResultBlock) retry.prompt().messages().getLast().content().getFirst()).text();
-        assertTrue(kept.endsWith("[truncated: 1200 bytes total]"), "the oversized result is cut in the kept tail: " + kept.length());
+        assertTrue(kept.contains("of 1200 bytes truncated"), "the oversized result is cut in the kept tail: " + kept.length());
         assertTrue(kept.length() < 200);
 
         loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "still too long"));
@@ -381,6 +383,92 @@ class CompactStepsTest {
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of()));
         loop.feed(loop.runId(), overflow(loop));
         assertEquals(EndReason.FAILED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
+    }
+
+    static tantalum.value.event.CompactRequested compactRequest(String instructions) {
+        return new tantalum.value.event.CompactRequested(new tantalum.value.id.SubmissionId("m"), new RequestId("m"), instructions);
+    }
+
+    /** 两轮问答后空闲的会话。 */
+    static LoopFixture idleAfterTwoRuns() {
+        LoopFixture loop = start();
+        loop.feed(loop.runId(), endTurn(loop, block("a1"), 100));
+        loop.prompt(block("q2"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
+        loop.feed(loop.runId(), endTurn(loop, block("a2"), 200));
+        assertNull(loop.session().activeRun());
+        return loop;
+    }
+
+    @Test
+    void manualCompactionIsASpecialRunThatEndsAfterTheSummaryAndReleasesQueuedPrompts() {
+        LoopFixture loop = idleAfterTwoRuns();
+        List<Message> history = loop.session().messages();
+        loop.feed(null, compactRequest("keep the numbers"));
+
+        assertEquals("AwaitingSummary", loop.phase());
+        RunState run = loop.run();
+        assertEquals(Compacting.Trigger.MANUAL, run.compacting().trigger());
+        assertEquals("keep the numbers", run.compacting().manualInstructions());
+        assertEquals("system", run.system(), "system and tools come from the frozen session context, not a new assembly");
+        assertEquals(history, loop.session().messages(), "no user message is appended");
+        assertEquals(run.ref().run(), loop.session().activeRun());
+        CallModel summary = onlyCall(loop);
+        assertFalse(summary.prompt().output().toolsAllowed());
+        assertTrue(((TextBlock) summary.prompt().messages().getLast().content().getFirst()).text().endsWith("keep the numbers"));
+        // K = 70：留 a2 和 q2，头部 q1、a1。
+        assertEquals(2, run.compacting().plan().headMessages());
+
+        // 压缩期间的提交排队，压缩结束后开始。
+        loop.feed(null, new tantalum.value.event.FollowUpSubmitted(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
+        assertEquals(List.of("q3"), loop.session().followUps());
+
+        loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0)));
+        Ended ended = assertInstanceOf(Ended.class, loop.state.runs().get(run.ref().run()).phase());
+        assertEquals(EndReason.COMPLETED, ended.reason());
+        assertEquals(CompactSteps.COMPACTED, ended.detail());
+        assertEquals(Compacting.Trigger.MANUAL, fact(loop, ContextCompacted.class).trigger());
+        assertEquals(4, loop.session().compaction().replacement().size(), "summary, request q1, kept a2, kept q2");
+        assertEquals("AwaitingContext", loop.phase(), "the queued follow-up started a new run");
+        assertEquals(List.of(), loop.session().followUps());
+    }
+
+    @Test
+    void manualCompactionWithNothingToCompactFails() {
+        LoopFixture loop = start();
+        loop.feed(loop.runId(), endTurn(loop, "a1", 100));
+        loop.feed(null, compactRequest(null));
+        Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
+        assertEquals(EndReason.FAILED, ended.reason());
+        assertEquals(CompactSteps.NOTHING_TO_COMPACT, ended.detail());
+        assertNull(loop.session().activeRun());
+        assertEquals(List.of(), loop.last.commands());
+    }
+
+    @Test
+    void manualCompactionIsIgnoredWhileARunIsActiveOrBeforeAnyContext() {
+        LoopFixture loop = start();
+        KernelState before = loop.state;
+        loop.feed(null, compactRequest(null));
+        assertEquals(before, loop.state, "a racing request during a run changes nothing");
+        assertEquals(List.of(), loop.last.commands());
+
+        LoopFixture fresh = new LoopFixture();
+        fresh.feed(null, compactRequest(null));
+        assertEquals(KernelState.empty(), fresh.state);
+    }
+
+    @Test
+    void manualSummaryFailureEndsTheRunWithTheReason() {
+        LoopFixture loop = idleAfterTwoRuns();
+        loop.feed(null, compactRequest(null));
+        RunId run = loop.runId();
+        loop.feed(run, reply(loop, text("x"), StopReason.MAX_TOKENS, null));
+        Ended ended = assertInstanceOf(Ended.class, loop.state.runs().get(run).phase());
+        assertEquals(EndReason.FAILED, ended.reason());
+        assertEquals("summary did not end normally: MAX_TOKENS", ended.detail());
+        assertNull(loop.session().compaction());
+        assertNull(loop.session().activeRun());
     }
 
     @Test

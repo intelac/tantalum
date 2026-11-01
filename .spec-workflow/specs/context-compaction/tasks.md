@@ -105,14 +105,14 @@
 
 ## 阶段 5：真实模型
 
-- [ ] 14. 暗号与约束场景（Claude 严格校验 + 本地 qwen）
+- [x] 14. 暗号与约束场景（Claude 严格校验 + 本地 qwen）
   - File: tantalum-shell/src/test/java/tantalum/shell/smoke/ClaudeScenarioTest.java, OpenAiScenarioTest.java
   - 窗口 32000，依次读若干文件，各带暗号和约束；越过压缩点后报全部暗号并遵守约束；统计重读次数
   - 验证：暗号全对、约束未违反、重读 ≤ 1；严格校验不 400；strata 不可用记为未验证；用量写进 tech.md
   - _Requirements: 6.3_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“暗号与约束场景”，满足需求 6.3，遵守 design.md | Restrictions: 只做这一件事；两个模型同一用例；判定标准机械断言 | Success: 暗号全对、约束未违反、重读 ≤ 1；严格校验不 400；用量写进 tech.md | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 15. 严格校验下的合法性与代价对比
+- [x] 15. 严格校验下的合法性与代价对比
   - File: tantalum-shell/src/test/java/tantalum/shell/smoke/ClaudeScenarioTest.java, .spec-workflow/steering/tech.md
   - 压缩后继续带 thinking 的多轮工具调用；保留段含 MCP 工具调用；压缩后该 MCP 工具已下线；同一长任务开/关压缩的完成情况与总 token
   - 验证：三个场景不 400；对比结论写进 tech.md
@@ -121,14 +121,14 @@
 
 ## 阶段 6：手动压缩
 
-- [ ] 16. 手动压缩内核步骤
+- [x] 16. 手动压缩内核步骤
   - File: tantalum-kernel/src/test/java/tantalum/kernel/step/CompactStepsTest.java, tantalum-kernel/src/main/java/tantalum/kernel/step/CompactSteps.java, BuiltinSteps.java
   - `CompactRequested`：空闲会话开特殊运行，不追加用户消息，不发 AssembleContext；头部为空 FAILED；成功 COMPLETED 并取排队提交；有运行时忽略
   - 验证：逐步断言全过
   - _Requirements: 5.1_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“手动压缩内核步骤”，满足需求 5.1，遵守 design.md | Restrictions: 只做这一件事 | Success: 逐步断言全过 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 17. 接口 `POST /api/sessions/{id}/compact`
+- [x] 17. 接口 `POST /api/sessions/{id}/compact`
   - File: tantalum-shell/src/main/java/tantalum/shell/web/ApiController.java, tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java, tantalum-shell/src/test/java/tantalum/shell/web/ApiControllerTest.java
   - 200/404/409（运行中、无可压缩、无设置）/429/503；`Origin` 校验；可带 `instructions`
   - 验证：每个状态码有用例；真实 Claude 手动压缩一次，摘要含用户说明的重点

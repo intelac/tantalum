@@ -45,17 +45,29 @@ class TrimmingTest {
     }
 
     @Test
-    void longResultsAreCutAtAUtf8BoundaryAndAnnotated() {
-        String text = "ab" + "你".repeat(10);
+    void longResultsKeepHeadAndTailAtUtf8BoundariesAndAreAnnotated() {
+        String text = "ab" + "你".repeat(10) + "END";
         ToolResultBlock result = new ToolResultBlock("t", text, true, "CODE");
-        ToolResultBlock cut = Trimming.truncate(result, 6);
-        String[] parts = cut.text().split("\n", 2);
-        assertEquals("ab你", parts[0], "cutting inside 好 would leave a broken character");
-        assertEquals("[truncated: " + text.getBytes(StandardCharsets.UTF_8).length + " bytes total]", parts[1]);
+        ToolResultBlock cut = Trimming.truncate(result, 8);
+        String[] parts = cut.text().split("\n");
+        assertEquals(3, parts.length, cut.text());
+        assertEquals("ab", parts[0], "4 bytes of head: cutting inside the first 你 would leave a broken character, so it backs off");
+        assertEquals("END", parts[2], "the tail survives: codes and conclusions sit at the end of tool output");
+        int total = text.getBytes(StandardCharsets.UTF_8).length;
+        assertEquals("[... " + (total - 2 - 3) + " of " + total + " bytes truncated ...]", parts[1]);
         assertTrue(cut.error());
         assertEquals("CODE", cut.code());
         assertEquals("t", cut.toolCallId());
-        assertFalse(cut.text().contains("�"));
+        assertFalse(cut.text().contains("\uFFFD"));
+    }
+
+    @Test
+    void truncationKeepsTheLastLineOfALongLog() {
+        String log = "line\n".repeat(2000) + "SECRET CODE: KESTREL-4137\n";
+        ToolResultBlock cut = Trimming.truncate(new ToolResultBlock("t", log, false, null), 4096);
+        assertTrue(cut.text().contains("KESTREL-4137"));
+        assertTrue(cut.text().startsWith("line\nline\n"));
+        assertTrue(cut.text().getBytes(StandardCharsets.UTF_8).length < 4096 + 80);
     }
 
     @Test

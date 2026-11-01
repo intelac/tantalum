@@ -116,10 +116,15 @@ public final class TestMcpServer implements AutoCloseable {
         port = tomcat.getConnector().getLocalPort();
     }
 
+    /** 可重复调用：测试里可能先手动停掉再由 try-with-resources 关闭。 */
     public void stop() throws Exception {
+        if (tomcat == null) {
+            return;
+        }
         server.closeGracefully();
         tomcat.stop();
         tomcat.destroy();
+        tomcat = null;
     }
 
     public void addTool(Definition definition) {

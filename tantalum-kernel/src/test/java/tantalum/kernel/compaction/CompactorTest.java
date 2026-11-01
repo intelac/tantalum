@@ -137,7 +137,7 @@ class CompactorTest {
         assertEquals(SummaryPrompt.summaryMessage("the summary"), replacement.get(0));
         assertEquals(user(1), replacement.get(1));
         assertEquals(List.of(new TextBlock("a")), replacement.get(2).content());
-        assertTrue(((ToolResultBlock) replacement.get(3).content().getFirst()).text().contains("[truncated: 100 bytes total]"));
+        assertTrue(((ToolResultBlock) replacement.get(3).content().getFirst()).text().contains("of 100 bytes truncated"));
 
         List<Message> noRequest = Compactor.replacement(new Plan(2, 2, 2, 60, null), view, "s", SETTINGS);
         assertEquals(3, noRequest.size());
@@ -155,7 +155,7 @@ class CompactorTest {
         assertFalse(fits.dropped());
         assertEquals(3, fits.messages().size());
         assertEquals(List.of(new TextBlock("a")), fits.messages().get(1).content());
-        assertTrue(((ToolResultBlock) fits.messages().get(2).content().getFirst()).text().startsWith("y".repeat(30) + "\n[truncated"));
+        assertTrue(((ToolResultBlock) fits.messages().get(2).content().getFirst()).text().startsWith("y".repeat(15) + "\n[... "));
 
         // 固定部分已占 780，阈值 800：只剩 20 token，第一单元（30）放不下，丢；第二单元也放不下，丢；空了。
         Compactor.Head dropped = Compactor.headForSummary(plan, view, SETTINGS, 780);

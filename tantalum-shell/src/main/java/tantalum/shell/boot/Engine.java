@@ -14,6 +14,7 @@ import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.compaction.Compactor;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.table.BuiltinSteps;
@@ -62,6 +63,7 @@ import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
 import tantalum.value.event.Cancel;
+import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
@@ -72,6 +74,7 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.state.Compacting;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
@@ -207,6 +210,7 @@ public final class Engine implements AutoCloseable {
             case UserPrompt prompt -> prompt.submission();
             case SteerSubmitted steer -> steer.submission();
             case FollowUpSubmitted followUp -> followUp.submission();
+            case CompactRequested compact -> compact.submission();
             case Cancel cancel -> null;
             default -> {
                 yield null;
@@ -245,6 +249,41 @@ public final class Engine implements AutoCloseable {
             case "follow-up" -> new FollowUpSubmitted(claim.submission(), request, text);
             default -> new UserPrompt(claim.submission(), request, new OwnerRef.OfSession(session), text);
         };
+        if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), principal, session, null, event))) {
+            gate.release(principal);
+            if (newRunSubmissions.remove(claim.submission())) {
+                gate.releaseNewRun();
+            }
+            ledger.release(principal, request);
+            return new Submission(429, null, false);
+        }
+        return new Submission(200, claim.submission(), false);
+    }
+
+    /**
+     * 手动压缩（context-compaction 决定 D4）。会话不存在或不是该用户的 → 404；正在运行、没有压缩设置或没有可压缩的内容 → 409。
+     * 通过后发布 {@code CompactRequested}，内核在空闲会话上开一个特殊运行。{@code instructions} 可为 null。
+     */
+    public Submission compact(Principal principal, SessionId session, RequestId request, String instructions) {
+        SessionState existing = view.current().sessions().get(session);
+        if (existing == null || !existing.principal().equals(principal)) {
+            return new Submission(404, null, false);
+        }
+        if (existing.activeRun() != null || existing.context() == null || existing.context().compaction() == null
+                || Compactor.plan(existing, existing.context().system(), existing.context().tools(), Compacting.Trigger.MANUAL).isEmpty()) {
+            return new Submission(409, null, false);
+        }
+        SubmissionLedger.Claim claim = ledger.claim(principal, request);
+        if (!claim.isNew()) {
+            return new Submission(200, claim.submission(), true);
+        }
+        ExternalGate.Verdict verdict = gate.admit(principal, true);
+        if (verdict != ExternalGate.Verdict.ADMITTED) {
+            ledger.release(principal, request);
+            return new Submission(verdict == ExternalGate.Verdict.HALTED ? 503 : 429, null, false);
+        }
+        newRunSubmissions.add(claim.submission());
+        Event event = new CompactRequested(claim.submission(), request, instructions);
         if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), principal, session, null, event))) {
             gate.release(principal);
             if (newRunSubmissions.remove(claim.submission())) {
