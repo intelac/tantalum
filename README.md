@@ -109,13 +109,14 @@ journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 - **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令的内容会被拒绝写入。
 - **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
+- **边界和删除**：知识、`AGENTS.md`、索引用标签包裹并转义闭合标签，这只降低注入风险，不是保证。记忆变化时只追加变化的部分。删除记忆不会清除 journal 和历史消息里的内容，同一会话的 system 也要到压缩或新会话才更新。
 - **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
 
 ## 上下文压缩
 
 长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
 
-- **规则**：阈值 = 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`)；保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次，压缩失败后本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
+- **规则**：阈值 = 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`)；保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
 - **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
 - **配置**：`tantalum.<provider>.context-window`（为 0 时不压缩）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置在会话第一次运行时冻结，改配置只影响新会话。
 - **手动**：状态栏的压缩按钮，或 `POST /api/sessions/{id}/compact`（可带 `instructions`）；会话运行中或没有可压缩的内容时返回 409。
@@ -144,8 +145,9 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 - **共享身份**：所有用户用同一个凭据，外部系统分不清是谁操作的，只有 journal 能回答。没有每用户令牌。
 - **提示注入**：工具结果可能诱导模型。system 里有提醒，但这不是保证；未放行的工具才真正调不到。放行写工具后，没有人工确认这一步。
 - **取消和超时**：服务器不一定知道调用被取消，写工具的结果可能未知，系统不自动重试。
+- **会话失效**：只有期间没有别的调用才重试一次；有重叠时报告结果未知，因为 SDK 2.1.0 用同一条错误结束所有在途调用，分不清哪个已经执行。
 - **不并行**：同一轮的 MCP 工具逐个执行，这样回放不依赖服务器当时的状态。
-- **新工具**：已有会话看不到，要开新会话。
+- **新工具**：已有会话要到压缩之后或新会话才看到。新会话最多等 `tantalum.mcp.startup-wait`（默认 10 秒）让第一次连接结束。
 - **不支持**：stdio 本地服务器、OAuth、资源、提示词模板、采样。状态只能看日志，没有界面。
 
 ## 写插件

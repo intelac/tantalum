@@ -78,6 +78,8 @@ class StrataScenarioTest {
             CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt one at a time, then say done.");
             CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt one at a time, then say done.");
             CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt again one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt again one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note10.txt again one at a time, then say done.");
             String answer = CompactionScenario.ask(server, "twice", "s1", "Write a one-line report of what you did. Do not read anything.");
             int compactions = CompactionScenario.compactions(server, "twice", "s1");
             System.out.println("[strata twice] compactions=" + compactions + " answer=" + answer.replace("\n", " | "));

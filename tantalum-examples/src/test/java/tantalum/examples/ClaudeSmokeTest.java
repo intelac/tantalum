@@ -95,6 +95,29 @@ class ClaudeSmokeTest {
         SummaryModePrompt.check(replied);
     }
 
+    /**
+     * 压缩后重新组装的风险（spec-audit-fixes 设计）：保留段里有某工具的调用，而新的工具列表里没有它。
+     * 判定：严格校验下请求被接受，模型能看到那次结果。
+     */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void historyMayCallAToolThatIsNoLongerListed() {
+        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
+                "claude-sonnet-5-5", 1024, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+        ToolSpec other = new ToolSpec("read_file", "Read a file.", new Json.Obj(Map.of("type", new Json.Str("object"),
+                "properties", new Json.Obj(Map.of("path", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
+        List<Message> messages = List.of(
+                Message.user("[Summary] The user wants the value of key a."),
+                new Message(Role.ASSISTANT, List.of(new tantalum.value.model.TextBlock("Looking it up."),
+                        new ToolCallBlock("gone1", "mcp__demo__lookup", "{\"key\":\"a\"}", new Json.Obj(Map.of("key", new Json.Str("a"))))), false),
+                new Message(Role.USER, List.of(new ToolResultBlock("gone1", "value-3391", false, null)), false),
+                Message.user("What was the value? Answer directly."));
+        ModelOutcome outcome = strict.call(new Prompt("s", List.of(other), messages), IGNORE);
+        ModelOutcome.Replied replied = assertInstanceOf(ModelOutcome.Replied.class, outcome, outcome instanceof ModelOutcome.Failed failed ? failed.detail() : "");
+        System.out.println("[smoke claude] gone tool in history: usage=" + replied.usage() + " text=" + SummaryModePrompt.text(replied).replace('\n', ' '));
+        assertTrue(SummaryModePrompt.text(replied).contains("3391"));
+    }
+
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void oversizedPromptIsRecognisedAsContextOverflow() {
