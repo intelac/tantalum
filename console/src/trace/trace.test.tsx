@@ -35,6 +35,27 @@ describe("TimeBars", () => {
   });
 });
 
+describe("EventList compaction", () => {
+  it("tags the event that compacted the context", () => {
+    const compacted: Trace = {
+      events: [
+        { seq: 0, at: "2026-10-31T00:00:00Z", type: "ContextAssembled", phase: "AwaitingSummary", turn: 1 },
+        { seq: 1, at: "2026-10-31T00:00:03Z", type: "ModelReplied", phase: "AwaitingModel", turn: 2, compaction: { trigger: "AUTO", ok: true, estimateBefore: 13900, estimateAfter: 4800 } },
+        { seq: 2, at: "2026-10-31T00:00:05Z", type: "ModelReplied", phase: "AwaitingModel", turn: 3, compaction: { trigger: "AUTO", ok: false, estimateBefore: 0, estimateAfter: 0, reason: "summary is empty" } },
+      ],
+      segments: [
+        { handler: "ModelHandler", from: "2026-10-31T00:00:00Z", to: "2026-10-31T00:00:03Z" },
+        { handler: "ModelHandler", from: "2026-10-31T00:00:03Z", to: "2026-10-31T00:00:05Z" },
+      ],
+    };
+    render(<EventList trace={compacted} selectedTurn={null} onSelectTurn={() => undefined} />);
+    const items = screen.getAllByRole("listitem");
+    expect(items[1]?.textContent).toContain("压缩 13.9K → 4.8K");
+    expect(items[2]?.textContent).toContain("压缩未采用：summary is empty");
+    expect(items[0]?.textContent).not.toContain("压缩");
+  });
+});
+
 describe("EventList", () => {
   it("shows type tags, handlers and lets the model-call rows be selected", async () => {
     const onSelect = vi.fn();

@@ -118,6 +118,14 @@ export function submit(session: string, mode: SubmitMode, text: string, requestI
   });
 }
 
+/** 手动压缩空闲会话；运行中或没有可压缩的内容时后端返回 409。 */
+export function compactSession(session: string, instructions?: string): Promise<{ submissionId: string; duplicate: boolean }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/compact`, {
+    method: "POST",
+    body: JSON.stringify(instructions === undefined ? {} : { instructions }),
+  });
+}
+
 export function cancelRun(run: string): Promise<unknown> {
   return call(`/api/runs/${encodeURIComponent(run)}/cancel`, { method: "POST", body: "{}" });
 }

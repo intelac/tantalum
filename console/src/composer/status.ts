@@ -13,7 +13,11 @@ export interface StatusParts {
   tokens: string | null;
   inOut: string | null;
   context: string | null;
+  /** 占比达到 80%：下一次模型调用前会自动压缩，状态行变色提示。 */
+  warn: boolean;
 }
+
+export const WARN_PERCENT = 80;
 
 /**
  * 状态行的几段文字。上下文占比 = 最近一次调用的输入（含缓存读取）/ 窗口大小；窗口未知时不显示。
@@ -27,5 +31,6 @@ export function statusParts(turns: number, usage: TokenUsage | undefined, contex
     tokens: usage === undefined ? null : zh.status.tokens(compact(total)),
     inOut: usage === undefined ? null : zh.status.inOut(compact(input), compact(usage.output)),
     context: percent === null ? null : zh.status.context(percent),
+    warn: percent !== null && percent >= WARN_PERCENT,
   };
 }

@@ -1,4 +1,5 @@
 import type { Trace, TraceEntry } from "../api/types";
+import { compact } from "../composer/status";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 import { offsetSeconds } from "./layout";
@@ -47,6 +48,13 @@ export function EventList({ trace, selectedTurn, onSelectTurn }: Props) {
             <span className="min-w-0 flex-1 truncate text-sm text-fg">
               {entry.type}
               {clickable && <span className="ml-2 text-xs text-accent">{zh.trace.turn(entry.turn as number)}</span>}
+              {entry.compaction !== undefined && (
+                <span className={cx("ml-2 rounded-xs px-1.5 py-0.5 text-xs", entry.compaction.ok ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger")}>
+                  {entry.compaction.ok
+                    ? zh.trace.compaction(compact(entry.compaction.estimateBefore), compact(entry.compaction.estimateAfter))
+                    : zh.trace.compactionFailed(entry.compaction.reason ?? "")}
+                </span>
+              )}
             </span>
             <span className="hidden shrink-0 text-xs text-fg-faint sm:inline" title={zh.trace.phase}>
               {entry.phase}

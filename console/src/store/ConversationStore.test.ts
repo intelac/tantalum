@@ -13,7 +13,7 @@ const step: ToolStepItem = {
   status: "RUNNING",
   group: "g2",
 };
-const text: TextItem = { kind: "text", id: "4.0", session: "s", run: "run-0", at: "2026-10-31T00:00:04Z", text: "done", interrupted: false };
+const text: TextItem = { kind: "text", id: "4.0", session: "s", run: "run-0", at: "2026-10-31T00:00:04Z", text: "done", interrupted: false, truncated: false };
 
 describe("ConversationStore", () => {
   it("overwrites by id without moving the item", () => {
