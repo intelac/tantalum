@@ -1,6 +1,6 @@
 {
   "filePath": ".spec-workflow/specs/context-compaction/requirements.md",
-  "currentVersion": 1,
+  "currentVersion": 2,
   "snapshots": [
     {
       "version": 1,
@@ -9,6 +9,14 @@
       "trigger": "initial",
       "approvalId": "approval_1793504330126_tn5hv3h8n",
       "approvalTitle": "context-compaction spec：需求文档（通用压缩、会话内稳定）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T08:04:15.942Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793516226447_f1ajgxbln",
+      "approvalTitle": "context-compaction spec：需求文档（重写，含九条压缩规则）"
     }
   ]
 }

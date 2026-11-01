@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/context-compaction/design.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T08:11:59.289Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793520719286_oaiy0rkbl",
+      "approvalTitle": "context-compaction spec：设计文档"
+    }
+  ]
+}
