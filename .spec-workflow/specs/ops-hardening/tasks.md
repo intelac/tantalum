@@ -42,25 +42,25 @@
 
 ## 阶段 1：每会话文件（只加新类，不接入）
 
-- [ ] 6. 文件名和路径
+- [x] 6. 文件名和路径
   - File: shell/store/SessionPaths.java, tantalum-shell/src/test/java/tantalum/shell/store/SessionPathsTest.java
   - URL 安全编码，超 120 字节截短加 SHA-256，解析后校验仍在 `sessions/` 内
   - 验证：`../x`、`a/b`、`..`、NUL、超长、Unicode 都不越出目录，不同 ID 不撞名
   - _Requirements: 非功能 Security_
 
-- [ ] 7. 写入
+- [x] 7. 写入
   - File: shell/store/SessionFile.java, SessionFileTest.java
   - 头部、追加、`force(true)`、新文件 fsync 目录、权限 600/700、首次写才创建；句柄 LRU
   - 验证：写后读回一致；权限符合；被 LRU 关闭的句柄再写仍正确
   - _Requirements: 1b（3.1b）, 非功能 Security_
 
-- [ ] 8. 读取和残缺处理
+- [x] 8. 读取和残缺处理
   - File: shell/store/SessionFileReader.java, SessionFileReaderTest.java
   - 尾部无换行或末行解析失败时截掉并记日志；中间损坏抛异常并指出行号
   - 验证：逐字节截断一个文件，每种截断都恢复出全部完整事件；中间损坏被拒绝，其他文件不受影响
   - _Requirements: 3.1a_
 
-- [ ] 9. 格式版本
+- [x] 9. 格式版本
   - File: shell/store/StoreFormat.java, StoreFormatTest.java
   - 读写 `format.json`；`storage` 比程序新时拒绝并说明，不改动数据；`semantics` 变化只记警告
   - 验证：未来版本拒绝且文件未变；语义变化能启动并有警告

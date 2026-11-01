@@ -29,6 +29,14 @@ public final class JsonText {
         }
     }
 
+    public static String toText(Json value) {
+        return MAPPER.writeValueAsString(toPlain(value));
+    }
+
+    public static String quote(String text) {
+        return MAPPER.writeValueAsString(text);
+    }
+
     /** 按 token 读取，数字取原文，避免经过树节点时丢失精度。 */
     static Json read(JsonParser in) {
         return switch (in.currentToken()) {
