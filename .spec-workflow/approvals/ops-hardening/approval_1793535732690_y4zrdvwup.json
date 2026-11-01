@@ -1,0 +1,10 @@
+{
+  "id": "approval_1793535732690_y4zrdvwup",
+  "title": "ops-hardening spec：需求文档（改为每会话一个 journal）",
+  "filePath": ".spec-workflow/specs/ops-hardening/requirements.md",
+  "type": "document",
+  "status": "pending",
+  "createdAt": "2026-11-01T12:22:12.690Z",
+  "category": "spec",
+  "categoryName": "ops-hardening"
+}
