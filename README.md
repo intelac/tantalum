@@ -139,10 +139,26 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 
 第三方依赖和界面参考（DeepSeek Harness）的许可证见 `THIRD_PARTY_NOTICES.md`。
 
-## 这个版本还没有的
+## 能力对照：和 pi、DeepSeek Harness 比
 
-- 用户管理界面：只有命令行；会话在内存里，重启后要重新登录
-- 操作系统级沙箱：目录隔离靠路径校验，工具都在同一进程里运行
-- 崩溃后自动续跑：重启后未结束的运行标记为“待恢复”，只能撤销
-- 子 agent、上下文压缩、memory
-- journal 快照：启动时间和内存随历史增长
+“做完了”一律对着这张表说。每个 spec 完成后更新；`core-skeleton` 和 `console-ui` 两个 spec 的任务已全部完成，但相对目标还缺下面标“没有”的部分。
+
+| 能力 | pi | DeepSeek Harness | Tantalum | 计划 |
+|---|---|---|---|---|
+| agent 循环、流式、工具调用、并行工具 | 有 | 有 | 有 | |
+| 会话持久化、崩溃后恢复 | 有（文件） | 有 | 有，journal 可逐字节回放；重启后未结束的运行标“待恢复”，只能撤销，不自动续跑 | 自动续跑待定 |
+| 钩子 / 扩展点 | 有 | 有 | 有，纯函数钩子 + `NeedWork` | |
+| 多用户、登录、每用户目录、入口限额 | 无 | 无 | 有 | |
+| 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有 | |
+| prompt caching（Claude） | 有 | 经 pi | 有 | |
+| 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-and-ops` |
+| journal 快照（启动时间不随历史增长） | 不适用 | 有 | **没有** | `context-and-ops` |
+| 长期记忆 | 无 | 有（MCP 工具，默认关） | **没有** | `memory`（需求已写） |
+| MCP 接入 | 无 | 有 | **没有** | MCP spec，第一版只接只读工具 |
+| 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
+| 子 agent | 有 | 有 | **没有** | 子 agent spec |
+| 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |
+| 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |
+| 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
+
+顺序（Yi 决定）：`memory` → `context-and-ops` → MCP → 沙箱 → 子 agent。
