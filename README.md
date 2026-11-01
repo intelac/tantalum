@@ -162,7 +162,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 多用户、登录、每用户目录、入口限额 | 无 | 无 | 有 | |
 | 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有 | |
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
-| 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-compaction`（需求待批准） |
+| 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-compaction`（已推迟，需求草稿已写） |
 | journal 快照（启动时间不随历史增长） | 不适用 | 有 | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 有（MCP 工具，默认关） | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | MCP 接入 | 无 | 有 | **没有** | MCP spec，第一版只接只读工具 |
@@ -172,4 +172,4 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |
 | 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
 
-顺序（Yi 决定）：`memory`（已完成）→ `context-compaction` → `ops-hardening` → MCP → 沙箱 → 子 agent。
+顺序（Yi 决定）：`memory`（已完成）；`context-compaction` 已推迟（Yi 决定，2026-11-01），其余顺序待定。
