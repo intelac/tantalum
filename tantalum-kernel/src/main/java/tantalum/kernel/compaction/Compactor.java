@@ -56,7 +56,10 @@ public final class Compactor {
         }
         int headMessages = units.get(firstKept).from();
         List<Message> head = view.subList(0, headMessages);
-        return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, TokenEstimate.ofMessages(head), request(head)));
+        // 规则 5：当前请求是视图里最新的用户亲笔消息；保留段里已有更新的，头部的旧消息就只进摘要。
+        boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isUserText);
+        return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, TokenEstimate.ofMessages(head),
+                requestKept ? null : request(head)));
     }
 
     /** 规则 1：有锚点用实测加新增估算，否则全部估算。 */

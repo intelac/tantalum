@@ -151,7 +151,7 @@ class TurnQueryTest {
         assertEquals(false, turns.get(0).prompt().output().toolsAllowed(), "turn 1 of the second run is the summary call");
         assertEquals(500, turns.get(0).prompt().output().maxTokens());
         assertTrue(turns.get(1).prompt().output().toolsAllowed());
-        assertEquals(4, turns.get(1).prompt().messages().size(), "summary, request q2, kept a2, kept q3");
+        assertEquals(3, turns.get(1).prompt().messages().size(), "summary, kept a2, kept q3");
 
         TurnQuery.Trace trace = query.trace(USER, second);
         assertEquals(List.of("AwaitingContext", "AwaitingSummary", "AwaitingModel", "Ended"),

@@ -84,13 +84,23 @@ class CompactorTest {
         assertEquals(3, plan.headUnits());
         assertEquals(3, plan.keptUnits());
         assertEquals(90, plan.headEstimate());
-        assertEquals(user(2), plan.request(), "the latest user text in the head is the current request");
+        assertNull(plan.request(), "a newer user message is kept, so the old one in the head only goes into the summary");
 
         Message huge = Message.user("x".repeat(900));
         SessionState bigTail = session(SETTINGS, user(1), assistant(1), huge).withAnchor(new UsageAnchor(900, 3));
         Plan kept = Compactor.plan(bigTail, "sys", NO_TOOLS, Trigger.AUTO).orElseThrow();
         assertEquals(2, kept.headMessages(), "the last unit is kept even though it exceeds K");
         assertEquals(1, kept.keptUnits());
+    }
+
+    /** 规则 5：工具链进行中，保留段里没有用户亲笔消息，头部的请求就是当前请求，原文必须留下。 */
+    @Test
+    void requestInTheHeadIsKeptWhenTheTailHasNoUserText() {
+        Message call = new Message(Role.ASSISTANT, List.of(new TextBlock("x".repeat(600))), false);
+        Message results = new Message(Role.USER, List.of(new ToolResultBlock("t", "r", false, null)), false);
+        SessionState session = session(SETTINGS, user(1), call, results, assistant(2), results).withAnchor(new UsageAnchor(900, 5));
+        Plan plan = Compactor.plan(session, "sys", NO_TOOLS, Trigger.AUTO).orElseThrow();
+        assertEquals(user(1), plan.request());
     }
 
     @Test
@@ -177,6 +187,6 @@ class CompactorTest {
         Optional<Plan> plan = Compactor.plan(session.withAnchor(new UsageAnchor(900, 10)), "sys", NO_TOOLS, Trigger.AUTO);
         assertTrue(plan.isPresent());
         assertEquals(4, plan.orElseThrow().headMessages(), "the head is counted on the view, starting at the old summary");
-        assertEquals(user(4), plan.orElseThrow().request());
+        assertNull(plan.orElseThrow().request(), "user(5) in the kept tail is the current request");
     }
 }

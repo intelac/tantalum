@@ -137,7 +137,7 @@ class CompactStepsTest {
         assertEquals(Compacting.Trigger.AUTO, compacting.trigger());
         // 单元：[q1] [thinking+call, result] [a1] [q2]；K = 70 → 留 a1 和 q2（60），头部是前两个单元（3 条消息）。
         assertEquals(3, compacting.plan().headMessages());
-        assertEquals(Message.user(block("q1")), compacting.plan().request());
+        assertNull(compacting.plan().request(), "q2 in the kept tail is the current request");
 
         List<Message> sent = summary.prompt().messages();
         assertEquals(4, sent.size(), "head of three messages plus the instruction");
@@ -157,12 +157,11 @@ class CompactStepsTest {
         CallModel call = onlyCall(loop);
         assertTrue(call.prompt().output().toolsAllowed());
         List<Message> view = call.prompt().messages();
-        assertEquals(4, view.size(), "summary, request, kept a1, kept q2");
+        assertEquals(3, view.size(), "summary, kept a1, kept q2");
         assertEquals(SummaryPrompt.summaryMessage("Goal: q1"), view.get(0));
-        assertEquals(Message.user(block("q1")), view.get(1));
-        assertEquals(Role.ASSISTANT, view.get(2).role());
-        assertEquals(text(block("a1")), view.get(2).content());
-        assertEquals(Message.user(block("q2")), view.get(3));
+        assertEquals(Role.ASSISTANT, view.get(1).role());
+        assertEquals(text(block("a1")), view.get(1).content());
+        assertEquals(Message.user(block("q2")), view.get(2));
         assertEquals(history, loop.session().messages(), "history is untouched");
         assertEquals(history.size(), loop.session().compaction().tailFrom());
         assertNull(loop.session().anchor(), "the old measurement is void");
@@ -185,7 +184,7 @@ class CompactStepsTest {
         loop.prompt("q3");
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
         assertEquals("AwaitingModel", loop.phase());
-        assertEquals(6, onlyCall(loop).prompt().messages().size(), "view = replacement(4) + a2 + q3");
+        assertEquals(5, onlyCall(loop).prompt().messages().size(), "view = replacement(3) + a2 + q3");
     }
 
     @Test
@@ -324,8 +323,8 @@ class CompactStepsTest {
         assertEquals("AwaitingModel", loop.phase());
         CallModel retry = onlyCall(loop);
         assertTrue(retry.prompt().output().toolsAllowed());
-        assertEquals(List.of(SummaryPrompt.summaryMessage("Goal: q1 then q2"), Message.user(block("q1")), Message.user(block("q2"))),
-                retry.prompt().messages(), "summary, the request q1 from the head, and the kept last unit q2");
+        assertEquals(List.of(SummaryPrompt.summaryMessage("Goal: q1 then q2"), Message.user(block("q2"))),
+                retry.prompt().messages(), "summary and the kept last unit q2, which is the current request");
         assertEquals(Compacting.Trigger.OVERFLOW, fact(loop, ContextCompacted.class).trigger());
 
         // 成功回复后标记清零，下一次超长可以再恢复一次。
@@ -428,7 +427,7 @@ class CompactStepsTest {
         assertEquals(EndReason.COMPLETED, ended.reason());
         assertEquals(CompactSteps.COMPACTED, ended.detail());
         assertEquals(Compacting.Trigger.MANUAL, fact(loop, ContextCompacted.class).trigger());
-        assertEquals(4, loop.session().compaction().replacement().size(), "summary, request q1, kept a2, kept q2");
+        assertEquals(3, loop.session().compaction().replacement().size(), "summary, kept q2, kept a2");
         assertEquals("AwaitingContext", loop.phase(), "the queued follow-up started a new run");
         assertEquals(List.of(), loop.session().followUps());
     }

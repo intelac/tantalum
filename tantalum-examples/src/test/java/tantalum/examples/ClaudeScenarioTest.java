@@ -596,6 +596,46 @@ class ClaudeScenarioTest {
         assertTrue(verdict.rereads() <= 1, "the model went back to the files " + verdict.rereads() + " times after compaction");
     }
 
+    /**
+     * context-compaction 任务 17：真实 Claude 手动压缩一次。判定：运行以 compacted 完成；摘要含用户说明要求保留的暗号；
+     * 压缩后继续提问，模型只靠摘要答对，且没有调用工具。严格校验模式。
+     */
+    @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
+    void manualCompactionKeepsWhatTheUserAskedFor() throws Exception {
+        Path workspace = workspace("manual");
+        Path data = temp.resolve("data-manual");
+        try (TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            submit(server, "manual", "s1", "The deployment code is ZEPHYR-9182. Reply with one short sentence. " + "Background only: " + "lorem ipsum ".repeat(1500));
+            assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
+            submit(server, "manual", "s1", "Reply with the single word: ok.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
+
+            HttpResponse<String> compact = server.post("manual", "/api/sessions/s1/compact", "{\"instructions\":\"Keep the deployment code exactly.\"}");
+            assertEquals(200, compact.statusCode(), compact.body());
+            JsonNode run = null;
+            for (int i = 0; i < 1200; i++) {
+                JsonNode runs = JSON.readTree(server.get("manual", "/api/sessions/s1/runs").body()).get("runs");
+                if (runs.size() == 3 && runs.get(2).has("endReason")) {
+                    run = runs.get(2);
+                    break;
+                }
+                Thread.sleep(100);
+            }
+            assertNotNull(run, "the compaction run did not end");
+            assertEquals("compacted", run.path("detail").asString(), run.toString());
+            String messages = server.get("manual", "/api/sessions/s1/messages").body();
+            assertTrue(messages.contains("\"trigger\":\"MANUAL\"") && messages.contains("ZEPHYR-9182"), messages.substring(0, Math.min(500, messages.length())));
+
+            submit(server, "manual", "s1", "What is the deployment code? Answer from what you know, without using tools.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
+        }
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(lastText(journal).contains("ZEPHYR-9182"), lastText(journal));
+        assertTrue(toolCalls(journal).isEmpty(), toolCalls(journal).toString());
+        usage("manual compaction", journal);
+    }
+
     private static ClaudeClient strict(String effort) {
         return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
                 MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);

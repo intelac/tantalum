@@ -88,7 +88,7 @@ class TranscriptReplayTest {
         assertEquals(live.items(), transcript.items(SESSION));
         assertEquals(live.state(), state);
         assertEquals(1, transcript.items(SESSION).stream().filter(TranscriptItem.CompactionMark.class::isInstance).count());
-        assertEquals(4, state.sessions().get(SESSION).compaction().replacement().size(), "summary, request q2, kept a2, kept q3");
+        assertEquals(3, state.sessions().get(SESSION).compaction().replacement().size(), "summary, kept a2, kept q3");
     }
 
     @Test
