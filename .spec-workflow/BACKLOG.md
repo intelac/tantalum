@@ -39,4 +39,4 @@
 
 不是任务，记在 `steering/tech.md` 的 Known Limitations：Disruptor 未针对 Java 25 正式声明支持、SQLite 原生访问警告、登录会话不持久化、没有用户管理界面、模型并发默认为 1、strata 与其他任务共用。
 
-`ops-hardening` 完成后会多两条，写进 README：内核语义变化后旧会话回放可能不再逐字节相同。
+`ops-hardening` 完成后会多一条，写进 README：内核语义变化后旧会话回放可能不再逐字节相同。
