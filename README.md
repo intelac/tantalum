@@ -102,7 +102,7 @@ journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 
 ## 记忆
 
-模型可以替每个用户记住跨会话仍然有用的事实：偏好、纠正过的做法、项目事实、外部链接。四层模型里本版本实现了第三层（个人长期记忆）和第四层（共享知识，只读）；第二层会话摘要属于 `context-compaction`。
+模型可以替每个用户记住跨会话仍然有用的事实：偏好、纠正过的做法、项目事实、外部链接。四层模型里实现了第二层（会话摘要，见下面的“上下文压缩”）、第三层（个人长期记忆）和第四层（共享知识，只读）。
 
 - **存在哪**：每人模式下在 `<workspace>/<用户名>/memory/`，索引 `MEMORY.md` 每条一行，条目 `<name>.md` 带 frontmatter（名称、描述、类型、更新时间）。共用工作目录模式下放到 `<data-dir>/memory/<用户名>/`，这样别人的 `grep` 搜不到。索引以条目文件为准，每次写删后重建。
 - **怎么进 prompt**：运行开始时把记忆指引、共享知识、`AGENTS.md` 和该用户的索引依次拼进 system，写进 `ContextAssembled` 事件；回放不读文件。索引在 system 末尾、钩子追加内容之前，prompt caching 的断点整个运行里稳定。条目正文不常驻，模型用 `memory_read` 按需读。新记忆从下一个运行开始生效：会话的 system 和工具在第一个运行时固定（所有模型相同），之后可变内容有变化时追加一条用户消息说明，新工具要到新会话才可见。
@@ -110,6 +110,18 @@ journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 - **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
 - **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
+
+## 上下文压缩
+
+长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
+
+- **规则**：阈值 = 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`)；保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次，压缩失败后本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
+- **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
+- **配置**：`tantalum.<provider>.context-window`（为 0 时不压缩）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置在会话第一次运行时冻结，改配置只影响新会话。
+- **手动**：状态栏的压缩按钮，或 `POST /api/sessions/{id}/compact`（可带 `instructions`）；会话运行中或没有可压缩的内容时返回 409。
+- **回复被截断**：回复因输出上限结束时运行照常完成，对话页提示“回复被截断”；不自动续写。
+
+实测（细节在 `.spec-workflow/steering/tech.md`）：Claude Sonnet 5.5 严格校验和本地 qwen 用同一个十篇笔记的用例，压缩后暗号和规则全部保留；同一任务开压缩后总 prompt token 从 15.3 万降到 10.3 万。
 
 ## MCP
 
@@ -187,7 +199,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 多用户、登录、每用户目录、入口限额 | 无 | 无 | 有 | |
 | 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有 | |
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
-| 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-compaction`（已推迟，需求草稿已写） |
+| 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec | 自定义摘要钩子待定 |
 | journal 快照（启动时间不随历史增长） | 不适用 | 有 | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 有（MCP 工具，默认关） | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | MCP 接入 | 无 | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
@@ -197,4 +209,4 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |
 | 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
 
-顺序（Yi 决定）：`memory`（已完成）；`context-compaction` 已推迟（Yi 决定，2026-11-01），其余顺序待定。
+顺序（Yi 决定）：`memory`、`mcp-client`、`context-compaction` 已完成；其余顺序待定。
