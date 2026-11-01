@@ -7,7 +7,25 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** 全部配置，默认值在 {@code application.properties}。 */
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
-                                 String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp) {
+                                 String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
+                                 Compaction compaction) {
+
+    /** 上下文压缩。窗口在各供应商下配置；这里是预留、保留量、工具结果上限和摘要长度。 */
+    public record Compaction(long reserveTokens, long keepRecentTokens, int maxKeptToolResultBytes,
+                             int maxSummarizedToolResultBytes, long summaryMaxTokens) {
+
+        public Compaction {
+            requirePositive("reserveTokens", reserveTokens);
+            requirePositive("keepRecentTokens", keepRecentTokens);
+            requirePositive("maxKeptToolResultBytes", maxKeptToolResultBytes);
+            requirePositive("maxSummarizedToolResultBytes", maxSummarizedToolResultBytes);
+            requirePositive("summaryMaxTokens", summaryMaxTokens);
+        }
+
+        public static Compaction defaults() {
+            return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192);
+        }
+    }
 
     /** MCP 服务器，只由管理员配置。没配时可以整个为 null。校验在 {@code McpSettings}。 */
     public record Mcp(java.util.Map<String, McpServer> servers) {}
@@ -46,7 +64,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    private static void requirePositive(String name, int value) {
+    private static void requirePositive(String name, long value) {
         if (value <= 0) {
             throw new IllegalArgumentException(name + " must be positive but was " + value);
         }

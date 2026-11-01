@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
+import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.FollowUpSubmitted;
@@ -89,6 +90,7 @@ public final class EventCodec {
         codec.register(TimerFired.TYPE, 1, TimerFired.class);
         codec.register(WorkDone.TYPE, 1, WorkDone.class);
         codec.register(CommandDropped.TYPE, 1, CommandDropped.class);
+        codec.register(CompactRequested.TYPE, 1, CompactRequested.class);
         return codec;
     }
 

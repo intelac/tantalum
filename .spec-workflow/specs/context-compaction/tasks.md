@@ -20,14 +20,14 @@
 
 ## 阶段 1：值对象
 
-- [ ] 3. value 新记录与字段
+- [x] 3. value 新记录与字段
   - File: tantalum-value/src/main/java/tantalum/value/state/Compaction.java, UsageAnchor.java, CompactionSettings.java, Compacting.java, Plan.java, SessionState.java, SessionContext.java, RunState.java, tantalum-value/src/main/java/tantalum/value/event/ContextAssembled.java, CompactRequested.java, tantalum-value/src/main/java/tantalum/value/decision/ContextCompacted.java, CompactionFailed.java
   - 按 design 的 Data Models；`SessionState.view()`；`ContextAssembled.compaction` 可空且保留旧构造器
   - 验证：value 测试全过；`EventCodec` 能读旧格式的 `ContextAssembled`（无 compaction 字段）
   - _Requirements: 4.1_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“value 新记录与字段”，满足需求 4.1，遵守 design.md | Restrictions: 只做这一件事；value 只依赖 JDK；旧事件必须能反序列化 | Success: value 测试全过；EventCodec 能读旧格式的 ContextAssembled | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 4. `EventCodec` 注册 `CompactRequested`，配置项
+- [x] 4. `EventCodec` 注册 `CompactRequested`，配置项
   - File: tantalum-shell/src/main/java/tantalum/shell/journal/EventCodec.java, tantalum-shell/src/main/java/tantalum/shell/boot/TantalumProperties.java, tantalum-shell/src/main/resources/application.properties, tantalum-shell/src/test/java/tantalum/shell/journal/EventCodecTest.java, tantalum-shell/src/test/java/tantalum/shell/boot/TantalumPropertiesTest.java
   - 五个配置项及默认值；非正数启动失败
   - 验证：往返编码；非法配置的错误指出配置项

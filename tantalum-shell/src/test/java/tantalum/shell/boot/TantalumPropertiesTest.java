@@ -60,6 +60,23 @@ class TantalumPropertiesTest {
     }
 
     @Test
+    void compactionHasDefaultsAndMustBePositive() {
+        TantalumProperties.Compaction compaction = TantalumProperties.Compaction.defaults();
+        assertEquals(16384, compaction.reserveTokens());
+        assertEquals(20000, compaction.keepRecentTokens());
+        assertEquals(32768, compaction.maxKeptToolResultBytes());
+        assertEquals(4096, compaction.maxSummarizedToolResultBytes());
+        assertEquals(8192, compaction.summaryMaxTokens());
+        String message = assertThrows(IllegalArgumentException.class,
+                () -> new TantalumProperties.Compaction(0, 1, 1, 1, 1)).getMessage();
+        assertTrue(message.contains("reserveTokens"), message);
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, -1, 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0));
+    }
+
+    @Test
     void limitsMustBePositive() {
         assertThrows(IllegalArgumentException.class, () -> new Loop(0, 1, 1, 1, 1024, 1024));
         assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024));
