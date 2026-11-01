@@ -185,17 +185,19 @@ class ClaudeScenarioTest {
         long input = 0;
         long output = 0;
         long cacheRead = 0;
+        long cacheWrite = 0;
         long thinking = 0;
         for (ModelReplied reply : replies) {
             if (reply.usage() != null) {
                 input += reply.usage().input();
                 output += reply.usage().output();
                 cacheRead += reply.usage().cacheRead();
+                cacheWrite += reply.usage().cacheWrite();
             }
             thinking += reply.content().stream().filter(ReasoningBlock.class::isInstance).count();
         }
         String line = "[claude " + label + "] modelCalls=" + replies.size() + " input=" + input + " output=" + output
-                + " cacheRead=" + cacheRead + " thinkingBlocks=" + thinking;
+                + " cacheRead=" + cacheRead + " cacheWrite=" + cacheWrite + " thinkingBlocks=" + thinking;
         System.out.println(line);
         return line;
     }

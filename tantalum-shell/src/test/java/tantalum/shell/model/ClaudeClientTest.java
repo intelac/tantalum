@@ -246,7 +246,7 @@ class ClaudeClientTest {
         String body = server.requests.getFirst();
         assertTrue(body.contains("\"model\":\"claude-sonnet-5-5\""), body);
         assertTrue(body.contains("\"stream\":true"), body);
-        assertTrue(body.contains("\"system\":\"sys\""), body);
+        assertTrue(body.contains("\"text\":\"sys\""), body);
         assertTrue(body.contains("\"signature\":\"SIG123\""), body);
         assertTrue(body.contains("\"data\":\"ENC\""), body);
         assertFalse(body.contains("not mine"), body);
@@ -256,5 +256,45 @@ class ClaudeClientTest {
         assertTrue(body.contains("\"effort\":\"medium\""), body);
         assertTrue(body.contains("\"fallbacks\":\"default\""), body);
         assertFalse(body.contains("temperature"), body);
+    }
+
+    /** 缓存断点只在三处：system 块、最后一个工具定义、最后一条消息的最后一个块；其余地方没有，否则会浪费断点配额。 */
+    @Test
+    void requestMarksCacheBreakpointsOnSystemLastToolAndLastMessage() throws Exception {
+        server.body = START + messageDelta("end_turn", "null") + STOP;
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        Prompt prompt = new Prompt("sys", List.of(new ToolSpec("grep", "g", schema), new ToolSpec("read", "r", schema)), List.of(
+                Message.user("q"),
+                new Message(Role.ASSISTANT, List.of(new TextBlock("calling"),
+                        new ToolCallBlock("t1", "grep", "{}", new Json.Obj(Map.of()))), false),
+                new Message(Role.USER, List.of(new ToolResultBlock("t1", "out", false, null), new TextBlock("steer")), false)));
+
+        call(prompt);
+
+        tools.jackson.databind.JsonNode body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(server.requests.getFirst());
+        assertEquals("ephemeral", body.path("system").get(0).path("cache_control").path("type").asString());
+        assertTrue(body.path("tools").get(0).path("cache_control").isMissingNode());
+        assertEquals("ephemeral", body.path("tools").get(1).path("cache_control").path("type").asString());
+        tools.jackson.databind.JsonNode last = body.path("messages").get(2).path("content");
+        assertTrue(last.get(0).path("cache_control").isMissingNode());
+        assertEquals("ephemeral", last.get(1).path("cache_control").path("type").asString());
+        assertTrue(body.path("messages").get(0).path("content").get(0).path("cache_control").isMissingNode());
+        assertEquals(3, countOf(server.requests.getFirst(), "\"cache_control\""));
+    }
+
+    @Test
+    void blankSystemIsOmittedInsteadOfSentAsAnEmptyBlock() throws Exception {
+        server.body = START + messageDelta("end_turn", "null") + STOP;
+        call(new Prompt("", List.of(), List.of(Message.user("hi"))));
+        tools.jackson.databind.JsonNode body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(server.requests.getFirst());
+        assertTrue(body.path("system").isMissingNode(), server.requests.getFirst());
+    }
+
+    private static int countOf(String text, String needle) {
+        int count = 0;
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length())) {
+            count++;
+        }
+        return count;
     }
 }

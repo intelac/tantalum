@@ -154,7 +154,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 | 场景 | 结果 | 结论 |
 |---|---|---|
-| 一次运行八步顺序工具链（长任务） | 9 次模型调用，输入 7.3K、输出 0.46K | 多轮工具和长任务正常；**`cacheRead` 全程为 0**：`ClaudeClient` 没有用 prompt caching，长任务的输入 token 随轮次线性累加。待办：给 system 和工具定义加 `cache_control` |
+| 一次运行八步顺序工具链（长任务） | 9 次模型调用，输入 7.5K、输出 0.48K | 多轮工具和长任务正常。加 prompt caching 前 `cacheRead` 为 0；加上后（断点在最后一个工具、system 块、最后一条消息）同一场景 7.5K 输入里 6.4K 命中缓存、1.1K 写入缓存、只有 20 个按全价，输入费用约为原来的 27%。单次调用的运行（如额度场景）只有写入没有命中，输入费用多付四分之一 |
 | 递推题链（high effort） | 6 次调用，2 轮带 thinking | 带签名的 thinking 块经 journal 存取、跨多轮工具回传被接受。adaptive 模式下简单任务不出 thinking，测试在没有 thinking 时按跳过处理 |
 | 每个钩子位置（只读策略、截断、引用核对、工作结果、每日额度、真实 API 错误） | 全部触发 | 钩子链在第一个 `Stop` / `NeedWork` 处短路，**注册顺序决定后面的钩子看不看得到**；`/api/runs/{run}/turns` 回放时内核把同一段 journal 又跑一遍，钩子被再次调用（实测 4 次变 24 次），这正是钩子必须纯函数、不能有副作用的原因 |
 | 模型名不存在（HTTP 404 `not_found_error`） | `INVALID_REQUEST`，不重试，`onFailure` 看到原因 | 失败分类正确 |
