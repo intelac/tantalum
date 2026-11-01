@@ -22,7 +22,7 @@ class McpSettingsTest {
     }
 
     private static McpSettings load(String name, McpServer server) {
-        return McpSettings.from(new Mcp(Map.of(name, server)), TOOL_TIMEOUT, key -> key.equals("TOKEN") ? SECRET : null);
+        return McpSettings.from(new Mcp(Map.of(name, server), null), TOOL_TIMEOUT, key -> key.equals("TOKEN") ? SECRET : null);
     }
 
     private static String failure(String name, McpServer server) {
@@ -32,7 +32,7 @@ class McpSettingsTest {
     @Test
     void absentConfigurationMeansNoServers() {
         assertTrue(McpSettings.from(null, TOOL_TIMEOUT, key -> null).isEmpty());
-        assertTrue(McpSettings.from(new Mcp(null), TOOL_TIMEOUT, key -> null).isEmpty());
+        assertTrue(McpSettings.from(new Mcp(null, null), TOOL_TIMEOUT, key -> null).isEmpty());
     }
 
     @Test
@@ -79,5 +79,16 @@ class McpSettingsTest {
         assertTrue(failure("a", tooLong).contains(".timeout"));
         McpServer zero = new McpServer("https://x/mcp", null, null, List.of("a"), List.of("b"), 0, null, null, null);
         assertTrue(failure("a", zero).contains(".concurrency"));
+    }
+
+    /** 需求 2.10：回环判断只认字面量。 */
+    @Test
+    void loopbackIsLiteralOnly() {
+        for (String host : java.util.List.of("localhost", "127.0.0.1", "127.1.2.3", "[::1]")) {
+            assertTrue(McpSettings.isLoopback(host), host);
+        }
+        for (String host : java.util.List.of("example.com", "127.0.0.1.example.com", "10.0.0.1")) {
+            assertFalse(McpSettings.isLoopback(host), host);
+        }
     }
 }

@@ -38,6 +38,10 @@ public final class TestMcpServer implements AutoCloseable {
     public final List<String> calls = new CopyOnWriteArrayList<>();
     public final Set<String> authorizations = ConcurrentHashMap.newKeySet();
     public volatile boolean rejectAll;
+    /** 接下来这么多个 POST 直接返回 500，模拟一次调用的服务端错误。 */
+    public final java.util.concurrent.atomic.AtomicInteger failNextPosts = new java.util.concurrent.atomic.AtomicInteger();
+    /** 重启时不声明 tools 能力。 */
+    public volatile boolean withoutTools;
 
     private final List<Definition> definitions = new CopyOnWriteArrayList<>();
     private McpSyncServer server;
@@ -71,9 +75,11 @@ public final class TestMcpServer implements AutoCloseable {
     public void start() throws Exception {
         var provider = HttpServletStreamableServerTransportProvider.builder()
                 .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/mcp").build();
-        server = McpServer.sync(provider).serverInfo("test", "1")
-                .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-                .tools(definitions.stream().map(this::spec).toList()).build();
+        server = withoutTools
+                ? McpServer.sync(provider).serverInfo("test", "1").capabilities(McpSchema.ServerCapabilities.builder().build()).build()
+                : McpServer.sync(provider).serverInfo("test", "1")
+                        .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
+                        .tools(definitions.stream().map(this::spec).toList()).build();
         tomcat = new Tomcat();
         tomcat.setPort(port);
         tomcat.setBaseDir(Files.createTempDirectory("mcp-tomcat").toString());
@@ -102,6 +108,10 @@ public final class TestMcpServer implements AutoCloseable {
                 }
                 if (rejectAll) {
                     response.setStatus(401);
+                    return;
+                }
+                if ("POST".equals(request.getMethod()) && failNextPosts.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                    response.setStatus(500);
                     return;
                 }
                 chain.doFilter(request, response);

@@ -47,7 +47,7 @@ class McpRegistryTest {
                 new Definition("create", false, args -> TestMcpServer.text("created")),
                 new Definition("delete_all", null, args -> TestMcpServer.text("deleted")),
                 new Definition("bad.name", true, args -> TestMcpServer.text("x")));
-        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), allow, deny, maxTools))), FAST);
+        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), allow, deny, maxTools)), java.time.Duration.ofSeconds(1)), FAST);
         for (int i = 0; i < 1000 && registry.state("s") != McpConnection.State.READY; i++) {
             Thread.sleep(10);
         }
@@ -62,14 +62,14 @@ class McpRegistryTest {
     @Test
     void onlyReadOnlyToolsAreVisibleByDefault() throws Exception {
         open(Set.of(), Set.of(), 64);
-        assertEquals(List.of("mcp__s__search"), names());
+        assertEquals(List.of("mcp__s__bad_name_11ac3b82", "mcp__s__search"), names());
         assertTrue(registry.find("mcp__s__delete_all").isEmpty());
     }
 
     @Test
     void allowAddsWritesAndDenyWins() throws Exception {
         open(Set.of("create", "delete_all"), Set.of("delete_all"), 64);
-        assertEquals(List.of("mcp__s__create", "mcp__s__search"), names());
+        assertEquals(List.of("mcp__s__bad_name_11ac3b82", "mcp__s__create", "mcp__s__search"), names());
     }
 
     @Test
@@ -97,7 +97,7 @@ class McpRegistryTest {
         open(Set.of(), Set.of(), 64);
         ToolCatalog catalog = new ToolCatalog();
         catalog.setSource(registry);
-        assertEquals(List.of("mcp__s__search"), catalog.specs().stream().map(spec -> spec.name()).toList());
+        assertEquals(List.of("mcp__s__bad_name_11ac3b82", "mcp__s__search"), catalog.specs().stream().map(spec -> spec.name()).toList());
         assertTrue(catalog.find("mcp__s__search").isPresent());
         assertFalse(catalog.safety().isConcurrencySafe("mcp__s__search", new Json.Null()));
         Tool found = catalog.find("mcp__s__search").orElseThrow();
@@ -113,7 +113,23 @@ class McpRegistryTest {
 
     @Test
     void unreachableServerDoesNotBlockConstruction() {
-        registry = new McpRegistry(new McpSettings(List.of(settings("http://127.0.0.1:9/mcp", Set.of(), Set.of(), 64))), FAST);
+        registry = new McpRegistry(new McpSettings(List.of(settings("http://127.0.0.1:9/mcp", Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(1)), FAST);
         assertEquals(List.of(), registry.tools());
+    }
+
+    /** 需求 2.5：服务器不可用时最多等配置的时间；可用时等到工具出现。 */
+    @Test
+    void awaitReadyIsBoundedAndSeesTheToolsOfAReachableServer() throws Exception {
+        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(10)));
+        registry.awaitReady();
+        assertFalse(registry.tools().isEmpty(), "tools are there right after the first attempt");
+        registry.close();
+
+        McpSettings.Server silent = settings("http://10.255.255.1:9/mcp", Set.of(), Set.of(), 64);
+        registry = new McpRegistry(new McpSettings(List.of(silent), java.time.Duration.ofMillis(200)));
+        long start = System.nanoTime();
+        registry.awaitReady();
+        assertTrue(java.time.Duration.ofNanos(System.nanoTime() - start).toMillis() < 2000);
+        assertTrue(registry.tools().isEmpty());
     }
 }

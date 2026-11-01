@@ -55,7 +55,8 @@ public final class ContextHandler implements Handler {
     }
 
     @Override
-    public Event handle(Command command) throws IOException {
+    public Event handle(Command command) throws IOException, InterruptedException {
+        catalog.awaitReady();
         Principal principal = command.run().principal();
         StringBuilder dynamic = new StringBuilder();
         String shared = knowledge.text();

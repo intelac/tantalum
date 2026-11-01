@@ -1,6 +1,7 @@
 package tantalum.shell.mcp;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,9 +68,9 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
                     LOG.warn("mcp server {}: over max-tools ({}); skipping {}", server.name(), server.maxTools(), tool.name());
                     continue;
                 }
-                Optional<String> name = McpToolFilter.publicName(server.name(), tool.name());
-                if (name.isEmpty() || next.containsKey(name.get())) {
-                    LOG.warn("mcp server {}: tool name {} is invalid or duplicated; skipped", server.name(), tool.name());
+                String name = McpToolFilter.publicName(server.name(), tool.name());
+                if (next.containsKey(name)) {
+                    LOG.warn("mcp server {}: tool name {} is duplicated; skipped", server.name(), tool.name());
                     continue;
                 }
                 Json schema = JsonText.fromPlain(tool.inputSchema() == null ? Map.of("type", "object") : tool.inputSchema());
@@ -77,8 +78,8 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
                     LOG.warn("mcp server {}: tool {} has an invalid schema; skipped", server.name(), tool.name());
                     continue;
                 }
-                next.put(name.get(), new McpTool(server, connection, name.get(), tool.name(),
-                        tool.description() == null ? "" : tool.description(), schema, Boolean.TRUE.equals(hint)));
+                next.put(name, new McpTool(server, connection, name, tool.name(),
+                        tool.description() == null ? "" : tool.description(), schema));
             }
         }
         visible = Map.copyOf(next);
@@ -91,6 +92,15 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
     @Override
     public List<Tool> tools() {
         return List.copyOf(visible.values());
+    }
+
+    /** 第一个连接的尝试结束前工具还不全，而工具会随会话冻结，所以新会话要等一下（pi、DSH 都等）。总共最多等配置的时间。 */
+    @Override
+    public void awaitReady() throws InterruptedException {
+        long deadline = System.nanoTime() + settings.startupWait().toNanos();
+        for (McpConnection connection : connections.values()) {
+            connection.awaitFirstAttempt(Duration.ofNanos(Math.max(0, deadline - System.nanoTime())));
+        }
     }
 
     @Override

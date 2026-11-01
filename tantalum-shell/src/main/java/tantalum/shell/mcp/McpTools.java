@@ -11,12 +11,18 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** 构造 MCP 客户端的唯一地方。不跟随重定向，否则凭据可能被带到别的主机。 */
 final class McpTools {
 
     private static final int MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+
+    private static final Logger LOG = LoggerFactory.getLogger(McpTools.class);
+    static final int MAX_PAGES = 100;
 
     private McpTools() {}
 
@@ -43,12 +49,22 @@ final class McpTools {
 
     /** 列出全部工具，跟随分页。 */
     static List<McpSchema.Tool> listAll(McpSyncClient client) {
-        List<McpSchema.Tool> tools = new ArrayList<>();
-        McpSchema.ListToolsResult page = client.listTools();
-        tools.addAll(page.tools());
+        return collectPages(client.listTools(), client::listTools);
+    }
+
+    /** 分页有上限：有缺陷或恶意的服务器可能一直给下一页游标。超限时保留已取到的。 */
+    static List<McpSchema.Tool> collectPages(McpSchema.ListToolsResult first, Function<String, McpSchema.ListToolsResult> next) {
+        List<McpSchema.Tool> tools = new ArrayList<>(first.tools());
+        McpSchema.ListToolsResult page = first;
+        int pages = 1;
         while (page.nextCursor() != null && !page.nextCursor().isEmpty()) {
-            page = client.listTools(page.nextCursor());
+            if (pages >= MAX_PAGES) {
+                LOG.warn("mcp tool list exceeds {} pages; keeping the first ones", MAX_PAGES);
+                break;
+            }
+            page = next.apply(page.nextCursor());
             tools.addAll(page.tools());
+            pages++;
         }
         return List.copyOf(tools);
     }

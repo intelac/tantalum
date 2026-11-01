@@ -32,10 +32,28 @@ class McpResultsTest {
     }
 
     @Test
-    void truncationKeepsWholeCharactersAndSaysSo() {
+    void truncationKeepsHeadAndTailWholeCharactersAndSaysSo() {
         assertEquals("短", McpResults.truncate("短", 3));
-        String cut = McpResults.truncate("汉字汉字", 7);
-        assertTrue(cut.startsWith("汉字\n"), cut);
-        assertTrue(cut.contains("12 bytes, limit 7"), cut);
+        String cut = McpResults.truncate("汉".repeat(100) + "END", 80);
+        assertTrue(cut.startsWith("汉"), cut);
+        assertTrue(cut.endsWith("END"), cut);
+        assertTrue(cut.contains("303 bytes, limit 80"), cut);
+        assertTrue(cut.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 80);
+        assertTrue(!cut.contains("\uFFFD"), cut);
+    }
+
+    @Test
+    void resourceLinksKeepTheirNameAndUri() {
+        var link = McpSchema.ResourceLink.builder().name("report").uri("file:///r.txt").build();
+        var result = McpSchema.CallToolResult.builder().content(List.of(link)).build();
+        assertEquals("[resource report: file:///r.txt]", McpResults.toOutput(result, 1024).text());
+    }
+
+    @Test
+    void emptyContentFallsBackToStructuredContentAndEmptyErrorsSaySo() {
+        var structured = McpSchema.CallToolResult.builder().structuredContent(java.util.Map.of("owner", "M")).build();
+        assertEquals("{\"owner\":\"M\"}", McpResults.toOutput(structured, 1024).text());
+        var empty = McpSchema.CallToolResult.builder().isError(true).build();
+        assertTrue(!McpResults.toOutput(empty, 1024).text().isEmpty());
     }
 }

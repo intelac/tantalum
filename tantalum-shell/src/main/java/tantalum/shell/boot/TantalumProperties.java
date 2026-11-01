@@ -29,7 +29,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /** MCP 服务器，只由管理员配置。没配时可以整个为 null。校验在 {@code McpSettings}。 */
-    public record Mcp(java.util.Map<String, McpServer> servers) {}
+    public record Mcp(java.util.Map<String, McpServer> servers, Duration startupWait) {}
 
     /** 一个远程 MCP 服务器。凭据只从 {@code tokenEnv} 指向的环境变量读取；数字和时长为空时用默认值。 */
     public record McpServer(String url, String auth, String tokenEnv, java.util.List<String> allow, java.util.List<String> deny,
