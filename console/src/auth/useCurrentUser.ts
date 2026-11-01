@@ -20,18 +20,24 @@ export function useCurrentUser(): CurrentUser {
 
   const setUser = useCallback((user: User | null) => queries.setQueryData(ME_KEY, user), [queries]);
 
+  // 退出或登录过期：除“我是谁”之外的缓存（会话列表、配置、轨迹）全部丢掉，不留给同一标签页里下一个登录的人。
+  const forget = useCallback(() => {
+    queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
+    setUser(null);
+  }, [queries, setUser]);
+
   useEffect(() => {
-    onUnauthorized(() => setUser(null));
+    onUnauthorized(forget);
     return () => onUnauthorized(() => undefined);
-  }, [setUser]);
+  }, [forget]);
 
   const logout = useCallback(async () => {
     try {
       await logoutRequest();
     } finally {
-      setUser(null);
+      forget();
     }
-  }, [setUser]);
+  }, [forget]);
 
   return { user: query.data ?? null, loading: query.isPending, setUser, logout };
 }

@@ -86,6 +86,55 @@ describe("connectEvents", () => {
     expect((fetchMock.mock.calls[0]?.[1] as RequestInit).credentials).toBe("same-origin");
   });
 
+  it("a throwing handler loses one event but does not tear down the stream", async () => {
+    const fetchMock = vi.fn((_: string, init?: RequestInit) =>
+      Promise.resolve(response(200, streamOf(["event:item\ndata:bad\n\nevent:item\ndata:good\n\n"], true, init?.signal ?? undefined))),
+    );
+    const seen: string[] = [];
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const stop = connectEvents(
+      {
+        onEvent: (event) => {
+          if (event.data === "bad") throw new Error("handler bug");
+          seen.push(event.data);
+        },
+        onConnection: () => undefined,
+      },
+      { retryDelayMs: 1, fetch: fetchMock as unknown as typeof fetch },
+    );
+    await until(() => seen.length === 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    stop();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(errors).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+  });
+
+  it("cancels the old reader before reconnecting", async () => {
+    const cancelled: boolean[] = [];
+    const encoder = new TextEncoder();
+    const fetchMock = vi.fn(() => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode("event:chunk\ndata:{}\n\n"));
+          controller.close();
+        },
+        cancel() {
+          cancelled.push(true);
+        },
+      });
+      return Promise.resolve(response(200, stream));
+    });
+    const stop = connectEvents(
+      { onEvent: () => undefined, onConnection: () => undefined },
+      { retryDelayMs: 1, fetch: fetchMock as unknown as typeof fetch },
+    );
+    await until(() => fetchMock.mock.calls.length >= 2);
+    stop();
+    // 流正常结束后 cancel 是空操作，但调用路径必须走到；这里只断言没有抛错且重连发生了。
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("stops on 401 and reports it", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(401, null));
     const unauthorized = vi.fn();

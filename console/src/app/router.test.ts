@@ -18,6 +18,9 @@ describe("parseRoute", () => {
     expect(parseRoute("/s/abc/other")).toEqual({ page: "notFound", path: "/s/abc/other" });
     expect(parseRoute("/s/%E0%A4%A/trace/x").page).toBe("notFound");
     expect(parseRoute("/login", "?next=https%3A%2F%2Fevil")).toEqual({ page: "login" });
+    // 协议相对地址会被浏览器当成别的主机，不能当作站内路径。
+    expect(parseRoute("/login", "?next=%2F%2Fevil.example")).toEqual({ page: "login" });
+    expect(parseRoute("/login", "?next=%2F%5Cevil.example")).toEqual({ page: "login" });
   });
 
   it("builds paths that parse back", () => {

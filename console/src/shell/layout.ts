@@ -1,5 +1,7 @@
 // 侧栏宽度和断点的纯逻辑，组件只负责把它们接到 DOM 上。
 
+import { localStore } from "../app/storage";
+
 export const SIDEBAR_MIN = 264;
 export const SIDEBAR_MAX = 420;
 export const SIDEBAR_DEFAULT = 280;
@@ -15,34 +17,34 @@ export function clampWidth(width: number): number {
   return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(width)));
 }
 
-export function readWidth(storage: Pick<Storage, "getItem"> = localStorage): number {
+export function readWidth(storage: Pick<Storage, "getItem"> | null = localStore()): number {
   try {
-    const stored = storage.getItem(WIDTH_KEY);
+    const stored = storage?.getItem(WIDTH_KEY) ?? null;
     return stored === null ? SIDEBAR_DEFAULT : clampWidth(Number(stored));
   } catch {
     return SIDEBAR_DEFAULT;
   }
 }
 
-export function saveWidth(width: number, storage: Pick<Storage, "setItem"> = localStorage): void {
+export function saveWidth(width: number, storage: Pick<Storage, "setItem"> | null = localStore()): void {
   try {
-    storage.setItem(WIDTH_KEY, String(clampWidth(width)));
+    storage?.setItem(WIDTH_KEY, String(clampWidth(width)));
   } catch {
     // 存不了只影响这次。
   }
 }
 
-export function readCollapsed(storage: Pick<Storage, "getItem"> = localStorage): boolean {
+export function readCollapsed(storage: Pick<Storage, "getItem"> | null = localStore()): boolean {
   try {
-    return storage.getItem(COLLAPSED_KEY) === "true";
+    return storage?.getItem(COLLAPSED_KEY) === "true";
   } catch {
     return false;
   }
 }
 
-export function saveCollapsed(collapsed: boolean, storage: Pick<Storage, "setItem"> = localStorage): void {
+export function saveCollapsed(collapsed: boolean, storage: Pick<Storage, "setItem"> | null = localStore()): void {
   try {
-    storage.setItem(COLLAPSED_KEY, String(collapsed));
+    storage?.setItem(COLLAPSED_KEY, String(collapsed));
   } catch {
     // 同上。
   }

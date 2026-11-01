@@ -97,23 +97,26 @@ export class ConversationStore {
   /**
    * 从接口整体加载一个会话。{@code seq} 是快照截至的事件序号：SSE 已经推过更新版本的条目保留，
    * 快照里没有但比快照新的条目也保留并排在后面；其余以快照为准。只通知真正变了的条目。
+   * 不给 {@code seq} 时快照无条件生效，且不记录版本，之后任何推送都能更新这些条目。
    */
-  replace(session: string, items: readonly Item[], seq = Number.MAX_SAFE_INTEGER): void {
+  replace(session: string, items: readonly Item[], seq?: number): void {
     const changed: string[] = [];
     const ids = items.map((item) => item.id);
+    const cutoff = seq ?? Number.MAX_SAFE_INTEGER;
     for (const item of items) {
       const before = this.items.get(item.id);
-      if (before !== undefined && (this.versions.get(item.id) ?? -1) > seq) continue;
+      if (before !== undefined && (this.versions.get(item.id) ?? -1) > cutoff) continue;
       if (before === undefined || !sameItem(before, item)) {
         this.items.set(item.id, item);
         changed.push(item.id);
       }
-      this.versions.set(item.id, Math.max(seq, this.versions.get(item.id) ?? -1));
+      if (seq === undefined) this.versions.delete(item.id);
+      else this.versions.set(item.id, Math.max(seq, this.versions.get(item.id) ?? -1));
     }
     const previous = this.getOrder(session);
     for (const id of previous) {
       if (ids.includes(id)) continue;
-      if ((this.versions.get(id) ?? -1) > seq) ids.push(id);
+      if ((this.versions.get(id) ?? -1) > cutoff) ids.push(id);
       else {
         this.items.delete(id);
         this.versions.delete(id);

@@ -57,12 +57,16 @@ interface BoundaryState {
   failed: boolean;
 }
 
-/** 渲染出错退回纯文本，不让一条消息拖垮整个列表。 */
+/** 渲染出错退回纯文本，不让一条消息拖垮整个列表。文本变化后再试一次：流式中间态失败不该让最终文本也停在回退。 */
 class Boundary extends Component<{ text: string; children: ReactNode }, BoundaryState> {
   state: BoundaryState = { failed: false };
 
   static getDerivedStateFromError(): BoundaryState {
     return { failed: true };
+  }
+
+  componentDidUpdate(previous: { text: string }): void {
+    if (this.state.failed && previous.text !== this.props.text) this.setState({ failed: false });
   }
 
   render() {

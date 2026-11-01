@@ -35,16 +35,16 @@
   --color-current: currentColor;
 
   --radius-*: initial;
-  --radius-xs: var(--radius-xs);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
-  --radius-2xl: var(--radius-2xl);
+  --radius-xs: var(--shape-xs);
+  --radius-sm: var(--shape-sm);
+  --radius-md: var(--shape-md);
+  --radius-lg: var(--shape-lg);
+  --radius-xl: var(--shape-xl);
+  --radius-2xl: var(--shape-2xl);
   --radius-full: 9999px;
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-sans: var(--type-sans);
+  --font-mono: var(--type-mono);
 }
 
 html,
@@ -57,7 +57,7 @@ body {
   margin: 0;
   background-color: var(--bg);
   color: var(--fg);
-  font-family: var(--font-sans);
+  font-family: var(--type-sans);
   -webkit-font-smoothing: antialiased;
 }
 

@@ -122,6 +122,13 @@ describe("ConversationStore", () => {
     expect((store.getItem("2.0") as ToolStepItem).status).toBe("DONE");
   });
 
+  it("a snapshot without a seq records no version, so later pushes still apply", () => {
+    const store = new ConversationStore();
+    store.replace("s", [user, step]);
+    store.applyItem({ ...step, status: "DONE" }, 3);
+    expect((store.getItem("2.0") as ToolStepItem).status).toBe("DONE");
+  });
+
   it("unsubscribe stops notifications and unknown keys are empty", () => {
     const store = new ConversationStore();
     const listener = vi.fn();

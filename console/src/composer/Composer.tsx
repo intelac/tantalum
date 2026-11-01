@@ -29,6 +29,8 @@ export function Composer({ session, activeRun, modelName, cloud, compact = false
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const requestId = useRef<string | null>(null);
+  /** 上次失败时发送的内容；改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。 */
+  const failedContent = useRef<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = activeRun !== null;
 
@@ -37,6 +39,7 @@ export function Composer({ session, activeRun, modelName, cloud, compact = false
     setText(readDraft(session));
     setError(null);
     requestId.current = null;
+    failedContent.current = null;
   }, [session]);
 
   useLayoutEffect(() => {
@@ -56,16 +59,18 @@ export function Composer({ session, activeRun, modelName, cloud, compact = false
   async function send(): Promise<void> {
     const content = text.trim();
     if (content === "" || busy) return;
-    requestId.current ??= crypto.randomUUID();
+    if (requestId.current === null || failedContent.current !== content) requestId.current = crypto.randomUUID();
     setBusy(true);
     setError(null);
     try {
       await submit(session, running ? "follow-up" : "prompt", content, requestId.current);
       requestId.current = null;
+      failedContent.current = null;
       setText("");
       clearDraft(session);
       onSubmitted?.();
     } catch (failure) {
+      failedContent.current = content;
       setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
       setBusy(false);

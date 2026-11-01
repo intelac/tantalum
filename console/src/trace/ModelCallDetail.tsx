@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { getTurn } from "../api/client";
 import type { ContentBlock, Turn } from "../api/types";
@@ -54,7 +54,11 @@ function Block({ block }: { block: ContentBlock }) {
 
 /** 一次模型调用：由 journal 回放得出的完整 system prompt、工具列表、消息，以及回复或失败、用量和实际模型。 */
 export function ModelCallDetail({ run, turn, refreshKey }: Props) {
-  const query = useQuery({ queryKey: ["turn", run, turn, refreshKey], queryFn: () => getTurn(run, turn) });
+  const query = useQuery({
+    queryKey: ["turn", run, turn, refreshKey],
+    queryFn: () => getTurn(run, turn),
+    placeholderData: keepPreviousData,
+  });
   if (query.isPending) return <p className="p-3 text-sm text-fg-faint">{zh.common.loading}</p>;
   if (query.isError) {
     return (
