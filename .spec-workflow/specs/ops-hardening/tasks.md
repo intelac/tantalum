@@ -4,6 +4,8 @@
 
 **检查点：** 阶段 0 结束后停下，向 Yi 汇报基线和预算，确认后才动存储。其余阶段汇报后继续。
 
+编号：任务 45–49 是 2026-11-02 加的（快照和序号约定），放在实际执行的位置，原有编号不变。
+
 路径前缀：`shell/` = `tantalum-shell/src/main/java/tantalum/shell/`，`kernel/` = `tantalum-kernel/src/main/java/tantalum/kernel/`，`value/` = `tantalum-value/src/main/java/tantalum/value/`。
 
 ## 阶段 0：改造前基线（代码行为不变）
@@ -32,7 +34,7 @@
   - 验证：清单写进 design.md 的新小节
   - _Requirements: H5_
 
-- [ ] 5. 跑基线，确认预算（**检查点**）
+- [x] 5. 跑基线，确认预算（**检查点**，Yi 已于 2026-11-02 确认；50 万事件基线未实测，见需求文档的偏离说明）
   - File: .spec-workflow/steering/tech.md, .spec-workflow/specs/ops-hardening/design.md
   - 跑三个规模，结果写进 tech.md；需求 2.2、2.3、5.3、8.2 的预算写进 design.md；H3 的 30 分钟和 1000 按实测内存校正。如果并行 fsync 明显不够，在这里提出，不继续往下做
   - 验证：向 Yi 汇报数字，得到确认后才开始阶段 1
@@ -72,6 +74,12 @@
   - 验证：名额用完时分发等待、Input Ring 满后入口 429；已落盘事件不丢
   - _Requirements: H12_
 
+- [ ] 45. 序号接口
+  - File: shell/loop/Sequence.java, SequenceContractTest.java；shell/loop/JournalDispatcher.java
+  - 接口和单进程计数器；上限 2^53；测试用一个跳号的实现
+  - 验证：不连续的序号经分发、落盘、发布后顺序和内容正确；超上限时报错而不是静默溢出
+  - _Requirements: 11.2, H14_
+
 - [ ] 11. 用户通道
   - File: shell/loop/UserLane.java, UserLaneTest.java
   - 每用户一个虚拟线程，没事件就退出；按会话分组并行写，全部完成后按序号发布
@@ -98,8 +106,8 @@
 
 - [ ] 15. 阶段回归
   - File: 无新文件
-  - 验证：`mvn verify` 全量和现有并发压测通过；`kill -9` 后事件不丢（手工跑一次，自动化在任务 42）
-  - _Requirements: 3.1a, 3.1b_
+  - 验证：`mvn verify` 全量和现有并发压测通过，并用跳号的 `Sequence` 再跑一次；`kill -9` 后事件不丢（手工跑一次，自动化在任务 42）
+  - _Requirements: 3.1a, 3.1b, 11.1_
 
 ## 阶段 3：索引库
 
@@ -167,6 +175,18 @@
   - 验证：多用户交错下，结果和全量回放中该会话的部分逐字节相同
   - _Requirements: 5.4, 3.6, H2, H4_
 
+- [ ] 46. 快照编解码
+  - File: shell/store/SessionSnapshot.java, SessionSnapshotTest.java；shell/conversation/Transcript.java（导出和恢复内部状态）
+  - 含 `SessionState`、`RunState` 和 `Transcript` 内部状态；校验和
+  - 验证：覆盖压缩、工具轮、记忆变化的状态，编码再解码后相等；恢复的 `Transcript` 接着处理事件，结果和未中断时相同
+  - _Requirements: 10.2, H13_
+
+- [ ] 47. 快照载入和校验
+  - File: shell/store/SessionReplay.java, SessionReplayTest.java
+  - 读快照，从 `offset` 重放尾部；校验校验和、版本、`offset` 和该位置的序号
+  - 验证：只读了尾部事件（计数）；截断、改字节、超前、版本不符都回到全量重放并有警告；删除 `snapshots/` 后结果不变
+  - _Requirements: 10.1, 10.3, H13_
+
 - [ ] 26. 钉住计数
   - File: shell/loop/Residency.java, ResidencyTest.java
   - 通道判断前加一，cleanroom 处理完减一
@@ -185,11 +205,17 @@
   - 验证：有活动运行或排队的不被回收；超上限回收最久未用的
   - _Requirements: 2.5, H3, H5_
 
+- [ ] 48. 快照写入
+  - File: shell/store/SnapshotWriter.java, SnapshotWriterTest.java；shell/loop/Cleanroom.java, Evictor.java
+  - 回收前必写，运行结束且超过 200 事件时写，有活动运行不写；写临时文件再重命名；权限 600/700
+  - 验证：触发时机；写失败时运行不受影响、旧快照还在；写到一半崩溃时旧快照或全量重放仍正确；cleanroom 没有文件 I/O
+  - _Requirements: 10.4, 10.5, 非功能 Security_
+
 - [ ] 29. 不变量测试
   - File: tantalum-shell/src/test/java/tantalum/shell/loop/EvictionInvarianceTest.java
-  - “从不回收”和“每个事件后回收”两种配置
+  - “从不回收”“每个事件后回收”“每次都从快照载入”三种配置
   - 验证：prompt、对话视图、钩子结果逐字节相同，覆盖压缩、工具轮、记忆变化、额度钩子
-  - _Requirements: 9.1, 2.4_
+  - _Requirements: 9.1, 2.4, 10.2_
 
 - [ ] 30. 冷会话只读查询和启动
   - File: shell/store/ColdReads.java, ColdReadsTest.java；shell/loop/StateView.java；shell/boot/Startup.java
@@ -264,6 +290,12 @@
   - 任务 5 确认的预算写进代码，不能用环境变量放宽；对比基线写进 tech.md
   - 验证：故意调低预算时 `bench` 失败；真实预算下通过
   - _Requirements: 1.3, 2.2, 2.3, 5.3, 8.2_
+
+- [ ] 49. 快照效果
+  - File: tantalum-examples/src/test/java/tantalum/examples/bench/
+  - 长会话冷载入，有无快照各测一次；同时量写快照的耗时和文件大小
+  - 验证：两组数字进 tech.md 并汇报；如果快照没有明显提速，汇报给 Yi，不默认保留
+  - _Requirements: 10.6_
 
 - [ ] 41. 安全和升级端到端
   - File: tantalum-examples 集成测试
