@@ -191,3 +191,22 @@ export interface PhaseChanged {
   session: string;
   phase: string;
 }
+
+export type MemoryType = "user" | "feedback" | "project" | "reference";
+
+export interface MemorySummary {
+  name: string;
+  type: MemoryType;
+  description: string;
+  updatedAt: string;
+}
+
+export interface MemoryEntry extends MemorySummary {
+  content: string;
+}
+
+export interface MemoryList {
+  entries: MemorySummary[];
+  used: number;
+  max: number;
+}
