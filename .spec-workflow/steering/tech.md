@@ -168,6 +168,15 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 压测（不用真实模型，进 `mvn verify`）：16 个用户 × 每人 2 个会话同时提交，每个运行里 4 个并行工具 + 被只读策略拦下的 write_file + 截断钩子 + 引用核对工作，其中 4 个运行在模型调用进行中被取消；每轮 92 次模型调用、316 个事件，重复 2 轮。检查的不变量全部成立：每个 prompt 只含自己的文件；SSE 只收到自己的事件；没有 `CommandDropped`；回放得到的 prompt 与实时发给模型的逐个相同；重启后回放重建的对话视图与实时视图逐字节相同，且不会再调用模型。同一用户的多个会话之间只共享工作目录、每用户在途上限和按 principal 投影的状态（如每日额度）；`requestId` 去重按“用户 + requestId”，客户端要保证它全局唯一。
 
+### 代码审查整改（2026-11-01，Open Code Review + claude-sonnet-5-5）
+
+四轮 `ocr scan` 审完 kernel、shell、examples、console 全部源码（value 模块的 64 个 record 和构建配置未审），约 47 美元；287 条评论里核实为真并修复的 52 条（提交 3706665、1ab2cf0、0b6decb、43ec797 及 examples 一次），误报约 20 条，细节在会话的 `ocr-triage.md`。值得记住的结论：
+
+- **内核**：`ModelInterrupted` 以前在任何状态都追加文本，现在只在该运行仍是会话末尾时追加（`SessionState.lastRun`），且中断的是正在等待的调用时运行以 CANCELLED 结束；`RunEnd.finish` 把未并入的 steer 追加为用户消息；从 `onFailure` 申请的工作完成后再调模型也计入重试次数；钩子返回 null 按 `Stop`。
+- **运行时**：两个环都设了 Disruptor 异常处理器，`Cleanroom` 捕获内核之外的 `Throwable`，三者任一出错入口都返回 503（以前消费者线程静默死亡、提交永远 429）；`WorkType.run` 和工具一样受 `tantalum.tool-timeout` 约束；`OpenAiClient` 有连接和响应头超时；`Engine.close` 先排空环再关 journal，每步独立。
+- **安全面**：登录限速在校验前预占账号计数（并发猜密码不能越过 5 次），登录输入限长；`ExternalGate` 释放钳到 0；`Workspace` 对越界和不存在报同一句话；工具错误信息不带服务器路径；SSE 挤出边界按（序号, 下标）记录。
+- **明确不改、留给后续 spec**：路径校验与打开之间的 TOCTOU（sandbox spec）；`TurnQuery` 每次请求回放整个 journal、停用后已打开的 SSE 不断开、关闭时等待在途 Handler（context-and-ops spec）。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。

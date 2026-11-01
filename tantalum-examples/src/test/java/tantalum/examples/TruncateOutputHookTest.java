@@ -25,6 +25,20 @@ class TruncateOutputHookTest {
         assertTrue(cut.text().contains("3 more characters"));
     }
 
+    /** 截断不能切开代理对，否则末尾是一个坏字符。 */
+    @Test
+    void surrogatePairsAreNotSplit() {
+        ToolOutput cut = new TruncateOutputHook(2).afterToolExecution(null, "t", ARGS, ToolOutput.ok("a😀b"));
+        assertEquals("a", cut.text().split("\n")[0]);
+        assertTrue(cut.text().contains("3 more characters"));
+    }
+
+    @Test
+    void constructorsRejectNonPositiveLimits() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new TruncateOutputHook(0));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new DailyQuotaHook(-1));
+    }
+
     @Test
     void errorFlagIsKept() {
         assertEquals(true, new TruncateOutputHook(1).afterToolExecution(null, "t", ARGS, ToolOutput.error("abc")).error());

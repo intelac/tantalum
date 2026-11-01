@@ -1,6 +1,8 @@
 package tantalum.examples;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,12 +15,16 @@ import tantalum.shell.plugin.WorkType;
 import tantalum.shell.plugin.Workspace;
 import tantalum.value.json.Json;
 
-/** 核对回答里形如 {@code FILE.cbl:42} 的引用：文件存在且行号有效。不通过时让模型修正。 */
+/**
+ * 核对回答里形如 {@code FILE.cbl:42} 的引用：文件存在且行号有效。不通过时让模型修正。
+ * 按字节数行，遗留 COBOL 源常见的非 UTF-8 编码也能核对。
+ */
 public final class CitationWork implements WorkType {
 
     public static final String TYPE = "citation";
 
-    private static final Pattern CITATION = Pattern.compile("([\\w./-]+\\.\\w+):(\\d+)");
+    /** 行号最多 9 位，再长的不是行号。 */
+    private static final Pattern CITATION = Pattern.compile("([\\w./-]+\\.\\w+):(\\d{1,9})(?!\\d)");
 
     @Override
     public String name() {
@@ -52,8 +58,29 @@ public final class CitationWork implements WorkType {
         if (!Files.isRegularFile(path)) {
             return false;
         }
-        try (var lines = Files.lines(path)) {
-            return line >= 1 && line <= lines.count();
+        try {
+            return line >= 1 && line <= countLines(path);
+        } catch (UncheckedIOException unreadable) {
+            return false;
         }
+    }
+
+    /** 行数 = 换行符数，末行没有换行时再加一。 */
+    static long countLines(Path path) throws IOException {
+        long newlines = 0;
+        int last = -1;
+        try (InputStream in = Files.newInputStream(path)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                for (int i = 0; i < read; i++) {
+                    if (buffer[i] == '\n') {
+                        newlines++;
+                    }
+                }
+                last = buffer[read - 1];
+            }
+        }
+        return last == -1 ? 0 : last == '\n' ? newlines : newlines + 1;
     }
 }

@@ -75,6 +75,32 @@ class CitationCheckTest {
         assertTrue(result.continueText().contains("B.cbl:1"));
     }
 
+    /** 核对本身失败（文件读不了、工作超时）不能当作通过。 */
+    @Test
+    void failedWorkStopsTheRunInsteadOfPassing() {
+        WorkDone failed = new WorkDone(new CommandId("c"), CitationWork.TYPE, new Json.Str("work timed out"), true, null);
+        tantalum.value.hook.Stop stop = assertInstanceOf(tantalum.value.hook.Stop.class,
+                new CitationCheckHook().beforeRunEnd(KernelState.empty(), CONTEXT.withWork(failed)));
+        assertTrue(stop.reason().contains("timed out"));
+    }
+
+    /** 遗留 COBOL 源常见的非 UTF-8 编码：按字节数行，不抛异常。 */
+    @Test
+    void nonUtf8FileIsCountedByBytes() throws Exception {
+        Files.write(dir.resolve("LEGACY.cbl"), new byte[] {'A', (byte) 0xC9, '\n', 'B', (byte) 0xFF, '\n', 'C'});
+        var context = new tantalum.shell.plugin.ToolContext(USER, new tantalum.shell.plugin.Workspace(dir));
+        assertNull(new CitationWork().run(context, new Json.Str("see LEGACY.cbl:3")).continueText());
+        assertTrue(new CitationWork().run(context, new Json.Str("see LEGACY.cbl:4")).continueText().contains("LEGACY.cbl:4"));
+    }
+
+    @Test
+    void absurdLineNumbersDoNotCrashTheCheck() throws Exception {
+        Files.writeString(dir.resolve("A.cbl"), "one\n");
+        WorkResult result = new CitationWork().run(new tantalum.shell.plugin.ToolContext(USER, new tantalum.shell.plugin.Workspace(dir)),
+                new Json.Str("see A.cbl:99999999999999999999 and A.cbl:1"));
+        assertNull(result.continueText(), "the 20-digit number is not a line citation; A.cbl:1 is valid");
+    }
+
     @Test
     void citationOutsideTheWorkspaceIsRejected() throws Exception {
         WorkResult result = new CitationWork().run(new tantalum.shell.plugin.ToolContext(USER, new tantalum.shell.plugin.Workspace(dir)), new Json.Str("see ../../etc/hosts.txt:1"));

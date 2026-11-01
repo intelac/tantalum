@@ -5,6 +5,7 @@ import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
 import tantalum.value.hook.NeedWork;
+import tantalum.value.hook.Stop;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
@@ -24,10 +25,11 @@ public final class CitationCheckHook implements KernelHook {
         return "citationCheck";
     }
 
+    /** 核对本身失败（读不了文件、工作超时）不放行：一个“检查”钩子不能在检查没做成时当作通过。 */
     @Override
     public HookResult beforeRunEnd(KernelState state, HookContext context) {
         if (context.work() != null) {
-            return Allow.PLAIN;
+            return context.work().failed() ? new Stop("citation check failed: " + context.work().result()) : Allow.PLAIN;
         }
         SessionState session = state.sessions().get(context.run().session());
         return new NeedWork(CitationWork.TYPE, new Json.Str(lastAnswer(session)));
