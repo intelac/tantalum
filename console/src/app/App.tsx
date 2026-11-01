@@ -137,7 +137,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
                     modelName={config.data?.model ?? zh.composer.model}
                     cloud={config.data?.cloud ?? false}
                   />
-                  <StatusBar run={state.latestRun} ended={!state.running} contextWindow={config.data?.contextWindow} />
+                  <StatusBar session={route.session} run={state.latestRun} ended={!state.running} contextWindow={config.data?.contextWindow} />
                 </div>
               )}
             />

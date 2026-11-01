@@ -39,13 +39,26 @@ public final class E2eModel implements ModelClient {
     static final int SLOW_STEPS = 40;
 
     private final AtomicInteger callIds = new AtomicInteger();
+    /** 当前这次调用的 prompt 估算；openai 供应商并发为 1，调用是串行的。 */
+    private static volatile long promptSize;
 
     @Override
     public ModelOutcome call(Prompt prompt, ChunkListener chunks) {
+        promptSize = promptSize(prompt);
         int lastUser = lastUserText(prompt.messages());
         String text = lastUser < 0 ? "" : userText(prompt.messages().get(lastUser));
         int results = toolResultsAfter(prompt.messages(), lastUser);
         try {
+            if (!prompt.output().toolsAllowed()) {
+                return summary(prompt);
+            }
+            if (text.contains("long")) {
+                return longAnswer(text, prompt, chunks);
+            }
+            if (text.contains("truncate")) {
+                stream(chunks, "这段回复会被截");
+                return new ModelOutcome.Replied(List.of(new TextBlock("这段回复会被截")), StopReason.MAX_TOKENS, MODEL, usage(prompt));
+            }
             if (text.contains("tools")) {
                 return toolChain(results, chunks);
             }
@@ -96,6 +109,25 @@ public final class E2eModel implements ModelClient {
         return answer(chunks, "已记住。");
     }
 
+    /** 摘要调用：工具被禁用。摘要很短，所以总比它替代的头部小。 */
+    private static ModelOutcome summary(Prompt prompt) {
+        int lastUser = lastUserText(prompt.messages().subList(0, prompt.messages().size() - 1));
+        String last = lastUser < 0 ? "" : userText(prompt.messages().get(lastUser)).split("\n", 2)[0];
+        String text = "## Goal\n\n用户在和脚本化模型聊天，最近说的是“" + last + "”。\n\n## Key context\n\n之前的回答都是长篇填充文字。";
+        return new ModelOutcome.Replied(List.of(new TextBlock(text)), StopReason.END_TURN, MODEL, usage(prompt));
+    }
+
+    /** 约 12 KB 的长回答（估算 4000 token），几轮就越过 e2e 服务器的压缩阈值。 */
+    private static ModelOutcome longAnswer(String text, Prompt prompt, ChunkListener chunks) throws InterruptedException {
+        String head = "长回答开始：" + text + "\n\n";
+        String tail = "\n\n长回答结束：" + text;
+        String filler = ("这是用来撑大上下文的填充文字，没有别的意思。").repeat(190);
+        stream(chunks, head + tail);
+        String answer = head + filler + tail;
+        return new ModelOutcome.Replied(List.of(new TextBlock(answer)), StopReason.END_TURN, MODEL,
+                usage(promptSize(prompt), tantalum.kernel.compaction.TokenEstimate.ofText(answer)));
+    }
+
     private ModelOutcome slow(ChunkListener chunks) throws InterruptedException {
         StringBuilder sent = new StringBuilder();
         for (int i = 1; i <= SLOW_STEPS; i++) {
@@ -117,7 +149,8 @@ public final class E2eModel implements ModelClient {
         stream(chunks, answer);
         List<ContentBlock> content = new ArrayList<>(thinking);
         content.add(new TextBlock(answer));
-        return new ModelOutcome.Replied(content, StopReason.END_TURN, MODEL, usage());
+        return new ModelOutcome.Replied(content, StopReason.END_TURN, MODEL,
+                usage(promptSize, tantalum.kernel.compaction.TokenEstimate.ofText(answer)));
     }
 
     private ModelOutcome answer(ChunkListener chunks, String text) throws InterruptedException {
@@ -142,7 +175,13 @@ public final class E2eModel implements ModelClient {
         List<ContentBlock> content = new ArrayList<>(prefix);
         content.addAll(List.of(blocks));
         boolean tools = content.stream().anyMatch(ToolCallBlock.class::isInstance);
-        return new ModelOutcome.Replied(content, tools ? StopReason.TOOL_USE : StopReason.END_TURN, MODEL, usage());
+        long output = 0;
+        for (ContentBlock block : content) {
+            if (block instanceof TextBlock text) {
+                output += tantalum.kernel.compaction.TokenEstimate.ofText(text.text());
+            }
+        }
+        return new ModelOutcome.Replied(content, tools ? StopReason.TOOL_USE : StopReason.END_TURN, MODEL, usage(promptSize, Math.max(output, 20)));
     }
 
     private ToolCallBlock call(String tool, Map<String, String> arguments) {
@@ -159,8 +198,19 @@ public final class E2eModel implements ModelClient {
         return new ToolCallBlock("c" + callIds.incrementAndGet(), tool, raw.toString(), new Json.Obj(fields));
     }
 
-    private static TokenUsage usage() {
-        return new TokenUsage(1200, 80, 300, 0);
+    /** 用量按估算报：输入是 prompt 的估算，输出是回复的估算，这样状态栏的占比和压缩的锚点都像真的。 */
+    private static TokenUsage usage(Prompt prompt) {
+        return usage(promptSize(prompt), 80);
+    }
+
+    private static long promptSize(Prompt prompt) {
+        return tantalum.kernel.compaction.TokenEstimate.ofText(prompt.system())
+                + tantalum.kernel.compaction.TokenEstimate.ofTools(prompt.tools())
+                + tantalum.kernel.compaction.TokenEstimate.ofMessages(prompt.messages());
+    }
+
+    private static TokenUsage usage(long promptSize, long output) {
+        return new TokenUsage(Math.max(0, promptSize - 300), output, Math.min(300, promptSize), 0);
     }
 
     private static int lastUserText(List<Message> messages) {

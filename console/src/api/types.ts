@@ -81,6 +81,8 @@ export interface TextItem extends ItemBase {
   kind: "text";
   text: string;
   interrupted: boolean;
+  /** 回复因输出上限被截断。 */
+  truncated: boolean;
 }
 
 export interface ThinkingItem extends ItemBase {
@@ -109,7 +111,21 @@ export interface RunStatusItem extends ItemBase {
   failure?: FailureReason;
 }
 
-export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem;
+export type CompactionTrigger = "AUTO" | "OVERFLOW" | "MANUAL";
+
+/** 一次上下文压缩。成功时有 summary，失败时有 failure。估算是压缩前后视图的 token 估算。 */
+export interface CompactionItem extends ItemBase {
+  kind: "compaction";
+  run: string;
+  trigger: CompactionTrigger;
+  summary?: string;
+  estimateBefore: number;
+  estimateAfter: number;
+  usage?: TokenUsage;
+  failure?: string;
+}
+
+export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */
@@ -127,12 +143,23 @@ export interface RunView {
   detail?: string;
 }
 
+export interface TraceCompaction {
+  trigger: string;
+  ok: boolean;
+  estimateBefore: number;
+  estimateAfter: number;
+  usage?: TokenUsage;
+  reason?: string;
+}
+
 export interface TraceEntry {
   seq: number;
   at: string;
   type: string;
   phase: string;
   turn?: number;
+  /** 这个事件带来的压缩结果。 */
+  compaction?: TraceCompaction;
 }
 
 export interface TraceSegment {

@@ -4,6 +4,7 @@ import type { Item } from "../api/types";
 
 export type Block =
   | { kind: "user"; id: string }
+  | { kind: "compaction"; id: string }
   | {
       kind: "run";
       run: string;
@@ -23,6 +24,10 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
   for (const id of order) {
     const shape = shapeOf(id);
     if (shape === undefined) continue;
+    if (shape.kind === "compaction") {
+      blocks.push({ kind: "compaction", id });
+      continue;
+    }
     if (shape.kind === "user" || shape.run === undefined) {
       blocks.push({ kind: "user", id });
       continue;

@@ -3,6 +3,7 @@ import { ProcessGroup } from "../process/ProcessGroup";
 import type { ConversationStore } from "../store/ConversationStore";
 import { AssistantText } from "./AssistantText";
 import type { Block } from "./blocks";
+import { CompactionMark } from "./CompactionMark";
 import { JumpToBottom } from "./JumpToBottom";
 import { LiveReply } from "./LiveReply";
 import { RunStatusRow } from "./RunStatusRow";
@@ -63,6 +64,8 @@ export function MessageList({ store, blocks }: Props) {
           {blocks.map((block) =>
             block.kind === "user" ? (
               <UserBubble key={block.id} store={store} id={block.id} />
+            ) : block.kind === "compaction" ? (
+              <CompactionMark key={block.id} store={store} id={block.id} />
             ) : (
               <div key={block.run} className="py-1">
                 <ProcessGroup store={store} run={block.run} statusId={block.statusId} ids={block.process} />

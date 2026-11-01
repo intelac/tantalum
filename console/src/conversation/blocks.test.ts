@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groupBlocks } from "./blocks";
 
-const shapes: Record<string, { kind: "user" | "run" | "thinking" | "tool" | "text"; run?: string }> = {
+const shapes: Record<string, { kind: "user" | "run" | "thinking" | "tool" | "text" | "compaction"; run?: string }> = {
   "0.0": { kind: "user", run: "run-0" },
   "run:run-0": { kind: "run", run: "run-0" },
   "2.0": { kind: "thinking", run: "run-0" },
@@ -33,6 +33,16 @@ describe("groupBlocks", () => {
     expect(before[1]).toMatchObject({ reply: ["2.1"], process: [] });
     const after = groupBlocks(["0.0", "run:run-0", "2.1", "2.2"], (id) => shapes[id]);
     expect(after[1]).toMatchObject({ reply: [], process: ["2.1", "2.2"] });
+  });
+
+  it("puts a compaction mark in its own block in order", () => {
+    const withMark: typeof shapes = { ...shapes, "3.0": { kind: "compaction", run: "run-0" } };
+    const blocks = groupBlocks(["0.0", "run:run-0", "2.0", "3.0", "4.1"], (id) => withMark[id]);
+    expect(blocks).toEqual([
+      { kind: "user", id: "0.0" },
+      { kind: "run", run: "run-0", statusId: "run:run-0", process: ["2.0"], reply: ["4.1"] },
+      { kind: "compaction", id: "3.0" },
+    ]);
   });
 
   it("skips unknown ids", () => {

@@ -137,14 +137,14 @@
 
 ## 阶段 7：控制台
 
-- [ ] 18. 对话页与状态栏
+- [x] 18. 对话页与状态栏
   - File: console/src/conversation/CompactionMark.tsx, MessageList.tsx, AssistantText.tsx, console/src/composer/StatusBar.tsx, status.ts, console/src/api/client.ts, types.ts, console/src/text/zh.ts, 对应 *.test.tsx
   - 分隔条目可展开摘要、失败显示原因；`truncated` 提示；占比 ≥ 80% 提示；压缩按钮（运行中禁用）
   - 验证：vitest 全过
   - _Requirements: 4.2, 4.4, 5.2_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: React 19 / TypeScript 工程师 | Task: 完成“对话页与状态栏”，满足需求 4.2, 4.4, 5.2，遵守 design.md | Restrictions: 只做这一件事；文案进 zh.ts | Success: vitest 全过 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 19. 轨迹页与 Playwright
+- [x] 19. 轨迹页与 Playwright
   - File: console/src/trace/*.tsx, console/e2e/compaction.spec.ts, tantalum-examples/src/test/java/tantalum/examples/E2eModel.java
   - 轨迹里的压缩步骤（耗时、用量、前后估算）；`E2eModel` 按关键词返回摘要；覆盖分隔标记、摘要展开、轨迹步骤、截断提示、手动压缩、500 条消息会话
   - 验证：`pnpm e2e` 全过
