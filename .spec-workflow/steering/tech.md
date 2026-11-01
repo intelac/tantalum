@@ -155,6 +155,8 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 | 场景 | 结果 | 结论 |
 |---|---|---|
 | 一次运行八步顺序工具链（长任务） | 9 次模型调用，输入 7.5K、输出 0.48K | 多轮工具和长任务正常。加 prompt caching 前 `cacheRead` 为 0；加上后（断点在最后一个工具、system 块、最后一条消息）同一场景 7.5K 输入里 6.4K 命中缓存、1.1K 写入缓存、只有 20 个按全价，输入费用约为原来的 27%。单次调用的运行（如额度场景）只有写入没有命中，输入费用多付四分之一 |
+| 跨会话记住（memory 需求 8.2） | 2 个会话、3 次模型调用，输入 10、缓存读 2.0K、写 2.0K | 会话 A 说“以后 Java 代码一律用 Java 25 语法并记住”，模型调用 `memory_write` 写下 `java-25-syntax-preference.md`；会话 B 的 `ContextAssembled.system` 含索引，问最小 Hello 程序，回答是 `void main() { IO.println("Hello"); }`，没有 `String[] args`。判定标准全部机械断言 |
+| 让它忘记（memory 需求 8.3） | 2 个会话、3 次模型调用，缓存读 3.0K | 接口先种一条记忆，用户说“忘掉我偏好的 Java 版本”，模型调用 `memory_delete`，文件消失，下一运行的 system 不再含索引 |
 | 递推题链（high effort） | 6 次调用，2 轮带 thinking | 带签名的 thinking 块经 journal 存取、跨多轮工具回传被接受。adaptive 模式下简单任务不出 thinking，测试在没有 thinking 时按跳过处理 |
 | 每个钩子位置（只读策略、截断、引用核对、工作结果、每日额度、真实 API 错误） | 全部触发 | 钩子链在第一个 `Stop` / `NeedWork` 处短路，**注册顺序决定后面的钩子看不看得到**；`/api/runs/{run}/turns` 回放时内核把同一段 journal 又跑一遍，钩子被再次调用（实测 4 次变 24 次），这正是钩子必须纯函数、不能有副作用的原因 |
 | 模型名不存在（HTTP 404 `not_found_error`） | `INVALID_REQUEST`，不重试，`onFailure` 看到原因 | 失败分类正确 |
@@ -176,6 +178,15 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **运行时**：两个环都设了 Disruptor 异常处理器，`Cleanroom` 捕获内核之外的 `Throwable`，三者任一出错入口都返回 503（以前消费者线程静默死亡、提交永远 429）；`WorkType.run` 和工具一样受 `tantalum.tool-timeout` 约束；`OpenAiClient` 有连接和响应头超时；`Engine.close` 先排空环再关 journal，每步独立。
 - **安全面**：登录限速在校验前预占账号计数（并发猜密码不能越过 5 次），登录输入限长；`ExternalGate` 释放钳到 0；`Workspace` 对越界和不存在报同一句话；工具错误信息不带服务器路径；SSE 挤出边界按（序号, 下标）记录。
 - **明确不改、留给后续 spec**：路径校验与打开之间的 TOCTOU（sandbox spec）；`TurnQuery` 每次请求回放整个 journal、停用后已打开的 SSE 不断开、关闭时等待在途 Handler（context-and-ops spec）。
+
+### memory spec（2026-11-01）
+
+四层记忆模型：1 工作记忆（消息历史，已有）；2 情景记忆（会话摘要，属 `context-and-ops`）；3 个人长期记忆（本 spec）；4 共享知识（本 spec，只读）。层与层之间不自动流动。实现在 `tantalum.shell.memory`，内核和 value 不改。
+
+- **存储**：每用户目录 `memory/`，索引 `MEMORY.md` 由条目文件的 frontmatter 重建；写入临时文件 + 重命名，每用户一把锁。共用工作目录模式下放到数据目录（对需求 1.4 的修正：共用 root 会被所有人的 grep 搜到）。
+- **进 prompt**：`ContextHandler` 的 system 顺序固定为基础提示 → 记忆指引 → 共享知识 → `AGENTS.md` → 索引；索引在最后，钩子 `PromptPatch` 追加在它之后，prompt caching 的 system 断点运行内稳定；运行开始快照进 `ContextAssembled`，回放不读文件（`MemorySnapshotTest`）。
+- **安全**：名称白名单、路径不可能越出目录、`CredentialGuard` 拒收像凭据的内容且不回显、接口按登录用户、别人的和不存在的都是 404、写接口受 `Origin` 校验。
+- **不做**：自动整理（决定 M5）、向量检索、跨用户共享个人记忆。
 
 ### strata 实测（2026-10-31）
 

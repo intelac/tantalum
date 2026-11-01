@@ -542,6 +542,94 @@ class ClaudeScenarioTest {
         usage("multi-user", journal(data));
     }
 
+    /** 该用户记忆目录里的条目文件名（不含索引）。 */
+    private static List<String> memoryFiles(Path workspace, String user) throws Exception {
+        Path dir = workspace.resolve(user).resolve("memory");
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (var files = Files.list(dir)) {
+            return files.map(file -> file.getFileName().toString())
+                    .filter(name -> name.endsWith(".md") && !name.equals("MEMORY.md")).sorted().toList();
+        }
+    }
+
+    private static List<String> toolCalls(List<EventEnvelope> journal) {
+        return events(journal, ModelReplied.class).stream().flatMap(reply -> reply.content().stream())
+                .filter(ToolCallBlock.class::isInstance).map(block -> ((ToolCallBlock) block).name()).toList();
+    }
+
+    private static List<String> systems(List<EventEnvelope> journal) {
+        return events(journal, tantalum.value.event.ContextAssembled.class).stream()
+                .map(tantalum.value.event.ContextAssembled::system).toList();
+    }
+
+    /**
+     * memory 需求 8.2：会话 A 让模型记住“以后一律用 Java 25 语法”，会话 B 的新运行里 system 带上索引，
+     * 模型回答时真的用了 Java 25 的写法。判定：A 调用了 memory_write 且文件存在；B 的 ContextAssembled.system
+     * 含记忆索引；B 的回答含 {@code void main()}（无参）或 {@code IO.println}。
+     */
+    @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
+    void memoryWrittenInOneSessionShapesTheAnswerInTheNext() throws Exception {
+        Path workspace = workspace("mem");
+        Path data = temp.resolve("data-mem");
+
+        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"))) {
+            submit(server, "mem", "s1", "From now on, whenever you show Java code, always use Java 25 syntax: the compact "
+                    + "`void main()` entry point without arguments and `IO.println` for output, never the old "
+                    + "`public static void main(String[] args)` form. Please remember this preference for my future sessions.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "mem", "s1", Duration.ofMinutes(3)).get("endReason").asString());
+            assertFalse(memoryFiles(workspace, "mem").isEmpty(), "the model did not write a memory file");
+
+            submit(server, "mem", "s2", "Show me the smallest complete Java program that prints Hello. Only the code, no explanation.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "mem", "s2", Duration.ofMinutes(3)).get("endReason").asString());
+        }
+
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(toolCalls(journal).contains("memory_write"), toolCalls(journal).toString());
+        List<String> systems = systems(journal);
+        assertFalse(systems.getFirst().contains("## Your memory index"), "first run starts with no memory");
+        assertTrue(systems.getLast().contains("## Your memory index"), systems.getLast());
+        String answer = lastText(journal);
+        assertTrue(answer.contains("void main()") || answer.contains("IO.println"), "answer did not use Java 25 syntax:\n" + answer);
+        assertFalse(answer.contains("String[] args"), "answer fell back to the old entry point:\n" + answer);
+        System.out.println("[claude memory remember] files=" + memoryFiles(workspace, "mem") + " answer=" + answer.replace("\n", " | "));
+        usage("memory remember", journal);
+    }
+
+    /**
+     * memory 需求 8.3：用户让它忘记。先用接口种一条记忆，再在新会话里说“忘掉关于 Java 版本的记忆”。
+     * 判定：调用了 memory_delete、文件消失、再下一个运行的 system 不含索引。
+     */
+    @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
+    void askingToForgetDeletesTheMemory() throws Exception {
+        Path workspace = workspace("forget");
+        Path data = temp.resolve("data-forget");
+
+        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"))) {
+            HttpResponse<String> seeded = server.post("forget", "/api/memory",
+                    "{\"name\":\"java-version\",\"type\":\"user\",\"description\":\"Always answer with Java 25 syntax\","
+                    + "\"content\":\"The user wants Java 25 syntax in every example.\"}");
+            assertEquals(201, seeded.statusCode(), seeded.body());
+
+            submit(server, "forget", "s1", "Please forget what you remembered about my preferred Java version.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "forget", "s1", Duration.ofMinutes(3)).get("endReason").asString());
+            assertEquals(List.of(), memoryFiles(workspace, "forget"), "the memory file should be gone");
+
+            submit(server, "forget", "s2", "Say hi in one word.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "forget", "s2", Duration.ofMinutes(3)).get("endReason").asString());
+        }
+
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(toolCalls(journal).contains("memory_delete"), toolCalls(journal).toString());
+        List<String> systems = systems(journal);
+        assertTrue(systems.getFirst().contains("java-version"), "first run saw the seeded index");
+        assertFalse(systems.getLast().contains("## Your memory index"), systems.getLast());
+        usage("memory forget", journal);
+    }
+
     private static String describe(Map<String, List<Instant[]>> segments) {
         StringBuilder text = new StringBuilder();
         segments.forEach((user, list) -> {

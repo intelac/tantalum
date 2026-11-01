@@ -139,34 +139,34 @@
 
 ## 阶段 6：集成验证与收尾
 
-- [-] 19. 快照语义的集成测试
+- [x] 19. 快照语义的集成测试
   - File: tantalum-examples/src/test/java/tantalum/examples/MemorySnapshotTest.java
   - 脚本化模型：第一轮调用 `memory_write`，第二轮回答；断言同一运行第二次 `CallModel.prompt().system()` 不含新索引行；下一个运行的 `ContextAssembled.system` 含它；回放（`Replay.run`）得到的 prompt 与实时逐个相同且不读文件（删掉记忆目录后回放仍相同）
   - _Requirements: 2.3, 2.4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“快照语义的集成测试”，满足需求 2.3、2.4，参照 `TenLoopIntegrationTest` 和 `ScriptedModelClient` | Restrictions: 不用真实模型 | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [-] 20. e2e：脚本化模型写记忆，面板里看、删
+- [x] 20. e2e：脚本化模型写记忆，面板里看、删
   - File: tantalum-examples/src/test/java/tantalum/examples/E2eModel.java, console/e2e/memory.spec.ts
   - `E2eModel` 新增关键词 `remember`：调用 `memory_write` 后回答“已记住”；e2e：发送含 `remember` 的消息 → 打开设置 › 记忆 → 看到条目 → 展开正文 → 删除确认 → 列表为空
   - 验证：`pnpm e2e` 全过（原 9 条 + 新增）
   - _Requirements: 8.5_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Playwright 测试工程师 | Task: 完成“e2e：脚本化模型写记忆，面板里看、删”，满足需求 8.5，参照 `console/e2e/chat.spec.ts` | Restrictions: 文本断言用唯一内容，避开 strict mode 冲突 | Success: e2e 全过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 21. 真实模型场景：跨会话记住、让它忘记
+- [x] 21. 真实模型场景：跨会话记住、让它忘记
   - File: tantalum-examples/src/test/java/tantalum/examples/ClaudeScenarioTest.java, .spec-workflow/steering/tech.md
   - 场景 1：会话 A “以后回答一律用 Java 25 语法并记住” → `memory_write` 被调用、文件存在；会话 B 新运行 `ContextAssembled.system` 含索引行，问“写一个打印 Hello 的最小 Java 程序”，断言回答含 Java 25 写法（`void main()` 或 `IO.println`）。场景 2：“忘掉关于 Java 版本的记忆” → `memory_delete` 被调用、文件消失、下一运行 system 不含。每个场景写明对应需求、判定标准、结论和用量
   - 验证：两场景通过；tech.md 场景表新增两行
   - _Requirements: 8.2, 8.3_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: 做过真实模型验收的工程师 | Task: 完成“真实模型场景：跨会话记住、让它忘记”，满足需求 8.2、8.3，门控与用量汇总沿用 `ClaudeScenarioTest` | Restrictions: 判定标准要能机械断言；用量报回 | Success: 通过并记录 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 22. 文档：README、能力对照表、插件说明
+- [x] 22. 文档：README、能力对照表、插件说明
   - File: README.md, .spec-workflow/steering/tech.md
   - README：记忆一节（目录、格式、三个工具、面板、配置、共享知识层）；能力对照表“长期记忆”改为“有”；插件说明补“按名单放行的策略要把 memory_* 加进名单”；tech.md 决策日志加一条（四层模型、目录位置修正、索引以文件为准）
   - 验证：文档与实现一致，命令可运行
   - _Requirements: NFR 可用性_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: 技术写作者 | Task: 完成“文档：README、能力对照表、插件说明” | Restrictions: 不写实现里没有的东西 | Success: 文档更新 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 23. 全量验证与提交
+- [x] 23. 全量验证与提交
   - File: （无新文件）
   - `mvn -o -q verify`、`pnpm test`、`tsc`、`vite build`、`pnpm e2e`；按阶段提交；汇报：改了什么、验证结果、是否偏离 spec（含对需求 1.4 的修正）、下一步
   - 验证：全部通过；工作树干净
