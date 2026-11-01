@@ -27,20 +27,20 @@
 
 ## 阶段 1：存储
 
-- [-] 4. `MemoryStore` 测试（先失败）
+- [x] 4. `MemoryStore` 测试（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/MemoryStoreTest.java
   - 覆盖：新建 → 文件和索引行；同名覆盖 → UPDATED、条目数不变；删除 → 文件和索引行都没了；删除不存在 → false；条目数上限、索引字节上限、单条字节上限各自拒绝且不写；凭据拒绝；32 个线程并发写同一用户后每个文件完整、索引与目录一致；`@TempDir`；写后目录里没有 `.tmp`
   - _Requirements: 1.1, 1.2, 1.5, 3.2, 3.5, 4.2, 4.3, 7.2_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: 注重并发正确性的 Java 测试工程师 | Task: 完成“MemoryStore 测试（先失败）”，满足列出的需求，遵守 design.md 的“并发与原子性” | Restrictions: 只写测试；用真实文件系统的 `@TempDir`，不 mock | Success: 测试编译通过并因缺少实现而失败 | 完成后标 [x] 并 log-implementation_
 
-- [-] 5. `MemoryStore` 实现
+- [x] 5. `MemoryStore` 实现
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryStore.java, MemoryLimits.java
   - `indexText()`、`list()`、`read()`、`write()`、`delete()`、`limits()`；临时文件 + 重命名；写/删在用户锁内；每次写删后由条目文件重建 `MEMORY.md`；最终路径必须在目录内
   - 验证：任务 4 全部通过
   - _Requirements: 同任务 4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“MemoryStore 实现”让任务 4 通过，遵守 design.md | Restrictions: I/O 只在这个类；`Clock` 注入用于 `updatedAt`；错误文本不含绝对路径 | Success: `MemoryStoreTest` 全过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 6. `MemoryStores`：目录位置、每用户锁
+- [x] 6. `MemoryStores`：目录位置、每用户锁
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/MemoryStoresTest.java, tantalum-shell/src/main/java/tantalum/shell/memory/MemoryStores.java
   - 每人模式：`<workspace>/<用户>/memory/`；共用模式：`<data-dir>/memory/<用户>/`；目录权限 700；同一用户两次 `of` 返回同一实例
   - 验证：两种模式的路径断言；共用模式下别人的记忆目录不在工作目录 root 内（用 `Workspace.resolve` 断言到不了）；不安全用户名被拒
@@ -49,14 +49,14 @@
 
 ## 阶段 2：进入上下文
 
-- [ ] 7. `KnowledgeBase`：测试和实现
+- [-] 7. `KnowledgeBase`：测试和实现
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/KnowledgeBaseTest.java, tantalum-shell/src/main/java/tantalum/shell/memory/KnowledgeBase.java
   - 读目录下 `*.md`（不递归，按文件名排序）拼成一段，总字节上限按文件名顺序截断并记警告；目录未配置或不存在返回空串并记一次警告；按最大修改时间缓存
   - 验证：排序、截断、缺失、缓存命中后文件变化能被读到
   - _Requirements: 4.4, 5.1, 5.2_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“KnowledgeBase 测试和实现”，满足需求 4.4、5.1、5.2 | Restrictions: 只读；不跟随符号链接到目录外（`Files.isRegularFile` + `NOFOLLOW_LINKS`） | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 8. `MemoryGuidance` 固定指引文本
+- [-] 8. `MemoryGuidance` 固定指引文本
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryGuidance.java
   - 内容按需求 7.1：四种类型各记什么、只记跨会话有用的事实、写前先看索引、同名覆盖、用户让记/让忘、不记一次性细节、不记凭据、正文按需 `memory_read`；英文（与基础提示一致），一个常量
   - 验证：文本里出现三个工具名和四种类型名（单元断言放进任务 9 的测试）
