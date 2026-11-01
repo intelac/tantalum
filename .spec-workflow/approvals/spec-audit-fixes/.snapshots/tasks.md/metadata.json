@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/spec-audit-fixes/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T12:38:19.290Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793536699288_85vbkbahm",
+      "approvalTitle": "spec-audit-fixes：任务清单（21 个任务、5 个阶段）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T12:39:09.655Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793536699288_85vbkbahm",
+      "approvalTitle": "spec-audit-fixes：任务清单（21 个任务、5 个阶段）"
+    }
+  ]
+}

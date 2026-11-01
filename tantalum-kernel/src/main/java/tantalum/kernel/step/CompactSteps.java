@@ -12,6 +12,7 @@ import tantalum.kernel.hook.HookPoint;
 import tantalum.kernel.projection.UsageProjection;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.command.CallModel;
+import tantalum.value.command.StartTimer;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
@@ -27,6 +28,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.Compacting.Trigger;
@@ -42,6 +44,7 @@ import tantalum.value.state.SessionState;
 public final class CompactSteps {
 
     static final String AWAITING_SUMMARY = "AwaitingSummary";
+    static final String AWAITING_SUMMARY_RETRY = "AwaitingSummaryRetry";
     public static final String COMPACTED = "compacted";
     public static final String NOTHING_TO_COMPACT = "nothing to compact";
 
@@ -64,7 +67,7 @@ public final class CompactSteps {
             return run;
         }
         Plan plan = planned.orElseThrow();
-        Compacting compacting = new Compacting(trigger, plan, manual, originalDetail);
+        Compacting compacting = new Compacting(trigger, plan, manual, originalDetail, patch);
 
         HookOutcome hook = out.hooks.run(HookPoint.BEFORE_COMPACT, out.state, out.hookContext(run.ref()).withPlan(plan));
         out.report(hook.facts());
@@ -72,13 +75,30 @@ public final class CompactSteps {
             String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work, which is not supported";
             return refused(out, run, compacting, reason);
         }
+        if (Compactor.summaryCanHelp(plan, session.context().compaction())) {
+            sendSummary(out, run, compacting);
+        } else {
+            failed(out, run, compacting, trigger == Trigger.MANUAL ? NOTHING_TO_COMPACT : "too little to summarize");
+        }
+        return null;
+    }
 
+    /** 发摘要调用。重试时用同一个计划，prompt 相同。除旧摘要外什么都放不下时不发。 */
+    private static void sendSummary(Outcome out, RunState run, Compacting compacting) {
+        SessionState session = out.session(run.ref());
         CompactionSettings settings = session.context().compaction();
-        Message instruction = SummaryPrompt.instruction(false, manual);
+        String system = run.system() + compacting.patch().systemAppend();
+        List<ToolSpec> tools = new ArrayList<>(run.toolSpecs());
+        tools.addAll(compacting.patch().addTools());
+        Message instruction = SummaryPrompt.instruction(false, compacting.manualInstructions());
         long fixed = TokenEstimate.ofText(system) + TokenEstimate.ofTools(tools) + TokenEstimate.ofMessage(instruction);
-        Compactor.Head head = Compactor.headForSummary(plan, session.view(), settings, fixed);
+        Compactor.Head head = Compactor.headForSummary(compacting.plan(), session.view(), settings, fixed);
+        if (head.nothingToSummarize()) {
+            failed(out, run, compacting, "nothing fits in a summary call");
+            return;
+        }
         List<Message> messages = new ArrayList<>(head.messages());
-        messages.add(SummaryPrompt.instruction(head.dropped(), manual));
+        messages.add(SummaryPrompt.instruction(head.dropped(), compacting.manualInstructions()));
         Prompt prompt = new Prompt(system, tools, messages, new Prompt.Output(false, settings.summaryMaxTokens()));
 
         RunState waiting = run.withCompacting(compacting);
@@ -86,7 +106,6 @@ public final class CompactSteps {
         CommandId id = out.nextCommandId();
         out.emit(new CallModel(id, run.ref(), prompt));
         out.await(waiting, AWAITING_SUMMARY, Set.of(id));
-        return null;
     }
 
     /** 钩子拒绝：自动压缩标记后让调用方继续；其他触发方式结束运行。 */
@@ -143,34 +162,68 @@ public final class CompactSteps {
 
         SessionState session = out.session(run.ref());
         List<Message> view = session.view();
-        List<Message> replacement = Compactor.replacement(compacting.plan(), view, SummaryPrompt.text(event.content()),
-                session.context().compaction());
-        out.state = out.state.with(session.compacted(new Compaction(replacement, session.messages().size())));
-        out.report(List.of(new ContextCompacted(run.ref(), compacting.trigger(), compacting.plan().headUnits(),
-                compacting.plan().keptUnits(), TokenEstimate.ofMessages(view), TokenEstimate.ofMessages(replacement), event.usage())));
+        List<Message> replacement = Compactor.replacement(plan, view, SummaryPrompt.text(event.content()), session.context().compaction());
+        adopt(out, run, compacting, replacement, plan.headUnits(), plan.keptUnits(), event.usage(), false);
+        return out.decision();
+    }
 
-        RunState resumed = run.withCompacting(null);
+    /** 换视图，然后接着走：手动压缩到此结束；其余重新组装 system 和工具（规则 5），之后的那次调用不再判断（规则 3.1）。 */
+    private static void adopt(Outcome out, RunState run, Compacting compacting, List<Message> replacement, int headUnits, int keptUnits,
+                              TokenUsage usage, boolean trimOnly) {
+        SessionState session = out.session(run.ref());
+        long before = TokenEstimate.ofMessages(session.view());
+        out.state = out.state.with(session.compacted(new Compaction(replacement, session.messages().size())).withContext(null));
+        out.report(List.of(new ContextCompacted(run.ref(), compacting.trigger(), headUnits, keptUnits, before,
+                TokenEstimate.ofMessages(replacement), usage, trimOnly)));
+        RunState resumed = run.withCompacting(null).withRetries(0);
         out.put(resumed);
         if (compacting.trigger() == Trigger.MANUAL) {
             RunEnd.finish(out, resumed, EndReason.COMPLETED, COMPACTED);
         } else {
-            ModelSteps.callModel(out, resumed, null, false);
+            ModelSteps.reassemble(out, resumed);
         }
-        return out.decision();
     }
 
+    /** 可重试的失败退避后重发（pi 的做法），不改变视图；用完才按规则 8 处理。 */
     public static Decision summaryFailed(StepContext context) {
         ModelFailed event = (ModelFailed) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
-        failed(out, run, run.compacting(), "summary call failed: " + event.reason() + " " + event.detail());
+        if (event.retryable() && run.retries() < RetrySteps.MAX_RETRIES) {
+            CommandId id = out.nextCommandId();
+            out.emit(new StartTimer(id, run.ref(), RetrySteps.backoff(run.retries(), event.retryAfter())));
+            RunState waiting = run.withRetries(run.retries() + 1);
+            out.put(waiting);
+            out.await(waiting, AWAITING_SUMMARY_RETRY, Set.of(id));
+        } else {
+            failed(out, run, run.compacting(), "summary call failed: " + event.reason() + " " + event.detail());
+        }
         return out.decision();
     }
 
-    /** 规则 8：自动 → 继续原调用且本运行不再自动压缩；超长恢复 → 以原始错误失败；手动 → 以原因失败。 */
+    public static Decision summaryRetry(StepContext context) {
+        Outcome out = new Outcome(context);
+        sendSummary(out, context.run(), context.run().compacting());
+        return out.decision();
+    }
+
+    /**
+     * 摘要没有采用。裁剪能带来进展时改用裁剪（DSH：进展不依赖摘要）；手动压缩的摘要失败仍然报告。
+     * 否则按规则 8：自动 → 继续原调用且本运行不再自动压缩；超长恢复 → 以原始错误失败；手动 → 以原因失败。
+     */
     private static void failed(Outcome out, RunState run, Compacting compacting, String reason) {
+        SessionState session = out.session(run.ref());
+        CompactionSettings settings = session.context().compaction();
+        boolean summaryWasTried = !NOTHING_TO_COMPACT.equals(reason);
+        boolean canTrim = Compactor.trimHelps(session.view(), settings)
+                && (compacting.trigger() != Trigger.MANUAL || !summaryWasTried);
+        if (canTrim) {
+            adopt(out, run, compacting, Compactor.trimmed(session.view(), settings), 0, compacting.plan().headUnits() + compacting.plan().keptUnits(),
+                    null, true);
+            return;
+        }
         out.report(List.of(new CompactionFailed(run.ref(), compacting.trigger(), reason)));
-        RunState resumed = run.withCompacting(null);
+        RunState resumed = run.withCompacting(null).withRetries(0);
         switch (compacting.trigger()) {
             case AUTO -> {
                 resumed = resumed.withAutoCompactionFailed(true);

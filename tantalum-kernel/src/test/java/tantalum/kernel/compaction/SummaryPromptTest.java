@@ -40,11 +40,23 @@ class SummaryPromptTest {
         assertEquals(plain, text(SummaryPrompt.instruction(false, "   ")), "blank manual notes add nothing");
     }
 
+    /** 需求 1.6：两节新内容、忠实保留纠正、前缀让模型直接继续。 */
+    @Test
+    void instructionCoversCodeErrorsAndCorrectionsAndThePrefixResumes() {
+        String plain = text(SummaryPrompt.instruction(false, null));
+        for (String part : List.of("## Files and code", "## Errors and fixes", "corrected", "from In progress to Done")) {
+            assertTrue(plain.contains(part), part);
+        }
+        assertTrue(SummaryPrompt.SUMMARY_PREFIX.contains("Continue the task directly"));
+    }
+
     @Test
     void summaryMessageIsRecognisable() {
         Message summary = SummaryPrompt.summaryMessage("  Goal: x\n");
         assertTrue(SummaryPrompt.isSummary(summary));
         assertEquals(SummaryPrompt.SUMMARY_PREFIX + "Goal: x", text(summary));
+        assertEquals(List.of("a", "b"), SummaryPrompt.filesIn(SummaryPrompt.summaryMessage("s", List.of("a", "b"))));
+        assertEquals(List.of(), SummaryPrompt.filesIn(summary));
         assertFalse(SummaryPrompt.isSummary(Message.user("Goal: x")));
     }
 

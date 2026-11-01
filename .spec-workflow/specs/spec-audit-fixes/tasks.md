@@ -4,48 +4,48 @@
 
 ## 阶段 1：压缩，内核
 
-- [ ] 1. 截断幂等
+- [x] 1. 截断幂等
   - File: tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java, tantalum-kernel/src/test/java/tantalum/kernel/compaction/TrimmingTest.java
   - 标记算进上限；再次截断不嵌套，保留最初的原长度
   - 验证：截断两次标记只有一个、原长度不变、总长不超上限、不切坏字符
   - _Requirements: 1.7_
 
-- [ ] 2. 手动压缩 K = 0
+- [x] 2. 手动压缩 K = 0
   - File: tantalum-kernel/src/main/java/tantalum/kernel/compaction/Compactor.java, tantalum-kernel/src/test/java/tantalum/kernel/compaction/CompactorTest.java, tantalum-shell/src/test/java/tantalum/shell/web/CompactApiTest.java
   - 验证：两个单元的短会话也有头部；只有一个单元时才 409
   - _Requirements: 1.8_
 
-- [ ] 3. 旧摘要不丢
+- [x] 3. 旧摘要不丢
   - File: Compactor.java, CompactorTest.java, tantalum-kernel/src/main/java/tantalum/kernel/step/CompactSteps.java, CompactStepsTest.java
   - 丢单元时跳过旧摘要；除旧摘要外全部丢光时不发摘要调用，按失败处理
   - 验证：头部放不下时旧摘要仍在请求里；丢光时没有 CallModel
   - _Requirements: 1.3_
 
-- [ ] 4. 文件列表
+- [x] 4. 文件列表
   - File: Compactor.java, tantalum-kernel/src/main/java/tantalum/kernel/compaction/SummaryPrompt.java, CompactorTest.java, SummaryPromptTest.java
   - 从工具调用的 `path` 参数提取，并入旧摘要的 `<files-touched>`，最多 200 条
   - 验证：两次压缩累积且不重复；模型的摘要里没写也有；超上限截断
   - _Requirements: 1.4_
 
-- [ ] 5. 摘要指令
+- [x] 5. 摘要指令
   - File: SummaryPrompt.java, SummaryPromptTest.java
   - 增加 Files and code、Errors and fixes、保留用户纠正；前缀要求直接继续；有旧摘要时要求更新进度
   - 验证：断言各段存在
   - _Requirements: 1.6_
 
-- [ ] 6. 只裁剪压缩
+- [x] 6. 只裁剪压缩
   - File: tantalum-value/src/main/java/tantalum/value/decision/ContextCompacted.java, Compactor.java, CompactSteps.java, RetrySteps.java, CompactStepsTest.java
   - 头部不足 `MIN_SUMMARY_GAIN` 时直接裁剪；自动和超长恢复路径上摘要失败时回退到裁剪；都不能变小按规则 8
   - 验证：先用复现测试看到现有失败（头部只有首条请求 + 超大工具结果）；修后运行继续；超长恢复同样通过；手动仍报失败
   - _Requirements: 1.1, 1.2_
 
-- [ ] 7. 摘要调用重试
+- [x] 7. 摘要调用重试
   - File: tantalum-value/src/main/java/tantalum/value/state/Compacting.java, CompactSteps.java, tantalum-kernel/src/main/java/tantalum/kernel/table/BuiltinSteps.java, CompactStepsTest.java
   - `AwaitingSummaryRetry`，退避后重发相同 prompt；用完再按规则 8；成功后 `retries` 清零
   - 验证：限流后重试成功；连续失败到上限；重试等待中取消；回放 prompt 相同
   - _Requirements: 1.5_
 
-- [ ] 8. 压缩后重新组装
+- [x] 8. 压缩后重新组装
   - File: tantalum-value/src/main/java/tantalum/value/state/RunState.java, SessionState.java, CompactSteps.java, tantalum-kernel/src/main/java/tantalum/kernel/step/ModelSteps.java, CompactStepsTest.java
   - 自动和超长恢复成功后发 `AssembleContext`，重新冻结，之后那次调用不再判断
   - 验证：新记忆索引和新工具出现在压缩后的 system；不追加更新消息；不连续压缩；回放相同
@@ -53,7 +53,7 @@
 
 ## 阶段 2：压缩，shell 和界面
 
-- [ ] 9. 对话条目、轨迹和控制台
+- [x] 9. 对话条目、轨迹和控制台
   - File: tantalum-shell/src/main/java/tantalum/shell/conversation/Transcript.java, TranscriptItem.java, tantalum-shell/src/main/java/tantalum/shell/journal/TurnQuery.java, console/src/conversation/CompactionMark.tsx, console/src/text/zh.ts, 对应测试
   - “已裁剪”标记；重试等待不记为运行失败；`AwaitingSummaryRetry` 归 TimerHandler
   - 验证：TranscriptTest、TurnQueryTest、vitest 全过；重启后视图逐字节相同

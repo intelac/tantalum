@@ -78,7 +78,8 @@ class TranscriptTest {
         assertEquals(new tantalum.value.model.TokenUsage(50, 20, 0, 0), mark.usage());
         assertTrue(fx.items(Text.class).stream().noneMatch(item -> item.text().contains("Goal")), "the summary is not a reply");
         assertTrue(fx.items(Thinking.class).stream().noneMatch(item -> item.text().equals("summarizing")));
-        assertEquals("AwaitingModel", fx.status(run).phase());
+        assertEquals("AwaitingContext", fx.status(run).phase(), "the context is reassembled after compaction");
+        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
 
         fx.feed(run, fx.reply(text("a3")));
         assertEquals("a3", fx.items(Text.class).getLast().text());
@@ -103,7 +104,12 @@ class TranscriptTest {
         assertTrue(fx.status(run).ended());
         RunId again = nextRun(block("q4"));
         fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, null, "", "429"));
-        assertTrue(fx.items(CompactionMark.class).getLast().failure().contains("429"));
+        assertNull(fx.status(again).failure(), "waiting to retry the summary is not a run failure");
+        assertEquals("AwaitingSummaryRetry", fx.status(again).phase());
+        assertEquals(1, fx.items(CompactionMark.class).size(), "no new mark while retrying");
+        fx.feed(again, new tantalum.value.event.TimerFired(fx.lastCommands().getFirst().id()));
+        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.INVALID_REQUEST, false, null, "", "400"));
+        assertTrue(fx.items(CompactionMark.class).getLast().failure().contains("400"));
         assertNull(fx.status(again).failure());
     }
 

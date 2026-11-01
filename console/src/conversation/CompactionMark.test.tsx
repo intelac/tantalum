@@ -54,6 +54,12 @@ describe("CompactionMark", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("shows a trim without a summary as a plain note", () => {
+    render(<CompactionMark store={storeWith(mark({ summary: "", estimateBefore: 10000, estimateAfter: 1000 }))} id="9.0" />);
+    expect(screen.getByRole("note").textContent).toBe("上下文已裁剪 10K → 1K tok");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("renders nothing for other items", () => {
     const { container } = render(<CompactionMark store={new ConversationStore()} id="nope" />);
     expect(container.textContent).toBe("");

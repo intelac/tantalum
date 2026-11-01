@@ -3,6 +3,8 @@ package tantalum.kernel.compaction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
@@ -14,6 +16,8 @@ import tantalum.value.model.ToolResultBlock;
  * 截断保留开头和结尾各一半：文件的暗号、日志的结论、测试的结果往往在末尾，只留开头会把它们丢掉（真实 Claude 场景暴露的问题）。
  */
 public final class Trimming {
+
+    private static final Pattern MARKER = Pattern.compile("\\n\\[\\.\\.\\. (\\d+) of (\\d+) bytes truncated \\.\\.\\.\\]\\n");
 
     private Trimming() {}
 
@@ -40,18 +44,31 @@ public final class Trimming {
         return List.copyOf(out);
     }
 
+    /** 标记算进上限。已经被截断过的结果先去掉旧标记，沿用最初的原长度，所以不会嵌套。上限小于标记时只留标记。 */
     static ToolResultBlock truncate(ToolResultBlock result, int maxBytes) {
-        byte[] bytes = result.text().getBytes(StandardCharsets.UTF_8);
-        if (bytes.length <= maxBytes) {
+        byte[] whole = result.text().getBytes(StandardCharsets.UTF_8);
+        if (whole.length <= maxBytes) {
             return result;
         }
-        int headEnd = charBoundaryBackward(bytes, maxBytes / 2);
-        int tailStart = charBoundaryForward(bytes, bytes.length - (maxBytes - maxBytes / 2));
+        String text = result.text();
+        Matcher old = MARKER.matcher(text);
+        long original = whole.length;
+        if (old.find()) {
+            original = Long.parseLong(old.group(2));
+            text = text.substring(0, old.start()) + text.substring(old.end());
+        }
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        int budget = Math.max(0, maxBytes - marker(original, original).length());
+        int headEnd = charBoundaryBackward(bytes, budget / 2);
+        int tailStart = charBoundaryForward(bytes, bytes.length - (budget - budget / 2));
         String head = new String(bytes, 0, headEnd, StandardCharsets.UTF_8);
         String tail = new String(bytes, tailStart, bytes.length - tailStart, StandardCharsets.UTF_8);
-        return new ToolResultBlock(result.toolCallId(),
-                head + "\n[... " + (tailStart - headEnd) + " of " + bytes.length + " bytes truncated ...]\n" + tail,
-                result.error(), result.code());
+        long omitted = original - headEnd - (bytes.length - tailStart);
+        return new ToolResultBlock(result.toolCallId(), head + marker(omitted, original) + tail, result.error(), result.code());
+    }
+
+    private static String marker(long omitted, long original) {
+        return "\n[... " + omitted + " of " + original + " bytes truncated ...]\n";
     }
 
     /** 退到 UTF-8 字符边界：续字节是 10xxxxxx。 */

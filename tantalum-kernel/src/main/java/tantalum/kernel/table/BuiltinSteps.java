@@ -39,6 +39,7 @@ public final class BuiltinSteps {
         table.register("AwaitingModel", ModelFailed.TYPE, RetrySteps::modelFailed);
         table.register("AwaitingSummary", ModelReplied.TYPE, CompactSteps::summaryReplied);
         table.register("AwaitingSummary", ModelFailed.TYPE, CompactSteps::summaryFailed);
+        table.register("AwaitingSummaryRetry", TimerFired.TYPE, CompactSteps::summaryRetry);
         table.register("AwaitingTools", ToolFinished.TYPE, ToolSteps::toolFinished);
         table.register("AwaitingRetry", TimerFired.TYPE, RetrySteps::timerFired);
         table.register("AwaitingWork", WorkDone.TYPE, WorkSteps::workDone);

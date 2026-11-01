@@ -103,6 +103,61 @@ class CompactorTest {
         assertEquals(user(1), plan.request());
     }
 
+    /** 需求 1.8：手动压缩只留最新单元，同 DSH 的 compactNow。 */
+    @Test
+    void manualKeepsOnlyTheLastUnit() {
+        SessionState session = session(SETTINGS, user(1), assistant(1));
+        Plan plan = Compactor.plan(session, "sys", NO_TOOLS, Trigger.MANUAL).orElseThrow();
+        assertEquals(1, plan.headMessages());
+        assertEquals(1, plan.keptUnits());
+    }
+
+    /** 需求 1.3：头部放不下时先丢别的单元，上一次的摘要永不丢。 */
+    @Test
+    void previousSummaryIsNeverDropped() {
+        Message summary = SummaryPrompt.summaryMessage("constraint: never touch A");
+        List<Message> view = List.of(summary, user(1), assistant(1), user(2));
+        Plan plan = new Plan(3, 3, 1, 90, null);
+        long fixed = SETTINGS.threshold() - TokenEstimate.ofMessage(summary) - 5;
+        Compactor.Head head = Compactor.headForSummary(plan, view, SETTINGS, fixed);
+        assertTrue(head.dropped());
+        assertEquals(List.of(summary), head.messages());
+        assertTrue(head.nothingToSummarize(), "only the old summary is left");
+        assertFalse(Compactor.headForSummary(plan, view, SETTINGS, 0).nothingToSummarize());
+        assertFalse(new Compactor.Head(List.of(user(1)), true).nothingToSummarize());
+        assertTrue(new Compactor.Head(List.of(), true).nothingToSummarize());
+    }
+
+    /** 需求 1.4：文件列表由程序提取，再次压缩时累积，不靠模型。 */
+    @Test
+    void filesTouchedComeFromToolCallsAndAccumulate() {
+        Message call = new Message(Role.ASSISTANT, List.of(
+                new tantalum.value.model.ToolCallBlock("a", "read_file", "{}", new Json.Obj(java.util.Map.of("path", new Json.Str("src/A.java")))),
+                new tantalum.value.model.ToolCallBlock("b", "read_file", "{}", new Json.Obj(java.util.Map.of("path", new Json.Str("src/B.java")))),
+                new tantalum.value.model.ToolCallBlock("c", "grep", "{}", new Json.Obj(java.util.Map.of("pattern", new Json.Str("x")))),
+                new tantalum.value.model.ToolCallBlock("d", "bad", "{oops", null)), false);
+        List<Message> view = List.of(user(1), call, user(2));
+        List<Message> first = Compactor.replacement(new Plan(2, 2, 1, 900, null), view, "summary one", SETTINGS);
+        String text = ((TextBlock) first.getFirst().content().getFirst()).text();
+        assertTrue(text.contains("<files-touched>\nsrc/A.java\nsrc/B.java\n</files-touched>"), text);
+
+        Message again = new Message(Role.ASSISTANT, List.of(
+                new tantalum.value.model.ToolCallBlock("e", "read_file", "{}", new Json.Obj(java.util.Map.of("path", new Json.Str("src/C.java")))),
+                new tantalum.value.model.ToolCallBlock("f", "read_file", "{}", new Json.Obj(java.util.Map.of("path", new Json.Str("src/A.java"))))), false);
+        List<Message> second = Compactor.replacement(new Plan(2, 2, 1, 900, null), List.of(first.getFirst(), again, user(3)), "summary two", SETTINGS);
+        String merged = ((TextBlock) second.getFirst().content().getFirst()).text();
+        assertTrue(merged.contains("<files-touched>\nsrc/A.java\nsrc/B.java\nsrc/C.java\n</files-touched>"), merged);
+        assertEquals(1, merged.split("<files-touched>", -1).length - 1, "the list is not nested");
+
+        List<String> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 250; i++) {
+            many.add("f" + i);
+        }
+        List<String> capped = SummaryPrompt.capFiles(many);
+        assertEquals(200, capped.size());
+        assertEquals("f249", capped.getLast(), "the most recent paths stay");
+    }
+
     @Test
     void overflowKeepsOnlyTheLastUnit() {
         SessionState session = session(SETTINGS, user(1), assistant(1), user(2), assistant(2));
@@ -165,14 +220,14 @@ class CompactorTest {
         assertFalse(fits.dropped());
         assertEquals(3, fits.messages().size());
         assertEquals(List.of(new TextBlock("a")), fits.messages().get(1).content());
-        assertTrue(((ToolResultBlock) fits.messages().get(2).content().getFirst()).text().startsWith("y".repeat(15) + "\n[... "));
+        assertTrue(((ToolResultBlock) fits.messages().get(2).content().getFirst()).text().contains("of 200 bytes truncated"));
 
-        // 固定部分已占 780，阈值 800：只剩 20 token，第一单元（30）放不下，丢；第二单元也放不下，丢；空了。
-        Compactor.Head dropped = Compactor.headForSummary(plan, view, SETTINGS, 780);
+        // 固定部分已占 795，阈值 800：只剩 5 token，两个单元都放不下，空了。
+        Compactor.Head dropped = Compactor.headForSummary(plan, view, SETTINGS, 795);
         assertTrue(dropped.dropped());
         assertTrue(dropped.messages().isEmpty());
 
-        Compactor.Head partial = Compactor.headForSummary(plan, view, SETTINGS, 760);
+        Compactor.Head partial = Compactor.headForSummary(plan, view, SETTINGS, 770);
         assertTrue(partial.dropped());
         assertEquals(2, partial.messages().size(), "the first unit went, the assistant unit (about 20 tokens) stays");
     }

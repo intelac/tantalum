@@ -32,6 +32,15 @@ export function CompactionMark({ store, id }: Props) {
       </div>
     );
   }
+  if (item.summary === undefined || item.summary === "") {
+    return (
+      <div role="note" className="my-3 flex items-center gap-3 text-xs text-fg-faint">
+        <span className="h-px flex-1 bg-line" />
+        <span>{zh.conversation.trimmed(compact(item.estimateBefore), compact(item.estimateAfter)) + triggerLabel(item)}</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+    );
+  }
   const label = zh.conversation.compacted(compact(item.estimateBefore), compact(item.estimateAfter)) + triggerLabel(item);
   return (
     <div className="my-3 text-xs text-fg-faint">

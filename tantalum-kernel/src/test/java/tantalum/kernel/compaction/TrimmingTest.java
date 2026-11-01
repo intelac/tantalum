@@ -46,19 +46,40 @@ class TrimmingTest {
 
     @Test
     void longResultsKeepHeadAndTailAtUtf8BoundariesAndAreAnnotated() {
-        String text = "ab" + "你".repeat(10) + "END";
-        ToolResultBlock result = new ToolResultBlock("t", text, true, "CODE");
-        ToolResultBlock cut = Trimming.truncate(result, 8);
-        String[] parts = cut.text().split("\n");
-        assertEquals(3, parts.length, cut.text());
-        assertEquals("ab", parts[0], "4 bytes of head: cutting inside the first 你 would leave a broken character, so it backs off");
-        assertEquals("END", parts[2], "the tail survives: codes and conclusions sit at the end of tool output");
-        int total = text.getBytes(StandardCharsets.UTF_8).length;
-        assertEquals("[... " + (total - 2 - 3) + " of " + total + " bytes truncated ...]", parts[1]);
+        String text = "ab" + "你".repeat(100) + "END";
+        ToolResultBlock cut = Trimming.truncate(new ToolResultBlock("t", text, true, "CODE"), 64);
+        assertTrue(cut.text().startsWith("ab"), cut.text());
+        assertTrue(cut.text().endsWith("END"), cut.text());
+        assertTrue(cut.text().contains(" of " + text.getBytes(StandardCharsets.UTF_8).length + " bytes truncated"), cut.text());
         assertTrue(cut.error());
         assertEquals("CODE", cut.code());
         assertEquals("t", cut.toolCallId());
         assertFalse(cut.text().contains("\uFFFD"));
+    }
+
+    /** 需求 1.7：总长含标记不超上限；再次截断不嵌套，保留最初的原长度。 */
+    @Test
+    void lengthIncludingTheMarkerStaysWithinTheLimit() {
+        ToolResultBlock cut = Trimming.truncate(new ToolResultBlock("t", "x".repeat(10_000), false, null), 200);
+        assertTrue(cut.text().getBytes(StandardCharsets.UTF_8).length <= 200, cut.text().length() + "");
+    }
+
+    @Test
+    void truncatingAgainDoesNotNestMarkersAndKeepsTheOriginalLength() {
+        ToolResultBlock once = Trimming.truncate(new ToolResultBlock("t", "x".repeat(5_000) + "END", false, null), 500);
+        ToolResultBlock twice = Trimming.truncate(once, 200);
+        assertEquals(1, twice.text().split("bytes truncated", -1).length - 1, twice.text());
+        assertTrue(twice.text().contains(" of 5003 bytes truncated"), twice.text());
+        assertTrue(twice.text().endsWith("END"), twice.text());
+        assertTrue(twice.text().getBytes(StandardCharsets.UTF_8).length <= 200);
+        assertSame(twice, Trimming.truncate(twice, 200), "already within the limit");
+    }
+
+    @Test
+    void limitSmallerThanTheMarkerLeavesOnlyTheMarker() {
+        ToolResultBlock cut = Trimming.truncate(new ToolResultBlock("t", "x".repeat(500), false, null), 8);
+        assertTrue(cut.text().contains("of 500 bytes truncated"), cut.text());
+        assertFalse(cut.text().contains("xx"), cut.text());
     }
 
     @Test
@@ -67,7 +88,7 @@ class TrimmingTest {
         ToolResultBlock cut = Trimming.truncate(new ToolResultBlock("t", log, false, null), 4096);
         assertTrue(cut.text().contains("KESTREL-4137"));
         assertTrue(cut.text().startsWith("line\nline\n"));
-        assertTrue(cut.text().getBytes(StandardCharsets.UTF_8).length < 4096 + 80);
+        assertTrue(cut.text().getBytes(StandardCharsets.UTF_8).length <= 4096);
     }
 
     @Test

@@ -80,6 +80,7 @@ class TranscriptReplayTest {
         RunId third = new RunId("run-" + live.lastSeq());
         live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
         live.feed(third, live.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
+        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
         live.feed(third, live.truncatedReply("a3 cut"));
 
         Transcript transcript = new Transcript();

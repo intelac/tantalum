@@ -111,10 +111,13 @@ public final class ModelSteps {
         ContextAssembled event = (ContextAssembled) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
+        // 压缩刚把上下文清空：这次组装之后的调用不再判断（规则 3.1）。
+        SessionState before = out.session(run.ref());
+        boolean justCompacted = before.context() == null && before.compaction() != null;
         SessionContext frozen = freezeContext(out, run, event);
         run = run.withContext(frozen.system(), frozen.tools());
         out.put(run);
-        callModel(out, run, null);
+        callModel(out, run, null, !justCompacted);
         return out.decision();
     }
 
@@ -136,6 +139,13 @@ public final class ModelSteps {
             out.state = out.state.with(session.append(Message.user(CONTEXT_UPDATE + body)).withContext(frozen));
         }
         return frozen;
+    }
+
+    /** 压缩后重新组装 system 和工具（规则 5），新的记忆索引和 MCP 工具在此生效。 */
+    static void reassemble(Outcome out, RunState run) {
+        CommandId id = out.nextCommandId();
+        out.emit(new AssembleContext(id, run.ref()));
+        out.await(run, AWAITING_CONTEXT, Set.of(id));
     }
 
     static void callModel(Outcome out, RunState pending, WorkDone work) {
