@@ -120,7 +120,7 @@ public final class ModelSteps {
         SessionState session = out.session(run.ref());
         SessionContext frozen = session.context();
         if (frozen == null) {
-            frozen = new SessionContext(event.system(), event.tools(), event.dynamic());
+            frozen = new SessionContext(event.system(), event.tools(), event.dynamic(), event.compaction());
             out.state = out.state.with(session.withContext(frozen));
             return frozen;
         }

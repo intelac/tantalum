@@ -52,7 +52,7 @@ class StateTreeTest {
         assertThrows(NullPointerException.class, () -> RunState.start(null, OWNER));
         assertThrows(NullPointerException.class, () -> RunState.start(REF, null));
         assertThrows(NullPointerException.class,
-                () -> new RunState(REF, OWNER, null, null, List.of(), null, List.of(), 0, false, null));
+                () -> new RunState(REF, OWNER, null, null, List.of(), null, List.of(), 0, false, null, null, false, false));
     }
 
     @Test
