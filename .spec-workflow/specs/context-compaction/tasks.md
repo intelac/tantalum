@@ -36,21 +36,21 @@
 
 ## 阶段 2：内核纯函数
 
-- [ ] 5. `Units`、`TokenEstimate` 测试和实现
+- [x] 5. `Units`、`TokenEstimate` 测试和实现
   - File: tantalum-kernel/src/test/java/tantalum/kernel/compaction/UnitsTest.java, TokenEstimateTest.java, tantalum-kernel/src/main/java/tantalum/kernel/compaction/Units.java, TokenEstimate.java
   - 切单元：用户消息；助手加紧随的工具结果消息。估算：UTF-8 字节 / 3 向上取整，含工具调用参数、工具结果、推理块原始 JSON、工具定义
   - 验证：连续用户消息各自成单元；以结果结尾；空视图；中文估算
   - _Requirements: 6.1（规则 1、4）_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“Units、TokenEstimate 测试和实现”，满足需求 6.1，遵守 design.md | Restrictions: 只做这一件事；纯函数；不引用供应商类型 | Success: 连续用户消息各自成单元；以结果结尾；空视图；中文估算 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 6. `Trimming`、`SummaryPrompt` 测试和实现
+- [x] 6. `Trimming`、`SummaryPrompt` 测试和实现
   - File: tantalum-kernel/src/test/java/tantalum/kernel/compaction/TrimmingTest.java, SummaryPromptTest.java, tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java, SummaryPrompt.java
   - 去推理块、按 UTF-8 边界截断并注明原长度、空消息丢弃；指令文本（pi 结构、已省略句、手动说明）；四种校验失败
   - 验证：未超长不动；截断不切坏字符；校验每条各有用例
   - _Requirements: 6.1（规则 5、6、7）_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“Trimming、SummaryPrompt 测试和实现”，满足需求 6.1，遵守 design.md | Restrictions: 只做这一件事；纯函数；Trimming 不看 provider | Success: 未超长不动；截断不切坏字符；校验每条各有用例 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 7. `Compactor` 测试和实现
+- [x] 7. `Compactor` 测试和实现
   - File: tantalum-kernel/src/test/java/tantalum/kernel/compaction/CompactorTest.java, tantalum-kernel/src/main/java/tantalum/kernel/compaction/Compactor.java
   - 规则 1（锚点、无锚点、锚点后新增）、规则 2（等于阈值不触发）、规则 4（K 上限 T/4、最新单元超 K 仍保留、头部为空、OVERFLOW 时 K = 0、MANUAL）、请求识别（排除上下文更新和摘要）
   - 验证：每条规则至少一个用例
