@@ -27,21 +27,21 @@
 
 ## 阶段 1：连接
 
-- [ ] 4. `TestMcpServer` 测试夹具
+- [x] 4. `TestMcpServer` 测试夹具
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/TestMcpServer.java
   - 内嵌 Tomcat 的真实 MCP 服务器：记录凭据和调用，可停可启，可返回 401、重定向，可增减工具
   - 验证：SDK 客户端能连上
   - _Requirements: 7.1_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`TestMcpServer` 测试夹具”，满足需求 7.1，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: SDK 客户端能连上 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 5. `McpConnection` 测试（先失败）
+- [x] 5. `McpConnection` 测试（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/McpConnectionTest.java
   - 发现、调用、`isError`、未知工具、中断后仍可用、重启后恢复、失败上限、稳定窗口、`list_changed`、重定向不跟随、401
   - 验证：编译通过，因缺实现失败
   - _Requirements: 3.2–3.4, 5.1–5.3, 1.5_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`McpConnection` 测试（先失败）”，满足需求 3.2–3.4, 5.1–5.3, 1.5，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 编译通过，因缺实现失败 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 6. `McpTools`、`McpConnection` 实现
+- [x] 6. `McpTools`、`McpConnection` 实现
   - File: tantalum-shell/src/main/java/tantalum/shell/mcp/McpTools.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpConnection.java
   - 状态机、退避、换新客户端、只读工具在会话失效时重试一次、其余不重试
   - 验证：上一任务全过；线程不泄漏
