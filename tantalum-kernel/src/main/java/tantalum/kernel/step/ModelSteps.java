@@ -34,6 +34,7 @@ import tantalum.value.state.Awaiting;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
+import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
 /** 提交、组装上下文和模型调用的处理函数。 */
@@ -41,6 +42,8 @@ public final class ModelSteps {
 
     static final String AWAITING_CONTEXT = "AwaitingContext";
     static final String AWAITING_MODEL = "AwaitingModel";
+    static final String CONTEXT_UPDATE = "[Context update, not written by the user. This replaces the shared knowledge, "
+            + "project instructions and memory index given earlier.]\n\n";
 
     private ModelSteps() {}
 
@@ -101,10 +104,32 @@ public final class ModelSteps {
     public static Decision contextAssembled(StepContext context) {
         ContextAssembled event = (ContextAssembled) context.envelope().event();
         Outcome out = new Outcome(context);
-        RunState run = context.run().withContext(event.system(), event.tools());
+        RunState run = context.run();
+        SessionContext frozen = freezeContext(out, run, event);
+        run = run.withContext(frozen.system(), frozen.tools());
         out.put(run);
         callModel(out, run, null);
         return out.decision();
+    }
+
+    /**
+     * 所有模型相同：会话的 system 和工具固定为第一次组装的结果，历史只追加。
+     * 之后可变内容（记忆索引等）有变化时，追加一条用户消息告诉模型，新工具要等新会话。
+     */
+    private static SessionContext freezeContext(Outcome out, RunState run, ContextAssembled event) {
+        SessionState session = out.session(run.ref());
+        SessionContext frozen = session.context();
+        if (frozen == null) {
+            frozen = new SessionContext(event.system(), event.tools(), event.dynamic());
+            out.state = out.state.with(session.withContext(frozen));
+            return frozen;
+        }
+        if (event.dynamic() != null && !event.dynamic().equals(frozen.dynamic())) {
+            String body = event.dynamic().isEmpty() ? "(now empty)" : event.dynamic();
+            frozen = frozen.withDynamic(event.dynamic());
+            out.state = out.state.with(session.append(Message.user(CONTEXT_UPDATE + body)).withContext(frozen));
+        }
+        return frozen;
     }
 
     /** 调用模型前经过 {@code beforeModelCall}；待处理的 {@code steer} 在这里并入消息。 */

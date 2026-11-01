@@ -159,6 +159,41 @@ class ModelStepsTest {
         assertEquals(EndReason.STOPPED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
 
+    /** 所有模型相同：第二个运行的 system 和工具逐字节不变，可变内容的变化只作为追加消息出现。 */
+    @Test
+    void laterRunsKeepTheFrozenContextAndAppendChanges() {
+        LoopFixture loop = new LoopFixture();
+        loop.prompt("one");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), "idx1"));
+        loop.feed(loop.runId(), reply(loop, "a"));
+
+        loop.prompt("two");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), "idx1"));
+        CallModel same = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals("sys idx1", same.prompt().system());
+        assertEquals(Message.user("two"), same.prompt().messages().getLast());
+        loop.feed(loop.runId(), reply(loop, "b"));
+
+        loop.prompt("three");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(
+                new tantalum.value.model.ToolSpec("late", "d", new Json.Null())), "idx2"));
+        CallModel changed = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals("sys idx1", changed.prompt().system());
+        assertEquals(List.of(), changed.prompt().tools());
+        assertEquals(Message.user(ModelSteps.CONTEXT_UPDATE + "idx2"), changed.prompt().messages().getLast());
+        loop.feed(loop.runId(), reply(loop, "c"));
+
+        // 没再变就不重复说明；清空也要说明。
+        loop.prompt("four");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(), "idx2"));
+        assertEquals(Message.user("four"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
+        loop.feed(loop.runId(), reply(loop, "d"));
+        loop.prompt("five");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), ""));
+        assertEquals(Message.user(ModelSteps.CONTEXT_UPDATE + "(now empty)"),
+                assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
+    }
+
     /** 不是 Cancel 引起的中断（线程被别的原因打断）：运行不能永远停在 AwaitingModel。 */
     @Test
     void interruptedAwaitedCallEndsTheRunAsCancelledAndKeepsThePartialText() {

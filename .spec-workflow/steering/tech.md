@@ -186,6 +186,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **存储**：每用户目录 `memory/`，索引 `MEMORY.md` 由条目文件的 frontmatter 重建；写入临时文件 + 重命名，每用户一把锁。共用工作目录模式下放到数据目录（对需求 1.4 的修正：共用 root 会被所有人的 grep 搜到）。
 - **进 prompt**：`ContextHandler` 的 system 顺序固定为基础提示 → 记忆指引 → 共享知识 → `AGENTS.md` → 索引；索引在最后，钩子 `PromptPatch` 追加在它之后，prompt caching 的 system 断点运行内稳定；运行开始快照进 `ContextAssembled`，回放不读文件（`MemorySnapshotTest`）。
 - **安全**：名称白名单、路径不可能越出目录、`CredentialGuard` 拒收像凭据的内容且不回显、接口按登录用户、别人的和不存在的都是 404、写接口受 `Origin` 校验。
+- **会话内冻结（2026-11-01 修正 M4、M7）**：Sonnet 5.5 的 thinking 签名绑定 system、工具和之前的消息。实测严格模式下改 system 或工具返回 400，我们账号默认放行所以没暴露。现在内核把会话第一次的 system 和工具存进 `SessionContext`，之后可变内容变化时追加用户消息；严格模式真实场景通过。
 - **不做**：自动整理（决定 M5）、向量检索、跨用户共享个人记忆。
 
 ### strata 实测（2026-10-31）

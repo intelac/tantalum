@@ -18,7 +18,7 @@ import tantalum.value.id.Principal;
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
  * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → AGENTS.md → 该用户的记忆索引；每段只在有内容时加入。
- * 索引放在最后，钩子追加的内容在它之后，所以 prompt caching 的 system 断点整个运行里稳定。
+ * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只用 {@code dynamic} 判断是否追加变更说明，不再换 system。
  */
 public final class ContextHandler implements Handler {
 
@@ -43,21 +43,23 @@ public final class ContextHandler implements Handler {
     @Override
     public Event handle(Command command) throws IOException {
         Principal principal = command.run().principal();
-        StringBuilder system = new StringBuilder(basePrompt);
-        append(system, MemoryGuidance.TEXT.strip());
+        StringBuilder dynamic = new StringBuilder();
         String shared = knowledge.text();
         if (!shared.isEmpty()) {
-            append(system, KNOWLEDGE_HEADING + "\n\n" + shared);
+            append(dynamic, KNOWLEDGE_HEADING + "\n\n" + shared);
         }
         Path agents = agentsFile(workspaces.of(principal));
         if (agents != null && Files.isRegularFile(agents)) {
-            append(system, Files.readString(agents).strip());
+            append(dynamic, Files.readString(agents).strip());
         }
         String index = memories.of(principal).indexText().strip();
         if (!index.isEmpty()) {
-            append(system, INDEX_HEADING + "\n\n" + index);
+            append(dynamic, INDEX_HEADING + "\n\n" + index);
         }
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs());
+        StringBuilder system = new StringBuilder(basePrompt);
+        append(system, MemoryGuidance.TEXT.strip());
+        append(system, dynamic.toString());
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), dynamic.toString());
     }
 
     private static void append(StringBuilder system, String section) {
