@@ -127,13 +127,13 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 3. **自写 OpenAI 兼容客户端**：实际只需发送 prompt、取回回复和工具调用。
 4. **SQLite + 原生 JDBC**：满足单进程，journal 是追加写入，不需要 ORM。
 5. **使用 Disruptor（Yi 决定）**：Input Disruptor → cleanroom → Output Disruptor，结构与架构图一致，框架成熟。Input Disruptor 上 journal 消费者在前，cleanroom 消费者依赖其进度，直接表达“先落盘再处理”，并用 `endOfBatch` 批量提交。Disruptor 只存在于 shell；`Kernel.step` 仍是纯函数，不感知它。一律用 `tryPublishEvent`；等待策略用不空转的 `BlockingWaitStrategy`，避免占满 CPU。
-6. **流式调用模型，分片不落盘**：pi 和 DeepSeek Harness 都用流式。分片只作瞬态进度，每次调用结束时写一个结算事件，内核只看到结果（与 DeepSeek Harness 的 `assistant/message` / `assistant/attempt` 同构）。两级持久化仍属于 `context-and-ops`，因此崩溃会丢失进行中那次调用的全部分片。
+6. **流式调用模型，分片不落盘**：pi 和 DeepSeek Harness 都用流式。分片只作瞬态进度，每次调用结束时写一个结算事件，内核只看到结果（与 DeepSeek Harness 的 `assistant/message` / `assistant/attempt` 同构）。两级持久化仍未排期，因此崩溃会丢失进行中那次调用的全部分片。
 7. **React + `fetch` 流式读取 SSE**：生态大，且以后接认证不用换 SSE 客户端。
 8. **工具默认独占，声明后才并行**：沿用 DeepSeek Harness 的 `isConcurrencySafe` 和默认 10 的并发上限，比 pi 默认并行更保守，未声明的工具不会意外并发写入。
 9. **`reasoning_content` 逐字回传**：沿用 DeepSeek Harness 的决定。它曾只在工具轮次回传，导致经网关转发时对话重建出错；开关设错又会静默失败，所以不提供开关。代价是多占输入 token。
 10. **预留对照 pi 和 DeepSeek Harness（2026-10-31）**：压缩都以追加事件替换投影视图，溢出都规范化后压缩并重试一次，我们预留相同的边界。子 agent 都以工具形式接入；DeepSeek Harness 限每棵树 8 个活跃子 agent、深度 1、超限拒绝不排队，以此为后续默认值的参考。memory 在 DeepSeek Harness 中是默认关闭的第三方 MCP 工具，没有内置服务，我们同样优先走工具接入，但多用户隔离是我们额外的要求。
 
-11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。一次只选一个模型，多模型路由不在本 spec。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-and-ops` 必须按此设计。
+11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。一次只选一个模型，多模型路由不在本 spec。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-compaction` 必须按此设计。
 
 12. **项目定名 Tantalum（Yi 决定）**：Maven 模块以 `tantalum-` 为前缀，Java 顶层包 `tantalum.*`。`groupId` 暂用 `dev.tantalum`，只在本地构建；对外发布前要确认已取得域名，否则按简报改用 `io.github.<handle>`。
 
@@ -177,11 +177,11 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **内核**：`ModelInterrupted` 以前在任何状态都追加文本，现在只在该运行仍是会话末尾时追加（`SessionState.lastRun`），且中断的是正在等待的调用时运行以 CANCELLED 结束；`RunEnd.finish` 把未并入的 steer 追加为用户消息；从 `onFailure` 申请的工作完成后再调模型也计入重试次数；钩子返回 null 按 `Stop`。
 - **运行时**：两个环都设了 Disruptor 异常处理器，`Cleanroom` 捕获内核之外的 `Throwable`，三者任一出错入口都返回 503（以前消费者线程静默死亡、提交永远 429）；`WorkType.run` 和工具一样受 `tantalum.tool-timeout` 约束；`OpenAiClient` 有连接和响应头超时；`Engine.close` 先排空环再关 journal，每步独立。
 - **安全面**：登录限速在校验前预占账号计数（并发猜密码不能越过 5 次），登录输入限长；`ExternalGate` 释放钳到 0；`Workspace` 对越界和不存在报同一句话；工具错误信息不带服务器路径；SSE 挤出边界按（序号, 下标）记录。
-- **明确不改、留给后续 spec**：路径校验与打开之间的 TOCTOU（sandbox spec）；`TurnQuery` 每次请求回放整个 journal、停用后已打开的 SSE 不断开、关闭时等待在途 Handler（context-and-ops spec）。
+- **明确不改、留给后续 spec**：路径校验与打开之间的 TOCTOU（sandbox spec）；`TurnQuery` 每次请求回放整个 journal、停用后已打开的 SSE 不断开、关闭时等待在途 Handler（ops-hardening spec）。
 
 ### memory spec（2026-11-01）
 
-四层记忆模型：1 工作记忆（消息历史，已有）；2 情景记忆（会话摘要，属 `context-and-ops`）；3 个人长期记忆（本 spec）；4 共享知识（本 spec，只读）。层与层之间不自动流动。实现在 `tantalum.shell.memory`，内核和 value 不改。
+四层记忆模型：1 工作记忆（消息历史，已有）；2 情景记忆（会话摘要，属 `context-compaction`）；3 个人长期记忆（本 spec）；4 共享知识（本 spec，只读）。层与层之间不自动流动。实现在 `tantalum.shell.memory`，内核和 value 不改。
 
 - **存储**：每用户目录 `memory/`，索引 `MEMORY.md` 由条目文件的 frontmatter 重建；写入临时文件 + 重命名，每用户一把锁。共用工作目录模式下放到数据目录（对需求 1.4 的修正：共用 root 会被所有人的 grep 搜到）。
 - **进 prompt**：`ContextHandler` 的 system 顺序固定为基础提示 → 记忆指引 → 共享知识 → `AGENTS.md` → 索引；索引在最后，钩子 `PromptPatch` 追加在它之后，prompt caching 的 system 断点运行内稳定；运行开始快照进 `ContextAssembled`，回放不读文件（`MemorySnapshotTest`）。
