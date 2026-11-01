@@ -17,6 +17,9 @@ public final class DailyQuotaHook implements KernelHook {
     private final long dailyTokens;
 
     public DailyQuotaHook(long dailyTokens) {
+        if (dailyTokens <= 0) {
+            throw new IllegalArgumentException("dailyTokens must be positive but was " + dailyTokens);
+        }
         this.dailyTokens = dailyTokens;
     }
 

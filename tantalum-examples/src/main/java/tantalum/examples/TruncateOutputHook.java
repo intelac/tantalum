@@ -11,15 +11,21 @@ public final class TruncateOutputHook implements AfterToolHook {
     private final int maxChars;
 
     public TruncateOutputHook(int maxChars) {
+        if (maxChars <= 0) {
+            throw new IllegalArgumentException("maxChars must be positive but was " + maxChars);
+        }
         this.maxChars = maxChars;
     }
 
+    /** 不在代理对中间切开，否则截断处是一个坏字符。 */
     @Override
     public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
-        if (output.text().length() <= maxChars) {
+        String text = output.text();
+        if (text.length() <= maxChars) {
             return output;
         }
-        int dropped = output.text().length() - maxChars;
-        return new ToolOutput(output.text().substring(0, maxChars) + "\n(" + dropped + " more characters truncated)", output.error());
+        int cut = Character.isHighSurrogate(text.charAt(maxChars - 1)) ? maxChars - 1 : maxChars;
+        int dropped = text.length() - cut;
+        return new ToolOutput(text.substring(0, cut) + "\n(" + dropped + " more characters truncated)", output.error());
     }
 }

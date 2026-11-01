@@ -103,8 +103,13 @@ public final class SseHub implements FactListener {
         this.itemMapper = itemMapper;
     }
 
-    private Set<Subscription> subscribers(Principal principal) {
-        return subscribers.computeIfAbsent(principal, key -> ConcurrentHashMap.newKeySet());
+    /** 加入和删除都在同一个 compute 里做，否则刚建的空集合可能在加入前被另一边当作空集合删掉。 */
+    private void addSubscriber(Subscription subscription) {
+        subscribers.compute(subscription.principal, (key, set) -> {
+            Set<Subscription> target = set == null ? ConcurrentHashMap.newKeySet() : set;
+            target.add(subscription);
+            return target;
+        });
     }
 
     /** 不为没见过的用户建条目，空集合顺手删掉，表不随见过的用户数增长。 */
@@ -138,7 +143,7 @@ public final class SseHub implements FactListener {
                     }
                 }
             }
-            subscribers(principal).add(subscription);
+            addSubscriber(subscription);
         }
         if (fromHistory) {
             try {
