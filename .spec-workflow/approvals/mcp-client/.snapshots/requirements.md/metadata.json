@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/mcp-client/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T04:11:17.355Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793506277352_r7y4f47h3",
+      "approvalTitle": "mcp-client spec：需求文档（远程服务器、放行名单、用户令牌）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T04:13:52.753Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793506277352_r7y4f47h3",
+      "approvalTitle": "mcp-client spec：需求文档（远程服务器、放行名单、用户令牌）"
+    }
+  ]
+}

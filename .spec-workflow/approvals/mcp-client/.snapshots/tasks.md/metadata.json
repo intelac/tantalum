@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/mcp-client/tasks.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T04:26:43.721Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793507203718_0b1we6pfl",
+      "approvalTitle": "mcp-client spec：任务清单（6 个阶段）"
+    }
+  ]
+}
