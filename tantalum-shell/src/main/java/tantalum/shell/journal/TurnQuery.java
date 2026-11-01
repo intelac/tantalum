@@ -146,7 +146,7 @@ public final class TurnQuery {
             case "AwaitingModel", "AwaitingSummary" -> "ModelHandler";
             case "AwaitingTools" -> "ToolHandler";
             case "AwaitingWork" -> "WorkHandler";
-            case "AwaitingRetry" -> "TimerHandler";
+            case "AwaitingRetry", "AwaitingSummaryRetry" -> "TimerHandler";
             default -> phase;
         };
     }

@@ -172,7 +172,8 @@ public final class Transcript implements Projection {
             String id = TranscriptItem.id(envelope.seq(), 0);
             switch (fact) {
                 case ContextCompacted ok -> {
-                    String summary = envelope.event() instanceof ModelReplied reply ? SummaryPrompt.text(reply.content()) : "";
+                    // 只裁剪时没有摘要，哪怕这个事件是一次没采用的摘要回复。
+                    String summary = !ok.trimOnly() && envelope.event() instanceof ModelReplied reply ? SummaryPrompt.text(reply.content()) : "";
                     put(new CompactionMark(id, session, ok.run().run(), at, ok.trigger(), summary, ok.estimateBefore(),
                             ok.estimateAfter(), ok.usage(), null));
                 }
@@ -248,7 +249,8 @@ public final class Transcript implements Projection {
         /** 摘要调用失败不算运行失败：运行照常继续，原因在压缩条目里。 */
         private void failed(ModelFailed failed) {
             RunId run = runOfEvent();
-            if (run != null && compactionFact() == null && get(RunStatus.idOf(run)) instanceof RunStatus status) {
+            boolean summaryCall = run != null && state.runs().get(run) instanceof RunState current && current.compacting() != null;
+            if (run != null && !summaryCall && compactionFact() == null && get(RunStatus.idOf(run)) instanceof RunStatus status) {
                 put(status.failedWith(failed.reason(), at));
             }
         }

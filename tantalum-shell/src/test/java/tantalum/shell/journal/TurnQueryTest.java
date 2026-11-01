@@ -144,7 +144,8 @@ class TurnQueryTest {
         write(second, new ContextAssembled(new CommandId("6-0"), "system prompt", List.of(), null, settings));
         write(second, new ModelReplied(new CommandId("7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(50, 20, 0, 0)));
-        write(second, new ModelReplied(new CommandId("8-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
+        write(second, new ContextAssembled(new CommandId("8-0"), "system prompt", List.of(), null, settings));
+        write(second, new ModelReplied(new CommandId("9-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
 
         List<TurnQuery.Turn> turns = query.turns(USER, second);
         assertEquals(2, turns.size());
@@ -154,7 +155,7 @@ class TurnQueryTest {
         assertEquals(3, turns.get(1).prompt().messages().size(), "summary, kept a2, kept q3");
 
         TurnQuery.Trace trace = query.trace(USER, second);
-        assertEquals(List.of("AwaitingContext", "AwaitingSummary", "AwaitingModel", "Ended"),
+        assertEquals(List.of("AwaitingContext", "AwaitingSummary", "AwaitingContext", "AwaitingModel", "Ended"),
                 trace.events().stream().map(TurnQuery.Trace.Entry::phase).toList());
         TurnQuery.Trace.Entry summary = trace.events().get(2);
         assertEquals("ModelReplied", summary.type());
@@ -162,7 +163,7 @@ class TurnQueryTest {
         assertEquals("AUTO", summary.compaction().trigger());
         assertTrue(summary.compaction().estimateAfter() < summary.compaction().estimateBefore());
         assertNull(trace.events().get(1).compaction());
-        assertEquals(List.of("ContextHandler", "ModelHandler", "ModelHandler"),
+        assertEquals(List.of("ContextHandler", "ModelHandler", "ContextHandler", "ModelHandler"),
                 trace.segments().stream().map(TurnQuery.Trace.Segment::handler).toList());
     }
 

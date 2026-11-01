@@ -74,7 +74,6 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
-import tantalum.value.state.Compacting;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
@@ -270,7 +269,7 @@ public final class Engine implements AutoCloseable {
             return new Submission(404, null, false);
         }
         if (existing.activeRun() != null || existing.context() == null || existing.context().compaction() == null
-                || Compactor.plan(existing, existing.context().system(), existing.context().tools(), Compacting.Trigger.MANUAL).isEmpty()) {
+                || !Compactor.worthCompacting(existing, existing.context().system(), existing.context().tools())) {
             return new Submission(409, null, false);
         }
         SubmissionLedger.Claim claim = ledger.claim(principal, request);

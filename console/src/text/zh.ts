@@ -41,6 +41,7 @@ export const zh = {
     interrupted: "已中断",
     truncated: "回复被截断：达到输出上限",
     compacted: (before: string, after: string) => `上下文已压缩 ${before} → ${after} tok`,
+    trimmed: (before: string, after: string) => `上下文已裁剪 ${before} → ${after} tok`,
     compactedManual: "手动",
     compactedOverflow: "超长恢复",
     compactionFailed: (reason: string) => `压缩未采用：${reason}`,

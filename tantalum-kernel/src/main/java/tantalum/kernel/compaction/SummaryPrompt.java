@@ -11,7 +11,7 @@ import tantalum.value.model.ToolCallBlock;
 public final class SummaryPrompt {
 
     /** 摘要消息的开头，模型和下一次压缩都靠它认出这是摘要。 */
-    public static final String SUMMARY_PREFIX = "[Summary of the earlier conversation, not written by the user.]\n\n";
+    public static final String SUMMARY_PREFIX = "[Summary of the earlier conversation, not written by the user. Continue the task directly from it; do not acknowledge it.]\n\n";
 
     private static final String INSTRUCTION = """
             The conversation above is about to be replaced by a summary so that work can continue in a smaller context. \
@@ -33,6 +33,12 @@ public final class SummaryPrompt {
             ## Key decisions
             Decisions made and why, including alternatives that were rejected.
 
+            ## Files and code
+            Files read or changed and what matters in them, with the exact names and snippets needed to continue.
+
+            ## Errors and fixes
+            Errors met and how they were fixed. Whenever the user corrected you, record what they corrected, faithfully.
+
             ## Next steps
             What should happen next, in order.
 
@@ -40,10 +46,14 @@ public final class SummaryPrompt {
             Facts needed to continue: file paths, function and variable names, commands, error messages, numbers, identifiers. \
             Copy them exactly as they appeared; do not paraphrase them.
 
-            If the conversation already starts with an earlier summary, keep everything in it that is still true and update it; \
-            do not drop constraints or context from it.
+            If the conversation already starts with an earlier summary, keep everything in it that is still true and update it: \
+            move finished items from In progress to Done, and do not drop constraints or context from it.
 
             Do not call any tool. Do not add anything that is not in the conversation. Do not address the user; write notes for yourself.""";
+
+    static final int MAX_FILES = 200;
+    private static final String FILES_OPEN = "<files-touched>";
+    private static final String FILES_CLOSE = "</files-touched>";
 
     private SummaryPrompt() {}
 
@@ -62,7 +72,32 @@ public final class SummaryPrompt {
 
     /** 摘要消息：替换视图的第一条。 */
     public static Message summaryMessage(String summary) {
-        return Message.user(SUMMARY_PREFIX + summary.strip());
+        return summaryMessage(summary, List.of());
+    }
+
+    /** {@code files} 由程序提取，追加在末尾，不靠模型记住。 */
+    public static Message summaryMessage(String summary, List<String> files) {
+        String list = files.isEmpty() ? "" : "\n\n" + FILES_OPEN + "\n" + String.join("\n", files) + "\n" + FILES_CLOSE;
+        return Message.user(SUMMARY_PREFIX + summary.strip() + list);
+    }
+
+    /** 摘要消息末尾的文件列表；模型自己写的同名标签不算，只认最后一个。 */
+    public static List<String> filesIn(Message summary) {
+        if (!isSummary(summary)) {
+            return List.of();
+        }
+        String text = ((TextBlock) summary.content().getFirst()).text();
+        int open = text.lastIndexOf(FILES_OPEN);
+        int close = text.lastIndexOf(FILES_CLOSE);
+        if (open < 0 || close < open) {
+            return List.of();
+        }
+        return text.substring(open + FILES_OPEN.length(), close).strip().lines().filter(line -> !line.isBlank()).toList();
+    }
+
+    /** 最多保留最近的 {@value #MAX_FILES} 条。 */
+    public static List<String> capFiles(List<String> files) {
+        return files.size() <= MAX_FILES ? List.copyOf(files) : List.copyOf(files.subList(files.size() - MAX_FILES, files.size()));
     }
 
     public static boolean isSummary(Message message) {

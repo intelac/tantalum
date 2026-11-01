@@ -96,6 +96,11 @@ class CompactStepsTest {
         return loop;
     }
 
+    /** 压缩后的重新组装。 */
+    static void assembled(LoopFixture loop) {
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
+    }
+
     static CallModel onlyCall(LoopFixture loop) {
         return assertInstanceOf(CallModel.class, loop.onlyCommand());
     }
@@ -152,6 +157,9 @@ class CompactStepsTest {
         LoopFixture loop = overThreshold();
         List<Message> history = loop.session().messages();
         loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
+        ContextCompacted fact = fact(loop, ContextCompacted.class);
+        assertFalse(fact.trimOnly());
+        assembled(loop);
 
         assertEquals("AwaitingModel", loop.phase());
         CallModel call = onlyCall(loop);
@@ -167,7 +175,6 @@ class CompactStepsTest {
         assertNull(loop.session().anchor(), "the old measurement is void");
         assertNull(loop.run().compacting());
 
-        ContextCompacted fact = fact(loop, ContextCompacted.class);
         assertEquals(Compacting.Trigger.AUTO, fact.trigger());
         assertEquals(2, fact.headUnits());
         assertEquals(2, fact.keptUnits());
@@ -228,9 +235,9 @@ class CompactStepsTest {
     }
 
     @Test
-    void failedSummaryCallIsNotRetried() {
+    void nonRetryableSummaryFailureIsNotRetried() {
         LoopFixture loop = overThreshold();
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, false, null, "", "429"));
         assertEquals("AwaitingModel", loop.phase());
         assertTrue(loop.run().autoCompactionFailed());
         assertTrue(fact(loop, CompactionFailed.class).reason().contains("429"));
@@ -320,12 +327,14 @@ class CompactStepsTest {
         assertEquals(0, loop.run().retries(), "recovery is not a timed retry");
 
         loop.feed(loop.runId(), reply(loop, text("Goal: q1 then q2"), StopReason.END_TURN, null));
+        ContextCompacted recovered = fact(loop, ContextCompacted.class);
+        assembled(loop);
         assertEquals("AwaitingModel", loop.phase());
         CallModel retry = onlyCall(loop);
         assertTrue(retry.prompt().output().toolsAllowed());
         assertEquals(List.of(SummaryPrompt.summaryMessage("Goal: q1 then q2"), Message.user(block("q2"))),
                 retry.prompt().messages(), "summary and the kept last unit q2, which is the current request");
-        assertEquals(Compacting.Trigger.OVERFLOW, fact(loop, ContextCompacted.class).trigger());
+        assertEquals(Compacting.Trigger.OVERFLOW, recovered.trigger());
 
         // 成功回复后标记清零，下一次超长可以再恢复一次。
         loop.feed(loop.runId(), endTurn(loop, "a2", 100));
@@ -338,6 +347,7 @@ class CompactStepsTest {
         loop.feed(loop.runId(), overflow(loop));
         assertEquals("AwaitingSummary", loop.phase());
         loop.feed(loop.runId(), reply(loop, text("Goal: q"), StopReason.END_TURN, null));
+        assembled(loop);
         assertEquals("AwaitingModel", loop.phase());
         CallModel retry = onlyCall(loop);
         String kept = ((tantalum.value.model.ToolResultBlock) retry.prompt().messages().getLast().content().getFirst()).text();
@@ -360,9 +370,23 @@ class CompactStepsTest {
         assertTrue(loop.last.facts().stream().noneMatch(CompactionFailed.class::isInstance), "no plan means no attempt");
     }
 
+    /** 摘要被拒，但裁剪有进展：改用裁剪，运行继续（DSH：进展不依赖摘要）。 */
     @Test
-    void overflowSummaryFailureReportsTheOriginalError() {
+    void overflowSummaryFailureFallsBackToTrimmingWhenThatHelps() {
         LoopFixture loop = overflowed();
+        loop.feed(loop.runId(), overflow(loop));
+        loop.feed(loop.runId(), reply(loop, text("x"), StopReason.MAX_TOKENS, null));
+        assertEquals("AwaitingContext", loop.phase());
+        assertTrue(fact(loop, ContextCompacted.class).trimOnly());
+        assertTrue(loop.last.facts().stream().noneMatch(CompactionFailed.class::isInstance));
+    }
+
+    @Test
+    void overflowSummaryFailureWithNothingToTrimReportsTheOriginalError() {
+        LoopFixture loop = start();
+        loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
+        loop.prompt(block("q2"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
         loop.feed(loop.runId(), overflow(loop));
         loop.feed(loop.runId(), reply(loop, text("x"), StopReason.MAX_TOKENS, null));
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
@@ -415,8 +439,8 @@ class CompactStepsTest {
         CallModel summary = onlyCall(loop);
         assertFalse(summary.prompt().output().toolsAllowed());
         assertTrue(((TextBlock) summary.prompt().messages().getLast().content().getFirst()).text().endsWith("keep the numbers"));
-        // K = 70：留 a2 和 q2，头部 q1、a1。
-        assertEquals(2, run.compacting().plan().headMessages());
+        // 手动 K = 0：只留 a2，头部 q1、a1、q2。
+        assertEquals(3, run.compacting().plan().headMessages());
 
         // 压缩期间的提交排队，压缩结束后开始。
         loop.feed(null, new tantalum.value.event.FollowUpSubmitted(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
@@ -427,7 +451,7 @@ class CompactStepsTest {
         assertEquals(EndReason.COMPLETED, ended.reason());
         assertEquals(CompactSteps.COMPACTED, ended.detail());
         assertEquals(Compacting.Trigger.MANUAL, fact(loop, ContextCompacted.class).trigger());
-        assertEquals(3, loop.session().compaction().replacement().size(), "summary, kept q2, kept a2");
+        assertEquals(3, loop.session().compaction().replacement().size(), "summary, request q2, kept a2");
         assertEquals("AwaitingContext", loop.phase(), "the queued follow-up started a new run");
         assertEquals(List.of(), loop.session().followUps());
     }
@@ -470,10 +494,92 @@ class CompactStepsTest {
         assertNull(loop.session().activeRun());
     }
 
+    /** 需求 1.1：头部只有首条请求、保留段是超大工具结果，摘要帮不上忙，直接裁剪，运行继续。 */
+    @Test
+    void hugeToolResultWithASmallHeadIsTrimmedWithoutASummaryCall() {
+        LoopFixture loop = start();
+        loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false));
+        assertEquals("AwaitingContext", loop.phase(), "no summary call; the context is reassembled after trimming");
+        assertNotNull(loop.session().compaction());
+        assertFalse(loop.run().autoCompactionFailed());
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
+        assertEquals("AwaitingModel", loop.phase());
+        String kept = ((tantalum.value.model.ToolResultBlock) onlyCall(loop).prompt().messages().getLast().content().getFirst()).text();
+        assertTrue(kept.contains("of 30000 bytes truncated"), kept);
+    }
+
+    /** 需求 1.1：同样的情况走超长恢复。 */
+    @Test
+    void overflowFromAHugeToolResultWithASmallHeadRecovers() {
+        CompactionSettings large = new CompactionSettings(100_000, 200, 70, 60, 30, 500);
+        LoopFixture loop = new LoopFixture();
+        loop.prompt(block("q1"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, large));
+        loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false));
+        assertEquals("AwaitingModel", loop.phase(), "the estimate fits, so no automatic compaction");
+        loop.feed(loop.runId(), overflow(loop));
+        assertEquals("AwaitingContext", loop.phase());
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, large));
+        assertEquals("AwaitingModel", loop.phase());
+    }
+
+    /** 需求 1.5：可重试的失败退避后用相同 prompt 重发。 */
+    @Test
+    void retryableSummaryFailureIsRetriedWithTheSamePrompt() {
+        LoopFixture loop = overThreshold();
+        CallModel first = onlyCall(loop);
+        loop.feed(loop.runId(), new ModelFailed(first.id(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        assertEquals("AwaitingSummaryRetry", loop.phase());
+        loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
+        assertEquals("AwaitingSummary", loop.phase());
+        assertEquals(first.prompt(), onlyCall(loop).prompt());
+        assertTrue(loop.last.facts().stream().noneMatch(CompactionFailed.class::isInstance));
+    }
+
+    @Test
+    void summaryFailureAfterTheLastRetryFallsBackToTheRule() {
+        LoopFixture loop = overThreshold();
+        for (int i = 0; i < RetrySteps.MAX_RETRIES; i++) {
+            loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+            loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
+        }
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        assertEquals("AwaitingModel", loop.phase());
+        assertTrue(loop.run().autoCompactionFailed());
+        assertEquals(0, loop.run().retries());
+    }
+
+    @Test
+    void cancelWhileWaitingToRetryTheSummary() {
+        LoopFixture loop = overThreshold();
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new Cancel(new RequestId("c")));
+        assertEquals(EndReason.CANCELLED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
+        assertNull(loop.session().compaction());
+    }
+
+    /** 设计补 1.9（规则 5）：压缩后重新组装，新的 system、工具和记忆生效，不追加更新消息，也不连续压缩。 */
+    @Test
+    void contextIsReassembledAfterCompaction() {
+        LoopFixture loop = overThreshold();
+        loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
+        assertEquals("AwaitingContext", loop.phase());
+        int size = loop.session().view().size();
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "new system", List.of(), "new index", SETTINGS));
+        assertEquals("AwaitingModel", loop.phase());
+        CallModel call = onlyCall(loop);
+        assertEquals("new system", call.prompt().system());
+        assertEquals(size, call.prompt().messages().size(), "the new index is in the system, no update message");
+        assertEquals("new index", loop.session().context().dynamic());
+    }
+
     @Test
     void replayRecomputesTheSamePromptsFromTheJournal() {
         LoopFixture loop = overThreshold();
         loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
+        assembled(loop);
         loop.feed(loop.runId(), endTurn(loop, "a2", 300));
         List<Command> live = List.copyOf(loop.commands);
 
