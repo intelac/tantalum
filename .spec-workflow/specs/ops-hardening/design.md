@@ -49,7 +49,7 @@ graph LR
 
 **文件名。** 会话 ID 来自客户端，用户名来自管理员，都可能含 `/` 或 `..`。文件名用 URL 安全编码，超过 120 字节时截短并加 SHA-256。解析路径后校验仍在 `sessions/` 内。这是新增的攻击面，有专门测试。
 
-**写入。** 每个会话一个 `FileChannel`，按 LRU 保留打开的句柄。每批追加后 `force(true)`，新文件再 fsync 目录。Java 在 macOS 上的 `force` 不等于 `F_FULLFSYNC`，掉电保证弱于 Linux，写进 README。
+**写入。** 每个会话一个 `FileChannel`，按 LRU 保留打开的句柄。每批追加后 `force(true)`，新文件再 fsync 目录。实测（任务 3）`FileChannel.force` 在 macOS 上约 5 ms，和 SQLite 开 `fullfsync` 相同，而 `FileDescriptor.sync` 只要 0.04 ms。所以这里用 `force`，它是更严格的那种。（更正：本文原来写反了。）
 
 **残缺尾部。** 打开写入前检查末尾：没有换行或最后一行解析失败，就截掉这一行并记日志。**文件中间**损坏时只拒绝这个会话（接口返回 500 并记日志），不影响其他会话。
 
@@ -171,6 +171,17 @@ usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq)
 ## 性能预算
 
 Maven profile `bench`，在 `tantalum-examples`：合成数据、每个样本新进程、记录中位数和内存峰值、预算写在代码里。**基线要在改造前测**，所以这是第一批任务。对比项：单一 SQLite 和并行 fsync 的吞吐与延迟。
+
+## 现有钩子核对（H5，任务 4）
+
+| 钩子 | 读什么 | 结论 |
+|---|---|---|
+| `DailyQuotaHook` | `state.principals()` 中当前用户的用量 | 符合，依赖 H4 的用量注入 |
+| `ReadOnlyHook` | `context.call()` | 符合 |
+| `CitationCheckHook` | 当前会话的消息、`context.work()` | 符合 |
+| 测试里的 `RecordingHook`、`NO_RM` | 只读 `context` | 符合 |
+
+内核本身：运行 ID 和命令 ID 只由序号决定，没有跨会话计数器；步骤里没有遍历全部会话或运行，只有 `UsageProjection` 读当前用户。所以按会话重放可行。`KernelHook` 拿到的是整个 `KernelState`，接口上拦不住钩子读别的会话，只能靠 README 约束。
 
 ## Error Handling
 

@@ -72,5 +72,47 @@
         </plugins>
       </build>
     </profile>
+    <!-- 性能基准，发布前手动跑：mvn -P bench -pl tantalum-examples -am -DskipTests test-compile
+         每个样本一个新进程，不随普通构建运行。 -->
+    <profile>
+      <id>bench</id>
+      <properties>
+        <bench.main>tantalum.examples.bench.ReadBench</bench.main>
+        <bench.sizes>10000,100000,500000</bench.sizes>
+        <bench.samples>3</bench.samples>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>bench</id>
+                <phase>test-compile</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>java</executable>
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>-Xmx4g</argument>
+                    <argument>--enable-native-access=ALL-UNNAMED</argument>
+                    <argument>-classpath</argument>
+                    <classpath/>
+                    <argument>${bench.main}</argument>
+                    <argument>${project.build.directory}/bench</argument>
+                    <argument>${bench.sizes}</argument>
+                    <argument>${bench.samples}</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 </project>

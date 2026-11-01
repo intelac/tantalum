@@ -14,19 +14,19 @@
   - 验证：生成的 journal 能被现有代码完整回放；同一种子两次生成的事件相同
   - _Requirements: 1.1_
 
-- [ ] 2. 读路径基准
+- [x] 2. 读路径基准
   - File: tantalum-examples/src/test/java/tantalum/examples/bench/ReadBench.java, BenchProcess.java；tantalum-examples/pom.xml（profile `bench`）
   - 每个样本一个新进程，测启动时间、堆峰值、会话列表、打开长会话、`/turns`、`/trace`；报告每个样本、中位数和机器信息
   - 验证：`mvn -Pbench` 在 1 万事件上跑通，输出含全部 6 项；另加一个用户有大量事件时测另一用户的 `/turns`
   - _Requirements: 1.1, 5.3_
 
-- [ ] 3. 写路径对比
+- [x] 3. 写路径对比
   - File: tantalum-examples/src/test/java/tantalum/examples/bench/WriteBench.java
   - 现有单一 SQLite 对比并行 fsync 的 JSONL（1、10、100 个会话并发），测吞吐和 P50/P99 延迟。JSONL 一侧是最小原型，只放在 bench 里
   - 验证：两侧写入同样数量和大小的事件，完成后读回条数一致
   - _Requirements: 非功能 Performance_
 
-- [ ] 4. 核对现有钩子是否满足 H5
+- [x] 4. 核对现有钩子是否满足 H5
   - File: tantalum-examples/、tantalum-shell 中所有 `KernelHook` 实现（只读，发现违反时记录下来，放到任务 28 修）
   - 列出每个钩子读了什么；只能依赖当前运行、当前会话和该用户用量
   - 验证：清单写进 design.md 的新小节
@@ -283,6 +283,6 @@
 
 - [ ] 44. 文档和全量回归
   - File: README.md, .spec-workflow/steering/tech.md
-  - 回收配置、钩子约束、回放承诺的边界、macOS fsync、删除旧 journal、启动日志
+  - 回收配置、钩子约束、回放承诺的边界、删除旧 journal、启动日志
   - 验证：`mvn verify`、vitest、Playwright 全量通过；报真实模型用量
   - _Requirements: 非功能 Usability, H5_
