@@ -12,7 +12,8 @@ import tantalum.value.hook.Stop;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
 
-/** 按注册顺序遍历钩子，并执行异常规则：强制钩子和 {@code beforeToolCall} 失败时关闭，其余跳过并上报。 */
+/** 按注册顺序遍历钩子，并执行异常规则：强制钩子和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
+ * 返回 null 违反契约，一律按 {@code Stop} 处理。 */
 public final class HookChain {
 
     private final List<KernelHook> hooks;
@@ -36,6 +37,10 @@ public final class HookChain {
                     return new HookOutcome(new Stop("hook failed: " + hook.name()), facts);
                 }
                 continue;
+            }
+            if (result == null) {
+                facts.add(new HookReported(context.run(), hook.name(), "hook returned null"));
+                return new HookOutcome(new Stop("hook returned null: " + hook.name()), facts);
             }
             if (!(result instanceof Allow allow)) {
                 return new HookOutcome(result, facts);

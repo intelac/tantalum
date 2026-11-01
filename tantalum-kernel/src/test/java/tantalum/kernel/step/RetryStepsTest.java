@@ -110,6 +110,38 @@ class RetryStepsTest {
         assertEquals("AwaitingModel", loop.phase());
     }
 
+    /** 失败钩子每次都申请工作（如压缩），失败持续时不能无限循环：工作后的再调用也占重试次数。 */
+    @Test
+    void workFromFailureCountsAsARetryAndEventuallyFails() {
+        LoopFixture loop = atModel(onFailure(new NeedWork("compact", new Json.Null())));
+        for (int i = 0; i < RetrySteps.MAX_RETRIES; i++) {
+            loop.feed(loop.runId(), retryable(loop, null));
+            assertEquals("AwaitingWork", loop.phase(), "round " + i);
+            loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null));
+            assertEquals("AwaitingModel", loop.phase(), "round " + i);
+            assertEquals(i + 1, loop.run().retries());
+        }
+        loop.feed(loop.runId(), retryable(loop, null));
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null));
+        assertEquals(EndReason.FAILED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
+    }
+
+    @Test
+    void continueTextAfterFailureWorkGoesToTheModelAndCounts() {
+        LoopFixture loop = atModel(onFailure(new NeedWork("compact", new Json.Null())));
+        loop.feed(loop.runId(), retryable(loop, null));
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, "summarised"));
+        CallModel call = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals(tantalum.value.model.Message.user("summarised"), call.prompt().messages().getLast());
+        assertEquals(1, loop.run().retries());
+    }
+
+    @Test
+    void retryAfterIsCapped() {
+        assertEquals(RetrySteps.MAX_BACKOFF, RetrySteps.backoff(0, Duration.ofHours(1)));
+        assertEquals(Duration.ofSeconds(30), RetrySteps.backoff(0, Duration.ofSeconds(30)));
+    }
+
     @Test
     void replyResetsTheRetryCount() {
         LoopFixture loop = atModel();

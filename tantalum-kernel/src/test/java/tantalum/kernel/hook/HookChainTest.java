@@ -108,6 +108,16 @@ class HookChainTest {
         assertEquals(1, outcome.facts().size());
     }
 
+    /** 返回 null 违反契约：不能当作放行，也不能让后面的钩子被跳过而无人知道。 */
+    @Test
+    void nullResultIsTreatedAsStopAndReported() {
+        HookOutcome outcome = modelCall(hook("broken", false, null), hook("b", false, Allow.PLAIN));
+        Stop stop = assertInstanceOf(Stop.class, outcome.result());
+        assertTrue(stop.reason().contains("broken"));
+        assertEquals(List.of("broken"), calls);
+        assertEquals("broken", assertInstanceOf(HookReported.class, outcome.facts().getFirst()).hook());
+    }
+
     @Test
     void beforeToolCallExceptionAlwaysBlocks() {
         HookOutcome outcome = new HookChain(List.of(throwing("metrics", false)))

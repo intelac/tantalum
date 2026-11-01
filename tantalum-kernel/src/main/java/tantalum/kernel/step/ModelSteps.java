@@ -30,6 +30,7 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.state.Awaiting;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
@@ -148,14 +149,27 @@ public final class ModelSteps {
         return out.decision();
     }
 
-    /** 被取消的回复：只把用户已看到的文本追加到会话，不改运行状态。 */
+    /** 被中断的回复。用户已看到的文本只在该运行仍是历史末尾时追加（会话已开新运行就只留在 journal）；
+     * 中断的是运行正在等待的那次调用而运行还没结束（不是 {@code Cancel} 引起），运行以 CANCELLED 结束。 */
     public static Decision modelInterrupted(StepContext context) {
         ModelInterrupted event = (ModelInterrupted) context.envelope().event();
+        RunState run = context.run();
         SessionState session = context.state().sessions().get(context.envelope().session());
-        if (session == null || event.text().isEmpty()) {
+        if (run == null || session == null) {
             return Decision.unchanged(context.state());
         }
-        Message partial = new Message(Role.ASSISTANT, List.of(new TextBlock(event.text())), true);
-        return Decision.unchanged(context.state().with(session.append(partial)));
+        boolean awaited = run.phase() instanceof Awaiting awaiting && awaiting.commands().contains(event.command());
+        boolean historyOpen = awaited || (run.ended() && session.isLatestRun(run.ref().run()));
+        if (!historyOpen) {
+            return Decision.unchanged(context.state());
+        }
+        Outcome out = new Outcome(context);
+        if (!event.text().isEmpty()) {
+            out.append(run.ref(), new Message(Role.ASSISTANT, List.of(new TextBlock(event.text())), true));
+        }
+        if (awaited) {
+            RunEnd.finish(out, run, EndReason.CANCELLED, "model call interrupted");
+        }
+        return out.decision();
     }
 }
