@@ -145,7 +145,7 @@ describe("ProcessGroup", () => {
 describe("explain", () => {
   const base: RunStatusItem = { kind: "run", id: "run:run-0", session: "s", run: "run-0", at: "t", updatedAt: "t", phase: "Ended" };
   it("has a sentence per failure reason", () => {
-    expect(explain({ ...base, endReason: "FAILED", failure: "CONTEXT_OVERFLOW" })).toBe("上下文超长，模型放不下这段对话");
+    expect(explain({ ...base, endReason: "FAILED", failure: "CONTEXT_OVERFLOW" })).toBe("上下文超长，模型放不下这段对话。请开一个新会话继续，记忆会带过去");
     expect(explain({ ...base, endReason: "FAILED", failure: "REFUSAL" })).toBe("模型拒绝回答");
     expect(explain({ ...base, endReason: "FAILED", failure: "RATE_LIMITED" })).toBe("触发限流，稍后再试");
     expect(explain({ ...base, endReason: "FAILED", detail: "output ring full" })).toBe("命令丢失，运行失败");
