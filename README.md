@@ -111,6 +111,31 @@ journal 含完整的 prompt 和工具结果，文件权限只限所有者。
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
 - **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
 
+## MCP
+
+可以连接远程 MCP 服务器，把它们的工具交给模型。只由管理员配置：
+
+```properties
+tantalum.mcp.servers.jira.url=https://mcp.example.com/mcp
+tantalum.mcp.servers.jira.auth=service         # none 或 service
+tantalum.mcp.servers.jira.token-env=JIRA_TOKEN # 令牌只从这个环境变量读
+tantalum.mcp.servers.jira.allow=create_issue   # 除只读工具外额外放行
+tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
+```
+
+可选项：`concurrency`（默认 4）、`timeout`（默认且不能超过 `tantalum.tool-timeout`）、`max-result-bytes`（默认 64 KB）、`max-tools`（默认 64）。工具名是 `mcp__<服务器>__<工具>`，调用经过和内置工具相同的钩子、超时、journal 和轨迹。
+
+默认只放行声明了 `readOnlyHint` 的工具。这个声明是服务器自己写的，所以只连可信的服务器。
+
+第一版的限制，部署前要知道：
+
+- **共享身份**：所有用户用同一个凭据，外部系统分不清是谁操作的，只有 journal 能回答。没有每用户令牌。
+- **提示注入**：工具结果可能诱导模型。system 里有提醒，但这不是保证；未放行的工具才真正调不到。放行写工具后，没有人工确认这一步。
+- **取消和超时**：服务器不一定知道调用被取消，写工具的结果可能未知，系统不自动重试。
+- **不并行**：同一轮的 MCP 工具逐个执行，这样回放不依赖服务器当时的状态。
+- **新工具**：已有会话看不到，要开新会话。
+- **不支持**：stdio 本地服务器、OAuth、资源、提示词模板、采样。状态只能看日志，没有界面。
+
 ## 写插件
 
 只需要看 `tantalum.shell.plugin`、`tantalum.kernel.hook` 和 `tantalum.value`，示例在 `tantalum-examples`。
@@ -165,7 +190,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 上下文压缩 | 有 | 有 | **没有**，会话够长会以 FAILED 结束 | `context-compaction`（已推迟，需求草稿已写） |
 | journal 快照（启动时间不随历史增长） | 不适用 | 有 | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 有（MCP 工具，默认关） | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
-| MCP 接入 | 无 | 有 | **没有** | MCP spec，第一版只接只读工具 |
+| MCP 接入 | 无 | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
 | 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |

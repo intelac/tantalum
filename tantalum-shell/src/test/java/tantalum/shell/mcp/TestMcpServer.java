@@ -29,7 +29,11 @@ import org.apache.tomcat.util.descriptor.web.FilterMap;
 public final class TestMcpServer implements AutoCloseable {
 
     /** 工具处理函数：参数到结果。 */
-    public record Definition(String name, Boolean readOnly, Function<Map<String, Object>, McpSchema.CallToolResult> handler) {}
+    public record Definition(String name, Boolean readOnly, String param, Function<Map<String, Object>, McpSchema.CallToolResult> handler) {
+        public Definition(String name, Boolean readOnly, Function<Map<String, Object>, McpSchema.CallToolResult> handler) {
+            this(name, readOnly, null, handler);
+        }
+    }
 
     public final List<String> calls = new CopyOnWriteArrayList<>();
     public final Set<String> authorizations = ConcurrentHashMap.newKeySet();
@@ -55,7 +59,8 @@ public final class TestMcpServer implements AutoCloseable {
 
     private McpServerFeatures.SyncToolSpecification spec(Definition definition) {
         McpSchema.Tool tool = McpSchema.Tool.builder().name(definition.name()).description("test tool " + definition.name())
-                .inputSchema(new McpSchema.JsonSchema("object", Map.of(), List.of(), true, null, null))
+                .inputSchema(definition.param() == null ? new McpSchema.JsonSchema("object", Map.of(), List.of(), true, null, null)
+                        : new McpSchema.JsonSchema("object", Map.of(definition.param(), Map.of("type", "string")), List.of(definition.param()), true, null, null))
                 .annotations(new McpSchema.ToolAnnotations(definition.name(), definition.readOnly(), null, null, null, null)).build();
         return McpServerFeatures.SyncToolSpecification.builder().tool(tool).callHandler((exchange, request) -> {
             calls.add(definition.name());

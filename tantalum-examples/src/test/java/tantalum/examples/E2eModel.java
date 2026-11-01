@@ -27,6 +27,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code tools}：思考 → grep → 思考 → 两个并行 read_file → 回答；</li>
  *   <li>{@code slow}：一段一段慢慢回答，取消时返回已发出的部分；</li>
  *   <li>{@code fail}：供应商出错；</li>
+ *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>其它：一句思考，然后复述用户的话。</li>
  * </ul>
@@ -53,6 +54,14 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("fail")) {
                 return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, false, null, "", "scripted failure");
+            }
+            if (text.contains("external")) {
+                return results == 0 ? reply(think(chunks, "这要查外部系统。"), call("mcp__demo__lookup", Map.of()))
+                        : answer(chunks, "外部系统查到了负责人。");
+            }
+            if (text.contains("forbidden")) {
+                return results == 0 ? reply(List.of(), call("mcp__demo__delete_all", Map.of()))
+                        : answer(chunks, "这个工具不可用。");
             }
             if (text.contains("remember")) {
                 return remember(results, chunks);
