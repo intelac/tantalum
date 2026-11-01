@@ -265,7 +265,7 @@ public final class OpenAiClient implements ModelClient {
         body.put("model", model);
         body.put("stream", true);
         body.put("stream_options", Map.of("include_usage", true));
-        body.put("max_tokens", maxTokens);
+        body.put("max_tokens", prompt.output().maxTokens() > 0 ? prompt.output().maxTokens() : maxTokens);
         List<Object> messages = new ArrayList<>();
         Map<String, Object> system = new LinkedHashMap<>();
         system.put("role", "system");
@@ -275,6 +275,9 @@ public final class OpenAiClient implements ModelClient {
         body.put("messages", messages);
         if (!prompt.tools().isEmpty()) {
             body.put("tools", prompt.tools().stream().map(OpenAiClient::tool).toList());
+            if (!prompt.output().toolsAllowed()) {
+                body.put("tool_choice", "none");
+            }
         }
         return body;
     }

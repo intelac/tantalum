@@ -20,6 +20,7 @@ import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ThinkingBlockParam;
 import com.anthropic.models.messages.ThinkingConfigAdaptive;
 import com.anthropic.models.messages.Tool;
+import com.anthropic.models.messages.ToolChoiceNone;
 import com.anthropic.models.messages.ToolResultBlockParam;
 import com.anthropic.models.messages.ToolUseBlockParam;
 import com.anthropic.models.messages.UserMessageParam;
@@ -317,11 +318,15 @@ public final class ClaudeClient implements ModelClient {
      * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
      */
     private MessageCreateParams params(Prompt prompt) {
+        Prompt.Output output = prompt.output();
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
-                .maxTokens(maxTokens)
+                .maxTokens(output.maxTokens() > 0 ? output.maxTokens() : maxTokens)
                 .thinking(thinking())
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
+        if (!output.toolsAllowed()) {
+            params.toolChoice(ToolChoiceNone.builder().build());
+        }
         if (!prompt.system().isBlank()) {
             params.systemOfTextBlockParams(List.of(
                     TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));

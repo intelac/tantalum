@@ -181,6 +181,28 @@ class OpenAiClientTest {
     }
 
     @Test
+    void summaryOutputDisablesToolsAndOverridesMaxTokens() throws Exception {
+        server.body = finish("stop");
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        call(new Prompt("sys", List.of(new ToolSpec("grep", "search", schema)), List.of(Message.user("summarize")),
+                new Prompt.Output(false, 8192)));
+
+        String body = server.requests.getFirst();
+        assertTrue(body.contains("\"tool_choice\":\"none\""), body);
+        assertTrue(body.contains("\"name\":\"grep\""), body);
+        assertTrue(body.contains("\"max_tokens\":8192"), body);
+    }
+
+    @Test
+    void defaultOutputSendsTheSameRequestAsBefore() throws Exception {
+        server.body = finish("stop");
+        call(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
+        call(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
+        assertEquals(server.requests.get(0), server.requests.get(1));
+        assertFalse(server.requests.getFirst().contains("tool_choice"), server.requests.getFirst());
+    }
+
+    @Test
     void contextOverflowIsNotRetryable() throws Exception {
         server.status = 400;
         server.contentType = "application/json";
