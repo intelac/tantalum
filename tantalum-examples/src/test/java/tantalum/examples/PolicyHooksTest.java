@@ -41,6 +41,14 @@ class PolicyHooksTest {
         assertInstanceOf(Stop.class, new DailyQuotaHook(100).beforeModelCall(used(LocalDate.of(2026, 10, 31), 100), CONTEXT));
     }
 
+    /** 开了 prompt caching 后大部分输入在缓存读写里，额度不能只数未缓存的部分。 */
+    @Test
+    void quotaCountsCachedInput() {
+        KernelState state = KernelState.empty().with(tantalum.value.state.PrincipalState.start(CONTEXT.run().principal())
+                .add(LocalDate.of(2026, 10, 31), new tantalum.value.model.TokenUsage(1, 1, 90, 10)));
+        assertInstanceOf(Stop.class, new DailyQuotaHook(100).beforeModelCall(state, CONTEXT));
+    }
+
     @Test
     void quotaResetsOnANewDay() {
         assertSame(Allow.PLAIN, new DailyQuotaHook(100).beforeModelCall(used(LocalDate.of(2026, 10, 30), 500), CONTEXT));

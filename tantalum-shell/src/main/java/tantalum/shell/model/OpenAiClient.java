@@ -255,8 +255,9 @@ public final class OpenAiClient implements ModelClient {
     }
 
     private static TokenUsage usage(JsonNode usage) {
-        return new TokenUsage(usage.path("prompt_tokens").asLong(), usage.path("completion_tokens").asLong(),
-                usage.path("prompt_tokens_details").path("cached_tokens").asLong(), 0);
+        // prompt_tokens 已包含缓存命中；TokenUsage.input 只算未缓存的部分。
+        long cached = usage.path("prompt_tokens_details").path("cached_tokens").asLong();
+        return new TokenUsage(Math.max(0, usage.path("prompt_tokens").asLong() - cached), usage.path("completion_tokens").asLong(), cached, 0);
     }
 
     private Map<String, Object> body(Prompt prompt) {

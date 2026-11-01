@@ -542,6 +542,32 @@ class ClaudeScenarioTest {
         usage("multi-user", journal(data));
     }
 
+    /**
+     * 风险：Sonnet 5.5 的 thinking 签名绑定 system、工具和之前的消息。同一会话里记忆变了，下一个运行的 system 就变了，
+     * 回传旧 thinking 可能被拒（400）。判定：第一轮确实产生 thinking（否则跳过）；改记忆后同一会话的下一个运行正常完成。
+     */
+    @Test
+    @Timeout(value = 6, unit = TimeUnit.MINUTES)
+    void changingMemoryMidSessionKeepsThinkingValid() throws Exception {
+        Path workspace = workspace("drift");
+        Path data = temp.resolve("data-drift");
+        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "high"))) {
+            submit(server, "drift", "s1", "Let a1 = 3 and a(n+1) = 2*a(n) - 1. Compute a12 modulo 7 step by step and double-check it.");
+            assertEquals("COMPLETED", waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3)).get("endReason").asString());
+            assertEquals(201, server.post("drift", "/api/memory",
+                    "{\"name\":\"style\",\"type\":\"user\",\"description\":\"Prefers short answers\",\"content\":\"Short answers.\"}").statusCode());
+            submit(server, "drift", "s1", "Now compute a13 modulo 7.");
+            JsonNode second = waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3));
+            System.out.println("[claude memory drift] second run=" + second);
+            assertEquals("COMPLETED", second.get("endReason").asString(), second.toString());
+        }
+        List<EventEnvelope> journal = journal(data);
+        long thinking = events(journal, ModelReplied.class).stream().flatMap(reply -> reply.content().stream()).filter(ReasoningBlock.class::isInstance).count();
+        System.out.println("[claude memory drift] thinkingBlocks=" + thinking);
+        org.junit.jupiter.api.Assumptions.assumeTrue(thinking > 0, "no thinking was produced, so this proves nothing");
+        usage("memory drift", journal);
+    }
+
     /** 该用户记忆目录里的条目文件名（不含索引）。 */
     private static List<String> memoryFiles(Path workspace, String user) throws Exception {
         Path dir = workspace.resolve(user).resolve("memory");
