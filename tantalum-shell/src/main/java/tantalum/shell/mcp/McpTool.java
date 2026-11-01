@@ -19,17 +19,15 @@ final class McpTool implements Tool {
     private final String remoteName;
     private final String description;
     private final Json schema;
-    private final boolean readOnly;
 
     McpTool(McpSettings.Server server, McpConnection connection, String publicName, String remoteName, String description,
-            Json schema, boolean readOnly) {
+            Json schema) {
         this.server = server;
         this.connection = connection;
         this.publicName = publicName;
         this.remoteName = remoteName;
         this.description = description;
         this.schema = schema;
-        this.readOnly = readOnly;
     }
 
     @Override public String name() { return publicName; }
@@ -43,6 +41,6 @@ final class McpTool implements Tool {
     public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException {
         Object plain = arguments == null ? Map.of() : JsonText.toPlain(arguments);
         Map<String, Object> map = plain instanceof Map<?, ?> given ? (Map<String, Object>) given : Map.of();
-        return connection.call(remoteName, map, readOnly);
+        return connection.call(remoteName, map);
     }
 }

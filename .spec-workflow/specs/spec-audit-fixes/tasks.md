@@ -61,33 +61,33 @@
 
 ## 阶段 3：MCP
 
-- [ ] 10. 普通失败不拆连接
+- [x] 10. 普通失败不拆连接
   - File: tantalum-shell/src/main/java/tantalum/shell/mcp/McpConnection.java, McpConnectionTest.java, McpMultiUserTest.java
   - 验证：服务器对一个调用返回 500 时，另一用户的慢调用完成，连接状态仍 READY，失败次数不变；真下线时探活发现
   - _Requirements: 2.1, 2.3_
 
-- [ ] 11. 会话失效和重试
+- [x] 11. 会话失效和重试
   - File: McpConnection.java, McpTool.java, McpConnectionTest.java
   - 只认 `McpTransportSessionNotFoundException`；换客户端，旧客户端延迟关闭；所有工具重试一次；去掉 `retrySafe`
   - 验证：写工具在 404 后只执行一次；旧客户端的在途调用走完；服务关闭时一并关闭
   - _Requirements: 2.2_
 
-- [ ] 12. 回调代次、能力和分页
+- [x] 12. 回调代次、能力和分页
   - File: McpConnection.java, McpTools.java, McpConnectionTest.java
   - 验证：旧客户端回调被忽略；无 tools 能力时不调 `tools/list`；分页超 100 页时停止并告警
   - _Requirements: 2.7, 2.8, 2.9_
 
-- [ ] 13. 工具名
+- [x] 13. 工具名
   - File: McpToolFilter.java, McpRegistry.java, McpTool.java, McpToolFilterTest.java
   - 验证：含点、超长的工具可调用，服务器收到原名；名称重启后不变；长度不超 64
   - _Requirements: 2.4_
 
-- [ ] 14. 启动等待
+- [x] 14. 启动等待
   - File: McpRegistry.java, tantalum-shell/src/main/java/tantalum/shell/tool/ToolCatalog.java, tantalum-shell/src/main/java/tantalum/shell/handler/ContextHandler.java, tantalum-shell/src/main/java/tantalum/shell/boot/TantalumProperties.java, 对应测试
   - 验证：刚启动的会话有工具；服务器不可用时最多等配置时间后继续并记日志；不配 MCP 时不等待
   - _Requirements: 2.5_
 
-- [ ] 15. 结果处理和回环判断
+- [x] 15. 结果处理和回环判断
   - File: McpResults.java, McpResultsTest.java, McpSettings.java, McpSettingsTest.java
   - 验证：超长保留首尾；`resource_link` 有名称和 URI；空内容回退 `structuredContent`；空错误有说明；回环判断不做 DNS
   - _Requirements: 2.6, 2.10_

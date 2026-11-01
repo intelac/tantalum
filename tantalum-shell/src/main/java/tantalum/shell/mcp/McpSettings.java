@@ -1,8 +1,6 @@
 package tantalum.shell.mcp;
 
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +11,7 @@ import java.util.regex.Pattern;
 import tantalum.shell.boot.TantalumProperties;
 
 /** 校验过的 MCP 配置。任何一项不合法都让启动失败，错误里只有配置项名字，没有凭据内容。 */
-public record McpSettings(List<Server> servers) {
+public record McpSettings(List<Server> servers, Duration startupWait) {
 
     public enum Auth { NONE, SERVICE }
 
@@ -32,7 +30,7 @@ public record McpSettings(List<Server> servers) {
     static final int DEFAULT_MAX_TOOLS = 64;
 
     public static McpSettings none() {
-        return new McpSettings(List.of());
+        return new McpSettings(List.of(), Duration.ZERO);
     }
 
     public boolean isEmpty() {
@@ -45,7 +43,7 @@ public record McpSettings(List<Server> servers) {
         }
         List<Server> servers = new ArrayList<>();
         new java.util.TreeMap<>(mcp.servers()).forEach((name, config) -> servers.add(server(name, config, toolTimeout, environment)));
-        return new McpSettings(List.copyOf(servers));
+        return new McpSettings(List.copyOf(servers), mcp.startupWait() == null ? Duration.ofSeconds(10) : mcp.startupWait());
     }
 
     private static Server server(String name, TantalumProperties.McpServer config, Duration toolTimeout, UnaryOperator<String> environment) {
@@ -105,15 +103,10 @@ public record McpSettings(List<Server> servers) {
         return url;
     }
 
-    private static boolean isLoopback(String host) {
-        if (host.equals("localhost")) {
-            return true;
-        }
-        try {
-            return InetAddress.getByName(host).isLoopbackAddress();
-        } catch (UnknownHostException unknown) {
-            return false;
-        }
+    /** 只认字面量，不走 DNS：DNS 结果不可信，也不能让校验发网络请求（pi 相同）。 */
+    static boolean isLoopback(String host) {
+        return host.equals("localhost") || host.equals("[::1]") || host.equals("::1")
+                || host.matches("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
     }
 
     private static Set<String> names(List<String> names) {

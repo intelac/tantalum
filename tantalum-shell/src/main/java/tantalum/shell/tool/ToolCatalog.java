@@ -18,6 +18,9 @@ public final class ToolCatalog {
         List<Tool> tools();
 
         Optional<Tool> find(String name);
+
+        /** 等来源准备好，比如第一次连接外部服务器。有上限，不阻塞内核（在 Handler 的虚拟线程上调用）。 */
+        default void awaitReady() throws InterruptedException { }
     }
 
     private volatile ToolSource source = new ToolSource() {
@@ -40,6 +43,10 @@ public final class ToolCatalog {
         }
         limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
         tools.put(tool.name(), tool);
+    }
+
+    public void awaitReady() throws InterruptedException {
+        source.awaitReady();
     }
 
     public void setSource(ToolSource newSource) {

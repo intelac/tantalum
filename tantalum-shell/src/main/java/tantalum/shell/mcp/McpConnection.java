@@ -4,6 +4,7 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.McpHttpClientTransportAuthorizationException;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,7 @@ final class McpConnection implements AutoCloseable {
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(McpConnection.class);
-    private static final Duration RETRY_WAIT = Duration.ofSeconds(2);
+    private static final Duration RETRY_WAIT = Duration.ofSeconds(5);
 
     private final McpSettings.Server server;
     private final Policy policy;
@@ -41,6 +42,13 @@ final class McpConnection implements AutoCloseable {
     private volatile List<McpSchema.Tool> tools = List.of();
     private volatile McpSyncClient client;
     private boolean broken;
+    /** 会话失效引起的换客户端：不算失败，不退避。 */
+    private boolean rotating;
+    private volatile long generation;
+    private final java.util.Set<Call> inFlight = new java.util.HashSet<>();
+    /** 换下来的客户端：等在途调用走完再关。 */
+    private final java.util.Set<McpSyncClient> retired = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.CountDownLatch firstAttempt = new java.util.concurrent.CountDownLatch(1);
 
     McpConnection(McpSettings.Server server, Policy policy, Consumer<List<McpSchema.Tool>> onTools) {
         this.server = server;
@@ -58,6 +66,11 @@ final class McpConnection implements AutoCloseable {
         return state;
     }
 
+    /** 等第一次连接尝试结束（无论成败），最多等 {@code limit}。 */
+    void awaitFirstAttempt(Duration limit) throws InterruptedException {
+        firstAttempt.await(limit.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
     List<McpSchema.Tool> tools() {
         return tools;
     }
@@ -72,6 +85,7 @@ final class McpConnection implements AutoCloseable {
                     connectOnce();
                     connectedAt = System.nanoTime();
                     move(State.READY);
+                    firstAttempt.countDown();
                     watch();
                 } catch (InterruptedException stopped) {
                     throw stopped;
@@ -80,6 +94,7 @@ final class McpConnection implements AutoCloseable {
                         throw new InterruptedException();
                     }
                     LOG.warn("mcp server {}: {}", server.name(), category(failure));
+                    firstAttempt.countDown();
                     if (isUnauthorized(failure)) {
                         giveUp(State.UNAUTHORIZED);
                         discardClient();
@@ -90,6 +105,9 @@ final class McpConnection implements AutoCloseable {
                 discardClient();
                 if (state == State.CLOSED) {
                     return;
+                }
+                if (takeRotating()) {
+                    continue;
                 }
                 boolean stable = connectedAt != 0 && Duration.ofNanos(System.nanoTime() - connectedAt).compareTo(policy.stableWindow()) >= 0;
                 if (stable) {
@@ -113,15 +131,19 @@ final class McpConnection implements AutoCloseable {
             LOG.error("mcp server {}: connection supervisor died", server.name(), fatal);
             move(State.FAILED);
         } finally {
+            firstAttempt.countDown();
             discardClient();
+            retired.forEach(McpConnection::closeQuietly);
         }
     }
 
     private void connectOnce() {
-        McpSyncClient fresh = McpTools.client(server, this::toolsChanged);
+        long current = ++generation;
+        McpSyncClient fresh = McpTools.client(server, changed -> toolsChanged(current, changed));
         client = fresh;
         fresh.initialize();
-        publish(McpTools.listAll(fresh));
+        boolean hasTools = fresh.getServerCapabilities() != null && fresh.getServerCapabilities().tools() != null;
+        publish(hasTools ? McpTools.listAll(fresh) : List.of());
         synchronized (lock) {
             broken = false;
         }
@@ -139,12 +161,23 @@ final class McpConnection implements AutoCloseable {
                     return;
                 }
             }
-            client.ping();
+            McpSyncClient current = client;
+            if (current == null) {
+                return;
+            }
+            current.ping();
         }
     }
 
-    private void toolsChanged(List<McpSchema.Tool> changed) {
-        publish(List.copyOf(changed));
+    /** 旧客户端迟到的回调不算数，否则会覆盖新列表，或在移除后把工具加回来。 */
+    void toolsChanged(long from, List<McpSchema.Tool> changed) {
+        if (from == generation) {
+            publish(List.copyOf(changed));
+        }
+    }
+
+    long generation() {
+        return generation;
     }
 
     private void publish(List<McpSchema.Tool> changed) {
@@ -171,11 +204,48 @@ final class McpConnection implements AutoCloseable {
         McpSyncClient old = client;
         client = null;
         if (old != null) {
-            try {
-                old.close();
-            } catch (RuntimeException ignored) {
-                // 连接已经坏了，关闭失败没有后果。
+            closeQuietly(old);
+        }
+    }
+
+    private static void closeQuietly(McpSyncClient old) {
+        try {
+            old.close();
+        } catch (RuntimeException ignored) {
+            // 连接已经坏了，关闭失败没有后果。
+        }
+    }
+
+    /** 会话失效：摘下这个客户端让监督线程换新的。它不立刻关，其他在途调用要走完（pi 的做法）。 */
+    private void rotate(McpSyncClient expired) {
+        synchronized (lock) {
+            if (client != expired) {
+                return;
             }
+            client = null;
+            rotating = true;
+            broken = true;
+            move(State.RECONNECTING);
+            retired.add(expired);
+            lock.notifyAll();
+        }
+        Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(server.timeout());
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+            }
+            if (retired.remove(expired)) {
+                closeQuietly(expired);
+            }
+        });
+    }
+
+    private boolean takeRotating() {
+        synchronized (lock) {
+            boolean was = rotating;
+            rotating = false;
+            return was;
         }
     }
 
@@ -190,10 +260,10 @@ final class McpConnection implements AutoCloseable {
 
     /**
      * 调用工具。失败都变成错误结果交给模型，只有中断原样抛出。
-     * {@code retrySafe} 的工具（声明只读）在连接失效时换新连接后重试一次；其余工具结果可能未知，不重试。
+     * 只有确定没有执行的会话失效才重试一次，所以写工具也安全。其他失败不碰共享连接，下线由探活发现。
      */
-    ToolOutput call(String tool, Map<String, Object> arguments, boolean retrySafe) throws InterruptedException {
-        ToolOutput first = attempt(tool, arguments, !retrySafe);
+    ToolOutput call(String tool, Map<String, Object> arguments) throws InterruptedException {
+        ToolOutput first = attempt(tool, arguments, false);
         if (first != null) {
             return first;
         }
@@ -202,11 +272,24 @@ final class McpConnection implements AutoCloseable {
         return second != null ? second : unavailable();
     }
 
-    /** 返回 null 表示连接失效且可以重试。 */
+    /** 一次进行中的调用。{@code overlapped} 表示期间连接上还有别的调用。 */
+    private static final class Call {
+        volatile boolean overlapped;
+    }
+
+    /** 返回 null 表示这次没有执行，可以重试。 */
     private ToolOutput attempt(String tool, Map<String, Object> arguments, boolean last) throws InterruptedException {
         McpSyncClient current = client;
         if (current == null || state != State.READY) {
             return last ? unavailable() : null;
+        }
+        Call call = new Call();
+        synchronized (inFlight) {
+            if (!inFlight.isEmpty()) {
+                call.overlapped = true;
+                inFlight.forEach(other -> other.overlapped = true);
+            }
+            inFlight.add(call);
         }
         try {
             McpSchema.CallToolResult result = current.callTool(new McpSchema.CallToolRequest(tool, arguments));
@@ -221,13 +304,32 @@ final class McpConnection implements AutoCloseable {
             if (has(failure, TimeoutException.class)) {
                 return ToolOutput.error("MCP tool timed out after " + server.timeout() + ". Its outcome is unknown.");
             }
-            markBroken(current);
+            if (isSessionLost(failure)) {
+                rotate(current);
+                // 会话失效时 SDK 用同一个错误结束所有在途调用，分不清哪个被服务器拒绝、哪个已经执行。
+                // 只有期间没有别的调用才能确定是这次被拒绝，重试才不会重复执行。
+                if (!call.overlapped) {
+                    return last ? unavailable() : null;
+                }
+                return ToolOutput.error("MCP server " + server.name() + " lost the session during this call. Its outcome is unknown.");
+            }
             if (isUnauthorized(failure)) {
+                markBroken(current);
                 return ToolOutput.error("MCP server " + server.name() + " refused the configured credentials.");
             }
             LOG.warn("mcp server {}: call failed: {}", server.name(), category(failure));
-            return last ? ToolOutput.error("MCP server " + server.name() + " is unavailable. The outcome of this call is unknown.") : null;
+            return ToolOutput.error("MCP server " + server.name() + " failed this call. Its outcome is unknown.");
+        } finally {
+            synchronized (inFlight) {
+                inFlight.remove(call);
+            }
         }
+    }
+
+    /** SDK 2.1.0 把 404 变成这条没有原因的 RuntimeException（{@code McpClientSession.dismissPendingResponses}），只能靠消息识别。 */
+    private static boolean isSessionLost(Throwable failure) {
+        return has(failure, McpTransportSessionNotFoundException.class)
+                || failure.getMessage() != null && failure.getMessage().contains("session with server terminated");
     }
 
     private void awaitReady() throws InterruptedException {
@@ -274,6 +376,8 @@ final class McpConnection implements AutoCloseable {
     @Override
     public void close() {
         state = State.CLOSED;
+        retired.forEach(McpConnection::closeQuietly);
+        retired.clear();
         if (supervisor != null) {
             supervisor.interrupt();
         }
