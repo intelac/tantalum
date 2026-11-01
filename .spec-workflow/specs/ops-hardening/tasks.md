@@ -4,7 +4,7 @@
 
 **检查点：** 阶段 0 结束后停下，向 Yi 汇报基线和预算，确认后才动存储。其余阶段汇报后继续。
 
-编号：任务 45–49 是 2026-11-02 加的（快照和序号约定），放在实际执行的位置，原有编号不变。
+编号：任务 45–51 是 2026-11-02 加的（快照、序号、ID），放在实际执行的位置，原有编号不变。任务 21（拆分旧 journal）已取消，Yi 确认没有旧数据。
 
 路径前缀：`shell/` = `tantalum-shell/src/main/java/tantalum/shell/`，`kernel/` = `tantalum-kernel/src/main/java/tantalum/kernel/`，`value/` = `tantalum-value/src/main/java/tantalum/value/`。
 
@@ -66,23 +66,35 @@
   - 验证：未来版本拒绝且文件未变；语义变化能启动并有警告
   - _Requirements: 3.4, 3.5_
 
+- [ ] 50. 会话 ID 字符集
+  - File: shell/web/ApiController.java, 对应测试
+  - 入口校验 `[A-Za-z0-9_-]{1,128}`
+  - 验证：不符合的返回 400 且不写事件；控制台生成的 ID 通过
+  - _Requirements: 11.4, H14_
+
+- [ ] 51. 运行 ID 和命令 ID 格式
+  - File: kernel/step/ModelSteps.java, CompactSteps.java, CommandIds.java, Outcome.java；shell/conversation/Transcript.java；shell/web/ApiController.java（`runOrder`、从运行 ID 取会话）；写死 `run-` 的测试和控制台文件
+  - `<会话ID>_<序号>`、`<会话ID>_<序号>-<下标>`；这一步序号仍是全局的
+  - 验证：`mvn verify`、vitest 通过；格式不对的运行 ID 和别人的运行返回 404
+  - _Requirements: 11.5, H14_
+
 ## 阶段 2：写入管线（接入后行为仍是全量内存）
 
 - [ ] 10. 写入分发
   - File: shell/loop/JournalDispatcher.java, JournalDispatcherTest.java
-  - 消费 Input Ring，分配序号，取放行名额（总数 = Cleanroom Ring 大小），放进用户通道
+  - 消费 Input Ring，取放行名额（总数 = Cleanroom Ring 大小），放进用户通道
   - 验证：名额用完时分发等待、Input Ring 满后入口 429；已落盘事件不丢
   - _Requirements: H12_
 
-- [ ] 45. 序号接口
-  - File: shell/loop/Sequence.java, SequenceContractTest.java；shell/loop/JournalDispatcher.java
-  - 接口和单进程计数器；上限 2^53；测试用一个跳号的实现
-  - 验证：不连续的序号经分发、落盘、发布后顺序和内容正确；超上限时报错而不是静默溢出
-  - _Requirements: 11.2, H14_
+- [ ] 45. 按用户的序号
+  - File: shell/loop/Sequence.java, SequenceTest.java
+  - 接口和实现：`next(用户)`；第一次见到用户时读他的文件尾部；上限 2^53；测试用一个跳号的实现
+  - 验证：重启后新序号大于该用户已有的序号；只读了该用户的文件；超上限时报错而不是静默溢出
+  - _Requirements: 11.2, 11.3, H14_
 
 - [ ] 11. 用户通道
   - File: shell/loop/UserLane.java, UserLaneTest.java
-  - 每用户一个虚拟线程，没事件就退出；按会话分组并行写，全部完成后按序号发布
+  - 每用户一个虚拟线程，没事件就退出；按到达顺序取号，按会话分组并行写，全部完成后按序号发布
   - 验证：同一用户并发提交时发布严格按序；写失败置 `halted`；通道退出和新事件到达竞争时不丢事件
   - _Requirements: H12, 3.1b_
 
@@ -93,10 +105,10 @@
   - _Requirements: 2.9_
 
 - [ ] 13. 切换 cleanroom 和启动
-  - File: shell/loop/Cleanroom.java, shell/boot/Engine.java, shell/boot/Startup.java；删除 JournalWriter；shell/journal/Journal.java 只留读旧库
-  - cleanroom 改从 Cleanroom Ring 取事件；启动暂时全量重放所有文件；序号恢复取文件尾部最大值加一；读取不再要求序号连续
-  - 验证：现有后端测试全部通过（必要的改动逐条列出）；重启后序号不重复
-  - _Requirements: H1, H12, 3.1b_
+  - File: shell/loop/Cleanroom.java, shell/boot/Engine.java, shell/boot/Startup.java；删除 JournalWriter、Journal；tantalum-examples 的 Corpus 改为生成每会话文件
+  - cleanroom 改从 Cleanroom Ring 取事件；启动暂时全量重放所有文件；`TurnQuery` 改读文件；读取不再要求序号连续；有旧 `journal.db` 且无 `format.json` 时拒绝启动
+  - 验证：现有后端测试全部通过（必要的改动逐条列出）；两个用户序号相同时运行和命令不串；旧 `journal.db` 的目录启动被拒绝且文件未变；Corpus 生成的数据能完整回放
+  - _Requirements: H1, H12, 3.1, 3.1b, 11.1_
 
 - [ ] 14. SSE 每用户位置
   - File: shell/sse/SseHub.java, SseHubTest.java
@@ -113,7 +125,7 @@
 
 - [ ] 16. 索引库和写入线程
   - File: shell/store/SessionIndex.java, IndexWriter.java, SessionIndexTest.java；shell/loop/Cleanroom.java
-  - 四张表；cleanroom 只把变化放进内存队列；运行结束和回收时必写，其余 200 事件或 5 秒（可配）；写失败只记日志
+  - 三张表；cleanroom 只把变化放进内存队列；运行结束和回收时必写，其余 200 事件或 5 秒（可配）；写失败只记日志
   - 验证：节流和必写的时机；写失败时服务继续；cleanroom 没有 I/O（ArchUnit 或测试断言）
   - _Requirements: H6, 非功能 Reliability_
 
@@ -141,12 +153,6 @@
   - 验证：删库后重建结果和原库相同；落后的索引被补齐；损坏时有警告且能启动
   - _Requirements: 3.1c, 3.2, 4.2_
 
-- [ ] 21. 拆分旧 journal
-  - File: shell/store/JournalSplit.java, JournalSplitTest.java；shell/boot/Startup.java
-  - 写到 `sessions.tmp/`，fsync，重命名，写 `format.json`，建索引；日志有进度
-  - 验证：用现有代码生成的真实旧 journal 拆分，全量回放结果相同；在各步中断后可重做；`journal.db` 未变
-  - _Requirements: 3.1_
-
 ## 阶段 4：崩溃收尾（H9）
 
 - [ ] 22. `RunInterrupted` 事件和内核处理
@@ -158,7 +164,7 @@
 - [ ] 23. 删除“待恢复”
   - File: value/（`RunState.pendingRecovery`）, shell/web/ApiController.java, 控制台相关文件, core-skeleton 相关测试
   - 启动时发布 `RunInterrupted`；删除状态、接口字段和界面内容
-  - 验证：旧 journal 里未结束的运行同样收尾；`grep pendingRecovery` 无结果；vitest 通过
+  - 验证：`grep pendingRecovery` 无结果；vitest 通过
   - _Requirements: H9, 2.1_
 
 - [ ] 24. 真实 Claude 严格校验
@@ -239,7 +245,7 @@
 
 - [ ] 33. `/turns`、`/trace` 按会话读
   - File: shell/journal/TurnQuery.java, 对应测试
-  - 从 `runs` 表找会话，只读该文件和用量表
+  - 从运行 ID 得到会话，只读该文件和用量表
   - 验证：统计读取的文件，只有一个；结果和全量回放相同
   - _Requirements: 5.1, 5.4_
 
@@ -297,10 +303,10 @@
   - 验证：两组数字进 tech.md 并汇报；如果快照没有明显提速，汇报给 Yi，不默认保留
   - _Requirements: 10.6_
 
-- [ ] 41. 安全和升级端到端
+- [ ] 41. 安全端到端
   - File: tantalum-examples 集成测试
-  - 验证：恶意 ID 经 HTTP 不越出目录；权限 600/700；旧 journal 启动升级后接口结果不变
-  - _Requirements: 3.1, 非功能 Security_
+  - 验证：恶意 ID 经 HTTP 不越出目录；权限 600/700
+  - _Requirements: 非功能 Security_
 
 - [ ] 42. `kill -9` 崩溃测试
   - File: tantalum-examples 集成测试（打包的 jar）
@@ -315,6 +321,6 @@
 
 - [ ] 44. 文档和全量回归
   - File: README.md, .spec-workflow/steering/tech.md
-  - 回收配置、钩子约束、回放承诺的边界、删除旧 journal、启动日志
+  - 回收配置、钩子约束、回放承诺的边界、旧 `journal.db` 被拒绝时怎么处理、启动日志
   - 验证：`mvn verify`、vitest、Playwright 全量通过；报真实模型用量
   - _Requirements: 非功能 Usability, H5_

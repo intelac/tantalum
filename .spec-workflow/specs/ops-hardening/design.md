@@ -28,7 +28,7 @@ graph LR
 | 分页：至少 50 条消息且跨 2 轮，最多 500 条 | DSH `session-controller/README.md` |
 | 性能预算 | DSH `benchmarks/AGENTS.md` |
 
-自定（DSH 单用户，没有对应问题）：用户通道、全局序号、索引库的跨用户表、SSE 按用户的补读位置、登录失效。
+自定（DSH 单用户，没有对应问题）：用户通道、按用户的序号、索引库的跨用户表、SSE 按用户的补读位置、登录失效。
 
 ## 对已批准需求的偏离
 
@@ -61,11 +61,11 @@ graph LR
 
 ## 写入管线
 
-**写入分发（`JournalDispatcher`）。** Input Ring 的唯一消费者。分配全局序号，取一个放行名额，放进该用户的通道。名额总数等于 Cleanroom Ring 的大小，所以这个环不会满，已落盘的事件不会丢。名额用完时分发线程等待，Input Ring 随之填满，入口返回 429。这只在严重过载时发生。
+**写入分发（`JournalDispatcher`）。** Input Ring 的唯一消费者。取一个放行名额，放进该用户的通道。名额总数等于 Cleanroom Ring 的大小，所以这个环不会满，已落盘的事件不会丢。名额用完时分发线程等待，Input Ring 随之填满，入口返回 429。这只在严重过载时发生。
 
 **用户通道（`UserLane`）。** 每个有事件的用户一个虚拟线程，没事件就退出。
 
-1. 取走队列里的全部事件，按会话分组，每个会话一个虚拟线程写文件并 fsync。
+1. 取走队列里的全部事件，按到达顺序取号，按会话分组，每个会话一个虚拟线程写文件并 fsync。
 2. 全部完成后，载入这批涉及的冷会话（见下一节）。
 3. 按序号发布到 Cleanroom Ring。
 
@@ -73,9 +73,13 @@ graph LR
 
 **Cleanroom Ring。** 多生产者，消费者就是现在的 cleanroom。
 
-**序号（H14）。** 约定只有三条：全局唯一、同一用户内递增、可以有空洞。`JournalDispatcher` 通过接口 `Sequence` 取号，现在的实现是单进程计数器，启动时取索引和文件尾部的最大值加一。读取只要求每个文件内递增。序号不超过 2^53，因为控制台用 JavaScript 数字解析它。
+**序号和 ID（H14）。** 序号按用户分配，由该用户的通道通过接口 `Sequence` 取号，所以同一用户内顺序和到达顺序一致。第一次见到一个用户时，读他所有会话文件的尾部，取最大值加一；这一步只拖慢这个用户。读取只要求每个文件内递增。序号不超过 2^53，因为控制台用 JavaScript 数字解析它。
 
-没有改成每用户各自计数：`run-<seq>` 和 `<seq>-<index>` 由序号生成，`/api/runs/{run}` 和 `runs` 表按运行 ID 全局查找，各自计数后两个用户会有相同的运行 ID。以后做多实例时，换一种满足上述三条的 `Sequence` 即可，比如按实例取号段；用户被另一实例接管时，新实例要从该用户的最大序号之后取号。这一点留给以后的 spec。
+运行 ID 是 `<会话ID>_<序号>`，命令 ID 是 `<会话ID>_<序号>-<下标>`，由内核从事件信封生成，仍是纯函数。对话条目 ID 和 SSE 位置继续用 `<序号>.<下标>`，它们只在一个用户内比较。从运行 ID 取会话：取最后一个 `_` 之前的部分，再做归属检查，不是本人的返回 404 且不读文件。
+
+`SessionId` 不改，字符集在 `ApiController` 入口校验：`[A-Za-z0-9_-]{1,128}`，不符合返回 400。控制台生成的 `s-xxxxxxxx` 符合。用户名仍可能含特殊字符，所以 `SessionPaths` 的编码保留。
+
+以后做多实例时，新归属实例同样从该用户文件尾部的最大值往后取号，不改文件格式。接管和共享存储留给以后的 spec。
 
 ## 按需载入和回收
 
@@ -113,7 +117,6 @@ graph LR
 
 ```
 sessions(session PK, principal, title, last_activity, run_status, last_seq, file_offset, format)
-runs(run PK, session)
 submissions(principal, request_id, submission, PK(principal, request_id))
 usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq))
 ```
@@ -124,7 +127,7 @@ usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq)
 
 **启动。**
 
-1. 校验 `format.json`，需要时拆分旧 journal。
+1. 校验 `format.json`。有 `journal.db` 而没有 `format.json` 时拒绝启动并说明，不改动数据。
 2. 扫描 `sessions/` 的文件大小，和 `file_offset` 比较，不读内容。这一步随会话数增长，随事件数不增长，同 DSH 的列表重扫。
 3. 落后的会话重放尾部，补齐索引。
 4. `run_status` 未结束的会话载入内存，按 H9 收尾。
@@ -139,11 +142,11 @@ usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq)
 
 新事件 `RunInterrupted` v1。启动时对每个未结束的运行发布一条。内核处理：`ToolPairing` 补“结果未知”，并入未消费的插话，运行以 `CANCELLED` 结束，详情 `interrupted by restart`。排队的提交照常开始，这和现有规则一致。
 
-`RunState.pendingRecovery` 和接口、控制台里的“待恢复”一并删除。旧 journal 里的未结束运行同样收尾。
+`RunState.pendingRecovery` 和接口、控制台里的“待恢复”一并删除。
 
 ## 回放接口和 SSE
 
-**`/turns`、`/trace`。** 从 `runs` 表找到会话，只读这个文件。
+**`/turns`、`/trace`。** 从运行 ID 得到会话，只读这个文件。
 
 **SSE 位置（需求里没想到）。** `SseHub` 的 `recent` 和 `evictedSeq` 假设序号全局递增。现在不同用户可以乱序到达，所以改成每个用户一份。同一用户内仍有序，`Last-Event-ID` 的语义不变。
 
@@ -175,16 +178,6 @@ usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq)
 6. 关闭文件和索引库，释放锁。
 
 每步失败不跳过后面的。配置 `server.shutdown=graceful`，让 Web 层等已接受的请求。
-
-## 旧 journal 拆分
-
-`journal.db` 存在且没有 `format.json` 时：
-
-1. 全部读出，写到 `sessions.tmp/`，fsync。
-2. 重命名为 `sessions/`，写 `format.json`。
-3. 建索引。
-
-中断后删掉 `sessions.tmp/` 重来。`journal.db` 不动，不再使用，README 说明确认后可以手动删除。
 
 ## 性能预算
 
@@ -219,17 +212,16 @@ Maven profile `bench`，在 `tantalum-examples`：合成数据、每个样本新
 | 载入失败 | 该事件所属运行以 FAILED 结束；事件已落盘 |
 | 索引库写失败 | 记日志，缓存落后，下次启动补齐；服务继续 |
 | 文件写失败 | `halted`，503 |
-| 拆分中断 | 下次启动重做，旧文件没动 |
 
 ## Testing Strategy
 
 - **不变量（需求 9.1）：** 同一组事件在“从不回收”和“每个事件后回收”下，prompt、对话视图、钩子结果逐字节相同，覆盖压缩、工具轮、记忆变化、额度钩子。
 - **快照：** 不变量测试加“每次都从快照载入”；快照截断、改字节、超前、版本不符时都回到全量重放；删除 `snapshots/` 后结果不变。
-- **序号：** 用跳号的 `Sequence` 跑回归，确认没有代码依赖连续或跨用户顺序。
+- **序号和 ID：** 用跳号的 `Sequence` 跑回归；两个用户序号相同时，运行、命令、SSE 不串；重启后新序号大于该用户已有的序号。
 - **隔离：** 放慢一个用户的 fsync，其他用户不受影响；同一用户内仍按序。
 - **压测：** 现有并发压测的不变量在回收不断发生时全部成立。
 - **崩溃：** 打包 jar，`kill -9` 后事件不丢，尾部残缺被截掉，运行收尾，不重新调用模型和工具。
 - **安全：** 恶意会话 ID 和用户名不越出目录；别人的会话 404 且不载入。
-- **升级：** 用真实的旧 journal 拆分，结果和全量回放相同；中断后可重做；未来版本被拒绝。
+- **版本：** 有旧 `journal.db` 时拒绝启动且文件未变；未来版本被拒绝。
 - **真实 Claude：** 崩溃收尾后在严格校验下继续提交（需求 9.5）。
 - **Playwright：** 两个上下文同一用户，一个退出另一个仍收事件；回收的会话打开完整；长会话分页，滚动不跳；崩溃后的运行显示已中断。
