@@ -8,14 +8,14 @@
 
 ## 阶段 0：改造前基线（代码行为不变）
 
-- [ ] 1. 合成数据生成器
-  - File: tantalum-examples/src/test/java/tantalum/examples/bench/Corpus.java, CorpusTest.java；tantalum-examples/pom.xml（profile `bench`）
+- [x] 1. 合成数据生成器
+  - File: tantalum-examples/src/test/java/tantalum/examples/bench/Corpus.java, CorpusTest.java（profile `bench` 要有入口类才能验证，移到任务 2）
   - 生成 1 万、10 万、50 万事件的 journal：多用户、多会话、含工具轮、压缩、一个 500 条消息的长会话；固定随机种子
   - 验证：生成的 journal 能被现有代码完整回放；同一种子两次生成的事件相同
   - _Requirements: 1.1_
 
 - [ ] 2. 读路径基准
-  - File: tantalum-examples/src/test/java/tantalum/examples/bench/ReadBench.java, BenchProcess.java
+  - File: tantalum-examples/src/test/java/tantalum/examples/bench/ReadBench.java, BenchProcess.java；tantalum-examples/pom.xml（profile `bench`）
   - 每个样本一个新进程，测启动时间、堆峰值、会话列表、打开长会话、`/turns`、`/trace`；报告每个样本、中位数和机器信息
   - 验证：`mvn -Pbench` 在 1 万事件上跑通，输出含全部 6 项；另加一个用户有大量事件时测另一用户的 `/turns`
   - _Requirements: 1.1, 5.3_
