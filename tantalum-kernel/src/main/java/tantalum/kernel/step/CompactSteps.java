@@ -103,7 +103,9 @@ public final class CompactSteps {
         Compacting compacting = run.compacting();
         out.state = UsageProjection.apply(out.state, run.ref().principal(), context.envelope().at(), event.usage());
 
-        String reason = SummaryPrompt.validate(event.content(), event.stop(), compacting.plan().headEstimate());
+        Plan plan = compacting.plan();
+        long request = plan.request() == null ? 0 : TokenEstimate.ofMessage(plan.request());
+        String reason = SummaryPrompt.validate(event.content(), event.stop(), plan.headEstimate(), request);
         if (reason != null) {
             failed(out, run, compacting, reason);
             return out.decision();

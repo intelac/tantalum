@@ -173,7 +173,8 @@ public final class Engine implements AutoCloseable {
         InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
-                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge, mcp.fixedNote()),
+                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge, mcp.fixedNote(),
+                        properties.compactionSettings()),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),

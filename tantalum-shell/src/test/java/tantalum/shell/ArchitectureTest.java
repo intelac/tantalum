@@ -61,6 +61,12 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.mcp..")
             .should().dependOnClassesThat().resideInAPackage("io.modelcontextprotocol..");
 
+    /** 压缩是通用逻辑：内核不认识任何供应商的 SDK。 */
+    @ArchTest
+    static final ArchRule kernelKnowsNoProvider = noClasses()
+            .that().resideInAPackage("tantalum.kernel..")
+            .should().dependOnClassesThat().resideInAnyPackage("com.anthropic..", "com.openai..", "tantalum.shell.model..");
+
     @ArchTest
     static final ArchRule springStaysAtTheEdge = noClasses()
             .that().resideInAPackage("tantalum.shell..")

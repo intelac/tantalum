@@ -82,21 +82,21 @@
 
 ## 阶段 4：shell 接线
 
-- [ ] 11. 设置快照：`ContextHandler`、`Engine`
+- [x] 11. 设置快照：`ContextHandler`、`Engine`
   - File: tantalum-shell/src/main/java/tantalum/shell/handler/ContextHandler.java, tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java, tantalum-shell/src/test/java/tantalum/shell/handler/ContextHandlerTest.java
   - `window` 取供应商 `context-window`，`reserve = max(reserve-tokens, 供应商 max-tokens)`；窗口为 0 时为 null
   - 验证：Claude 默认配置得到 136000 的阈值；窗口 0 时事件字段为 null
   - _Requirements: 1.5_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“设置快照：ContextHandler、Engine”，满足需求 1.5，遵守 design.md | Restrictions: 只做这一件事 | Success: Claude 默认配置得到 136000 的阈值；窗口 0 时事件字段为 null | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 12. `Transcript`、`TurnQuery`、`Startup`
+- [x] 12. `Transcript`、`TurnQuery`、`Startup`
   - File: tantalum-shell/src/main/java/tantalum/shell/conversation/Transcript.java, TranscriptItem.java, tantalum-shell/src/main/java/tantalum/shell/journal/TurnQuery.java, tantalum-shell/src/test/java/tantalum/shell/conversation/TranscriptTest.java, tantalum-shell/src/test/java/tantalum/shell/journal/TurnQueryTest.java
   - `CompactionMark` 条目（成功与失败）；`Text.truncated`；轨迹条目挂压缩事实；`handlerOf("AwaitingSummary")`
   - 验证：摘要回复不生成 Text；重启后视图逐字节相同；轨迹里摘要调用是一个 turn
   - _Requirements: 4.2–4.4_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“Transcript、TurnQuery、Startup”，满足需求 4.2–4.4，遵守 design.md | Restrictions: 只做这一件事 | Success: 摘要回复不生成 Text；重启后视图逐字节相同；轨迹里摘要调用是一个 turn | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 13. 压测与回放：`CompactionStressTest`、架构规则
+- [x] 13. 压测与回放：`CompactionStressTest`、架构规则
   - File: tantalum-shell/src/test/java/tantalum/shell/loop/CompactionStressTest.java, tantalum-shell/src/test/java/tantalum/shell/ArchitectureTest.java
   - 脚本化模型、窗口设小，500 条消息、多次压缩；回放 prompt 与实时相同；重启后视图相同；另一用户同时运行不受影响；`tantalum.kernel.compaction` 不引用 shell
   - 验证：进 `mvn verify`，全过

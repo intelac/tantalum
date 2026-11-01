@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,6 +75,36 @@ class TantalumPropertiesTest {
         assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1));
         assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1));
         assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0));
+    }
+
+    private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
+        return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
+                new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
+                        java.time.Duration.ofSeconds(1), 4, claudeWindow),
+                new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
+                        java.time.Duration.ofSeconds(1), 1, openAiWindow),
+                TantalumProperties.Memory.defaults(), TantalumProperties.Knowledge.none(), null, compaction);
+    }
+
+    /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */
+    @Test
+    void compactionSettingsFollowTheProvider() {
+        tantalum.value.state.CompactionSettings claude = properties("claude", 200_000, 131_072, TantalumProperties.Compaction.defaults()).compactionSettings();
+        assertEquals(136_000, claude.threshold());
+        assertEquals(64_000, claude.reserve(), "Claude's max-tokens is larger than reserve-tokens");
+        assertEquals(20_000, claude.keepRecent());
+        assertEquals(32_768, claude.maxKeptResultBytes());
+        assertEquals(4_096, claude.maxSummarizedResultBytes());
+        assertEquals(8_192, claude.summaryMaxTokens());
+
+        tantalum.value.state.CompactionSettings openai = properties("openai", 200_000, 131_072, TantalumProperties.Compaction.defaults()).compactionSettings();
+        assertEquals(114_688, openai.threshold());
+        assertEquals(16_384, openai.reserve());
+
+        assertNull(properties("openai", 200_000, 0, TantalumProperties.Compaction.defaults()).compactionSettings(), "unknown window: no compaction");
+        assertEquals(136_000, properties("claude", 200_000, 0, null).compactionSettings().threshold(), "missing section means defaults");
+        assertThrows(IllegalArgumentException.class, () -> properties("openai", 200_000, 16_000, TantalumProperties.Compaction.defaults()).compactionSettings(),
+                "a window no larger than the reserve is a configuration error");
     }
 
     @Test

@@ -3,6 +3,7 @@ package tantalum.shell.boot;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import tantalum.value.state.CompactionSettings;
 
 /** 全部配置，默认值在 {@code application.properties}。 */
 @ConfigurationProperties("tantalum")
@@ -107,11 +108,24 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    /** Claude 设置。API Key 只从环境变量读取，不在这里。 */
+    /** Claude 设置。API Key 只从环境变量读取，不在这里。{@code contextWindow} 为 0 表示未知：不压缩，控制台不显示占比。 */
     public record Claude(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunkTimeout,
-                         Duration betweenChunkTimeout, int concurrency) {}
+                         Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
 
     /** OpenAI 兼容服务的设置。 */
     public record OpenAi(String baseUrl, String model, int maxTokens, Duration firstChunkTimeout,
-                         Duration betweenChunkTimeout, int concurrency) {}
+                         Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
+
+    /** 当前供应商的压缩设置快照；窗口未配置时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
+    public CompactionSettings compactionSettings() {
+        boolean claude = "claude".equals(provider);
+        long window = claude ? claude().contextWindow() : openai().contextWindow();
+        long maxTokens = claude ? claude().maxTokens() : openai().maxTokens();
+        if (window <= 0) {
+            return null;
+        }
+        Compaction c = compaction == null ? Compaction.defaults() : compaction;
+        return new CompactionSettings(window, Math.max(c.reserveTokens(), maxTokens), c.keepRecentTokens(),
+                c.maxKeptToolResultBytes(), c.maxSummarizedToolResultBytes(), c.summaryMaxTokens());
+    }
 }

@@ -51,15 +51,17 @@ class SummaryPromptTest {
     @Test
     void validationRejectsEachFailure() {
         List<ContentBlock> good = List.of(new TextBlock("Goal: short"));
-        assertNull(SummaryPrompt.validate(good, StopReason.END_TURN, 10_000));
-        assertEquals("summary did not end normally: MAX_TOKENS", SummaryPrompt.validate(good, StopReason.MAX_TOKENS, 10_000));
+        assertNull(SummaryPrompt.validate(good, StopReason.END_TURN, 10_000, 0));
+        assertEquals("summary did not end normally: MAX_TOKENS", SummaryPrompt.validate(good, StopReason.MAX_TOKENS, 10_000, 0));
         assertEquals("summary tried to call a tool", SummaryPrompt.validate(
-                List.of(new TextBlock("x"), new ToolCallBlock("t", "grep", "{}", new Json.Obj(Map.of()))), StopReason.END_TURN, 10_000));
-        assertEquals("summary is empty", SummaryPrompt.validate(List.of(new TextBlock("  \n")), StopReason.END_TURN, 10_000));
-        assertEquals("summary is empty", SummaryPrompt.validate(List.of(), StopReason.END_TURN, 10_000));
+                List.of(new TextBlock("x"), new ToolCallBlock("t", "grep", "{}", new Json.Obj(Map.of()))), StopReason.END_TURN, 10_000, 0));
+        assertEquals("summary is empty", SummaryPrompt.validate(List.of(new TextBlock("  \n")), StopReason.END_TURN, 10_000, 0));
+        assertEquals("summary is empty", SummaryPrompt.validate(List.of(), StopReason.END_TURN, 10_000, 0));
         long size = TokenEstimate.ofMessage(SummaryPrompt.summaryMessage("Goal: short"));
-        assertEquals("summary is not smaller than what it replaces", SummaryPrompt.validate(good, StopReason.END_TURN, size));
-        assertNull(SummaryPrompt.validate(good, StopReason.END_TURN, size + 1));
+        assertEquals("summary is not smaller than what it replaces", SummaryPrompt.validate(good, StopReason.END_TURN, size, 0));
+        assertNull(SummaryPrompt.validate(good, StopReason.END_TURN, size + 1, 0));
+        assertEquals("summary is not smaller than what it replaces", SummaryPrompt.validate(good, StopReason.END_TURN, size + 1, 1),
+                "the request repeated after the summary counts too");
     }
 
     @Test

@@ -7,7 +7,9 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.state.Compacting;
 import tantalum.value.state.EndReason;
 
 /**
@@ -47,8 +49,8 @@ public sealed interface TranscriptItem {
         }
     }
 
-    /** 回复文本。{@code interrupted} 表示回复被取消，只有用户已经看到的部分。 */
-    record Text(String id, SessionId session, RunId run, Instant at, String text, boolean interrupted)
+    /** 回复文本。{@code interrupted} 表示回复被取消，只有用户已经看到的部分；{@code truncated} 表示回复因输出上限被截断。 */
+    record Text(String id, SessionId session, RunId run, Instant at, String text, boolean interrupted, boolean truncated)
             implements TranscriptItem {
 
         public Text {
@@ -125,6 +127,30 @@ public sealed interface TranscriptItem {
         /** 起止都已知时的耗时，否则为空。 */
         public Duration elapsed() {
             return startedAt == null || endedAt == null ? null : Duration.between(startedAt, endedAt);
+        }
+    }
+
+    /**
+     * 一次压缩。成功时 {@code summary} 是摘要原文、{@code failure} 为空；失败时反过来。估算是压缩前后视图的 token 估算，
+     * {@code usage} 是摘要调用的实测用量，可能为空。对话页在这里画分隔线。
+     */
+    record CompactionMark(String id, SessionId session, RunId run, Instant at, Compacting.Trigger trigger, String summary,
+                          long estimateBefore, long estimateAfter, TokenUsage usage, String failure)
+            implements TranscriptItem {
+
+        public CompactionMark {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(trigger, "trigger");
+            if ((summary == null) == (failure == null)) {
+                throw new IllegalArgumentException("exactly one of summary and failure must be set");
+            }
+        }
+
+        public boolean failed() {
+            return failure != null;
         }
     }
 
