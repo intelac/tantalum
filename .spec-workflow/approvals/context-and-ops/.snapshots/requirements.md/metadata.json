@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/context-and-ops/requirements.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T03:30:20.371Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793503820368_x2ikaw12f",
+      "approvalTitle": "context-and-ops spec：需求文档（压缩、前缀稳定、快照、关闭顺序）"
+    }
+  ]
+}
