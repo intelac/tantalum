@@ -1,7 +1,20 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { zh } from "../text/zh";
-import type { Config, Messages, RunView, SessionSummary, SubmitMode, Trace, Turn, TurnSummary, User } from "./types";
+import type {
+  Config,
+  MemoryEntry,
+  MemoryList,
+  MemoryType,
+  Messages,
+  RunView,
+  SessionSummary,
+  SubmitMode,
+  Trace,
+  Turn,
+  TurnSummary,
+  User,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -128,4 +141,30 @@ export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {
 
 export function getTurn(run: string, number: number): Promise<Turn> {
   return call(`/api/runs/${encodeURIComponent(run)}/turns/${number}`);
+}
+
+// ---- 记忆：只操作当前登录用户的，接口按会话取身份。 ----
+
+export function listMemories(): Promise<MemoryList> {
+  return call("/api/memory");
+}
+
+export function getMemory(name: string): Promise<MemoryEntry> {
+  return call(`/api/memory/${encodeURIComponent(name)}`);
+}
+
+export interface NewMemory {
+  name: string;
+  type: MemoryType;
+  description: string;
+  content: string;
+}
+
+/** 400 时抛出的 ApiError.message 就是服务端的拒绝原因，原样显示给用户。 */
+export function createMemory(entry: NewMemory): Promise<MemoryEntry> {
+  return call("/api/memory", { method: "POST", body: JSON.stringify(entry) });
+}
+
+export function deleteMemory(name: string): Promise<void> {
+  return call(`/api/memory/${encodeURIComponent(name)}`, { method: "DELETE" });
 }

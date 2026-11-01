@@ -1,4 +1,4 @@
-import { Cpu, Palette, UserRound } from "lucide-react";
+import { Brain, Cpu, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
 import type { Config } from "../api/types";
 import { zh } from "../text/zh";
@@ -6,9 +6,10 @@ import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { AccountPane } from "./AccountPane";
 import { AppearancePane } from "./AppearancePane";
+import { MemoryPane } from "./MemoryPane";
 import { ModelPane } from "./ModelPane";
 
-type Pane = "appearance" | "model" | "account";
+type Pane = "appearance" | "model" | "memory" | "account";
 
 interface Props {
   open: boolean;
@@ -21,6 +22,7 @@ interface Props {
 const PANES: { id: Pane; label: string; icon: typeof Palette }[] = [
   { id: "appearance", label: zh.settings.appearance, icon: Palette },
   { id: "model", label: zh.settings.model, icon: Cpu },
+  { id: "memory", label: zh.memory.title, icon: Brain },
   { id: "account", label: zh.settings.account, icon: UserRound },
 ];
 
@@ -50,6 +52,7 @@ export function SettingsDialog({ open, onClose, config, username, onLogout }: Pr
         <div className="min-w-0 flex-1 px-6 pt-2 pb-6 sm:pt-4">
           {pane === "appearance" && <AppearancePane />}
           {pane === "model" && <ModelPane config={config} />}
+          {pane === "memory" && <MemoryPane />}
           {pane === "account" && <AccountPane username={username} onLogout={onLogout} />}
         </div>
       </div>

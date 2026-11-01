@@ -109,28 +109,28 @@
 
 ## 阶段 5：前端
 
-- [-] 15. 类型、客户端函数、查询 hook、文案
+- [x] 15. 类型、客户端函数、查询 hook、文案
   - File: console/src/api/types.ts, console/src/api/client.ts, console/src/settings/useMemories.ts, console/src/text/zh.ts, console/src/api/client.test.ts
   - `MemorySummary`、`MemoryEntry`、`MemoryType`；`listMemories`、`getMemory`、`createMemory`、`deleteMemory`；查询键 `["memory"]`、`["memory", name]`，写后 invalidate；`settings.memory.*` 文案（标题、类型名、空状态、已用 n/N、删除确认、表单标签、错误）
   - 验证：`client.test.ts` 覆盖四个函数的路径、方法和 404 处理；`tsc` 通过
   - _Requirements: 6.1–6.5_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: React 19 / TypeScript 工程师 | Task: 完成“类型、客户端函数、查询 hook、文案”，满足需求 6.1–6.5，参照 `client.ts` 现有函数和 `useConfig` | Restrictions: 文案只放 `zh.ts`；不改其它面板 | Success: 单测和 `tsc` 通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 16. `MemoryPane`：列表与查看
+- [x] 16. `MemoryPane`：列表与查看
   - File: console/src/settings/MemoryPane.tsx, console/src/settings/settings.test.tsx
   - 列表：名称、类型标签、描述、相对时间（`relativeTime`），按更新时间倒序；头部“已用 n/N 条”；空状态文案；点击一条展开正文（`Markdown` 组件）；加载和错误状态
   - 验证：渲染测试：空状态、三条倒序、点击展开显示正文
   - _Requirements: 6.1, 6.2_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: React 19 工程师 | Task: 完成“MemoryPane 列表与查看”，满足需求 6.1、6.2，风格参照 `AccountPane`、`ModelPane` | Restrictions: 只用现有设计变量和组件；键盘可操作、列表项是按钮 | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 17. `MemoryPane`：删除确认与手工新增
+- [x] 17. `MemoryPane`：删除确认与手工新增
   - File: console/src/settings/MemoryPane.tsx, console/src/settings/settings.test.tsx
   - 删除：`Dialog` 确认，Esc 取消，确认后调用 `deleteMemory` 并刷新；新增：名称、类型（下拉）、描述、正文，提交 `createMemory`，400 的原因原样显示在表单下
   - 验证：渲染测试：确认对话框出现/取消/确认；新增成功后列表刷新；400 文案显示
   - _Requirements: 6.3, 6.4, 7.3_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: React 19 工程师 | Task: 完成“MemoryPane 删除确认与手工新增”，满足需求 6.3、6.4、7.3 | Restrictions: 复用 `Dialog`、`Button`；表单校验只做必填，规则以服务端为准 | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 18. `SettingsDialog` 接入“记忆”面板
+- [x] 18. `SettingsDialog` 接入“记忆”面板
   - File: console/src/settings/SettingsDialog.tsx, console/src/settings/settings.test.tsx
   - 新增 `memory` 面板项（图标 `Brain`），顺序：外观、模型、记忆、账号
   - 验证：切换到记忆面板显示 `MemoryPane`；`tsc`、`vitest`、`vite build` 通过
@@ -139,13 +139,13 @@
 
 ## 阶段 6：集成验证与收尾
 
-- [ ] 19. 快照语义的集成测试
+- [-] 19. 快照语义的集成测试
   - File: tantalum-examples/src/test/java/tantalum/examples/MemorySnapshotTest.java
   - 脚本化模型：第一轮调用 `memory_write`，第二轮回答；断言同一运行第二次 `CallModel.prompt().system()` 不含新索引行；下一个运行的 `ContextAssembled.system` 含它；回放（`Replay.run`）得到的 prompt 与实时逐个相同且不读文件（删掉记忆目录后回放仍相同）
   - _Requirements: 2.3, 2.4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“快照语义的集成测试”，满足需求 2.3、2.4，参照 `TenLoopIntegrationTest` 和 `ScriptedModelClient` | Restrictions: 不用真实模型 | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 20. e2e：脚本化模型写记忆，面板里看、删
+- [-] 20. e2e：脚本化模型写记忆，面板里看、删
   - File: tantalum-examples/src/test/java/tantalum/examples/E2eModel.java, console/e2e/memory.spec.ts
   - `E2eModel` 新增关键词 `remember`：调用 `memory_write` 后回答“已记住”；e2e：发送含 `remember` 的消息 → 打开设置 › 记忆 → 看到条目 → 展开正文 → 删除确认 → 列表为空
   - 验证：`pnpm e2e` 全过（原 9 条 + 新增）
