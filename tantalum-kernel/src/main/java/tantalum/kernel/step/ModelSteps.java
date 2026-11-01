@@ -42,7 +42,7 @@ public final class ModelSteps {
 
     static final String AWAITING_CONTEXT = "AwaitingContext";
     static final String AWAITING_MODEL = "AwaitingModel";
-    static final String CONTEXT_UPDATE = "[Context update, not written by the user. This replaces the shared knowledge, "
+    public static final String CONTEXT_UPDATE = "[Context update, not written by the user. This replaces the shared knowledge, "
             + "project instructions and memory index given earlier.]\n\n";
 
     private ModelSteps() {}
