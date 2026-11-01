@@ -94,13 +94,13 @@
 
 ## 阶段 4：接口
 
-- [-] 13. `MemoryApiTest`（先失败）
+- [x] 13. `MemoryApiTest`（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/web/MemoryApiTest.java
   - 覆盖：列表（含 `used`/`max`、倒序）、详情、新增（201；400 的每种原因；凭据过滤）、删除（204；404）；alice 访问 bob 的名字和不存在的名字同为 404、同一文案；未登录 401；POST/DELETE 缺 `Origin` 被拒
   - _Requirements: 6.1–6.5, 7.3_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“MemoryApiTest（先失败）”，满足需求 6.1–6.5、7.3，用 `TestServer` | Restrictions: 只写测试 | Success: 编译通过、因缺实现失败 | 完成后标 [x] 并 log-implementation_
 
-- [-] 14. `MemoryController` 实现
+- [x] 14. `MemoryController` 实现
   - File: tantalum-shell/src/main/java/tantalum/shell/web/MemoryController.java
   - 四个接口；身份 `SecurityContextHolder`；名称不合法按 404；校验与工具同源（`MemoryFormat`、`CredentialGuard`、`MemoryStore.write` 的拒绝原因）
   - 验证：任务 13 全过；`AuthApiTest` 等现有接口测试仍过
@@ -109,7 +109,7 @@
 
 ## 阶段 5：前端
 
-- [ ] 15. 类型、客户端函数、查询 hook、文案
+- [-] 15. 类型、客户端函数、查询 hook、文案
   - File: console/src/api/types.ts, console/src/api/client.ts, console/src/settings/useMemories.ts, console/src/text/zh.ts, console/src/api/client.test.ts
   - `MemorySummary`、`MemoryEntry`、`MemoryType`；`listMemories`、`getMemory`、`createMemory`、`deleteMemory`；查询键 `["memory"]`、`["memory", name]`，写后 invalidate；`settings.memory.*` 文案（标题、类型名、空状态、已用 n/N、删除确认、表单标签、错误）
   - 验证：`client.test.ts` 覆盖四个函数的路径、方法和 404 处理；`tsc` 通过
