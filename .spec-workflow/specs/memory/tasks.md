@@ -49,28 +49,28 @@
 
 ## 阶段 2：进入上下文
 
-- [-] 7. `KnowledgeBase`：测试和实现
+- [x] 7. `KnowledgeBase`：测试和实现
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/KnowledgeBaseTest.java, tantalum-shell/src/main/java/tantalum/shell/memory/KnowledgeBase.java
   - 读目录下 `*.md`（不递归，按文件名排序）拼成一段，总字节上限按文件名顺序截断并记警告；目录未配置或不存在返回空串并记一次警告；按最大修改时间缓存
   - 验证：排序、截断、缺失、缓存命中后文件变化能被读到
   - _Requirements: 4.4, 5.1, 5.2_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“KnowledgeBase 测试和实现”，满足需求 4.4、5.1、5.2 | Restrictions: 只读；不跟随符号链接到目录外（`Files.isRegularFile` + `NOFOLLOW_LINKS`） | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [-] 8. `MemoryGuidance` 固定指引文本
+- [x] 8. `MemoryGuidance` 固定指引文本
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryGuidance.java
   - 内容按需求 7.1：四种类型各记什么、只记跨会话有用的事实、写前先看索引、同名覆盖、用户让记/让忘、不记一次性细节、不记凭据、正文按需 `memory_read`；英文（与基础提示一致），一个常量
   - 验证：文本里出现三个工具名和四种类型名（单元断言放进任务 9 的测试）
   - _Requirements: 7.1_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: 写过 agent system prompt 的工程师 | Task: 完成“MemoryGuidance 固定指引文本”，满足需求 7.1 | Restrictions: 不带任何会变化的内容（时间、计数）；控制在 25 行以内 | Success: 常量存在、措辞清楚 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 9. `ContextHandler` 扩展：测试和实现
+- [x] 9. `ContextHandler` 扩展：测试和实现
   - File: tantalum-shell/src/test/java/tantalum/shell/handler/ContextHandlerTest.java, tantalum-shell/src/main/java/tantalum/shell/handler/ContextHandler.java
   - system = 基础 + 指引 + 共享知识 + `AGENTS.md` + 索引，每段有才加，标题固定；构造器加 `MemoryStores`、`KnowledgeBase`
   - 验证：顺序正确；索引为空时没有记忆段；两个用户各自只拿到自己的索引；用 `PromptProjection.project` 断言钩子追加文字落在索引之后；现有测试仍过
   - _Requirements: 2.1, 2.2, 2.5, 2.6, 5.4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“ContextHandler 扩展”，满足需求 2.1、2.2、2.5、2.6、5.4，遵守 design.md 的“system 组装顺序” | Restrictions: 只改这两个文件和必要的测试夹具；不改 kernel | Success: 测试通过 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 10. `Engine` 装配 `MemoryStores`、`KnowledgeBase`
+- [x] 10. `Engine` 装配 `MemoryStores`、`KnowledgeBase`
   - File: tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java
   - 在 `assemble()` 创建两者并传给 `ContextHandler`；`TestServer`、`E2eServer` 不需要改（走属性默认值）
   - 验证：`mvn -o -q -pl tantalum-shell test` 全过；`StartupTest`/`TenLoopIntegrationTest` 不受影响
@@ -79,13 +79,13 @@
 
 ## 阶段 3：工具
 
-- [ ] 11. 三个记忆工具的测试（先失败）
+- [-] 11. 三个记忆工具的测试（先失败）
   - File: tantalum-shell/src/test/java/tantalum/shell/memory/MemoryToolsTest.java
   - 覆盖：`memory_write` 新建/覆盖的返回文案；类型错、描述空、超长、记忆已满、像凭据各自的错误结果；`memory_read` 存在/不存在；`memory_delete` 存在/不存在；三者 schema 的 `required`；结果不含绝对路径；两个用户的 `ToolContext` 互不可见
   - _Requirements: 3.1–3.6, 4.2, 7.2, 8.4_
   - _Prompt: Implement the task for spec memory, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 测试工程师 | Task: 完成“三个记忆工具的测试（先失败）”，满足列出的需求，风格参照 `BuiltinToolsTest` | Restrictions: 只写测试 | Success: 编译通过、因缺实现失败 | 完成后标 [x] 并 log-implementation_
 
-- [ ] 12. `MemoryWriteTool`、`MemoryReadTool`、`MemoryDeleteTool` 实现并注册
+- [-] 12. `MemoryWriteTool`、`MemoryReadTool`、`MemoryDeleteTool` 实现并注册
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryWriteTool.java, MemoryReadTool.java, MemoryDeleteTool.java, tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java
   - `server()`=`memory`，并发 16，`isConcurrencySafe` true；用 `ToolArguments.schema(required, optional)`；在 `Engine.assemble()` 注册到 `ToolCatalog`（内置工具之后、插件之前）
   - 验证：任务 11 全过；`ToolCatalogTest`、`ConcurrencyStressTest` 仍过（它的 `ReadOnlyHook` 名单没有 memory 工具，拦下属正常）
