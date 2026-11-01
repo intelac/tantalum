@@ -1,6 +1,6 @@
 {
   "filePath": ".spec-workflow/specs/ops-hardening/requirements.md",
-  "currentVersion": 1,
+  "currentVersion": 2,
   "snapshots": [
     {
       "version": 1,
@@ -9,6 +9,14 @@
       "trigger": "initial",
       "approvalId": "approval_1793530571675_qzl1ojhnk",
       "approvalTitle": "ops-hardening spec：需求文档"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T12:11:58.823Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793533528675_s39io6gas",
+      "approvalTitle": "ops-hardening spec：需求文档（逐项标出处）"
     }
   ]
 }
