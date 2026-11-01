@@ -58,6 +58,7 @@ public final class HookChain {
             case ON_FAILURE -> hook.onFailure(state, context);
             case BEFORE_RUN_END -> hook.beforeRunEnd(state, context);
             case ON_WORK_RESULT -> hook.onWorkResult(state, context);
+            case BEFORE_COMPACT -> hook.beforeCompact(state, context);
         };
     }
 }
