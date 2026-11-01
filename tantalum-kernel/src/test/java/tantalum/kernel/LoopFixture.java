@@ -35,6 +35,8 @@ public final class LoopFixture {
 
     public final Kernel kernel;
     public final List<EventEnvelope> journal = new ArrayList<>();
+    /** 实时路径发出的全部命令，按顺序；回放测试拿它对比。 */
+    public final List<Command> commands = new ArrayList<>();
     public KernelState state = KernelState.empty();
     public Decision last;
     private long seq;
@@ -56,6 +58,7 @@ public final class LoopFixture {
         journal.add(envelope);
         last = kernel.step(state, envelope);
         state = last.newState();
+        commands.addAll(last.commands());
         return last;
     }
 

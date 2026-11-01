@@ -59,21 +59,21 @@
 
 ## 阶段 3：内核步骤
 
-- [ ] 8. 自动压缩步骤测试（先失败）
+- [x] 8. 自动压缩步骤测试（先失败）
   - File: tantalum-kernel/src/test/java/tantalum/kernel/step/CompactStepsTest.java, tantalum-kernel/src/test/java/tantalum/kernel/LoopFixture.java
   - 经 `Kernel.step` 逐步断言：触发后发摘要 CallModel（禁用工具、限长、头部加指令）→ 通过后发普通 CallModel 且不再判断；锚点清空、收到回复后重建；摘要被截断/含工具/为空/没变小 → 继续原调用且本运行不再压缩；取消摘要调用视图不变、运行 CANCELLED；`beforeCompact` Stop；无设置的会话不压缩；回放 prompt 相同
   - 验证：编译通过，因缺实现失败
   - _Requirements: 1.1–1.4, 3.1, 3.2, 3.4, 4.1_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“自动压缩步骤测试（先失败）”，满足需求 1.1–1.4, 3.1, 3.2, 3.4, 4.1，遵守 design.md | Restrictions: 只做这一件事；零 mock | Success: 编译通过，因缺实现失败 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 9. `CompactSteps`、`PromptProjection`、`HookPoint.BEFORE_COMPACT` 实现
+- [x] 9. `CompactSteps`、`PromptProjection`、`HookPoint.BEFORE_COMPACT` 实现
   - File: tantalum-kernel/src/main/java/tantalum/kernel/step/CompactSteps.java, ModelSteps.java, tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java, tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPoint.java, KernelHook.java, HookChain.java, tantalum-kernel/src/main/java/tantalum/kernel/table/BuiltinSteps.java, tantalum-value/src/main/java/tantalum/value/hook/HookContext.java
   - `AwaitingSummary` 两行注册；`freezeContext` 存设置；`modelReplied` 设锚点；`modelInterrupted` 在压缩中不追加文本
   - 验证：上一任务全过；现有 kernel 测试全过
   - _Requirements: 同上_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“CompactSteps、PromptProjection、BEFORE_COMPACT 实现”，遵守 design.md | Restrictions: 只做这一件事；历史只追加；不引用供应商类型 | Success: 上一任务全过；现有 kernel 测试全过 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 10. 超长恢复和截断标记
+- [x] 10. 超长恢复和截断标记
   - File: tantalum-kernel/src/test/java/tantalum/kernel/step/CompactStepsTest.java, ModelStepsTest.java, tantalum-kernel/src/main/java/tantalum/kernel/step/RetrySteps.java, ModelSteps.java, RunEnd.java
   - `CONTEXT_OVERFLOW` 且未恢复过 → K = 0 压缩并重试一次；无可压缩或再次超长 → FAILED 带原始错误；单个超大工具结果经截断后重试成功；`MAX_TOKENS` 无工具调用 → COMPLETED 带 `reply truncated`
   - 验证：逐步断言全过

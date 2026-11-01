@@ -74,11 +74,11 @@ public final class SummaryPrompt {
      * 规则 7。通过返回 null，否则返回原因。{@code headEstimate} 是头部的估算，摘要不能比它大。
      */
     public static String validate(List<ContentBlock> content, StopReason stop, long headEstimate) {
-        if (stop != StopReason.END_TURN) {
-            return "summary did not end normally: " + stop;
-        }
         if (content.stream().anyMatch(ToolCallBlock.class::isInstance)) {
             return "summary tried to call a tool";
+        }
+        if (stop != StopReason.END_TURN) {
+            return "summary did not end normally: " + stop;
         }
         String text = text(content);
         if (text.isBlank()) {

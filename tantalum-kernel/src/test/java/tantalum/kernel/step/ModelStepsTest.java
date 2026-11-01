@@ -108,6 +108,18 @@ class ModelStepsTest {
         assertInstanceOf(DoWork.class, loop.onlyCommand());
     }
 
+    /** 回复因输出上限被截断：运行仍完成，但带标记（决定 D5）。 */
+    @Test
+    void truncatedReplyCompletesWithAMarker() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("half of the ans"), StopReason.MAX_TOKENS, "m", null));
+        Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
+        assertEquals(EndReason.COMPLETED, ended.reason());
+        assertEquals(ModelSteps.TRUNCATED, ended.detail());
+        assertEquals(2, loop.session().messages().size(), "the partial text is still the reply");
+    }
+
     @Test
     void replyWithoutToolsCompletesTheRun() {
         LoopFixture loop = new LoopFixture();

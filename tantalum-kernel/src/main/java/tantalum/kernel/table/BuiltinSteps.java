@@ -1,6 +1,7 @@
 package tantalum.kernel.table;
 
 import tantalum.kernel.step.CancelSteps;
+import tantalum.kernel.step.CompactSteps;
 import tantalum.kernel.step.ModelSteps;
 import tantalum.kernel.step.RetrySteps;
 import tantalum.kernel.step.ToolSteps;
@@ -34,6 +35,8 @@ public final class BuiltinSteps {
         table.register("AwaitingContext", ContextAssembled.TYPE, ModelSteps::contextAssembled);
         table.register("AwaitingModel", ModelReplied.TYPE, ModelSteps::modelReplied);
         table.register("AwaitingModel", ModelFailed.TYPE, RetrySteps::modelFailed);
+        table.register("AwaitingSummary", ModelReplied.TYPE, CompactSteps::summaryReplied);
+        table.register("AwaitingSummary", ModelFailed.TYPE, CompactSteps::summaryFailed);
         table.register("AwaitingTools", ToolFinished.TYPE, ToolSteps::toolFinished);
         table.register("AwaitingRetry", TimerFired.TYPE, RetrySteps::timerFired);
         table.register("AwaitingWork", WorkDone.TYPE, WorkSteps::workDone);

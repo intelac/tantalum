@@ -34,4 +34,9 @@ public interface KernelHook {
     default HookResult onWorkResult(KernelState state, HookContext context) {
         return Allow.PLAIN;
     }
+
+    /** 压缩前。只能放行或 {@code Stop}；{@code NeedWork} 和 {@code PromptPatch} 在这里不生效，计划在 {@code context.plan()}。 */
+    default HookResult beforeCompact(KernelState state, HookContext context) {
+        return Allow.PLAIN;
+    }
 }

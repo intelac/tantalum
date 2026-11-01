@@ -34,8 +34,12 @@ public final class RunEnd {
         return out.decision();
     }
 
-    /** 模型不再要工具时调用；{@code work} 是刚完成的工作，钩子据此判断是否放行。 */
     static void beforeEnd(Outcome out, RunState run, WorkDone work) {
+        beforeEnd(out, run, work, null);
+    }
+
+    /** 模型不再要工具时调用；{@code work} 是刚完成的工作，钩子据此判断是否放行；{@code detail} 随 COMPLETED 记录，如回复被截断。 */
+    static void beforeEnd(Outcome out, RunState run, WorkDone work, String detail) {
         if (!run.pendingSteers().isEmpty()) {
             ModelSteps.callModel(out, run, work);
             return;
@@ -46,7 +50,7 @@ public final class RunEnd {
         switch (hook.result()) {
             case Stop stop -> finish(out, run, EndReason.STOPPED, stop.reason());
             case NeedWork need -> WorkSteps.start(out, run, need, HookPoint.BEFORE_RUN_END);
-            default -> finish(out, run, EndReason.COMPLETED, null);
+            default -> finish(out, run, EndReason.COMPLETED, detail);
         }
     }
 

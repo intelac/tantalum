@@ -28,21 +28,27 @@ import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
+import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.Awaiting;
+import tantalum.value.state.Compacting;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.UsageAnchor;
 
 /** 提交、组装上下文和模型调用的处理函数。 */
 public final class ModelSteps {
 
     static final String AWAITING_CONTEXT = "AwaitingContext";
     static final String AWAITING_MODEL = "AwaitingModel";
-    public static final String CONTEXT_UPDATE = "[Context update, not written by the user. This replaces the shared knowledge, "
+    /** COMPLETED 的详情：回复因输出上限被截断。 */
+    public static final String TRUNCATED = "reply truncated";
+    public static final String CONTEXT_UPDATE ="[Context update, not written by the user. This replaces the shared knowledge, "
             + "project instructions and memory index given earlier.]\n\n";
 
     private ModelSteps() {}
@@ -132,8 +138,15 @@ public final class ModelSteps {
         return frozen;
     }
 
-    /** 调用模型前经过 {@code beforeModelCall}；待处理的 {@code steer} 在这里并入消息。 */
     static void callModel(Outcome out, RunState pending, WorkDone work) {
+        callModel(out, pending, work, true);
+    }
+
+    /**
+     * 调用模型前经过 {@code beforeModelCall}；待处理的 {@code steer} 在这里并入消息。
+     * 放行后先看要不要自动压缩（规则 2）；{@code compactionAllowed} 为 false 是压缩刚结束后的那次调用，不再判断（规则 3.1）。
+     */
+    static void callModel(Outcome out, RunState pending, WorkDone work, boolean compactionAllowed) {
         RunState run = pending;
         for (Message steer : run.pendingSteers()) {
             out.append(run.ref(), steer);
@@ -148,6 +161,12 @@ public final class ModelSteps {
             case Stop stop -> RunEnd.finish(out, run, EndReason.STOPPED, stop.reason());
             case NeedWork need -> WorkSteps.start(out, run, need, HookPoint.BEFORE_MODEL_CALL);
             case Allow allow -> {
+                if (compactionAllowed) {
+                    run = CompactSteps.tryStart(out, run, allow.patch(), Compacting.Trigger.AUTO, null, null);
+                    if (run == null) {
+                        return;
+                    }
+                }
                 Prompt prompt = PromptProjection.project(run, out.session(run.ref()), allow.patch());
                 CommandId id = out.nextCommandId();
                 out.emit(new CallModel(id, run.ref(), prompt));
@@ -159,15 +178,17 @@ public final class ModelSteps {
     public static Decision modelReplied(StepContext context) {
         ModelReplied event = (ModelReplied) context.envelope().event();
         Outcome out = new Outcome(context);
-        RunState run = context.run().withRetries(0);
+        RunState run = context.run().withRetries(0).withOverflowRecovered(false);
         out.put(run);
         out.append(run.ref(), new Message(Role.ASSISTANT, event.content(), false));
         out.state = UsageProjection.apply(out.state, run.ref().principal(), context.envelope().at(), event.usage());
+        anchor(out, run, event.usage());
 
         List<ToolCallBlock> calls = event.content().stream()
                 .filter(ToolCallBlock.class::isInstance).map(ToolCallBlock.class::cast).toList();
         if (calls.isEmpty()) {
-            RunEnd.beforeEnd(out, run, null);
+            // 回复因输出上限被截断：运行照常完成，但带标记，界面据此提示（决定 D5）。
+            RunEnd.beforeEnd(out, run, null, event.stop() == StopReason.MAX_TOKENS ? TRUNCATED : null);
         } else {
             ToolSteps.start(out, run, calls);
         }
@@ -189,12 +210,21 @@ public final class ModelSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        if (!event.text().isEmpty()) {
+        // 被中断的是摘要调用时，半截摘要不是回复，不进历史。
+        if (!event.text().isEmpty() && run.compacting() == null) {
             out.append(run.ref(), new Message(Role.ASSISTANT, List.of(new TextBlock(event.text())), true));
         }
         if (awaited) {
-            RunEnd.finish(out, run, EndReason.CANCELLED, "model call interrupted");
+            RunEnd.finish(out, run.withCompacting(null), EndReason.CANCELLED, "model call interrupted");
         }
         return out.decision();
+    }
+
+    /** 规则 1 的锚点：有实测用量就记下 prompt 加输出和此刻的消息数，没有就清空，之后全部估算。 */
+    private static void anchor(Outcome out, RunState run, TokenUsage usage) {
+        SessionState session = out.session(run.ref());
+        UsageAnchor anchor = usage == null ? null
+                : new UsageAnchor(usage.promptTotal() + usage.output(), session.messages().size());
+        out.state = out.state.with(session.withAnchor(anchor));
     }
 }
