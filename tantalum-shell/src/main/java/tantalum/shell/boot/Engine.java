@@ -40,6 +40,8 @@ import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
+import tantalum.shell.mcp.McpRegistry;
+import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
@@ -96,6 +98,7 @@ public final class Engine implements AutoCloseable {
     private final ExternalGate gate;
     private final SseHub hub;
     private final MemoryStores memories;
+    private final McpRegistry mcp;
     private final TurnQuery turns;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
@@ -119,6 +122,7 @@ public final class Engine implements AutoCloseable {
             this.turns = parts.turns;
             this.hub = parts.hub;
             this.memories = parts.memories;
+            this.mcp = parts.mcp;
             this.writer = parts.writer;
             this.gate = parts.gate;
             this.input = parts.input;
@@ -134,7 +138,7 @@ public final class Engine implements AutoCloseable {
     }
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalWriter writer,
-                            ExternalGate gate, InputRing input, OutputRing output, MemoryStores memories) {}
+                            ExternalGate gate, InputRing input, OutputRing output, MemoryStores memories, McpRegistry mcp) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -152,6 +156,8 @@ public final class Engine implements AutoCloseable {
         KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
         MemoryTools.all(memories).forEach(catalog::register);
         tools.forEach(catalog::register);
+        McpRegistry mcp = new McpRegistry(McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv));
+        catalog.setSource(mcp);
 
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
@@ -167,7 +173,7 @@ public final class Engine implements AutoCloseable {
         InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
-                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge),
+                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge, mcp.fixedNote()),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
@@ -183,7 +189,7 @@ public final class Engine implements AutoCloseable {
             cleanroom.onEvent(slot, sequence, endOfBatch);
             releaseIfExternal(envelope);
         });
-        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output, memories);
+        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output, memories, mcp);
     }
 
     private static void closeQuietly(AutoCloseable resource) {
@@ -267,6 +273,11 @@ public final class Engine implements AutoCloseable {
         return view.current();
     }
 
+    /** 某个工具当前是否对模型可见。 */
+    public boolean catalogHas(String tool) {
+        return mcp.find(tool).isPresent();
+    }
+
     /** 每用户的长期记忆，接口和工具共用同一份实例。 */
     public MemoryStores memories() {
         return memories;
@@ -297,7 +308,7 @@ public final class Engine implements AutoCloseable {
     public void close() throws IOException, SQLException {
         Exception first = null;
         for (AutoCloseable step : List.<AutoCloseable>of(
-                () -> input.shutdown(DRAIN), () -> output.shutdown(DRAIN), journal, lock)) {
+                mcp, () -> input.shutdown(DRAIN), () -> output.shutdown(DRAIN), journal, lock)) {
             try {
                 step.close();
             } catch (Exception failure) {

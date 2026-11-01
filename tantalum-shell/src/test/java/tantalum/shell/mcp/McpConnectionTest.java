@@ -67,7 +67,7 @@ class McpConnectionTest {
 
     private McpConnection connect(String url, String token, Duration timeout) {
         connection = new McpConnection(settings(url, token, timeout), FAST,
-                tools -> published.add(tools.stream().map(McpSchema.Tool::name).toList()));
+                tools -> published.add(tools.stream().map(McpSchema.Tool::name).toList())).start();
         return connection;
     }
 
@@ -165,7 +165,7 @@ class McpConnectionTest {
         // 探活间隔很长，连接还不知道会话已失效，第一次调用才发现。
         McpConnection.Policy noPing = new McpConnection.Policy(Duration.ofMillis(20), Duration.ofMillis(100), 5,
                 Duration.ofSeconds(60), Duration.ofMillis(100), Duration.ofMinutes(10));
-        connection = new McpConnection(settings(server.url(), null, Duration.ofSeconds(5)), noPing, tools -> { });
+        connection = new McpConnection(settings(server.url(), null, Duration.ofSeconds(5)), noPing, tools -> { }).start();
         McpConnection opened = connection;
         await(() -> opened.state() == McpConnection.State.READY);
 

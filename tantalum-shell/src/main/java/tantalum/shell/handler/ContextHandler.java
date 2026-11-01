@@ -30,9 +30,17 @@ public final class ContextHandler implements Handler {
     private final ToolCatalog catalog;
     private final MemoryStores memories;
     private final KnowledgeBase knowledge;
+    private final String fixedNote;
 
     public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
                           KnowledgeBase knowledge) {
+        this(workspaces, basePrompt, catalog, memories, knowledge, "");
+    }
+
+    /** {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。 */
+    public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
+                          KnowledgeBase knowledge, String fixedNote) {
+        this.fixedNote = fixedNote;
         this.workspaces = workspaces;
         this.basePrompt = basePrompt;
         this.catalog = catalog;
@@ -58,6 +66,7 @@ public final class ContextHandler implements Handler {
         }
         StringBuilder system = new StringBuilder(basePrompt);
         append(system, MemoryGuidance.TEXT.strip());
+        append(system, fixedNote);
         append(system, dynamic.toString());
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), dynamic.toString());
     }

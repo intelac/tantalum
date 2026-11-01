@@ -36,7 +36,7 @@ final class McpConnection implements AutoCloseable {
     private final Policy policy;
     private final Consumer<List<McpSchema.Tool>> onTools;
     private final Object lock = new Object();
-    private final Thread supervisor;
+    private volatile Thread supervisor;
     private volatile State state = State.CONNECTING;
     private volatile List<McpSchema.Tool> tools = List.of();
     private volatile McpSyncClient client;
@@ -46,7 +46,12 @@ final class McpConnection implements AutoCloseable {
         this.server = server;
         this.policy = policy;
         this.onTools = onTools;
-        this.supervisor = Thread.ofVirtual().name("mcp-" + server.name()).start(this::supervise);
+    }
+
+    /** 和构造分开：回调可能立刻发生，调用方要先把自己准备好。 */
+    McpConnection start() {
+        supervisor = Thread.ofVirtual().name("mcp-" + server.name()).start(this::supervise);
+        return this;
     }
 
     State state() {
@@ -265,6 +270,8 @@ final class McpConnection implements AutoCloseable {
     @Override
     public void close() {
         state = State.CLOSED;
-        supervisor.interrupt();
+        if (supervisor != null) {
+            supervisor.interrupt();
+        }
     }
 }

@@ -47,7 +47,7 @@ class ToolCatalogTest {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool("b", "s", 1, false));
         catalog.register(tool("a", "s", 1, false));
-        assertEquals(java.util.List.of("b", "a"), catalog.specs().stream().map(spec -> spec.name()).toList());
+        assertEquals(java.util.List.of("a", "b"), catalog.specs().stream().map(spec -> spec.name()).toList());
         assertTrue(catalog.find("a").isPresent());
         assertFalse(catalog.find("nope").isPresent());
     }
