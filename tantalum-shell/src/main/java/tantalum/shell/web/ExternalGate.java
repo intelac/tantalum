@@ -1,14 +1,13 @@
 package tantalum.shell.web;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.value.id.Principal;
 
-/** 外部事件的入口限额。超限直接拒绝，不排队，这样 Input Ring 总有内部结果的位置。 */
+/** 外部事件的入口限额。超限直接拒绝，不排队，这样 Input Ring 总有内部结果的位置。所有方法都在同一把锁下。 */
 public final class ExternalGate {
 
     public enum Verdict {
@@ -20,9 +19,10 @@ public final class ExternalGate {
     private final Loop limits;
     private final IntSupplier activeRuns;
     private final BooleanSupplier halted;
-    private final Map<Principal, AtomicInteger> perUser = new ConcurrentHashMap<>();
-    private final AtomicInteger total = new AtomicInteger();
-    private final AtomicInteger newRuns = new AtomicInteger();
+    /** 只保存在途数大于 0 的用户，归零即删，不随见过的用户数增长。 */
+    private final Map<Principal, Integer> perUser = new HashMap<>();
+    private int total;
+    private int newRuns;
 
     public ExternalGate(Loop limits, IntSupplier activeRuns, BooleanSupplier halted) {
         this.limits = limits;
@@ -35,28 +35,40 @@ public final class ExternalGate {
         if (halted.getAsBoolean()) {
             return Verdict.HALTED;
         }
-        AtomicInteger user = perUser.computeIfAbsent(principal, key -> new AtomicInteger());
-        if (user.get() >= limits.maxUserInFlight() || total.get() >= limits.maxExternalInFlight()) {
+        int user = perUser.getOrDefault(principal, 0);
+        if (user >= limits.maxUserInFlight() || total >= limits.maxExternalInFlight()) {
             return Verdict.OVER_LIMIT;
         }
-        if (needsNewRun && activeRuns.getAsInt() + newRuns.get() >= limits.maxActiveRuns()) {
+        if (needsNewRun && activeRuns.getAsInt() + newRuns >= limits.maxActiveRuns()) {
             return Verdict.OVER_LIMIT;
         }
-        user.incrementAndGet();
-        total.incrementAndGet();
+        perUser.put(principal, user + 1);
+        total++;
         if (needsNewRun) {
-            newRuns.incrementAndGet();
+            newRuns++;
         }
         return Verdict.ADMITTED;
     }
 
-    /** 事件被内核处理后调用；它产生的运行此后计入 {@code activeRuns}。 */
+    /** 事件被内核处理后调用；它产生的运行此后计入 {@code activeRuns}。多余的释放不会让计数变负。 */
     public synchronized void release(Principal principal) {
-        perUser.computeIfAbsent(principal, key -> new AtomicInteger()).decrementAndGet();
-        total.decrementAndGet();
+        Integer user = perUser.get(principal);
+        if (user == null) {
+            return;
+        }
+        if (user <= 1) {
+            perUser.remove(principal);
+        } else {
+            perUser.put(principal, user - 1);
+        }
+        total = Math.max(0, total - 1);
     }
 
     public synchronized void releaseNewRun() {
-        newRuns.decrementAndGet();
+        newRuns = Math.max(0, newRuns - 1);
+    }
+
+    synchronized int trackedUsers() {
+        return perUser.size();
     }
 }

@@ -58,4 +58,15 @@ class WorkspaceTest {
     void rejectsMissingFile() {
         assertThrows(IllegalArgumentException.class, () -> workspace.resolve("missing.txt"));
     }
+
+    /** 目录外存在的文件和不存在的文件必须报同一句话，否则工具调用方能探测服务器上的文件布局。 */
+    @Test
+    void outsideAndMissingPathsAreIndistinguishable() {
+        String existing = assertThrows(IllegalArgumentException.class, () -> workspace.resolve("../secret.txt")).getMessage();
+        String missing = assertThrows(IllegalArgumentException.class, () -> workspace.resolve("../nope.txt")).getMessage();
+        String inside = assertThrows(IllegalArgumentException.class, () -> workspace.resolve("nope.txt")).getMessage();
+        assertEquals(existing.replace("secret", "X"), missing.replace("nope", "X"));
+        assertEquals(missing.replace("../", ""), inside);
+        org.junit.jupiter.api.Assertions.assertFalse(existing.contains(temp.toString()));
+    }
 }

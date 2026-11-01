@@ -185,7 +185,7 @@ public class ApiController {
         }
         List<Map<String, Object>> runs = engine.state().runs().values().stream()
                 .filter(run -> run.ref().session().equals(id))
-                .sorted(Comparator.comparingLong(run -> Long.parseLong(run.ref().run().value().substring(4))))
+                .sorted(Comparator.comparingLong(run -> runOrder(run.ref().run())))
                 .map(ApiController::describe).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("runs", runs);
@@ -235,35 +235,56 @@ public class ApiController {
         return emitter;
     }
 
-    /** 心跳时检查用户是否被停用：停用可能来自另一个进程的命令行，这边收不到通知。 */
+    /** 运行 ID 由内核按事件序号生成（{@code run-<seq>}）；格式不对的排在最前，不让整个接口 500。 */
+    static long runOrder(RunId run) {
+        String value = run.value();
+        if (!value.startsWith("run-")) {
+            return -1;
+        }
+        try {
+            return Long.parseLong(value.substring(4));
+        } catch (NumberFormatException odd) {
+            return -1;
+        }
+    }
+
+    /** 心跳时检查用户是否被停用：停用可能来自另一个进程的命令行，这边收不到通知。无论怎么退出，订阅都要注销。 */
     private void pump(Principal user, SseHub.Subscription subscription, SseEmitter emitter) {
         try {
-            while (!subscription.closed()) {
-                SseMessage message = subscription.poll(heartbeat.toMillis(), TimeUnit.MILLISECONDS);
-                if (message == null) {
-                    if (subscription.closed()) {
-                        break;
-                    }
-                    if (users.isDisabled(user.value())) {
-                        subscription.close();
-                        break;
-                    }
-                    emitter.send(SseEmitter.event().comment("keep-alive"));
-                    continue;
-                }
-                SseEmitter.SseEventBuilder event = SseEmitter.event().name(message.event()).data(message.data(), MediaType.TEXT_PLAIN);
-                if (message.id() != null) {
-                    event.id(message.id());
-                }
-                emitter.send(event);
-            }
-            emitter.complete();
+            stream(user, subscription, emitter);
         } catch (IOException | SQLException | IllegalStateException gone) {
-            subscription.close();
+            // 客户端走了，或容器已经结束这次响应。
         } catch (InterruptedException stopping) {
-            subscription.close();
             Thread.currentThread().interrupt();
+        } catch (RuntimeException failure) {
+            emitter.completeWithError(failure);
+        } finally {
+            subscription.close();
         }
+    }
+
+    private void stream(Principal user, SseHub.Subscription subscription, SseEmitter emitter)
+            throws IOException, SQLException, InterruptedException {
+        while (!subscription.closed()) {
+            SseMessage message = subscription.poll(heartbeat.toMillis(), TimeUnit.MILLISECONDS);
+            if (message == null) {
+                if (subscription.closed()) {
+                    break;
+                }
+                if (users.isDisabled(user.value())) {
+                    subscription.close();
+                    break;
+                }
+                emitter.send(SseEmitter.event().comment("keep-alive"));
+                continue;
+            }
+            SseEmitter.SseEventBuilder event = SseEmitter.event().name(message.event()).data(message.data(), MediaType.TEXT_PLAIN);
+            if (message.id() != null) {
+                event.id(message.id());
+            }
+            emitter.send(event);
+        }
+        emitter.complete();
     }
 
     /** 在 Web 服务器开始停止之前断开 SSE，否则关闭时要等这些长连接结束。 */

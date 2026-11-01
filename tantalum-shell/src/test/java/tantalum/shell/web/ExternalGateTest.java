@@ -40,6 +40,33 @@ class ExternalGateTest {
         assertEquals(Verdict.ADMITTED, gate.admit(ALICE, false));
     }
 
+    /** 多余的释放不能把计数变负，否则之后的限额形同虚设；归零的用户不留条目。 */
+    @Test
+    void extraReleasesDoNotWeakenTheLimits() {
+        ExternalGate gate = gate(4, 1, 1);
+        gate.release(ALICE);
+        gate.releaseNewRun();
+        assertEquals(0, gate.trackedUsers());
+        assertEquals(Verdict.ADMITTED, gate.admit(ALICE, true));
+        assertEquals(1, gate.trackedUsers());
+        gate.release(ALICE);
+        gate.release(ALICE);
+        gate.releaseNewRun();
+        gate.releaseNewRun();
+        assertEquals(0, gate.trackedUsers());
+        assertEquals(Verdict.ADMITTED, gate.admit(ALICE, false));
+        assertEquals(Verdict.OVER_LIMIT, gate.admit(ALICE, false));
+        assertEquals(Verdict.OVER_LIMIT, gate.admit(BOB, false));
+    }
+
+    @Test
+    void rejectedRequestsLeaveNoEntry() {
+        ExternalGate gate = gate(4, 1, 1);
+        gate.admit(ALICE, false);
+        assertEquals(Verdict.OVER_LIMIT, gate.admit(BOB, false));
+        assertEquals(1, gate.trackedUsers());
+    }
+
     @Test
     void totalLimitIsEnforced() {
         ExternalGate gate = gate(4, 8, 1);
