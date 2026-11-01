@@ -58,11 +58,25 @@ public class SecurityConfig {
     }
 
     /** 不只绑定本机时，Cookie 必须带 Secure，否则会话会明文经过网络。 */
+    /** {@code server.address} 没设时 Spring 绑定全部网卡，不算回环。 */
     public static void requireSecureCookie(String address, boolean secure) {
-        boolean loopback = address == null || address.equals("localhost") || address.equals("::1") || address.startsWith("127.");
-        if (!loopback && !secure) {
+        if (!isLoopback(address) && !secure) {
             throw new IllegalStateException("server.address is " + address + " but the session cookie is not Secure. "
                     + "Serve over HTTPS and set server.servlet.session.cookie.secure=true.");
+        }
+    }
+
+    static boolean isLoopback(String address) {
+        if (address == null || address.isBlank()) {
+            return false;
+        }
+        if (address.equals("localhost")) {
+            return true;
+        }
+        try {
+            return java.net.InetAddress.getByName(address).isLoopbackAddress();
+        } catch (java.net.UnknownHostException unknown) {
+            return false;
         }
     }
 

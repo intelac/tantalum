@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -37,6 +39,7 @@ import tools.jackson.databind.json.JsonMapper;
 public final class OpenAiClient implements ModelClient {
 
     private static final String PROVIDER = "openai";
+    private static final int MAX_ERROR_BODY = 4096;
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
     private static final class ToolFragments {
@@ -52,8 +55,9 @@ public final class OpenAiClient implements ModelClient {
     private final Duration firstChunk;
     private final Duration betweenChunks;
     private final OverflowRules overflow;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http;
 
+    /** 连接和响应头都受首块超时约束：看门狗只能关已拿到的响应体，服务端接受连接却不回头部时它无能为力。 */
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
                         Duration betweenChunks, OverflowRules overflow) {
         this.endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/chat/completions");
@@ -63,6 +67,7 @@ public final class OpenAiClient implements ModelClient {
         this.firstChunk = firstChunk;
         this.betweenChunks = betweenChunks;
         this.overflow = overflow;
+        this.http = HttpClient.newBuilder().connectTimeout(firstChunk).build();
     }
 
     @Override
@@ -70,6 +75,7 @@ public final class OpenAiClient implements ModelClient {
         StringBuilder text = new StringBuilder();
         HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
                 .header("content-type", "application/json")
+                .timeout(firstChunk)
                 .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body(prompt))));
         if (apiKey != null) {
             request.header("authorization", "Bearer " + apiKey);
@@ -86,6 +92,8 @@ public final class OpenAiClient implements ModelClient {
             } catch (InterruptedException | InterruptedIOException interrupted) {
                 closeQuietly(open);
                 return new ModelOutcome.Interrupted(text.toString());
+            } catch (HttpTimeoutException noHeaders) {
+                return timeout(text);
             } catch (IOException failure) {
                 closeQuietly(open);
                 if (Thread.currentThread().isInterrupted()) {
@@ -95,6 +103,11 @@ public final class OpenAiClient implements ModelClient {
                     return timeout(text);
                 }
                 return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, text.toString(), failure.toString());
+            } catch (JacksonException malformed) {
+                // 畸形分片：流本身坏了，按连接错误重试，已收到的文本保留。
+                closeQuietly(open);
+                return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, text.toString(),
+                        "malformed stream chunk: " + malformed.getOriginalMessage());
             }
         }
     }
@@ -113,10 +126,12 @@ public final class OpenAiClient implements ModelClient {
         }
     }
 
+    /** 错误响应体会进日志、SSE 和 journal，只保留开头一段。 */
     private ModelOutcome httpFailure(HttpResponse<InputStream> response) throws IOException {
         String body;
         try (InputStream in = response.body()) {
-            body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] head = in.readNBytes(MAX_ERROR_BODY);
+            body = new String(head, StandardCharsets.UTF_8) + (in.read() >= 0 ? "..." : "");
         }
         int status = response.statusCode();
         Duration retryAfter = response.headers().firstValue("retry-after").map(OpenAiClient::seconds).orElse(null);

@@ -71,6 +71,37 @@ class OpenAiClientTest {
                 + "data: [DONE]\n\n";
     }
 
+    /** 上游接受连接却不回响应头：看门狗关不了还没拿到的响应体，必须靠请求超时结束。 */
+    @Test
+    void missingResponseHeadersTimeOutWithinFirstChunk() throws Exception {
+        server.hangBeforeHeaders = true;
+        long started = System.nanoTime();
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class,
+                client(Duration.ofMillis(300), Duration.ofSeconds(5)).call(HI, listener));
+        assertEquals(FailureReason.TIMEOUT, failed.reason());
+        assertTrue(failed.retryable());
+        assertTrue(Duration.ofNanos(System.nanoTime() - started).compareTo(Duration.ofSeconds(3)) < 0);
+    }
+
+    @Test
+    void malformedChunkIsARetryableConnectionErrorKeepingTheText() throws Exception {
+        server.body = delta("{\"content\":\"Hel\"}") + "data: {not json\n\n" + finish("stop");
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertEquals(FailureReason.CONNECTION_ERROR, failed.reason());
+        assertTrue(failed.retryable());
+        assertEquals("Hel", failed.partialText());
+    }
+
+    @Test
+    void hugeErrorBodyIsTruncatedInTheDetail() throws Exception {
+        server.status = 500;
+        server.contentType = "application/json";
+        server.body = "x".repeat(100_000);
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertTrue(failed.detail().length() < 5000, "detail length " + failed.detail().length());
+        assertTrue(failed.detail().endsWith("..."));
+    }
+
     @Test
     void streamsTextSkipsKeepAliveAndReadsUsage() throws Exception {
         server.body = ": keep-alive\n\n" + delta("{\"content\":\"Hel\"}") + ": keep-alive\n\n"

@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
@@ -73,6 +74,7 @@ import tantalum.value.state.SessionState;
 public final class Engine implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
+    private static final Duration DRAIN = Duration.ofSeconds(5);
 
     /** 提交的结果。{@code status} 对应 HTTP 状态。 */
     public record Submission(int status, SubmissionId submission, boolean duplicate) {}
@@ -92,15 +94,46 @@ public final class Engine implements AutoCloseable {
     private final TurnQuery turns;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
+    /** 构造失败时释放已拿到的锁和 journal，否则嵌入方重试会一直撞上“store is locked”。 */
     public Engine(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
         this.clock = clock;
         this.codec = codec;
-        Loop loop = properties.loop();
         this.lock = StoreLock.acquire(properties.dataDir());
-        this.journal = Journal.open(properties.dataDir(), codec);
+        try {
+            this.journal = Journal.open(properties.dataDir(), codec);
+        } catch (IOException | RuntimeException failure) {
+            closeQuietly(lock);
+            throw failure;
+        }
+        try {
+            Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
+            this.view = parts.view;
+            this.transcript = parts.transcript;
+            this.turns = parts.turns;
+            this.hub = parts.hub;
+            this.writer = parts.writer;
+            this.gate = parts.gate;
+            this.input = parts.input;
+            this.output = parts.output;
+        } catch (RuntimeException failure) {
+            closeQuietly(journal);
+            closeQuietly(lock);
+            throw failure;
+        }
+        output.start();
+        input.start();
+        LOG.info("store ready at {}, next seq {}", properties.dataDir(), writer.nextSeq());
+    }
 
+    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalWriter writer,
+                            ExternalGate gate, InputRing input, OutputRing output) {}
+
+    private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
+                              List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
+                              List<AfterToolHook> afterHooks) {
+        Loop loop = properties.loop();
         ToolCatalog catalog = new ToolCatalog();
         Workspaces workspaces = properties.workspaceMode().equals("shared")
                 ? Workspaces.shared(properties.workspace()) : Workspaces.perUser(properties.workspace());
@@ -116,32 +149,40 @@ public final class Engine implements AutoCloseable {
         Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
 
         Startup.Recovered recovered = Startup.recover(journal, kernel, ledger);
-        this.view = new StateView(recovered.state());
-        this.transcript = recovered.transcript();
-        this.turns = new TurnQuery(journal, kernel, codec.mapper());
-        this.hub = new SseHub(recovered.nextSeq(), 1024, 4096, turns::messagesAfter, codec.mapper());
-        this.writer = new JournalWriter(journal, recovered.nextSeq());
-        this.gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), writer::halted);
+        StateView view = new StateView(recovered.state());
+        TurnQuery turns = new TurnQuery(journal, kernel, codec.mapper());
+        SseHub hub = new SseHub(recovered.nextSeq(), 1024, 4096, turns::messagesAfter, codec.mapper());
+        JournalWriter writer = new JournalWriter(journal, recovered.nextSeq());
 
         InFlightCommands inFlight = new InFlightCommands();
-        this.input = new InputRing(loop.inputRingSize());
+        InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
                 AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
-                DoWork.class, new WorkHandler(workspaces, workTypes),
+                DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                 StartTimer.class, new TimerHandler());
-        this.output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
-        Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), writer::halted, output::tryPublish, transcript, hub, view, results);
+        OutputRing output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
+        Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), writer::halted, output::tryPublish,
+                recovered.transcript(), hub, view, results);
+        // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
+        BooleanSupplier halted = () -> writer.halted() || cleanroom.broken() || input.broken() || output.broken();
+        ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
         input.connect(writer, (slot, sequence, endOfBatch) -> {
             EventEnvelope envelope = slot.envelope;
             cleanroom.onEvent(slot, sequence, endOfBatch);
             releaseIfExternal(envelope);
         });
-        output.start();
-        input.start();
-        LOG.info("store ready at {}, next seq {}", properties.dataDir(), recovered.nextSeq());
+        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output);
+    }
+
+    private static void closeQuietly(AutoCloseable resource) {
+        try {
+            resource.close();
+        } catch (Exception failure) {
+            LOG.warn("cleanup after failed start: {}", failure.toString());
+        }
     }
 
     private void releaseIfExternal(EventEnvelope envelope) {
@@ -237,11 +278,25 @@ public final class Engine implements AutoCloseable {
         return Optional.ofNullable(view.current().runs().get(id)).filter(run -> run.ref().principal().equals(principal));
     }
 
+    /** 入口先关（{@code halted} 之外由 Web 层停止接收），再排空两个环，最后关 journal 和锁；每一步失败都不跳过后面的。 */
     @Override
     public void close() throws IOException, SQLException {
-        input.shutdown();
-        output.shutdown();
-        journal.close();
-        lock.close();
+        Exception first = null;
+        for (AutoCloseable step : List.<AutoCloseable>of(
+                () -> input.shutdown(DRAIN), () -> output.shutdown(DRAIN), journal, lock)) {
+            try {
+                step.close();
+            } catch (Exception failure) {
+                LOG.error("engine close step failed", failure);
+                first = first == null ? failure : first;
+            }
+        }
+        switch (first) {
+            case null -> { }
+            case IOException io -> throw io;
+            case SQLException sql -> throw sql;
+            case RuntimeException runtime -> throw runtime;
+            default -> throw new IllegalStateException(first);
+        }
     }
 }

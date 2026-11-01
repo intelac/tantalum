@@ -139,6 +139,29 @@ class CleanroomTest {
         ring.shutdown();
     }
 
+    /** 内核之外抛出（这里用 Error 模拟）不能让消费者线程静默死掉：置 broken，后续事件跳过，入口据此返回 503。 */
+    @Test
+    void unexpectedThrowableMarksTheCleanroomBrokenInsteadOfKillingTheThread() throws Exception {
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+        captureRing.start();
+        ring = captureRing;
+        // 内核只把 RuntimeException 变成运行失败；Error 会穿出来。
+        TransitionTable table = new TransitionTable();
+        table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, context -> { throw new AssertionError("step bug"); });
+        Kernel exploding = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        Cleanroom cleanroom = new Cleanroom(exploding, KernelState.empty(), () -> false, commands::add, Projection.NONE,
+                (seq, index, fact) -> facts.add(fact), view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+
+        InputRing.Slot first = prompt(0);
+        cleanroom.onEvent(first, 0, true);
+        assertTrue(cleanroom.broken());
+        assertEquals(null, first.envelope);
+
+        cleanroom.onEvent(prompt(1), 1, true);
+        assertEquals(List.of(), commands);
+        ring.shutdown();
+    }
+
     @Test
     void projectionFailureDoesNotStopTheLoop() throws Exception {
         InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });

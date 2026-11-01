@@ -13,6 +13,9 @@ public final class CallLimiter {
     public final class Permit implements AutoCloseable {
         private final AtomicBoolean closed = new AtomicBoolean();
 
+        /** 只能由 {@link #acquire} 发出，否则凭空 {@code close()} 会放大名额。 */
+        private Permit() {}
+
         @Override
         public void close() {
             if (closed.compareAndSet(false, true)) {

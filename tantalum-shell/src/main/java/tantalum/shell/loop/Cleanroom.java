@@ -27,6 +27,8 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
     private final StateView view;
     private final ResultPublisher results;
     private KernelState state;
+    /** 内核或状态发布抛出后置位：之后的事件全部跳过，入口返回 503，而不是让消费者线程静默死掉。 */
+    private volatile boolean broken;
 
     public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
                      Projection projection, FactListener facts, StateView view, ResultPublisher results) {
@@ -40,15 +42,30 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         this.results = results;
     }
 
+    /** 内核自己不会抛出（{@code Kernel.step} 把处理函数的异常变成运行失败）；这里防的是内核之外的 bug 和 {@code Error}。 */
+    public boolean broken() {
+        return broken;
+    }
+
     @Override
     public void onEvent(InputRing.Slot slot, long sequence, boolean endOfBatch) {
-        if (halted.getAsBoolean()) {
+        if (halted.getAsBoolean() || broken) {
+            slot.envelope = null;
             return;
         }
         EventEnvelope envelope = slot.envelope;
+        slot.envelope = null;
+        try {
+            step(envelope, endOfBatch);
+        } catch (Throwable failure) {
+            broken = true;
+            LOG.error("cleanroom broken at seq {}: refusing all further events", envelope.seq(), failure);
+        }
+    }
+
+    private void step(EventEnvelope envelope, boolean endOfBatch) {
         long seq = envelope.seq();
         Decision decision = kernel.step(state, envelope);
-        slot.envelope = null;
         state = decision.newState();
         view.publish(state);
         for (Command command : decision.commands()) {

@@ -49,8 +49,9 @@ public final class Journal implements AutoCloseable {
             Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         }
         Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+        Connection writer = null;
         try {
-            Connection writer = DriverManager.getConnection("jdbc:sqlite:" + file);
+            writer = DriverManager.getConnection("jdbc:sqlite:" + file);
             try (Statement statement = writer.createStatement()) {
                 statement.execute("PRAGMA journal_mode=WAL");
                 statement.execute("PRAGMA synchronous=FULL");
@@ -70,7 +71,18 @@ public final class Journal implements AutoCloseable {
             writer.setAutoCommit(false);
             return new Journal(file, codec, writer);
         } catch (SQLException failure) {
+            closeQuietly(writer);
             throw new JournalCorruptException("cannot open journal " + file + ": " + failure.getMessage(), failure);
+        }
+    }
+
+    private static void closeQuietly(Connection connection) {
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (SQLException ignored) {
+                // 打开已经失败，这里只是不留下连接。
+            }
         }
     }
 
@@ -146,10 +158,15 @@ public final class Journal implements AutoCloseable {
         }
     }
 
+    /** 可重复调用；未提交的追加回滚。 */
     @Override
     public void close() throws SQLException {
-        insert.close();
-        writer.rollback();
-        writer.close();
+        if (writer.isClosed()) {
+            return;
+        }
+        try (writer) {
+            insert.close();
+            writer.rollback();
+        }
     }
 }

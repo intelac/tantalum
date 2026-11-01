@@ -25,6 +25,11 @@ public final class JournalWriter implements EventHandler<InputRing.Slot> {
         return halted;
     }
 
+    /** 下一个要分配的序号。只在环启动前读取才准确。 */
+    public long nextSeq() {
+        return nextSeq;
+    }
+
     @Override
     public void onEvent(InputRing.Slot slot, long sequence, boolean endOfBatch) {
         if (halted) {

@@ -41,6 +41,13 @@ class JournalTest {
     }
 
     @Test
+    void closeIsIdempotent() throws Exception {
+        Journal journal = Journal.open(dir, codec);
+        journal.close();
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(journal::close);
+    }
+
+    @Test
     void committedEventsSurviveReopenWithAllFields() throws Exception {
         EventEnvelope first = event(0, null);
         EventEnvelope second = event(1, new RunId("run-0"));
