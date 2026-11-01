@@ -1,12 +1,20 @@
 {
   "filePath": ".spec-workflow/specs/spec-audit-fixes/design.md",
-  "currentVersion": 1,
+  "currentVersion": 2,
   "snapshots": [
     {
       "version": 1,
       "filename": "snapshot-001.json",
       "timestamp": "2026-11-01T12:21:44.034Z",
       "trigger": "initial",
+      "approvalId": "approval_1793535704032_l246os334",
+      "approvalTitle": "spec-audit-fixes：设计文档"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T12:37:35.301Z",
+      "trigger": "approved",
       "approvalId": "approval_1793535704032_l246os334",
       "approvalTitle": "spec-audit-fixes：设计文档"
     }
