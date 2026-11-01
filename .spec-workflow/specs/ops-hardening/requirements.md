@@ -74,7 +74,7 @@
 #### Acceptance Criteria
 
 1. WHEN 跑 `bench` THEN SHALL 用合成的 journal（1 万、10 万、50 万事件）在新进程里测启动时间、内存峰值、会话列表、打开长会话、`/turns`、`/trace`，报告每个样本和机器信息。
-2. WHEN 改造前基线完成 THEN 需求 2.2、2.3、5.3、9.2 的预算 SHALL 在设计文档确认，并写进代码；结果写进 tech.md。
+2. WHEN 改造前基线完成 THEN 需求 2.2、2.3、5.3、8.2 的预算 SHALL 在设计文档确认，并写进代码；结果写进 tech.md。
 3. WHEN 超出预算 THEN `bench` SHALL 失败。
 
 ### Requirement 2：按需载入和回收
@@ -158,7 +158,7 @@
 2. WHEN 已返回 200 的提交遇到正常关闭 THEN 它 SHALL 已写入 journal，重启后可见。
 3. WHEN 关闭时有长时间的模型调用 THEN 进程 SHALL 在配置时间内退出。
 
-### Requirement 9：历史分页
+### Requirement 8：历史分页
 
 出处：DSH `packages/api/session-controller/README.md`（`loadOlder`、`loadThrough`）、`benchmarks/long-session-browser`。
 
@@ -170,9 +170,7 @@
 2. WHEN 打开 500 条消息的会话 THEN 首屏时间 SHALL 在预算内（按需求 1.2 确认）；向上滚动 SHALL 加载更早的页，位置不跳动。
 3. WHEN 分页和 SSE 同时进行或断线重连 THEN 条目 SHALL 不缺、不重复。
 
-### Requirement 8：测试
-
-**User Story 补充：** 需求编号 9 排在 8 之前只因为后加，避免改动引用。
+### Requirement 9：测试
 
 **User Story:** 作为维护者，我需要证据。
 
