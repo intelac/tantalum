@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -140,5 +141,63 @@ class MemoryToolsTest {
         MemoryTools.all(stores).forEach(catalog::register);
         assertEquals(List.of("memory_delete", "memory_read", "memory_write"),
                 catalog.specs().stream().map(spec -> spec.name()).toList());
+    }
+
+    /** 需求 3.5：补齐的凭据格式都被拒绝；不含数字的长 sk- 名称不再误伤。 */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+        "github_pat_11ABCDEFG0abcdefghijklmnop", "glpat-abcdefghij0123456789", "npm_abcdefghijklmnopqrstuvwxyz0123456789",
+        "hf_abcdefghijklmnopqrstuvwxyz012345", "AIzaSyA1234567890abcdefghijklmnopqrstuvw", "ASIAABCDEFGHIJKLMNOP",
+        "LTAI5tAbCdEfGhIjKlMn", "AKIDabcdefghij1234567", "whsec_abcdefghijklmnopqrstuvwx", "sk_live_abcdefghij0123456789",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop", "postgres://admin:hunter2@db.example.com/x"})
+    void moreCredentialFormatsAreRefused(String secret) {
+        assertTrue(CredentialGuard.looksLikeCredential("value " + secret), secret);
+    }
+
+    @Test
+    void longKebabNamesAreNotMistakenForKeys() {
+        assertFalse(CredentialGuard.looksLikeCredential("see sk-learn-pipeline-tuning-notes for this"));
+        assertTrue(CredentialGuard.looksLikeCredential("sk-abc123def456ghi789jkl"));
+    }
+
+    /** 需求 3.4：坏行跳过，好行留下。 */
+    @Test
+    void indexTextSkipsBadLines() throws Exception {
+        save(ALICE, "java", "x");
+        MemoryStore store = stores.of(ALICE);
+        Path index = store.dir().resolve(MemoryFormat.INDEX_FILE);
+        String good = java.nio.file.Files.readString(index);
+        java.nio.file.Files.writeString(index, good + "this line is garbage\n");
+        assertEquals(good.strip(), store.indexText().strip());
+    }
+
+    /** 需求 3.3：索引超限时截断并告诉模型。 */
+    @Test
+    void oversizedIndexIsCutWithANotice() throws Exception {
+        MemoryStores small = new MemoryStores(workspaces, temp.resolve("data2"), new MemoryLimits(50, 200, 64), Clock.systemUTC());
+        MemoryStore store = small.of(ALICE);
+        java.nio.file.Files.createDirectories(store.dir());
+        StringBuilder many = new StringBuilder();
+        for (int i = 0; i < 40; i++) {
+            many.append(MemoryFormat.formatIndexLine(new MemoryEntry("n" + i, MemoryType.USER, "about " + i, "c", Instant.EPOCH))).append('\n');
+        }
+        java.nio.file.Files.writeString(store.dir().resolve(MemoryFormat.INDEX_FILE), many.toString());
+        String text = store.indexText();
+        assertTrue(text.contains("n0"));
+        assertFalse(text.contains("n39"));
+        assertTrue(text.contains("truncated"), text);
+    }
+
+    /** 需求 3.6：写入后不留临时文件，已存在的路径不会被跟随。 */
+    @Test
+    void tempFilesAreRandomAndLeaveNothingBehind() throws Exception {
+        save(ALICE, "java", "x");
+        Path dir = stores.of(ALICE).dir();
+        java.nio.file.Files.createSymbolicLink(dir.resolve("java.md.tmp"), temp.resolve("outside"));
+        save(ALICE, "java", "y");
+        assertFalse(java.nio.file.Files.exists(temp.resolve("outside")), "the planted link was not followed");
+        try (var files = java.nio.file.Files.list(dir)) {
+            assertEquals(1, files.filter(file -> file.getFileName().toString().endsWith(".tmp")).count(), "only the planted link");
+        }
     }
 }

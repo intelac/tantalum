@@ -231,4 +231,41 @@ final class CompactionScenario {
         System.out.println(line);
         return line;
     }
+
+    static final String HUGE_HEAD = "HEAD-CODE-7301";
+    static final String HUGE_TAIL = "TAIL-CODE-9142";
+
+    /** 一个 300 KB 的文件，开头和结尾各有一个暗号（需求 5.2）。比窗口大得多，不压缩就放不下。 */
+    static void writeHugeFile(Path userDir) throws Exception {
+        Files.writeString(userDir.resolve("huge.txt"), "First line: " + HUGE_HEAD + "\n" + "filler words go here\n".repeat(14_000)
+                + "Last line: " + HUGE_TAIL + "\n");
+    }
+
+    /** 跑一轮提问到结束，返回最后的回答。 */
+    static String ask(TestServer server, String user, String session, String text) throws Exception {
+        HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text) + "}");
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode runBefore = JSON.readTree(server.get(user, "/api/sessions/" + session + "/runs").body()).get("runs");
+        JsonNode run = waitForLatestRun(server, user, session, Duration.ofMinutes(25));
+        assertEquals("COMPLETED", run.path("endReason").asString(), run + " " + runBefore);
+        StringBuilder last = new StringBuilder();
+        for (JsonNode item : JSON.readTree(server.get(user, "/api/sessions/" + session + "/messages").body()).get("items")) {
+            if (item.path("kind").asString().equals("text") && item.path("run").asString().equals(run.path("run").asString())) {
+                last.append(item.path("text").asString());
+            }
+        }
+        return last.toString();
+    }
+
+    /** 这个会话成功压缩了几次，只裁剪的算在内。 */
+    static int compactions(TestServer server, String user, String session) throws Exception {
+        int count = 0;
+        for (JsonNode item : JSON.readTree(server.get(user, "/api/sessions/" + session + "/messages").body()).get("items")) {
+            if (item.path("kind").asString().equals("compaction") && item.path("failure").isMissingNode()) {
+                count++;
+            }
+        }
+        return count;
+    }
 }

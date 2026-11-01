@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import tantalum.kernel.hook.HookOutcome;
 import tantalum.kernel.hook.HookPoint;
+import tantalum.kernel.projection.ContextDiff;
 import tantalum.kernel.projection.PromptProjection;
 import tantalum.kernel.projection.UsageProjection;
 import tantalum.kernel.table.StepContext;
@@ -48,6 +49,10 @@ public final class ModelSteps {
     static final String AWAITING_MODEL = "AwaitingModel";
     /** COMPLETED 的详情：回复因输出上限被截断。 */
     public static final String TRUNCATED = "reply truncated";
+    /** 所有上下文更新消息的开头，压缩时靠它认出这不是用户写的。 */
+    public static final String CONTEXT_UPDATE_PREFIX = "[Context update, not written by the user.";
+    /** 只发变化的更新消息：这些内容叠加在之前给过的之上。 */
+    static final String CONTEXT_CHANGES = CONTEXT_UPDATE_PREFIX + " These changes apply on top of what you were given earlier.]\n\n";
     public static final String CONTEXT_UPDATE ="[Context update, not written by the user. This replaces the shared knowledge, "
             + "project instructions and memory index given earlier.]\n\n";
 
@@ -129,13 +134,21 @@ public final class ModelSteps {
         SessionState session = out.session(run.ref());
         SessionContext frozen = session.context();
         if (frozen == null) {
-            frozen = new SessionContext(event.system(), event.tools(), event.dynamic(), event.compaction());
+            frozen = new SessionContext(event.system(), event.tools(), event.dynamic(), event.compaction(), event.sections());
             out.state = out.state.with(session.withContext(frozen));
+            return frozen;
+        }
+        if (event.sections() != null && frozen.sections() != null) {
+            String changes = ContextDiff.of(frozen.sections(), event.sections());
+            if (!changes.isEmpty()) {
+                frozen = frozen.withDynamic(event.dynamic(), event.sections());
+                out.state = out.state.with(session.append(Message.user(CONTEXT_CHANGES + changes)).withContext(frozen));
+            }
             return frozen;
         }
         if (event.dynamic() != null && !event.dynamic().equals(frozen.dynamic())) {
             String body = event.dynamic().isEmpty() ? "(now empty)" : event.dynamic();
-            frozen = frozen.withDynamic(event.dynamic());
+            frozen = frozen.withDynamic(event.dynamic(), event.sections());
             out.state = out.state.with(session.append(Message.user(CONTEXT_UPDATE + body)).withContext(frozen));
         }
         return frozen;

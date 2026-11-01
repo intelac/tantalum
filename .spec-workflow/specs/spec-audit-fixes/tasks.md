@@ -94,17 +94,17 @@
 
 ## 阶段 4：记忆
 
-- [ ] 16. 坏行、上限和临时文件
+- [x] 16. 坏行、上限和临时文件
   - File: tantalum-shell/src/main/java/tantalum/shell/memory/MemoryStore.java, KnowledgeBase.java, ContextHandler.java, 对应测试
   - 验证：坏行被跳过并记日志；`AGENTS.md`、索引、共享知识超限时 prompt 里有说明；临时文件随机命名，已存在路径被拒
   - _Requirements: 3.3, 3.4, 3.6_
 
-- [ ] 17. 凭据规则
+- [x] 17. 凭据规则
   - File: CredentialGuard.java, MemoryToolsTest.java
   - 验证：每个新前缀各一例被拒；不含数字的长 `sk-` 名称通过；拒绝原因不回显内容
   - _Requirements: 3.5_
 
-- [ ] 18. 分段、边界和只发变化
+- [x] 18. 分段、边界和只发变化
   - File: tantalum-value/src/main/java/tantalum/value/state/ContextSection.java, SessionContext.java, tantalum-value/src/main/java/tantalum/value/event/ContextAssembled.java, tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextDiff.java, ModelSteps.java, ContextHandler.java, EventCodec 测试
   - 验证：一条记忆变化时追加的消息只有那一行；知识变化重发该段；整段消失有移除记录；闭合标签跳不出包裹；旧事件仍能回放；真实 Claude 严格校验下改记忆不失败
   - _Requirements: 3.1, 3.2_

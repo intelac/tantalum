@@ -6,12 +6,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,11 +53,36 @@ public final class MemoryStore {
         return limits;
     }
 
-    /** 索引原文；没有记忆时为空串。 */
+    /** 索引内容，进 system 前的样子：坏行跳过并记日志，超限时截断并写明。没有记忆时为空串。 */
     public String indexText() {
         Path index = dir.resolve(MemoryFormat.INDEX_FILE);
         try {
-            return Files.isRegularFile(index) ? Files.readString(index) : "";
+            if (!Files.isRegularFile(index)) {
+                return "";
+            }
+            StringBuilder text = new StringBuilder();
+            int used = 0;
+            boolean cut = false;
+            for (String line : Files.readString(index).lines().toList()) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                if (MemoryFormat.parseIndex(line).isEmpty()) {
+                    LOG.warn("memory index of {}: skipping a malformed line", dir.getFileName());
+                    continue;
+                }
+                int bytes = MemoryFormat.utf8Length(line) + 1;
+                if (used + bytes > limits.maxIndexBytes()) {
+                    cut = true;
+                    break;
+                }
+                text.append(line).append('\n');
+                used += bytes;
+            }
+            if (cut) {
+                text.append("(The memory index was truncated at ").append(limits.maxIndexBytes()).append(" bytes; some entries are not listed.)\n");
+            }
+            return text.toString();
         } catch (IOException failure) {
             LOG.warn("cannot read memory index for {}: {}", dir.getFileName(), failure.toString());
             return "";
@@ -192,8 +219,13 @@ public final class MemoryStore {
     }
 
     private static void writeAtomically(Path target, String text) throws IOException {
-        Path temp = target.resolveSibling(target.getFileName() + TEMP);
-        Files.writeString(temp, text, StandardCharsets.UTF_8);
-        Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        // 随机名加 CREATE_NEW：已存在的路径（包括别人放的符号链接）不会被跟随。
+        Path temp = target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + TEMP);
+        try {
+            Files.writeString(temp, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 }

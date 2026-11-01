@@ -34,7 +34,11 @@ public final class KnowledgeBase {
     }
 
     public static KnowledgeBase none() {
-        return new KnowledgeBase(Optional.empty(), 1);
+        return new KnowledgeBase(Optional.empty(), 64 * 1024);
+    }
+
+    public int maxBytes() {
+        return maxBytes;
     }
 
     /** 共享知识正文；没有配置、目录不存在或为空时返回空串。 */
@@ -91,6 +95,8 @@ public final class KnowledgeBase {
             int bytes = body.getBytes(StandardCharsets.UTF_8).length;
             if (used + bytes > maxBytes) {
                 LOG.warn("knowledge dir exceeds {} bytes; files from {} on are left out", maxBytes, file.getFileName());
+                text.append("(Shared knowledge was truncated at ").append(maxBytes).append(" bytes; files from ")
+                        .append(file.getFileName()).append(" on are not included.)");
                 break;
             }
             text.append(body);

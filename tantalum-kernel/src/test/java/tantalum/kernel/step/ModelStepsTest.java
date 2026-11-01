@@ -171,6 +171,28 @@ class ModelStepsTest {
         assertEquals(EndReason.STOPPED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
 
+    /** 需求 3.1：分段的事件只把变化追加成消息；没有变化不追加。 */
+    @Test
+    void sectionChangesAppendOnlyTheDifference() {
+        var one = List.of(new tantalum.value.state.ContextSection("memory-index", "- a", true));
+        var two = List.of(new tantalum.value.state.ContextSection("memory-index", "- a\n- b", true));
+        LoopFixture loop = new LoopFixture();
+        loop.prompt("one");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d1", null, one));
+        loop.feed(loop.runId(), reply(loop, "a"));
+        loop.prompt("two");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d1", null, one));
+        assertEquals(Message.user("two"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
+        loop.feed(loop.runId(), reply(loop, "b"));
+        loop.prompt("three");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d2", null, two));
+        Message update = assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast();
+        String text = ((tantalum.value.model.TextBlock) update.content().getFirst()).text();
+        assertTrue(text.startsWith(ModelSteps.CONTEXT_UPDATE_PREFIX), text);
+        assertTrue(text.contains("Added:\n- b"), text);
+        assertTrue(!text.contains("- a"), text);
+    }
+
     /** 所有模型相同：第二个运行的 system 和工具逐字节不变，可变内容的变化只作为追加消息出现。 */
     @Test
     void laterRunsKeepTheFrozenContextAndAppendChanges() {

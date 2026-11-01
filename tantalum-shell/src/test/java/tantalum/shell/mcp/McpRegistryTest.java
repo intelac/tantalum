@@ -117,9 +117,19 @@ class McpRegistryTest {
         assertEquals(List.of(), registry.tools());
     }
 
+    /** 需求 2.4：名字被改写的工具调用时仍用原名。 */
+    @Test
+    void aRenamedToolIsCalledByItsOriginalName() throws Exception {
+        open(Set.of(), Set.of(), 64);
+        Tool renamed = registry.find(McpToolFilter.publicName("s", "bad.name")).orElseThrow();
+        assertFalse(renamed.run(null, new Json.Obj(java.util.Map.of())).error());
+        assertEquals(List.of("bad.name"), server.calls);
+    }
+
     /** 需求 2.5：服务器不可用时最多等配置的时间；可用时等到工具出现。 */
     @Test
     void awaitReadyIsBoundedAndSeesTheToolsOfAReachableServer() throws Exception {
+        server = new TestMcpServer(new Definition("search", true, args -> TestMcpServer.text("found")));
         registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(10)));
         registry.awaitReady();
         assertFalse(registry.tools().isEmpty(), "tools are there right after the first attempt");
