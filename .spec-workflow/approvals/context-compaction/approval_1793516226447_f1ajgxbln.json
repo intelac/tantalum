@@ -1,10 +1,10 @@
 {
-  "id": "approval_1793504330126_tn5hv3h8n",
-  "title": "context-compaction spec：需求文档（通用压缩、会话内稳定）",
+  "id": "approval_1793516226447_f1ajgxbln",
+  "title": "context-compaction spec：需求文档（重写，含九条压缩规则）",
   "filePath": ".spec-workflow/specs/context-compaction/requirements.md",
   "type": "document",
   "status": "pending",
-  "createdAt": "2026-11-01T03:38:50.126Z",
+  "createdAt": "2026-11-01T06:57:06.447Z",
   "category": "spec",
   "categoryName": "context-compaction"
 }
