@@ -43,6 +43,7 @@ import tantalum.shell.loop.SubmissionLedger;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
@@ -145,6 +146,9 @@ public final class Engine implements AutoCloseable {
         }
         catalog.register(new ReadFileTool());
         catalog.register(new GrepTool());
+        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), MemoryLimits.of(properties.memory()), clock);
+        KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
+        MemoryTools.all(memories).forEach(catalog::register);
         tools.forEach(catalog::register);
 
         TransitionTable table = new TransitionTable();
@@ -160,8 +164,6 @@ public final class Engine implements AutoCloseable {
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
-        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), MemoryLimits.of(properties.memory()), clock);
-        KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
         Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
                 AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
