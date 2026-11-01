@@ -153,7 +153,7 @@
 
 ## 阶段 8：收尾
 
-- [ ] 20. 文档与全量验证
+- [x] 20. 文档与全量验证
   - File: README.md, .spec-workflow/steering/tech.md
   - README 能力对照表更新压缩一行；tech.md 记录决定、实测结论和用量
   - 验证：`mvn verify`、vitest、Playwright 全过；提交前密钥扫描
