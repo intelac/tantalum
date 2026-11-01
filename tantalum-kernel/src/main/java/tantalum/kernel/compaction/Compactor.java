@@ -181,6 +181,6 @@ public final class Compactor {
             }
         }
         String text = ((TextBlock) message.content().getFirst()).text();
-        return !text.startsWith(ModelSteps.CONTEXT_UPDATE) && !text.startsWith(SummaryPrompt.SUMMARY_PREFIX);
+        return !text.startsWith(ModelSteps.CONTEXT_UPDATE_PREFIX) && !text.startsWith(SummaryPrompt.SUMMARY_PREFIX);
     }
 }

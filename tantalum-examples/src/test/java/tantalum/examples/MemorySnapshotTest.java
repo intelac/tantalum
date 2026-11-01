@@ -82,7 +82,8 @@ class MemorySnapshotTest {
         assertFalse(model.prompts.get(1).system().contains(INDEX_LINE), "same run keeps the snapshot");
         assertEquals(model.prompts.get(0).system(), model.prompts.get(1).system());
         // 下一个运行开始时读到了索引。
-        assertTrue(model.prompts.get(2).system().endsWith("## Your memory index\n\n" + INDEX_LINE), model.prompts.get(2).system());
+        assertTrue(model.prompts.get(2).system().contains("## Your memory index"), model.prompts.get(2).system());
+        assertTrue(model.prompts.get(2).system().endsWith(INDEX_LINE + "\n</memory-index>"), model.prompts.get(2).system());
 
         List<EventEnvelope> journal;
         try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {

@@ -33,7 +33,8 @@ class KnowledgeBaseTest {
         Files.writeString(dir.resolve("b.md"), "y".repeat(40));
         String text = new KnowledgeBase(Optional.of(dir), 70).text();
         assertTrue(text.contains("x".repeat(40)));
-        assertFalse(text.contains("y"));
+        assertFalse(text.contains("yyy"));
+        assertTrue(text.contains("truncated"), "the model is told, not only the log");
     }
 
     @Test

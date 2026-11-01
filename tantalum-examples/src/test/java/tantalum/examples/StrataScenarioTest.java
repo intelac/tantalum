@@ -48,4 +48,45 @@ class StrataScenarioTest {
         assertEquals(Set.of(), verdict.missingTags(), "rules lost in the summary; answer: " + verdict.answer());
         assertTrue(verdict.rereads() <= 1, "the model went back to the files " + verdict.rereads() + " times after compaction");
     }
+
+    /** 需求 5.2：首条请求后读超大文件，头部很小。判定：运行完成，答对文件首尾的暗号，发生过压缩。 */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.MINUTES)
+    void hugeFileAfterTheFirstRequestRecovers() throws Exception {
+        Path workspace = temp.resolve("workspace"); Files.createDirectories(workspace.resolve("huge"));
+        CompactionScenario.writeHugeFile(workspace.resolve("huge"));
+        Path data = temp.resolve("data-huge");
+        try (TestServer server = new TestServer(data, workspace, client(), CompactionScenario.SETTINGS_OPENAI)) {
+            String answer = CompactionScenario.ask(server, "huge", "s1",
+                    "Read huge.txt with read_file once and tell me the code on its first line and the code on its last line.");
+            System.out.println("[strata huge] compactions=" + CompactionScenario.compactions(server, "huge", "s1") + " answer=" + answer.replace("\n", " | "));
+            assertTrue(answer.contains(CompactionScenario.HUGE_HEAD), answer);
+            assertTrue(answer.contains(CompactionScenario.HUGE_TAIL), answer);
+            assertTrue(CompactionScenario.compactions(server, "huge", "s1") >= 1, "the scenario proved nothing");
+        }
+    }
+
+    /** 需求 5.3：压缩至少两次，第一次压缩前的约束在结尾仍被遵守，文件列表累积。 */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.MINUTES)
+    void aConstraintSurvivesTwoCompactions() throws Exception {
+        Path workspace = temp.resolve("workspace"); Files.createDirectories(workspace.resolve("twice"));
+        CompactionScenario.writeNotes(workspace.resolve("twice"));
+        Path data = temp.resolve("data-twice");
+        try (TestServer server = new TestServer(data, workspace, client(), CompactionScenario.SETTINGS_OPENAI)) {
+            CompactionScenario.ask(server, "twice", "s1", "A standing rule for this whole conversation: end every report with the exact word FINCH-END. Reply with OK.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt again one at a time, then say done.");
+            String answer = CompactionScenario.ask(server, "twice", "s1", "Write a one-line report of what you did. Do not read anything.");
+            int compactions = CompactionScenario.compactions(server, "twice", "s1");
+            System.out.println("[strata twice] compactions=" + compactions + " answer=" + answer.replace("\n", " | "));
+            assertTrue(compactions >= 2, "only " + compactions + " compactions");
+            assertTrue(answer.contains("FINCH-END"), answer);
+        }
+    }
+
+    private static OpenAiClient client() {
+        return new OpenAiClient(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(600), Duration.ofSeconds(120), OverflowRules.defaults());
+    }
 }

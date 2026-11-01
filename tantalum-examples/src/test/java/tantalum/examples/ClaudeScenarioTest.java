@@ -636,6 +636,76 @@ class ClaudeScenarioTest {
         usage("manual compaction", journal);
     }
 
+    /** 需求 5.2：首条请求后读超大文件，头部很小。判定：运行完成，答对文件首尾的暗号，发生过压缩。 */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void hugeFileAfterTheFirstRequestRecovers() throws Exception {
+        Path workspace = workspace("huge");
+        CompactionScenario.writeHugeFile(workspace.resolve("huge"));
+        Path data = temp.resolve("data-huge");
+        try (TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            String answer = CompactionScenario.ask(server, "huge", "s1",
+                    "Read huge.txt with read_file once and tell me the code on its first line and the code on its last line.");
+            System.out.println("[claude huge] compactions=" + CompactionScenario.compactions(server, "huge", "s1") + " answer=" + answer.replace("\n", " | "));
+            assertTrue(answer.contains(CompactionScenario.HUGE_HEAD), answer);
+            assertTrue(answer.contains(CompactionScenario.HUGE_TAIL), answer);
+            assertTrue(CompactionScenario.compactions(server, "huge", "s1") >= 1, "the scenario proved nothing");
+        }
+    }
+
+    /** 需求 5.3：压缩至少两次，第一次压缩前的约束在结尾仍被遵守，文件列表累积。 */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void aConstraintSurvivesTwoCompactions() throws Exception {
+        Path workspace = workspace("twice");
+        CompactionScenario.writeNotes(workspace.resolve("twice"));
+        Path data = temp.resolve("data-twice");
+        try (TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            CompactionScenario.ask(server, "twice", "s1", "A standing rule for this whole conversation: end every report with the exact word FINCH-END. Reply with OK.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt one at a time, then say done.");
+            CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt again one at a time, then say done.");
+            String answer = CompactionScenario.ask(server, "twice", "s1", "Write a one-line report of what you did. Do not read anything.");
+            int compactions = CompactionScenario.compactions(server, "twice", "s1");
+            System.out.println("[claude twice] compactions=" + compactions + " answer=" + answer.replace("\n", " | "));
+            assertTrue(compactions >= 2, "only " + compactions + " compactions");
+            assertTrue(answer.contains("FINCH-END"), answer);
+        }
+    }
+
+    /**
+     * 设计补 1.9：压缩后工具列表重新组装，保留段里的 MCP 调用对应的工具已下线（服务器没了，工具被移除）。
+     * 判定：严格校验下运行完成，没有 INVALID_REQUEST。
+     */
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.MINUTES)
+    void keptCallOfAToolThatIsGoneAfterReassembly() throws Exception {
+        Path workspace = workspace("gone");
+        CompactionScenario.writeNotes(workspace.resolve("gone"));
+        Path data = temp.resolve("data-gone");
+        try (TestMcpServer mcp = new TestMcpServer(new TestMcpServer.Definition("lookup", true, "key", arguments -> TestMcpServer.text("value-3391")));
+             TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE[0], CompactionScenario.SETTINGS_CLAUDE[1],
+                     "--tantalum.mcp.servers.demo.url=" + mcp.url(), "--tantalum.mcp.servers.demo.max-tools=1")) {
+            CompactionScenario.ask(server, "gone", "s1", "Read note01.txt to note04.txt one at a time, then say done.");
+            CompactionScenario.ask(server, "gone", "s1", "Call the lookup tool with key a and tell me the value.");
+            mcp.stop();
+            for (int i = 0; i < 600 && server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__lookup"); i++) {
+                Thread.sleep(500);
+            }
+            boolean removed = !server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__lookup");
+            String manual = server.post("gone", "/api/sessions/s1/compact", "{}").body();
+            Thread.sleep(50);
+            CompactionScenario.waitForLatestRun(server, "gone", "s1", Duration.ofMinutes(3));
+            String answer = CompactionScenario.ask(server, "gone", "s1", "Read note05.txt to note08.txt one at a time, then tell me the secret code in note08.");
+            List<EventEnvelope> journal = journal(data);
+            long invalid = events(journal, ModelFailed.class).stream().filter(failure -> failure.reason() == FailureReason.INVALID_REQUEST).count();
+            System.out.println("[claude gone] toolRemoved=" + removed + " manual=" + manual + " invalid=" + invalid + " answer=" + answer.replace("\n", " | "));
+            usage("gone", journal);
+            assertEquals(0, invalid);
+            assertTrue(answer.contains(CompactionScenario.code(8)), answer);
+        }
+    }
+
     private static ClaudeClient strict(String effort) {
         return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
                 MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
