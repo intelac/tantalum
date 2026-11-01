@@ -1,12 +1,20 @@
 {
   "filePath": ".spec-workflow/specs/context-compaction/tasks.md",
-  "currentVersion": 1,
+  "currentVersion": 2,
   "snapshots": [
     {
       "version": 1,
       "filename": "snapshot-001.json",
       "timestamp": "2026-11-01T08:29:56.241Z",
       "trigger": "initial",
+      "approvalId": "approval_1793521796237_gyc9436k0",
+      "approvalTitle": "context-compaction spec：任务清单（20 个任务、9 个阶段）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T08:35:30.358Z",
+      "trigger": "approved",
       "approvalId": "approval_1793521796237_gyc9436k0",
       "approvalTitle": "context-compaction spec：任务清单（20 个任务、9 个阶段）"
     }

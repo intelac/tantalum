@@ -282,6 +282,32 @@ class ClaudeClientTest {
         assertEquals(3, countOf(server.requests.getFirst(), "\"cache_control\""));
     }
 
+    /** 摘要模式：工具定义照发（历史里有 tool_use，且要命中缓存），但禁止调用，输出上限按 Prompt 来。 */
+    @Test
+    void summaryOutputDisablesToolsAndOverridesMaxTokens() throws Exception {
+        server.body = START + messageDelta("end_turn", "null") + STOP;
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        Prompt prompt = new Prompt("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("summarize")),
+                new Prompt.Output(false, 8192));
+
+        call(prompt);
+
+        tools.jackson.databind.JsonNode body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(server.requests.getFirst());
+        assertEquals("none", body.path("tool_choice").path("type").asString(), server.requests.getFirst());
+        assertEquals("grep", body.path("tools").get(0).path("name").asString());
+        assertEquals(8192, body.path("max_tokens").asInt());
+    }
+
+    @Test
+    void defaultOutputSendsTheSameRequestAsBefore() throws Exception {
+        server.body = START + messageDelta("end_turn", "null") + STOP;
+        call(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
+        call(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
+        assertEquals(server.requests.get(0), server.requests.get(1));
+        assertFalse(server.requests.getFirst().contains("tool_choice"), server.requests.getFirst());
+        assertTrue(server.requests.getFirst().contains("\"max_tokens\":64000"), server.requests.getFirst());
+    }
+
     @Test
     void blankSystemIsOmittedInsteadOfSentAsAnEmptyBlock() throws Exception {
         server.body = START + messageDelta("end_turn", "null") + STOP;

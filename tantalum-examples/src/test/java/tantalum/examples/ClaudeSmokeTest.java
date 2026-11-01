@@ -83,6 +83,18 @@ class ClaudeSmokeTest {
         assertTrue(thinking > 0, "the model produced no thinking block, so the round trip was not exercised");
     }
 
+    /** 摘要模式（context-compaction 需求 3.1）：历史含工具调用和结果，末尾是指令，禁用工具、限长。判定：回复成功、没有工具调用、有文本。 */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void summaryModeRequestIsAccepted() {
+        ModelOutcome outcome = client().call(SummaryModePrompt.build(), IGNORE);
+        ModelOutcome.Replied replied = assertInstanceOf(ModelOutcome.Replied.class, outcome,
+                outcome instanceof ModelOutcome.Failed failed ? failed.detail() : "");
+        System.out.println("[smoke claude] summary mode: stop=" + replied.stop() + " usage=" + replied.usage()
+                + " text=" + SummaryModePrompt.text(replied).replace('\n', ' '));
+        SummaryModePrompt.check(replied);
+    }
+
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void oversizedPromptIsRecognisedAsContextOverflow() {

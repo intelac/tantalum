@@ -4,14 +4,14 @@
 
 ## 阶段 0：客户端支持摘要模式
 
-- [ ] 1. `Prompt.Output` 和两个客户端
+- [x] 1. `Prompt.Output` 和两个客户端
   - File: tantalum-value/src/main/java/tantalum/value/model/Prompt.java, tantalum-shell/src/main/java/tantalum/shell/model/ClaudeClient.java, tantalum-shell/src/main/java/tantalum/shell/model/OpenAiClient.java, tantalum-shell/src/test/java/tantalum/shell/model/ClaudeClientTest.java, tantalum-shell/src/test/java/tantalum/shell/model/OpenAiClientTest.java
   - `Output(toolsAllowed, maxTokens)`，默认 `(true, 0)`；禁用工具时 `tool_choice none` 且工具定义仍发；`maxTokens > 0` 覆盖配置
   - 验证：捕获的请求体符合；默认 Output 时请求体与现在逐字节相同
   - _Requirements: 3.1_
   - _Prompt: Implement the task for spec context-compaction, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`Prompt.Output` 和两个客户端”，满足需求 3.1，遵守 design.md | Restrictions: 只做这一件事；保留 Prompt 三参构造器；不改内核 | Success: 捕获的请求体符合；默认 Output 时请求体与现在逐字节相同 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 2. 真实服务确认摘要模式请求被接受
+- [x] 2. 真实服务确认摘要模式请求被接受
   - File: tantalum-shell/src/test/java/tantalum/shell/model/OpenAiSmokeTest.java, tantalum-shell/src/test/java/tantalum/shell/model/ClaudeSmokeTest.java
   - 对 strata（qwen）和 Claude 各发一次：历史含工具调用和结果、末尾用户指令、禁用工具、限长 512；判定：200、无工具调用、有文本
   - 验证：两边通过；strata 不可用记为未验证并写进 tech.md
