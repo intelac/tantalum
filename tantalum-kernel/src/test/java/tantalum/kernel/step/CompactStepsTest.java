@@ -560,6 +560,33 @@ class CompactStepsTest {
         assertNull(loop.session().compaction());
     }
 
+    /** 需求 1.3：system 太大、头部一条都放不下时不发摘要调用，以原始错误结束。 */
+    @Test
+    void nothingFitsInASummaryCallSoNoneIsSent() {
+        LoopFixture loop = new LoopFixture();
+        loop.prompt(block("q1"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), null, SETTINGS));
+        loop.feed(loop.runId(), endTurn(loop, block("a1"), 10));
+        loop.prompt(block("q2"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), null, SETTINGS));
+        loop.feed(loop.runId(), overflow(loop));
+        assertTrue(loop.last.commands().stream().noneMatch(CallModel.class::isInstance));
+        Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
+        assertEquals("prompt is too long", ended.detail());
+    }
+
+    /** 需求 1.5：重试过的摘要调用回放后 prompt 仍然相同。 */
+    @Test
+    void replayOfARetriedSummaryCallMatches() {
+        LoopFixture loop = overThreshold();
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
+        loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
+        Replay.Result replayed = Replay.run(loop.kernel, loop.journal);
+        assertEquals(loop.commands, replayed.commands());
+        assertEquals(loop.state, replayed.state());
+    }
+
     /** 设计补 1.9（规则 5）：压缩后重新组装，新的 system、工具和记忆生效，不追加更新消息，也不连续压缩。 */
     @Test
     void contextIsReassembledAfterCompaction() {

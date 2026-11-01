@@ -125,7 +125,7 @@ prompt = Prompt(run.system + patch.systemAppend, run.toolSpecs + patch.addTools,
                 new Prompt.Output(false, summaryMaxTokens))
 ```
 
-`Trimming.summarize` 与 `keep` 相同，只是上限不同。头部前缀与之前的普通调用逐字节相同，所以缓存命中；上一次的摘要就在头部第一条，指令里要求“保留并更新已有摘要”。
+`Trimming.summarize` 与 `keep` 相同，只是上限不同。~~头部前缀与之前的普通调用逐字节相同，所以缓存命中；~~（2026-11-01 更正）这句不成立：头部已去推理块并截断工具结果，至少在那里分叉，缓存只命中此前的部分。上一次的摘要就在头部第一条，指令里要求“保留并更新已有摘要”。
 
 `SummaryPrompt.instruction` 固定英文，结构来自 pi：Goal、Constraints & preferences、Progress（done / in progress / blocked）、Key decisions、Next steps、Key context；要求逐字保留文件路径、函数名、错误信息；`dropped` 为真时加一句“最早的部分已放不下、被省略”；手动压缩附用户说明。
 

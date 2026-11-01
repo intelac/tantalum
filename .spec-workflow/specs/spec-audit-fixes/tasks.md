@@ -111,18 +111,18 @@
 
 ## 阶段 5：真实场景和收尾
 
-- [ ] 19. 真实模型
+- [x] 19. 真实模型
   - File: tantalum-examples/src/test/java/tantalum/examples/ClaudeScenarioTest.java, StrataScenarioTest.java, CompactionScenario.java
   - Claude 严格校验和 qwen：首条请求后读超大文件，答对首尾暗号；窗口小到压缩两次的长任务，第一次压缩前的约束在结尾仍被遵守。Claude 额外跑：保留段含已下线工具的调用
   - 验证：判定全部机械断言；strata 不可用记为未验证；用量写进 tech.md。如果已下线工具的调用被拒，先修再过
   - _Requirements: 5.2, 5.3, 设计补 1.9_
 
-- [ ] 20. 文档
+- [x] 20. 文档
   - File: .spec-workflow/specs/mcp-client/requirements.md, .spec-workflow/specs/memory/requirements.md, .spec-workflow/specs/context-compaction/requirements.md, .spec-workflow/specs/context-compaction/design.md, README.md, .spec-workflow/steering/tech.md
   - 更正错误说法并注明日期；写明删除记忆不清除 journal、记忆边界不是保证；已知限制
   - _Requirements: 4.1, 4.2_
 
-- [ ] 21. 全量验证
+- [x] 21. 全量验证
   - `mvn verify`、vitest、Playwright 全过；对照需求逐条核对，每条都能指出对应的测试
   - 验证：列出核对结果，任何没做的如实写出
   - _Requirements: 5.5_
