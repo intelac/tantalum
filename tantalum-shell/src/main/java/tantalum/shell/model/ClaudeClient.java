@@ -54,6 +54,7 @@ public final class ClaudeClient implements ModelClient {
 
     private static final String PROVIDER = "claude";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
+    private static final String BINDING_BETA = "thinking-binding-controls-2026-08-01";
     /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
     private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
 
@@ -79,9 +80,17 @@ public final class ClaudeClient implements ModelClient {
     private final Duration firstChunk;
     private final Duration betweenChunks;
     private final OverflowRules overflow;
+    private final boolean strictThinking;
 
     public ClaudeClient(AnthropicClient client, String model, long maxTokens, String effort, boolean fallbacks,
                         Duration firstChunk, Duration betweenChunks, OverflowRules overflow) {
+        this(client, model, maxTokens, effort, fallbacks, firstChunk, betweenChunks, overflow, false);
+    }
+
+    /** {@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题。测试用。 */
+    public ClaudeClient(AnthropicClient client, String model, long maxTokens, String effort, boolean fallbacks,
+                        Duration firstChunk, Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {
+        this.strictThinking = strictThinking;
         this.client = client;
         this.model = model;
         this.maxTokens = maxTokens;
@@ -311,7 +320,7 @@ public final class ClaudeClient implements ModelClient {
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
-                .thinking(ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED).build())
+                .thinking(thinking())
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
         if (!prompt.system().isBlank()) {
             params.systemOfTextBlockParams(List.of(
@@ -338,11 +347,28 @@ public final class ClaudeClient implements ModelClient {
                 params.addMessage(AssistantMessageParam.builder().contentOfContentBlockParams(blocks).build());
             }
         }
+        List<String> betas = new ArrayList<>();
         if (fallbacks) {
-            params.putAdditionalHeader("anthropic-beta", FALLBACK_BETA);
+            betas.add(FALLBACK_BETA);
+        }
+        if (strictThinking) {
+            betas.add(BINDING_BETA);
+        }
+        if (!betas.isEmpty()) {
+            params.putAdditionalHeader("anthropic-beta", String.join(",", betas));
+        }
+        if (fallbacks) {
             params.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
         }
         return params.build();
+    }
+
+    private ThinkingConfigAdaptive thinking() {
+        ThinkingConfigAdaptive.Builder thinking = ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED);
+        if (strictThinking) {
+            thinking.putAdditionalProperty("block_binding", JsonValue.from(Map.of("prefix_mismatch_behavior", "error")));
+        }
+        return thinking.build();
     }
 
     private static Tool tool(ToolSpec spec, boolean last) {

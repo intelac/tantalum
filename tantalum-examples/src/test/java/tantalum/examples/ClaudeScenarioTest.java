@@ -551,19 +551,22 @@ class ClaudeScenarioTest {
     void changingMemoryMidSessionKeepsThinkingValid() throws Exception {
         Path workspace = workspace("drift");
         Path data = temp.resolve("data-drift");
-        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "high"))) {
+        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
+                MODEL, 8192, "high", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+        try (TestServer server = new TestServer(data, workspace, strict)) {
             submit(server, "drift", "s1", "Let a1 = 3 and a(n+1) = 2*a(n) - 1. Compute a12 modulo 7 step by step and double-check it.");
             assertEquals("COMPLETED", waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3)).get("endReason").asString());
             assertEquals(201, server.post("drift", "/api/memory",
                     "{\"name\":\"style\",\"type\":\"user\",\"description\":\"Prefers short answers\",\"content\":\"Short answers.\"}").statusCode());
-            submit(server, "drift", "s1", "Now compute a13 modulo 7.");
+            submit(server, "drift", "s1", "Also, what short-answer preference do you know about me? Then compute a13 modulo 7.");
             JsonNode second = waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3));
             System.out.println("[claude memory drift] second run=" + second);
             assertEquals("COMPLETED", second.get("endReason").asString(), second.toString());
         }
         List<EventEnvelope> journal = journal(data);
         long thinking = events(journal, ModelReplied.class).stream().flatMap(reply -> reply.content().stream()).filter(ReasoningBlock.class::isInstance).count();
-        System.out.println("[claude memory drift] thinkingBlocks=" + thinking);
+        System.out.println("[claude memory drift] thinkingBlocks=" + thinking + " answer=" + lastText(journal).replace("\n", " | "));
+        assertTrue(lastText(journal).toLowerCase().contains("short"), "the appended memory update did not reach the model: " + lastText(journal));
         org.junit.jupiter.api.Assumptions.assumeTrue(thinking > 0, "no thinking was produced, so this proves nothing");
         usage("memory drift", journal);
     }

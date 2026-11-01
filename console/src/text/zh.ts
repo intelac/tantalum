@@ -67,7 +67,7 @@ export const zh = {
     collapse: "收起",
   },
   failure: {
-    CONTEXT_OVERFLOW: "上下文超长，模型放不下这段对话",
+    CONTEXT_OVERFLOW: "上下文超长，模型放不下这段对话。请开一个新会话继续，记忆会带过去",
     REFUSAL: "模型拒绝回答",
     RATE_LIMITED: "触发限流，稍后再试",
     TIMEOUT: "模型响应超时",
