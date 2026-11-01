@@ -40,6 +40,9 @@ import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
+import tantalum.shell.memory.KnowledgeBase;
+import tantalum.shell.memory.MemoryLimits;
+import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
@@ -157,8 +160,10 @@ public final class Engine implements AutoCloseable {
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
+        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), MemoryLimits.of(properties.memory()), clock);
+        KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
         Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
-                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog),
+                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
