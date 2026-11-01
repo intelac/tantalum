@@ -35,6 +35,7 @@ public final class ItemJson {
             case TranscriptItem.Thinking ignored -> "thinking";
             case TranscriptItem.ToolStep ignored -> "tool";
             case TranscriptItem.RunStatus ignored -> "run";
+            case TranscriptItem.CompactionMark ignored -> "compaction";
         };
     }
 }

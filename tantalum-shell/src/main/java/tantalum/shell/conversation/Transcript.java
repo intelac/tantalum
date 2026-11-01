@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.compaction.SummaryPrompt;
+import tantalum.shell.conversation.TranscriptItem.CompactionMark;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.loop.Projection;
 import tantalum.shell.conversation.TranscriptItem.Text;
@@ -18,6 +20,8 @@ import tantalum.shell.conversation.TranscriptItem.ToolStep;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
+import tantalum.value.decision.CompactionFailed;
+import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.PhaseChanged;
@@ -37,6 +41,7 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
+import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
@@ -146,8 +151,35 @@ public final class Transcript implements Projection {
                     phaseChanged(phase.run().run(), phase.phase());
                 }
             }
+            compaction();
             blockedSlots();
             appendedResults();
+        }
+
+        /** 这个决定里属于本会话的压缩事实，没有则为 null。 */
+        private Fact compactionFact() {
+            for (Fact fact : decision.facts()) {
+                if ((fact instanceof ContextCompacted || fact instanceof CompactionFailed) && fact.run().session().equals(session)) {
+                    return fact;
+                }
+            }
+            return null;
+        }
+
+        /** 压缩成功或失败各一个条目；摘要调用的回复不是对话文本，在 {@link #reply} 里跳过。 */
+        private void compaction() {
+            Fact fact = compactionFact();
+            String id = TranscriptItem.id(envelope.seq(), 0);
+            switch (fact) {
+                case ContextCompacted ok -> {
+                    String summary = envelope.event() instanceof ModelReplied reply ? SummaryPrompt.text(reply.content()) : "";
+                    put(new CompactionMark(id, session, ok.run().run(), at, ok.trigger(), summary, ok.estimateBefore(),
+                            ok.estimateAfter(), ok.usage(), null));
+                }
+                case CompactionFailed failed -> put(new CompactionMark(id, session, failed.run().run(), at, failed.trigger(),
+                        null, 0, 0, null, failed.reason()));
+                case null, default -> { }
+            }
         }
 
         private void put(TranscriptItem item) {
@@ -177,15 +209,16 @@ public final class Transcript implements Projection {
 
         private void reply(ModelReplied reply) {
             RunId run = runOfEvent();
-            if (run == null) {
+            if (run == null || compactionFact() != null) {
                 return;
             }
             List<ContentBlock> content = reply.content();
+            boolean truncated = reply.stop() == StopReason.MAX_TOKENS && content.stream().noneMatch(ToolCallBlock.class::isInstance);
             for (int i = 0; i < content.size(); i++) {
                 String id = TranscriptItem.id(envelope.seq(), i);
                 switch (content.get(i)) {
                     case ReasoningBlock reasoning -> put(thinking(id, run, reasoning));
-                    case TextBlock text -> put(new Text(id, session, run, at, text.text(), false));
+                    case TextBlock text -> put(new Text(id, session, run, at, text.text(), false, truncated));
                     case ToolCallBlock call -> {
                         put(ToolStep.waiting(id, session, run, at, call));
                         conversation.stepByCall.put(call.id(), id);
@@ -208,13 +241,14 @@ public final class Transcript implements Projection {
         private void interrupted(ModelInterrupted interrupted) {
             RunId run = runOfEvent();
             if (run != null && !interrupted.text().isEmpty()) {
-                put(new Text(TranscriptItem.id(envelope.seq(), 0), session, run, at, interrupted.text(), true));
+                put(new Text(TranscriptItem.id(envelope.seq(), 0), session, run, at, interrupted.text(), true, false));
             }
         }
 
+        /** 摘要调用失败不算运行失败：运行照常继续，原因在压缩条目里。 */
         private void failed(ModelFailed failed) {
             RunId run = runOfEvent();
-            if (run != null && get(RunStatus.idOf(run)) instanceof RunStatus status) {
+            if (run != null && compactionFact() == null && get(RunStatus.idOf(run)) instanceof RunStatus status) {
                 put(status.failedWith(failed.reason(), at));
             }
         }

@@ -12,6 +12,8 @@ import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
+import tantalum.value.decision.CompactionFailed;
+import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
@@ -21,6 +23,7 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.model.Prompt;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.json.JsonMapper;
@@ -43,8 +46,12 @@ public final class TurnQuery {
     /** 一次运行的轨迹：事件列表和两事件之间由哪个 Handler 在干活的时间段。 */
     public record Trace(List<Entry> events, List<Segment> segments) {
 
-        /** {@code phase} 是事件处理后的状态名；{@code turn} 是这个事件发出的模型调用序号，没有则为空。 */
-        public record Entry(long seq, Instant at, String type, String phase, Integer turn) {}
+        /** {@code phase} 是事件处理后的状态名；{@code turn} 是这个事件发出的模型调用序号，没有则为空；
+         * {@code compaction} 是这个事件带来的压缩结果，没有则为空。 */
+        public record Entry(long seq, Instant at, String type, String phase, Integer turn, Compaction compaction) {}
+
+        /** 一次压缩的结果：成功时带前后估算和摘要调用用量，失败时带原因。 */
+        public record Compaction(String trigger, boolean ok, long estimateBefore, long estimateAfter, TokenUsage usage, String reason) {}
 
         /** 还在等待时 {@code to} 为空。 */
         public record Segment(String handler, Instant from, Instant to) {}
@@ -105,7 +112,8 @@ public final class TurnQuery {
                     turn = ++turns;
                 }
             }
-            entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), Kernel.stateName(current), turn));
+            entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), Kernel.stateName(current), turn,
+                    compactionOf(decision, run)));
         }
         List<Trace.Segment> segments = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
@@ -119,11 +127,23 @@ public final class TurnQuery {
         return new Trace(entries, segments);
     }
 
+    private static Trace.Compaction compactionOf(Decision decision, RunId run) {
+        for (Fact fact : decision.facts()) {
+            if (fact instanceof ContextCompacted ok && ok.run().run().equals(run)) {
+                return new Trace.Compaction(ok.trigger().name(), true, ok.estimateBefore(), ok.estimateAfter(), ok.usage(), null);
+            }
+            if (fact instanceof CompactionFailed failed && failed.run().run().equals(run)) {
+                return new Trace.Compaction(failed.trigger().name(), false, 0, 0, null, failed.reason());
+            }
+        }
+        return null;
+    }
+
     /** 等待状态名到负责它的 Handler。 */
     static String handlerOf(String phase) {
         return switch (phase) {
             case "AwaitingContext" -> "ContextHandler";
-            case "AwaitingModel" -> "ModelHandler";
+            case "AwaitingModel", "AwaitingSummary" -> "ModelHandler";
             case "AwaitingTools" -> "ToolHandler";
             case "AwaitingWork" -> "WorkHandler";
             case "AwaitingRetry" -> "TimerHandler";

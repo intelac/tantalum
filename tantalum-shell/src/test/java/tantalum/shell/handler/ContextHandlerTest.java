@@ -3,6 +3,7 @@ package tantalum.shell.handler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -74,6 +75,16 @@ class ContextHandlerTest {
 
     private static ContextAssembled assembled(ContextHandler handler, AssembleContext command) throws Exception {
         return assertInstanceOf(ContextAssembled.class, handler.handle(command));
+    }
+
+    /** 压缩设置随事件写进 journal，会话据此冻结；没配时为 null，内核就不压缩。 */
+    @Test
+    void compactionSettingsRideAlongWithTheEvent() throws Exception {
+        tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
+        ContextHandler handler = new ContextHandler(Workspaces.shared(dir), "Base.", catalog(), memories(Workspaces.shared(dir)),
+                KnowledgeBase.none(), "", settings);
+        assertEquals(settings, assembled(handler, COMMAND).compaction());
+        assertNull(assembled(shared(), COMMAND).compaction());
     }
 
     @Test

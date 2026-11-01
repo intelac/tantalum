@@ -33,7 +33,9 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 
@@ -116,10 +118,15 @@ final class TranscriptFixture {
 
     /** 开始一次运行并走完上下文组装，返回运行 ID。 */
     RunId start(String text) {
+        return start(text, null);
+    }
+
+    /** 同上，但带压缩设置（会话第一次组装时冻结）。 */
+    RunId start(String text, CompactionSettings settings) {
         feed(null, prompt(text));
         RunId run = new RunId("run-" + lastSeq());
         CommandId assemble = lastCommands().getFirst().id();
-        feed(run, new ContextAssembled(assemble, "sys", List.of()));
+        feed(run, new ContextAssembled(assemble, "sys", List.of(), null, settings));
         return run;
     }
 
@@ -144,8 +151,16 @@ final class TranscriptFixture {
 
     /** 模型回复，命令 ID 取最近一次 {@code CallModel}。 */
     ModelReplied reply(ContentBlock... content) {
+        return reply(null, content);
+    }
+
+    ModelReplied reply(TokenUsage usage, ContentBlock... content) {
         boolean tools = List.of(content).stream().anyMatch(ToolCallBlock.class::isInstance);
-        return new ModelReplied(callModel(), List.of(content), tools ? StopReason.TOOL_USE : StopReason.END_TURN, "m", null);
+        return new ModelReplied(callModel(), List.of(content), tools ? StopReason.TOOL_USE : StopReason.END_TURN, "m", usage);
+    }
+
+    ModelReplied truncatedReply(String text) {
+        return new ModelReplied(callModel(), List.of(new TextBlock(text)), StopReason.MAX_TOKENS, "m", null);
     }
 
     /** 某个调用的结果，命令 ID 取发出它的 {@code RunTool}。 */

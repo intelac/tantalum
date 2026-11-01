@@ -15,6 +15,7 @@ import static tantalum.shell.conversation.TranscriptFixture.text;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import tantalum.shell.conversation.TranscriptItem.CompactionMark;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
@@ -37,6 +38,86 @@ class TranscriptTest {
 
     private final TranscriptFixture fx = new TranscriptFixture();
 
+    /** 窗口 1000、预留 200、保留 70：阈值 800。 */
+    private static final tantalum.value.state.CompactionSettings SETTINGS =
+            new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
+
+    private static String block(String tag) {
+        return (tag + " ").repeat(45).substring(0, 90);
+    }
+
+    /** 两轮问答后实测 790，第三个问题让大小越过阈值，第三个运行先发摘要调用：头部 q1、a1、q2，保留 a2、q3。 */
+    private RunId runNeedingCompaction() {
+        RunId first = fx.start(block("q1"), SETTINGS);
+        fx.feed(first, fx.reply(new tantalum.value.model.TokenUsage(700, 10, 0, 0), text(block("a1"))));
+        RunId second = nextRun(block("q2"));
+        fx.feed(second, fx.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(block("a2"))));
+        return nextRun(block("q3"));
+    }
+
+    private RunId nextRun(String text) {
+        fx.feed(null, fx.prompt(text));
+        RunId run = new RunId("run-" + fx.lastSeq());
+        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
+        return run;
+    }
+
+    @Test
+    void summaryReplyBecomesACompactionMarkNotAReply() {
+        RunId run = runNeedingCompaction();
+        fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), claudeThinking("summarizing"), text("Goal: q")));
+
+        List<CompactionMark> marks = fx.items(CompactionMark.class);
+        assertEquals(1, marks.size());
+        CompactionMark mark = marks.getFirst();
+        assertEquals(run, mark.run());
+        assertEquals(tantalum.value.state.Compacting.Trigger.AUTO, mark.trigger());
+        assertEquals("Goal: q", mark.summary());
+        assertFalse(mark.failed());
+        assertTrue(mark.estimateAfter() < mark.estimateBefore());
+        assertEquals(new tantalum.value.model.TokenUsage(50, 20, 0, 0), mark.usage());
+        assertTrue(fx.items(Text.class).stream().noneMatch(item -> item.text().contains("Goal")), "the summary is not a reply");
+        assertTrue(fx.items(Thinking.class).stream().noneMatch(item -> item.text().equals("summarizing")));
+        assertEquals("AwaitingModel", fx.status(run).phase());
+
+        fx.feed(run, fx.reply(text("a3")));
+        assertEquals("a3", fx.items(Text.class).getLast().text());
+        assertTrue(fx.status(run).ended());
+        // 原始条目都还在：三条用户消息、三条回复文本。
+        assertEquals(3, fx.items(UserMessage.class).size());
+        assertEquals(3, fx.items(Text.class).size());
+    }
+
+    @Test
+    void failedSummaryIsAMarkWithTheReasonAndNotARunFailure() {
+        RunId run = runNeedingCompaction();
+        fx.feed(run, fx.truncatedReply("half"));
+        CompactionMark mark = fx.items(CompactionMark.class).getFirst();
+        assertTrue(mark.failed());
+        assertEquals("summary did not end normally: MAX_TOKENS", mark.failure());
+        assertNull(mark.summary());
+        assertNull(fx.status(run).failure(), "the run goes on; the summary failure is not the run's failure");
+        assertEquals("AwaitingModel", fx.status(run).phase());
+
+        fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(block("a3"))));
+        assertTrue(fx.status(run).ended());
+        RunId again = nextRun(block("q4"));
+        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        assertTrue(fx.items(CompactionMark.class).getLast().failure().contains("429"));
+        assertNull(fx.status(again).failure());
+    }
+
+    @Test
+    void truncatedReplyIsMarked() {
+        RunId run = fx.start("hi");
+        fx.feed(run, fx.truncatedReply("half of the"));
+        Text item = fx.items(Text.class).getFirst();
+        assertTrue(item.truncated());
+        assertFalse(item.interrupted());
+        assertEquals(EndReason.COMPLETED, fx.status(run).endReason());
+        assertEquals("reply truncated", fx.status(run).detail());
+    }
+
     @Test
     void thinkingBeforeAndAfterEachToolCallIsKeptInOrder() {
         RunId run = fx.start("hi");
@@ -52,6 +133,7 @@ class TranscriptTest {
             case Thinking t -> "think:" + t.text();
             case ToolStep s -> "tool:" + s.call().name();
             case Text t -> "text:" + t.text();
+            case CompactionMark c -> "compaction";
         }).toList();
         assertEquals(List.of("user:hi", "run", "think:plan", "tool:read_file", "think:check", "tool:grep",
                 "think:wrap up", "text:done"), kinds);

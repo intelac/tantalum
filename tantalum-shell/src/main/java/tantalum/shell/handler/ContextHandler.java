@@ -14,6 +14,7 @@ import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
+import tantalum.value.state.CompactionSettings;
 
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
@@ -31,16 +32,21 @@ public final class ContextHandler implements Handler {
     private final MemoryStores memories;
     private final KnowledgeBase knowledge;
     private final String fixedNote;
+    private final CompactionSettings compaction;
 
     public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
                           KnowledgeBase knowledge) {
-        this(workspaces, basePrompt, catalog, memories, knowledge, "");
+        this(workspaces, basePrompt, catalog, memories, knowledge, "", null);
     }
 
-    /** {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。 */
+    /**
+     * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
+     * {@code compaction} 是当前的压缩设置，随事件写进 journal，会话第一次组装时冻结；null 表示不压缩。
+     */
     public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
-                          KnowledgeBase knowledge, String fixedNote) {
+                          KnowledgeBase knowledge, String fixedNote, CompactionSettings compaction) {
         this.fixedNote = fixedNote;
+        this.compaction = compaction;
         this.workspaces = workspaces;
         this.basePrompt = basePrompt;
         this.catalog = catalog;
@@ -68,7 +74,7 @@ public final class ContextHandler implements Handler {
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
         append(system, dynamic.toString());
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), dynamic.toString());
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), dynamic.toString(), compaction);
     }
 
     private static void append(StringBuilder system, String section) {

@@ -71,9 +71,10 @@ public final class SummaryPrompt {
     }
 
     /**
-     * 规则 7。通过返回 null，否则返回原因。{@code headEstimate} 是头部的估算，摘要不能比它大。
+     * 规则 7。通过返回 null，否则返回原因。替代头部的是摘要加上原样重复的当前请求（{@code requestEstimate}，没有则为 0），
+     * 两者合起来必须比头部（{@code headEstimate}）小，否则压缩只会让视图变大。
      */
-    public static String validate(List<ContentBlock> content, StopReason stop, long headEstimate) {
+    public static String validate(List<ContentBlock> content, StopReason stop, long headEstimate, long requestEstimate) {
         if (content.stream().anyMatch(ToolCallBlock.class::isInstance)) {
             return "summary tried to call a tool";
         }
@@ -84,7 +85,7 @@ public final class SummaryPrompt {
         if (text.isBlank()) {
             return "summary is empty";
         }
-        if (TokenEstimate.ofMessage(summaryMessage(text)) >= headEstimate) {
+        if (TokenEstimate.ofMessage(summaryMessage(text)) + requestEstimate >= headEstimate) {
             return "summary is not smaller than what it replaces";
         }
         return null;

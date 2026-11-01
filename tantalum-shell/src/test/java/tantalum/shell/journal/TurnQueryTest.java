@@ -126,6 +126,46 @@ class TurnQueryTest {
         assertTrue(trace.segments().stream().allMatch(segment -> segment.to() != null));
     }
 
+    /** 摘要调用是一个 turn（prompt 里工具被禁用），轨迹条目带压缩结果，AwaitingSummary 归 ModelHandler。 */
+    @Test
+    void summaryCallIsATurnAndTheTraceCarriesTheCompaction() throws Exception {
+        tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
+        String q = ("q ").repeat(45);
+        write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
+        write(RUN, new ContextAssembled(new CommandId("0-0"), "system prompt", List.of(), null, settings));
+        write(RUN, new ModelReplied(new CommandId("1-0"), List.of(new TextBlock(("a ").repeat(45))), StopReason.END_TURN, "m",
+                new tantalum.value.model.TokenUsage(700, 10, 0, 0)));
+        write(null, new UserPrompt(new SubmissionId("b"), new RequestId("b"), new OwnerRef.OfSession(SESSION), q));
+        write(new RunId("run-3"), new ContextAssembled(new CommandId("3-0"), "system prompt", List.of(), null, settings));
+        write(new RunId("run-3"), new ModelReplied(new CommandId("4-0"), List.of(new TextBlock(("b ").repeat(45))), StopReason.END_TURN, "m",
+                new tantalum.value.model.TokenUsage(790, 10, 0, 0)));
+        write(null, new UserPrompt(new SubmissionId("c"), new RequestId("c"), new OwnerRef.OfSession(SESSION), q));
+        RunId second = new RunId("run-6");
+        write(second, new ContextAssembled(new CommandId("6-0"), "system prompt", List.of(), null, settings));
+        write(second, new ModelReplied(new CommandId("7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
+                new tantalum.value.model.TokenUsage(50, 20, 0, 0)));
+        write(second, new ModelReplied(new CommandId("8-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
+
+        List<TurnQuery.Turn> turns = query.turns(USER, second);
+        assertEquals(2, turns.size());
+        assertEquals(false, turns.get(0).prompt().output().toolsAllowed(), "turn 1 of the second run is the summary call");
+        assertEquals(500, turns.get(0).prompt().output().maxTokens());
+        assertTrue(turns.get(1).prompt().output().toolsAllowed());
+        assertEquals(4, turns.get(1).prompt().messages().size(), "summary, request q2, kept a2, kept q3");
+
+        TurnQuery.Trace trace = query.trace(USER, second);
+        assertEquals(List.of("AwaitingContext", "AwaitingSummary", "AwaitingModel", "Ended"),
+                trace.events().stream().map(TurnQuery.Trace.Entry::phase).toList());
+        TurnQuery.Trace.Entry summary = trace.events().get(2);
+        assertEquals("ModelReplied", summary.type());
+        assertTrue(summary.compaction().ok());
+        assertEquals("AUTO", summary.compaction().trigger());
+        assertTrue(summary.compaction().estimateAfter() < summary.compaction().estimateBefore());
+        assertNull(trace.events().get(1).compaction());
+        assertEquals(List.of("ContextHandler", "ModelHandler", "ModelHandler"),
+                trace.segments().stream().map(TurnQuery.Trace.Segment::handler).toList());
+    }
+
     @Test
     void traceOfAnUnfinishedRunHasAnOpenLastSegment() throws Exception {
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
