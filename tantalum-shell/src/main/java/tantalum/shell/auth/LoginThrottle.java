@@ -7,7 +7,10 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 按账号和来源限制登录失败次数。只在内存里，重启后清零。 */
+/**
+ * 按账号和来源限制登录失败次数。只在内存里，重启后清零。
+ * 一次尝试在开始时就占用计数（{@link #tryBegin}），成功后再退还，这样并发猜密码不能在慢的 Argon2 校验期间越过限额。
+ */
 public final class LoginThrottle {
 
     static final int MAX_KEYS = 10_000;
@@ -30,18 +33,23 @@ public final class LoginThrottle {
         this.clock = clock;
     }
 
-    public synchronized boolean allowed(String account, String source) {
-        return failures("a:" + account) < maxPerAccount && failures("s:" + source) < maxPerSource;
-    }
-
-    public synchronized void failed(String account, String source) {
+    /** 检查并预占一次尝试。返回 false 表示超限，调用方不要再去校验密码。 */
+    public synchronized boolean tryBegin(String account, String source) {
+        if (failures("a:" + account) >= maxPerAccount || failures("s:" + source) >= maxPerSource) {
+            return false;
+        }
         record("a:" + account);
         record("s:" + source);
+        return true;
     }
 
-    /** 只清账号的计数；来源的计数保留，否则攻击者可以用自己的账号登录来清零。 */
-    public synchronized void succeeded(String account) {
+    /** 登录成功：清掉账号的计数，退还来源的这一次预占。来源的其余计数保留，否则攻击者可以用自己的账号登录来清零。 */
+    public synchronized void succeeded(String account, String source) {
         windows.remove("a:" + account);
+        Window current = windows.get("s:" + source);
+        if (current != null && current.failures > 0) {
+            current.failures--;
+        }
     }
 
     synchronized int trackedKeys() {

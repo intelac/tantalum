@@ -142,6 +142,23 @@ class AuthApiTest {
         assertStreamEnds(stream);
     }
 
+    /** 超长输入在进 Argon2 和限速表之前就被拒。 */
+    @Test
+    void oversizedCredentialsAreRejectedBeforeVerification() throws Exception {
+        assertEquals(400, server.attemptLogin("a".repeat(65), "alice-password", null).statusCode());
+        assertEquals(400, server.attemptLogin("alice", "p".repeat(1025), null).statusCode());
+        assertEquals(400, server.attemptLogin("alice", "p".repeat(9000), null).statusCode());
+        assertEquals(400, server.attemptLogin("", "alice-password", null).statusCode());
+        assertEquals(200, server.attemptLogin("alice", "alice-password", null).statusCode());
+    }
+
+    @Test
+    void runOrderToleratesOddRunIds() {
+        assertEquals(12, ApiController.runOrder(new tantalum.value.id.RunId("run-12")));
+        assertEquals(-1, ApiController.runOrder(new tantalum.value.id.RunId("legacy")));
+        assertEquals(-1, ApiController.runOrder(new tantalum.value.id.RunId("run-x")));
+    }
+
     @Test
     void cookieMustBeSecureWhenNotBoundToLoopback() {
         assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie("0.0.0.0", false));

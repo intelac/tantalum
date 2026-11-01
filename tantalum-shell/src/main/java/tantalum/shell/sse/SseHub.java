@@ -70,7 +70,7 @@ public final class SseHub implements FactListener {
         @Override
         public void close() {
             closed = true;
-            subscribers(principal).remove(this);
+            removeSubscriber(this);
             queue.offer(WAKE_UP);
         }
     }
@@ -89,11 +89,14 @@ public final class SseHub implements FactListener {
     private final JsonMapper itemMapper;
     private final Map<Principal, Set<Subscription>> subscribers = new ConcurrentHashMap<>();
     private final Deque<Stored> recent = new ArrayDeque<>();
-    /** 内存能覆盖的最早序号，更早的要回放。 */
-    private long coveredFromSeq;
+    /** 最后一条被挤出内存的消息位置（序号.下标）；在它之前的位置要回放，之后的内存都有。 */
+    private long evictedSeq;
+    private int evictedIndex;
 
     public SseHub(long firstLiveSeq, int queueCapacity, int recentCapacity, History history, JsonMapper itemMapper) {
-        this.coveredFromSeq = firstLiveSeq;
+        // 启动前的消息都不在内存：把上一个序号的全部下标都当作已挤出。
+        this.evictedSeq = firstLiveSeq - 1;
+        this.evictedIndex = Integer.MAX_VALUE;
         this.queueCapacity = queueCapacity;
         this.recentCapacity = recentCapacity;
         this.history = history;
@@ -104,20 +107,33 @@ public final class SseHub implements FactListener {
         return subscribers.computeIfAbsent(principal, key -> ConcurrentHashMap.newKeySet());
     }
 
-    /** {@code lastEventId} 为空或无法解析时只接收之后的消息。 */
+    /** 不为没见过的用户建条目，空集合顺手删掉，表不随见过的用户数增长。 */
+    private void removeSubscriber(Subscription subscription) {
+        subscribers.computeIfPresent(subscription.principal, (key, set) -> {
+            set.remove(subscription);
+            return set.isEmpty() ? null : set;
+        });
+    }
+
+    private void forEachSubscriber(Principal principal, java.util.function.Consumer<Subscription> action) {
+        Set<Subscription> set = subscribers.get(principal);
+        if (set != null) {
+            set.forEach(action);
+        }
+    }
+
+    /** {@code lastEventId} 为空或无法解析时只接收之后的消息。回放失败时订阅不会留在表里。 */
     public Subscription subscribe(Principal principal, String lastEventId) {
         Subscription subscription = new Subscription(principal, queueCapacity);
         long[] position = parse(lastEventId);
         List<SseMessage> missed = new ArrayList<>();
         boolean fromHistory = false;
         synchronized (recent) {
-            if (position != null && position[0] < coveredFromSeq - 1) {
+            if (position != null && isBefore(position[0], position[1], evictedSeq, evictedIndex)) {
                 fromHistory = true;
             } else if (position != null) {
                 for (Stored stored : recent) {
-                    boolean later = stored.seq() > position[0]
-                            || (stored.seq() == position[0] && stored.index() > position[1]);
-                    if (later && stored.owner().equals(principal)) {
+                    if (isBefore(position[0], position[1], stored.seq(), stored.index()) && stored.owner().equals(principal)) {
                         missed.add(stored.message());
                     }
                 }
@@ -125,20 +141,37 @@ public final class SseHub implements FactListener {
             subscribers(principal).add(subscription);
         }
         if (fromHistory) {
-            missed = history.after(principal, lastEventId);
+            try {
+                missed = history.after(principal, lastEventId);
+            } catch (RuntimeException failure) {
+                subscription.close();
+                throw failure;
+            }
         }
         subscription.catchUp.addAll(missed);
         return subscription;
     }
 
+    private static boolean isBefore(long seq, long index, long otherSeq, long otherIndex) {
+        return seq < otherSeq || (seq == otherSeq && index < otherIndex);
+    }
+
+    /** 当前订阅数，含所有用户。 */
+    public int subscriberCount() {
+        return subscribers.values().stream().mapToInt(Set::size).sum();
+    }
+
     /** 服务关闭时调用，否则要等每条连接超时。 */
     public void closeEveryone() {
-        subscribers.keySet().forEach(this::closeAll);
+        List.copyOf(subscribers.keySet()).forEach(this::closeAll);
     }
 
     /** 用户退出或被停用时调用，断开它的全部连接。 */
     public void closeAll(Principal principal) {
-        List.copyOf(subscribers(principal)).forEach(Subscription::close);
+        Set<Subscription> set = subscribers.get(principal);
+        if (set != null) {
+            List.copyOf(set).forEach(Subscription::close);
+        }
     }
 
     private static long[] parse(String id) {
@@ -167,9 +200,11 @@ public final class SseHub implements FactListener {
         synchronized (recent) {
             recent.addLast(new Stored(seq, index, owner, message));
             if (recent.size() > recentCapacity) {
-                coveredFromSeq = recent.removeFirst().seq() + 1;
+                Stored evicted = recent.removeFirst();
+                evictedSeq = evicted.seq();
+                evictedIndex = evicted.index();
             }
-            subscribers(owner).forEach(subscription -> subscription.offer(message));
+            forEachSubscriber(owner, subscription -> subscription.offer(message));
         }
     }
 
@@ -180,7 +215,7 @@ public final class SseHub implements FactListener {
         data.put("kind", kind);
         data.put("text", text);
         SseMessage message = new SseMessage(null, "chunk", MAPPER.writeValueAsString(data));
-        subscribers(run.principal()).forEach(subscription -> subscription.offer(message));
+        forEachSubscriber(run.principal(), subscription -> subscription.offer(message));
     }
 
     /** 把条目变化转成 {@code item} 消息：完整条目，客户端按 ID 覆盖。回放补读时也用它。 */
@@ -191,7 +226,6 @@ public final class SseHub implements FactListener {
     /** 把事实转成消息，回放补读时也用它。 */
     public static SseMessage toMessage(long seq, int index, Fact fact) {
         Map<String, Object> data = new HashMap<>(MAPPER.convertValue(fact, new TypeReference<Map<String, Object>>() { }));
-        data.remove("run");
         data.put("run", fact.run().run().value());
         data.put("session", fact.run().session().value());
         return new SseMessage(seq + "." + index, fact.type(), MAPPER.writeValueAsString(data));

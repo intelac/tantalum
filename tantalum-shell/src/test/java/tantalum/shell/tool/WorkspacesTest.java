@@ -52,6 +52,14 @@ class WorkspacesTest {
         assertTrue(Workspaces.isSafeName("alice_1-x"));
     }
 
+    /** 用户目录被换成指向外面的符号链接：不能把外面的目录当成它的工作区。 */
+    @Test
+    void userDirectoryLinkingOutsideIsRejected(@TempDir Path elsewhere) throws Exception {
+        Files.createSymbolicLink(root.resolve("mallory"), elsewhere);
+        Workspaces workspaces = Workspaces.perUser(root);
+        assertThrows(IllegalStateException.class, () -> workspaces.of(new Principal("mallory")));
+    }
+
     @Test
     void sharedModeUsesTheRootForEveryone() throws Exception {
         Workspaces workspaces = Workspaces.shared(root);

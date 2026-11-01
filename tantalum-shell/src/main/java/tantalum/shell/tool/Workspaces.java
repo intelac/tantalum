@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import tantalum.shell.plugin.Workspace;
@@ -45,9 +46,17 @@ public final class Workspaces {
         return shared;
     }
 
-    /** 目录不存在时创建，权限 700。名字不安全时抛 {@link IllegalArgumentException}。 */
+    /** 每人模式下目录不存在时创建，权限 700（共用模式只建目录）。名字不安全时抛 {@link IllegalArgumentException}。 */
     public Workspace of(Principal principal) {
-        return byPrincipal.computeIfAbsent(principal, this::open);
+        Objects.requireNonNull(principal, "principal");
+        Workspace existing = byPrincipal.get(principal);
+        if (existing != null) {
+            return existing;
+        }
+        // 文件 I/O 放在 compute 之外，不占 ConcurrentHashMap 的桶锁；重复打开只是多算一次路径。
+        Workspace opened = open(principal);
+        Workspace raced = byPrincipal.putIfAbsent(principal, opened);
+        return raced == null ? opened : raced;
     }
 
     private Workspace open(Principal principal) {
@@ -61,10 +70,23 @@ public final class Workspaces {
             }
             Path dir = root.resolve(principal.value());
             Files.createDirectories(dir);
-            Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------"));
-            return new Workspace(dir);
+            restrictToOwner(dir);
+            Workspace workspace = new Workspace(dir);
+            // 用户目录若被换成指向外面的符号链接，真实路径就不在 root 下，不能把外面的目录当成它的工作区。
+            if (!workspace.root().startsWith(root.toRealPath())) {
+                throw new IllegalStateException("workspace for " + principal.value() + " points outside " + root);
+            }
+            return workspace;
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
+        }
+    }
+
+    private static void restrictToOwner(Path dir) throws IOException {
+        try {
+            Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------"));
+        } catch (UnsupportedOperationException notPosix) {
+            // Windows 等非 POSIX 文件系统：权限靠操作系统的默认 ACL。
         }
     }
 }

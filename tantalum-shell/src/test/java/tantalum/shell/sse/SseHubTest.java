@@ -135,6 +135,45 @@ class SseHubTest {
         assertEquals(List.of("0.0"), asked);
     }
 
+    /** 同一序号有多条消息，只挤出了其中一部分：客户端的位置在被挤出的那条之前就必须回放，不能从内存补读而漏掉它。 */
+    @Test
+    void evictionWithinOneSeqIsTrackedByIndex() throws Exception {
+        List<String> asked = new ArrayList<>();
+        SseHub hub = new SseHub(0, 4, 2, (principal, after) -> {
+            asked.add(after);
+            return List.of();
+        }, MAPPER);
+        hub.onFact(5, 0, fact(ALICE, "a"));
+        hub.onFact(5, 1, fact(ALICE, "b"));
+        hub.onFact(6, 0, fact(ALICE, "c"));   // 挤出 5.0
+        SseHub.Subscription atFiveZero = hub.subscribe(ALICE, "5.0");
+        assertEquals(List.of(), asked, "5.0 itself was evicted but everything after it is in memory");
+        assertEquals("5.1", atFiveZero.poll(1, TimeUnit.SECONDS).id());
+        assertEquals("6.0", atFiveZero.poll(1, TimeUnit.SECONDS).id());
+
+        hub.onFact(7, 0, fact(ALICE, "d"));   // 挤出 5.1
+        hub.subscribe(ALICE, "5.0");
+        assertEquals(List.of("5.0"), asked, "5.1 is gone from memory, so 5.0 must replay from the journal");
+    }
+
+    @Test
+    void failedHistoryReplayDoesNotLeakTheSubscription() {
+        SseHub hub = new SseHub(100, 4, 8, (principal, after) -> { throw new IllegalStateException("journal gone"); }, MAPPER);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> hub.subscribe(ALICE, "1.0"));
+        assertEquals(0, hub.subscriberCount());
+    }
+
+    @Test
+    void closedSubscriptionsLeaveNoEntryBehind() throws Exception {
+        SseHub hub = hub();
+        SseHub.Subscription alice = hub.subscribe(ALICE, null);
+        hub.onChunk(run(BOB), "text", "bob never subscribed");
+        hub.closeAll(BOB);
+        assertEquals(1, hub.subscriberCount());
+        alice.close();
+        assertEquals(0, hub.subscriberCount());
+    }
+
     @Test
     void catchUpLargerThanTheQueueIsNotCutOff() throws Exception {
         List<SseMessage> history = new ArrayList<>();

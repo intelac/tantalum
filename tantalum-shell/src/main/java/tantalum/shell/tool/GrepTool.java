@@ -18,7 +18,9 @@ import tantalum.value.json.Json;
 /** 在工作目录内按正则搜索。纯 Java 实现，不经过 shell，参数不会被当作命令。 */
 public final class GrepTool implements Tool {
 
-    private static final int MAX_MATCHES = 200;
+    static final int MAX_MATCHES = 200;
+    static final int MAX_LINE_CHARS = 500;
+    static final int MAX_OUTPUT_CHARS = 64 * 1024;
     private static final long MAX_FILE_BYTES = 4 * 1024 * 1024;
     private static final int WORKSPACE_CONCURRENCY = 16;
 
@@ -27,7 +29,7 @@ public final class GrepTool implements Tool {
         @Override
         public char charAt(int index) {
             if (Thread.currentThread().isInterrupted()) {
-                throw new IllegalStateException("interrupted");
+                throw new SearchInterrupted();
             }
             return text.charAt(index);
         }
@@ -42,11 +44,17 @@ public final class GrepTool implements Tool {
         @Override public String toString() { return text.toString(); }
     }
 
+    private static final class SearchInterrupted extends RuntimeException {
+        SearchInterrupted() {
+            super("interrupted", null, false, false);
+        }
+    }
+
     @Override public String name() { return "grep"; }
     @Override public String description() {
         return "Search files with a Java regular expression. path is an optional directory or file relative to the workspace.";
     }
-    @Override public Json schema() { return ToolArguments.schema("pattern", "path"); }
+    @Override public Json schema() { return ToolArguments.schema(List.of("pattern"), List.of("path")); }
     @Override public String server() { return "workspace"; }
     @Override public int serverConcurrency() { return WORKSPACE_CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
@@ -65,26 +73,54 @@ public final class GrepTool implements Tool {
             if (matches.isEmpty()) {
                 return ToolOutput.ok("No matches.");
             }
-            String text = String.join("\n", matches);
-            return ToolOutput.ok(matches.size() >= MAX_MATCHES ? text + "\n(stopped at " + MAX_MATCHES + " matches)" : text);
+            return ToolOutput.ok(render(matches));
         } catch (PatternSyntaxException failure) {
             return ToolOutput.error("Invalid pattern: " + failure.getDescription());
         } catch (IllegalArgumentException failure) {
             return ToolOutput.error(failure.getMessage());
+        } catch (SearchInterrupted interrupted) {
+            Thread.currentThread().interrupt();
+            return ToolOutput.error("Search interrupted.");
         } catch (IOException | UncheckedIOException failure) {
-            return ToolOutput.error("Search failed: " + failure.getMessage());
+            return ToolOutput.error("Search failed: " + failure.getClass().getSimpleName());
         }
     }
 
+    /** 每行和总量都有上限，否则一个压缩过的单行文件就能撑爆模型上下文。 */
+    private static String render(List<String> matches) {
+        StringBuilder text = new StringBuilder();
+        for (String match : matches) {
+            if (text.length() + match.length() > MAX_OUTPUT_CHARS) {
+                text.append("(output truncated at ").append(MAX_OUTPUT_CHARS).append(" characters)");
+                return text.toString();
+            }
+            text.append(match).append('\n');
+        }
+        if (matches.size() >= MAX_MATCHES) {
+            text.append("(stopped at ").append(MAX_MATCHES).append(" matches)");
+        } else {
+            text.setLength(text.length() - 1);
+        }
+        return text.toString();
+    }
+
+    /** 单个文件读不了（权限、遍历途中被删）就跳过它，已找到的匹配不丢。 */
     private List<String> search(Pattern pattern, Path start, Path root) throws IOException {
         List<String> matches = new ArrayList<>();
         // Files.walk 默认不跟随符号链接，指向目录外的链接不会被进入。
         try (Stream<Path> files = Files.walk(start)) {
-            for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
-                if (Files.isSymbolicLink(file) || Files.size(file) > MAX_FILE_BYTES) {
+            for (Path file : (Iterable<Path>) files::iterator) {
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new SearchInterrupted();
+                }
+                try {
+                    if (!Files.isRegularFile(file) || Files.isSymbolicLink(file) || Files.size(file) > MAX_FILE_BYTES) {
+                        continue;
+                    }
+                    searchFile(pattern, file, root, matches);
+                } catch (IOException | UncheckedIOException unreadable) {
                     continue;
                 }
-                searchFile(pattern, file, root, matches);
                 if (matches.size() >= MAX_MATCHES) {
                     break;
                 }
@@ -102,8 +138,10 @@ public final class GrepTool implements Tool {
         }
         String relative = root.relativize(file).toString();
         for (int i = 0; i < lines.size() && matches.size() < MAX_MATCHES; i++) {
-            if (pattern.matcher(new InterruptibleText(lines.get(i))).find()) {
-                matches.add(relative + ":" + (i + 1) + ":" + lines.get(i));
+            String line = lines.get(i);
+            if (pattern.matcher(new InterruptibleText(line)).find()) {
+                String shown = line.length() > MAX_LINE_CHARS ? line.substring(0, MAX_LINE_CHARS) + "..." : line;
+                matches.add(relative + ":" + (i + 1) + ":" + shown);
             }
         }
     }

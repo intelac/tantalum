@@ -114,6 +114,60 @@ class BuiltinToolsTest {
         assertEquals("No matches.", output.text());
     }
 
+    /** 模型要知道哪些参数不能省：schema 里要有 required 数组，可选参数不在里面。 */
+    @Test
+    void schemasDeclareRequiredArguments() {
+        Json.Obj readSchema = (Json.Obj) read.schema();
+        assertEquals(new Json.Arr(java.util.List.of(new Json.Str("path"))), readSchema.fields().get("required"));
+        Json.Obj grepSchema = (Json.Obj) grep.schema();
+        assertEquals(new Json.Arr(java.util.List.of(new Json.Str("pattern"))), grepSchema.fields().get("required"));
+        assertTrue(((Json.Obj) grepSchema.fields().get("properties")).fields().containsKey("path"));
+    }
+
+    @Test
+    void grepTruncatesLongLinesAndSkipsUnreadableFiles() throws Exception {
+        Files.writeString(root.resolve("minified.js"), "COMPUTE" + "x".repeat(5000) + "\n");
+        Path locked = root.resolve("locked.cbl");
+        Files.writeString(locked, "COMPUTE LOCKED\n");
+        Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+        try {
+            ToolOutput output = grep.run(context, args("pattern", "COMPUTE"));
+            assertFalse(output.error(), output.text());
+            assertTrue(output.text().contains("a.cbl:1:COMPUTE INTEREST"), "readable files still searched");
+            assertFalse(output.text().contains("LOCKED"));
+            for (String line : output.text().split("\n")) {
+                assertTrue(line.length() <= GrepTool.MAX_LINE_CHARS + 40, "line too long: " + line.length());
+            }
+        } finally {
+            Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        }
+    }
+
+    /** 错误信息不能带服务器上的绝对路径。 */
+    @Test
+    void errorsDoNotRevealServerPaths() throws Exception {
+        Path locked = root.resolve("locked.cbl");
+        Files.writeString(locked, "x");
+        Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+        try {
+            ToolOutput output = read.run(context, args("path", "locked.cbl"));
+            assertTrue(output.error());
+            assertFalse(output.text().contains(root.toString()), output.text());
+            ToolOutput outside = read.run(context, args("path", "../secret.txt"));
+            assertFalse(outside.text().contains(temp.toString()), outside.text());
+        } finally {
+            Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        }
+    }
+
+    @Test
+    void readEnforcesTheSizeLimitWhileReading() throws Exception {
+        Files.write(root.resolve("big.bin"), new byte[ReadFileTool.MAX_BYTES + 1]);
+        ToolOutput output = read.run(context, args("path", "big.bin"));
+        assertTrue(output.error());
+        assertTrue(output.text().contains("larger than"));
+    }
+
     @Test
     void builtinsAreSafeToRunTogether() {
         assertTrue(read.isConcurrencySafe(args()));

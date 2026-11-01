@@ -33,6 +33,10 @@ final class StreamWatchdog implements AutoCloseable {
             while (!closed) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
+                    // 到期和正常结束几乎同时发生时再看一眼，少一次把完整回复误报成超时。
+                    if (closed) {
+                        return;
+                    }
                     expired = true;
                     onExpire.run();
                     return;
