@@ -3,6 +3,7 @@ package tantalum.kernel.step;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tantalum.kernel.LoopFixture.text;
 
@@ -14,6 +15,7 @@ import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.DoWork;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
@@ -26,6 +28,7 @@ import tantalum.value.hook.PromptPatch;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Message;
@@ -156,23 +159,97 @@ class ModelStepsTest {
         assertEquals(EndReason.STOPPED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
 
+    /** 不是 Cancel 引起的中断（线程被别的原因打断）：运行不能永远停在 AwaitingModel。 */
     @Test
-    void interruptedTextJoinsTheSessionWithoutChangingTheRun() {
+    void interruptedAwaitedCallEndsTheRunAsCancelledAndKeepsThePartialText() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        var run = loop.run();
-        loop.feed(run.ref().run(), new ModelInterrupted(new CommandId("old"), "partial"));
+        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "partial"));
+
         Message message = loop.session().messages().getLast();
         assertTrue(message.interrupted());
         assertEquals(text("partial"), message.content());
-        assertEquals("AwaitingModel", loop.phase());
+        Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
+        assertEquals(EndReason.CANCELLED, ended.reason());
+        assertNull(loop.session().activeRun());
     }
 
     @Test
-    void emptyInterruptedTextAddsNothing() {
+    void emptyInterruptedTextAddsNoMessageButStillEndsTheRun() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(loop.runId(), new ModelInterrupted(new CommandId("old"), ""));
+        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), ""));
         assertEquals(1, loop.session().messages().size());
+        assertTrue(loop.run().ended());
+    }
+
+    /** Cancel 之后迟到的中断结果：会话还没开新运行，用户看到的文本留在历史里。 */
+    @Test
+    void lateInterruptAfterCancelKeepsThePartialTextWhenNoNewRunStarted() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        CommandId call = loop.onlyCommandId();
+        loop.feed(loop.runId(), new Cancel(new RequestId("c")));
+        loop.feed(loop.runId(), new ModelInterrupted(call, "partial"));
+
+        Message message = loop.session().messages().getLast();
+        assertTrue(message.interrupted());
+        assertEquals(text("partial"), message.content());
+    }
+
+    /** Cancel 时已有排队提交，新运行已开始：迟到的部分回复不能插到新提示后面。 */
+    @Test
+    void lateInterruptIsIgnoredOnceANewRunStarted() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        CommandId call = loop.onlyCommandId();
+        RunId first = loop.runId();
+        loop.prompt("second");
+        loop.feed(first, new Cancel(new RequestId("c")));
+        assertEquals("AwaitingContext", loop.phase());
+        KernelState before = loop.state;
+
+        loop.feed(first, new ModelInterrupted(call, "partial"));
+
+        assertSame(before, loop.state);
+        assertEquals(Message.user("second"), loop.session().messages().getLast());
+    }
+
+    @Test
+    void interruptForAnotherCommandWhileRunningChangesNothing() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        KernelState before = loop.state;
+        loop.feed(loop.runId(), new ModelInterrupted(new CommandId("old"), "partial"));
+        assertSame(before, loop.state);
+        assertEquals("AwaitingModel", loop.phase());
+    }
+
+    /** 模型说 TOOL_USE 却没给工具调用：按普通回复结束，不能追加空的用户消息再调模型。 */
+    @Test
+    void toolUseStopWithoutCallsCompletesTheRun() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.TOOL_USE, "m", null));
+        assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
+        assertEquals(List.of(), loop.last.commands());
+    }
+
+    /** 运行被取消时模型还没看到的插话不能丢：追加为用户消息，下一个运行会看到。 */
+    @Test
+    void pendingSteersJoinTheHistoryWhenTheRunIsCancelled() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(loop.runId(), new Cancel(new RequestId("c")));
+
+        assertEquals(Message.user("also this"), loop.session().messages().getLast());
+        assertEquals(List.of(), loop.run().pendingSteers());
+        loop.prompt("next");
+        CallModel call = null;
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        call = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals(List.of(Message.user("hi"), Message.user("also this"), Message.user("next")),
+                call.prompt().messages());
     }
 }

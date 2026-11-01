@@ -50,12 +50,17 @@ public final class RunEnd {
         }
     }
 
+    /** 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。 */
     static void finish(Outcome out, RunState run, EndReason reason, String detail) {
         if (run.tools() != null && !run.tools().allFinished()) {
             List<ContentBlock> results = new ArrayList<>(ToolPairing.complete(run.tools()));
             out.append(run.ref(), new Message(Role.USER, results, false));
         }
-        out.enter(run.withTools(null).withPendingRecovery(false), new Ended(reason, detail));
+        for (Message steer : run.pendingSteers()) {
+            out.append(run.ref(), steer);
+        }
+        out.enter(run.withTools(null).withPendingSteers(List.of()).withPendingRecovery(false),
+                new Ended(reason, detail));
 
         SessionState session = out.session(run.ref()).withActiveRun(null);
         out.state = out.state.with(session);

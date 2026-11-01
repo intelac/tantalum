@@ -59,6 +59,8 @@ public final class WorkSteps {
     private static void resume(Outcome out, RunState run, HookPoint origin, WorkDone event) {
         if (origin == HookPoint.BEFORE_TOOL_CALL) {
             ToolSteps.resumeChecks(out, run, true, null);
+        } else if (origin == HookPoint.ON_FAILURE) {
+            RetrySteps.retryAfterWork(out, run, event);
         } else if (event.continueText() != null) {
             out.append(run.ref(), Message.user(event.continueText()));
             ModelSteps.callModel(out, run, null);

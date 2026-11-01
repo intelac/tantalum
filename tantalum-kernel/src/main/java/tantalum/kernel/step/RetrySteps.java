@@ -8,6 +8,8 @@ import tantalum.kernel.table.StepContext;
 import tantalum.value.command.StartTimer;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.ModelFailed;
+import tantalum.value.event.WorkDone;
+import tantalum.value.model.Message;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
@@ -18,7 +20,8 @@ import tantalum.value.state.RunState;
 public final class RetrySteps {
 
     static final String AWAITING_RETRY = "AwaitingRetry";
-    private static final int MAX_RETRIES = 3;
+    static final int MAX_RETRIES = 3;
+    static final Duration MAX_BACKOFF = Duration.ofMinutes(5);
 
     private RetrySteps() {}
 
@@ -46,9 +49,27 @@ public final class RetrySteps {
         return out.decision();
     }
 
-    private static Duration backoff(int retries, Duration retryAfter) {
+    /** 失败钩子申请的工作完成后再调模型，和定时重试一样占用重试次数，失败持续时不会无限循环。 */
+    static void retryAfterWork(Outcome out, RunState run, WorkDone work) {
+        if (run.retries() >= MAX_RETRIES) {
+            RunEnd.finish(out, run, EndReason.FAILED, "model call still failing after " + MAX_RETRIES + " retries");
+            return;
+        }
+        RunState retrying = run.withRetries(run.retries() + 1);
+        out.put(retrying);
+        if (work.continueText() != null) {
+            out.append(retrying.ref(), Message.user(work.continueText()));
+            ModelSteps.callModel(out, retrying, null);
+        } else {
+            ModelSteps.callModel(out, retrying, work);
+        }
+    }
+
+    /** 指数退避，供应商给的 {@code retryAfter} 更长时用它，但不超过上限。 */
+    static Duration backoff(int retries, Duration retryAfter) {
         Duration exponential = Duration.ofSeconds(1L << retries);
-        return retryAfter != null && retryAfter.compareTo(exponential) > 0 ? retryAfter : exponential;
+        Duration chosen = retryAfter != null && retryAfter.compareTo(exponential) > 0 ? retryAfter : exponential;
+        return chosen.compareTo(MAX_BACKOFF) > 0 ? MAX_BACKOFF : chosen;
     }
 
     public static Decision timerFired(StepContext context) {
