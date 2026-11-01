@@ -57,6 +57,11 @@ class ArchitectureTest {
             .should().haveSimpleName("AfterToolHook");
 
     @ArchTest
+    static final ArchRule mcpSdkStaysInItsPackage = noClasses()
+            .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.mcp..")
+            .should().dependOnClassesThat().resideInAPackage("io.modelcontextprotocol..");
+
+    @ArchTest
     static final ArchRule springStaysAtTheEdge = noClasses()
             .that().resideInAPackage("tantalum.shell..")
             .and().resideOutsideOfPackages("tantalum.shell.boot..", "tantalum.shell.web..", "tantalum.shell.auth..")
