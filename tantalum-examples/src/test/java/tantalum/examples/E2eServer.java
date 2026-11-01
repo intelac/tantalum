@@ -6,6 +6,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.TantalumApplication;
+import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
 
 /**
@@ -27,6 +28,9 @@ public final class E2eServer {
         Path data = root.resolve("data");
         Path workspace = root.resolve("workspace");
         seed(data, workspace);
+        TestMcpServer mcp = new TestMcpServer(
+                new TestMcpServer.Definition("lookup", true, arguments -> TestMcpServer.text("ticket 42 is owned by e2e-owner")),
+                new TestMcpServer.Definition("delete_all", null, arguments -> TestMcpServer.text("deleted")));
 
         new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(context -> {
@@ -40,7 +44,8 @@ public final class E2eServer {
                         "--tantalum.provider=openai",
                         "--tantalum.openai.model=" + E2eModel.MODEL,
                         "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
-                        "--tantalum.openai.context-window=32000");
+                        "--tantalum.openai.context-window=32000",
+                        "--tantalum.mcp.servers.demo.url=" + mcp.url());
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
     }

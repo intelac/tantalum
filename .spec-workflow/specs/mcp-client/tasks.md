@@ -80,28 +80,28 @@
 
 ## 阶段 3：验证和收尾
 
-- [ ] 11. e2e
+- [x] 11. e2e
   - File: tantalum-examples/src/test/java/tantalum/examples/E2eServer.java, tantalum-examples/src/test/java/tantalum/examples/E2eModel.java, console/e2e/mcp.spec.ts
   - 进程内 MCP 服务器；工具链显示 MCP 工具
   - 验证：Playwright 全过
   - _Requirements: 7.5_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“e2e”，满足需求 7.5，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: Playwright 全过 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 12. 真实 Claude 场景
+- [x] 12. 真实 Claude 场景
   - File: tantalum-examples/src/test/java/tantalum/examples/ClaudeScenarioTest.java, .spec-workflow/steering/tech.md
   - 严格校验模式下多步任务；注入场景：`delete_all` 未放行，服务器未收到调用，模型是否尝试只记录
   - 验证：判定标准、结论、用量写进 tech.md
   - _Requirements: 7.3, 7.4_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“真实 Claude 场景”，满足需求 7.3, 7.4，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 判定标准、结论、用量写进 tech.md | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 13. 文档
+- [x] 13. 文档
   - File: README.md, .spec-workflow/steering/tech.md
   - MCP 一节；写明共享身份、提示注入风险、取消后结果未知、工具独占、新工具只对新会话可见、不支持 stdio 和 OAuth；更新能力对照表
   - 验证：与实现一致
   - _Requirements: 6.3_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“文档”，满足需求 6.3，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 与实现一致 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 14. 全量验证和提交
+- [x] 14. 全量验证和提交
   - File: （无新文件）
   - `mvn verify`、vitest、tsc、build、e2e；提交前扫描密钥
   - 验证：全过；汇报对照表和仍缺的能力

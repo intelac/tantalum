@@ -108,6 +108,10 @@ final class McpConnection implements AutoCloseable {
             }
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
+        } catch (Throwable fatal) {
+            // 比如 SDK 依赖缺失。不能让监督线程静默消失，工具会永远不可用却没人知道。
+            LOG.error("mcp server {}: connection supervisor died", server.name(), fatal);
+            move(State.FAILED);
         } finally {
             discardClient();
         }
