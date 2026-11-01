@@ -112,7 +112,8 @@ class OpenAiClientTest {
         assertEquals(List.of(new TextBlock("Hello")), reply.content());
         assertEquals(StopReason.END_TURN, reply.stop());
         assertEquals("qwen-real", reply.actualModel());
-        assertEquals(new TokenUsage(54, 20, 49, 0), reply.usage());
+        assertEquals(new TokenUsage(5, 20, 49, 0), reply.usage());
+        assertEquals(54, reply.usage().promptTotal());
         assertEquals(List.of("Hel", "lo"), chunks);
     }
 
