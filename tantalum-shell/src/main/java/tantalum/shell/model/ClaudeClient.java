@@ -6,6 +6,7 @@ import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.AssistantMessageParam;
+import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
@@ -15,6 +16,7 @@ import com.anthropic.models.messages.RawMessageDeltaEvent;
 import com.anthropic.models.messages.RawMessageStartEvent;
 import com.anthropic.models.messages.RawMessageStreamEvent;
 import com.anthropic.models.messages.RedactedThinkingBlockParam;
+import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ThinkingBlockParam;
 import com.anthropic.models.messages.ThinkingConfigAdaptive;
 import com.anthropic.models.messages.Tool;
@@ -52,6 +54,8 @@ public final class ClaudeClient implements ModelClient {
 
     private static final String PROVIDER = "claude";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
+    /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
+    private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
 
     /** 正在累积的一个内容块。 */
     private static final class Pending {
@@ -298,19 +302,35 @@ public final class ClaudeClient implements ModelClient {
         };
     }
 
+    /**
+     * 组装请求并放 prompt caching 断点。缓存层级是固定的“工具 → system → 消息”，前缀逐字节相同才命中，所以断点放在
+     * 最后一个工具定义、system 块和最后一条消息的最后一个内容块上：工具和 system 在整个运行里不变，历史只追加，
+     * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
+     */
     private MessageCreateParams params(Prompt prompt) {
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
-                .system(prompt.system())
                 .thinking(ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED).build())
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
-        prompt.tools().forEach(tool -> params.addTool(tool(tool)));
-        for (Message message : prompt.messages()) {
-            List<ContentBlockParam> blocks = message.content().stream()
-                    .map(ClaudeClient::param).filter(java.util.Objects::nonNull).toList();
+        if (!prompt.system().isBlank()) {
+            params.systemOfTextBlockParams(List.of(
+                    TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));
+        }
+        List<ToolSpec> tools = prompt.tools();
+        for (int i = 0; i < tools.size(); i++) {
+            params.addTool(tool(tools.get(i), i == tools.size() - 1));
+        }
+        List<Message> messages = prompt.messages();
+        for (int i = 0; i < messages.size(); i++) {
+            Message message = messages.get(i);
+            List<ContentBlockParam> blocks = new ArrayList<>(message.content().stream()
+                    .map(ClaudeClient::param).filter(java.util.Objects::nonNull).toList());
             if (blocks.isEmpty()) {
                 continue;
+            }
+            if (i == messages.size() - 1) {
+                blocks.set(blocks.size() - 1, cached(blocks.getLast()));
             }
             if (message.role() == Role.USER) {
                 params.addMessage(UserMessageParam.builder().contentOfContentBlockParams(blocks).build());
@@ -325,7 +345,7 @@ public final class ClaudeClient implements ModelClient {
         return params.build();
     }
 
-    private static Tool tool(ToolSpec spec) {
+    private static Tool tool(ToolSpec spec, boolean last) {
         Tool.InputSchema.Builder schema = Tool.InputSchema.builder();
         if (spec.schema() instanceof Json.Obj object) {
             Map<String, JsonValue> fields = new HashMap<>();
@@ -336,15 +356,30 @@ public final class ClaudeClient implements ModelClient {
             });
             schema.putAllAdditionalProperties(fields);
         }
-        return Tool.builder().name(spec.name()).description(spec.description())
-                .inputSchema(schema.build()).eagerInputStreaming(true).build();
+        Tool.Builder tool = Tool.builder().name(spec.name()).description(spec.description())
+                .inputSchema(schema.build()).eagerInputStreaming(true);
+        if (last) {
+            tool.cacheControl(CACHE);
+        }
+        return tool.build();
+    }
+
+    /** 只有文本和工具结果块能带缓存标记；最后一条消息总是用户消息，所以这两种就够了。 */
+    private static ContentBlockParam cached(ContentBlockParam block) {
+        if (block.isText()) {
+            return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(CACHE).build());
+        }
+        if (block.isToolResult()) {
+            return ContentBlockParam.ofToolResult(block.asToolResult().toBuilder().cacheControl(CACHE).build());
+        }
+        return block;
     }
 
     /** 其他供应商的推理内容和空文本不发送。 */
     private static ContentBlockParam param(ContentBlock block) {
         return switch (block) {
             case TextBlock text -> text.text().isEmpty() ? null : ContentBlockParam.ofText(
-                    com.anthropic.models.messages.TextBlockParam.builder().text(text.text()).build());
+                    TextBlockParam.builder().text(text.text()).build());
             case ReasoningBlock reasoning -> reasoningParam(reasoning);
             case ToolCallBlock call -> {
                 ToolUseBlockParam.Input.Builder input = ToolUseBlockParam.Input.builder();
