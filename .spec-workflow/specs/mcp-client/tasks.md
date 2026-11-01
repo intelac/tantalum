@@ -50,28 +50,28 @@
 
 ## 阶段 2：目录和调用
 
-- [ ] 7. `ToolCatalog` 接入动态工具，`ContextHandler` 加说明
+- [x] 7. `ToolCatalog` 接入动态工具，`ContextHandler` 加说明
   - File: tantalum-shell/src/test/java/tantalum/shell/tool/ToolCatalogTest.java, tantalum-shell/src/main/java/tantalum/shell/tool/ToolCatalog.java, tantalum-shell/src/main/java/tantalum/shell/handler/ContextHandler.java, tantalum-shell/src/test/java/tantalum/shell/handler/ContextHandlerTest.java
   - `ToolSource`、按名称排序；固定的不可信内容说明，只在配了服务器时出现
   - 验证：内置工具行为不变；没配服务器时 system 与现在逐字节相同
   - _Requirements: 2.3, 6.1_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`ToolCatalog` 接入动态工具，`ContextHandler` 加说明”，满足需求 2.3, 6.1，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 内置工具行为不变；没配服务器时 system 与现在逐字节相同 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 8. `McpRegistry` 和 `McpTool`
+- [x] 8. `McpRegistry` 和 `McpTool`
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/McpRegistryTest.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpRegistry.java, tantalum-shell/src/main/java/tantalum/shell/mcp/McpTool.java
   - 管理连接；工具恒为独占；未放行工具调用返回错误
   - 验证：重名和超上限被跳过；未放行工具服务器收不到调用
   - _Requirements: 2.1–2.4, 3.1, 6.2, P10_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`McpRegistry` 和 `McpTool`”，满足需求 2.1–2.4, 3.1, 6.2, P10，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: 重名和超上限被跳过；未放行工具服务器收不到调用 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 9. `Engine` 装配和关闭
+- [x] 9. `Engine` 装配和关闭
   - File: tantalum-shell/src/main/java/tantalum/shell/boot/Engine.java
   - 创建 `McpRegistry`，加入目录，关闭时释放
   - 验证：shell 全量通过；服务器不可用时服务正常启动
   - _Requirements: 5.1, 5.4_
   - _Prompt: Implement the task for spec mcp-client, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Java 25 工程师 | Task: 完成“`Engine` 装配和关闭”，满足需求 5.1, 5.4，遵守 design.md | Restrictions: 只做这一件事；不改 kernel 和 value；凭据不进日志、journal、响应 | Success: shell 全量通过；服务器不可用时服务正常启动 | 完成后把任务标为 [x] 并用 log-implementation 记录_
 
-- [ ] 10. 多用户、回放集成测试
+- [x] 10. 多用户、回放集成测试
   - File: tantalum-shell/src/test/java/tantalum/shell/mcp/McpMultiUserTest.java, tantalum-shell/src/test/java/tantalum/shell/mcp/McpReplayTest.java
   - 两用户并发结果不串；经过钩子和 journal；停掉服务器后回放和重启视图逐字节相同且没有调用
   - 验证：全过

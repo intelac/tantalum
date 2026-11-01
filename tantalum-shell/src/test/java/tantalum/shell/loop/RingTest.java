@@ -94,7 +94,9 @@ class RingTest {
     @Test
     void gracefulShutdownDrainsPublishedEvents() throws Exception {
         List<Long> seen = new CopyOnWriteArrayList<>();
+        CountDownLatch running = new CountDownLatch(1);
         InputRing ring = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> {
+            running.countDown();
             Thread.sleep(20);
             seen.add(seq);
         });
@@ -102,6 +104,8 @@ class RingTest {
         for (int i = 0; i < 5; i++) {
             assertTrue(ring.tryPublish(envelope()));
         }
+        // Disruptor 只等已在运行的消费者；服务不会在启动的同一瞬间关闭，这里等它们跑起来。
+        assertTrue(running.await(5, TimeUnit.SECONDS));
         ring.shutdown(Duration.ofSeconds(5));
         assertEquals(List.of(0L, 1L, 2L, 3L, 4L), seen);
     }

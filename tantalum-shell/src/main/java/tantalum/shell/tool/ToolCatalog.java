@@ -10,11 +10,23 @@ import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.model.ToolSpec;
 
-/** 已注册的工具，以及每个服务端共享的并发名额。 */
+/** 已注册的工具，以及每个服务端共享的并发名额。动态工具（如 MCP）来自 {@link ToolSource}，同名时已注册的工具优先。 */
 public final class ToolCatalog {
 
+    /** 运行中会变化的工具来源。必须线程安全。 */
+    public interface ToolSource {
+        List<Tool> tools();
+
+        Optional<Tool> find(String name);
+    }
+
+    private volatile ToolSource source = new ToolSource() {
+        @Override public List<Tool> tools() { return List.of(); }
+        @Override public Optional<Tool> find(String name) { return Optional.empty(); }
+    };
+
     private final Map<String, Tool> tools = new LinkedHashMap<>();
-    private final Map<String, CallLimiter> limiters = new HashMap<>();
+    private final Map<String, CallLimiter> limiters = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Integer> limits = new HashMap<>();
 
     public void register(Tool tool) {
@@ -30,16 +42,24 @@ public final class ToolCatalog {
         tools.put(tool.name(), tool);
     }
 
+    public void setSource(ToolSource newSource) {
+        source = newSource;
+    }
+
     public Optional<Tool> find(String name) {
-        return Optional.ofNullable(tools.get(name));
+        Tool registered = tools.get(name);
+        return registered != null ? Optional.of(registered) : source.find(name);
     }
 
     public CallLimiter limiterFor(Tool tool) {
-        return limiters.get(tool.server());
+        return limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
     }
 
+    /** 按名称排序，工具顺序不随注册或连接的先后变化，缓存前缀才稳定。 */
     public List<ToolSpec> specs() {
-        return tools.values().stream()
+        return java.util.stream.Stream.concat(tools.values().stream(),
+                        source.tools().stream().filter(tool -> !tools.containsKey(tool.name())))
+                .sorted(java.util.Comparator.comparing(Tool::name))
                 .map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
     }
 

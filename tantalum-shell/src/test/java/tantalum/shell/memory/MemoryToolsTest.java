@@ -138,7 +138,7 @@ class MemoryToolsTest {
                 ((Json.Obj) write.schema()).fields().get("required"));
         ToolCatalog catalog = new ToolCatalog();
         MemoryTools.all(stores).forEach(catalog::register);
-        assertEquals(List.of("memory_write", "memory_read", "memory_delete"),
+        assertEquals(List.of("memory_delete", "memory_read", "memory_write"),
                 catalog.specs().stream().map(spec -> spec.name()).toList());
     }
 }
