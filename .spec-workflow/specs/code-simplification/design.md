@@ -1,0 +1,157 @@
+# Design Document
+
+## Overview
+
+按需求的决定 C1 分 6 个阶段。每个阶段只做一类改动，结束时全量回归、变异检查、提交、汇报。阶段之间没有交叉依赖：先清理（删东西最便宜，也让后面的改动更小），再定包结构（后面新建的类才知道放哪），然后从管线到外围到内核到前端。
+
+下面每节写“现在什么样、改成什么样”。行号以 2026-11-03 的代码为准，实现时以当时的代码为准。
+
+## 阶段 1：清理和小问题
+
+**删除（需求 4.2、C4）。** 只删生产代码不用的东西，测试里需要的占位实现移到测试代码：
+
+- 管线里为测试留的旧构造函数和重载：`Cleanroom` 8 参数、`UserLane` 4 参数、`JournalDispatcher` 的 `Predicate` 重载、`UserLane.Exit.publish(envelope)`、`CleanroomRing.tryPublish(envelope)`、`InputRing(size, consumer)`、`InputRing/OutputRing.shutdown()`、`SessionFiles` 3 参数、`SubmissionLedger()`、`TailSequence(paths)`、`Loader.usage` 的默认实现。
+- 占位实现 `Evictor.never`、`Evictor.Settings.NEVER`、`Sink.NONE`、`Loader.NONE`、`Projection.NONE`、`StepListener.NONE` 移到测试的 `LoopFixtures`。
+- 死方法：`Engine.transcript()`、`SessionStore.readUser`、`MemoryEntry.withUpdatedAt`、`MemoryStores.limits()`、`Units.Unit.size()`、`ToolRound(List)`、`Compacting` 4 参数构造、`Handler.Body`（移到测试）、`SseHub.subscribe(principal, lastEventId)`、`UserStore.hashExists`、`MemoryStore.count()`、`Transcript.sessions()`、`ContextHandler` 5 参数构造。
+- 前端：`Sidebar` 里隐藏的 `PanelLeftOpen`、`SidebarState.drawer`、`Composer` 的 `compact`/`onSubmitted` 属性和导出的 `ComposerProps`、`Dialog.hideTitle`、`Menu.align`、`CopyButton.size`、`followUps`、9 个无用文案键、`Tabs` 指向不存在元素的 `aria-controls`。
+
+**注释（需求 4.1）。** 删掉叠在新注释上面的旧注释（`SseHub.closeLogin`、`McpToolFilter.publicName`、`AuthController` 登录处、`SecurityConfig`、`JsonText.toPlain`）；`Engine` 构造函数上过时的“释放锁和 journal”；只写编号的注释改成写含义（H3、H4、H8、H9、需求 7.1、D4）；讲历史的句子删掉，保留原因；全限定类名改成 import。
+
+**小问题（需求 1）。**
+
+- 1.1 钩子执行两次：`CompactSteps.tryStart` 在“内容太少、裁剪也帮不上”时现在调 `failed`，`failed` 的自动分支再调一次 `callModel`。改为：`tryStart` 在这种情况下像钩子拒绝时一样报告 `CompactionFailed`、标记 `autoCompactionFailed`、返回运行，由调用方继续这一次调用。`failed` 只在摘要调用异步返回之后使用。先写测试：一个计数的 `beforeModelCall` 钩子在这一步里只被调一次，`WorkDone` 仍在。阶段 5 重写这段时保留这个测试。
+- 1.2 输入框提示：`queueHint` 改成“运行中：Enter 排队，Shift+Enter 换行”，删 `steer` 文案。
+- 1.5 过程区标题：`headerText` 去掉 `now` 参数和走不到的最后一行，`ProcessGroup` 不再调 `useNow`。
+
+**文档（C7）。** README“测试”一节写跳号回归：`JAVA_TOOL_OPTIONS=-Dtantalum.test.sequence-step=7 mvn test`，说明它检查什么（序号不连续时没有代码依赖“下一个序号是加一”）。
+
+## 阶段 2：包结构
+
+按 README“数据目录”的“原始记录 / 可重建缓存”分包，消除循环（需求 3.1、3.2）。
+
+| 包 | 内容 | 依赖 |
+|---|---|---|
+| `json` | `JsonText` | 无 |
+| `journal`（原始记录） | `SessionPaths`、`SessionFile`、`SessionFiles`、`SessionFileReader`、`SessionCorruptException`、`EventCodec`、`StoreFormat`、`StoreLock`、`Sequence`、`TailSequence` | `json` |
+| `store`（可重建缓存和读） | `SessionIndex`、`IndexWriter`、`IndexBatch`、`IndexChange`、`IndexCatchUp`（原 `IndexRecovery`）、`UsageLedger`、`SnapshotStore`、`SnapshotWriter`、`SessionSnapshot`、`SessionReplay`、`ColdReads`、`TurnQuery` | `journal`、`loop`、`conversation`、`sse` |
+| `conversation` | 现有内容，加上从 `loop` 移来的 `Projection` 接口 | 不再依赖 `loop` |
+| `loop` | 现有内容，减去 `Sequence`、`TailSequence`、`Projection`，加上 `ExternalGate`（来自 `web`） | `journal`、`conversation`、`handler` |
+
+其他循环和反向依赖：
+
+- `handler` ↔ `tool`：每个服务器的 `CallLimiter` 从 `ToolCatalog` 移到 `ToolHandler`，目录只做声明冲突检查。
+- `mcp`、`memory` → `boot`：`TantalumProperties` 里的子配置由 `boot` 转换成各包自己的设置（`McpSettings`、`MemoryLimits`），下层包不再 import `boot`。
+- `auth`、`memory` → `tool`（用户名规则）：规则移到 `Principal.isUsable(String)`（`value` 包），三处都调它。
+
+**ArchUnit。** 新增：`tantalum.shell` 下各包之间无循环；除 `boot`、`web` 外没有包依赖 `boot`。
+
+**改名（需求 3.5）。** `IndexRecovery` → `IndexCatchUp`；`JournalDispatcher` → `LaneDispatcher`；`Dispatcher` → `HandlerDispatcher`；`McpTools` → `McpClients`；`McpConnection.awaitReady` → `waitForReconnect`；`Transcript.Snapshot` → `View`、`Transcript.Part` → `Saved`；`Engine.catalogHas` → `mcpHas`；`RunStatus.ended()`、`ToolStep.finished()` 判断方法 → `isEnded()`、`isFinished()`；前端 `compact()` → `tokenCount()`、`reconnects` → `connects`。字段名跟着类型改。
+
+本阶段只移动和改名，不改逻辑。
+
+## 阶段 3：管线
+
+### 会话进内存只有一条路（C3、需求 2.1）
+
+现在启动时：`IndexRecovery` → `Startup.resume` 自己载入有未结束运行的会话，组成初始 `KernelState` 和 `Transcript`，`Engine` 手动登记 `Residency` 和 `Evictor.recovered`；补齐失败时 `Startup.recover` 全部重放。
+
+改成：
+
+1. 索引表 `sessions` 加 `active_run` 列（未结束的运行 ID，没有则为空），由 `IndexChange` 从内核状态算出，和 `run_status` 一起写。去掉只写不读的 `format`、`last_seq` 列，升级索引版本（C5，索引会从会话文件重建）。
+2. 启动：`IndexCatchUp` 补齐；失败就拒绝启动，消息写明删除 `index.db` 后重启。然后从索引查出 `(用户, 会话, 运行)`，为每个运行发布 `RunInterrupted`。这些会话不在内存，`UserLane` 按平时的方式冷载入，`Cleanroom` 并入后执行收尾。等管线排空再开门（和现在一样）。
+3. 删除：`Startup`（整个类）、`Evictor.recovered`、`Engine` 里登记常驻的循环、`StateView` 和 `Cleanroom` 的初始状态参数（启动时状态为空）、`SessionStore`（移到测试代码，测试用它“读出全部事件”）。
+4. 损坏的会话：只剩 `UserLane` 一种处理（拒绝这个会话，事件已落盘，运行以失败结束）。
+
+### `Engine` 拆分（需求 3.3）
+
+| 类 | 包 | 做什么 |
+|---|---|---|
+| `Storage` | `store` | 一次打开锁、格式检查、索引（含补齐）、索引写线程、会话文件、快照写线程，以及共用的 `SessionPaths`、读取器、`SnapshotStore`、`UsageLedger`、`SessionReplay`、`ColdReads`。打开失败时自己清理；`close()` 按顺序关闭 |
+| `Intake` | `loop` | 提交、压缩、取消：名额（原 `ExternalGate`）、新运行集合、`SubmissionLedger`、发布到输入环、失败回滚，只有一份。处理完事件后归还名额也在这里。会话归属检查通过构造时传入的函数完成，不依赖 `store` |
+| `SessionQueries` | `store` | 会话列表、会话视图、运行视图、`TurnQuery` |
+| `Engine` | `boot` | 组装内核、处理器和环；启动；收尾未结束的运行；关闭管线后关闭 `Storage`。对外只给 `intake()`、`queries()`、`hub()`、`memories()`、`codec()` |
+
+用静态工厂收集局部变量后调用一个私有构造函数，不再需要 16 个字段的 `Assembly` 记录。四个提交事件实现一个值接口 `Submitted`（提交 ID、请求 ID），`Intake` 和 `IndexChange` 都用它，删掉两处相同的 switch。
+
+### 一份“会话截至某个序号的状态”（需求 2.6）
+
+`loop.SessionSlice(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq)`。`SessionSnapshot` = 切片 + 文件偏移，`SessionReplay` 的结果 = 切片 + 重放事件数，`Evictor.Sink.offer(SessionSlice)`，`SnapshotWriter.Request` 删除。`Preload` 的三种模式改成 `CleanroomRing` 自己的槽：`usage`（可为空）和 `sealed Load = Loaded(SessionSlice, int replayed) | Failed(String reason)`。`CleanroomRing` 不再复用 `InputRing.Slot`。快照文件格式不变。
+
+### 其余
+
+- 三个环合成 `loop.Ring<S>`（名字、大小、槽工厂、生产者类型），三种槽各自一个类。
+- `SessionReplay` 的 `load` 和 `each` 共用一个私有回放循环，都按 `SessionId` 取文件；`IndexCatchUp` 用 `UsageLedger.Cursor` 代替手写的累计。
+- 列会话目录统一成 `SessionPaths.users()`、`sessionFiles(principal)`，只返回排好序的 `.jsonl`。
+- `Evictor` 直接用 `TantalumProperties.Residency`，删掉同形的 `Evictor.Settings`。`TantalumProperties` 的子配置统一：都在 `application.properties` 给默认值，代码里不再判空。
+
+## 阶段 4：外围
+
+- **模型客户端（需求 2.3）。** 新增包内类 `ModelFailures`：HTTP 状态分类（超长 → 429 → 5xx → 无效）、超时、流提前结束、连接失败、是否被中断（一条规则）、工具调用块的构造、`seconds`。两个客户端只剩请求构造、事件解析、停止原因映射、内容块序列化。`ClaudeClient` 的 8、9 参数构造函数改成一个 `ClaudeClient.Settings` 记录。推理内容的显示文本由 `model.Reasoning.displayText` 给出，`Transcript` 不再知道各供应商存推理的形状。
+- **Web（需求 2.4、3.4）。** SSE 移到 `EventStreamController`，`trace`/`turns`/`turn` 移到 `RunTraceController`，`ApiController` 剩会话、提交、压缩、取消、配置。包内 `Json` 工具类：`ok`、`error`、`read`、`text`、`currentUser`，三个 Controller 共用。会话 ID 校验和“运行存在且属于本人”各一个方法。
+- **配置（需求 1.3）。** `TantalumProperties.contextWindow()` 一处按供应商选择，配置接口和压缩都用它，删掉 `ApiController` 的两个 `@Value`。
+- **SSE 格式。** `TranscriptItem` 上一次声明类型名（`@JsonTypeInfo`），`ItemJson` 只负责摊平 ID，`SnapshotStore` 删掉 `ItemMixin`。`SseHub` 用注入的一个 mapper，消息构造改成实例方法交给 `TurnQuery`。`ModelHandler.Progress` 删掉，直接用 `ChunkListener`。输出的 JSON 和快照格式逐字节不变，用现有快照测试和接口测试确认。
+- **处理器。** `handler.Deadline.call(callable, timeout)`，`ToolHandler`、`WorkHandler` 共用。`AGENTS.md` 有自己的长度上限，不再借共享知识的上限。
+- **MCP。** 失败分类抽成 `McpFailures`。
+- **其余。** `UserStore` 建表一次写全、删迁移（C6），四个单行查询合成一个；两个 `isLoopback` 统一成只认字面量；`memory` 包里重复的 `string()` 用 `ToolArguments.string`，`MemoryType.keys()` 由枚举值生成，`parseIndex` 改成 `isIndexLine`，`CredentialGuard` 只留布尔判断。
+
+本阶段碰到发给 Claude 的请求，结束时跑 `ClaudeSmokeTest` 和 `ClaudeScenarioTest` 中思考签名多轮回传一项，报用量。
+
+## 阶段 5：内核
+
+### 压缩“未采用”（需求 2.7、1.4）
+
+- `Compacting.Trigger` 改成密封类型，自带数据：`Auto`、`Overflow(String originalDetail)`、`Manual(String instructions)`。`Compacting` 去掉两个可空字段，`tryStart` 去掉两个参数。
+- `tryStart` 返回 `PROCEED` 或 `TOOK_OVER`；调用方从 `out` 取更新后的运行。
+- 一个 `notAdopted(out, run, compacting, reason, boolean summarySent)` 写下规则 8 的整张表，含裁剪兜底。同步调用（还没发摘要）时自动触发返回 `PROCEED`，异步调用（摘要回复之后）才继续原调用。原因文字不再参与判断。
+- 裁剪有自己的 `adoptTrim`，不借用摘要的单元数。
+- 压缩途中取消后迟到的回复：在 `RunEnd.finish` 定一条规则——结束的运行保留 `compacting`，表示最后一次调用是摘要调用；删掉两处临时的 `withCompacting(null)`。先补测试：取消后迟到的摘要 `ModelInterrupted` 不进历史。
+
+### 上下文变化只有一套（C2、需求 2.2）
+
+`ContextAssembled(command, system, tools, compaction, sections)`、`SessionContext(system, tools, compaction, sections)`，`sections` 不可空。删除 `dynamic`、`CONTEXT_UPDATE`、`freezeContext` 的整块分支、所有便利构造函数。新增 `ContextUpdate`（和 `ContextDiff` 放在一起）：消息前缀、构造更新消息、`isContextUpdate(Message)`。`Compactor` 依赖它，不再依赖 `step` 包。`ContextSection.tagged()` 统一标签格式，shell 的 `ContextHandler` 也用它。`StoreFormat.SEMANTICS` 加一。
+
+### 状态只存一处（需求 3.6）
+
+- `RunState` 删 `system`、`toolSpecs`、`withContext`，用到的地方读 `session.context()`。
+- `HookPoint` 移到 `tantalum.value.hook`，`workOrigin` 类型改为 `HookPoint`。
+- `SessionState.withActiveRun` 拆成 `startRun(RunId)`、`endRun()`。
+- `TokenUsage.ZERO` 和 `plus`，`PrincipalState` 和 shell 的 `IndexChange` 都用它。
+
+### 步骤代码
+
+- `StepContext` 由 `Kernel` 建一次；`Outcome` 只有一个构造函数，`state` 改私有，加 `put(SessionState)`、`put(PrincipalState)`；删掉 `await` 前多余的 `put`；`RunEnd.fail(StepContext, RuntimeException)`。
+- `BuiltinSteps` 移到 `step` 包，用状态常量；`Kernel.stateName` 改成 `RunPhase.name()`；常量公开，shell 的 `TurnQuery` 用它们。`table` 和 `step` 之间不再循环。
+- `ModelSteps` 拆成 `SubmitSteps`（提问、排队、插话、开运行）、`ContextSteps`（上下文到达、冻结、重新组装）、`ModelSteps`（调用和回复）。新运行的构造合成一个方法，`CompactSteps` 也用它。
+- `RetrySteps.scheduleRetry(out, run, retryAfter, resumeAt)`，摘要重试也用它。
+- 合并钩子补丁的 system 和工具：`PromptPatch` 上一个方法，三处共用。
+- 工作完成后的恢复：一个按 `HookPoint` 的完整 `switch`，同时处理放行和停止，不可能的来源抛异常；`continueText` 一个辅助方法；`resumeChecks(out, run, String blockedReason)`。
+
+`Deciding` 阶段保留：设计规定运行有三个固定状态。
+
+本阶段改变发给模型的上下文变化消息，结束时跑 `ClaudeScenarioTest` 中记忆中途变化、压缩相关的三项，报用量。
+
+## 阶段 6：前端
+
+- **状态仓库是对话状态的唯一主人（需求 2.8、3.4）。** 翻页位置 `{ start, hasMore }` 存在仓库里；`replace`/`prependItems` 改成 `loadLatest(session, messages)`/`loadOlder(session, messages)`，自己更新位置；`seq` 必填。`ConversationPage` 只剩“载入 + 列表”。
+- **运行状态。** `runStatusId(run)` 是唯一知道 `"run:"` 前缀的地方；`useRunStatus`、`useLatestRun`（`{ run, running }`）、`useRunVersion`（查询缓存键的最后一段，替代三种写法）。`Block` 去掉 `statusId`。
+- **输入区。** `ComposerDock({ store, session, config })` 自己取最新运行和排队的提交，渲染排队区、输入框、状态栏；`App` 不再转手状态，`ConversationPage` 自己读重连次数。排队只按 `item.queued` 判断一次。
+- **过程区。** `chain.ts` 一个纯函数 `processRows(items)` 一次分组，删掉 `ToolChain.tsx` 和两层包装组件。
+- **运行结束文案。** `runOutcome(status)` 返回标题、说明、语气、图标，`RunStatusRow` 和 `ProcessGroup` 共用。
+- **其余。** 本地存储读写一个 `readStored`/`writeStored`；`useNow` 移到 `ui/`；`events.ts` 移到 `store/`，`client` 直接报告 503，删掉回调中转和没人读的 `unauthorized`；`MessageList` 拆出 `useScrollFollow` 和 `RunBlock`；会话标题的“未命名”回退一个函数；`ModelCallDetail` 的 `Block` 组件改名。
+
+## 测试策略
+
+- 每个阶段：`mvn verify`（含 `JarCrashIT`）、跳号回归、vitest、Playwright 全部通过才提交。
+- 只为删测试专用入口、改名、移包而改测试，不放宽断言。新的结构（`Storage`、`Intake`、`Ring`、`processRows`、`runOutcome` 等）沿用原有测试，必要时把断言从旧类移到新类。
+- 需求 1 的 1.1、1.4 先写失败的测试。
+- 变异检查：每个阶段改坏一处被重构的逻辑（例如阶段 3 让启动不发 `RunInterrupted`，阶段 5 让 `notAdopted` 的自动分支继续调用两次），确认有测试失败，再恢复。
+- 真实模型测试只在阶段 4、5 各跑一次（见上），报用量。
+
+## 风险
+
+| 风险 | 应对 |
+|---|---|
+| 阶段 3 改启动路径，崩溃收尾出错 | `JarCrashIT`、`RestartInterruptTest`、`ColdSessionTest`、`EvictionInvarianceTest` 都覆盖；变异检查专门针对它 |
+| 阶段 4 改 SSE 和快照序列化，格式悄悄变化 | 先对现有输出取样存成测试期望，改完逐字节比较 |
+| 阶段 5 改压缩，规则 8 的某个分支行为变化 | `CompactStepsTest` 约 40 个用例；先列出规则 8 每格对应的测试，缺的先补 |
+| 改动面大，中途和别的工作冲突 | Yi 已决定先暂停其他任务；每个阶段单独提交，可单独回退 |

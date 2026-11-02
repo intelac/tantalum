@@ -4,7 +4,11 @@
 
 ## 1. 正在做
 
-没有。`ops-hardening` 50/50 已完成（2026-11-02），全部 7 个 spec 的任务都已勾完。
+| 事项 | 状态 | 位置 |
+|---|---|---|
+| `code-simplification` | 0/39，2026-11-03 开始。整体审查后的重构，6 个阶段；Yi 决定其他任务先放一放 | `specs/code-simplification/tasks.md` |
+
+`ops-hardening` 50/50 已完成（2026-11-02）。
 
 ## 2. 已定要做，还没开 spec
 
