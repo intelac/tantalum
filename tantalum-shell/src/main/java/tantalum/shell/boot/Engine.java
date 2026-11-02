@@ -20,6 +20,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.boot.TantalumProperties.Loop;
+import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ContextHandler;
@@ -45,6 +46,7 @@ import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
 import tantalum.shell.loop.TailSequence;
+import tantalum.shell.loop.UserLane;
 import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
@@ -56,6 +58,7 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.sse.SseHub;
+import tantalum.shell.store.ColdReads;
 import tantalum.shell.store.IndexRecovery;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionFileReader;
@@ -88,11 +91,13 @@ import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.state.PrincipalState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
@@ -108,6 +113,16 @@ public final class Engine implements AutoCloseable {
 
     /** 提交的结果。{@code status} 对应 HTTP 状态。 */
     public record Submission(int status, SubmissionId submission, boolean duplicate) {}
+
+    /** 一个会话的只读视图：在内存的取当前状态，不在的重放文件得到，不进常驻。 */
+    public record SessionView(SessionState state, List<RunState> runs, Transcript.Snapshot transcript) {}
+
+    /** 会话文件读不了（中间损坏、索引库不可用）。 */
+    public static final class SessionUnreadable extends RuntimeException {
+        SessionUnreadable(SessionId session, Exception cause) {
+            super("cannot read session " + session.value(), cause);
+        }
+    }
 
     private final Clock clock;
     private final StoreLock lock;
@@ -129,6 +144,7 @@ public final class Engine implements AutoCloseable {
     private final MemoryStores memories;
     private final McpRegistry mcp;
     private final TurnQuery turns;
+    private final ColdReads cold;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
     /** 构造失败时释放已拿到的锁和 journal，否则嵌入方重试会一直撞上“store is locked”。 */
@@ -160,6 +176,7 @@ public final class Engine implements AutoCloseable {
             this.view = parts.view;
             this.transcript = parts.transcript;
             this.turns = parts.turns;
+            this.cold = parts.cold;
             this.hub = parts.hub;
             this.memories = parts.memories;
             this.mcp = parts.mcp;
@@ -186,7 +203,7 @@ public final class Engine implements AutoCloseable {
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
                             ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp,
-                            List<RunState> unfinished) {}
+                            List<RunState> unfinished, ColdReads cold) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -212,18 +229,16 @@ public final class Engine implements AutoCloseable {
         Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
 
         SessionStore store = new SessionStore(properties.dataDir(), codec);
-        catchUpIndex(properties, kernel);
-        Startup.Recovered recovered = Startup.recover(store, kernel);
+        SessionPaths paths = new SessionPaths(properties.dataDir());
+        UsageLedger usage = new UsageLedger(index, indexWriter);
+        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), usage, kernel);
+        Startup.Recovered recovered = recover(properties, kernel, store, replay);
         StateView view = new StateView(recovered.state());
         TurnQuery turns = new TurnQuery(store, kernel, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
         CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
-        SessionPaths paths = new SessionPaths(properties.dataDir());
-        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), new UsageLedger(index, indexWriter), kernel);
         JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),
-                files::append, cleanroomRing::tryPublish, (principal, session, beforeSeq) -> replay.load(principal, session, beforeSeq)
-                .map(slice -> Preload.loaded(slice.snapshot().session(), slice.snapshot().runs(), slice.snapshot().transcript(), slice.snapshot().seq(), slice.replayedEvents())),
-                residency);
+                files::append, cleanroomRing::tryPublish, loader(replay, usage), residency);
 
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
@@ -241,6 +256,7 @@ public final class Engine implements AutoCloseable {
             residency.resident(session);
             evictor.recovered(session, recovered.transcript().snapshot(session).seq());
         }
+        recovered.failed().forEach(residency::fail);
         Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
                 recovered.transcript(), hub, view, results, indexWriter::onStep, evictor);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
@@ -253,7 +269,8 @@ public final class Engine implements AutoCloseable {
             releaseIfExternal(envelope);
             dispatcher.released();
         });
-        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished());
+        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished(),
+                new ColdReads(paths, replay));
     }
 
     private static Evictor.Settings evictorSettings(TantalumProperties properties) {
@@ -284,13 +301,33 @@ public final class Engine implements AutoCloseable {
         }
     }
 
-    /** 索引只是缓存，补不上也能服务，下次启动再试。 */
-    private void catchUpIndex(TantalumProperties properties, Kernel kernel) {
+    /** 平常只载入有未结束运行的会话；索引补不上时不知道哪些会话没结束，只能全量重放。 */
+    private Startup.Recovered recover(TantalumProperties properties, Kernel kernel, SessionStore store, SessionReplay replay) {
         try {
             IndexRecovery.run(index, new SessionPaths(properties.dataDir()), new SessionFileReader(codec), kernel);
+            return Startup.resume(index, replay);
         } catch (IOException | SQLException failure) {
-            LOG.warn("index could not catch up with session files: {}", failure.toString());
+            LOG.warn("index could not catch up with session files, replaying everything: {}", failure.toString());
+            return Startup.recover(store, kernel);
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while starting", stopping);
         }
+    }
+
+    private static UserLane.Loader loader(SessionReplay replay, UsageLedger usage) {
+        return new UserLane.Loader() {
+            @Override
+            public Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
+                return replay.load(principal, session, beforeSeq).map(slice -> Preload.loaded(slice.snapshot().session(),
+                        slice.snapshot().runs(), slice.snapshot().transcript(), slice.snapshot().seq(), slice.replayedEvents()));
+            }
+
+            @Override
+            public PrincipalState usage(Principal principal, long beforeSeq) throws Exception {
+                return new PrincipalState(principal, usage.before(principal, beforeSeq));
+            }
+        };
     }
 
     /** 查不到时当作新提交：可用性优先，日志留痕。 */
@@ -391,10 +428,11 @@ public final class Engine implements AutoCloseable {
      * 通过后发布 {@code CompactRequested}，内核在空闲会话上开一个特殊运行。{@code instructions} 可为 null。
      */
     public Submission compact(Principal principal, SessionId session, RequestId request, String instructions) {
-        SessionState existing = view.current().sessions().get(session);
-        if (existing == null || !existing.principal().equals(principal)) {
+        Optional<SessionView> found = session(principal, session);
+        if (found.isEmpty()) {
             return new Submission(404, null, false);
         }
+        SessionState existing = found.get().state();
         if (existing.activeRun() != null || existing.context() == null || existing.context().compaction() == null
                 || !Compactor.worthCompacting(existing, existing.context().system(), existing.context().tools())) {
             return new Submission(409, null, false);
@@ -465,11 +503,55 @@ public final class Engine implements AutoCloseable {
         return codec;
     }
 
-    public Optional<tantalum.value.state.RunState> run(Principal principal, tantalum.value.id.RunId id) {
+    /** 在内存的直接取，不在的从会话文件重放。别人的运行为空。 */
+    public Optional<RunState> run(Principal principal, RunId id) {
         if (id.session().isEmpty()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(view.current().runs().get(id)).filter(run -> run.ref().principal().equals(principal));
+        RunState resident = view.current().runs().get(id);
+        if (resident != null) {
+            return Optional.of(resident).filter(run -> run.ref().principal().equals(principal));
+        }
+        return session(principal, id.session().get())
+                .flatMap(found -> found.runs().stream().filter(run -> run.ref().run().equals(id)).findFirst());
+    }
+
+    /** 不存在或不是本人的会话为空。不在内存时只读本人目录下的文件，不进常驻。 */
+    public Optional<SessionView> session(Principal principal, SessionId session) {
+        KernelState state = view.current();
+        SessionState resident = state.sessions().get(session);
+        if (resident != null) {
+            if (!resident.principal().equals(principal)) {
+                return Optional.empty();
+            }
+            List<RunState> runs = state.runs().values().stream().filter(run -> run.ref().session().equals(session)).toList();
+            return Optional.of(new SessionView(resident, runs, transcript.snapshot(session)));
+        }
+        try {
+            return cold.read(principal, session).map(found -> new SessionView(found.session(), found.runs(),
+                    new Transcript.Snapshot(found.transcript().lastSeq(), found.transcript().items())));
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            throw new SessionUnreadable(session, stopping);
+        } catch (Exception failure) {
+            throw new SessionUnreadable(session, failure);
+        }
+    }
+
+    /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
+    public List<SessionSummary> sessions(Principal principal) throws SQLException {
+        KernelState state = view.current();
+        Map<SessionId, SessionSummary> summaries = new java.util.HashMap<>();
+        for (SessionIndex.Session row : index.sessions(principal)) {
+            summaries.put(row.session(), new SessionSummary(row.session(), row.title(), row.lastActivity(), row.runStatus()));
+        }
+        for (SessionState session : state.sessions().values()) {
+            if (session.principal().equals(principal)) {
+                summaries.put(session.id(), SessionSummary.of(session.id(),
+                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id())));
+            }
+        }
+        return summaries.values().stream().sorted(java.util.Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
 
     /** 入口先关（{@code halted} 之外由 Web 层停止接收），再依次排空输入环、用户通道和两个下游环，最后关文件和锁；每一步失败都不跳过后面的。 */

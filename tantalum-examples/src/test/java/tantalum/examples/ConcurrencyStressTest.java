@@ -67,7 +67,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 其中一部分运行在模型调用进行中被取消。检查的不是“没抛异常”，而是并发下的不变量：
  * 每个用户的 prompt 只含自己的文件内容；SSE 只收到自己的事件；没有命令丢失；
  * 从 journal 回放得到的 prompt 和实时发给模型的逐个相同；重启后由回放重建的对话视图和实时视图逐字节相同。
- * 不用真实模型，整个场景重复若干轮。
+ * 不用真实模型，整个场景重复若干轮。第 2 轮激进回收（任务 32）：会话一空闲就离开内存、运行结束就写快照，
+ * 全部结束后每个会话再同时提交一轮，迫使 32 个会话并发载入；取消后迟到的模型回复也会落到已回收的会话上。
  */
 class ConcurrencyStressTest {
 
@@ -189,6 +190,57 @@ class ConcurrencyStressTest {
         return "s-" + user + "-" + number;
     }
 
+    /** 等全部会话离开内存，再让每个会话同时提交第二轮：每个都要从快照载入，载入和别的用户的事件、回收交错。 */
+    private static void secondTurnFromCold(TestServer server, Instant deadline, Map<String, String> messagesBefore) throws Exception {
+        tantalum.shell.boot.Engine engine = server.context.getBean(tantalum.shell.boot.Engine.class);
+        while (!engine.state().sessions().isEmpty() && Instant.now().isBefore(deadline)) {
+            Thread.sleep(20);
+        }
+        assertTrue(engine.state().sessions().isEmpty(), "idle sessions must have left memory: " + engine.state().sessions().keySet());
+        CountDownLatch go = new CountDownLatch(1);
+        List<Thread> threads = new ArrayList<>();
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+        for (int i = 0; i < USERS; i++) {
+            for (int n = 1; n <= SESSIONS; n++) {
+                String user = user(i);
+                String session = session(user, n);
+                threads.add(Thread.ofVirtual().start(() -> {
+                    try {
+                        go.await();
+                        HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
+                                "{\"requestId\":\"again-" + session + "\",\"mode\":\"prompt\",\"text\":\"Again, please.\"}");
+                        assertEquals(200, response.statusCode(), response.body());
+                    } catch (Throwable failure) {
+                        failures.add(failure);
+                    }
+                }));
+            }
+        }
+        go.countDown();
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        assertTrue(failures.isEmpty(), failures.toString());
+        for (int i = 0; i < USERS; i++) {
+            for (int n = 1; n <= SESSIONS; n++) {
+                String user = user(i);
+                String session = session(user, n);
+                JsonNode second = null;
+                while (Instant.now().isBefore(deadline)) {
+                    JsonNode runs = JSON.readTree(server.get(user, "/api/sessions/" + session + "/runs").body()).get("runs");
+                    if (runs != null && runs.size() == 2 && runs.get(1).has("endReason")) {
+                        second = runs.get(1);
+                        break;
+                    }
+                    Thread.sleep(20);
+                }
+                assertTrue(second != null, "second run of " + session + " did not end");
+                assertEquals("COMPLETED", second.get("endReason").asString(), session);
+                messagesBefore.put(session, server.get(user, "/api/sessions/" + session + "/messages").body());
+            }
+        }
+    }
+
     private static final java.util.regex.Pattern USER_ID = java.util.regex.Pattern.compile("USER-(u\\d\\d)");
 
     @Test
@@ -227,7 +279,11 @@ class ConcurrencyStressTest {
         Map<String, String> endReasons = new LinkedHashMap<>();
         Map<String, List<String>> sseLines = new ConcurrentHashMap<>();
         List<HttpResponse<InputStream>> streams = new ArrayList<>();
-        try (TestServer server = new TestServer(data, workspace, model, plugins, "--tantalum.claude.concurrency=16")) {
+        boolean evict = round == 2;
+        String[] args = evict ? new String[] {"--tantalum.claude.concurrency=16", "--tantalum.residency.idle=0s",
+                "--tantalum.residency.max-resident=1000", "--tantalum.residency.snapshot-events=1", "--tantalum.residency.sweep-interval=0s"}
+                : new String[] {"--tantalum.claude.concurrency=16"};
+        try (TestServer server = new TestServer(data, workspace, model, plugins, args)) {
             for (int i = 0; i < USERS; i++) {
                 server.get(user(i), "/api/sessions");     // 先登录，提交才是同时的
             }
@@ -305,6 +361,9 @@ class ConcurrencyStressTest {
                     messagesBefore.put(session, server.get(user, "/api/sessions/" + session + "/messages").body());
                 }
             }
+            if (evict) {
+                secondTurnFromCold(server, deadline, messagesBefore);
+            }
             Thread.sleep(200);   // 让 SSE 把最后的条目送到
             for (HttpResponse<InputStream> stream : streams) {
                 stream.body().close();
@@ -369,6 +428,14 @@ class ConcurrencyStressTest {
         List<EventEnvelope> journal;
         journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         assertTrue(journal.stream().noneMatch(envelope -> envelope.event() instanceof CommandDropped), "a command was dropped");
+        Map<String, Integer> requests = new java.util.HashMap<>();
+        for (EventEnvelope envelope : journal) {
+            if (envelope.event() instanceof tantalum.value.event.UserPrompt prompt) {
+                requests.merge(envelope.principal().value() + "/" + prompt.request().value(), 1, Integer::sum);
+            }
+        }
+        assertEquals(USERS * SESSIONS * (evict ? 2 : 1), requests.size(), "every accepted submission is in the journal");
+        assertTrue(requests.values().stream().allMatch(count -> count == 1), "no submission was written twice: " + requests);
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         ToolCatalog catalog = new ToolCatalog();
