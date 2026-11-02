@@ -5,10 +5,34 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
+import java.time.Duration;
+import java.util.Properties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import tantalum.shell.boot.TantalumProperties.Loop;
 
 class TantalumPropertiesTest {
+
+    /** 发布的 application.properties，再叠加运维只改的几项。 */
+    private static TantalumProperties bind(String... overrides) throws Exception {
+        Properties properties = new Properties();
+        try (InputStream defaults = TantalumProperties.class.getResourceAsStream("/application.properties")) {
+            properties.load(defaults);
+        }
+        for (int i = 0; i < overrides.length; i += 2) {
+            properties.setProperty(overrides[i], overrides[i + 1]);
+        }
+        return new Binder(new MapConfigurationPropertySource(properties)).bind("tantalum", TantalumProperties.class).get();
+    }
+
+    @Test
+    void changingOneResidencySettingKeepsTheOtherDefaults() throws Exception {
+        assertEquals(TantalumProperties.Residency.defaults(), bind().residency());
+        TantalumProperties.Residency residency = bind("tantalum.residency.idle", "2s").residency();
+        assertEquals(new TantalumProperties.Residency(Duration.ofSeconds(2), 1000, 200, Duration.ofSeconds(1)), residency);
+    }
 
     @Test
     void defaultsSatisfyTheFormulas() {

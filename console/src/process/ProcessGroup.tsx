@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { RunStatusItem } from "../api/types";
+import { INTERRUPTED_BY_RESTART, type RunStatusItem } from "../api/types";
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem, useLive } from "../store/hooks";
@@ -27,7 +27,7 @@ export function headerText(status: RunStatusItem | undefined, now: number): stri
     case "FAILED":
       return zh.process.failed(elapsed);
     case "CANCELLED":
-      return zh.process.cancelled(elapsed);
+      return status.detail === INTERRUPTED_BY_RESTART ? zh.process.interrupted(elapsed) : zh.process.cancelled(elapsed);
     case "STOPPED":
       return zh.process.stopped(elapsed);
   }

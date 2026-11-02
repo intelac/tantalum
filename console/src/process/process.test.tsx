@@ -139,6 +139,8 @@ describe("ProcessGroup", () => {
     expect(screen.getByText("想一想")).not.toBeNull();
     expect(headerText(undefined, 0)).toBe("正在处理…");
     expect(headerText({ ...status, endReason: "FAILED" }, 0)).toBe("已失败，用时 32 秒");
+    expect(headerText({ ...status, endReason: "CANCELLED" }, 0)).toBe("已取消，用时 32 秒");
+    expect(headerText({ ...status, endReason: "CANCELLED", detail: "interrupted by restart" }, 0)).toBe("已中断，用时 32 秒");
   });
 });
 
@@ -150,6 +152,7 @@ describe("explain", () => {
     expect(explain({ ...base, endReason: "FAILED", failure: "RATE_LIMITED" })).toBe("触发限流，稍后再试");
     expect(explain({ ...base, endReason: "FAILED", detail: "output ring full" })).toBe("命令丢失，运行失败");
     expect(explain({ ...base, endReason: "CANCELLED" })).toBe("已取消");
+    expect(explain({ ...base, endReason: "CANCELLED", detail: "interrupted by restart" })).toBe("服务重启，这次运行已中断。可以接着提问");
     expect(explain({ ...base, endReason: "STOPPED", detail: "policy" })).toBe("被钩子停止：policy");
     expect(explain({ ...base, endReason: "COMPLETED" })).toBeNull();
     expect(explain({ ...base })).toBeNull();
