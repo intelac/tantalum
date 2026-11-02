@@ -130,12 +130,12 @@ public class SecurityConfig {
         }
     }
 
-    /** 每个请求都查一次用户是否被停用，这样命令行停用后会话立即失效。 */
+    /** 每个请求都查一次用户是否被停用、登录后是否改过密码，这样命令行停用或改密码后旧的登录立即失效。 */
     private static final class DisabledUserFilter extends OncePerRequestFilter {
-        private final UserStore users;
+        private final LoginCheck check;
 
         DisabledUserFilter(UserStore users) {
-            this.users = users;
+            this.check = new LoginCheck(users);
         }
 
         @Override
@@ -144,7 +144,7 @@ public class SecurityConfig {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()) {
                 try {
-                    if (users.isDisabled(authentication.getName())) {
+                    if (!check.accountValid(authentication.getName(), request.getSession(false))) {
                         SecurityContextHolder.clearContext();
                         var session = request.getSession(false);
                         if (session != null) {

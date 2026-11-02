@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import tantalum.shell.auth.LoginCheck;
 import tantalum.shell.auth.LoginThrottle;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
@@ -75,15 +76,16 @@ public class AuthController {
         throttle.succeeded(username, source);
 
         // 登录前的会话作废，防止会话固定攻击；它若已登录，断开那个用户的推送连接。
+        // 只断开被替换掉的那次登录的推送连接，同一用户在别处的登录不受影响。
         Authentication before = SecurityContextHolder.getContext().getAuthentication();
-        if (before != null && before.isAuthenticated() && !(before instanceof AnonymousAuthenticationToken)) {
-            engine.hub().closeAll(new Principal(before.getName()));
-        }
         HttpSession previous = request.getSession(false);
+        if (before != null && before.isAuthenticated() && !(before instanceof AnonymousAuthenticationToken) && previous != null) {
+            engine.hub().closeLogin(new Principal(before.getName()), previous.getId());
+        }
         if (previous != null) {
             previous.invalidate();
         }
-        request.getSession(true);
+        new LoginCheck(users).remember(username, request.getSession(true));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(new UsernamePasswordAuthenticationToken(username, null,
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))));
@@ -94,9 +96,9 @@ public class AuthController {
 
     @PostMapping("/api/auth/logout")
     ResponseEntity<String> logout(HttpServletRequest request) {
-        engine.hub().closeAll(new Principal(SecurityContextHolder.getContext().getAuthentication().getName()));
         HttpSession session = request.getSession(false);
         if (session != null) {
+            engine.hub().closeLogin(new Principal(SecurityContextHolder.getContext().getAuthentication().getName()), session.getId());
             session.invalidate();
         }
         SecurityContextHolder.clearContext();

@@ -271,19 +271,19 @@
 
 ## 阶段 8：连接和关闭
 
-- [ ] 37. 按登录会话断开
+- [x] 37. 按登录会话断开
   - File: shell/sse/SseHub.java, shell/web/AuthController.java, 对应测试
   - `subscribe` 带 `HttpSession` ID，退出只断这一个，停用才断全部
   - 验证：一个用户两个登录，退出一个，另一个继续
   - _Requirements: 6.1_
 
-- [ ] 38. 过期和停用
+- [x] 38. 过期和停用
   - File: shell/sse/SseHub.java, shell/auth/UserStore.java, 对应测试
   - 口令戳列；`pump` 每个心跳查三件事
   - 验证：过期、停用、改密码（含命令行在服务外修改）都在一个心跳内断开
   - _Requirements: 6.2, 6.3_
 
-- [ ] 39. 关闭顺序
+- [x] 39. 关闭顺序
   - File: shell/boot/Engine.java, TantalumProperties.java, application 配置, 对应测试
   - 按设计 6 步；每步失败不跳过后面的；`shutdown-wait` 默认 30 秒
   - 验证：已返回 200 的提交重启后可见；挂起的模型调用不拖过上限；中间一步抛错后面仍执行

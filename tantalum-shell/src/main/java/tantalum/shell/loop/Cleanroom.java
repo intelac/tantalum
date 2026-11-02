@@ -56,6 +56,11 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         this.results = results;
     }
 
+    /** 关闭时写投影缓存（快照）。只能在 Cleanroom Ring 停了以后调用，那时没有别的线程碰状态。 */
+    public void snapshotAll() {
+        evictor.snapshotAll(state);
+    }
+
     /** 内核自己不会抛出（{@code Kernel.step} 把处理函数的异常变成运行失败）；这里防的是内核之外的 bug 和 {@code Error}。 */
     public boolean broken() {
         return broken;

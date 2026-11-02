@@ -44,6 +44,9 @@ public final class UserStore implements AutoCloseable {
                       disabled      INTEGER NOT NULL DEFAULT 0,
                       created_at    TEXT NOT NULL
                     )""");
+            if (!hasColumn(connection, "password_stamp")) {
+                statement.execute("ALTER TABLE users ADD COLUMN password_stamp INTEGER NOT NULL DEFAULT 0");
+            }
         }
         return new UserStore(connection);
     }
@@ -71,8 +74,34 @@ public final class UserStore implements AutoCloseable {
         return matches && hash != null && !isDisabled(name);
     }
 
+    /** 口令戳随之变化，之前的登录在下一次请求或下一个心跳时失效。 */
     public synchronized void resetPassword(String name, String password) throws SQLException {
-        update("UPDATE users SET password_hash = ? WHERE name = ?", encoder.encode(password), name);
+        update("UPDATE users SET password_hash = ?, password_stamp = password_stamp + 1 WHERE name = ?", encoder.encode(password), name);
+    }
+
+    /** 登录是否还有效要看的两件事。{@code stamp} 每次改密码加一。 */
+    public record Status(boolean disabled, long stamp) {}
+
+    /** 用户不存在时为空。每次都读库，所以命令行在服务外的修改立即可见。 */
+    public synchronized java.util.Optional<Status> status(String name) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("SELECT disabled, password_stamp FROM users WHERE name = ?")) {
+            query.setString(1, name);
+            try (ResultSet row = query.executeQuery()) {
+                return row.next() ? java.util.Optional.of(new Status(row.getInt(1) != 0, row.getLong(2))) : java.util.Optional.empty();
+            }
+        }
+    }
+
+    private static boolean hasColumn(Connection connection, String column) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet columns = statement.executeQuery("PRAGMA table_info(users)")) {
+            while (columns.next()) {
+                if (column.equals(columns.getString("name"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     public synchronized void disable(String name) throws SQLException {

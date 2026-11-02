@@ -9,7 +9,12 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
-                                 Compaction compaction, Index index, Residency residency) {
+                                 Compaction compaction, Index index, Residency residency, Duration shutdownWait) {
+
+    /** 关闭时等在途的模型和工具调用最多多久，到时中断它们（H8）。未配置时 30 秒。 */
+    public Duration shutdownWaitOrDefault() {
+        return shutdownWait == null ? Duration.ofSeconds(30) : shutdownWait;
+    }
 
     /** 常驻会话。{@code idle} 为 null 时不按时间回收。 */
     public record Residency(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {

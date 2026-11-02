@@ -45,4 +45,21 @@ public final class InFlightCommands {
     public int size() {
         return entries.size();
     }
+
+    /** 等在途的全部结束，超时返回 false。 */
+    public boolean awaitEmpty(java.time.Duration wait) throws InterruptedException {
+        long deadline = System.nanoTime() + wait.toNanos();
+        while (!entries.isEmpty()) {
+            if (System.nanoTime() >= deadline) {
+                return false;
+            }
+            Thread.sleep(10);
+        }
+        return true;
+    }
+
+    /** 中断全部在途的 Handler。 */
+    public void abortAll() {
+        abort(java.util.List.copyOf(entries.keySet()));
+    }
 }

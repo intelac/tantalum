@@ -102,4 +102,34 @@ class UserStoreTest {
             assertThrows(IllegalArgumentException.class, () -> store.disable("nobody"));
         }
     }
+
+    /** 任务 38：改密码让口令戳变化，旧的登录据此失效；停用也在状态里。 */
+    @Test
+    void resettingThePasswordChangesTheStamp() throws Exception {
+        try (UserStore store = UserStore.open(dir)) {
+            store.add("alice", "old");
+            long before = store.status("alice").orElseThrow().stamp();
+            store.resetPassword("alice", "new");
+            assertTrue(store.status("alice").orElseThrow().stamp() > before);
+            store.disable("alice");
+            assertTrue(store.status("alice").orElseThrow().disabled());
+            assertTrue(store.status("nobody").isEmpty());
+        }
+    }
+
+    /** 已有的用户库没有口令戳这一列：打开时补上，已有用户照常登录。 */
+    @Test
+    void anOlderUserDatabaseGetsTheStampColumn() throws Exception {
+        try (java.sql.Connection connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + dir.resolve(UserStore.FILE));
+                java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE users (name TEXT PRIMARY KEY, password_hash TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)");
+        }
+        try (UserStore store = UserStore.open(dir)) {
+            store.add("alice", "pw");
+            assertEquals(0, store.status("alice").orElseThrow().stamp());
+        }
+        try (UserStore store = UserStore.open(dir)) {
+            assertTrue(store.verify("alice", "pw"), "reopening does not add the column twice");
+        }
+    }
 }
