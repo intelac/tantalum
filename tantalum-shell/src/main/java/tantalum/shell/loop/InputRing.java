@@ -20,6 +20,8 @@ public final class InputRing {
     /** 环上的一格。 */
     public static final class Slot {
         public EventEnvelope envelope;
+        /** 只有 Cleanroom Ring 用：这个事件的会话刚载入，处理前要并入。 */
+        public Preload preload;
     }
 
     private static final long DRAIN_POLL_MILLIS = 5;

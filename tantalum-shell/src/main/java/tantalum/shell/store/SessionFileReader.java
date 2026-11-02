@@ -232,6 +232,27 @@ public final class SessionFileReader {
         }
     }
 
+    /** 序号为 {@code seq} 的那一行结束的文件位置，没有时为 -1。从末尾往前找，所以落后不多时很快。 */
+    static long endOffsetOf(Path file, long seq) throws IOException {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            long end = channel.size();
+            if (end > 0 && byteAt(channel, end - 1) != '\n') {
+                end = lineStart(channel, end);
+            }
+            while (end > 0) {
+                long start = lineStart(channel, end - 1);
+                if (parse(bytes(channel, start, end - 1)) instanceof Json.Obj record && record.fields().get("seq") instanceof Json.Num found) {
+                    long value = found.value().longValueExact();
+                    if (value <= seq) {
+                        return value == seq ? end : -1;
+                    }
+                }
+                end = start;
+            }
+            return -1;
+        }
+    }
+
     /** {@code position} 所在行的起点，即它之前最后一个换行符的下一个字节。 */
     private static long lineStart(FileChannel channel, long position) throws IOException {
         long end = position;

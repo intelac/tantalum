@@ -193,25 +193,25 @@
   - 验证：只读了尾部事件（计数）；截断、改字节、超前、版本不符都回到全量重放并有警告；删除 `snapshots/` 后结果不变
   - _Requirements: 10.1, 10.3, H13_
 
-- [ ] 26. 钉住计数
+- [x] 26. 钉住计数
   - File: shell/loop/Residency.java, ResidencyTest.java
   - 通道判断前加一，cleanroom 处理完减一
   - 验证：计数不为零时不能回收；并发增减后归零
   - _Requirements: 2.7_
 
-- [ ] 27. 载入
+- [x] 27. 载入
   - File: shell/loop/UserLane.java, Cleanroom.java, shell/conversation/Transcript.java
   - 通道载入冷会话，切片随事件进环，cleanroom 处理前并入；载入失败时该运行以 FAILED 结束
   - 验证：载入大会话时其他会话的事件不被阻塞；载入失败不影响其他会话
   - _Requirements: 2.4, 2.6, H7_
 
-- [ ] 28. 回收
+- [x] 28. 回收
   - File: shell/loop/Evictor.java, EvictorTest.java；shell/loop/Cleanroom.java；任务 4 发现的违规钩子
   - 钉住为零、无活动运行、无排队提交，且空闲超时或超过上限；先写投影缓存再移除
   - 验证：有活动运行或排队的不被回收；超上限回收最久未用的
   - _Requirements: 2.5, H3, H5_
 
-- [ ] 48. 快照写入
+- [x] 48. 快照写入
   - File: shell/store/SnapshotWriter.java, SnapshotWriterTest.java；shell/loop/Cleanroom.java, Evictor.java
   - 回收前必写，运行结束且超过 200 事件时写，有活动运行不写；写临时文件再重命名；权限 600/700
   - 验证：触发时机；写失败时运行不受影响、旧快照还在；写到一半崩溃时旧快照或全量重放仍正确；cleanroom 没有文件 I/O

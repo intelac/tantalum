@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +26,21 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
     private final Semaphore permits;
     private final Sequence sequence;
     private final UserLane.Writer writer;
-    private final Predicate<EventEnvelope> cleanroom;
+    private final BiPredicate<EventEnvelope, Preload> cleanroom;
+    private final UserLane.Loader loader;
+    private final Residency residency;
     /** 只有消费者线程访问。 */
     private final Map<Principal, UserLane> lanes = new HashMap<>();
     private volatile boolean halted;
 
     public JournalDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
+        this(capacity, sequence, writer, (envelope, preload) -> cleanroom.test(envelope), UserLane.Loader.NONE, new Residency());
+    }
+
+    public JournalDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, BiPredicate<EventEnvelope, Preload> cleanroom,
+                             UserLane.Loader loader, Residency residency) {
+        this.loader = loader;
+        this.residency = residency;
         this.capacity = capacity;
         this.permits = new Semaphore(capacity);
         this.sequence = sequence;
@@ -51,7 +61,7 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
     }
 
     private UserLane newLane(Principal principal) {
-        return new UserLane(principal, sequence, writer, this);
+        return new UserLane(principal, sequence, writer, this, loader, residency);
     }
 
     /** cleanroom 处理完一个事件后调用。 */
@@ -75,7 +85,12 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
 
     @Override
     public boolean publish(EventEnvelope envelope) {
-        return cleanroom.test(envelope);
+        return cleanroom.test(envelope, null);
+    }
+
+    @Override
+    public boolean publish(EventEnvelope envelope, Preload preload) {
+        return cleanroom.test(envelope, preload);
     }
 
     @Override

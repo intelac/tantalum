@@ -3,14 +3,20 @@ package tantalum.shell.loop;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
@@ -21,10 +27,20 @@ import tantalum.value.id.SessionId;
  */
 public final class UserLane {
 
+    private static final Logger LOG = LoggerFactory.getLogger(UserLane.class);
+
     /** 把一个会话的事件写到它的文件，返回时已落盘。 */
     @FunctionalInterface
     public interface Writer {
         void append(Principal principal, SessionId session, List<EventEnvelope> events) throws IOException;
+    }
+
+    /** 重放一个冷会话里序号小于 {@code beforeSeq} 的事件。没有这样的事件（全新会话）时为空。 */
+    @FunctionalInterface
+    public interface Loader {
+        Loader NONE = (principal, session, beforeSeq) -> Optional.empty();
+
+        Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
     }
 
     /** 通道的下游。 */
@@ -32,6 +48,10 @@ public final class UserLane {
         boolean halted();
 
         boolean publish(EventEnvelope envelope);
+
+        default boolean publish(EventEnvelope envelope, Preload preload) {
+            return publish(envelope);
+        }
 
         /** 写入失败，进程停止处理事件。 */
         void failed(Throwable failure);
@@ -44,10 +64,18 @@ public final class UserLane {
     private final Sequence sequence;
     private final Writer writer;
     private final Exit exit;
+    private final Loader loader;
+    private final Residency residency;
     private final Queue<EventEnvelope> queue = new ArrayDeque<>();
     private boolean running;
 
     UserLane(Principal principal, Sequence sequence, Writer writer, Exit exit) {
+        this(principal, sequence, writer, exit, Loader.NONE, new Residency());
+    }
+
+    UserLane(Principal principal, Sequence sequence, Writer writer, Exit exit, Loader loader, Residency residency) {
+        this.loader = loader;
+        this.residency = residency;
         this.principal = principal;
         this.sequence = sequence;
         this.writer = writer;
@@ -85,6 +113,11 @@ public final class UserLane {
             exit.discarded(batch.size());
             return;
         }
+        Map<SessionId, Residency.State> states = new HashMap<>();
+        for (EventEnvelope envelope : batch) {
+            Residency.State state = residency.pin(envelope.session());
+            states.putIfAbsent(envelope.session(), state);
+        }
         List<EventEnvelope> numbered = new ArrayList<>(batch.size());
         try {
             for (EventEnvelope envelope : batch) {
@@ -96,15 +129,57 @@ public final class UserLane {
                 Thread.currentThread().interrupt();
             }
             exit.failed(failure);
+            batch.forEach(envelope -> residency.unpin(envelope.session()));
             exit.discarded(batch.size());
             return;
         }
+        Map<SessionId, Preload> preloads = load(numbered, states);
         for (int i = 0; i < numbered.size(); i++) {
-            if (!exit.publish(numbered.get(i))) {
+            EventEnvelope envelope = numbered.get(i);
+            Preload preload = preloads.get(envelope.session());
+            if (preload != null && !preload.isFailure()) {
+                preloads.remove(envelope.session());
+            }
+            if (!exit.publish(envelope, preload)) {
                 exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
+                numbered.subList(i, numbered.size()).forEach(left -> residency.unpin(left.session()));
                 exit.discarded(numbered.size() - i);
                 return;
             }
+        }
+    }
+
+    /** 事件已落盘，序号小于它的才算历史。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
+    private Map<SessionId, Preload> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
+        Map<SessionId, Preload> preloads = new HashMap<>();
+        Set<SessionId> visited = new HashSet<>();
+        for (EventEnvelope envelope : numbered) {
+            SessionId session = envelope.session();
+            if (!visited.add(session)) {
+                continue;
+            }
+            switch (states.get(session)) {
+                case RESIDENT -> { }
+                case FAILED -> preloads.put(session, Preload.failed(residency.failure(session)));
+                case COLD -> loadOne(session, envelope.seq()).ifPresent(preload -> preloads.put(session, preload));
+            }
+        }
+        return preloads;
+    }
+
+    private Optional<Preload> loadOne(SessionId session, long beforeSeq) {
+        try {
+            Optional<Preload> preload = loader.load(principal, session, beforeSeq);
+            residency.resident(session);
+            return preload;
+        } catch (Exception | Error failure) {
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            LOG.error("cannot load session {}; refusing it until restart", session.value(), failure);
+            String reason = failure.toString();
+            residency.fail(session, reason);
+            return Optional.of(Preload.failed(reason));
         }
     }
 

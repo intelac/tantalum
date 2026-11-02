@@ -38,6 +38,13 @@ public final class CleanroomRing {
         return disruptor.getRingBuffer().tryPublishEvent((slot, sequence) -> slot.envelope = envelope);
     }
 
+    public boolean tryPublish(EventEnvelope envelope, Preload preload) {
+        return disruptor.getRingBuffer().tryPublishEvent((slot, sequence) -> {
+            slot.envelope = envelope;
+            slot.preload = preload;
+        });
+    }
+
     public boolean broken() {
         return failure.broken();
     }
