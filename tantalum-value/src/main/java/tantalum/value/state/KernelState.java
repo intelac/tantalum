@@ -39,6 +39,15 @@ public record KernelState(Map<Principal, PrincipalState> principals,
         return new KernelState(principals, sessions, updated);
     }
 
+    /** 去掉一个会话和它的运行。只由外壳在回收时调用，不是事件。 */
+    public KernelState without(SessionId session) {
+        Map<SessionId, SessionState> keptSessions = new HashMap<>(sessions);
+        keptSessions.remove(session);
+        Map<RunId, RunState> keptRuns = new HashMap<>(runs);
+        keptRuns.values().removeIf(run -> run.ref().session().equals(session));
+        return new KernelState(principals, keptSessions, keptRuns);
+    }
+
     public long activeRunCount() {
         return runs.values().stream().filter(run -> !run.ended()).count();
     }

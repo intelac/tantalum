@@ -266,11 +266,17 @@ public final class SessionIndex implements AutoCloseable {
     }
 
     /** 该用户的全部用量，按序号排列。 */
-    public synchronized List<IndexChange.Usage> usage(Principal principal) throws SQLException {
+    public List<IndexChange.Usage> usage(Principal principal) throws SQLException {
+        return usageFrom(principal, Long.MIN_VALUE);
+    }
+
+    /** 序号不小于 {@code seq} 的用量，按序号排列。 */
+    public synchronized List<IndexChange.Usage> usageFrom(Principal principal, long seq) throws SQLException {
         List<IndexChange.Usage> rows = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement(
-                "SELECT seq, day, input, output, cache_read, cache_write FROM usage WHERE principal = ? ORDER BY seq")) {
+                "SELECT seq, day, input, output, cache_read, cache_write FROM usage WHERE principal = ? AND seq >= ? ORDER BY seq")) {
             select.setString(1, principal.value());
+            select.setLong(2, seq);
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
                     rows.add(new IndexChange.Usage(result.getLong(1), LocalDate.parse(result.getString(2)),

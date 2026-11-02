@@ -23,10 +23,15 @@ public final class SessionPaths {
     private static final char HASH_MARK = '~';
     private static final HexFormat HEX = HexFormat.of();
 
+    private static final String SNAPSHOTS = "snapshots";
+    private static final String SNAPSHOT_EXTENSION = ".json";
+
     private final Path root;
+    private final Path snapshots;
 
     public SessionPaths(Path dataDir) {
         this.root = dataDir.resolve(SESSIONS).toAbsolutePath().normalize();
+        this.snapshots = dataDir.resolve(SNAPSHOTS).toAbsolutePath().normalize();
     }
 
     public Path sessionsDir() {
@@ -39,6 +44,14 @@ public final class SessionPaths {
 
     public Path sessionFile(Principal principal, SessionId session) {
         return inside(userDir(principal).resolve(encode(session.value()) + EXTENSION));
+    }
+
+    public Path snapshotFile(Principal principal, SessionId session) {
+        Path file = snapshots.resolve(encode(principal.value())).resolve(encode(session.value()) + SNAPSHOT_EXTENSION).normalize();
+        if (!file.startsWith(snapshots) || file.equals(snapshots)) {
+            throw new IllegalArgumentException("path escapes the snapshots directory: " + file);
+        }
+        return file;
     }
 
     /** 不同输入得到不同名字。超长时截短并加 SHA-256；{@code ~} 不在编码字符内，所以不会和未截短的名字相同。 */

@@ -74,7 +74,43 @@ public final class Transcript implements Projection {
     /** 一个会话的全部条目和它们截至的事件序号：序号更大的 SSE 推送比快照新，反之快照更新。 */
     public record Snapshot(long seq, List<TranscriptItem> items) {}
 
+    /** 一个会话的完整内部状态，可以写进快照，恢复后接着处理事件和没中断时相同。 */
+    public record Part(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq) {
+
+        public Part {
+            items = List.copyOf(items);
+            queued = List.copyOf(queued);
+            stepByCall = Map.copyOf(stepByCall);
+        }
+    }
+
     private final Map<SessionId, Conversation> sessions = new ConcurrentHashMap<>();
+
+    /** 没有该会话时返回空的状态。 */
+    public Part export(SessionId session) {
+        Conversation conversation = sessions.get(session);
+        if (conversation == null) {
+            return new Part(List.of(), List.of(), Map.of(), 0, -1);
+        }
+        synchronized (conversation) {
+            return new Part(List.copyOf(conversation.items.values()), List.copyOf(conversation.queued), conversation.stepByCall,
+                    conversation.seenMessages, conversation.lastSeq);
+        }
+    }
+
+    public void restore(SessionId session, Part part) {
+        Conversation conversation = new Conversation();
+        part.items().forEach(item -> conversation.items.put(item.id(), item));
+        conversation.queued.addAll(part.queued());
+        conversation.stepByCall.putAll(part.stepByCall());
+        conversation.seenMessages = part.seenMessages();
+        conversation.lastSeq = part.lastSeq();
+        sessions.put(session, conversation);
+    }
+
+    public void remove(SessionId session) {
+        sessions.remove(session);
+    }
 
     /** 没有该会话时返回空列表。 */
     public List<TranscriptItem> items(SessionId session) {

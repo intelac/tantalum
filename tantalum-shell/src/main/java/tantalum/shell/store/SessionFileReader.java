@@ -37,6 +37,12 @@ public final class SessionFileReader {
     private static final Logger LOG = LoggerFactory.getLogger(SessionFileReader.class);
     private static final int TAIL_CHUNK = 64 * 1024;
 
+    /** 收到一个事件和它那一行结束后的文件位置。 */
+    @FunctionalInterface
+    public interface Visitor {
+        void visit(EventEnvelope envelope, long endOffset);
+    }
+
     private final EventCodec codec;
 
     public SessionFileReader(EventCodec codec) {
@@ -51,6 +57,11 @@ public final class SessionFileReader {
 
     /** 不修改文件，可以和写入同时进行；正在写的尾部不会被读到。文件不存在时没有事件。 */
     public void forEach(Path file, Consumer<EventEnvelope> consumer) throws IOException {
+        scan(file, 0, (envelope, end) -> consumer.accept(envelope));
+    }
+
+    /** 从文件位置 {@code from} 开始读，它必须是一行的开头；0 表示头部之后。头部总要读，事件的身份在那里。 */
+    public void scan(Path file, long from, Visitor visitor) throws IOException {
         if (!Files.exists(file)) {
             return;
         }
@@ -58,6 +69,11 @@ public final class SessionFileReader {
             byte[] current = readLine(in);
             if (current == null) {
                 return;
+            }
+            long position = current.length + 1L;
+            if (from > position) {
+                in.skipNBytes(from - position);
+                position = from;
             }
             byte[] next = readLine(in);
             Identity identity = parseHeader(file, current, next == null);
@@ -78,7 +94,8 @@ public final class SessionFileReader {
                     throw corrupt(file, lineNumber, "seq " + envelope.seq() + " is not after " + lastSeq, null);
                 }
                 lastSeq = envelope.seq();
-                consumer.accept(envelope);
+                position += current.length + 1L;
+                visitor.visit(envelope, position);
                 current = next;
                 lineNumber++;
             }
@@ -200,6 +217,18 @@ public final class SessionFileReader {
                 end = start;
             }
             return -1;
+        }
+    }
+
+    /** 在 {@code offset} 结束的那一行的序号。{@code offset} 不是行尾或那一行不是事件时为 -1。 */
+    static long seqEndingAt(Path file, long offset) throws IOException {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            if (offset <= 0 || offset > channel.size() || byteAt(channel, offset - 1) != '\n') {
+                return -1;
+            }
+            long start = lineStart(channel, offset - 1);
+            return parse(bytes(channel, start, offset - 1)) instanceof Json.Obj record
+                    && record.fields().get("seq") instanceof Json.Num seq ? seq.value().longValueExact() : -1;
         }
     }
 
