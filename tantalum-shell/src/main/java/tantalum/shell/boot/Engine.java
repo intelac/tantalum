@@ -158,6 +158,7 @@ public final class Engine implements AutoCloseable {
     public Engine(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
+        long started = System.nanoTime();
         this.clock = clock;
         this.codec = codec;
         this.shutdownWait = properties.shutdownWaitOrDefault();
@@ -205,11 +206,13 @@ public final class Engine implements AutoCloseable {
             closeQuietly(lock);
             throw failure;
         }
+        int loaded = view.current().sessions().size();
         output.start();
         cleanroom.start();
         input.start();
         interrupt(unfinished);
-        LOG.info("store ready at {}", properties.dataDir());
+        LOG.info("store ready at {} in {} ms: {} sessions with unfinished runs loaded, {} runs closed as interrupted",
+                properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), loaded, unfinished.size());
     }
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
@@ -308,7 +311,6 @@ public final class Engine implements AutoCloseable {
             if (!dispatcher.awaitIdle(DRAIN)) {
                 LOG.warn("{} unfinished runs were not closed within {}", unfinished.size(), DRAIN);
             }
-            LOG.info("closed {} runs left unfinished by the previous process", unfinished.size());
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
         }

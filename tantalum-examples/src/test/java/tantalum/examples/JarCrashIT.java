@@ -445,7 +445,9 @@ class JarCrashIT {
                 try (Connection index = DriverManager.getConnection("jdbc:sqlite:" + data.resolve("index.db"))) {
                     assertEquals(journalUsage(data), usageRows(index));
                 }
-                assertTrue(Files.readString(temp.resolve("second.log")).contains("index caught up with"), "startup log should report the catch-up");
+                String startup = Files.readString(temp.resolve("second.log"));
+                assertTrue(startup.contains("index caught up with"), "startup log should report the catch-up");
+                assertTrue(startup.contains("2 sessions with unfinished runs loaded, 2 runs closed as interrupted"), "startup log should count the recovery");
 
                 // 重启没有重新调用模型和工具。
                 Thread.sleep(1000);

@@ -75,9 +75,23 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 
 `TheLoopTest` 不启线程，逐圈断言状态和命令，回边被改坏时会指出是哪一圈。`TenLoopIntegrationTest` 经过真实的环、journal、Web 和 SSE，再回放比对每次的 prompt。
 
-## 用 journal 查看一个运行
+## 数据目录
 
-journal 是数据目录（默认 `~/.local/share/tantalum`）下的 `journal.db`。
+默认 `~/.local/share/tantalum`（`tantalum.data-dir`）。目录下的文件只有进程所有者能读写（600/700），会话文件含完整的 prompt 和工具结果。
+
+| 路径 | 内容 |
+|---|---|
+| `sessions/<用户>/<会话>.jsonl` | journal：每个会话一个文件，第一行是文件头，之后每行一个事件，只追加 |
+| `index.db` | 会话列表、提交去重、用量的索引（SQLite）。可以由会话文件重建 |
+| `snapshots/<用户>/<会话>.json` | 会话的投影快照，加快冷载入。可以删除 |
+| `format.json` | 存储格式和内核语义的版本 |
+| `users.db` | 账号 |
+| `store.lock` | 进程独占锁：一份数据目录同时只能被一个进程使用 |
+| `memory/<用户>/` | 只在 `workspace-mode=shared` 时使用的记忆目录；默认每个用户的记忆在自己工作目录的 `memory/` 下 |
+
+用户名和会话 ID 里不能直接做文件名的字符会被编码，太长的名字截短后加哈希。只有会话文件是事实来源，索引和快照落后或丢失时，启动时从会话文件补齐。
+
+## 用 journal 查看一个运行
 
 **控制台：** 选中运行，再选一次模型调用，就能看到回放得出的完整 prompt 和回复。
 
@@ -95,10 +109,42 @@ curl -b cookie http://127.0.0.1:8080/api/runs/<run>/trace      # 事件、处理
 **直接看事件：**
 
 ```sh
-sqlite3 ~/.local/share/tantalum/journal.db "SELECT seq, type, run_id, at FROM events ORDER BY seq"
+jq -c 'select(.seq) | [.seq, .type, .run, .at]' ~/.local/share/tantalum/sessions/yi/<session>.jsonl
 ```
 
-journal 含完整的 prompt 和工具结果，文件权限只限所有者。
+**回放能保证什么。** 同一版本的程序回放一个会话，得到的 prompt 和当时发给模型的逐字节相同，会话在不在内存、从快照还是从文件载入都一样。内核语义变了（升级后 `format.json` 的 `semantics` 变化，启动日志会警告 `kernel semantics changed`），旧会话的 prompt 回放可能不再和当时逐字节相同；journal 原文不受影响，旧会话照常打开、继续。
+
+## 运维
+
+**启动。** 启动时先比较会话文件和索引，补齐落后的部分，再只把有未结束运行的会话载入内存，其余会话打开时才载入。日志：
+
+```
+index caught up with 3 session files
+store ready at /srv/tantalum in 1910 ms: 2 sessions with unfinished runs loaded, 2 runs closed as interrupted
+```
+
+第一行只在索引落后（比如上次被 `kill -9`）时出现。50 万个事件的数据目录启动约 2 秒，实测数字见 `.spec-workflow/steering/tech.md`。
+
+**崩溃或重启时没结束的运行。** 启动时给它们追加结束事件：已经发出但没有结果的工具调用补一条“结果未知”，运行以“已中断”结束，控制台显示“服务重启，这次运行已中断”。不会自动重新调用模型或重跑工具，因为写操作可能已经生效；用户在同一会话继续提问即可。
+
+**旧数据目录。** 早期版本用单个 `journal.db`。数据目录里有 `journal.db` 而没有 `format.json` 时拒绝启动，不改动任何文件：
+
+```
+/srv/tantalum holds an old journal.db and no format.json; this version cannot read it. Point tantalum at a new data directory.
+```
+
+旧数据不迁移。用 `--tantalum.data-dir` 指向一个新目录；旧目录不再需要时自行删除。`format.json` 的存储版本比程序新时同样拒绝启动，要升级程序。
+
+**会话常驻内存。** 没有运行、没有排队提交的会话，空闲超过 `idle` 或常驻数超过 `max-resident`（最久没用的先走）时移出内存，下次打开从快照和会话文件载入。回收在处理事件时顺带检查，所以完全没有请求的服务器不会主动回收，常驻数仍受上限约束。
+
+| 配置 | 默认 | 含义 |
+|---|---|---|
+| `tantalum.residency.idle` | `30m` | 空闲多久移出内存 |
+| `tantalum.residency.max-resident` | `1000` | 常驻会话上限 |
+| `tantalum.residency.snapshot-events` | `200` | 运行结束时距上次快照超过这么多事件就写一份快照 |
+| `tantalum.residency.sweep-interval` | `1s` | 两次回收检查的最小间隔 |
+
+**关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后写快照、关索引和文件。被中断的运行下次启动按上面的规则收尾。
 
 ## 记忆
 
@@ -163,6 +209,8 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 
 注册成 Spring bean 即可。
 
+**钩子只能看当前用户的当前会话。** `KernelHook` 拿到的是整个 `KernelState`，但只能读当前运行、当前会话和当前用户的用量（`state.principals()` 里这个用户的那一项）。别的会话可能不在内存里，回放一个会话时也不会有，读它们会让钩子在线上和回放时给出不同的结果。接口拦不住，靠这条约定；示例钩子都符合。
+
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数（回放接口会让内核重跑 journal，钩子会被再次调用）。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
 
 超时与失败：`Tool.run` 和 `WorkType.run` 都受 `tantalum.tool-timeout` 约束，到时线程被中断、结果按失败交回；撤销运行也会中断它们，所以阻塞操作要能响应中断。钩子返回 null 按 `Stop` 处理。按名单放行的策略钩子（如示例 `ReadOnlyHook`）要把 `memory_write`、`memory_read`、`memory_delete` 加进名单，否则记忆工具会被拦下；记忆目录是用户自己的，不算对工作目录的写操作。做“检查”的钩子在 `onWorkResult`/`beforeRunEnd` 里看到 `work.failed()` 时不要放行（示例 `CitationCheckHook` 会 `Stop`），否则检查没做成就等于通过。从 `onFailure` 申请的工作完成后再调模型会占用重试次数，失败持续时最多重试 3 次。
@@ -174,6 +222,8 @@ mvn clean verify          # 不访问外网，不花钱
 (cd console && pnpm test)
 (cd console && pnpm e2e)  # Playwright 端到端：自动起脚本化模型的后端（8097）和 vite（5174）
 ```
+
+`mvn verify` 在集成测试阶段还会用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。
 
 端到端的后端是 `tantalum-examples` 测试目录里的 `E2eServer`（Maven profile `e2e`，模型按关键词回放剧本，不访问外网），账号 `e2e` / `e2e-password`。
 
