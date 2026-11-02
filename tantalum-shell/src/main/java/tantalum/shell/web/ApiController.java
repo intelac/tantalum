@@ -41,8 +41,10 @@ import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
+import tantalum.shell.loop.Intake;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.TurnQuery;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -83,7 +85,7 @@ public class ApiController {
     /** 当前用户的会话，最近活动的在前。 */
     @GetMapping("/api/sessions")
     ResponseEntity<String> sessions() throws SQLException {
-        List<Map<String, Object>> sessions = engine.sessions(current()).stream().map(ApiController::describe).toList();
+        List<Map<String, Object>> sessions = engine.queries().sessions(current()).stream().map(ApiController::describe).toList();
         return json(200, Map.of("sessions", sessions));
     }
 
@@ -99,7 +101,7 @@ public class ApiController {
         if (before != null && before < 0) {
             return error(400, "invalid page position");
         }
-        Optional<Engine.SessionView> found = engine.session(current(), new SessionId(session));
+        Optional<SessionQueries.SessionView> found = engine.queries().session(current(), new SessionId(session));
         if (found.isEmpty()) {
             return error(404, "no such session");
         }
@@ -116,8 +118,8 @@ public class ApiController {
         return json(200, response);
     }
 
-    @ExceptionHandler(Engine.SessionUnreadable.class)
-    ResponseEntity<String> unreadable(Engine.SessionUnreadable failure) {
+    @ExceptionHandler(SessionQueries.SessionUnreadable.class)
+    ResponseEntity<String> unreadable(SessionQueries.SessionUnreadable failure) {
         LOG.error("session unreadable", failure);
         return error(500, "session unreadable");
     }
@@ -140,10 +142,10 @@ public class ApiController {
     @GetMapping("/api/runs/{run}/trace")
     ResponseEntity<String> trace(@PathVariable String run) {
         Principal user = current();
-        if (engine.run(user, new RunId(run)).isEmpty()) {
+        if (engine.queries().run(user, new RunId(run)).isEmpty()) {
             return error(404, "no such run");
         }
-        return json(200, engine.turns().trace(user, new RunId(run)));
+        return json(200, engine.queries().turns().trace(user, new RunId(run)));
     }
 
     @PostMapping("/api/sessions/{session}/submissions")
@@ -169,7 +171,7 @@ public class ApiController {
         if (blank(content)) {
             return error(400, "missing text");
         }
-        Engine.Submission result = engine.submit(current(), new SessionId(session),
+        Intake.Submission result = engine.intake().submit(current(), new SessionId(session),
                 new RequestId(requestId), mode, content);
         if (result.status() != 200) {
             return error(result.status(), "submission rejected");
@@ -196,7 +198,7 @@ public class ApiController {
         }
         String requestId = request == null ? null : text(request, "requestId");
         String instructions = request == null ? null : text(request, "instructions");
-        Engine.Submission result = engine.compact(current(), new SessionId(session),
+        Intake.Submission result = engine.intake().compact(current(), new SessionId(session),
                 new RequestId(blank(requestId) ? UUID.randomUUID().toString() : requestId), blank(instructions) ? null : instructions);
         if (result.status() == 404) {
             return error(404, "no such session");
@@ -216,17 +218,17 @@ public class ApiController {
     @PostMapping("/api/runs/{run}/cancel")
     ResponseEntity<String> cancel(@PathVariable String run) {
         Principal user = current();
-        Optional<RunState> found = engine.run(user, new RunId(run));
+        Optional<RunState> found = engine.queries().run(user, new RunId(run));
         if (found.isEmpty()) {
             return error(404, "no such run");
         }
-        int status = engine.cancel(user, found.get().ref());
+        int status = engine.intake().cancel(user, found.get().ref());
         return status == 200 ? json(200, Map.of("cancelled", true)) : error(status, "cancel rejected");
     }
 
     @GetMapping("/api/runs/{run}")
     ResponseEntity<String> run(@PathVariable String run) {
-        return engine.run(current(), new RunId(run))
+        return engine.queries().run(current(), new RunId(run))
                 .map(found -> json(200, describe(found)))
                 .orElseGet(() -> error(404, "no such run"));
     }
@@ -236,7 +238,7 @@ public class ApiController {
         if (!SESSION_ID.matcher(session).matches()) {
             return error(400, "invalid session id");
         }
-        Optional<Engine.SessionView> found = engine.session(current(), new SessionId(session));
+        Optional<SessionQueries.SessionView> found = engine.queries().session(current(), new SessionId(session));
         if (found.isEmpty()) {
             return error(404, "no such session");
         }
@@ -252,11 +254,11 @@ public class ApiController {
     @GetMapping("/api/runs/{run}/turns")
     ResponseEntity<String> turns(@PathVariable String run) {
         Principal user = current();
-        if (engine.run(user, new RunId(run)).isEmpty()) {
+        if (engine.queries().run(user, new RunId(run)).isEmpty()) {
             return error(404, "no such run");
         }
         List<Map<String, Object>> summaries = new ArrayList<>();
-        for (TurnQuery.Turn turn : engine.turns().turns(user, new RunId(run))) {
+        for (TurnQuery.Turn turn : engine.queries().turns().turns(user, new RunId(run))) {
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("number", turn.number());
             summary.put("command", turn.command().value());
@@ -270,10 +272,10 @@ public class ApiController {
     @GetMapping("/api/runs/{run}/turns/{number}")
     ResponseEntity<String> turn(@PathVariable String run, @PathVariable int number) {
         Principal user = current();
-        if (engine.run(user, new RunId(run)).isEmpty()) {
+        if (engine.queries().run(user, new RunId(run)).isEmpty()) {
             return error(404, "no such run");
         }
-        return engine.turns().turns(user, new RunId(run)).stream()
+        return engine.queries().turns().turns(user, new RunId(run)).stream()
                 .filter(turn -> turn.number() == number).findFirst()
                 .map(turn -> json(200, turn))
                 .orElseGet(() -> error(404, "no such turn"));

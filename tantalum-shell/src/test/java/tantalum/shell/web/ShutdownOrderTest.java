@@ -78,7 +78,7 @@ class ShutdownOrderTest {
         long took;
         try (TestServer server = server(hanging)) {
             engine = server.context.getBean(Engine.class);
-            assertEquals(200, engine.submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
             awaitCalls(calls);
             long start = System.nanoTime();
             server.context.close();
@@ -86,7 +86,7 @@ class ShutdownOrderTest {
         }
         assertTrue(took < 1_000 + 3_000, "closing took " + took + " ms with a 1 s shutdown wait");
         assertEquals(1, calls.get(), "no new model call was started while closing");
-        assertEquals(503, engine.submit(ALICE, S1, new RequestId("r2"), "prompt", "after").status());
+        assertEquals(503, engine.intake().submit(ALICE, S1, new RequestId("r2"), "prompt", "after").status());
         assertTrue(new SessionStore(temp.resolve("data"), EventCodec.withBuiltins()).readAll().stream()
                 .anyMatch(envelope -> envelope.event() instanceof UserPrompt prompt && prompt.text().equals("hi")));
 
@@ -114,7 +114,7 @@ class ShutdownOrderTest {
             return new ModelOutcome.Replied(List.of(new TextBlock("finished during shutdown")), StopReason.END_TURN, "m", null);
         })) {
             Engine engine = server.context.getBean(Engine.class);
-            assertEquals(200, engine.submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
             awaitCalls(calls);
             server.context.close();
         }
@@ -131,7 +131,7 @@ class ShutdownOrderTest {
     void aModelCallThatIgnoresInterruptsCannotHoldTheShutdown() throws Exception {
         try (TestServer server = server(stubborn)) {
             Engine engine = server.context.getBean(Engine.class);
-            assertEquals(200, engine.submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
             awaitCalls(calls);
             long start = System.nanoTime();
             server.context.close();
@@ -147,7 +147,7 @@ class ShutdownOrderTest {
         try (TestServer server = server((prompt, chunks) ->
                 new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null))) {
             Engine engine = server.context.getBean(Engine.class);
-            assertEquals(200, engine.submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
             for (int i = 0; i < 500 && (engine.state().sessions().get(S1) == null || engine.state().sessions().get(S1).activeRun() != null); i++) {
                 Thread.sleep(10);
             }

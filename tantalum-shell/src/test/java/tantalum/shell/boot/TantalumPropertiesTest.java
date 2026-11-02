@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import tantalum.shell.boot.TantalumProperties.Loop;
+import tantalum.shell.loop.Evictor;
 import tantalum.shell.memory.MemoryLimits;
 
 class TantalumPropertiesTest {
@@ -30,9 +31,9 @@ class TantalumPropertiesTest {
 
     @Test
     void changingOneResidencySettingKeepsTheOtherDefaults() throws Exception {
-        assertEquals(TantalumProperties.Residency.defaults(), bind().residency());
-        TantalumProperties.Residency residency = bind("tantalum.residency.idle", "2s").residency();
-        assertEquals(new TantalumProperties.Residency(Duration.ofSeconds(2), 1000, 200, Duration.ofSeconds(1)), residency);
+        assertEquals(Evictor.Settings.defaults(), bind().residency());
+        Evictor.Settings residency = bind("tantalum.residency.idle", "2s").residency();
+        assertEquals(new Evictor.Settings(Duration.ofSeconds(2), 1000, 200, Duration.ofSeconds(1)), residency);
     }
 
     @Test
@@ -108,7 +109,8 @@ class TantalumPropertiesTest {
                         java.time.Duration.ofSeconds(1), 4, claudeWindow),
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 1, openAiWindow),
-                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, null, null, null);
+                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
+                Evictor.Settings.defaults(), Duration.ofSeconds(30));
     }
 
     /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */

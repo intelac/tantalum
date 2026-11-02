@@ -1,18 +1,16 @@
 package tantalum.shell.store;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.loop.Evictor;
-import tantalum.value.state.RunState;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.state.SessionState;
 
 /**
@@ -25,8 +23,6 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
     private static final int CAPACITY = 1024;
     private static final long CLOSE_WAIT_MILLIS = 10_000;
     private static final Object STOP = new Object();
-
-    private record Request(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq) {}
 
     private record Barrier(CountDownLatch done) {}
 
@@ -42,9 +38,9 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
     }
 
     @Override
-    public void offer(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq) {
-        if (!queue.offer(new Request(session, runs, transcript, seq))) {
-            LOG.warn("snapshot queue full, skipping session {}; it will replay from its session file", session.id().value());
+    public void offer(SessionSlice slice) {
+        if (!queue.offer(slice)) {
+            LOG.warn("snapshot queue full, skipping session {}; it will replay from its session file", slice.session().id().value());
         }
     }
 
@@ -61,7 +57,7 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
         try {
             while (true) {
                 switch (queue.take()) {
-                    case Request request -> write(request);
+                    case SessionSlice slice -> write(slice);
                     case Barrier barrier -> barrier.done().countDown();
                     default -> {
                         return;
@@ -73,16 +69,17 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
         }
     }
 
-    private void write(Request request) {
+    private void write(SessionSlice slice) {
+        SessionState session = slice.session();
         try {
-            long offset = SessionFileReader.endOffsetOf(paths.sessionFile(request.session().principal(), request.session().id()), request.seq());
+            long offset = SessionFileReader.endOffsetOf(paths.sessionFile(session.principal(), session.id()), slice.seq());
             if (offset < 0) {
-                LOG.warn("no line with seq {} for session {}, skipping snapshot", request.seq(), request.session().id().value());
+                LOG.warn("no line with seq {} for session {}, skipping snapshot", slice.seq(), session.id().value());
                 return;
             }
-            store.write(request.session().principal(), new SessionSnapshot(request.session(), request.runs(), request.transcript(), request.seq(), offset));
+            store.write(session.principal(), new SessionSnapshot(slice, offset));
         } catch (IOException | RuntimeException failure) {
-            LOG.warn("snapshot write failed for session {}, keeping the old one: {}", request.session().id().value(), failure.toString());
+            LOG.warn("snapshot write failed for session {}, keeping the old one: {}", session.id().value(), failure.toString());
         }
     }
 

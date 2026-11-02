@@ -72,52 +72,52 @@
 
 ## 阶段 3：管线
 
-- [ ] 12. 索引记录未结束的运行
+- [x] 12. 索引记录未结束的运行
   - File: `shell/store/{SessionIndex,IndexChange,IndexBatch,IndexWriter}.java`
   - 加 `active_run` 列；去掉 `format`、`last_seq`；升级索引版本
   - 验证：`IndexStoreTest` 更新后通过；旧版本索引启动时被重建
   - _Requirements: 2.1, C5_
 
-- [ ] 13. 启动走平时的载入路径
+- [x] 13. 启动走平时的载入路径
   - File: `shell/boot/{Engine,Startup}.java`, `shell/loop/{Evictor,StateView,Cleanroom}.java`；`SessionStore` 移到测试代码
   - 补齐失败拒绝启动并提示删 `index.db`；按索引发布 `RunInterrupted`；删 `Startup`、`Evictor.recovered`、初始状态参数
   - 验证：`RestartInterruptTest`、`StartupTest`（改写）、`ColdSessionTest`、`CrashRestartTest`、`JarCrashIT` 通过；新增：索引补齐失败时启动失败且消息含 `index.db`
   - _Requirements: 2.1, C3_
 
-- [ ] 14. `Storage`
+- [x] 14. `Storage`
   - File: shell/store/Storage.java, shell/boot/Engine.java
   - 打开、失败清理、按序关闭写在一处；`SessionPaths`、读取器、`SnapshotStore` 各只建一次
   - 验证：`StoreLockTest`、`ShutdownOrderTest`、`ShutdownTest` 通过
   - _Requirements: 3.3_
 
-- [ ] 15. `Intake` 和 `Submitted`
+- [x] 15. `Intake` 和 `Submitted`
   - File: shell/loop/Intake.java, value/event/Submitted.java，四个提交事件，shell/store/IndexChange.java, shell/boot/Engine.java
   - 占名额、发布、回滚只有一份；归还名额也在这里
   - 验证：`ExternalGateTest`、`SubmitApiTest`、`CompactApiTest`、`MultiUserTest`、`ConcurrencyStressTest` 通过
   - _Requirements: 2.5, 3.3_
 
-- [ ] 16. `SessionQueries`，`Engine` 收尾
+- [x] 16. `SessionQueries`，`Engine` 收尾
   - File: shell/store/SessionQueries.java, shell/boot/Engine.java, shell/web/*.java
   - `Engine` 用静态工厂组装，去掉 `Assembly`；对外只给 `intake()`、`queries()`、`hub()`、`memories()`、`codec()`
   - 验证：全部 web 测试通过；`Engine` 不超过 300 行
   - _Requirements: 3.3_
 
-- [ ] 17. `SessionSlice` 和 Cleanroom Ring 的槽
+- [x] 17. `SessionSlice` 和 Cleanroom Ring 的槽
   - File: `shell/loop/{SessionSlice,Preload,CleanroomRing,Cleanroom,UserLane,Evictor}.java`, `shell/store/{SessionSnapshot,SessionReplay,SnapshotWriter}.java`
   - 验证：`LoadTest`、`UserLaneTest`、`CleanroomTest`、`EvictionInvarianceTest`、`SnapshotWriterTest`、`SessionReplayTest` 通过；快照文件格式不变（读旧测试数据）
   - _Requirements: 2.6_
 
-- [ ] 18. 一个 `Ring` 类
+- [x] 18. 一个 `Ring` 类
   - File: `shell/loop/{Ring,InputRing,CleanroomRing,OutputRing}.java`
   - 验证：`RingTest`、`BackpressureTest`、`RingIntegrationTest` 通过
   - _Requirements: 2.6_
 
-- [ ] 19. 回放循环、目录列举、设置记录
+- [x] 19. 回放循环、目录列举、设置记录
   - File: `shell/store/{SessionReplay,IndexCatchUp,UsageLedger,TurnQuery}.java`, `shell/journal/{SessionPaths,TailSequence}.java`, shell/loop/Evictor.java, shell/boot/TantalumProperties.java
   - 验证：`SessionReplayTest`、`IndexStoreTest`、`TurnQueryTest`、`PerSessionQueryTest`、`SequenceTest`、`TantalumPropertiesTest` 通过
   - _Requirements: 2.6_
 
-- [ ] 20. 阶段 3 收尾
+- [x] 20. 阶段 3 收尾
   - 验证：全量回归；变异检查（启动不发 `RunInterrupted`，`JarCrashIT` 失败）；提交；汇报
 
 ## 阶段 4：外围

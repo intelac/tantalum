@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.SessionState;
@@ -28,8 +29,8 @@ class ColdReadsTest {
     private ColdReads cold() {
         return new ColdReads(new SessionPaths(dir), (principal, session) -> {
             reads.incrementAndGet();
-            return Optional.of(new SessionSnapshot(SessionState.start(session, principal), List.of(),
-                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get()), reads.get(), 0));
+            return Optional.of(new SessionSlice(SessionState.start(session, principal), List.of(),
+                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get()), reads.get()));
         });
     }
 

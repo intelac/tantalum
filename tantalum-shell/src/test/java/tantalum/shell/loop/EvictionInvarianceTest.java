@@ -111,7 +111,7 @@ class EvictionInvarianceTest {
         final List<String> log = new ArrayList<>();
         final List<Integer> loads = new ArrayList<>();
         final Deque<Command> pending = new ArrayDeque<>();
-        final StateView view = new StateView(KernelState.empty());
+        final StateView view = new StateView();
         /** 场景结束时每个会话完整的对话视图：在内存的直接导出，不在的按线上冷查询的方式读（有快照就用快照）。 */
         final Map<SessionId, Transcript.Saved> views = new java.util.TreeMap<>(java.util.Comparator.comparing(SessionId::value));
         private final Transcript transcript;
@@ -161,7 +161,7 @@ class EvictionInvarianceTest {
                     log.add("item " + seq + "." + index + " " + item);
                 }
             };
-            Cleanroom cleanroom = new Cleanroom(kernel, KernelState.empty(), dispatcher::halted, command -> {
+            Cleanroom cleanroom = new Cleanroom(kernel, dispatcher::halted, command -> {
                 log.add("command " + command);
                 pending.add(command);
                 return true;
@@ -175,11 +175,10 @@ class EvictionInvarianceTest {
             input.start();
         }
 
-        private Optional<Preload> load(SessionReplay replay, Principal principal, SessionId session, long beforeSeq) throws Exception {
-            return replay.load(principal, session, beforeSeq).map(slice -> {
-                loads.add(slice.replayedEvents());
-                return Preload.loaded(slice.snapshot().session(), slice.snapshot().runs(), slice.snapshot().transcript(),
-                        slice.snapshot().seq(), slice.replayedEvents());
+        private Optional<CleanroomRing.Loaded> load(SessionReplay replay, Principal principal, SessionId session, long beforeSeq) throws Exception {
+            return replay.load(principal, session, beforeSeq).map(result -> {
+                loads.add(result.replayedEvents());
+                return new CleanroomRing.Loaded(result.snapshot().slice(), result.replayedEvents());
             });
         }
 
@@ -198,7 +197,7 @@ class EvictionInvarianceTest {
             for (var entry : sessions.entrySet()) {
                 SessionId session = entry.getKey();
                 views.put(session, transcript.sessions().contains(session) ? transcript.export(session)
-                        : replay.load(entry.getValue(), session, Long.MAX_VALUE).orElseThrow().snapshot().transcript());
+                        : replay.load(entry.getValue(), session, Long.MAX_VALUE).orElseThrow().snapshot().slice().transcript());
             }
         }
 

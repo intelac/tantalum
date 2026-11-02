@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
@@ -20,12 +21,12 @@ public final class ColdReads {
     /** 重放一个会话的全部事件，没有事件时为空。 */
     @FunctionalInterface
     public interface Reader {
-        Optional<SessionSnapshot> read(Principal principal, SessionId session) throws Exception;
+        Optional<SessionSlice> read(Principal principal, SessionId session) throws Exception;
     }
 
     private record Key(Principal principal, SessionId session) {}
 
-    private record Cached(long size, Optional<SessionSnapshot> snapshot) {}
+    private record Cached(long size, Optional<SessionSlice> slice) {}
 
     private final SessionPaths paths;
     private final Reader reader;
@@ -42,11 +43,11 @@ public final class ColdReads {
     }
 
     public ColdReads(SessionPaths paths, SessionReplay replay) {
-        this(paths, (principal, session) -> replay.load(principal, session, Long.MAX_VALUE).map(SessionReplay.Slice::snapshot));
+        this(paths, (principal, session) -> replay.load(principal, session, Long.MAX_VALUE).map(result -> result.snapshot().slice()));
     }
 
     /** 文件不存在时为空，不重放。 */
-    public Optional<SessionSnapshot> read(Principal principal, SessionId session) throws Exception {
+    public Optional<SessionSlice> read(Principal principal, SessionId session) throws Exception {
         Path file = paths.sessionFile(principal, session);
         if (!Files.exists(file)) {
             return Optional.empty();
@@ -57,10 +58,10 @@ public final class ColdReads {
         synchronized (cache) {
             Cached cached = cache.get(key);
             if (cached != null && cached.size() == size) {
-                return cached.snapshot();
+                return cached.slice();
             }
         }
-        Optional<SessionSnapshot> fresh = reader.read(principal, session);
+        Optional<SessionSlice> fresh = reader.read(principal, session);
         synchronized (cache) {
             cache.put(key, new Cached(size, fresh));
         }

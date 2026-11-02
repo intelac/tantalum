@@ -2,6 +2,7 @@ package tantalum.shell.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -234,6 +235,33 @@ class IndexStoreTest {
         }
         fixture.files.close();
         return fixture;
+    }
+
+    /** 启动只靠这一列找出要收尾的运行：运行开始时写上，结束时清空，重建后一样。 */
+    @Test
+    void unfinishedRunsAreRecordedAndClearedWhenTheyEnd() throws Exception {
+        List<SessionIndex.Session> before;
+        try (SessionIndex index = SessionIndex.open(dir)) {
+            IndexFixture fixture;
+            IndexFixture.Pending open;
+            try (IndexWriter writer = new IndexWriter(index::write, 1, LONG, 1000)) {
+                fixture = new IndexFixture(paths(), writer::onDurable, writer::onStep);
+                fixture.reply(fixture.prompt(ALICE, S1, DAY1, "done"), DAY1, tokens(1));
+                open = fixture.prompt(ALICE, S2, DAY1, "still running");
+                writer.flush();
+            }
+            fixture.files.close();
+            List<SessionIndex.Session> unfinished = index.unfinished();
+            assertEquals(List.of(S2), unfinished.stream().map(SessionIndex.Session::session).toList());
+            assertEquals(open.run(), unfinished.getFirst().activeRun());
+            assertNull(index.session(S1).orElseThrow().activeRun());
+            before = index.sessions();
+        }
+        deleteIndex();
+        try (SessionIndex rebuilt = SessionIndex.open(dir)) {
+            IndexCatchUp.run(rebuilt, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            assertEquals(before, rebuilt.sessions());
+        }
     }
 
     @Test

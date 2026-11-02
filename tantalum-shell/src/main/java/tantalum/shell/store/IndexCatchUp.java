@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
@@ -20,7 +19,6 @@ import tantalum.shell.journal.SessionCorruptException;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.id.Principal;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 
@@ -43,9 +41,9 @@ public final class IndexCatchUp {
             known.put(paths.sessionFile(session.principal(), session.session()), session);
         }
         int replayed = 0;
-        for (Path dir : list(paths.sessionsDir())) {
+        for (Path dir : paths.users()) {
             List<Lagging> lagging = new ArrayList<>();
-            for (Path file : list(dir)) {
+            for (Path file : paths.sessionFiles(dir)) {
                 long size = Files.size(file);
                 SessionIndex.Session session = known.get(file);
                 if (session == null || session.fileOffset() != size) {
@@ -91,35 +89,20 @@ public final class IndexCatchUp {
 
     /** 每个事件前把用量设为“截至这个序号的累计”：已有的记录加上这次重放算出来的，同一序号只算一次。 */
     private static IndexBatch replay(List<EventEnvelope> events, List<IndexChange.Usage> stored, Kernel kernel) {
-        Principal principal = events.getFirst().principal();
         Set<Long> storedSeqs = new HashSet<>();
         stored.forEach(row -> storedSeqs.add(row.seq()));
-        PrincipalState usage = PrincipalState.start(principal);
+        UsageLedger.Cursor usage = new UsageLedger.Cursor(PrincipalState.start(events.getFirst().principal()), stored);
         KernelState state = KernelState.empty();
         IndexBatch batch = new IndexBatch();
-        int next = 0;
         for (EventEnvelope envelope : events) {
-            while (next < stored.size() && stored.get(next).seq() < envelope.seq()) {
-                usage = usage.add(stored.get(next).day(), stored.get(next).amount());
-                next++;
-            }
-            KernelState before = state.with(usage);
+            KernelState before = state.with(usage.before(envelope.seq()));
             state = kernel.step(before, envelope).newState();
             IndexChange change = IndexChange.of(envelope, before, state);
             batch.add(change);
             if (change.usage() != null && !storedSeqs.contains(envelope.seq())) {
-                usage = usage.add(change.usage().day(), change.usage().amount());
+                usage.add(change.usage());
             }
         }
         return batch;
-    }
-
-    private static List<Path> list(Path dir) throws IOException {
-        if (!Files.isDirectory(dir)) {
-            return List.of();
-        }
-        try (Stream<Path> entries = Files.list(dir)) {
-            return entries.sorted().toList();
-        }
     }
 }

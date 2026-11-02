@@ -1,28 +1,20 @@
 package tantalum.shell.boot;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
-import tantalum.kernel.compaction.Compactor;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.boot.TantalumProperties.Loop;
-import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ContextHandler;
@@ -32,11 +24,6 @@ import tantalum.shell.handler.TimerHandler;
 import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFileReader;
-import tantalum.shell.journal.SessionFiles;
-import tantalum.shell.journal.SessionPaths;
-import tantalum.shell.journal.StoreFormat;
-import tantalum.shell.journal.StoreLock;
 import tantalum.shell.journal.TailSequence;
 import tantalum.shell.loop.Cleanroom;
 import tantalum.shell.loop.CleanroomRing;
@@ -45,18 +32,16 @@ import tantalum.shell.loop.ExternalGate;
 import tantalum.shell.loop.HandlerDispatcher;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.InputRing;
+import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
-import tantalum.shell.loop.Preload;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
-import tantalum.shell.loop.UserLane;
 import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
-import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.model.ModelClient;
@@ -65,15 +50,10 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.ColdReads;
-import tantalum.shell.store.IndexCatchUp;
-import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
+import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.SessionReplay;
-import tantalum.shell.store.SessionStore;
-import tantalum.shell.store.SnapshotStore;
-import tantalum.shell.store.SnapshotWriter;
 import tantalum.shell.store.TurnQuery;
-import tantalum.shell.store.UsageLedger;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
@@ -84,420 +64,137 @@ import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
-import tantalum.value.event.Cancel;
-import tantalum.value.event.CompactRequested;
-import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.event.SteerSubmitted;
-import tantalum.value.event.UserPrompt;
-import tantalum.value.id.Principal;
-import tantalum.value.id.RequestId;
-import tantalum.value.id.RunId;
-import tantalum.value.id.RunRef;
-import tantalum.value.id.SessionId;
-import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
-import tantalum.value.state.PrincipalState;
-import tantalum.value.state.RunState;
-import tantalum.value.state.SessionState;
 
-/** 把环、journal、Handler 和插件装配起来，并提供外部提交的入口。不依赖 Spring。 */
+/** 把存储、环、Handler 和插件装配起来，负责启动和关闭。提交走 {@link #intake()}，读取走 {@link #queries()}。不依赖 Spring。 */
 public final class Engine implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
     private static final Duration DRAIN = Duration.ofSeconds(5);
     private static final Duration INTERRUPT_RETRY = Duration.ofMillis(10);
     private static final Duration INTERRUPT_GRACE = Duration.ofSeconds(2);
-    private static final int MAX_OPEN_FILES = 256;
-    /** 只供回归测试：让序号跳号运行，证明没有代码依赖序号连续。 */
+    /** 只供跳号回归：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
 
-    /** 提交的结果。{@code status} 对应 HTTP 状态。 */
-    public record Submission(int status, SubmissionId submission, boolean duplicate) {}
-
-    /** 一个会话的只读视图：在内存的取当前状态，不在的重放文件得到，不进常驻。 */
-    public record SessionView(SessionState state, List<RunState> runs, Transcript.View transcript) {}
-
-    /** 会话文件读不了（中间损坏、索引库不可用）。 */
-    public static final class SessionUnreadable extends RuntimeException {
-        SessionUnreadable(SessionId session, Exception cause) {
-            super("cannot read session " + session.value(), cause);
-        }
-    }
-
     private final Clock clock;
-    private final StoreLock lock;
-    private final SessionFiles files;
     private final EventCodec codec;
-    private final LaneDispatcher dispatcher;
-    private final InputRing input;
-    private final CleanroomRing cleanroom;
-    private final OutputRing output;
+    private final Duration shutdownWait;
+    private final Storage storage;
     private final StateView view;
-    private final Transcript transcript;
-    private final SessionIndex index;
-    private final IndexWriter indexWriter;
-    private final SubmissionLedger ledger;
-    private final Residency residency = new Residency();
-    private final SnapshotWriter snapshots;
-    private final ExternalGate gate;
     private final SseHub hub;
     private final MemoryStores memories;
     private final McpRegistry mcp;
-    private final TurnQuery turns;
-    private final ColdReads cold;
-    private final Cleanroom cleanroomStep;
+    private final InputRing input;
+    private final LaneDispatcher lanes;
+    private final CleanroomRing cleanroomRing;
+    private final Cleanroom cleanroom;
+    private final OutputRing output;
     private final HandlerDispatcher handlers;
     private final InFlightCommands inFlight;
-    private final Duration shutdownWait;
+    private final Intake intake;
+    private final SessionQueries queries;
     /** 关闭开始后入口返回 503。 */
-    private volatile boolean closing;
-    private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean closing = new AtomicBoolean();
 
-    /** 构造失败时释放已拿到的锁、索引、会话文件和快照写线程，否则嵌入方重试会一直撞上“store is locked”。 */
     public Engine(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
         long started = System.nanoTime();
         this.clock = clock;
         this.codec = codec;
-        this.shutdownWait = properties.shutdownWaitOrDefault();
-        this.lock = StoreLock.acquire(properties.dataDir());
+        this.shutdownWait = properties.shutdownWait();
+        this.storage = Storage.open(properties.dataDir(), codec, properties.index());
+        Loop loop = properties.loop();
+        List<SessionIndex.Session> unfinished;
         try {
-            StoreFormat.check(properties.dataDir());
-            this.index = SessionIndex.open(properties.dataDir());
-        } catch (IOException | RuntimeException failure) {
-            closeQuietly(lock);
-            throw failure;
-        } catch (SQLException failure) {
-            closeQuietly(lock);
-            throw new IOException("cannot open index", failure);
-        }
-        this.ledger = new SubmissionLedger(this::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
-        TantalumProperties.Index throttle = properties.index() == null ? TantalumProperties.Index.defaults() : properties.index();
-        this.indexWriter = new IndexWriter(index, throttle.flushEvents(), throttle.flushInterval());
-        SessionPaths paths = new SessionPaths(properties.dataDir());
-        this.files = new SessionFiles(paths, codec, MAX_OPEN_FILES, indexWriter::onDurable);
-        this.snapshots = new SnapshotWriter(new SnapshotStore(paths, codec), paths);
-        List<RunState> unfinished;
-        try {
-            Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
-            this.view = parts.view;
-            this.transcript = parts.transcript;
-            this.turns = parts.turns;
-            this.cold = parts.cold;
-            this.cleanroomStep = parts.cleanroomStep;
-            this.handlers = parts.handlers;
-            this.inFlight = parts.inFlight;
-            this.hub = parts.hub;
-            this.memories = parts.memories;
-            this.mcp = parts.mcp;
-            this.dispatcher = parts.dispatcher;
-            this.cleanroom = parts.cleanroom;
-            this.gate = parts.gate;
-            this.input = parts.input;
-            this.output = parts.output;
-            unfinished = parts.unfinished;
+            ToolCatalog catalog = new ToolCatalog();
+            Workspaces workspaces = properties.workspaceMode().equals("shared")
+                    ? Workspaces.shared(properties.workspace()) : Workspaces.perUser(properties.workspace());
+            if (workspaces.isShared()) {
+                LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
+            }
+            catalog.register(new ReadFileTool());
+            catalog.register(new GrepTool());
+            memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
+            MemoryTools.all(memories).forEach(catalog::register);
+            tools.forEach(catalog::register);
+            mcp = new McpRegistry(McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv));
+            catalog.setSource(mcp);
+
+            TransitionTable table = new TransitionTable();
+            BuiltinSteps.register(table);
+            Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
+            SessionReplay replay = storage.replay(kernel);
+            unfinished = storage.catchUp(kernel);
+
+            Residency residency = new Residency();
+            Transcript transcript = new Transcript();
+            view = new StateView();
+            TurnQuery turns = new TurnQuery(storage.paths, replay, codec.mapper());
+            hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
+            queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths, replay), turns);
+
+            cleanroomRing = new CleanroomRing(loop.inputRingSize());
+            lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
+                    storage.files::append, cleanroomRing::tryPublish, storage.loader(replay), residency);
+            inFlight = new InFlightCommands();
+            input = new InputRing(loop.inputRingSize());
+            ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
+            Map<Class<? extends Command>, Handler> byCommand = Map.of(
+                    AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories,
+                            new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
+                            properties.compactionSettings()),
+                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
+                    RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
+                    DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
+                    StartTimer.class, new TimerHandler());
+            handlers = new HandlerDispatcher(byCommand, inFlight, results);
+            output = new OutputRing(loop.outputRingSize(), handlers);
+            Evictor evictor = new Evictor(properties.residency(), residency, transcript, storage.snapshots, clock);
+            cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, transcript, hub, view, results,
+                    storage.indexWriter::onStep, evictor);
+
+            // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
+            BooleanSupplier halted = () -> closing.get() || lanes.halted() || cleanroom.broken() || input.broken()
+                    || cleanroomRing.broken() || output.broken();
+            ExternalGate gate = new ExternalGate(new ExternalGate.Limits(loop.maxActiveRuns(), loop.maxUserInFlight(), loop.maxExternalInFlight()),
+                    () -> (int) view.current().activeRunCount(), halted);
+            SubmissionLedger ledger = new SubmissionLedger(storage::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
+            intake = new Intake(input, gate, ledger, view, residency, storage::claim,
+                    (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock);
+            input.connect(lanes);
+            cleanroomRing.connect((slot, sequence, endOfBatch) -> {
+                EventEnvelope envelope = slot.envelope;
+                cleanroom.onEvent(slot, sequence, endOfBatch);
+                intake.processed(envelope);
+                lanes.released();
+            });
         } catch (RuntimeException failure) {
-            closeQuietly(snapshots);
-            closeQuietly(files);
-            closeQuietly(indexWriter);
-            closeQuietly(index);
-            closeQuietly(lock);
+            Storage.closeQuietly(storage);
             throw failure;
         }
-        int loaded = view.current().sessions().size();
         output.start();
-        cleanroom.start();
+        cleanroomRing.start();
         input.start();
         interrupt(unfinished);
-        LOG.info("store ready at {} in {} ms: {} sessions with unfinished runs loaded, {} runs closed as interrupted",
-                properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), loaded, unfinished.size());
+        LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
+                properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
     }
 
-    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, LaneDispatcher dispatcher,
-                            ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp,
-                            List<RunState> unfinished, ColdReads cold, Cleanroom cleanroomStep, HandlerDispatcher handlers,
-                            InFlightCommands inFlight) {}
-
-    private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
-                              List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
-                              List<AfterToolHook> afterHooks) {
-        Loop loop = properties.loop();
-        ToolCatalog catalog = new ToolCatalog();
-        Workspaces workspaces = properties.workspaceMode().equals("shared")
-                ? Workspaces.shared(properties.workspace()) : Workspaces.perUser(properties.workspace());
-        if (workspaces.isShared()) {
-            LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
-        }
-        catalog.register(new ReadFileTool());
-        catalog.register(new GrepTool());
-        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
-        KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
-        MemoryTools.all(memories).forEach(catalog::register);
-        tools.forEach(catalog::register);
-        McpRegistry mcp = new McpRegistry(McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv));
-        catalog.setSource(mcp);
-
-        TransitionTable table = new TransitionTable();
-        BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
-
-        SessionStore store = new SessionStore(properties.dataDir(), codec);
-        SessionPaths paths = new SessionPaths(properties.dataDir());
-        UsageLedger usage = new UsageLedger(index, indexWriter);
-        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), usage, kernel);
-        Startup.Recovered recovered = recover(properties, kernel, store, replay);
-        StateView view = new StateView(recovered.state());
-        TurnQuery turns = new TurnQuery(paths, replay, codec.mapper());
-        SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
-        CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
-        LaneDispatcher dispatcher = new LaneDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),
-                files::append, cleanroomRing::tryPublish, loader(replay, usage), residency);
-
-        InFlightCommands inFlight = new InFlightCommands();
-        InputRing input = new InputRing(loop.inputRingSize());
-        ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
-        Map<Class<? extends Command>, Handler> handlers = Map.of(
-                AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge, mcp.fixedNote(),
-                        properties.compactionSettings()),
-                CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
-                RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
-                DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
-                StartTimer.class, new TimerHandler());
-        HandlerDispatcher commands = new HandlerDispatcher(handlers, inFlight, results);
-        OutputRing output = new OutputRing(loop.outputRingSize(), commands);
-        Evictor evictor = new Evictor(evictorSettings(properties), residency, recovered.transcript(), snapshots, clock);
-        for (SessionId session : recovered.state().sessions().keySet()) {
-            residency.resident(session);
-            evictor.recovered(session, recovered.transcript().view(session).seq());
-        }
-        recovered.failed().forEach(residency::fail);
-        Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
-                recovered.transcript(), hub, view, results, indexWriter::onStep, evictor);
-        // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
-        BooleanSupplier halted = () -> closing || dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
-        ExternalGate gate = new ExternalGate(new ExternalGate.Limits(loop.maxActiveRuns(), loop.maxUserInFlight(), loop.maxExternalInFlight()), () -> (int) view.current().activeRunCount(), halted);
-        input.connect(dispatcher);
-        cleanroomRing.connect((slot, sequence, endOfBatch) -> {
-            EventEnvelope envelope = slot.envelope;
-            cleanroom.onEvent(slot, sequence, endOfBatch);
-            releaseIfExternal(envelope);
-            dispatcher.released();
-        });
-        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished(),
-                new ColdReads(paths, replay), cleanroom, commands, inFlight);
+    /** 提问、排队、插话、手动压缩和取消。 */
+    public Intake intake() {
+        return intake;
     }
 
-    private static Evictor.Settings evictorSettings(TantalumProperties properties) {
-        TantalumProperties.Residency settings = properties.residency() == null ? TantalumProperties.Residency.defaults() : properties.residency();
-        return new Evictor.Settings(settings.idle(), settings.maxResident(), settings.snapshotEvents(), settings.sweepInterval());
+    /** 会话、运行和回放的读取。 */
+    public SessionQueries queries() {
+        return queries;
     }
 
-    /** 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。 */
-    private void interrupt(List<RunState> unfinished) {
-        if (unfinished.isEmpty()) {
-            return;
-        }
-        try {
-            for (RunState run : unfinished) {
-                EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), run.ref().principal(),
-                        run.ref().session(), run.ref().run(), new RunInterrupted());
-                while (!input.tryPublish(envelope)) {
-                    Thread.sleep(INTERRUPT_RETRY.toMillis());
-                }
-            }
-            input.awaitDrained(DRAIN);
-            if (!dispatcher.awaitIdle(DRAIN)) {
-                LOG.warn("{} unfinished runs were not closed within {}", unfinished.size(), DRAIN);
-            }
-        } catch (InterruptedException stopping) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    /** 平常只载入有未结束运行的会话；索引补不上时不知道哪些会话没结束，只能全量重放。 */
-    private Startup.Recovered recover(TantalumProperties properties, Kernel kernel, SessionStore store, SessionReplay replay) {
-        try {
-            IndexCatchUp.run(index, new SessionPaths(properties.dataDir()), new SessionFileReader(codec), kernel);
-            return Startup.resume(index, replay);
-        } catch (IOException | SQLException failure) {
-            LOG.warn("index could not catch up with session files, replaying everything: {}", failure.toString());
-            return Startup.recover(store, kernel);
-        } catch (InterruptedException stopping) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while starting", stopping);
-        }
-    }
-
-    private static UserLane.Loader loader(SessionReplay replay, UsageLedger usage) {
-        return new UserLane.Loader() {
-            @Override
-            public Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
-                return replay.load(principal, session, beforeSeq).map(slice -> Preload.loaded(slice.snapshot().session(),
-                        slice.snapshot().runs(), slice.snapshot().transcript(), slice.snapshot().seq(), slice.replayedEvents()));
-            }
-
-            @Override
-            public PrincipalState usage(Principal principal, long beforeSeq) throws Exception {
-                return new PrincipalState(principal, usage.before(principal, beforeSeq));
-            }
-        };
-    }
-
-    /** 查不到时当作新提交：可用性优先，日志留痕。 */
-    private Optional<SubmissionId> findSubmission(Principal principal, RequestId request) {
-        try {
-            return index.submission(principal, request);
-        } catch (SQLException failure) {
-            LOG.warn("index lookup failed, treating request as new: {}", failure.toString());
-            return Optional.empty();
-        }
-    }
-
-    /** 新会话 ID 只属于第一个认领的用户。内存里已有的会话不用查，这里只走一次。 */
-    private int claimSession(Principal principal, SessionId session) {
-        try {
-            return index.claim(session, principal) ? 200 : 404;
-        } catch (SQLException failure) {
-            LOG.error("cannot record session ownership", failure);
-            return 503;
-        }
-    }
-
-    private static void closeQuietly(AutoCloseable resource) {
-        try {
-            resource.close();
-        } catch (Exception failure) {
-            LOG.warn("cleanup after failed start: {}", failure.toString());
-        }
-    }
-
-    private void releaseIfExternal(EventEnvelope envelope) {
-        Event event = envelope.event();
-        SubmissionId submission = switch (event) {
-            case UserPrompt prompt -> prompt.submission();
-            case SteerSubmitted steer -> steer.submission();
-            case FollowUpSubmitted followUp -> followUp.submission();
-            case CompactRequested compact -> compact.submission();
-            case Cancel cancel -> null;
-            default -> {
-                yield null;
-            }
-        };
-        boolean external = submission != null || event instanceof Cancel;
-        if (external) {
-            gate.release(envelope.principal());
-        }
-        if (submission != null && newRunSubmissions.remove(submission)) {
-            gate.releaseNewRun();
-        }
-    }
-
-    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text) {
-        if (residency.failure(session) != null) {
-            return new Submission(500, null, false);
-        }
-        KernelState state = view.current();
-        SessionState existing = state.sessions().get(session);
-        if (existing != null && !existing.principal().equals(principal)) {
-            return new Submission(404, null, false);
-        }
-        if (existing == null) {
-            int owner = claimSession(principal, session);
-            if (owner != 200) {
-                return new Submission(owner, null, false);
-            }
-        }
-        SubmissionLedger.Claim claim = ledger.claim(principal, request);
-        if (!claim.isNew()) {
-            return new Submission(200, claim.submission(), true);
-        }
-        boolean needsNewRun = existing == null || existing.activeRun() == null;
-        ExternalGate.Verdict verdict = gate.admit(principal, needsNewRun);
-        if (verdict != ExternalGate.Verdict.ADMITTED) {
-            ledger.release(principal, request);
-            return new Submission(verdict == ExternalGate.Verdict.HALTED ? 503 : 429, null, false);
-        }
-        if (needsNewRun) {
-            newRunSubmissions.add(claim.submission());
-        }
-        Event event = switch (mode) {
-            case "steer" -> new SteerSubmitted(claim.submission(), request, text);
-            case "follow-up" -> new FollowUpSubmitted(claim.submission(), request, text);
-            default -> new UserPrompt(claim.submission(), request, new OwnerRef.OfSession(session), text);
-        };
-        if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), principal, session, null, event))) {
-            gate.release(principal);
-            if (newRunSubmissions.remove(claim.submission())) {
-                gate.releaseNewRun();
-            }
-            ledger.release(principal, request);
-            return new Submission(429, null, false);
-        }
-        return new Submission(200, claim.submission(), false);
-    }
-
-    /**
-     * 手动压缩。会话不存在或不是该用户的 → 404；正在运行、没有压缩设置或没有可压缩的内容 → 409。
-     * 通过后发布 {@code CompactRequested}，内核在空闲会话上开一个特殊运行。{@code instructions} 可为 null。
-     */
-    public Submission compact(Principal principal, SessionId session, RequestId request, String instructions) {
-        Optional<SessionView> found = session(principal, session);
-        if (found.isEmpty()) {
-            return new Submission(404, null, false);
-        }
-        SessionState existing = found.get().state();
-        if (existing.activeRun() != null || existing.context() == null || existing.context().compaction() == null
-                || !Compactor.worthCompacting(existing, existing.context().system(), existing.context().tools())) {
-            return new Submission(409, null, false);
-        }
-        SubmissionLedger.Claim claim = ledger.claim(principal, request);
-        if (!claim.isNew()) {
-            return new Submission(200, claim.submission(), true);
-        }
-        ExternalGate.Verdict verdict = gate.admit(principal, true);
-        if (verdict != ExternalGate.Verdict.ADMITTED) {
-            ledger.release(principal, request);
-            return new Submission(verdict == ExternalGate.Verdict.HALTED ? 503 : 429, null, false);
-        }
-        newRunSubmissions.add(claim.submission());
-        Event event = new CompactRequested(claim.submission(), request, instructions);
-        if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), principal, session, null, event))) {
-            gate.release(principal);
-            if (newRunSubmissions.remove(claim.submission())) {
-                gate.releaseNewRun();
-            }
-            ledger.release(principal, request);
-            return new Submission(429, null, false);
-        }
-        return new Submission(200, claim.submission(), false);
-    }
-
-    /** 返回 HTTP 状态。 */
-    public int cancel(Principal principal, RunRef run) {
-        ExternalGate.Verdict verdict = gate.admit(principal, false);
-        if (verdict != ExternalGate.Verdict.ADMITTED) {
-            return verdict == ExternalGate.Verdict.HALTED ? 503 : 429;
-        }
-        Event event = new Cancel(new RequestId(UUID.randomUUID().toString()));
-        if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), principal, run.session(), run.run(), event))) {
-            gate.release(principal);
-            return 429;
-        }
-        return 200;
-    }
-
-    public KernelState state() {
-        return view.current();
-    }
-
-    /** 某个工具当前是否对模型可见。 */
-    public boolean mcpHas(String tool) {
-        return mcp.find(tool).isPresent();
+    public SseHub hub() {
+        return hub;
     }
 
     /** 每用户的长期记忆，接口和工具共用同一份实例。 */
@@ -505,92 +202,64 @@ public final class Engine implements AutoCloseable {
         return memories;
     }
 
-    public SseHub hub() {
-        return hub;
-    }
-
-    public TurnQuery turns() {
-        return turns;
-    }
-
     public EventCodec codec() {
         return codec;
     }
 
-    /** 在内存的直接取，不在的从会话文件重放。别人的运行为空。 */
-    public Optional<RunState> run(Principal principal, RunId id) {
-        if (id.session().isEmpty()) {
-            return Optional.empty();
-        }
-        RunState resident = view.current().runs().get(id);
-        if (resident != null) {
-            return Optional.of(resident).filter(run -> run.ref().principal().equals(principal));
-        }
-        return session(principal, id.session().get())
-                .flatMap(found -> found.runs().stream().filter(run -> run.ref().run().equals(id)).findFirst());
+    /** 内存里的内核状态，给诊断和测试用。 */
+    public KernelState state() {
+        return view.current();
     }
 
-    /** 不存在或不是本人的会话为空。不在内存时只读本人目录下的文件，不进常驻。 */
-    public Optional<SessionView> session(Principal principal, SessionId session) {
-        KernelState state = view.current();
-        SessionState resident = state.sessions().get(session);
-        if (resident != null) {
-            if (!resident.principal().equals(principal)) {
-                return Optional.empty();
-            }
-            List<RunState> runs = state.runs().values().stream().filter(run -> run.ref().session().equals(session)).toList();
-            return Optional.of(new SessionView(resident, runs, transcript.view(session)));
+    /** 某个 MCP 工具当前是否对模型可见。 */
+    public boolean mcpHas(String tool) {
+        return mcp.find(tool).isPresent();
+    }
+
+    /**
+     * 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。
+     * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
+     */
+    private void interrupt(List<SessionIndex.Session> unfinished) {
+        if (unfinished.isEmpty()) {
+            return;
         }
         try {
-            return cold.read(principal, session).map(found -> new SessionView(found.session(), found.runs(),
-                    new Transcript.View(found.transcript().lastSeq(), found.transcript().items())));
+            for (SessionIndex.Session session : unfinished) {
+                EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(),
+                        session.session(), session.activeRun(), new RunInterrupted());
+                while (!input.tryPublish(envelope)) {
+                    Thread.sleep(INTERRUPT_RETRY.toMillis());
+                }
+            }
+            input.awaitDrained(DRAIN);
+            if (!lanes.awaitIdle(DRAIN)) {
+                LOG.warn("{} unfinished runs were not closed within {}", unfinished.size(), DRAIN);
+            }
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
-            throw new SessionUnreadable(session, stopping);
-        } catch (Exception failure) {
-            throw new SessionUnreadable(session, failure);
         }
-    }
-
-    /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
-    public List<SessionSummary> sessions(Principal principal) throws SQLException {
-        KernelState state = view.current();
-        Map<SessionId, SessionSummary> summaries = new HashMap<>();
-        for (SessionIndex.Session row : index.sessions(principal)) {
-            summaries.put(row.session(), new SessionSummary(row.session(), row.title(), row.lastActivity(), row.runStatus()));
-        }
-        for (SessionState session : state.sessions().values()) {
-            if (session.principal().equals(principal)) {
-                summaries.put(session.id(), SessionSummary.of(session.id(),
-                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id())));
-            }
-        }
-        return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
 
     /**
      * 关闭：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
-     * 排空输入环、各用户通道和两个下游环 → 写投影缓存 → 关 MCP、索引、文件，释放锁。每一步失败都不跳过后面的。
+     * 排空输入环、各用户通道和两个下游环 → 写投影缓存 → 关 MCP 和存储。每一步失败都不跳过后面的。
      * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动时以“因重启中断”收尾。
      */
     @Override
     public void close() throws IOException {
         Shutdown.run(List.of(
-                new Shutdown.Step("refuse new submissions", () -> closing = true),
+                new Shutdown.Step("refuse new submissions", () -> closing.set(true)),
                 new Shutdown.Step("close event streams", hub::closeEveryone),
                 new Shutdown.Step("stop starting handlers", handlers::close),
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
                 new Shutdown.Step("drain input ring", () -> input.shutdown(DRAIN)),
-                new Shutdown.Step("drain user lanes", () -> dispatcher.awaitIdle(DRAIN)),
-                new Shutdown.Step("drain cleanroom ring", () -> cleanroom.shutdown(DRAIN)),
+                new Shutdown.Step("drain user lanes", () -> lanes.awaitIdle(DRAIN)),
+                new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
-                new Shutdown.Step("write snapshots", cleanroomStep::snapshotAll),
-                new Shutdown.Step("flush snapshots", snapshots),
+                new Shutdown.Step("write snapshots", cleanroom::snapshotAll),
                 new Shutdown.Step("close mcp", mcp),
-                new Shutdown.Step("flush index", indexWriter),
-                new Shutdown.Step("close index", index),
-                new Shutdown.Step("close session files", files),
-                new Shutdown.Step("release lock", lock)));
+                new Shutdown.Step("close storage", storage)));
     }
 
     /** 到时中断；被中断的 Handler 产生的结果还会经过排空的环落盘。不响应中断的再等一小会儿就不管了。 */

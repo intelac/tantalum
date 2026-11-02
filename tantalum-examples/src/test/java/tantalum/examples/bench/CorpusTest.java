@@ -12,12 +12,13 @@ import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
-import tantalum.shell.boot.Startup;
+import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.store.SessionStore;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.KernelState;
 
 class CorpusTest {
 
@@ -44,14 +45,15 @@ class CorpusTest {
             SessionStore store = new SessionStore(temp, EventCodec.withBuiltins());
             List<EventEnvelope> events = store.readAll();
             assertEquals(manifest.events(), events.size());
-            Startup.Recovered recovered = Startup.recover(store, kernel());
-            assertTrue(recovered.state().runs().values().stream().allMatch(run -> run.isEnded()));
-            assertTrue(recovered.state().runs().values().stream()
+            Transcript transcript = new Transcript();
+            KernelState state = transcript.replay(kernel(), events);
+            assertTrue(state.runs().values().stream().allMatch(run -> run.isEnded()));
+            assertTrue(state.runs().values().stream()
                     .noneMatch(run -> ((tantalum.value.state.Ended) run.phase()).reason().name().equals("FAILED")));
             assertTrue(events.stream().map(envelope -> envelope.principal().value()).distinct().count() >= 3);
-            assertTrue(recovered.state().sessions().get(new SessionId(manifest.longSession())).compaction() != null,
+            assertTrue(state.sessions().get(new SessionId(manifest.longSession())).compaction() != null,
                     "the long session should have been compacted");
-            List<TranscriptItem> items = recovered.transcript().items(new SessionId(manifest.longSession()));
+            List<TranscriptItem> items = transcript.items(new SessionId(manifest.longSession()));
             assertTrue(items.size() >= 500, "long session has only " + items.size() + " items");
         }
     }

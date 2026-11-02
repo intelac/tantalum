@@ -22,6 +22,7 @@ import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.journal.StoreFormat;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.Awaiting;
@@ -78,8 +79,9 @@ public final class SnapshotStore {
     }
 
     String encode(SessionSnapshot snapshot) {
-        String body = mapper.writeValueAsString(new Body(snapshot.session(), snapshot.runs(), snapshot.transcript()));
-        Header header = new Header(StoreFormat.STORAGE, StoreFormat.SEMANTICS, snapshot.seq(), snapshot.offset(), checksum(body));
+        SessionSlice slice = snapshot.slice();
+        String body = mapper.writeValueAsString(new Body(slice.session(), slice.runs(), slice.transcript()));
+        Header header = new Header(StoreFormat.STORAGE, StoreFormat.SEMANTICS, slice.seq(), snapshot.offset(), checksum(body));
         return mapper.writeValueAsString(header) + "\n" + body + "\n";
     }
 
@@ -99,7 +101,7 @@ public final class SnapshotStore {
                 throw new IllegalArgumentException("checksum mismatch");
             }
             Body parsed = mapper.readValue(body, Body.class);
-            return new SessionSnapshot(parsed.session(), parsed.runs(), parsed.transcript(), header.seq(), header.offset());
+            return new SessionSnapshot(new SessionSlice(parsed.session(), parsed.runs(), parsed.transcript(), header.seq()), header.offset());
         } catch (JacksonException failure) {
             throw new IllegalArgumentException("unreadable snapshot", failure);
         }
@@ -107,7 +109,7 @@ public final class SnapshotStore {
 
     /** 失败时旧快照还在。 */
     public void write(Principal principal, SessionSnapshot snapshot) throws IOException {
-        Path file = paths.snapshotFile(principal, snapshot.session().id());
+        Path file = paths.snapshotFile(principal, snapshot.slice().session().id());
         createPrivateDirs(file.getParent());
         Path temp = Files.createTempFile(file.getParent(), "snapshot", ".tmp", PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(FILE_MODE)));
         try {
@@ -136,15 +138,16 @@ public final class SnapshotStore {
         }
         try {
             SessionSnapshot snapshot = decode(Files.readString(file, StandardCharsets.UTF_8));
-            if (!snapshot.session().id().equals(session) || !snapshot.session().principal().equals(principal)) {
+            SessionSlice slice = snapshot.slice();
+            if (!slice.session().id().equals(session) || !slice.session().principal().equals(principal)) {
                 throw new IllegalArgumentException("snapshot belongs to another session");
             }
-            if (snapshot.seq() >= beforeSeq) {
-                throw new IllegalArgumentException("snapshot seq " + snapshot.seq() + " is not before " + beforeSeq);
+            if (slice.seq() >= beforeSeq) {
+                throw new IllegalArgumentException("snapshot seq " + slice.seq() + " is not before " + beforeSeq);
             }
             long atOffset = SessionFileReader.seqEndingAt(paths.sessionFile(principal, session), snapshot.offset());
-            if (atOffset != snapshot.seq()) {
-                throw new IllegalArgumentException("session file has seq " + atOffset + " at offset " + snapshot.offset() + ", snapshot says " + snapshot.seq());
+            if (atOffset != slice.seq()) {
+                throw new IllegalArgumentException("session file has seq " + atOffset + " at offset " + snapshot.offset() + ", snapshot says " + slice.seq());
             }
             return Optional.of(snapshot);
         } catch (IOException | RuntimeException unusable) {

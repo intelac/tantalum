@@ -19,9 +19,9 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.journal.SessionFile;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.TokenUsage;
@@ -33,13 +33,12 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    static final int VERSION = 1;
+    static final int VERSION = 2;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
-    private static final long NEVER_WRITTEN = -1;
 
-    /** 一个会话的元数据。只被认领、还没写过事件时 {@code lastSeq} 是 -1，{@code lastActivity} 为 null。 */
+    /** 一个会话的元数据。只被认领、还没写过事件时 {@code lastActivity} 为 null；没有未结束的运行时 {@code activeRun} 为 null。 */
     public record Session(SessionId session, Principal principal, String title, Instant lastActivity, String runStatus,
-                          long lastSeq, long fileOffset) {}
+                          RunId activeRun, long fileOffset) {}
 
     private final Connection connection;
 
@@ -103,9 +102,8 @@ public final class SessionIndex implements AutoCloseable {
                   title         TEXT NOT NULL,
                   last_activity TEXT,
                   run_status    TEXT NOT NULL,
-                  last_seq      INTEGER NOT NULL,
-                  file_offset   INTEGER NOT NULL,
-                  format        INTEGER NOT NULL
+                  active_run    TEXT,
+                  file_offset   INTEGER NOT NULL
                 )""");
         statement.execute("""
                 CREATE TABLE IF NOT EXISTS submissions (
@@ -131,12 +129,10 @@ public final class SessionIndex implements AutoCloseable {
     /** 认领会话 ID。已被别的用户占有时返回 false。这里是“同一新会话 ID 只属于一个用户”的唯一裁决点。 */
     public synchronized boolean claim(SessionId session, Principal principal) throws SQLException {
         try (PreparedStatement insert = connection.prepareStatement("""
-                INSERT OR IGNORE INTO sessions (session, principal, title, run_status, last_seq, file_offset, format)
-                VALUES (?, ?, '', 'idle', ?, 0, ?)""")) {
+                INSERT OR IGNORE INTO sessions (session, principal, title, run_status, file_offset)
+                VALUES (?, ?, '', 'idle', 0)""")) {
             insert.setString(1, session.value());
             insert.setString(2, principal.value());
-            insert.setLong(3, NEVER_WRITTEN);
-            insert.setInt(4, SessionFile.FORMAT);
             insert.executeUpdate();
         }
         return session(session).orElseThrow().principal().equals(principal);
@@ -161,13 +157,13 @@ public final class SessionIndex implements AutoCloseable {
 
     private void writeSessions(IndexBatch batch) throws SQLException {
         try (PreparedStatement upsert = connection.prepareStatement("""
-                INSERT INTO sessions (session, principal, title, last_activity, run_status, last_seq, file_offset, format)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (session) DO UPDATE SET
                   title = CASE WHEN title = '' THEN excluded.title ELSE title END,
                   last_activity = excluded.last_activity,
                   run_status = excluded.run_status,
-                  last_seq = max(last_seq, excluded.last_seq),
+                  active_run = excluded.active_run,
                   file_offset = max(file_offset, excluded.file_offset)
                 WHERE principal = excluded.principal""")) {
             for (IndexBatch.Row row : batch.sessions.values()) {
@@ -176,9 +172,8 @@ public final class SessionIndex implements AutoCloseable {
                 upsert.setString(3, row.title);
                 upsert.setString(4, row.lastActivity.toString());
                 upsert.setString(5, row.runStatus);
-                upsert.setLong(6, row.lastSeq);
+                upsert.setString(6, row.activeRun == null ? null : row.activeRun.value());
                 upsert.setLong(7, row.fileOffset);
-                upsert.setInt(8, SessionFile.FORMAT);
                 upsert.addBatch();
             }
             upsert.executeBatch();
@@ -247,6 +242,18 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
+    /** 有未结束运行的会话：启动时要给这些运行收尾。 */
+    public synchronized List<Session> unfinished() throws SQLException {
+        List<Session> sessions = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE active_run IS NOT NULL ORDER BY session");
+                ResultSet result = select.executeQuery()) {
+            while (result.next()) {
+                sessions.add(session(result));
+            }
+        }
+        return sessions;
+    }
+
     /** 一个用户写过事件的会话；只认领还没写过的不算。 */
     public synchronized List<Session> sessions(Principal principal) throws SQLException {
         List<Session> sessions = new ArrayList<>();
@@ -262,12 +269,13 @@ public final class SessionIndex implements AutoCloseable {
     }
 
     private static final String SELECT_SESSION =
-            "SELECT session, principal, title, last_activity, run_status, last_seq, file_offset FROM sessions";
+            "SELECT session, principal, title, last_activity, run_status, active_run, file_offset FROM sessions";
 
     private static Session session(ResultSet result) throws SQLException {
         String at = result.getString(4);
+        String run = result.getString(6);
         return new Session(new SessionId(result.getString(1)), new Principal(result.getString(2)), result.getString(3),
-                at == null ? null : Instant.parse(at), result.getString(5), result.getLong(6), result.getLong(7));
+                at == null ? null : Instant.parse(at), result.getString(5), run == null ? null : new RunId(run), result.getLong(7));
     }
 
     public synchronized Optional<SubmissionId> submission(Principal principal, RequestId request) throws SQLException {

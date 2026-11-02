@@ -7,7 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.shell.conversation.Projection;
-import tantalum.shell.conversation.Transcript;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
@@ -20,13 +19,28 @@ import tantalum.value.state.SessionState;
  */
 public final class Evictor {
 
-    /** {@code idle} 为 null 时不按时间回收。{@code snapshotEvents} 是运行结束时写快照的事件数门槛。 */
-    public record Settings(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {}
+    /** 配置项 {@code tantalum.residency}。{@code idle} 为 null 时不按时间回收。{@code snapshotEvents} 是运行结束时写快照的事件数门槛。 */
+    public record Settings(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {
 
-    /** 接收要写的快照，不能阻塞。参数都不可变。 */
+        public Settings {
+            if (maxResident <= 0) {
+                throw new IllegalArgumentException("maxResident must be positive but was " + maxResident);
+            }
+            if (snapshotEvents <= 0) {
+                throw new IllegalArgumentException("snapshotEvents must be positive but was " + snapshotEvents);
+            }
+        }
+
+        /** 空闲 30 分钟或超过 1000 个常驻时回收，运行结束距上次快照超过 200 个事件时写快照。 */
+        public static Settings defaults() {
+            return new Settings(Duration.ofMinutes(30), 1000, 200, Duration.ofSeconds(1));
+        }
+    }
+
+    /** 接收要写的快照，不能阻塞。 */
     @FunctionalInterface
     public interface Sink {
-        void offer(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq);
+        void offer(SessionSlice slice);
     }
 
     private static final class Entry {
@@ -53,18 +67,12 @@ public final class Evictor {
         this.clock = clock;
     }
 
-    /** 启动时已经在内存的会话。 */
-    public void recovered(SessionId session, long seq) {
-        Entry entry = entry(session);
-        entry.seq = seq;
-    }
-
     /** 并入一个载入的会话。全部来自快照时，磁盘上的快照已经是最新的。 */
-    public void loaded(SessionId session, Preload preload) {
+    public void loaded(SessionId session, CleanroomRing.Loaded loaded) {
         Entry entry = entry(session);
-        entry.seq = preload.seq();
-        entry.sinceSnapshot = preload.replayed();
-        entry.snapshotSeq = preload.replayed() == 0 ? preload.seq() : -1;
+        entry.seq = loaded.slice().seq();
+        entry.sinceSnapshot = loaded.replayed();
+        entry.snapshotSeq = loaded.replayed() == 0 ? loaded.slice().seq() : -1;
     }
 
     /** 处理完一个事件后调用。运行结束且距上次快照够远时写一份。 */
@@ -138,7 +146,7 @@ public final class Evictor {
 
     private void snapshot(KernelState state, SessionState session, Entry entry) {
         List<RunState> runs = state.runs().values().stream().filter(run -> run.ref().session().equals(session.id())).toList();
-        sink.offer(session, runs, projection.export(session.id()), entry.seq);
+        sink.offer(new SessionSlice(session, runs, projection.export(session.id()), entry.seq));
         entry.snapshotSeq = entry.seq;
         entry.sinceSnapshot = 0;
     }

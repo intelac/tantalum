@@ -2,12 +2,10 @@ package tantalum.shell.store;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Stream;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
@@ -26,33 +24,22 @@ public final class SessionStore {
 
     public List<EventEnvelope> readAll() {
         List<EventEnvelope> events = new ArrayList<>();
-        for (Path dir : list(paths.sessionsDir())) {
-            events.addAll(readDir(dir));
-        }
-        return events;
-    }
-
-    private List<EventEnvelope> readDir(Path dir) {
-        List<EventEnvelope> events = new ArrayList<>();
         try {
-            for (Path file : list(dir)) {
-                reader.forEach(file, events::add);
+            for (Path dir : paths.users()) {
+                events.addAll(readDir(dir));
             }
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
         }
-        events.sort(Comparator.comparingLong(EventEnvelope::seq));
         return events;
     }
 
-    private static List<Path> list(Path dir) {
-        if (!Files.isDirectory(dir)) {
-            return List.of();
+    private List<EventEnvelope> readDir(Path dir) throws IOException {
+        List<EventEnvelope> events = new ArrayList<>();
+        for (Path file : paths.sessionFiles(dir)) {
+            reader.forEach(file, events::add);
         }
-        try (Stream<Path> entries = Files.list(dir)) {
-            return entries.sorted().toList();
-        } catch (IOException failure) {
-            throw new UncheckedIOException(failure);
-        }
+        events.sort(Comparator.comparingLong(EventEnvelope::seq));
+        return events;
     }
 }
