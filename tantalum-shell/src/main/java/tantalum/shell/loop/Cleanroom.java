@@ -26,12 +26,19 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
     private final FactListener facts;
     private final StateView view;
     private final ResultPublisher results;
+    private final StepListener steps;
     private KernelState state;
     /** 内核或状态发布抛出后置位：之后的事件全部跳过，入口返回 503，而不是让消费者线程静默死掉。 */
     private volatile boolean broken;
 
     public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
                      Projection projection, FactListener facts, StateView view, ResultPublisher results) {
+        this(kernel, initial, halted, output, projection, facts, view, results, StepListener.NONE);
+    }
+
+    public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
+                     Projection projection, FactListener facts, StateView view, ResultPublisher results, StepListener steps) {
+        this.steps = steps;
         this.kernel = kernel;
         this.state = initial;
         this.halted = halted;
@@ -65,9 +72,11 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
 
     private void step(EventEnvelope envelope, boolean endOfBatch) {
         long seq = envelope.seq();
-        Decision decision = kernel.step(state, envelope);
+        KernelState before = state;
+        Decision decision = kernel.step(before, envelope);
         state = decision.newState();
         view.publish(state);
+        notifyListener(envelope, before);
         for (Command command : decision.commands()) {
             if (!output.test(command)) {
                 results.reportDropped(command, "output ring full");
@@ -92,6 +101,14 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         } catch (RuntimeException failure) {
             LOG.error("projection failed at seq {}", envelope.seq(), failure);
             return List.of();
+        }
+    }
+
+    private void notifyListener(EventEnvelope envelope, KernelState before) {
+        try {
+            steps.onStep(envelope, before, state);
+        } catch (RuntimeException failure) {
+            LOG.error("step listener failed at seq {}", envelope.seq(), failure);
         }
     }
 

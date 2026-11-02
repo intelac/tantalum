@@ -67,6 +67,12 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.kernel..")
             .should().dependOnClassesThat().resideInAnyPackage("com.anthropic..", "com.openai..", "tantalum.shell.model..");
 
+    /** 索引和文件都不能拖住 cleanroom：它只把变化交给监听器。 */
+    @ArchTest
+    static final ArchRule cleanroomDoesNoIo = noClasses()
+            .that().haveFullyQualifiedName("tantalum.shell.loop.Cleanroom")
+            .should().dependOnClassesThat().resideInAnyPackage("java.io..", "java.sql..", "java.nio.file..", "tantalum.shell.store..");
+
     @ArchTest
     static final ArchRule springStaysAtTheEdge = noClasses()
             .that().resideInAPackage("tantalum.shell..")

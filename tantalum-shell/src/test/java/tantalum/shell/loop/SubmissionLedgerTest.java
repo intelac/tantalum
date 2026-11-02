@@ -4,19 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
-import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
-import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
-import tantalum.value.state.OwnerRef;
 
 class SubmissionLedgerTest {
 
@@ -69,14 +64,33 @@ class SubmissionLedgerTest {
     }
 
     @Test
-    void restartRebuildsFromTheJournal() {
-        SessionId session = new SessionId("s");
-        SubmissionId existing = new SubmissionId("existing");
-        SubmissionLedger ledger = new SubmissionLedger();
-        ledger.rebuild(List.of(new EventEnvelope(0, Instant.EPOCH, ALICE, session, null,
-                new UserPrompt(existing, REQUEST, new OwnerRef.OfSession(session), "hi"))));
-        SubmissionLedger.Claim claim = ledger.claim(ALICE, REQUEST);
-        assertEquals(existing, claim.submission());
-        assertEquals(false, claim.isNew());
+    void historyAnswersWhatMemoryForgot() {
+        SubmissionId old = new SubmissionId("old");
+        List<RequestId> asked = new ArrayList<>();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> {
+            asked.add(request);
+            return request.equals(REQUEST) ? java.util.Optional.of(old) : java.util.Optional.empty();
+        }, 2);
+        assertEquals(new SubmissionLedger.Claim(old, false), ledger.claim(ALICE, REQUEST));
+        ledger.claim(ALICE, new RequestId("a"));
+        ledger.claim(ALICE, new RequestId("b"));
+        assertEquals(new SubmissionLedger.Claim(old, false), ledger.claim(ALICE, REQUEST), "evicted from memory, still a duplicate");
+        assertEquals(2, asked.stream().filter(REQUEST::equals).count());
+    }
+
+    @Test
+    void memoryHoldsNoMoreThanItsCapacity() throws Exception {
+        List<RequestId> asked = new ArrayList<>();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> {
+            asked.add(request);
+            return java.util.Optional.empty();
+        }, 2);
+        ledger.claim(ALICE, new RequestId("a"));
+        ledger.claim(ALICE, new RequestId("b"));
+        ledger.claim(ALICE, new RequestId("a"));
+        assertEquals(2, asked.size(), "recent requests do not reach the index");
+        ledger.claim(ALICE, new RequestId("c"));
+        ledger.claim(ALICE, new RequestId("b"));
+        assertEquals(4, asked.size(), "b was the least recently used and fell out");
     }
 }

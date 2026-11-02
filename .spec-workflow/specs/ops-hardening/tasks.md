@@ -123,31 +123,31 @@
 
 ## 阶段 3：索引库
 
-- [ ] 16. 索引库和写入线程
+- [x] 16. 索引库和写入线程
   - File: shell/store/SessionIndex.java, IndexWriter.java, SessionIndexTest.java；shell/loop/Cleanroom.java
   - 三张表；cleanroom 只把变化放进内存队列；运行结束和回收时必写，其余 200 事件或 5 秒（可配）；写失败只记日志
   - 验证：节流和必写的时机；写失败时服务继续；cleanroom 没有 I/O（ArchUnit 或测试断言）
   - _Requirements: H6, 非功能 Reliability_
 
-- [ ] 17. 用量表
+- [x] 17. 用量表
   - File: shell/store/UsageLedger.java, UsageLedgerTest.java；shell/loop/Cleanroom.java
   - 比较 `kernel.step` 前后的 `PrincipalState` 写入；提供“截至序号的累计”
   - 验证：迟到的回复不计；跨天；同一用户多会话交错时累计正确
   - _Requirements: H4, 3.6_
 
-- [ ] 18. 归属
+- [x] 18. 归属
   - File: shell/web/ApiController.java, SessionIndex.java, OwnershipTest.java
   - 提交时 `INSERT OR IGNORE` 并读回比较
   - 验证：两个用户并发抢同一新会话 ID，只有一个成功，另一个 404 且不写事件
   - _Requirements: 2.8_
 
-- [ ] 19. 去重
+- [x] 19. 去重
   - File: shell/loop/SubmissionLedger.java, SubmissionLedgerTest.java
   - 内存占位 10 万条，未命中查索引；补上 `CompactRequested`
   - 验证：先写失败测试：重启后重复的手动压缩被重复执行；修后去重；超出占位的旧 `requestId` 仍被去重
   - _Requirements: 3.3, H10_
 
-- [ ] 20. 启动补齐和重建
+- [x] 20. 启动补齐和重建
   - File: shell/store/IndexRecovery.java, IndexRecoveryTest.java；shell/boot/Startup.java
   - 扫描文件大小，和 `file_offset` 比较，落后的重放尾部；索引缺失、损坏或版本不符时全部重建
   - 验证：删库后重建结果和原库相同；落后的索引被补齐；损坏时有警告且能启动

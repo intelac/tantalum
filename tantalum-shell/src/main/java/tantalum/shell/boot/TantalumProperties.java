@@ -9,7 +9,20 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
-                                 Compaction compaction) {
+                                 Compaction compaction, Index index) {
+
+    /** 索引库的节流：攒够事件数或到时间就写。运行结束总是写。 */
+    public record Index(int flushEvents, Duration flushInterval) {
+
+        public Index {
+            requirePositive("flushEvents", flushEvents);
+            requirePositive("flushInterval", flushInterval.toMillis());
+        }
+
+        public static Index defaults() {
+            return new Index(200, Duration.ofSeconds(5));
+        }
+    }
 
     /** 上下文压缩。窗口在各供应商下配置；这里是预留、保留量、工具结果上限和摘要长度。 */
     public record Compaction(long reserveTokens, long keepRecentTokens, int maxKeptToolResultBytes,

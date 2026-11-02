@@ -17,6 +17,12 @@ import tantalum.value.id.SessionId;
  */
 public final class SessionFiles implements AutoCloseable {
 
+    /** 一批事件落盘后调用：序号不超过 {@code seq} 的事件已落盘，文件到 {@code offset}。 */
+    @FunctionalInterface
+    public interface DurableListener {
+        void onDurable(Principal principal, SessionId session, long seq, long offset);
+    }
+
     private record Key(Principal principal, SessionId session) {}
 
     private static final class Handle {
@@ -27,10 +33,16 @@ public final class SessionFiles implements AutoCloseable {
     private final SessionPaths paths;
     private final EventCodec codec;
     private final int maxOpen;
+    private final DurableListener listener;
     private final Object lock = new Object();
     private final LinkedHashMap<Key, Handle> handles = new LinkedHashMap<>(16, 0.75f, true);
 
     public SessionFiles(SessionPaths paths, EventCodec codec, int maxOpen) {
+        this(paths, codec, maxOpen, (principal, session, seq, offset) -> { });
+    }
+
+    public SessionFiles(SessionPaths paths, EventCodec codec, int maxOpen, DurableListener listener) {
+        this.listener = listener;
         this.paths = paths;
         this.codec = codec;
         this.maxOpen = maxOpen;
@@ -49,7 +61,8 @@ public final class SessionFiles implements AutoCloseable {
                 if (handle.file == null) {
                     handle.file = SessionFile.open(paths, principal, session, codec);
                 }
-                handle.file.append(events);
+                long offset = handle.file.append(events);
+                listener.onDurable(principal, session, events.getLast().seq(), offset);
             }
         } finally {
             release(handle);

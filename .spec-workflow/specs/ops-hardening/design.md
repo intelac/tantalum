@@ -118,7 +118,7 @@ graph LR
 ```
 sessions(session PK, principal, title, last_activity, run_status, last_seq, file_offset, format)
 submissions(principal, request_id, submission, PK(principal, request_id))
-usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq))
+usage(principal, seq, day, input, output, cache_read, cache_write, PK(principal, seq))
 ```
 
 **怎么写。** cleanroom 处理完事件，把变化放进内存队列，不做 I/O，由写入线程批量写。运行结束和回收时必写，其余 200 事件或 5 秒。崩溃时索引只会落后。
@@ -129,7 +129,7 @@ usage(principal, seq, input, output, cache_read, cache_write, PK(principal, seq)
 
 1. 校验 `format.json`。有 `journal.db` 而没有 `format.json` 时拒绝启动并说明，不改动数据。
 2. 扫描 `sessions/` 的文件大小，和 `file_offset` 比较，不读内容。这一步随会话数增长，随事件数不增长，同 DSH 的列表重扫。
-3. 落后的会话重放尾部，补齐索引。
+3. 落后的会话整个文件重放，补齐索引（更正：原来写“尾部”。用量要比较内核状态才知道，没有快照时只能从头算；写入可重复，所以和已有内容重叠没有关系。任务 47 有快照后可以再缩短）。
 4. `run_status` 未结束的会话载入内存，按 H9 收尾。
 
 索引库缺失或版本不符时，全部文件重放重建，并记日志。
