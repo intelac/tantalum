@@ -4,9 +4,7 @@
 
 ## 1. 正在做
 
-| 事项 | 状态 | 位置 |
-|---|---|---|
-| `ops-hardening` | 47/50，阶段 9 剩任务 42（`kill -9` 崩溃测试）、43（Playwright）、44（文档和全量回归）；快照是否保留待 Yi 决定（见下） | `specs/ops-hardening/tasks.md` |
+没有。`ops-hardening` 50/50 已完成（2026-11-02），全部 7 个 spec 的任务都已勾完。
 
 ## 2. 已定要做，还没开 spec
 
@@ -44,10 +42,7 @@
 | `ops-hardening` 阶段 5 | 会话列表里不在内存的会话取索引的最近活动时间（最后一个事件的时间），在内存的取条目里最晚的时间，两者在“最后一个事件没有改变条目”时可能差几毫秒；重启前后对比测试里一致 | 记录 |
 | `ops-hardening` 阶段 5 | 同一用户的一个大会话载入时，这个用户的其他会话要等它（同一用户内按序是设计决定）；其他用户不受影响 | 记录 |
 | `ops-hardening` 阶段 3 | 内存占位被挤出、而对应事件还没写进索引时，重复提交可能漏判。要在写入间隔内有 10 万个新请求才会发生 | 不处理，记录 |
-| `spec-audit-fixes` | 提交 b885dfd 补的 2 个测试只跑了 `CompactStepsTest`，之后没有跑全量 | 由 `ops-hardening` 任务 15 的 `mvn verify` 覆盖 |
 
 ## 5. 长期限制
 
-不是任务，记在 `steering/tech.md` 的 Known Limitations：Disruptor 未针对 Java 25 正式声明支持、SQLite 原生访问警告、登录会话不持久化、没有用户管理界面、模型并发默认为 1、strata 与其他任务共用。
-
-`ops-hardening` 完成后会多一条，写进 README：内核语义变化后旧会话回放可能不再逐字节相同。
+不是任务，记在 `steering/tech.md` 的 Known Limitations：Disruptor 未针对 Java 25 正式声明支持、SQLite 原生访问警告、登录会话不持久化、没有用户管理界面、模型并发默认为 1、strata 与其他任务共用。另有一条写在 README“回放能保证什么”：内核语义变化后旧会话回放可能不再逐字节相同。
