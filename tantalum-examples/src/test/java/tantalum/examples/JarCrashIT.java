@@ -405,7 +405,7 @@ class JarCrashIT {
             try (Connection index = DriverManager.getConnection("jdbc:sqlite:" + data.resolve("index.db"))) {
                 assertEquals(1, count(index, "SELECT count(*) FROM submissions WHERE principal = ? AND request_id = 'r1'", "alice"));
                 try (PreparedStatement rewind = index.prepareStatement(
-                        "UPDATE sessions SET file_offset = 0, last_seq = 0, run_status = 'RUNNING', title = '' WHERE session = 's-done'")) {
+                        "UPDATE sessions SET file_offset = 0, active_run = NULL, run_status = 'RUNNING', title = '' WHERE session = 's-done'")) {
                     assertEquals(1, rewind.executeUpdate());
                 }
                 try (PreparedStatement forget = index.prepareStatement("DELETE FROM submissions WHERE request_id = 'r1'")) {
@@ -447,7 +447,7 @@ class JarCrashIT {
                 }
                 String startup = Files.readString(temp.resolve("second.log"));
                 assertTrue(startup.contains("index caught up with"), "startup log should report the catch-up");
-                assertTrue(startup.contains("2 sessions with unfinished runs loaded, 2 runs closed as interrupted"), "startup log should count the recovery");
+                assertTrue(startup.contains("2 runs left unfinished by the previous process closed as interrupted"), "startup log should count the recovery");
 
                 // 重启没有重新调用模型和工具。
                 Thread.sleep(1000);

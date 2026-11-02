@@ -84,11 +84,11 @@ public final class SnapshotBench {
                 Files.deleteIfExists(paths.snapshotFile(principal, session));
             }
             long start = System.nanoTime();
-            SessionReplay.Slice slice = replay.load(principal, session, Long.MAX_VALUE).orElseThrow();
+            SessionReplay.Result slice = replay.load(principal, session, Long.MAX_VALUE).orElseThrow();
             report("load_" + mode + "_snapshot_ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
             report("replayed_events_" + mode, slice.replayedEvents());
             if (mode.equals("without")) {
-                report("transcript_items", slice.snapshot().transcript().items().size());
+                report("transcript_items", slice.snapshot().slice().transcript().items().size());
                 long write = System.nanoTime();
                 snapshots.write(principal, slice.snapshot());
                 report("write_snapshot_ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - write));

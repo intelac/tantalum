@@ -72,7 +72,7 @@ class EvictorTest {
             }
         };
         return new Evictor(new Evictor.Settings(idle, max, snapshotEvents, NONE), residency, projection,
-                (session, runs, transcript, at) -> snapshots.add(at), clock);
+                slice -> snapshots.add(slice.seq()), clock);
     }
 
     private static SessionState idle(SessionId id) {
@@ -176,7 +176,7 @@ class EvictorTest {
     void evictionDoesNotRewriteASnapshotThatIsAlreadyCurrent() {
         Evictor evictor = evictor(NONE, 1000, 200);
         residency.resident(A);
-        evictor.loaded(A, Preload.loaded(idle(A), List.of(), null, 7, 0));
+        evictor.loaded(A, new CleanroomRing.Loaded(new SessionSlice(idle(A), List.of(), null, 7), 0));
         evictor.sweep(state(idle(A)));
         assertEquals(List.of(), snapshots);
         assertEquals(List.of(A), removed);

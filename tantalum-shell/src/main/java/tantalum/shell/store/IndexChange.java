@@ -5,10 +5,10 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.SessionSummary;
-import tantalum.value.event.CompactRequested;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -22,7 +22,7 @@ import tantalum.value.state.SessionState;
 
 /** 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。 */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
-                          Usage usage, Submission submission, boolean runEnded) {
+                          RunId activeRun, Usage usage, Submission submission, boolean runEnded) {
 
     /** 一个事件带来的用量，{@code seq} 在同一用户内唯一。 */
     public record Usage(long seq, LocalDate day, TokenUsage amount) {}
@@ -30,29 +30,19 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
     public record Submission(RequestId request, SubmissionId id) {}
 
     public static IndexChange of(EventEnvelope envelope, KernelState before, KernelState after) {
-        String text = null;
-        Submission submission = null;
-        switch (envelope.event()) {
-            case UserPrompt prompt -> {
-                text = prompt.text();
-                submission = new Submission(prompt.request(), prompt.submission());
-            }
-            case SteerSubmitted steer -> {
-                text = steer.text();
-                submission = new Submission(steer.request(), steer.submission());
-            }
-            case FollowUpSubmitted followUp -> {
-                text = followUp.text();
-                submission = new Submission(followUp.request(), followUp.submission());
-            }
-            case CompactRequested compact -> submission = new Submission(compact.request(), compact.submission());
-            default -> { }
-        }
+        String text = switch (envelope.event()) {
+            case UserPrompt prompt -> prompt.text();
+            case SteerSubmitted steer -> steer.text();
+            case FollowUpSubmitted followUp -> followUp.text();
+            default -> null;
+        };
+        Submission submission = envelope.event() instanceof Submitted submitted
+                ? new Submission(submitted.request(), submitted.submission()) : null;
         RunId active = activeRun(after, envelope.session());
         RunId previous = activeRun(before, envelope.session());
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
                 text == null ? "" : SessionSummary.titleOf(text),
-                active == null ? SessionSummary.IDLE : Kernel.stateName(after.runs().get(active)),
+                active == null ? SessionSummary.IDLE : Kernel.stateName(after.runs().get(active)), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active));
     }
 

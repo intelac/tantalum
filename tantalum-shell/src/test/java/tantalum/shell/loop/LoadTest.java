@@ -26,7 +26,7 @@ import tantalum.value.state.SessionState;
 /** 通道载入冷会话：切片跟着第一个事件走，失败不扩散，慢载入只拖住这一个用户。 */
 class LoadTest {
 
-    private record Reached(EventEnvelope envelope, Preload preload) {}
+    private record Reached(EventEnvelope envelope, CleanroomRing.Load load) {}
 
     private final List<Reached> reached = new CopyOnWriteArrayList<>();
     private final Residency residency = new Residency();
@@ -35,8 +35,8 @@ class LoadTest {
 
     private InputRing start(LoopFixtures.Load loader) {
         LaneDispatcher[] holder = new LaneDispatcher[1];
-        holder[0] = new LaneDispatcher(256, sequence, (principal, session, events) -> { }, (envelope, preload) -> {
-            reached.add(new Reached(envelope, preload));
+        holder[0] = new LaneDispatcher(256, sequence, (principal, session, events) -> { }, (envelope, usage, load) -> {
+            reached.add(new Reached(envelope, load));
             holder[0].released();
             return true;
         }, LoopFixtures.loader(loader), residency);
@@ -56,8 +56,8 @@ class LoadTest {
         assertEquals(count, reached.size());
     }
 
-    private static Preload slice(SessionId session, Principal principal) {
-        return Preload.loaded(SessionState.start(session, principal), List.of(), null, 1, 1);
+    private static CleanroomRing.Loaded slice(SessionId session, Principal principal) {
+        return new CleanroomRing.Loaded(new SessionSlice(SessionState.start(session, principal), List.of(), null, 1), 1);
     }
 
     @Test
@@ -77,13 +77,13 @@ class LoadTest {
         Thread.sleep(50);
         hold.countDown();
         await(3);
-        assertNotNull(reached.get(0).preload());
-        assertNull(reached.get(1).preload());
-        assertNull(reached.get(2).preload());
+        assertNotNull(reached.get(0).load());
+        assertNull(reached.get(1).load());
+        assertNull(reached.get(2).load());
         assertEquals(reached.get(0).envelope().seq(), before.get(), "history means everything before the first new event");
         assertTrue(input.tryPublish(event("alice", "s")));
         await(4);
-        assertNull(reached.get(3).preload(), "already resident");
+        assertNull(reached.get(3).load(), "already resident");
         assertEquals(1, loads.get());
         assertEquals(4, residency.pins(new SessionId("s")), "nothing has passed the cleanroom in this test");
     }
@@ -145,7 +145,7 @@ class LoadTest {
         await(3);
         for (Reached item : reached) {
             boolean bad = item.envelope().session().value().equals("bad");
-            assertEquals(bad, item.preload() != null && item.preload().isFailure(), item.envelope().session().value());
+            assertEquals(bad, item.load() instanceof CleanroomRing.Failed, item.envelope().session().value());
         }
         assertEquals(1, attempts.get());
         assertTrue(residency.failure(new SessionId("bad")).contains("corrupt"));

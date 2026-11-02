@@ -1,10 +1,15 @@
 package tantalum.shell.journal;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
@@ -44,6 +49,25 @@ public final class SessionPaths {
 
     public Path sessionFile(Principal principal, SessionId session) {
         return inside(userDir(principal).resolve(encode(session.value()) + EXTENSION));
+    }
+
+    /** 所有用户的目录，按名字排序。还没有会话目录时为空。 */
+    public List<Path> users() throws IOException {
+        return list(root, Files::isDirectory);
+    }
+
+    /** 一个用户目录下的会话文件，按名字排序。目录不存在时为空。 */
+    public List<Path> sessionFiles(Path userDir) throws IOException {
+        return list(userDir, file -> file.getFileName().toString().endsWith(EXTENSION));
+    }
+
+    private static List<Path> list(Path dir, Predicate<Path> keep) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> entries = Files.list(dir)) {
+            return entries.filter(keep).sorted().toList();
+        }
     }
 
     public Path snapshotFile(Principal principal, SessionId session) {

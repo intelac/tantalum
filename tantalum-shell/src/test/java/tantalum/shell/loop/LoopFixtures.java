@@ -25,7 +25,7 @@ public final class LoopFixtures {
     /** 从不回收、从不写快照。 */
     public static final Evictor.Settings NEVER = new Evictor.Settings(null, Integer.MAX_VALUE, Integer.MAX_VALUE, Duration.ofSeconds(1));
 
-    public static final Evictor.Sink NO_SINK = (session, runs, transcript, seq) -> { };
+    public static final Evictor.Sink NO_SINK = slice -> { };
 
     public static final Projection NO_PROJECTION = (envelope, decision) -> List.of();
 
@@ -36,7 +36,7 @@ public final class LoopFixtures {
     /** 只载入会话的 {@link UserLane.Loader}，测试里可以写成 lambda。 */
     @FunctionalInterface
     public interface Load {
-        Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
+        Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
     }
 
     /** 假 {@link Handler} 的主体，测试里写成 lambda。 */
@@ -51,7 +51,7 @@ public final class LoopFixtures {
     public static UserLane.Loader loader(Load load) {
         return new UserLane.Loader() {
             @Override
-            public Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
+            public Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
                 return load.load(principal, session, beforeSeq);
             }
 
@@ -67,14 +67,14 @@ public final class LoopFixtures {
     }
 
     /** 不监听步骤、不回收的 cleanroom。 */
-    public static Cleanroom cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
+    public static Cleanroom cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
                                       Projection projection, FactListener facts, StateView view, ResultPublisher results) {
-        return new Cleanroom(kernel, initial, halted, output, projection, facts, view, results, NO_STEPS, never(projection));
+        return new Cleanroom(kernel, halted, output, projection, facts, view, results, NO_STEPS, never(projection));
     }
 
     /** 不载入冷会话的分发器，下游只看事件。 */
     public static LaneDispatcher dispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
-        return new LaneDispatcher(capacity, sequence, writer, (envelope, preload) -> cleanroom.test(envelope), NO_LOADER, new Residency());
+        return new LaneDispatcher(capacity, sequence, writer, (envelope, usage, load) -> cleanroom.test(envelope), NO_LOADER, new Residency());
     }
 
     /** 建环时就接好消费者。 */

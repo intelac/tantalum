@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.Intake;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.value.id.Principal;
@@ -56,8 +57,8 @@ class EvictAndLoadTest {
         assertTrue(condition.getAsBoolean(), what);
     }
 
-    private static Engine.Submission submit(Engine engine, SessionId session, String text) {
-        return engine.submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text);
+    private static Intake.Submission submit(Engine engine, SessionId session, String text) {
+        return engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text);
     }
 
     private List<Prompt> conversation(String name, boolean evicts, String... extra) throws Exception {

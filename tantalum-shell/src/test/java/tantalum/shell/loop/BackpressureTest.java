@@ -60,14 +60,14 @@ class BackpressureTest {
         output.start();
         InputRing input = LoopFixtures.inputRing(64, (slot, sequence, end) -> { });
         input.start();
-        StateView view = new StateView(KernelState.empty());
+        StateView view = new StateView();
         ResultPublisher results = new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 0);
-        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { }, view, results);
 
         assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             for (int i = 0; i < 8; i++) {
-                InputRing.Slot slot = new InputRing.Slot();
+                CleanroomRing.Slot slot = new CleanroomRing.Slot();
                 slot.envelope = prompt(i);
                 cleanroom.onEvent(slot, i, i == 7);
             }
@@ -85,15 +85,16 @@ class BackpressureTest {
         OutputRing output = new OutputRing(2, (slot, sequence, end) -> stuck.await());
         output.start();
         InFlightCommands inFlight = new InFlightCommands();
-        StateView view = new StateView(KernelState.empty());
+        StateView view = new StateView();
         InputRing input = new InputRing(64);
         ResultPublisher results = new ResultPublisher(input, inFlight, Clock.systemUTC(), 0);
-        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { }, view, results);
         long[] nextSeq = {0};
         input.connect((slot, sequence, end) -> {
-            slot.envelope = slot.envelope.withSeq(nextSeq[0]++);
-            cleanroom.onEvent(slot, sequence, end);
+            CleanroomRing.Slot next = new CleanroomRing.Slot();
+            next.envelope = slot.envelope.withSeq(nextSeq[0]++);
+            cleanroom.onEvent(next, sequence, end);
         });
         input.start();
 

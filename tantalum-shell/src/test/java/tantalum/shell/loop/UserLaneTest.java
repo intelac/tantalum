@@ -19,6 +19,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.PrincipalState;
 
 class UserLaneTest {
 
@@ -33,7 +34,7 @@ class UserLaneTest {
         volatile boolean accept = true;
 
         @Override public boolean halted() { return halted; }
-        @Override public boolean publish(EventEnvelope envelope, Preload preload) {
+        @Override public boolean publish(EventEnvelope envelope, PrincipalState usage, CleanroomRing.Load load) {
             if (accept) {
                 published.add(envelope);
             }

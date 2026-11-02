@@ -7,8 +7,8 @@ public final class StateView {
 
     private volatile KernelState current;
 
-    public StateView(KernelState initial) {
-        this.current = initial;
+    public StateView() {
+        this.current = KernelState.empty();
     }
 
     public KernelState current() {

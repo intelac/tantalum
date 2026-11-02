@@ -39,7 +39,7 @@ public final class UserLane {
 
     /** 重放一个冷会话里序号小于 {@code beforeSeq} 的事件。没有这样的事件（全新会话）时为空。 */
     public interface Loader {
-        Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
+        Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
 
         /** 这个用户序号小于 {@code beforeSeq} 的累计用量。为 null 时不并入。 */
         PrincipalState usage(Principal principal, long beforeSeq) throws Exception;
@@ -49,7 +49,7 @@ public final class UserLane {
     interface Exit {
         boolean halted();
 
-        boolean publish(EventEnvelope envelope, Preload preload);
+        boolean publish(EventEnvelope envelope, PrincipalState usage, CleanroomRing.Load load);
 
         /** 写入失败，进程停止处理事件。 */
         void failed(Throwable failure);
@@ -129,30 +129,27 @@ public final class UserLane {
             exit.discarded(batch.size());
             return;
         }
-        Map<SessionId, Preload> preloads = load(numbered, states);
+        Map<SessionId, CleanroomRing.Load> loads = load(numbered, states);
         PrincipalState usage = usage(numbered.getFirst().seq());
         for (int i = 0; i < numbered.size(); i++) {
             EventEnvelope envelope = numbered.get(i);
-            Preload preload = preloads.get(envelope.session());
-            if (preload != null && !preload.isFailure()) {
-                preloads.remove(envelope.session());
+            CleanroomRing.Load load = loads.get(envelope.session());
+            if (load instanceof CleanroomRing.Loaded) {
+                loads.remove(envelope.session());
             }
-            if (usage != null) {
-                preload = preload == null ? Preload.usage(usage) : preload.withPrincipal(usage);
-                usage = null;
-            }
-            if (!exit.publish(envelope, preload)) {
+            if (!exit.publish(envelope, usage, load)) {
                 exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
                 numbered.subList(i, numbered.size()).forEach(left -> residency.unpin(left.session()));
                 exit.discarded(numbered.size() - i);
                 return;
             }
+            usage = null;
         }
     }
 
     /** 事件已落盘，序号小于它的才算历史。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
-    private Map<SessionId, Preload> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
-        Map<SessionId, Preload> preloads = new HashMap<>();
+    private Map<SessionId, CleanroomRing.Load> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
+        Map<SessionId, CleanroomRing.Load> loads = new HashMap<>();
         Set<SessionId> visited = new HashSet<>();
         for (EventEnvelope envelope : numbered) {
             SessionId session = envelope.session();
@@ -161,11 +158,11 @@ public final class UserLane {
             }
             switch (states.get(session)) {
                 case RESIDENT -> { }
-                case FAILED -> preloads.put(session, Preload.failed(residency.failure(session)));
-                case COLD -> loadOne(session, envelope.seq()).ifPresent(preload -> preloads.put(session, preload));
+                case FAILED -> loads.put(session, new CleanroomRing.Failed(residency.failure(session)));
+                case COLD -> loadOne(session, envelope.seq()).ifPresent(load -> loads.put(session, load));
             }
         }
-        return preloads;
+        return loads;
     }
 
     /** 失败时下一批再试；在那之前钩子看到的用量偏少，所以记错误日志。 */
@@ -186,11 +183,11 @@ public final class UserLane {
         }
     }
 
-    private Optional<Preload> loadOne(SessionId session, long beforeSeq) {
+    private Optional<CleanroomRing.Load> loadOne(SessionId session, long beforeSeq) {
         try {
-            Optional<Preload> preload = loader.load(principal, session, beforeSeq);
+            Optional<CleanroomRing.Loaded> loaded = loader.load(principal, session, beforeSeq);
             residency.resident(session);
-            return preload;
+            return loaded.map(CleanroomRing.Load.class::cast);
         } catch (Exception | Error failure) {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -198,7 +195,7 @@ public final class UserLane {
             LOG.error("cannot load session {}; refusing it until restart", session.value(), failure);
             String reason = failure.toString();
             residency.fail(session, reason);
-            return Optional.of(Preload.failed(reason));
+            return Optional.of(new CleanroomRing.Failed(reason));
         }
     }
 

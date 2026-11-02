@@ -50,5 +50,10 @@ public final class UsageLedger {
             }
             return total;
         }
+
+        /** 重放时新算出、还没进索引的一条用量。 */
+        public void add(IndexChange.Usage usage) {
+            total = total.add(usage.day(), usage.amount());
+        }
     }
 }

@@ -2,12 +2,10 @@ package tantalum.shell.journal;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Stream;
 import tantalum.shell.journal.Sequence;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
@@ -42,13 +40,9 @@ public final class TailSequence implements Sequence {
     }
 
     private long firstFree(Principal principal) {
-        Path dir = paths.userDir(principal);
-        if (!Files.isDirectory(dir)) {
-            return 0;
-        }
-        try (Stream<Path> files = Files.list(dir)) {
+        try {
             long last = -1;
-            for (Path file : files.filter(path -> path.toString().endsWith(".jsonl")).toList()) {
+            for (Path file : paths.sessionFiles(paths.userDir(principal))) {
                 last = Math.max(last, SessionFileReader.lastSeq(file));
             }
             return last + 1;

@@ -75,7 +75,7 @@ class RingIntegrationTest {
         SessionPaths paths = new SessionPaths(dir);
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
         try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 8, (principal, session, seq, offset) -> { })) {
-            StateView view = new StateView(KernelState.empty());
+            StateView view = new StateView();
             InFlightCommands inFlight = new InFlightCommands();
             Kernel kernel = kernel();
             InputRing input = new InputRing(1024);
@@ -86,9 +86,9 @@ class RingIntegrationTest {
                             StopReason.END_TURN, "m", null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
-            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null));
+            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null, null));
             List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
-            Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, KernelState.empty(), journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
+            Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
                     (seq, index, fact) -> { }, view, publisher);
             ring.connect((slot, seq, end) -> {
                 EventEnvelope envelope = slot.envelope;

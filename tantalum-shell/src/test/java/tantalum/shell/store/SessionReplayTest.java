@@ -34,6 +34,7 @@ import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.journal.StoreFormat;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -200,7 +201,7 @@ class SessionReplayTest {
         return runs.stream().sorted(Comparator.comparing(run -> run.ref().run().value())).toList();
     }
 
-    private void assertSameAsFull(Full full, SessionId session, SessionSnapshot slice) {
+    private void assertSameAsFull(Full full, SessionId session, SessionSlice slice) {
         assertEquals(full.state().sessions().get(session), slice.session());
         assertEquals(sorted(full.state().runs().values().stream().filter(run -> run.ref().session().equals(session)).toList()), sorted(slice.runs()));
         assertEquals(full.transcript().export(session), slice.transcript());
@@ -224,7 +225,7 @@ class SessionReplayTest {
         for (var session : List.of(Set.of(ALICE, TOOLS), Set.of(ALICE, COMPACTED), Set.of(ALICE, STOPPED), Set.of(BOB, BOBS))) {
             Principal principal = session.stream().filter(Principal.class::isInstance).map(Principal.class::cast).findFirst().orElseThrow();
             SessionId id = session.stream().filter(SessionId.class::isInstance).map(SessionId.class::cast).findFirst().orElseThrow();
-            SessionSnapshot slice = replay.load(principal, id, Long.MAX_VALUE).orElseThrow().snapshot();
+            SessionSlice slice = replay.load(principal, id, Long.MAX_VALUE).orElseThrow().snapshot().slice();
             assertSameAsFull(full, id, slice);
         }
     }
@@ -234,9 +235,9 @@ class SessionReplayTest {
         scenario();
         List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(TOOLS)).toList();
         long cut = events.get(4).seq();
-        SessionReplay.Slice slice = replay.load(ALICE, TOOLS, cut).orElseThrow();
+        SessionReplay.Result slice = replay.load(ALICE, TOOLS, cut).orElseThrow();
         assertEquals(4, slice.replayedEvents());
-        assertEquals(events.get(3).seq(), slice.snapshot().seq());
+        assertEquals(events.get(3).seq(), slice.snapshot().slice().seq());
     }
 
     @Test
@@ -256,7 +257,7 @@ class SessionReplayTest {
         for (SessionId session : List.of(TOOLS, COMPACTED, STOPPED)) {
             List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(session)).toList();
             for (EventEnvelope event : events) {
-                Optional<SessionReplay.Slice> slice = replay.load(ALICE, session, event.seq());
+                Optional<SessionReplay.Result> slice = replay.load(ALICE, session, event.seq());
                 if (slice.isPresent()) {
                     SessionSnapshot original = slice.get().snapshot();
                     assertEquals(original, snapshots.decode(snapshots.encode(original)), session + " before seq " + event.seq());
@@ -271,7 +272,7 @@ class SessionReplayTest {
         Set<String> phases = new HashSet<>();
         List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(COMPACTED)).toList();
         for (EventEnvelope event : events) {
-            replay.load(ALICE, COMPACTED, event.seq()).ifPresent(slice -> slice.snapshot().runs().forEach(run -> phases.add(Kernel.stateName(run))));
+            replay.load(ALICE, COMPACTED, event.seq()).ifPresent(slice -> slice.snapshot().slice().runs().forEach(run -> phases.add(Kernel.stateName(run))));
         }
         assertTrue(phases.containsAll(Set.of("AwaitingContext", "AwaitingModel", "AwaitingSummary")), phases.toString());
     }
@@ -293,9 +294,9 @@ class SessionReplayTest {
             int total = (int) fixture.events.stream().filter(event -> event.session().equals(session)).count();
             for (int kept = 1; kept < total; kept++) {
                 snapshotAt(session, kept);
-                SessionReplay.Slice slice = replay.load(ALICE, session, Long.MAX_VALUE).orElseThrow();
+                SessionReplay.Result slice = replay.load(ALICE, session, Long.MAX_VALUE).orElseThrow();
                 assertEquals(total - kept, slice.replayedEvents(), session + " from event " + kept);
-                assertSameAsFull(full, session, slice.snapshot());
+                assertSameAsFull(full, session, slice.snapshot().slice());
             }
         }
     }
@@ -305,9 +306,9 @@ class SessionReplayTest {
         Path file = paths.snapshotFile(ALICE, TOOLS);
         Files.writeString(file, damage.apply(Files.readString(file)));
         int total = (int) fixture.events.stream().filter(event -> event.session().equals(TOOLS)).count();
-        SessionReplay.Slice slice = replay.load(ALICE, TOOLS, Long.MAX_VALUE).orElseThrow();
+        SessionReplay.Result slice = replay.load(ALICE, TOOLS, Long.MAX_VALUE).orElseThrow();
         assertEquals(total, slice.replayedEvents());
-        assertSameAsFull(full(), TOOLS, slice.snapshot());
+        assertSameAsFull(full(), TOOLS, slice.snapshot().slice());
     }
 
     @Test
@@ -343,7 +344,7 @@ class SessionReplayTest {
         SessionSnapshot other = snapshotAt(COMPACTED, 3);
         Files.createDirectories(paths.snapshotFile(ALICE, TOOLS).getParent());
         Files.copy(paths.snapshotFile(ALICE, COMPACTED), paths.snapshotFile(ALICE, TOOLS));
-        assertTrue(other.seq() >= 0);
+        assertTrue(other.slice().seq() >= 0);
         int total = (int) fixture.events.stream().filter(event -> event.session().equals(TOOLS)).count();
         assertEquals(total, replay.load(ALICE, TOOLS, Long.MAX_VALUE).orElseThrow().replayedEvents());
     }

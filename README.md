@@ -116,11 +116,11 @@ jq -c 'select(.seq) | [.seq, .type, .run, .at]' ~/.local/share/tantalum/sessions
 
 ## 运维
 
-**启动。** 启动时先比较会话文件和索引，补齐落后的部分，再只把有未结束运行的会话载入内存，其余会话打开时才载入。日志：
+**启动。** 启动时先比较会话文件和索引，补齐落后的部分；补不上就拒绝启动，提示删掉 `index.db` 重建。然后给索引里没结束的运行收尾，这些会话和平时一样按需从文件载入。日志：
 
 ```
 index caught up with 3 session files
-store ready at /srv/tantalum in 1910 ms: 2 sessions with unfinished runs loaded, 2 runs closed as interrupted
+store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous process closed as interrupted
 ```
 
 第一行只在索引落后（比如上次被 `kill -9`）时出现。50 万个事件的数据目录启动约 2 秒，实测数字见 `.spec-workflow/steering/tech.md`。

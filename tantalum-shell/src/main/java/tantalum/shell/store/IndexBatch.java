@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.value.id.Principal;
+import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 
 /** 一次事务要写的内容。同一会话的多个事件合并成一行。只由一个线程使用。 */
@@ -17,6 +18,7 @@ final class IndexBatch {
         String title = "";
         Instant lastActivity;
         String runStatus;
+        RunId activeRun;
         long lastSeq;
         /** 已知落盘到这里，不知道时是 0。写入时只增不减。 */
         long fileOffset;
@@ -43,6 +45,7 @@ final class IndexBatch {
         }
         row.lastActivity = change.at();
         row.runStatus = change.runStatus();
+        row.activeRun = change.activeRun();
         row.lastSeq = change.seq();
         if (change.usage() != null) {
             usage.add(new UsageRow(change.principal(), change.usage()));

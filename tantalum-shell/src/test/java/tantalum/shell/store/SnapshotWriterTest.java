@@ -13,6 +13,7 @@ import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFile;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -57,11 +58,11 @@ class SnapshotWriterTest {
         long atFive = append(1, 5);
         append(9);
         try (SnapshotWriter writer = new SnapshotWriter(store(), paths())) {
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 5);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 5));
             writer.flush();
         }
         SessionSnapshot loaded = store().load(ALICE, S, Long.MAX_VALUE).orElseThrow();
-        assertEquals(5, loaded.seq());
+        assertEquals(5, loaded.slice().seq());
         assertEquals(atFive, loaded.offset());
     }
 
@@ -69,7 +70,7 @@ class SnapshotWriterTest {
     void filesArePrivateAndNoTempFileIsLeft() throws Exception {
         append(1);
         try (SnapshotWriter writer = new SnapshotWriter(store(), paths())) {
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 1);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 1));
             writer.flush();
         }
         Path file = paths().snapshotFile(ALICE, S);
@@ -85,16 +86,16 @@ class SnapshotWriterTest {
         append(1, 2);
         Path file = paths().snapshotFile(ALICE, S);
         try (SnapshotWriter writer = new SnapshotWriter(store(), paths())) {
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 1);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 1));
             writer.flush();
             Files.setPosixFilePermissions(file.getParent(), PosixFilePermissions.fromString("r-x------"));
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 2);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 2));
             writer.flush();
-            assertEquals(1, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().seq(), "the old snapshot survives");
+            assertEquals(1, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().slice().seq(), "the old snapshot survives");
             Files.setPosixFilePermissions(file.getParent(), PosixFilePermissions.fromString("rwx------"));
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 2);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 2));
             writer.flush();
-            assertEquals(2, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().seq());
+            assertEquals(2, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().slice().seq());
         }
     }
 
@@ -103,7 +104,7 @@ class SnapshotWriterTest {
     void aSeqNotInTheFileIsSkipped() throws Exception {
         append(1, 5);
         try (SnapshotWriter writer = new SnapshotWriter(store(), paths())) {
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 3);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 3));
             writer.flush();
         }
         assertTrue(Files.notExists(paths().snapshotFile(ALICE, S)));
@@ -114,12 +115,12 @@ class SnapshotWriterTest {
     void aCrashMidWriteLeavesOnlyATempFile() throws Exception {
         append(1, 2);
         try (SnapshotWriter writer = new SnapshotWriter(store(), paths())) {
-            writer.offer(SessionState.start(S, ALICE), List.of(), EMPTY, 1);
+            writer.offer(new SessionSlice(SessionState.start(S, ALICE), List.of(), EMPTY, 1));
             writer.flush();
         }
         Path file = paths().snapshotFile(ALICE, S);
         Files.writeString(file.getParent().resolve("snapshot123.tmp"), "{\"storage\":1,\"sem");
-        assertEquals(1, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().seq());
+        assertEquals(1, store().load(ALICE, S, Long.MAX_VALUE).orElseThrow().slice().seq());
         Files.delete(file);
         assertTrue(store().load(ALICE, S, Long.MAX_VALUE).isEmpty());
     }

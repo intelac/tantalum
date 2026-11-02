@@ -1,7 +1,6 @@
 package tantalum.shell.store;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -10,7 +9,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
@@ -18,7 +16,6 @@ import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
-import tantalum.shell.store.SessionReplay;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.decision.CompactionFailed;
@@ -182,7 +179,7 @@ public final class TurnQuery {
         long lastSeq = Long.parseLong(parts[0]);
         int lastIndex = Integer.parseInt(parts[1]);
         List<Positioned> messages = new ArrayList<>();
-        for (Path file : files(paths.userDir(principal))) {
+        for (Path file : files(principal)) {
             try {
                 if (SessionFileReader.lastSeq(file) < lastSeq) {
                     continue;
@@ -211,12 +208,10 @@ public final class TurnQuery {
         return messages.stream().map(Positioned::message).toList();
     }
 
-    private static List<Path> files(Path dir) {
-        if (!Files.isDirectory(dir)) {
-            return List.of();
-        }
-        try (Stream<Path> entries = Files.list(dir)) {
-            return entries.sorted().toList();
+    private List<Path> files(Principal principal) {
+        Path dir = paths.userDir(principal);
+        try {
+            return paths.sessionFiles(dir);
         } catch (IOException failure) {
             throw new IllegalStateException("cannot list " + dir, failure);
         }

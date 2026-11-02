@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import tantalum.shell.loop.Evictor;
 import tantalum.shell.mcp.McpProperties;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.value.state.CompactionSettings;
@@ -12,27 +13,7 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
-                                 Compaction compaction, Index index, Residency residency, Duration shutdownWait) {
-
-    /** 关闭时等在途的模型和工具调用最多多久，到时中断它们，下次启动时收尾。未配置时 30 秒。 */
-    public Duration shutdownWaitOrDefault() {
-        return shutdownWait == null ? Duration.ofSeconds(30) : shutdownWait;
-    }
-
-    /** 常驻会话。{@code idle} 为 null 时不按时间回收。 */
-    public record Residency(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {
-
-        public Residency {
-            requirePositive("maxResident", maxResident);
-            requirePositive("snapshotEvents", snapshotEvents);
-        }
-
-        /** 空闲 30 分钟或超过 1000 个常驻时回收，运行结束距上次快照超过 200 个事件时写快照。 */
-        public static Residency defaults() {
-            return new Residency(Duration.ofMinutes(30), 1000, 200, Duration.ofSeconds(1));
-        }
-    }
-
+                                 Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait) {
 
     /** 索引库的节流：攒够事件数或到时间就写。运行结束总是写。 */
     public record Index(int flushEvents, Duration flushInterval) {

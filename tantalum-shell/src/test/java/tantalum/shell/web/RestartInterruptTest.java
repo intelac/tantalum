@@ -163,4 +163,54 @@ class RestartInterruptTest {
         }
         assertEquals(1, journal().stream().filter(RunInterrupted.class::isInstance).count());
     }
+
+    /** 索引补不上就不知道哪些运行要收尾：拒绝启动，并告诉管理员删掉索引重建。 */
+    @Test
+    void indexThatCannotCatchUpRefusesToStart() throws Exception {
+        diedDuringTool();
+        Path userDir = new SessionPaths(data()).userDir(ALICE);
+        Files.setPosixFilePermissions(userDir, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+        try {
+            Throwable failure = org.junit.jupiter.api.Assertions.assertThrows(Exception.class, this::server);
+            StringBuilder messages = new StringBuilder();
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                messages.append(cause.getMessage()).append('\n');
+            }
+            assertTrue(messages.toString().contains("delete index.db"), messages.toString());
+        } finally {
+            Files.setPosixFilePermissions(userDir, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+        }
+    }
+
+    /** 一个有未结束运行的会话文件坏了：只拒绝它，其他会话照常收尾，服务照常启动。 */
+    @Test
+    void corruptUnfinishedSessionIsRefusedAndTheOthersStart() throws Exception {
+        diedDuringTool();
+        SessionId other = new SessionId("s3");
+        RunId otherRun = RunId.of(other, 20);
+        try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, other, EventCodec.withBuiltins())) {
+            file.append(List.of(
+                    new EventEnvelope(20, AT, ALICE, other, null, new UserPrompt(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
+                    new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of()))));
+        }
+        // 先让索引记下两个未结束的运行，再把 s1 的中间一行改坏：启动时索引仍说它没结束，载入时才发现坏了。
+        Path s1 = new SessionPaths(data()).sessionFile(ALICE, S1);
+        try (var index = tantalum.shell.store.SessionIndex.open(data())) {
+            tantalum.kernel.table.TransitionTable table = new tantalum.kernel.table.TransitionTable();
+            tantalum.kernel.table.BuiltinSteps.register(table);
+            tantalum.shell.store.IndexCatchUp.run(index, new SessionPaths(data()), new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins()),
+                    new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()), (tool, args) -> false, 10));
+            assertEquals(2, index.unfinished().size());
+        }
+        List<String> broken = Files.readAllLines(s1);
+        broken.set(2, "{\"seq\":2,\"at\":\"2026-11-02T00:00:00Z\",\"type\":\"Mystery\",\"version\":1,\"run\":null,\"payload\":{}}");
+        Files.write(s1, broken);
+
+        try (TestServer server = server()) {
+            String view = server.get("alice", "/api/runs/" + otherRun.value()).body();
+            assertTrue(view.contains("interrupted by restart"), view);
+            int status = server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"again\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode();
+            assertEquals(500, status);
+        }
+    }
 }
