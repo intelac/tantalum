@@ -9,8 +9,10 @@ interface Props {
   session: string;
   /** 最近一次运行；没有时整行只显示占位。 */
   run: string | null;
-  /** 运行结束后变化，触发重新读取用量。 */
-  ended: boolean;
+  /** 最近的运行还没结束：这时不能手动压缩。 */
+  running: boolean;
+  /** 运行状态变化时变，触发重新读取用量。 */
+  version: string;
   contextWindow: number | undefined;
 }
 
@@ -18,9 +20,9 @@ interface Props {
  * 输入栏下方：轮数、token、上下文占比，右侧是手动压缩按钮。数据来自 journal 回放的模型调用，运行结束后才有最后一次的用量。
  * 占比到 80% 变色提示。窄屏只留占比。
  */
-export function StatusBar({ session, run, ended, contextWindow }: Props) {
+export function StatusBar({ session, run, running, version, contextWindow }: Props) {
   const turns = useQuery({
-    queryKey: ["status", run, ended],
+    queryKey: ["turns", run, version],
     enabled: run !== null,
     queryFn: async () => {
       const list = (await listTurns(run as string)).turns;
@@ -38,7 +40,7 @@ export function StatusBar({ session, run, ended, contextWindow }: Props) {
     { key: "inOut", text: parts.inOut, narrow: false },
     { key: "context", text: parts.context, narrow: true },
   ].filter((segment) => segment.text !== null);
-  const canCompact = run !== null && ended;
+  const canCompact = run !== null && !running;
 
   return (
     <div className="flex h-6 items-center justify-center gap-3 text-xs text-fg-faint" aria-label={zh.trace.usage}>

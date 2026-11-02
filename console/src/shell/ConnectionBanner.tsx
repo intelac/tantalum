@@ -1,4 +1,4 @@
-import { useConnection } from "../app/connection";
+import { useConnection } from "../api/connection";
 import { zh } from "../text/zh";
 
 /** 顶部的连接提示：断线时提示并自动重连；收到 503 后说明服务已停止处理事件。 */

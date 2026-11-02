@@ -2,9 +2,9 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getTrace, listRuns } from "../api/client";
 import { navigate, tracePath } from "../app/router";
-import { useNow } from "../process/useNow";
+import { useNow } from "../ui/useNow";
 import type { ConversationStore } from "../store/ConversationStore";
-import { useItem } from "../store/hooks";
+import { useRunStatus, useRunVersion } from "../store/hooks";
 import { zh } from "../text/zh";
 import { EventList } from "./EventList";
 import { ModelCallDetail } from "./ModelCallDetail";
@@ -22,9 +22,10 @@ export function TracePage({ store, session, run }: Props) {
   const runs = useQuery({ queryKey: ["runs", session], queryFn: () => listRuns(session), select: (data) => data.runs });
   const list = runs.data ?? [];
   const current = run ?? list[list.length - 1]?.run;
-  const status = useItem(store, current === undefined ? "" : `run:${current}`);
-  const live = status?.kind === "run" ? `${status.phase}@${status.updatedAt}` : "";
-  const ended = status?.kind === "run" ? status.endReason !== undefined : (list.find((entry) => entry.run === current)?.endReason ?? null) !== null;
+  const status = useRunStatus(store, current ?? null);
+  const version = useRunVersion(store, current ?? null);
+  // 不在 store 里的运行（比如别的会话打开前就结束了）按接口列出的状态判断。
+  const ended = status !== undefined ? status.endReason !== undefined : list.find((entry) => entry.run === current)?.endReason != null;
   const now = useNow(!ended);
   const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
 
@@ -33,7 +34,7 @@ export function TracePage({ store, session, run }: Props) {
   }, [current]);
 
   const trace = useQuery({
-    queryKey: ["trace", current, live],
+    queryKey: ["trace", current, version],
     // 运行状态变化换了缓存键时沿用上一份数据，不闪成空白。
     placeholderData: keepPreviousData,
     enabled: current !== undefined,
@@ -84,7 +85,7 @@ export function TracePage({ store, session, run }: Props) {
         </div>
         {selectedTurn !== null && (
           <div className="mt-2 border-t border-line">
-            <ModelCallDetail run={current} turn={selectedTurn} refreshKey={live} />
+            <ModelCallDetail run={current} turn={selectedTurn} version={version} />
           </div>
         )}
       </div>

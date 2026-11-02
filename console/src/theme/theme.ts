@@ -2,7 +2,7 @@
 // index.html 里有一段同样逻辑的内联脚本，在样式加载前先设好属性，避免闪烁。
 
 import { useSyncExternalStore } from "react";
-import { localStore } from "../app/storage";
+import { localArea, readStored, writeStored } from "../ui/storage";
 
 export type Theme = "light" | "dark" | "system";
 export type Resolved = "light" | "dark";
@@ -12,21 +12,13 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 const THEMES: readonly Theme[] = ["light", "dark", "system"];
 
-export function readTheme(storage: Pick<Storage, "getItem"> | null = localStore()): Theme {
-  try {
-    const stored = storage?.getItem(THEME_KEY) ?? null;
-    return THEMES.includes(stored as Theme) ? (stored as Theme) : "system";
-  } catch {
-    return "system";
-  }
+export function readTheme(storage: Pick<Storage, "getItem"> | null = localArea()): Theme {
+  const stored = readStored(THEME_KEY, storage);
+  return THEMES.includes(stored as Theme) ? (stored as Theme) : "system";
 }
 
-export function saveTheme(theme: Theme, storage: Pick<Storage, "setItem"> | null = localStore()): void {
-  try {
-    storage?.setItem(THEME_KEY, theme);
-  } catch {
-    // 私密模式下存不了，只影响这次会话。
-  }
+export function saveTheme(theme: Theme, storage: Pick<Storage, "setItem"> | null = localArea()): void {
+  writeStored(THEME_KEY, theme, storage);
 }
 
 export function resolveTheme(theme: Theme, prefersDark: boolean): Resolved {

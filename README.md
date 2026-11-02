@@ -16,6 +16,22 @@
 | `tantalum-examples` | 示例插件，不打进可执行 jar |
 | `console/` | 参考控制台 |
 
+`tantalum-shell` 里的包，依赖只朝一个方向，没有循环（ArchUnit 检查）：
+
+| 包 | 内容 |
+|---|---|
+| `boot` | 组装、启动、关闭：`Engine`、`Storage`（打开和关闭数据目录）、配置。只有它和 `web` 读全局配置 |
+| `loop` | 管线：输入环 → 用户通道（落盘、载入冷会话）→ cleanroom（`Kernel.step`）→ 输出环 → Handler；`Intake` 接收提交，`Evictor` 回收空闲会话 |
+| `journal` | 原始记录：每会话一个只追加的文件、事件编解码、格式版本、锁、序号 |
+| `store` | 能从原始记录重建的东西：索引、快照、回放查询，以及读会话的 `SessionQueries` |
+| `conversation` | 控制台看到的对话条目，是事件的展示投影 |
+| `handler` | 执行命令：组装上下文、调模型、跑工具和插件工作 |
+| `model` | Claude 和 OpenAI 兼容两个模型客户端，失败分类共用 `ModelFailures` |
+| `tool`、`mcp`、`memory` | 内置工具、MCP 客户端、每用户记忆 |
+| `sse`、`web`、`auth` | 推送、HTTP 接口、登录 |
+| `plugin` | 插件 SDK |
+| `json`、`net` | JSON 文本、主机名判断 |
+
 设计文档在 `.spec-workflow/`。
 
 ## 运行
@@ -224,6 +240,8 @@ mvn clean verify          # 不访问外网，不花钱
 ```
 
 `mvn verify` 在集成测试阶段还会用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。
+
+浏览器和磁盘看到的 JSON（`/messages` 的条目、SSE 消息、会话快照文件）由 `WireFormatTest` 逐字节钉住，期望文件在 `tantalum-shell/src/test/resources/wire/`。有意改格式时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么。
 
 跳号回归：让事件序号每次加 7 再跑一遍全部测试，确认没有代码假设“下一个序号是加一”（运行 ID、命令 ID 和断点续传都从序号来）：
 

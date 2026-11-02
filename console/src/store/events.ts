@@ -2,12 +2,12 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { notifyUnauthorized, onHalted } from "../api/client";
+import { notifyUnauthorized } from "../api/client";
+import { reportConnection, resetConnection } from "../api/connection";
 import { connectEvents, type SseEvent } from "../api/sse";
 import type { Chunk, Item, PhaseChanged } from "../api/types";
 import { SESSIONS_KEY } from "../shell/useSessions";
-import { seqOf, type ConversationStore } from "../store/ConversationStore";
-import { reportConnection, reportHalted, reportUnauthorized, resetConnection } from "./connection";
+import { seqOf, type ConversationStore } from "./ConversationStore";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -57,18 +57,11 @@ export function handleEvent(event: SseEvent, store: ConversationStore, queries: 
 export function useEventStream(store: ConversationStore, queries: QueryClient): void {
   useEffect(() => {
     resetConnection();
-    onHalted(reportHalted);
     const stop = connectEvents({
       onEvent: (event) => handleEvent(event, store, queries),
       onConnection: reportConnection,
-      onUnauthorized: () => {
-        reportUnauthorized();
-        notifyUnauthorized();
-      },
+      onUnauthorized: notifyUnauthorized,
     });
-    return () => {
-      onHalted(() => undefined);
-      stop();
-    };
+    return stop;
   }, [store, queries]);
 }

@@ -1,6 +1,7 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { zh } from "../text/zh";
+import { reportHalted } from "./connection";
 import type {
   Config,
   MemoryEntry,
@@ -38,14 +39,6 @@ export function notifyUnauthorized(): void {
   unauthorized();
 }
 
-type Halted = () => void;
-let halted: Halted = () => undefined;
-
-/** 任何接口返回 503 表示服务已停止处理事件，界面要说明。 */
-export function onHalted(handler: Halted): void {
-  halted = handler;
-}
-
 interface Options extends RequestInit {
   /** 为 true 时 401 不触发登录流程，只作为错误返回。 */
   quiet401?: boolean;
@@ -59,7 +52,8 @@ async function call<T>(path: string, { quiet401 = false, ...init }: Options = {}
   });
   const body = await response.text();
   if (response.status === 401 && !quiet401) unauthorized();
-  if (response.status === 503) halted();
+  // 任何接口返回 503 表示服务已停止处理事件，界面要说明。
+  if (response.status === 503) reportHalted();
   if (!response.ok) throw new ApiError(response.status, messageOf(response.status, body));
   return (body === "" ? undefined : JSON.parse(body)) as T;
 }

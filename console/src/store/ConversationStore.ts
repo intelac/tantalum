@@ -1,6 +1,6 @@
 // 按条目 ID 保存不可变对象，组件只订阅自己的条目：一个分片只重绘一个条目。不依赖 React。
 
-import type { Item } from "../api/types";
+import type { Item, Messages } from "../api/types";
 
 export interface Live {
   text: string;
@@ -9,6 +9,14 @@ export interface Live {
 
 const EMPTY_ORDER: readonly string[] = Object.freeze([]);
 const EMPTY_LIVE: Live = Object.freeze({ text: "", reasoning: "" });
+
+/** 已加载部分的第一个条目在会话里的位置，以及前面是否还有更早的条目。 */
+export interface Paging {
+  start: number;
+  hasMore: boolean;
+}
+
+const NO_PAGING: Paging = Object.freeze({ start: 0, hasMore: false });
 
 type Listener = () => void;
 
@@ -25,6 +33,8 @@ export class ConversationStore {
   private readonly versions = new Map<string, number>();
   /** 会话到条目 ID 的顺序；每次变化换成新数组，所以引用可以直接比较。 */
   private readonly order = new Map<string, readonly string[]>();
+  /** 会话到翻页位置。 */
+  private readonly paging = new Map<string, Paging>();
   /** 运行到流式分片；结算后清掉。 */
   private readonly live = new Map<string, Live>();
   private readonly listeners = new Map<string, Set<Listener>>();
@@ -39,6 +49,10 @@ export class ConversationStore {
 
   static liveKey(run: string): string {
     return `live:${run}`;
+  }
+
+  static pagingKey(session: string): string {
+    return `paging:${session}`;
   }
 
   subscribe(key: string, listener: Listener): () => void {
@@ -64,6 +78,10 @@ export class ConversationStore {
 
   getLive(run: string): Live {
     return this.live.get(run) ?? EMPTY_LIVE;
+  }
+
+  getPaging(session: string): Paging {
+    return this.paging.get(session) ?? NO_PAGING;
   }
 
   /**
@@ -95,25 +113,22 @@ export class ConversationStore {
   }
 
   /**
-   * 从接口加载一个会话的最近一页。{@code seq} 是快照截至的事件序号：SSE 已经推过更新版本的条目保留，
-   * 快照里没有但比快照新的条目也保留并排在后面；其余以快照为准。只通知真正变了的条目。
-   * 不给 {@code seq} 时快照无条件生效，且不记录版本，之后任何推送都能更新这些条目。
-   * 之前向上加载过的更早条目，只要这一页的第一个条目原来就在，就接在前面保留（中间没有缺口）；否则丢掉。
-   * 返回保留的更早条目数。
+   * 从接口加载一个会话的最近一页（打开会话和每次重连都会调）。{@code page.seq} 是快照截至的事件序号：
+   * SSE 已经推过更新版本的条目保留，快照里没有但比快照新的条目也保留并排在后面；其余以快照为准。只通知真正变了的条目。
+   * 之前向上加载过的更早条目，只要这一页的第一个条目原来就在，就接在前面保留，翻页位置不变（中间没有缺口）；
+   * 否则丢掉，翻页位置从这一页开始。快照和推送会重叠，是因为重连时既按 Last-Event-ID 补读、又重新拉这一页。
    */
-  replace(session: string, items: readonly Item[], seq?: number): number {
+  loadLatest(session: string, page: Messages): void {
     const changed: string[] = [];
-    const ids = items.map((item) => item.id);
-    const cutoff = seq ?? Number.MAX_SAFE_INTEGER;
-    for (const item of items) {
+    const ids = page.items.map((item) => item.id);
+    for (const item of page.items) {
       const before = this.items.get(item.id);
-      if (before !== undefined && (this.versions.get(item.id) ?? -1) > cutoff) continue;
+      if (before !== undefined && (this.versions.get(item.id) ?? -1) > page.seq) continue;
       if (before === undefined || !sameItem(before, item)) {
         this.items.set(item.id, item);
         changed.push(item.id);
       }
-      if (seq === undefined) this.versions.delete(item.id);
-      else this.versions.set(item.id, Math.max(seq, this.versions.get(item.id) ?? -1));
+      this.versions.set(item.id, Math.max(page.seq, this.versions.get(item.id) ?? -1));
     }
     const previous = this.getOrder(session);
     const firstIndex = ids.length > 0 ? previous.indexOf(ids[0]) : -1;
@@ -121,7 +136,7 @@ export class ConversationStore {
     const kept = new Set(older);
     for (const id of previous) {
       if (ids.includes(id) || kept.has(id)) continue;
-      if ((this.versions.get(id) ?? -1) > cutoff) ids.push(id);
+      if ((this.versions.get(id) ?? -1) > page.seq) ids.push(id);
       else {
         this.items.delete(id);
         this.versions.delete(id);
@@ -134,22 +149,32 @@ export class ConversationStore {
       this.notify(ConversationStore.orderKey(session));
     }
     for (const id of changed) this.notify(ConversationStore.itemKey(id));
-    return older.length;
+    if (older.length === 0) this.setPaging(session, { start: page.start, hasMore: page.hasMore });
   }
 
   /**
-   * 向上加载的更早一页，接在最前面。已经有的条目不动（SSE 可能推过更新的版本）。
-   * {@code seq} 同 {@link replace}，记为这些条目的版本。
+   * 向上加载的更早一页，接在最前面；{@code from} 是请求这一页时的翻页位置，位置已经变了（中间重新加载过）就丢掉这一页。
+   * 已经有的条目不动（SSE 可能推过更新的版本）。
    */
-  prependItems(session: string, items: readonly Item[], seq?: number): void {
-    const fresh = items.filter((item) => !this.items.has(item.id));
-    if (fresh.length === 0) return;
+  loadOlder(session: string, from: number, page: Messages): void {
+    if (this.getPaging(session).start !== from) return;
+    const fresh = page.items.filter((item) => !this.items.has(item.id));
     for (const item of fresh) {
       this.items.set(item.id, item);
-      if (seq !== undefined) this.versions.set(item.id, seq);
+      this.versions.set(item.id, page.seq);
     }
-    this.order.set(session, [...fresh.map((item) => item.id), ...this.getOrder(session)]);
-    this.notify(ConversationStore.orderKey(session));
+    if (fresh.length > 0) {
+      this.order.set(session, [...fresh.map((item) => item.id), ...this.getOrder(session)]);
+      this.notify(ConversationStore.orderKey(session));
+    }
+    this.setPaging(session, { start: page.start, hasMore: page.hasMore });
+  }
+
+  private setPaging(session: string, next: Paging): void {
+    const current = this.paging.get(session);
+    if (current !== undefined && current.start === next.start && current.hasMore === next.hasMore) return;
+    this.paging.set(session, next);
+    this.notify(ConversationStore.pagingKey(session));
   }
 
   private notify(key: string): void {

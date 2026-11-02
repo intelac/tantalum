@@ -35,7 +35,8 @@ export function Sidebar({
   onLogout,
   username,
 }: Props) {
-  const current = currentSession !== null && !sessions.some((session) => session.id === currentSession);
+  // 刚新建、还没提交过的会话不在列表里，先放一行占位。
+  const unsaved = currentSession !== null && !sessions.some((session) => session.id === currentSession);
   const menuItems = [
     { id: "settings", label: zh.sidebar.settings, icon: <Settings size={16} />, onSelect: onSettings },
     { id: "logout", label: zh.sidebar.logout, icon: <LogOut size={16} />, danger: true, onSelect: onLogout },
@@ -74,7 +75,7 @@ export function Sidebar({
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-3" aria-label={zh.sidebar.sessions}>
         <ul className="flex flex-col gap-0.5">
-          {current && (
+          {unsaved && (
             <SessionRow
               session={{ id: currentSession, title: "", lastActivity: new Date().toISOString(), runStatus: "idle" }}
               selected
@@ -91,7 +92,7 @@ export function Sidebar({
             {error}
           </p>
         )}
-        {!loading && error === null && sessions.length === 0 && !current && (
+        {!loading && error === null && sessions.length === 0 && !unsaved && (
           <p className="px-3 py-2 text-xs text-fg-faint">{zh.sidebar.empty}</p>
         )}
       </nav>

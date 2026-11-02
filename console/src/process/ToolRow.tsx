@@ -5,7 +5,7 @@ import { formatDuration } from "../text/time";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
-import { useNow } from "./useNow";
+import { useNow } from "../ui/useNow";
 
 interface Props {
   step: ToolStepItem;

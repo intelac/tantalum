@@ -10,7 +10,7 @@ interface Props {
   run: string;
   turn: number;
   /** 运行还在进行时变化，结果到了要重新读。 */
-  refreshKey: string;
+  version: string;
 }
 
 function Section({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
@@ -30,7 +30,7 @@ function reasoningText(raw: unknown): string {
   return zh.process.thinkingRedacted;
 }
 
-function Block({ block }: { block: ContentBlock }) {
+function ContentBlockView({ block }: { block: ContentBlock }) {
   switch (block.kind) {
     case "text":
       return <pre className="font-sans text-sm whitespace-pre-wrap text-fg">{block.text}</pre>;
@@ -53,9 +53,9 @@ function Block({ block }: { block: ContentBlock }) {
 }
 
 /** 一次模型调用：由 journal 回放得出的完整 system prompt、工具列表、消息，以及回复或失败、用量和实际模型。 */
-export function ModelCallDetail({ run, turn, refreshKey }: Props) {
+export function ModelCallDetail({ run, turn, version }: Props) {
   const query = useQuery({
-    queryKey: ["turn", run, turn, refreshKey],
+    queryKey: ["turn", run, turn, version],
     queryFn: () => getTurn(run, turn),
     placeholderData: keepPreviousData,
   });
@@ -98,7 +98,7 @@ export function ModelCallDetail({ run, turn, refreshKey }: Props) {
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 {message.content.map((block, blockIndex) => (
-                  <Block key={blockIndex} block={block} />
+                  <ContentBlockView key={blockIndex} block={block} />
                 ))}
                 {message.interrupted && <span className="text-xs text-fg-faint">{zh.conversation.interrupted}</span>}
               </div>
@@ -110,7 +110,7 @@ export function ModelCallDetail({ run, turn, refreshKey }: Props) {
         <Section title={zh.trace.reply}>
           <div className="flex flex-col gap-1">
             {detail.reply.content.map((block, index) => (
-              <Block key={index} block={block} />
+              <ContentBlockView key={index} block={block} />
             ))}
           </div>
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-fg-muted">

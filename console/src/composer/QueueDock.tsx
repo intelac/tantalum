@@ -1,17 +1,20 @@
 import { ListOrdered } from "lucide-react";
+import { useMemo } from "react";
 import type { ConversationStore } from "../store/ConversationStore";
-import { useItems } from "../store/hooks";
+import { useItems, useOrder } from "../store/hooks";
 import { zh } from "../text/zh";
 
 interface Props {
   store: ConversationStore;
-  /** 排队中的用户条目 ID。 */
-  ids: readonly string[];
+  session: string;
 }
 
 /** 输入栏上方的排队内容：数量和每条的开头。运行开始后条目不再排队，这里自动消失。 */
-export function QueueDock({ store, ids }: Props) {
-  const items = useItems(store, ids);
+export function QueueDock({ store, session }: Props) {
+  const order = useOrder(store, session);
+  // 条目的种类不会变，所以只需订阅用户条目；是否排队看条目自己的 queued。
+  const users = useMemo(() => order.filter((id) => store.getItem(id)?.kind === "user"), [order, store]);
+  const items = useItems(store, users);
   const queued = items.filter((item) => item?.kind === "user" && item.queued);
   if (queued.length === 0) return null;
   return (

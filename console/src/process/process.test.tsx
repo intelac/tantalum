@@ -2,12 +2,11 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RunStatusItem, ToolStepItem } from "../api/types";
-import { explain } from "../conversation/RunStatusRow";
+import { runOutcome } from "../conversation/runOutcome";
 import { ConversationStore } from "../store/ConversationStore";
-import { chainOf, summarizeArguments } from "./chain";
-import { headerText, ProcessGroup } from "./ProcessGroup";
+import { chainOf, processRows, summarizeArguments } from "./chain";
+import { ProcessGroup } from "./ProcessGroup";
 import { ThinkingBlock } from "./ThinkingBlock";
-import { ToolChain } from "./ToolChain";
 import { ToolRow } from "./ToolRow";
 
 afterEach(cleanup);
@@ -30,6 +29,15 @@ function step(id: string, extra: Partial<ToolStepItem> = {}): ToolStepItem {
 }
 
 describe("chain", () => {
+  it("makes one row per thinking or text and one tool-chain row per run of consecutive tool steps", () => {
+    const thinking = { kind: "thinking" as const, id: "t", session: "s", run: "run-0", at: "x", text: "hmm", redacted: false };
+    const middle = { kind: "text" as const, id: "m", session: "s", run: "run-0", at: "x", text: "then", interrupted: false, truncated: false };
+    const rows = processRows([thinking, step("a"), step("b"), middle, step("c", { group: "g9" }), undefined]);
+    expect(rows.map((row) => row.kind)).toEqual(["thinking", "tools", "text", "tools"]);
+    const first = rows[1];
+    expect(first?.kind === "tools" ? first.groups.map((group) => group.map((s) => s.id)) : null).toEqual([["a", "b"]]);
+  });
+
   it("groups consecutive steps with the same group and keeps waiting ones alone", () => {
     const groups = chainOf([step("a"), step("b"), step("c", { group: "g5" }), step("d", { status: "WAITING", group: undefined, startedAt: undefined, endedAt: undefined, result: undefined })]);
     expect(groups.map((group) => group.map((s) => s.id))).toEqual([["a", "b"], ["c"], ["d"]]);
@@ -101,15 +109,16 @@ describe("ToolRow", () => {
   });
 });
 
-describe("ToolChain", () => {
+describe("tool chain in the process area", () => {
   it("renders parallel steps as a group and others as single rows", () => {
     const store = new ConversationStore();
     store.applyItem(step("a"));
     store.applyItem(step("b"));
     store.applyItem(step("c", { group: "g7" }));
-    render(<ToolChain store={store} ids={["a", "b", "c"]} />);
+    render(<ProcessGroup store={store} run="run-0" ids={["a", "b", "c"]} />);
     expect(screen.getByRole("group", { name: "2 个并行调用" })).not.toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    // 过程区标题一个按钮，三个工具各一个。
+    expect(screen.getAllByRole("button")).toHaveLength(4);
   });
 });
 
@@ -120,7 +129,7 @@ describe("ProcessGroup", () => {
     const store = new ConversationStore();
     store.applyItem({ ...status, phase: "AwaitingTools", endReason: undefined, updatedAt: "2026-10-31T00:00:02Z" });
     store.applyItem(step("a"));
-    render(<ProcessGroup store={store} run="run-0" statusId="run:run-0" ids={["a"]} />);
+    render(<ProcessGroup store={store} run="run-0" ids={["a"]} />);
     const header = screen.getAllByRole("button")[0];
     expect(header?.textContent).toContain("正在处理");
     expect(header?.getAttribute("aria-expanded")).toBe("true");
@@ -135,26 +144,26 @@ describe("ProcessGroup", () => {
     const store = new ConversationStore();
     store.applyItem({ ...status, phase: "AwaitingModel", endReason: undefined });
     store.applyChunk("run-0", "reasoning", "想一想");
-    render(<ProcessGroup store={store} run="run-0" statusId="run:run-0" ids={[]} />);
+    render(<ProcessGroup store={store} run="run-0" ids={[]} />);
     expect(screen.getByText("想一想")).not.toBeNull();
-    expect(headerText(undefined)).toBe("正在处理…");
-    expect(headerText({ ...status, endReason: "FAILED" })).toBe("已失败，用时 32 秒");
-    expect(headerText({ ...status, endReason: "CANCELLED" })).toBe("已取消，用时 32 秒");
-    expect(headerText({ ...status, endReason: "CANCELLED", detail: "interrupted by restart" })).toBe("已中断，用时 32 秒");
+    expect(runOutcome(undefined).header).toBe("正在处理…");
+    expect(runOutcome({ ...status, endReason: "FAILED" }).header).toBe("已失败，用时 32 秒");
+    expect(runOutcome({ ...status, endReason: "CANCELLED" }).header).toBe("已取消，用时 32 秒");
+    expect(runOutcome({ ...status, endReason: "CANCELLED", detail: "interrupted by restart" }).header).toBe("已中断，用时 32 秒");
   });
 });
 
-describe("explain", () => {
+describe("runOutcome", () => {
   const base: RunStatusItem = { kind: "run", id: "run:run-0", session: "s", run: "run-0", at: "t", updatedAt: "t", phase: "Ended" };
   it("has a sentence per failure reason", () => {
-    expect(explain({ ...base, endReason: "FAILED", failure: "CONTEXT_OVERFLOW" })).toBe("上下文超长，模型放不下这段对话。请开一个新会话继续，记忆会带过去");
-    expect(explain({ ...base, endReason: "FAILED", failure: "REFUSAL" })).toBe("模型拒绝回答");
-    expect(explain({ ...base, endReason: "FAILED", failure: "RATE_LIMITED" })).toBe("触发限流，稍后再试");
-    expect(explain({ ...base, endReason: "FAILED", detail: "output ring full" })).toBe("命令丢失，运行失败");
-    expect(explain({ ...base, endReason: "CANCELLED" })).toBe("已取消");
-    expect(explain({ ...base, endReason: "CANCELLED", detail: "interrupted by restart" })).toBe("服务重启，这次运行已中断。可以接着提问");
-    expect(explain({ ...base, endReason: "STOPPED", detail: "policy" })).toBe("被钩子停止：policy");
-    expect(explain({ ...base, endReason: "COMPLETED" })).toBeNull();
-    expect(explain({ ...base })).toBeNull();
+    expect(runOutcome({ ...base, endReason: "FAILED", failure: "CONTEXT_OVERFLOW" }).explanation).toBe("上下文超长，模型放不下这段对话。请开一个新会话继续，记忆会带过去");
+    expect(runOutcome({ ...base, endReason: "FAILED", failure: "REFUSAL" }).explanation).toBe("模型拒绝回答");
+    expect(runOutcome({ ...base, endReason: "FAILED", failure: "RATE_LIMITED" }).explanation).toBe("触发限流，稍后再试");
+    expect(runOutcome({ ...base, endReason: "FAILED", detail: "output ring full" }).explanation).toBe("命令丢失，运行失败");
+    expect(runOutcome({ ...base, endReason: "CANCELLED" }).explanation).toBe("已取消");
+    expect(runOutcome({ ...base, endReason: "CANCELLED", detail: "interrupted by restart" }).explanation).toBe("服务重启，这次运行已中断。可以接着提问");
+    expect(runOutcome({ ...base, endReason: "STOPPED", detail: "policy" }).explanation).toBe("被钩子停止：policy");
+    expect(runOutcome({ ...base, endReason: "COMPLETED" }).explanation).toBeNull();
+    expect(runOutcome({ ...base }).explanation).toBeNull();
   });
 });
