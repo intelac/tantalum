@@ -18,6 +18,7 @@ import tantalum.value.model.Role;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
@@ -71,7 +72,7 @@ public final class RunEnd {
         if (!session.followUps().isEmpty()) {
             String next = session.followUps().getFirst();
             out.state = out.state.with(session.withFollowUps(session.followUps().subList(1, session.followUps().size())));
-            ModelSteps.startRun(out, new tantalum.value.state.OwnerRef.OfSession(session.id()), next);
+            ModelSteps.startRun(out, new OwnerRef.OfSession(session.id()), next);
         }
     }
 }

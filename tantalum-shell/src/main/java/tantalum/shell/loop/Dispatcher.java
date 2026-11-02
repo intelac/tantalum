@@ -17,7 +17,7 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
     private final Map<Class<? extends Command>, Handler> handlers;
     private final InFlightCommands inFlight;
     private final ResultPublisher results;
-    /** 关闭中不再启动新的 Handler：这些运行在文件里没结束，下次启动由 H9 收尾，不会重复调用。 */
+    /** 关闭中不再启动新的 Handler：这些运行在文件里没结束，下次启动时以“因重启中断”收尾，不会重复调用。 */
     private volatile boolean closing;
 
     public Dispatcher(Map<Class<? extends Command>, Handler> handlers, InFlightCommands inFlight, ResultPublisher results) {

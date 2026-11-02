@@ -225,6 +225,12 @@ mvn clean verify          # 不访问外网，不花钱
 
 `mvn verify` 在集成测试阶段还会用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。
 
+跳号回归：让事件序号每次加 7 再跑一遍全部测试，确认没有代码假设“下一个序号是加一”（运行 ID、命令 ID 和断点续传都从序号来）：
+
+```sh
+JAVA_TOOL_OPTIONS=-Dtantalum.test.sequence-step=7 mvn test -Djacoco.skip=true
+```
+
 端到端的后端是 `tantalum-examples` 测试目录里的 `E2eServer`（Maven profile `e2e`，模型按关键词回放剧本，不访问外网），账号 `e2e` / `e2e-password`。
 
 真实模型的冒烟测试要显式打开：

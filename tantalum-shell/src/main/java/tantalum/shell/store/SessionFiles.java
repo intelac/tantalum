@@ -37,10 +37,6 @@ public final class SessionFiles implements AutoCloseable {
     private final Object lock = new Object();
     private final LinkedHashMap<Key, Handle> handles = new LinkedHashMap<>(16, 0.75f, true);
 
-    public SessionFiles(SessionPaths paths, EventCodec codec, int maxOpen) {
-        this(paths, codec, maxOpen, (principal, session, seq, offset) -> { });
-    }
-
     public SessionFiles(SessionPaths paths, EventCodec codec, int maxOpen, DurableListener listener) {
         this.listener = listener;
         this.paths = paths;

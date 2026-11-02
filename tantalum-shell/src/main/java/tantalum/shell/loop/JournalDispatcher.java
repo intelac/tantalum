@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
-import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.value.event.EventEnvelope;
@@ -32,10 +31,6 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
     /** 只有消费者线程访问。 */
     private final Map<Principal, UserLane> lanes = new HashMap<>();
     private volatile boolean halted;
-
-    public JournalDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
-        this(capacity, sequence, writer, (envelope, preload) -> cleanroom.test(envelope), UserLane.Loader.NONE, new Residency());
-    }
 
     public JournalDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, BiPredicate<EventEnvelope, Preload> cleanroom,
                              UserLane.Loader loader, Residency residency) {
@@ -81,11 +76,6 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
     @Override
     public boolean halted() {
         return halted;
-    }
-
-    @Override
-    public boolean publish(EventEnvelope envelope) {
-        return cleanroom.test(envelope, null);
     }
 
     @Override

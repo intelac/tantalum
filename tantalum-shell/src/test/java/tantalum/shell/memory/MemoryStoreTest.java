@@ -62,7 +62,7 @@ class MemoryStoreTest {
         now = now.plusSeconds(60);
         WriteResult second = store.write("a", "project", "second", "2");
         assertInstanceOf(WriteResult.Updated.class, second);
-        assertEquals(1, store.count());
+        assertEquals(1, store.list().size());
         MemoryEntry entry = store.read("a").orElseThrow();
         assertEquals(MemoryType.PROJECT, entry.type());
         assertEquals("2", entry.content());
@@ -109,7 +109,7 @@ class MemoryStoreTest {
         WriteResult.Rejected rejected = assertInstanceOf(WriteResult.Rejected.class,
                 store.write("b", "user", "a description long enough to push the index over eighty bytes", "2"));
         assertTrue(rejected.reason().contains("index"), rejected.reason());
-        assertEquals(1, store.count());
+        assertEquals(1, store.list().size());
     }
 
     @Test

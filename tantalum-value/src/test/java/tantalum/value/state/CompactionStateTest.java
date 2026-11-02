@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import tantalum.value.hook.PromptPatch;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
@@ -83,7 +84,7 @@ class CompactionStateTest {
     void runCarriesCompactionFlags() {
         RunRef ref = new RunRef(USER, SESSION, new RunId("r"));
         Plan plan = new Plan(3, 2, 1, 900, null);
-        Compacting compacting = new Compacting(Compacting.Trigger.OVERFLOW, plan, null, "prompt is too long");
+        Compacting compacting = new Compacting(Compacting.Trigger.OVERFLOW, plan, null, "prompt is too long", PromptPatch.NONE);
         RunState run = RunState.start(ref, new OwnerRef.OfSession(SESSION))
                 .withCompacting(compacting).withAutoCompactionFailed(true).withOverflowRecovered(true);
         assertEquals(compacting, run.compacting());
@@ -92,6 +93,6 @@ class CompactionStateTest {
         assertEquals(compacting, run.withRetries(1).withPhase(new Deciding()).compacting());
         assertNull(run.withCompacting(null).compacting());
         assertThrows(IllegalArgumentException.class, () -> new Plan(0, 0, 0, 0, null));
-        assertThrows(NullPointerException.class, () -> new Compacting(null, plan, null, null));
+        assertThrows(NullPointerException.class, () -> new Compacting(null, plan, null, null, PromptPatch.NONE));
     }
 }

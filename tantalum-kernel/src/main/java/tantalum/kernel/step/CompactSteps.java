@@ -47,6 +47,7 @@ public final class CompactSteps {
     static final String AWAITING_SUMMARY_RETRY = "AwaitingSummaryRetry";
     public static final String COMPACTED = "compacted";
     public static final String NOTHING_TO_COMPACT = "nothing to compact";
+    private static final String NOTHING_FITS = "nothing fits in a summary call";
 
     private CompactSteps() {}
 
@@ -75,16 +76,21 @@ public final class CompactSteps {
             String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work, which is not supported";
             return refused(out, run, compacting, reason);
         }
-        if (Compactor.summaryCanHelp(plan, session.context().compaction())) {
-            sendSummary(out, run, compacting);
-        } else {
-            failed(out, run, compacting, trigger == Trigger.MANUAL ? NOTHING_TO_COMPACT : "too little to summarize");
+        boolean canHelp = Compactor.summaryCanHelp(plan, session.context().compaction());
+        if (canHelp && sendSummary(out, run, compacting)) {
+            return null;
         }
+        String reason = !canHelp ? (trigger == Trigger.MANUAL ? NOTHING_TO_COMPACT : "too little to summarize") : NOTHING_FITS;
+        // 自动压缩在这里放弃时由调用方在同一步里继续原调用；交给 failed 会再跑一遍 beforeModelCall。
+        if (trigger == Trigger.AUTO && !Compactor.trimHelps(session.view(), session.context().compaction())) {
+            return refused(out, run, compacting, reason);
+        }
+        failed(out, run, compacting, reason);
         return null;
     }
 
-    /** 发摘要调用。重试时用同一个计划，prompt 相同。除旧摘要外什么都放不下时不发。 */
-    private static void sendSummary(Outcome out, RunState run, Compacting compacting) {
+    /** 发摘要调用，返回是否发出。重试时用同一个计划，prompt 相同。除旧摘要外什么都放不下时不发。 */
+    private static boolean sendSummary(Outcome out, RunState run, Compacting compacting) {
         SessionState session = out.session(run.ref());
         CompactionSettings settings = session.context().compaction();
         String system = run.system() + compacting.patch().systemAppend();
@@ -94,8 +100,7 @@ public final class CompactSteps {
         long fixed = TokenEstimate.ofText(system) + TokenEstimate.ofTools(tools) + TokenEstimate.ofMessage(instruction);
         Compactor.Head head = Compactor.headForSummary(compacting.plan(), session.view(), settings, fixed);
         if (head.nothingToSummarize()) {
-            failed(out, run, compacting, "nothing fits in a summary call");
-            return;
+            return false;
         }
         List<Message> messages = new ArrayList<>(head.messages());
         messages.add(SummaryPrompt.instruction(head.dropped(), compacting.manualInstructions()));
@@ -106,9 +111,10 @@ public final class CompactSteps {
         CommandId id = out.nextCommandId();
         out.emit(new CallModel(id, run.ref(), prompt));
         out.await(waiting, AWAITING_SUMMARY, Set.of(id));
+        return true;
     }
 
-    /** 钩子拒绝：自动压缩标记后让调用方继续；其他触发方式结束运行。 */
+    /** 不压缩了（钩子拒绝或无从压缩）：自动压缩标记后让调用方继续；其他触发方式结束运行。 */
     private static RunState refused(Outcome out, RunState run, Compacting compacting, String reason) {
         out.report(List.of(new CompactionFailed(run.ref(), compacting.trigger(), reason)));
         if (compacting.trigger() == Trigger.AUTO) {
@@ -122,8 +128,8 @@ public final class CompactSteps {
     }
 
     /**
-     * 手动压缩（决定 D4）：空闲会话上开一个特殊运行，不追加用户消息，不组装上下文（用会话冻结的 system 和工具）。
-     * 会话正在运行、还没有上下文或视图为空时忽略；接口在发布前已把这些情况拦成 409，只有竞争才会走到这里。
+     * 手动压缩：空闲会话上开一个特殊运行，不追加用户消息，不组装上下文（用会话冻结的 system 和工具）。
+     * 会话正在运行、还没有上下文或视图为空时忽略；提交方通常已先拦下这些情况，只有竞争才会走到这里。
      */
     public static Decision requested(StepContext context) {
         CompactRequested event = (CompactRequested) context.envelope().event();
@@ -203,7 +209,9 @@ public final class CompactSteps {
 
     public static Decision summaryRetry(StepContext context) {
         Outcome out = new Outcome(context);
-        sendSummary(out, context.run(), context.run().compacting());
+        if (!sendSummary(out, context.run(), context.run().compacting())) {
+            failed(out, context.run(), context.run().compacting(), NOTHING_FITS);
+        }
         return out.decision();
     }
 

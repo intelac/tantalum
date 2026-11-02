@@ -1,5 +1,7 @@
 package tantalum.shell.web;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -10,10 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
@@ -29,8 +32,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
 import tantalum.shell.auth.LoginCheck;
 import tantalum.shell.auth.UserStore;
@@ -196,7 +197,7 @@ public class ApiController {
         String requestId = request == null ? null : text(request, "requestId");
         String instructions = request == null ? null : text(request, "instructions");
         Engine.Submission result = engine.compact(current(), new SessionId(session),
-                new RequestId(blank(requestId) ? java.util.UUID.randomUUID().toString() : requestId), blank(instructions) ? null : instructions);
+                new RequestId(blank(requestId) ? UUID.randomUUID().toString() : requestId), blank(instructions) ? null : instructions);
         if (result.status() == 404) {
             return error(404, "no such session");
         }

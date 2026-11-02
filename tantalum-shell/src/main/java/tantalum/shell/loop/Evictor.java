@@ -20,16 +20,11 @@ import tantalum.value.state.SessionState;
 public final class Evictor {
 
     /** {@code idle} 为 null 时不按时间回收。{@code snapshotEvents} 是运行结束时写快照的事件数门槛。 */
-    public record Settings(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {
-
-        public static final Settings NEVER = new Settings(null, Integer.MAX_VALUE, Integer.MAX_VALUE, Duration.ofSeconds(1));
-    }
+    public record Settings(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {}
 
     /** 接收要写的快照，不能阻塞。参数都不可变。 */
     @FunctionalInterface
     public interface Sink {
-        Sink NONE = (session, runs, transcript, seq) -> { };
-
         void offer(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq);
     }
 
@@ -55,10 +50,6 @@ public final class Evictor {
         this.projection = projection;
         this.sink = sink;
         this.clock = clock;
-    }
-
-    public static Evictor never(Projection projection) {
-        return new Evictor(Settings.NEVER, new Residency(), projection, Sink.NONE, Clock.systemUTC());
     }
 
     /** 启动时已经在内存的会话。 */

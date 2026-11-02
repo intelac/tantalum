@@ -133,7 +133,6 @@ export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */
   seq: number;
   items: Item[];
-  followUps: number;
   /** 这一页第一个条目在会话里的位置，用作上一页的 `before`。 */
   start: number;
   /** 前面还有更早的条目。 */

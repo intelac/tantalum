@@ -13,8 +13,4 @@ public record MemoryEntry(String name, MemoryType type, String description, Stri
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
-
-    public MemoryEntry withUpdatedAt(Instant at) {
-        return new MemoryEntry(name, type, description, content, at);
-    }
 }

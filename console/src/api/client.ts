@@ -106,7 +106,7 @@ export async function listMessages(session: string, before?: number): Promise<Me
   try {
     return await call(`/api/sessions/${encodeURIComponent(session)}/messages${page}`);
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 404) return { seq: -1, items: [], followUps: 0, start: 0, hasMore: false };
+    if (failure instanceof ApiError && failure.status === 404) return { seq: -1, items: [], start: 0, hasMore: false };
     throw failure;
   }
 }
@@ -131,11 +131,11 @@ export function cancelRun(run: string): Promise<unknown> {
   return call(`/api/runs/${encodeURIComponent(run)}/cancel`, { method: "POST", body: "{}" });
 }
 
-export async function listRuns(session: string): Promise<{ runs: RunView[]; followUps: number }> {
+export async function listRuns(session: string): Promise<{ runs: RunView[] }> {
   try {
     return await call(`/api/sessions/${encodeURIComponent(session)}/runs`);
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 404) return { runs: [], followUps: 0 };
+    if (failure instanceof ApiError && failure.status === 404) return { runs: [] };
     throw failure;
   }
 }

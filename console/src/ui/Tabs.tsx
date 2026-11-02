@@ -45,7 +45,6 @@ export function Tabs({ tabs, selected, onSelect, label, className }: Props) {
             role="tab"
             id={`tab-${tab.id}`}
             aria-selected={active}
-            aria-controls={`panel-${tab.id}`}
             tabIndex={active ? 0 : -1}
             onClick={() => onSelect(tab.id)}
             className={cx(

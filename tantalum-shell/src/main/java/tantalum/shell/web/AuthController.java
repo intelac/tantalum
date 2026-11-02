@@ -75,8 +75,7 @@ public class AuthController {
         }
         throttle.succeeded(username, source);
 
-        // 登录前的会话作废，防止会话固定攻击；它若已登录，断开那个用户的推送连接。
-        // 只断开被替换掉的那次登录的推送连接，同一用户在别处的登录不受影响。
+        // 登录前的会话作废，防止会话固定攻击。它若已登录，只断开这次登录的推送连接，同一用户在别处的登录不受影响。
         Authentication before = SecurityContextHolder.getContext().getAuthentication();
         HttpSession previous = request.getSession(false);
         if (before != null && before.isAuthenticated() && !(before instanceof AnonymousAuthenticationToken) && previous != null) {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class SubmissionLedgerTest {
 
     @Test
     void repeatedRequestGetsTheExistingSubmission() {
-        SubmissionLedger ledger = new SubmissionLedger();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> Optional.empty(), SubmissionLedger.DEFAULT_CAPACITY);
         SubmissionLedger.Claim first = ledger.claim(ALICE, REQUEST);
         SubmissionLedger.Claim second = ledger.claim(ALICE, REQUEST);
         assertTrue(first.isNew());
@@ -30,13 +31,13 @@ class SubmissionLedgerTest {
 
     @Test
     void sameRequestIdFromAnotherUserIsSeparate() {
-        SubmissionLedger ledger = new SubmissionLedger();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> Optional.empty(), SubmissionLedger.DEFAULT_CAPACITY);
         assertNotEquals(ledger.claim(ALICE, REQUEST).submission(), ledger.claim(new Principal("bob"), REQUEST).submission());
     }
 
     @Test
     void releasedClaimCanBeRetried() {
-        SubmissionLedger ledger = new SubmissionLedger();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> Optional.empty(), SubmissionLedger.DEFAULT_CAPACITY);
         ledger.release(ALICE, REQUEST);
         ledger.claim(ALICE, REQUEST);
         ledger.release(ALICE, REQUEST);
@@ -45,7 +46,7 @@ class SubmissionLedgerTest {
 
     @Test
     void onlyOneOfManyConcurrentClaimsWins() throws Exception {
-        SubmissionLedger ledger = new SubmissionLedger();
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> Optional.empty(), SubmissionLedger.DEFAULT_CAPACITY);
         Set<SubmissionId> submissions = ConcurrentHashMap.newKeySet();
         List<Boolean> wins = java.util.Collections.synchronizedList(new ArrayList<>());
         List<Thread> threads = new ArrayList<>();

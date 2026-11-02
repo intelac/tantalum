@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
@@ -43,14 +44,14 @@ class DispatcherTest {
 
     @BeforeEach
     void start() {
-        ring = new InputRing(64, (slot, seq, end) -> results.add(slot.envelope));
+        ring = LoopFixtures.inputRing(64, (slot, seq, end) -> results.add(slot.envelope));
         ring.start();
         publisher = new ResultPublisher(ring, inFlight, Clock.systemUTC(), 0);
     }
 
     @AfterEach
     void stop() {
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     private Dispatcher dispatcher(Handler handler) {
@@ -63,7 +64,7 @@ class DispatcherTest {
         dispatcher.onEvent(slot, 0, true);
     }
 
-    private static Handler handler(Handler.Body body) {
+    private static Handler handler(LoopFixtures.HandlerBody body) {
         return new Handler() {
             @Override public Event handle(Command command) throws Exception { return body.run(command); }
             @Override public Event failed(Command command, Exception failure) {

@@ -6,7 +6,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
@@ -57,8 +59,10 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** 不只绑定本机时，Cookie 必须带 Secure，否则会话会明文经过网络。 */
-    /** {@code server.address} 没设时 Spring 绑定全部网卡，不算回环。 */
+    /**
+     * 不只绑定本机时，Cookie 必须带 Secure，否则会话会明文经过网络。
+     * {@code server.address} 没设时 Spring 绑定全部网卡，不算回环。
+     */
     public static void requireSecureCookie(String address, boolean secure) {
         if (!isLoopback(address) && !secure) {
             throw new IllegalStateException("server.address is " + address + " but the session cookie is not Secure. "
@@ -74,8 +78,8 @@ public class SecurityConfig {
             return true;
         }
         try {
-            return java.net.InetAddress.getByName(address).isLoopbackAddress();
-        } catch (java.net.UnknownHostException unknown) {
+            return InetAddress.getByName(address).isLoopbackAddress();
+        } catch (UnknownHostException unknown) {
             return false;
         }
     }

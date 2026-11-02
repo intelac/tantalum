@@ -7,7 +7,6 @@ export const zh = {
     tagline: "Agent 运行时控制台",
   },
   login: {
-    title: "登录",
     username: "用户名",
     password: "密码",
     submit: "登录",
@@ -47,7 +46,6 @@ export const zh = {
     summary: "摘要",
     queued: "排队中",
     jumpToBottom: "回到底部",
-    you: "你",
   },
   process: {
     running: "正在处理…",
@@ -58,7 +56,6 @@ export const zh = {
     stopped: (seconds: string) => `已停止，用时 ${seconds}`,
     thinking: "思考",
     thinkingRedacted: "思考内容已被供应商隐藏",
-    tool: "调用工具",
     toolWaiting: "等待中",
     toolRunning: "运行中",
     toolDone: "完成",
@@ -70,8 +67,6 @@ export const zh = {
     synthesized: "合成结果",
     outcomeUnknown: "结果未知：工具可能已执行",
     abortedBeforeDispatch: "运行结束前未发出",
-    expand: "展开",
-    collapse: "收起",
   },
   failure: {
     CONTEXT_OVERFLOW: "上下文超长，模型放不下这段对话。请开一个新会话继续，记忆会带过去",
@@ -92,9 +87,8 @@ export const zh = {
     placeholder: "给 Tantalum 发消息",
     send: "发送",
     stop: "停止",
-    steer: "插话",
     followUp: "排队",
-    queueHint: "运行中：Enter 插话，Shift+Enter 换行",
+    queueHint: "运行中：Enter 排队，Shift+Enter 换行",
     hint: "Enter 发送，Shift+Enter 换行",
     queued: (count: number) => `${count} 条排队中`,
     queueTitle: "排队中",
@@ -180,12 +174,10 @@ export const zh = {
     keyNotice: "API Key 只从服务端环境变量读取，这里不提供输入。",
     contextWindow: "上下文窗口",
     appearanceHint: "选择在刷新后保留。",
-    close: "关闭",
   },
   connection: {
     offline: "连接已断开，正在重连…",
     halted: "服务已停止处理事件，请重启服务后刷新",
-    unauthorized: "登录已过期，请重新登录",
   },
   error: {
     busy: "系统繁忙，请稍后重试（429）",
@@ -228,7 +220,6 @@ export const zh = {
     close: "关闭",
     cancel: "取消",
     confirm: "确定",
-    menu: "菜单",
     loading: "加载中…",
   },
 } as const;

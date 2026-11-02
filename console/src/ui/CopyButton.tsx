@@ -1,16 +1,15 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { zh } from "../text/zh";
-import { Button, type ButtonSize } from "./Button";
+import { Button } from "./Button";
 
 interface Props {
   text: string;
-  size?: ButtonSize;
   className?: string;
 }
 
 /** 复制到剪贴板，成功后短暂显示对勾。 */
-export function CopyButton({ text, size = "sm", className }: Props) {
+export function CopyButton({ text, className }: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -31,7 +30,7 @@ export function CopyButton({ text, size = "sm", className }: Props) {
   return (
     <Button
       variant="icon"
-      size={size}
+      size="sm"
       className={className}
       aria-label={copied ? zh.conversation.copied : zh.conversation.copy}
       title={copied ? zh.conversation.copied : zh.conversation.copy}

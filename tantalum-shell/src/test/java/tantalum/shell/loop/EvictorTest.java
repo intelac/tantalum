@@ -183,7 +183,7 @@ class EvictorTest {
 
     @Test
     void sweepsAreThrottled() {
-        Evictor evictor = new Evictor(new Evictor.Settings(NONE, 1000, 200, Duration.ofSeconds(1)), residency, Projection.NONE, Evictor.Sink.NONE, clock);
+        Evictor evictor = new Evictor(new Evictor.Settings(NONE, 1000, 200, Duration.ofSeconds(1)), residency, LoopFixtures.NO_PROJECTION, LoopFixtures.NO_SINK, clock);
         KernelState state = state(idle(A));
         evictor.sweep(state);
         touch(evictor, A, state, state);

@@ -19,10 +19,6 @@ public final class TailSequence implements Sequence {
     private final int step;
     private final Map<Principal, AtomicLong> next = new ConcurrentHashMap<>();
 
-    public TailSequence(SessionPaths paths) {
-        this(paths, 1);
-    }
-
     /** {@code step} 大于 1 时跳号。以后多实例接管会产生跳号，回归测试用它证明没有代码依赖连续。 */
     public TailSequence(SessionPaths paths, int step) {
         this.paths = paths;

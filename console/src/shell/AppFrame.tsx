@@ -18,8 +18,6 @@ import {
 export interface SidebarState {
   /** 只显示图标。 */
   rail: boolean;
-  /** 当前是抽屉（覆盖在内容上）。 */
-  drawer: boolean;
   toggle: () => void;
   close: () => void;
 }
@@ -97,7 +95,6 @@ export function AppFrame({ sidebar, header, children }: Props) {
   const rail = mode === "medium" || (mode === "wide" && collapsed);
   const docked = mode === "wide" || mode === "medium";
   const dockedWidth = rail ? RAIL_WIDTH : width;
-  const state: SidebarState = { rail: rail && !drawerOpen, drawer: drawerOpen, toggle, close };
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-canvas text-fg">
@@ -107,7 +104,7 @@ export function AppFrame({ sidebar, header, children }: Props) {
           style={{ width: dockedWidth }}
           aria-label={zh.sidebar.sessions}
         >
-          {sidebar({ ...state, rail })}
+          {sidebar({ rail, toggle, close })}
           {mode === "wide" && !collapsed && (
             <div
               role="separator"
@@ -130,7 +127,7 @@ export function AppFrame({ sidebar, header, children }: Props) {
             className="relative flex h-full w-[min(var(--sidebar-width),85vw)] flex-col border-r border-line bg-sidebar shadow-xl"
             aria-label={zh.sidebar.sessions}
           >
-            {sidebar({ ...state, rail: false })}
+            {sidebar({ rail: false, toggle, close })}
           </aside>
         </div>
       )}

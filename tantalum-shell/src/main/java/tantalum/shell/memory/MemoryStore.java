@@ -114,10 +114,6 @@ public final class MemoryStore {
         return entries;
     }
 
-    public int count() {
-        return list().size();
-    }
-
     public Optional<MemoryEntry> read(String name) {
         if (!MemoryFormat.isValidName(name)) {
             return Optional.empty();

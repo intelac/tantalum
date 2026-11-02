@@ -6,8 +6,13 @@ import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -45,10 +50,10 @@ final class McpConnection implements AutoCloseable {
     /** 会话失效引起的换客户端：不算失败，不退避。 */
     private boolean rotating;
     private volatile long generation;
-    private final java.util.Set<Call> inFlight = new java.util.HashSet<>();
+    private final Set<Call> inFlight = new HashSet<>();
     /** 换下来的客户端：等在途调用走完再关。 */
-    private final java.util.Set<McpSyncClient> retired = java.util.concurrent.ConcurrentHashMap.newKeySet();
-    private final java.util.concurrent.CountDownLatch firstAttempt = new java.util.concurrent.CountDownLatch(1);
+    private final Set<McpSyncClient> retired = ConcurrentHashMap.newKeySet();
+    private final CountDownLatch firstAttempt = new CountDownLatch(1);
 
     McpConnection(McpSettings.Server server, Policy policy, Consumer<List<McpSchema.Tool>> onTools) {
         this.server = server;
@@ -68,7 +73,7 @@ final class McpConnection implements AutoCloseable {
 
     /** 等第一次连接尝试结束（无论成败），最多等 {@code limit}。 */
     void awaitFirstAttempt(Duration limit) throws InterruptedException {
-        firstAttempt.await(limit.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        firstAttempt.await(limit.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     List<McpSchema.Tool> tools() {

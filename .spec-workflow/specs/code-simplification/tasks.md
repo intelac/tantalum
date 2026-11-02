@@ -8,37 +8,37 @@
 
 ## 阶段 1：清理和小问题
 
-- [ ] 1. 钩子执行两次（先写测试）
+- [x] 1. 钩子执行两次（先写测试）
   - File: kernel/step/CompactSteps.java；测试 CompactStepsTest
   - 测试：自动压缩“内容太少、裁剪也帮不上”时，计数的 `beforeModelCall` 钩子在这一步只被调一次，事实只报告一次，`WorkDone` 仍传给钩子；先确认它在现有代码上失败。修复：`tryStart` 这种情况下报告、标记 `autoCompactionFailed`、返回运行
   - 验证：新测试通过，`CompactStepsTest` 全部通过
   - _Requirements: 1.1_
 
-- [ ] 2. 删管线里测试专用的入口
+- [x] 2. 删管线里测试专用的入口
   - File: `shell/loop/{Cleanroom,UserLane,JournalDispatcher,CleanroomRing,InputRing,OutputRing,SubmissionLedger,TailSequence,Evictor,Projection,StepListener}.java`, shell/store/SessionFiles.java；测试新增 LoopFixtures
   - 删旧构造函数和重载；`NONE`、`never`、`Settings.NEVER` 移到测试
   - 验证：shell 和 examples 编译、测试通过；主代码里 grep 不到被删的名字
   - _Requirements: 2.9, 4.2_
 
-- [ ] 3. 删其余死代码和测试专用方法
+- [x] 3. 删其余死代码和测试专用方法
   - File: shell/boot/Engine.java（`transcript()`）、shell/store/SessionStore.java（`readUser`）、`shell/memory/{MemoryEntry,MemoryStores,MemoryStore}.java`、`shell/handler/{Handler,ContextHandler}.java`、shell/sse/SseHub.java、shell/auth/UserStore.java（`hashExists`）、shell/conversation/Transcript.java（`sessions()`）、kernel/compaction/Units.java、`value/…/{ToolRound,Compacting}.java`
   - 删掉之前逐个 grep 全部模块，确认只有测试或没人用
   - 验证：全部模块编译、测试通过
   - _Requirements: 2.9, 4.2_
 
-- [ ] 4. 注释
+- [x] 4. 注释
   - File: shell/sse/SseHub.java, shell/mcp/McpToolFilter.java, shell/web/AuthController.java, shell/auth/SecurityConfig.java, shell/journal/JsonText.java, `shell/boot/{Engine,TantalumProperties}.java`, `shell/loop/{Cleanroom,Dispatcher}.java`, shell/store/SessionReplay.java, shell/journal/StoreLock.java, kernel/compaction/Trimming.java, kernel/step/CompactSteps.java 等
   - 删叠层的旧注释；编号改成含义；删历史叙述；全限定类名改 import
   - 验证：grep 主代码里 `/\*\*` 连续两行的情况为零；`H[0-9]`、`需求 [0-9]` 只出现在 pi/DSH 出处之外的地方为零
   - _Requirements: 4.1_
 
-- [ ] 5. 前端清理和小问题
+- [x] 5. 前端清理和小问题
   - File: `console/shell/{Sidebar,AppFrame}.tsx`, console/composer/Composer.tsx, `console/ui/{Dialog,Menu,CopyButton,Tabs}.tsx`, `console/api/{types,client}.ts`, console/text/zh.ts, console/process/ProcessGroup.tsx
   - 删无用属性、隐藏图标、`followUps`、9 个无用文案键、错误的 `aria-controls`；`queueHint` 改成“Enter 排队”，删 `steer` 文案；`headerText` 去掉 `now`，`ProcessGroup` 不再调 `useNow`
   - 验证：`tsc`、vitest、Playwright 通过；`run-control.spec` 里的排队提示断言更新
   - _Requirements: 1.2, 1.5, 4.2_
 
-- [ ] 6. 文档和阶段 1 收尾
+- [x] 6. 文档和阶段 1 收尾
   - File: README.md（跳号回归）
   - 验证：全量回归；变异检查（撤掉任务 1 的修复，新测试失败）；提交；汇报
   - _Requirements: C7_

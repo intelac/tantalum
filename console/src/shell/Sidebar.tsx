@@ -1,4 +1,4 @@
-import { LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Settings, SquarePen } from "lucide-react";
+import { LogOut, MoreHorizontal, PanelLeftClose, Settings, SquarePen } from "lucide-react";
 import type { SessionSummary } from "../api/types";
 import { zh } from "../text/zh";
 import { Button } from "../ui/Button";
@@ -103,7 +103,6 @@ export function Sidebar({
         <span className="truncate text-xs text-fg-faint" title={username}>
           {username}
         </span>
-        <PanelLeftOpen className="hidden" size={0} aria-hidden="true" />
       </div>
     </div>
   );

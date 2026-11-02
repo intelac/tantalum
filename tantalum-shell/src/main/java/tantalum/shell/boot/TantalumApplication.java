@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +41,7 @@ public class TantalumApplication {
 
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && args[0].equals("users")) {
-            String[] command = java.util.Arrays.copyOfRange(args, 1, args.length);
+            String[] command = Arrays.copyOfRange(args, 1, args.length);
             System.exit(UserCommand.run(command, dataDirFromEnvironment(),
                     new BufferedReader(new InputStreamReader(System.in)), System.out));
         }

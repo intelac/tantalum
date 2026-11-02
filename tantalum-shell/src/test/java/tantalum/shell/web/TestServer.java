@@ -98,7 +98,7 @@ public final class TestServer implements AutoCloseable {
 
     private String login(String username) {
         try {
-            if (users().hashExists(username) == false) {
+            if (users().status(username).isEmpty()) {
                 users().add(username, PASSWORD);
             }
             HttpResponse<String> response = attemptLogin(username, PASSWORD, null);

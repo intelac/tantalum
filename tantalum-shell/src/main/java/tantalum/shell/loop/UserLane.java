@@ -37,27 +37,18 @@ public final class UserLane {
     }
 
     /** 重放一个冷会话里序号小于 {@code beforeSeq} 的事件。没有这样的事件（全新会话）时为空。 */
-    @FunctionalInterface
     public interface Loader {
-        Loader NONE = (principal, session, beforeSeq) -> Optional.empty();
-
         Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
 
         /** 这个用户序号小于 {@code beforeSeq} 的累计用量。为 null 时不并入。 */
-        default PrincipalState usage(Principal principal, long beforeSeq) throws Exception {
-            return null;
-        }
+        PrincipalState usage(Principal principal, long beforeSeq) throws Exception;
     }
 
     /** 通道的下游。 */
     interface Exit {
         boolean halted();
 
-        boolean publish(EventEnvelope envelope);
-
-        default boolean publish(EventEnvelope envelope, Preload preload) {
-            return publish(envelope);
-        }
+        boolean publish(EventEnvelope envelope, Preload preload);
 
         /** 写入失败，进程停止处理事件。 */
         void failed(Throwable failure);
@@ -76,10 +67,6 @@ public final class UserLane {
     private boolean running;
     /** 只有通道线程访问。用户的用量在本进程只载入一次，跟着他的第一个事件。 */
     private boolean usageLoaded;
-
-    UserLane(Principal principal, Sequence sequence, Writer writer, Exit exit) {
-        this(principal, sequence, writer, exit, Loader.NONE, new Residency());
-    }
 
     UserLane(Principal principal, Sequence sequence, Writer writer, Exit exit, Loader loader, Residency residency) {
         this.loader = loader;

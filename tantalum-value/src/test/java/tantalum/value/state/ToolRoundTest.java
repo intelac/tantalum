@@ -42,7 +42,7 @@ class ToolRoundTest {
 
     @Test
     void resultsKeepModelOrder() {
-        ToolRound round = new ToolRound(List.of(ToolSlot.pending(call("a"), true), ToolSlot.pending(call("b"), true)));
+        ToolRound round = new ToolRound(List.of(ToolSlot.pending(call("a"), true), ToolSlot.pending(call("b"), true)), 2);
         assertFalse(round.allFinished());
 
         ToolRound updated = round

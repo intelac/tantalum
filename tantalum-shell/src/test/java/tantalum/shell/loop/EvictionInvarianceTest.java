@@ -139,16 +139,16 @@ class EvictionInvarianceTest {
             this.replay = replay;
             Residency residency = new Residency();
             transcript = new Transcript();
-            Evictor evictor = mode == Mode.NEVER ? new Evictor(Evictor.Settings.NEVER, residency, transcript, Evictor.Sink.NONE, Clock.systemUTC())
+            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, transcript, LoopFixtures.NO_SINK, Clock.systemUTC())
                     // 快照配置下运行结束也写快照（门槛 1 个事件），回收时快照已是最新，载入用的就是运行结束时写的那份。
                     : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, mode == Mode.FROM_SNAPSHOT ? 1 : Integer.MAX_VALUE, Duration.ZERO),
                             residency, transcript,
-                            mode == Mode.FROM_SNAPSHOT ? snapshots : Evictor.Sink.NONE, Clock.systemUTC());
+                            mode == Mode.FROM_SNAPSHOT ? snapshots : LoopFixtures.NO_SINK, Clock.systemUTC());
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
-            dispatcher = new JournalDispatcher(64, new TailSequence(paths), files::append, ring::tryPublish,
-                    (principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq), residency);
+            dispatcher = new JournalDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
+                    LoopFixtures.loader((principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq)), residency);
             FactListener facts = new FactListener() {
                 @Override
                 public void onFact(long seq, int index, Fact fact) {

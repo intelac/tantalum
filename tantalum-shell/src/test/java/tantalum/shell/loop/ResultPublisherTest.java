@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -36,7 +37,7 @@ class ResultPublisherTest {
     private InputRing ring;
 
     private ResultPublisher publisher(int size, int reserve) {
-        ring = new InputRing(size, (slot, seq, end) -> {
+        ring = LoopFixtures.inputRing(size, (slot, seq, end) -> {
             release.await();
             received.add(slot.envelope);
         });
@@ -59,7 +60,7 @@ class ResultPublisherTest {
     @AfterEach
     void stop() {
         release.countDown();
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test

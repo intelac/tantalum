@@ -43,8 +43,8 @@ class SseHubTest {
     @Test
     void factGoesOnlyToItsOwner() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription alice = hub.subscribe(ALICE, null);
-        SseHub.Subscription bob = hub.subscribe(BOB, null);
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription bob = hub.subscribe(BOB, null, null);
 
         hub.onFact(0, 0, fact(ALICE, "AwaitingModel"));
 
@@ -58,8 +58,8 @@ class SseHubTest {
     @Test
     void chunkGoesOnlyToItsOwnerAndHasNoId() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription alice = hub.subscribe(ALICE, null);
-        SseHub.Subscription bob = hub.subscribe(BOB, null);
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription bob = hub.subscribe(BOB, null, null);
 
         hub.onChunk(run(ALICE), "text", "Hel");
 
@@ -73,8 +73,8 @@ class SseHubTest {
     @Test
     void slowSubscriberIsCutOffWithoutAffectingOthers() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription slow = hub.subscribe(ALICE, null);
-        SseHub.Subscription fast = hub.subscribe(ALICE, null);
+        SseHub.Subscription slow = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription fast = hub.subscribe(ALICE, null, null);
 
         for (int i = 0; i < 6; i++) {
             hub.onFact(i, 0, fact(ALICE, "p" + i));
@@ -93,7 +93,7 @@ class SseHubTest {
         hub.onFact(1, 1, fact(ALICE, "c"));
         hub.onFact(2, 0, fact(BOB, "other"));
 
-        SseHub.Subscription again = hub.subscribe(ALICE, "0.0");
+        SseHub.Subscription again = hub.subscribe(ALICE, null, "0.0");
 
         assertEquals("1.0", again.poll(1, TimeUnit.SECONDS).id());
         assertEquals("1.1", again.poll(1, TimeUnit.SECONDS).id());
@@ -105,7 +105,7 @@ class SseHubTest {
         SseHub hub = hub();
         hub.onFact(1, 0, fact(ALICE, "b"));
         hub.onFact(1, 1, fact(ALICE, "c"));
-        SseHub.Subscription again = hub.subscribe(ALICE, "1.0");
+        SseHub.Subscription again = hub.subscribe(ALICE, null, "1.0");
         assertEquals("1.1", again.poll(1, TimeUnit.SECONDS).id());
     }
 
@@ -116,7 +116,7 @@ class SseHubTest {
             asked.add(principal.value() + "@" + after);
             return List.of(new SseMessage("50.0", "PhaseChanged", "{}"));
         }, MAPPER);
-        SseHub.Subscription again = hub.subscribe(ALICE, "3.0");
+        SseHub.Subscription again = hub.subscribe(ALICE, null, "3.0");
         assertEquals(List.of("alice@3.0"), asked);
         assertEquals("50.0", again.poll(1, TimeUnit.SECONDS).id());
     }
@@ -131,7 +131,7 @@ class SseHubTest {
         for (int i = 0; i < 5; i++) {
             hub.onFact(i, 0, fact(ALICE, "p"));
         }
-        hub.subscribe(ALICE, "0.0");
+        hub.subscribe(ALICE, null, "0.0");
         assertEquals(List.of("0.0"), asked);
     }
 
@@ -146,13 +146,13 @@ class SseHubTest {
         hub.onFact(5, 0, fact(ALICE, "a"));
         hub.onFact(5, 1, fact(ALICE, "b"));
         hub.onFact(6, 0, fact(ALICE, "c"));   // 挤出 5.0
-        SseHub.Subscription atFiveZero = hub.subscribe(ALICE, "5.0");
+        SseHub.Subscription atFiveZero = hub.subscribe(ALICE, null, "5.0");
         assertEquals(List.of(), asked, "5.0 itself was evicted but everything after it is in memory");
         assertEquals("5.1", atFiveZero.poll(1, TimeUnit.SECONDS).id());
         assertEquals("6.0", atFiveZero.poll(1, TimeUnit.SECONDS).id());
 
         hub.onFact(7, 0, fact(ALICE, "d"));   // 挤出 5.1
-        hub.subscribe(ALICE, "5.0");
+        hub.subscribe(ALICE, null, "5.0");
         assertEquals(List.of("5.0"), asked, "5.1 is gone from memory, so 5.0 must replay from the journal");
     }
 
@@ -170,11 +170,11 @@ class SseHubTest {
         hub.onFact(101, 0, fact(ALICE, "c")); // 挤出 bob 的 5.0
         hub.onFact(102, 0, fact(ALICE, "d")); // 挤出 alice 的 100.0
 
-        SseHub.Subscription bob = hub.subscribe(BOB, "5.0");
+        SseHub.Subscription bob = hub.subscribe(BOB, null, "5.0");
         assertEquals(List.of(), asked);
         assertEquals("6.0", bob.poll(1, TimeUnit.SECONDS).id());
 
-        hub.subscribe(ALICE, "99.0");
+        hub.subscribe(ALICE, null, "99.0");
         assertEquals(List.of("alice@99.0"), asked);
     }
 
@@ -186,7 +186,7 @@ class SseHubTest {
         hub.onFact(1, 0, fact(BOB, "b"));
         hub.onFact(2, 0, fact(ALICE, "a"));
         hub.onFact(2, 0, fact(BOB, "b"));
-        SseHub.Subscription alice = hub.subscribe(ALICE, "1.0");
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, "1.0");
         assertEquals("2.0", alice.poll(1, TimeUnit.SECONDS).id());
         assertEquals(null, alice.poll(50, TimeUnit.MILLISECONDS));
     }
@@ -194,14 +194,14 @@ class SseHubTest {
     @Test
     void failedHistoryReplayDoesNotLeakTheSubscription() {
         SseHub hub = new SseHub(4, 8, (principal, after) -> { throw new IllegalStateException("journal gone"); }, MAPPER);
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> hub.subscribe(ALICE, "1.0"));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> hub.subscribe(ALICE, null, "1.0"));
         assertEquals(0, hub.subscriberCount());
     }
 
     @Test
     void closedSubscriptionsLeaveNoEntryBehind() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription alice = hub.subscribe(ALICE, null);
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
         hub.onChunk(run(BOB), "text", "bob never subscribed");
         hub.closeAll(BOB);
         assertEquals(1, hub.subscriberCount());
@@ -216,7 +216,7 @@ class SseHubTest {
             history.add(new SseMessage(i + ".0", "PhaseChanged", "{}"));
         }
         SseHub hub = new SseHub(4, 8, (principal, after) -> history, MAPPER);
-        SseHub.Subscription again = hub.subscribe(ALICE, "-1.0");
+        SseHub.Subscription again = hub.subscribe(ALICE, null, "-1.0");
         assertFalse(again.closed());
         for (int i = 0; i < 50; i++) {
             assertEquals(i + ".0", again.poll(1, TimeUnit.SECONDS).id());
@@ -227,15 +227,15 @@ class SseHubTest {
     void badLastEventIdStartsFromNow() throws Exception {
         SseHub hub = hub();
         hub.onFact(0, 0, fact(ALICE, "a"));
-        assertNull(hub.subscribe(ALICE, "garbage").poll(50, TimeUnit.MILLISECONDS));
+        assertNull(hub.subscribe(ALICE, null, "garbage").poll(50, TimeUnit.MILLISECONDS));
     }
 
     @Test
     void closeAllEndsOnlyThatUsersSubscriptions() {
         SseHub hub = hub();
-        SseHub.Subscription first = hub.subscribe(ALICE, null);
-        SseHub.Subscription second = hub.subscribe(ALICE, null);
-        SseHub.Subscription other = hub.subscribe(BOB, null);
+        SseHub.Subscription first = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription second = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription other = hub.subscribe(BOB, null, null);
         hub.closeAll(ALICE);
         assertTrue(first.closed());
         assertTrue(second.closed());
@@ -262,7 +262,7 @@ class SseHubTest {
     @Test
     void closedSubscriptionStopsReceiving() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription subscription = hub.subscribe(ALICE, null);
+        SseHub.Subscription subscription = hub.subscribe(ALICE, null, null);
         subscription.close();
         hub.onFact(0, 0, fact(ALICE, "a"));
         assertNull(subscription.poll(50, TimeUnit.MILLISECONDS));
@@ -271,8 +271,8 @@ class SseHubTest {
     @Test
     void itemGoesOnlyToItsOwnerAndCanBeReadAgainAfterReconnect() throws Exception {
         SseHub hub = hub();
-        SseHub.Subscription alice = hub.subscribe(ALICE, null);
-        SseHub.Subscription bob = hub.subscribe(BOB, null);
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription bob = hub.subscribe(BOB, null, null);
         TranscriptItem.ToolStep step = TranscriptItem.ToolStep.waiting("3.1", new SessionId("s-alice"), new RunId("r-alice"),
                 Instant.EPOCH, new ToolCallBlock("c1", "read_file", "{\"path\":\"a\"}", new Json.Obj(Map.of("path", new Json.Str("a")))));
 
@@ -288,7 +288,7 @@ class SseHubTest {
         assertTrue(message.data().contains("\"status\":\"RUNNING\""), message.data());
         assertNull(bob.poll(50, TimeUnit.MILLISECONDS));
 
-        SseHub.Subscription again = hub.subscribe(ALICE, "3.0");
+        SseHub.Subscription again = hub.subscribe(ALICE, null, "3.0");
         assertEquals("3.1", again.poll(1, TimeUnit.SECONDS).id());
     }
 }

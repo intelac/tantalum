@@ -1,10 +1,13 @@
 package tantalum.shell.tool;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.plugin.Tool;
@@ -29,7 +32,7 @@ public final class ToolCatalog {
     };
 
     private final Map<String, Tool> tools = new LinkedHashMap<>();
-    private final Map<String, CallLimiter> limiters = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
     private final Map<String, Integer> limits = new HashMap<>();
 
     public void register(Tool tool) {
@@ -64,9 +67,9 @@ public final class ToolCatalog {
 
     /** 按名称排序，工具顺序不随注册或连接的先后变化，缓存前缀才稳定。 */
     public List<ToolSpec> specs() {
-        return java.util.stream.Stream.concat(tools.values().stream(),
+        return Stream.concat(tools.values().stream(),
                         source.tools().stream().filter(tool -> !tools.containsKey(tool.name())))
-                .sorted(java.util.Comparator.comparing(Tool::name))
+                .sorted(Comparator.comparing(Tool::name))
                 .map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
     }
 

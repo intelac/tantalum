@@ -137,10 +137,10 @@ describe("ProcessGroup", () => {
     store.applyChunk("run-0", "reasoning", "想一想");
     render(<ProcessGroup store={store} run="run-0" statusId="run:run-0" ids={[]} />);
     expect(screen.getByText("想一想")).not.toBeNull();
-    expect(headerText(undefined, 0)).toBe("正在处理…");
-    expect(headerText({ ...status, endReason: "FAILED" }, 0)).toBe("已失败，用时 32 秒");
-    expect(headerText({ ...status, endReason: "CANCELLED" }, 0)).toBe("已取消，用时 32 秒");
-    expect(headerText({ ...status, endReason: "CANCELLED", detail: "interrupted by restart" }, 0)).toBe("已中断，用时 32 秒");
+    expect(headerText(undefined)).toBe("正在处理…");
+    expect(headerText({ ...status, endReason: "FAILED" })).toBe("已失败，用时 32 秒");
+    expect(headerText({ ...status, endReason: "CANCELLED" })).toBe("已取消，用时 32 秒");
+    expect(headerText({ ...status, endReason: "CANCELLED", detail: "interrupted by restart" })).toBe("已中断，用时 32 秒");
   });
 });
 

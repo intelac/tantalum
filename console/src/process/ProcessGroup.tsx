@@ -8,7 +8,6 @@ import { formatDuration } from "../text/time";
 import { zh } from "../text/zh";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolChain } from "./ToolChain";
-import { useNow } from "./useNow";
 
 interface Props {
   store: ConversationStore;
@@ -18,7 +17,7 @@ interface Props {
   ids: readonly string[];
 }
 
-export function headerText(status: RunStatusItem | undefined, now: number): string {
+export function headerText(status: RunStatusItem | undefined): string {
   if (status === undefined || status.endReason === undefined) return zh.process.running;
   const elapsed = formatDuration(new Date(status.updatedAt).getTime() - new Date(status.at).getTime());
   switch (status.endReason) {
@@ -31,7 +30,6 @@ export function headerText(status: RunStatusItem | undefined, now: number): stri
     case "STOPPED":
       return zh.process.stopped(elapsed);
   }
-  return formatDuration(now - new Date(status.at).getTime());
 }
 
 /** 一段连续 ID 的类型，用来把相邻的工具步骤合成一条工具链。 */
@@ -68,7 +66,6 @@ export function ProcessGroup({ store, run, statusId, ids }: Props) {
   const live = useLive(store, run);
   const runStatus = status?.kind === "run" ? status : undefined;
   const ended = runStatus?.endReason !== undefined;
-  const now = useNow(!ended);
   const [open, setOpen] = useState(!ended);
 
   useEffect(() => {
@@ -79,7 +76,7 @@ export function ProcessGroup({ store, run, statusId, ids }: Props) {
   if (ids.length === 0 && !hasLiveReasoning) return null;
 
   return (
-    <section className="my-2 border-b border-line pb-2" aria-label={headerText(runStatus, now)}>
+    <section className="my-2 border-b border-line pb-2" aria-label={headerText(runStatus)}>
       <button
         type="button"
         aria-expanded={open}
@@ -87,7 +84,7 @@ export function ProcessGroup({ store, run, statusId, ids }: Props) {
         className="flex w-full items-center gap-1.5 py-1 text-left text-sm text-fg-muted hover:text-fg"
       >
         {!ended && <Loader2 size={14} className="animate-spin text-accent" aria-hidden="true" />}
-        <span>{headerText(runStatus, now)}</span>
+        <span>{headerText(runStatus)}</span>
         {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
       </button>
       {open && (

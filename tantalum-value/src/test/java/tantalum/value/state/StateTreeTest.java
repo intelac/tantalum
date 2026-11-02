@@ -29,7 +29,7 @@ class StateTreeTest {
         RunState run = RunState.start(REF, OWNER);
         RunState changed = run.withPhase(new Awaiting(Set.of(), "AwaitingModel"))
                 .withContext("sys", List.of())
-                .withTools(new ToolRound(List.of()))
+                .withTools(new ToolRound(List.of(), 0))
                 .withPendingSteers(List.of(Message.user("x")))
                 .withRetries(2);
 

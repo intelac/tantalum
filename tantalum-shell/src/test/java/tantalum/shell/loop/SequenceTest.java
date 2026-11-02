@@ -36,7 +36,7 @@ class SequenceTest {
     }
 
     private TailSequence sequence() {
-        return new TailSequence(new SessionPaths(dir));
+        return new TailSequence(new SessionPaths(dir), 1);
     }
 
     @Test

@@ -7,15 +7,12 @@ import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { clearDraft, readDraft, saveDraft } from "./drafts";
 
-export interface ComposerProps {
+interface Props {
   session: string;
   /** 当前运行；没有或已结束时为空。 */
   activeRun: string | null;
   modelName: string;
   cloud: boolean;
-  /** 窄屏时隐藏模型名。 */
-  compact?: boolean;
-  onSubmitted?: () => void;
 }
 
 const MAX_HEIGHT = 200;
@@ -24,7 +21,7 @@ const MAX_HEIGHT = 200;
  * 大圆角输入卡片。Enter 发送、Shift+Enter 换行、输入法组字时 Enter 不发送。
  * 运行中提交进入排队，并多一个停止按钮。被拒绝时保留内容，重试用同一个 requestId。
  */
-export function Composer({ session, activeRun, modelName, cloud, compact = false, onSubmitted }: ComposerProps) {
+export function Composer({ session, activeRun, modelName, cloud }: Props) {
   const [text, setText] = useState(() => readDraft(session));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,7 +65,6 @@ export function Composer({ session, activeRun, modelName, cloud, compact = false
       failedContent.current = null;
       setText("");
       clearDraft(session);
-      onSubmitted?.();
     } catch (failure) {
       failedContent.current = content;
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -119,12 +115,10 @@ export function Composer({ session, activeRun, modelName, cloud, compact = false
           {/* 左侧加号的位置留空，按 spec 不做附件。 */}
           <span className="w-8" aria-hidden="true" />
           <span className="flex-1" />
-          {!compact && (
-            <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
-              {modelName}
-              <span className="ml-1 text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
-            </span>
-          )}
+          <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
+            {modelName}
+            <span className="ml-1 text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
+          </span>
           {running && (
             <Button
               variant="icon"

@@ -65,12 +65,12 @@ public final class JsonText {
         };
     }
 
-    /** 转成 Jackson 和 SDK 都接受的普通 Java 对象。 */
     /** {@link #toPlain} 的反向：把普通的 Map、List、标量变成 {@code Json}。 */
     public static Json fromPlain(Object value) {
         return parseOrNull(MAPPER.writeValueAsString(value));
     }
 
+    /** 转成 Jackson 和 SDK 都接受的普通 Java 对象。 */
     public static Object toPlain(Json value) {
         return switch (value) {
             case Json.Null ignored -> null;
