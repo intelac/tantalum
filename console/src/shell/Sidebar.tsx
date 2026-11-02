@@ -76,7 +76,7 @@ export function Sidebar({
         <ul className="flex flex-col gap-0.5">
           {current && (
             <SessionRow
-              session={{ id: currentSession, title: "", lastActivity: new Date().toISOString(), runStatus: "idle", pendingRecovery: false }}
+              session={{ id: currentSession, title: "", lastActivity: new Date().toISOString(), runStatus: "idle" }}
               selected
               onSelect={onSelectSession}
             />

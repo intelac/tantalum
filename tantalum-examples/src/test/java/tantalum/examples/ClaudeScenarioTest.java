@@ -457,6 +457,100 @@ class ClaudeScenarioTest {
     }
 
     /**
+     * 需求 9.5、H9。风险：工具调用途中崩溃后，历史里是带 thinking 签名的回复加一条合成的工具结果，只有真实服务能判断是否合法。
+     * 工具执行中复制数据目录，得到和崩溃相同的磁盘内容，再用副本启动。判定：严格校验下继续提交没有 400，
+     * 运行完成，模型知道那次调用结果未知；崩溃时的调用没有被重新执行。
+     */
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.MINUTES)
+    void crashDuringAToolCallThenTheConversationContinuesUnderStrictChecks() throws Exception {
+        Path workspace = workspace("crash");
+        Path data = temp.resolve("data-crash");
+        Path restored = temp.resolve("data-crash-restored");
+        AtomicInteger executions = new AtomicInteger();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Tool transfer = recordTransfer(executions, entered, release);
+        Consumer<GenericApplicationContext> plugins = context -> context.registerBean("transfer", Tool.class, () -> transfer);
+
+        try (TestServer server = new TestServer(data, workspace, strictClaude("high"), plugins)) {
+            submit(server, "crash", "s1", "A ledger starts at 3 and each entry doubles the previous one and subtracts 1. Work out the fourth "
+                    + "entry, verify your arithmetic, then call record_transfer once with that number as amount.");
+            assertTrue(entered.await(4, TimeUnit.MINUTES), "the tool was never called");
+            copySessionData(data, restored);
+        } finally {
+            release.countDown();
+        }
+        int executedBeforeCrash = executions.get();
+        assertEquals(1, executedBeforeCrash);
+
+        try (TestServer server = new TestServer(restored, workspace, strictClaude("high"), plugins)) {
+            JsonNode interrupted = waitForLatestRun(server, "crash", "s1", Duration.ofSeconds(10));
+            assertEquals("CANCELLED", interrupted.get("endReason").asString(), interrupted.toString());
+            assertEquals("interrupted by restart", interrupted.get("detail").asString(), interrupted.toString());
+
+            submit(server, "crash", "s1", "The service restarted. Did the record_transfer call definitely succeed? "
+                    + "Do not call it again. Answer in one sentence and start with YES, NO or UNKNOWN.");
+            // 提交返回时新运行可能还没进内核，先等它出现，否则读到的是上一个运行。
+            for (int i = 0; i < 500 && JSON.readTree(server.get("crash", "/api/sessions/s1/runs").body()).get("runs").size() < 2; i++) {
+                Thread.sleep(10);
+            }
+            JsonNode after = waitForLatestRun(server, "crash", "s1", Duration.ofMinutes(4));
+            assertEquals("COMPLETED", after.get("endReason").asString(), after.toString());
+        }
+
+        List<EventEnvelope> journal = journal(restored);
+        assertEquals(executedBeforeCrash, executions.get(), "the interrupted call must not run again");
+        assertEquals(List.of(), events(journal, tantalum.value.event.ModelFailed.class), "no request was rejected");
+        assertEquals(1, events(journal, tantalum.value.event.RunInterrupted.class).size());
+        long thinking = events(journal, ModelReplied.class).stream()
+                .filter(reply -> reply.content().stream().anyMatch(ReasoningBlock.class::isInstance)).count();
+        System.out.println("[claude crash] thinkingReplies=" + thinking + " answer=" + lastText(journal).replace('\n', ' '));
+        usage("crash during tool", journal);
+        assertTrue(lastText(journal).strip().toUpperCase().startsWith("UNKNOWN"), lastText(journal));
+        org.junit.jupiter.api.Assumptions.assumeTrue(thinking >= 1,
+                "the model produced no thinking, so a signed reply before the synthetic result was not exercised");
+    }
+
+    private static ClaudeClient strictClaude(String effort) {
+        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
+                MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+    }
+
+    /** 第一次调用卡住，模拟执行到一半；它的写操作可能已经生效，所以不能重跑。 */
+    private static Tool recordTransfer(AtomicInteger executions, CountDownLatch entered, CountDownLatch release) {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object"), "properties",
+                new Json.Obj(Map.of("amount", new Json.Obj(Map.of("type", new Json.Str("number")))))));
+        return new Tool() {
+            @Override public String name() { return "record_transfer"; }
+            @Override public String description() { return "Record a money transfer. Not idempotent: each call records one more transfer."; }
+            @Override public Json schema() { return schema; }
+            @Override public ToolOutput run(ToolContext context, Json arguments) {
+                executions.incrementAndGet();
+                entered.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException stopping) {
+                    Thread.currentThread().interrupt();
+                }
+                return ToolOutput.ok("recorded");
+            }
+        };
+    }
+
+    /** 不复制索引库：它是可重建的缓存，崩溃后落后也算正常，这里让它从文件重建。 */
+    private static void copySessionData(Path from, Path to) throws Exception {
+        Files.createDirectories(to);
+        Files.copy(from.resolve("format.json"), to.resolve("format.json"));
+        Files.copy(from.resolve(tantalum.shell.auth.UserStore.FILE), to.resolve(tantalum.shell.auth.UserStore.FILE));
+        try (java.util.stream.Stream<Path> files = Files.walk(from.resolve("sessions"))) {
+            for (Path file : files.toList()) {
+                Files.copy(file, to.resolve(from.relativize(file)));
+            }
+        }
+    }
+
+    /**
      * 多人同时调用：三个用户同时提交带工具的请求，模型并发上限为默认的 4。判定：三个运行都完成、
      * 各自只读到自己的文件、模型调用在时间上确实重叠（不是排队）。
      */

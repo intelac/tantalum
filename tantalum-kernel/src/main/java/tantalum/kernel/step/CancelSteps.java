@@ -11,7 +11,20 @@ import tantalum.value.state.RunState;
 /** 撤销和命令丢失的处理函数：运行立即结束，在途命令被中止。 */
 public final class CancelSteps {
 
+    public static final String INTERRUPTED_BY_RESTART = "interrupted by restart";
+
     private CancelSteps() {}
+
+    /** 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。 */
+    public static Decision interrupted(StepContext context) {
+        RunState run = context.run();
+        if (run == null || run.ended()) {
+            return Decision.unchanged(context.state());
+        }
+        Outcome out = new Outcome(context);
+        RunEnd.finish(out, run.withCompacting(null), EndReason.CANCELLED, INTERRUPTED_BY_RESTART);
+        return out.decision();
+    }
 
     public static Decision cancel(StepContext context) {
         return end(context, EndReason.CANCELLED, null);

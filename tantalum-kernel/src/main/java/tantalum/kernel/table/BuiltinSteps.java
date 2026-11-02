@@ -14,6 +14,7 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
@@ -31,6 +32,7 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, SteerSubmitted.TYPE, ModelSteps::steer);
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
         table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, CancelSteps::commandDropped);
+        table.register(TransitionTable.ANY_STATE, RunInterrupted.TYPE, CancelSteps::interrupted);
         table.register(TransitionTable.ANY_STATE, ModelInterrupted.TYPE, ModelSteps::modelInterrupted);
         table.register(TransitionTable.ANY_STATE, CompactRequested.TYPE, CompactSteps::requested);
 

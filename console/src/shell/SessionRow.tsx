@@ -10,9 +10,9 @@ interface Props {
   now?: Date;
 }
 
-/** 一行会话：标题，右侧相对时间；运行中显示跳动的点，待恢复显示标签。 */
+/** 一行会话：标题，右侧相对时间；运行中显示跳动的点。 */
 export function SessionRow({ session, selected, onSelect, now }: Props) {
-  const running = session.runStatus !== "idle" && !session.pendingRecovery;
+  const running = session.runStatus !== "idle";
   const title = session.title === "" ? zh.sidebar.untitled : session.title;
   return (
     <li>
@@ -33,10 +33,7 @@ export function SessionRow({ session, selected, onSelect, now }: Props) {
             {zh.sidebar.running}
           </span>
         )}
-        {session.pendingRecovery && (
-          <span className="shrink-0 rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted">{zh.sidebar.pendingRecovery}</span>
-        )}
-        {!running && !session.pendingRecovery && (
+        {!running && (
           <span className="shrink-0 text-xs text-fg-faint">{relativeTime(session.lastActivity, now)}</span>
         )}
       </button>

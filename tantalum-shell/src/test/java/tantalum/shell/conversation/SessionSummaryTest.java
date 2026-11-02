@@ -29,13 +29,11 @@ class SessionSummaryTest {
         assertEquals("where is the interest calculated?", running.title());
         assertEquals("AwaitingModel", running.runStatus());
         assertEquals(T0.plusSeconds(1), running.lastActivity());
-        assertFalse(running.pendingRecovery());
 
         fx.tick(Duration.ofSeconds(30));
         fx.feed(run, fx.reply(text("done")));
         SessionSummary idle = SessionSummary.of(SESSION, null, fx.items());
         assertEquals(SessionSummary.IDLE, idle.runStatus());
         assertEquals(T0.plusSeconds(32), idle.lastActivity());
-        assertTrue(SessionSummary.of(SESSION, fx.state().runs().get(run).withPendingRecovery(true), fx.items()).pendingRecovery());
     }
 }

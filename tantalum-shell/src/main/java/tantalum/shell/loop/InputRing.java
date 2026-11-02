@@ -22,6 +22,8 @@ public final class InputRing {
         public EventEnvelope envelope;
     }
 
+    private static final long DRAIN_POLL_MILLIS = 5;
+
     private final Disruptor<Slot> disruptor;
     private final RingFailure<Slot> failure = new RingFailure<>("input");
 
@@ -51,6 +53,18 @@ public final class InputRing {
 
     public long remainingCapacity() {
         return disruptor.getRingBuffer().remainingCapacity();
+    }
+
+    /** 等已发布的事件都被消费者取走。超时返回 false。 */
+    public boolean awaitDrained(Duration wait) throws InterruptedException {
+        long deadline = System.nanoTime() + wait.toNanos();
+        while (disruptor.getRingBuffer().getMinimumGatingSequence() < disruptor.getCursor()) {
+            if (System.nanoTime() >= deadline) {
+                return false;
+            }
+            Thread.sleep(DRAIN_POLL_MILLIS);
+        }
+        return true;
     }
 
     /** 某个消费者抛出过异常。事件本身已跳过，环还在转，但状态不再可信。 */

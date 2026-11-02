@@ -134,19 +134,11 @@ class CrashRestartTest {
             ScriptedModelClient mustNotRun = new ScriptedModelClient(List.of());
             try (TestServer restarted = new TestServer(data, workspace, mustNotRun)) {
                 String view = restarted.get("alice", "/api/runs/" + run.value()).body();
-                assertTrue(view.contains("\"phase\":\"AwaitingModel\""), view);
-                assertTrue(view.contains("\"pendingRecovery\":true"), view);
+                assertTrue(view.contains("\"endReason\":\"CANCELLED\""), view);
+                assertTrue(view.contains("interrupted by restart"), view);
                 Thread.sleep(200);
                 assertEquals(0, mustNotRun.prompts.size());
                 assertEquals(callsBeforeRestart, modelCalls.get());
-
-                assertEquals(200, restarted.post("alice", "/api/runs/" + run.value() + "/cancel", "{}").statusCode());
-                String ended = "";
-                for (int i = 0; i < 500 && !ended.contains("CANCELLED"); i++) {
-                    Thread.sleep(10);
-                    ended = restarted.get("alice", "/api/runs/" + run.value()).body();
-                }
-                assertTrue(ended.contains("CANCELLED"), ended);
             }
         } finally {
             child.destroyForcibly();

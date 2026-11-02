@@ -155,19 +155,19 @@
 
 ## 阶段 4：崩溃收尾（H9）
 
-- [ ] 22. `RunInterrupted` 事件和内核处理
+- [x] 22. `RunInterrupted` 事件和内核处理
   - File: value/（事件和编解码）, kernel/step/（新步骤）, 对应测试
   - 补“结果未知”，并入未消费的插话，运行以 `CANCELLED` 结束，详情 `interrupted by restart`，排队提交照常开始
   - 验证：每个等待状态（模型、工具、摘要、钩子）下收尾后配对完整；不发命令重新执行模型和工具
   - _Requirements: 2.1a, H9_
 
-- [ ] 23. 删除“待恢复”
+- [x] 23. 删除“待恢复”
   - File: value/（`RunState.pendingRecovery`）, shell/web/ApiController.java, 控制台相关文件, core-skeleton 相关测试
   - 启动时发布 `RunInterrupted`；删除状态、接口字段和界面内容
   - 验证：`grep pendingRecovery` 无结果；vitest 通过
   - _Requirements: H9, 2.1_
 
-- [ ] 24. 真实 Claude 严格校验
+- [x] 24. 真实 Claude 严格校验
   - File: tantalum-examples/src/test/java/tantalum/examples/ClaudeScenarioTest.java
   - 风险：合成的工具结果和中断后的历史只有真实服务能校验。判定：工具调用途中收尾后继续提交，严格校验模式下无 400
   - 验证：真跑一次，报用量，结论写进 tech.md

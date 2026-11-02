@@ -10,7 +10,7 @@ import tantalum.value.model.ToolSpec;
  * {@code workOrigin} 是发起当前工作的钩子位置；{@code compacting} 在等摘要时有值；
  * {@code autoCompactionFailed} 为真后本运行不再自动压缩；{@code overflowRecovered} 为真后再超长就直接失败。 */
 public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, String system, List<ToolSpec> toolSpecs,
-                       ToolRound tools, List<Message> pendingSteers, int retries, boolean pendingRecovery,
+                       ToolRound tools, List<Message> pendingSteers, int retries,
                        String workOrigin, Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered) {
 
     public RunState {
@@ -22,56 +22,51 @@ public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, String system
     }
 
     public static RunState start(RunRef ref, OwnerRef owner) {
-        return new RunState(ref, owner, new Deciding(), null, List.of(), null, List.of(), 0, false, null, null, false, false);
+        return new RunState(ref, owner, new Deciding(), null, List.of(), null, List.of(), 0, null, null, false, false);
     }
 
     public RunState withPhase(RunPhase newPhase) {
-        return new RunState(ref, owner, newPhase, system, toolSpecs, tools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, newPhase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withContext(String newSystem, List<ToolSpec> newToolSpecs) {
-        return new RunState(ref, owner, phase, newSystem, newToolSpecs, tools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, newSystem, newToolSpecs, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withTools(ToolRound newTools) {
-        return new RunState(ref, owner, phase, system, toolSpecs, newTools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, newTools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withPendingSteers(List<Message> newSteers) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, newSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, newSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withRetries(int newRetries) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, newRetries, pendingRecovery, workOrigin,
-                compacting, autoCompactionFailed, overflowRecovered);
-    }
-
-    public RunState withPendingRecovery(boolean newPendingRecovery) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, newPendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, newRetries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withWorkOrigin(String newWorkOrigin) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, pendingRecovery, newWorkOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, newWorkOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withCompacting(Compacting newCompacting) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
                 newCompacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withAutoCompactionFailed(boolean failed) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
                 compacting, failed, overflowRecovered);
     }
 
     public RunState withOverflowRecovered(boolean recovered) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, pendingRecovery, workOrigin,
+        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, recovered);
     }
 

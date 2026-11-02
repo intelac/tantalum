@@ -81,7 +81,6 @@ class SessionApiTest {
         assertEquals("first question about interest", sessions.get(2).get("title").asString());
         assertEquals("idle", sessions.get(2).get("runStatus").asString());
         assertEquals("AwaitingModel", sessions.get(0).get("runStatus").asString());
-        assertEquals(false, sessions.get(0).get("pendingRecovery").asBoolean());
         assertTrue(sessions.get(0).get("lastActivity").asString().endsWith("Z"));
 
         JsonNode bobs = JSON.readTree(server.get("bob", "/api/sessions").body()).get("sessions");
