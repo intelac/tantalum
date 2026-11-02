@@ -291,19 +291,19 @@
 
 ## 阶段 9：验收
 
-- [ ] 40. 预算进 bench
+- [x] 40. 预算进 bench
   - File: tantalum-examples/src/test/java/tantalum/examples/bench/
   - 任务 5 确认的预算写进代码，不能用环境变量放宽；对比基线写进 tech.md
   - 验证：故意调低预算时 `bench` 失败；真实预算下通过
   - _Requirements: 1.3, 2.2, 2.3, 5.3, 8.2_
 
-- [ ] 49. 快照效果
+- [x] 49. 快照效果
   - File: tantalum-examples/src/test/java/tantalum/examples/bench/
   - 长会话冷载入，有无快照各测一次；同时量写快照的耗时和文件大小
   - 验证：两组数字进 tech.md 并汇报；如果快照没有明显提速，汇报给 Yi，不默认保留
   - _Requirements: 10.6_
 
-- [ ] 41. 安全端到端
+- [x] 41. 安全端到端
   - File: tantalum-examples 集成测试
   - 验证：恶意 ID 经 HTTP 不越出目录；权限 600/700
   - _Requirements: 非功能 Security_

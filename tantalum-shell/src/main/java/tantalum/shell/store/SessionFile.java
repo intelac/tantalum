@@ -30,6 +30,8 @@ public final class SessionFile implements AutoCloseable {
     private final SessionId session;
     private final EventCodec codec;
     private final FileChannel channel;
+    /** 新建时新出现的目录项所在的目录：第一批事件落盘后再 fsync，省掉单独为头部做的一次 fsync。 */
+    private List<Path> unsyncedDirs;
 
     private SessionFile(Principal principal, SessionId session, EventCodec codec, FileChannel channel) {
         this.principal = principal;
@@ -38,18 +40,25 @@ public final class SessionFile implements AutoCloseable {
         this.channel = channel;
     }
 
-    /** 打开写入，先截掉上次崩溃留下的残缺尾部。文件不存在时才创建，所以只有第一次写入才产生文件。 */
+    /**
+     * 打开写入，先截掉上次崩溃留下的残缺尾部。文件不存在时才创建，所以只有第一次写入才产生文件。
+     * 新文件的头部和第一批事件一起 fsync：在那之前这批事件还没交给内核，崩溃只留下残缺的头部，下次打开时截掉重写。
+     */
     public static SessionFile open(SessionPaths paths, Principal principal, SessionId session, EventCodec codec) throws IOException {
         Path file = paths.sessionFile(principal, session);
         SessionFileReader.repairTail(file);
+        List<Path> unsynced = List.of();
         if (!Files.exists(file) || Files.size(file) == 0) {
-            create(paths, file, principal, session);
+            unsynced = create(paths, file, principal, session);
         }
         Files.setPosixFilePermissions(file, PosixFilePermissions.fromString(FILE_MODE));
-        return new SessionFile(principal, session, codec, FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND));
+        SessionFile opened = new SessionFile(principal, session, codec, FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND));
+        opened.unsyncedDirs = unsynced;
+        return opened;
     }
 
-    private static void create(SessionPaths paths, Path file, Principal principal, SessionId session) throws IOException {
+    /** 写头部，不 fsync。返回第一批事件落盘后要 fsync 的目录。 */
+    private static List<Path> create(SessionPaths paths, Path file, Principal principal, SessionId session) throws IOException {
         boolean rootIsNew = createPrivateDir(paths.sessionsDir());
         boolean userIsNew = createPrivateDir(file.getParent());
         boolean fileIsNew = !Files.exists(file);
@@ -58,18 +67,19 @@ public final class SessionFile implements AutoCloseable {
         }
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
             writeFully(channel, ByteBuffer.wrap(header(principal, session)));
-            channel.force(true);
         }
         // 文件内容落盘还不够，目录项也要落盘，否则崩溃后文件可能不见。
+        List<Path> dirs = new java.util.ArrayList<>();
         if (fileIsNew) {
-            syncDir(file.getParent());
+            dirs.add(file.getParent());
         }
         if (userIsNew) {
-            syncDir(paths.sessionsDir());
+            dirs.add(paths.sessionsDir());
         }
         if (rootIsNew) {
-            syncDir(paths.sessionsDir().getParent());
+            dirs.add(paths.sessionsDir().getParent());
         }
+        return dirs;
     }
 
     private static boolean createPrivateDir(Path dir) throws IOException {
@@ -106,6 +116,12 @@ public final class SessionFile implements AutoCloseable {
         }
         writeFully(channel, ByteBuffer.wrap(lines.toString().getBytes(StandardCharsets.UTF_8)));
         channel.force(true);
+        if (!unsyncedDirs.isEmpty()) {
+            for (Path dir : unsyncedDirs) {
+                syncDir(dir);
+            }
+            unsyncedDirs = List.of();
+        }
         return channel.size();
     }
 

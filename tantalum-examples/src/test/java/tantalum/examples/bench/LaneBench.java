@@ -1,0 +1,119 @@
+package tantalum.examples.bench;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import tantalum.shell.journal.EventCodec;
+import tantalum.shell.loop.InputRing;
+import tantalum.shell.loop.JournalDispatcher;
+import tantalum.shell.loop.TailSequence;
+import tantalum.shell.store.SessionFiles;
+import tantalum.shell.store.SessionPaths;
+import tantalum.value.event.EventEnvelope;
+import tantalum.value.event.UserPrompt;
+import tantalum.value.id.Principal;
+import tantalum.value.id.RequestId;
+import tantalum.value.id.SessionId;
+import tantalum.value.id.SubmissionId;
+import tantalum.value.state.OwnerRef;
+
+/**
+ * 写路径预算（非功能需求）：走真实的写入分发、用户通道和每会话文件（每批 fsync），
+ * 100 个会话分属 10 个用户，每会话每秒 1 个事件，量从进入输入环到进入 Cleanroom Ring 的耗时。
+ * {@code mvn -P bench -pl tantalum-examples -am -DskipTests test-compile -Dbench.main=tantalum.examples.bench.LaneBench}
+ */
+public final class LaneBench {
+
+    private static final int SESSIONS = 100;
+    private static final int USERS = 10;
+    private static final int SECONDS = 30;
+    private static final String TEXT = "payload ".repeat(256);
+
+    private LaneBench() {}
+
+    public static void main(String[] args) throws Exception {
+        Path dir = Files.createDirectories(Path.of(args[0])).resolve("lane-" + System.nanoTime());
+        Files.createDirectories(dir);
+        Map<String, Long> sent = new ConcurrentHashMap<>();
+        List<Long> latencies = Collections.synchronizedList(new ArrayList<>());
+        /** 第一秒每个会话都是新文件（建文件并 fsync 目录），单独统计。 */
+        List<Long> firstSecond = Collections.synchronizedList(new ArrayList<>());
+        SessionPaths paths = new SessionPaths(dir);
+        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256)) {
+            JournalDispatcher[] holder = new JournalDispatcher[1];
+            holder[0] = new JournalDispatcher(1024, new TailSequence(paths), files::append, envelope -> {
+                long now = System.nanoTime();
+                String request = ((UserPrompt) envelope.event()).request().value();
+                Long start = sent.remove(request);
+                latencies.add(TimeUnit.NANOSECONDS.toMicros(now - start));
+                if (request.startsWith("0-")) {
+                    firstSecond.add(TimeUnit.NANOSECONDS.toMicros(now - start));
+                }
+                holder[0].released();
+                return true;
+            });
+            InputRing input = new InputRing(1024, holder[0]);
+            input.start();
+            if (Boolean.getBoolean("lane.warmup")) {
+                // 对照实验：先让另外 100 个会话各写一次（JIT、类加载、用户目录都预热），再开始计时。
+                for (int session = 0; session < SESSIONS; session++) {
+                    String request = "warm-" + session;
+                    SessionId id = new SessionId("warm" + session);
+                    sent.put(request, System.nanoTime());
+                    input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
+                            new UserPrompt(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)));
+                    Thread.sleep(10);
+                }
+                Thread.sleep(2_000);
+                latencies.clear();
+            }
+            long begin = System.nanoTime();
+            for (int second = 0; second < SECONDS; second++) {
+                for (int session = 0; session < SESSIONS; session++) {
+                    // 每个会话在这一秒里的固定时刻发，100 个会话均匀错开。
+                    long due = begin + TimeUnit.SECONDS.toNanos(second) + TimeUnit.MILLISECONDS.toNanos(session * 10L);
+                    long wait = due - System.nanoTime();
+                    if (wait > 0) {
+                        TimeUnit.NANOSECONDS.sleep(wait);
+                    }
+                    String request = second + "-" + session;
+                    SessionId id = new SessionId("s" + session);
+                    sent.put(request, System.nanoTime());
+                    if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
+                            new UserPrompt(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)))) {
+                        throw new IllegalStateException("input ring full");
+                    }
+                }
+            }
+            for (int i = 0; i < 500 && latencies.size() < SECONDS * SESSIONS; i++) {
+                Thread.sleep(10);
+            }
+            input.shutdown();
+        }
+        List<Long> sorted = latencies.stream().sorted().toList();
+        if (sorted.size() != SECONDS * SESSIONS) {
+            throw new IllegalStateException("only " + sorted.size() + " of " + SECONDS * SESSIONS + " events arrived");
+        }
+        long p50 = sorted.get(sorted.size() / 2);
+        long p99 = sorted.get((int) Math.ceil(sorted.size() * 0.99) - 1);
+        System.out.printf("machine: %s %s, %d cores, java %s%n", System.getProperty("os.name"), System.getProperty("os.arch"),
+                Runtime.getRuntime().availableProcessors(), System.getProperty("java.version"));
+        System.out.printf("%d events, %d sessions, %d users: P50 %.1f ms, P99 %.1f ms, max %.1f ms%n", sorted.size(), SESSIONS, USERS,
+                p50 / 1000.0, p99 / 1000.0, sorted.getLast() / 1000.0);
+        List<Long> first = firstSecond.stream().sorted().toList();
+        System.out.printf("first second (new files): P50 %.1f ms, max %.1f ms%n", first.get(first.size() / 2) / 1000.0, first.getLast() / 1000.0);
+        List<Long> later = new ArrayList<>(sorted);
+        first.forEach(later::remove);
+        System.out.printf("after the first second: P50 %.1f ms, P99 %.1f ms, max %.1f ms%n", later.get(later.size() / 2) / 1000.0,
+                later.get((int) Math.ceil(later.size() * 0.99) - 1) / 1000.0, later.getLast() / 1000.0);
+        Budgets budgets = Budgets.fromSystemProperty();
+        budgets.check("write_p99_ms", Math.round(p99 / 1000.0), Budgets.WRITE_P99_MS);
+        budgets.exitIfOver();
+    }
+}

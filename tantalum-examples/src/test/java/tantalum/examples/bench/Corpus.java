@@ -184,6 +184,8 @@ public final class Corpus {
         } else {
             running.remove(session);
             active--;
+            // 结束的会话不会再被用到；留在状态里会让每一步复制的 Map 越来越大，生成耗时随规模平方增长。
+            state = state.without(session);
         }
     }
 
