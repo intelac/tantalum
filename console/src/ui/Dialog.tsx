@@ -10,14 +10,12 @@ interface Props {
   title: string;
   children: ReactNode;
   className?: string;
-  /** 不显示标题栏时由内容自己放标题，标题仍用于无障碍名称。 */
-  hideTitle?: boolean;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** 居中大圆角弹窗。Esc 和遮罩关闭；打开时聚焦第一个控件，关闭后把焦点还给打开它的控件；Tab 在弹窗内循环。 */
-export function Dialog({ open, onClose, title, children, className, hideTitle = false }: Props) {
+export function Dialog({ open, onClose, title, children, className }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
   const titleId = useId();
@@ -75,15 +73,13 @@ export function Dialog({ open, onClose, title, children, className, hideTitle = 
           className,
         )}
       >
-        <div className={cx("flex items-center justify-between gap-2 px-6 pt-5", hideTitle && "sr-only")}>
+        <div className="flex items-center justify-between gap-2 px-6 pt-5">
           <h2 id={titleId} className="text-base font-semibold">
             {title}
           </h2>
-          {!hideTitle && (
-            <Button variant="icon" size="sm" aria-label={zh.common.close} onClick={onClose}>
-              <CloseIcon />
-            </Button>
-          )}
+          <Button variant="icon" size="sm" aria-label={zh.common.close} onClick={onClose}>
+            <CloseIcon />
+          </Button>
         </div>
         {children}
       </div>

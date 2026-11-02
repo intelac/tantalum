@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.stream.Stream;
 import tantalum.shell.journal.EventCodec;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.id.Principal;
 
 /** 读数据目录里的会话文件。同一用户的事件按序号合并；不同用户的序号不能比较，所以按用户依次排列。 */
 public final class SessionStore {
@@ -29,10 +28,6 @@ public final class SessionStore {
             events.addAll(readDir(dir));
         }
         return events;
-    }
-
-    public List<EventEnvelope> readUser(Principal principal) {
-        return readDir(paths.userDir(principal));
     }
 
     private List<EventEnvelope> readDir(Path dir) {

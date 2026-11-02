@@ -43,7 +43,7 @@ class LoginStreamsTest {
 
     /** 一次独立的登录，有自己的 Cookie。 */
     private static String login(TestServer server, String user) throws Exception {
-        if (!server.users().hashExists(user)) {
+        if (server.users().status(user).isEmpty()) {
             server.users().add(user, TestServer.PASSWORD);
         }
         HttpResponse<String> response = server.attemptLogin(user, TestServer.PASSWORD, null);

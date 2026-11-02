@@ -23,7 +23,6 @@ final class McpToolFilter {
         return server.allow().contains(tool) || Boolean.TRUE.equals(readOnlyHint);
     }
 
-    /** {@code mcp__<server>__<tool>}。超长或含模型 API 不接受的字符时为空。 */
     /**
      * {@code mcp__<server>__<tool>}。超长或含非法字符时替换并加原名的 SHA-256 前缀，不隐藏工具（pi、DSH 相同）。
      * 结果只取决于原名，重启后不变；调用时仍用原名。

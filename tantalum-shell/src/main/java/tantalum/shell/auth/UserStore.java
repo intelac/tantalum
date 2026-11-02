@@ -11,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.Optional;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import tantalum.shell.tool.Workspaces;
 
@@ -83,11 +84,11 @@ public final class UserStore implements AutoCloseable {
     public record Status(boolean disabled, long stamp) {}
 
     /** 用户不存在时为空。每次都读库，所以命令行在服务外的修改立即可见。 */
-    public synchronized java.util.Optional<Status> status(String name) throws SQLException {
+    public synchronized Optional<Status> status(String name) throws SQLException {
         try (PreparedStatement query = connection.prepareStatement("SELECT disabled, password_stamp FROM users WHERE name = ?")) {
             query.setString(1, name);
             try (ResultSet row = query.executeQuery()) {
-                return row.next() ? java.util.Optional.of(new Status(row.getInt(1) != 0, row.getLong(2))) : java.util.Optional.empty();
+                return row.next() ? Optional.of(new Status(row.getInt(1) != 0, row.getLong(2))) : Optional.empty();
             }
         }
     }
@@ -123,10 +124,6 @@ public final class UserStore implements AutoCloseable {
             row.next();
             return row.getLong(1);
         }
-    }
-
-    public synchronized boolean hashExists(String name) throws SQLException {
-        return hashOf(name) != null;
     }
 
     /** 不存在时返回 null。 */

@@ -2,6 +2,9 @@ package tantalum.shell.boot;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import tantalum.value.state.CompactionSettings;
 
@@ -11,7 +14,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                                  String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
                                  Compaction compaction, Index index, Residency residency, Duration shutdownWait) {
 
-    /** 关闭时等在途的模型和工具调用最多多久，到时中断它们（H8）。未配置时 30 秒。 */
+    /** 关闭时等在途的模型和工具调用最多多久，到时中断它们，下次启动时收尾。未配置时 30 秒。 */
     public Duration shutdownWaitOrDefault() {
         return shutdownWait == null ? Duration.ofSeconds(30) : shutdownWait;
     }
@@ -24,7 +27,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             requirePositive("snapshotEvents", snapshotEvents);
         }
 
-        /** 空闲 30 分钟或超过 1000 个常驻时回收（H3），运行结束距上次快照超过 200 个事件时写快照。 */
+        /** 空闲 30 分钟或超过 1000 个常驻时回收，运行结束距上次快照超过 200 个事件时写快照。 */
         public static Residency defaults() {
             return new Residency(Duration.ofMinutes(30), 1000, 200, Duration.ofSeconds(1));
         }
@@ -62,10 +65,10 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /** MCP 服务器，只由管理员配置。没配时可以整个为 null。校验在 {@code McpSettings}。 */
-    public record Mcp(java.util.Map<String, McpServer> servers, Duration startupWait) {}
+    public record Mcp(Map<String, McpServer> servers, Duration startupWait) {}
 
     /** 一个远程 MCP 服务器。凭据只从 {@code tokenEnv} 指向的环境变量读取；数字和时长为空时用默认值。 */
-    public record McpServer(String url, String auth, String tokenEnv, java.util.List<String> allow, java.util.List<String> deny,
+    public record McpServer(String url, String auth, String tokenEnv, List<String> allow, List<String> deny,
                             Integer concurrency, Duration timeout, Integer maxResultBytes, Integer maxTools) {}
 
     /** 每用户长期记忆的上限：条目数、索引总字节、单条正文字节。超限时写入被拒，不自动整理。 */
@@ -93,8 +96,8 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             return new Knowledge("", 64 * 1024);
         }
 
-        public java.util.Optional<Path> path() {
-            return dir == null || dir.isBlank() ? java.util.Optional.empty() : java.util.Optional.of(Path.of(dir));
+        public Optional<Path> path() {
+            return dir == null || dir.isBlank() ? Optional.empty() : Optional.of(Path.of(dir));
         }
     }
 

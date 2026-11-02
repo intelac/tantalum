@@ -40,7 +40,7 @@ class RingTest {
     @Test
     void consumerExceptionMarksTheRingBrokenButKeepsConsuming() throws Exception {
         CountDownLatch second = new CountDownLatch(2);
-        InputRing ring = new InputRing(8, (slot, seq, end) -> {
+        InputRing ring = LoopFixtures.inputRing(8, (slot, seq, end) -> {
             second.countDown();
             if (seq == 0) {
                 throw new IllegalStateException("writer bug");
@@ -52,7 +52,7 @@ class RingTest {
         assertTrue(ring.tryPublish(envelope()));
         assertTrue(second.await(5, TimeUnit.SECONDS));
         assertTrue(ring.broken());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -69,7 +69,7 @@ class RingTest {
         assertTrue(ring.tryPublish(command(1)));
         assertTrue(delivered.await(5, TimeUnit.SECONDS));
         assertTrue(ring.broken());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     /** 正常关闭要把已发布的事件处理完：客户端已经收到 200 的提交不能丢。 */
@@ -77,7 +77,7 @@ class RingTest {
     void gracefulShutdownDrainsPublishedEvents() throws Exception {
         List<Long> seen = new CopyOnWriteArrayList<>();
         CountDownLatch running = new CountDownLatch(1);
-        InputRing ring = new InputRing(8, (slot, seq, end) -> {
+        InputRing ring = LoopFixtures.inputRing(8, (slot, seq, end) -> {
             running.countDown();
             Thread.sleep(20);
             seen.add(seq);
@@ -95,7 +95,7 @@ class RingTest {
     @Test
     void fullInputRingReturnsFalseWithoutWaiting() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        InputRing ring = new InputRing(4, (slot, seq, end) -> release.await());
+        InputRing ring = LoopFixtures.inputRing(4, (slot, seq, end) -> release.await());
         ring.start();
         boolean sawFull = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
             for (int i = 0; i < 16; i++) {
@@ -108,7 +108,7 @@ class RingTest {
         assertTrue(sawFull);
         assertEquals(0, ring.remainingCapacity());
         release.countDown();
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -126,7 +126,7 @@ class RingTest {
         });
         assertTrue(sawFull);
         release.countDown();
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -144,6 +144,6 @@ class RingTest {
         assertTrue(done.await(5, TimeUnit.SECONDS));
         assertEquals(List.of(command(0), command(1), command(2)), received);
         assertFalse(received.isEmpty());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 }

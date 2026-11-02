@@ -32,7 +32,7 @@ class UserLaneTest {
         volatile boolean accept = true;
 
         @Override public boolean halted() { return halted; }
-        @Override public boolean publish(EventEnvelope envelope) {
+        @Override public boolean publish(EventEnvelope envelope, Preload preload) {
             if (accept) {
                 published.add(envelope);
             }
@@ -73,7 +73,7 @@ class UserLaneTest {
             } catch (InterruptedException stop) {
                 throw new IOException(stop);
             }
-        }, exit);
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
         int total = 300;
         for (int i = 0; i < total; i++) {
             lane.offer(event(i % 3 == 0 ? "a" : i % 3 == 1 ? "b" : "c", "r" + i));
@@ -109,7 +109,7 @@ class UserLaneTest {
                     throw new IOException(stop);
                 }
             }
-        }, exit);
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
         held.offer(event("first", "r0"));
         Thread.sleep(50);
         held.offer(event("slow", "r1"));
@@ -127,7 +127,7 @@ class UserLaneTest {
     void writeFailureHaltsAndNothingOfTheBatchIsPublished() throws Exception {
         UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> {
             throw new IOException("disk full");
-        }, exit);
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -151,7 +151,7 @@ class UserLaneTest {
             } else if (s.value().equals("bad")) {
                 throw new IOException("disk full");
             }
-        }, exit);
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("first", "r0"));
         Thread.sleep(50);
         lane.offer(event("good", "r1"));
@@ -167,7 +167,7 @@ class UserLaneTest {
         List<EventEnvelope> written = Collections.synchronizedList(new ArrayList<>());
         UserLane lane = new UserLane(ALICE, principal -> {
             throw new IllegalStateException("exceeded");
-        }, (p, s, events) -> written.addAll(events), exit);
+        }, (p, s, events) -> written.addAll(events), exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -177,7 +177,7 @@ class UserLaneTest {
     @Test
     void refusedPublishHaltsAndReleasesTheRest() throws Exception {
         exit.accept = false;
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -187,7 +187,7 @@ class UserLaneTest {
     /** 线程退出和新事件到达竞争时不能丢事件：每发一个就等它走完，让线程反复退出。 */
     @Test
     void laneExitRacingWithNewEventsLosesNothing() throws Exception {
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
         int total = 5_000;
         for (int i = 0; i < total; i++) {
             lane.offer(event("a", "r" + i));

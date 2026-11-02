@@ -210,7 +210,7 @@ public final class ModelSteps {
         List<ToolCallBlock> calls = event.content().stream()
                 .filter(ToolCallBlock.class::isInstance).map(ToolCallBlock.class::cast).toList();
         if (calls.isEmpty()) {
-            // 回复因输出上限被截断：运行照常完成，但带标记，界面据此提示（决定 D5）。
+            // 回复因输出上限被截断：运行照常完成，但带标记，界面据此提示。
             RunEnd.beforeEnd(out, run, null, event.stop() == StopReason.MAX_TOKENS ? TRUNCATED : null);
         } else {
             ToolSteps.start(out, run, calls);

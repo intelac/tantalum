@@ -7,7 +7,5 @@ import tantalum.value.state.KernelState;
 @FunctionalInterface
 public interface StepListener {
 
-    StepListener NONE = (envelope, before, after) -> { };
-
     void onStep(EventEnvelope envelope, KernelState before, KernelState after);
 }

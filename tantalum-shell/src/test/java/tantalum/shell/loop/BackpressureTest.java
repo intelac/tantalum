@@ -58,11 +58,11 @@ class BackpressureTest {
         CountDownLatch stuck = new CountDownLatch(1);
         OutputRing output = new OutputRing(2, (slot, sequence, end) -> stuck.await());
         output.start();
-        InputRing input = new InputRing(64, (slot, sequence, end) -> { });
+        InputRing input = LoopFixtures.inputRing(64, (slot, sequence, end) -> { });
         input.start();
         StateView view = new StateView(KernelState.empty());
         ResultPublisher results = new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 0);
-        Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, Projection.NONE,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { }, view, results);
 
         assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
@@ -75,8 +75,8 @@ class BackpressureTest {
 
         assertEquals(8, view.current().runs().size());
         stuck.countDown();
-        input.shutdown();
-        output.shutdown();
+        input.shutdown(Duration.ZERO);
+        output.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -88,7 +88,7 @@ class BackpressureTest {
         StateView view = new StateView(KernelState.empty());
         InputRing input = new InputRing(64);
         ResultPublisher results = new ResultPublisher(input, inFlight, Clock.systemUTC(), 0);
-        Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, Projection.NONE,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { }, view, results);
         long[] nextSeq = {0};
         input.connect((slot, sequence, end) -> {
@@ -112,15 +112,15 @@ class BackpressureTest {
         assertFalse(failed.isEmpty(), "at least one run must fail because its command did not fit");
         assertEquals("output ring full", assertInstanceOf(Ended.class, failed.getFirst().phase()).detail());
         stuck.countDown();
-        input.shutdown();
-        output.shutdown();
+        input.shutdown(Duration.ZERO);
+        output.shutdown(Duration.ZERO);
     }
 
     @Test
     void fullInputRingReturnsImmediatelyAndTheDropIsReportedOnceThereIsRoom() throws Exception {
         CountDownLatch stuck = new CountDownLatch(1);
         List<EventEnvelope> received = java.util.Collections.synchronizedList(new ArrayList<>());
-        InputRing input = new InputRing(2, (slot, sequence, end) -> {
+        InputRing input = LoopFixtures.inputRing(2, (slot, sequence, end) -> {
             stuck.await();
             received.add(slot.envelope);
         });
@@ -142,7 +142,7 @@ class BackpressureTest {
             Thread.sleep(5);
         }
         assertEquals(0, results.pendingDrops());
-        input.shutdown();
+        input.shutdown(Duration.ZERO);
     }
 
     @Test

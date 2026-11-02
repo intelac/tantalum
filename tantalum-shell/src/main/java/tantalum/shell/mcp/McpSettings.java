@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 import tantalum.shell.boot.TantalumProperties;
@@ -42,7 +43,7 @@ public record McpSettings(List<Server> servers, Duration startupWait) {
             return none();
         }
         List<Server> servers = new ArrayList<>();
-        new java.util.TreeMap<>(mcp.servers()).forEach((name, config) -> servers.add(server(name, config, toolTimeout, environment)));
+        new TreeMap<>(mcp.servers()).forEach((name, config) -> servers.add(server(name, config, toolTimeout, environment)));
         return new McpSettings(List.copyOf(servers), mcp.startupWait() == null ? Duration.ofSeconds(10) : mcp.startupWait());
     }
 

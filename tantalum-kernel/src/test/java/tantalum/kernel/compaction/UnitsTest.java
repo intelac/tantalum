@@ -42,7 +42,7 @@ class UnitsTest {
         List<Unit> units = Units.split(List.of(Message.user("q"), calling("t1"), results("t1"), calling("t2"), results("t2"),
                 assistant("done")));
         assertEquals(List.of(new Unit(0, 1), new Unit(1, 3), new Unit(3, 5), new Unit(5, 6)), units);
-        assertEquals(2, units.get(1).size());
+        assertEquals(2, units.get(1).to() - units.get(1).from());
     }
 
     @Test

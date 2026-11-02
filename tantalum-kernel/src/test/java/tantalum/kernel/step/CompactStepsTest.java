@@ -42,7 +42,6 @@ import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
-import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
@@ -108,6 +107,41 @@ class CompactStepsTest {
     static <T extends Fact> T fact(LoopFixture loop, Class<T> type) {
         return loop.last.facts().stream().filter(type::isInstance).map(type::cast).findFirst().orElseThrow(
                 () -> new AssertionError("no " + type.getSimpleName() + " in " + loop.last.facts()));
+    }
+
+    /**
+     * 超过阈值，但头部只有首条请求（摘要省不了什么），也没有可裁剪的：自动压缩放弃，同一步里继续原调用。
+     * {@code beforeModelCall} 只能在这一步里跑一次，并且看到刚做完的工作。
+     */
+    @Test
+    void autoCompactionWithTooLittleToSummarizeRunsTheModelHookOnce() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<Boolean> sawWork = new java.util.concurrent.CopyOnWriteArrayList<>();
+        KernelHook needsWork = new KernelHook() {
+            @Override public String name() { return "needs-work"; }
+            @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
+                calls.incrementAndGet();
+                sawWork.add(context.work() != null);
+                return context.work() == null ? new NeedWork("check", new Json.Null()) : tantalum.value.hook.Allow.PLAIN;
+            }
+        };
+        LoopFixture loop = start(needsWork);
+        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null));
+        loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
+        loop.prompt(block("q2"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, SETTINGS));
+        assertEquals("AwaitingWork", loop.phase());
+        calls.set(0);
+        sawWork.clear();
+
+        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null));
+
+        assertEquals("AwaitingModel", loop.phase());
+        assertEquals(1, calls.get(), "beforeModelCall ran more than once in one step");
+        assertEquals(List.of(true), sawWork);
+        assertEquals("too little to summarize", fact(loop, CompactionFailed.class).reason());
+        assertEquals(1, loop.last.facts().stream().filter(CompactionFailed.class::isInstance).count());
+        assertTrue(loop.run().autoCompactionFailed());
     }
 
     @Test

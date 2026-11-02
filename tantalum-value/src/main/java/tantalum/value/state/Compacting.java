@@ -21,8 +21,4 @@ public record Compacting(Trigger trigger, Plan plan, String manualInstructions, 
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(patch, "patch");
     }
-
-    public Compacting(Trigger trigger, Plan plan, String manualInstructions, String originalDetail) {
-        this(trigger, plan, manualInstructions, originalDetail, PromptPatch.NONE);
-    }
 }

@@ -32,14 +32,14 @@ class LoadTest {
     private final Map<Principal, AtomicLong> counters = new ConcurrentHashMap<>();
     private final Sequence sequence = principal -> counters.computeIfAbsent(principal, ignored -> new AtomicLong(100)).getAndIncrement();
 
-    private InputRing start(UserLane.Loader loader) {
+    private InputRing start(LoopFixtures.Load loader) {
         JournalDispatcher[] holder = new JournalDispatcher[1];
         holder[0] = new JournalDispatcher(256, sequence, (principal, session, events) -> { }, (envelope, preload) -> {
             reached.add(new Reached(envelope, preload));
             holder[0].released();
             return true;
-        }, loader, residency);
-        InputRing input = new InputRing(1024, holder[0]);
+        }, LoopFixtures.loader(loader), residency);
+        InputRing input = LoopFixtures.inputRing(1024, holder[0]);
         input.start();
         return input;
     }

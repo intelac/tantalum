@@ -14,6 +14,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.loop.FactListener;
@@ -122,19 +123,17 @@ public final class SseHub implements FactListener {
         });
     }
 
-    private void forEachSubscriber(Principal principal, java.util.function.Consumer<Subscription> action) {
+    private void forEachSubscriber(Principal principal, Consumer<Subscription> action) {
         Set<Subscription> set = subscribers.get(principal);
         if (set != null) {
             set.forEach(action);
         }
     }
 
-    /** {@code lastEventId} 为空或无法解析时只接收之后的消息。回放失败时订阅不会留在表里。 */
-    public Subscription subscribe(Principal principal, String lastEventId) {
-        return subscribe(principal, null, lastEventId);
-    }
-
-    /** {@code login} 是登录会话 ID，{@link #closeLogin} 按它断开。 */
+    /**
+     * {@code login} 是登录会话 ID，{@link #closeLogin} 按它断开。{@code lastEventId} 为空或无法解析时只接收之后的消息。
+     * 回放失败时订阅不会留在表里。
+     */
     public Subscription subscribe(Principal principal, String login, String lastEventId) {
         Subscription subscription = new Subscription(principal, login, queueCapacity);
         long[] position = parse(lastEventId);
@@ -179,7 +178,6 @@ public final class SseHub implements FactListener {
         List.copyOf(subscribers.keySet()).forEach(this::closeAll);
     }
 
-    /** 用户退出或被停用时调用，断开它的全部连接。 */
     /** 退出登录：只断开这一次登录的订阅，同一用户的其他登录不受影响。 */
     public void closeLogin(Principal principal, String login) {
         Set<Subscription> set = subscribers.get(principal);

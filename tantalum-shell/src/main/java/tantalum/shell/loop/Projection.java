@@ -12,8 +12,6 @@ import tantalum.value.id.SessionId;
 @FunctionalInterface
 public interface Projection {
 
-    Projection NONE = (envelope, decision) -> List.of();
-
     List<TranscriptItem> apply(EventEnvelope envelope, Decision decision);
 
     /** 一个会话的完整内部状态，写快照用。 */

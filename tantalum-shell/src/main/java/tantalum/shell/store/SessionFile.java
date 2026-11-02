@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +70,7 @@ public final class SessionFile implements AutoCloseable {
             writeFully(channel, ByteBuffer.wrap(header(principal, session)));
         }
         // 文件内容落盘还不够，目录项也要落盘，否则崩溃后文件可能不见。
-        List<Path> dirs = new java.util.ArrayList<>();
+        List<Path> dirs = new ArrayList<>();
         if (fileIsNew) {
             dirs.add(file.getParent());
         }

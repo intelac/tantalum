@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -33,7 +34,7 @@ class LaneIsolationTest {
         ConcurrentHashMap<Principal, AtomicLong> counters = new ConcurrentHashMap<>();
         Sequence sequence = principal -> counters.computeIfAbsent(principal, ignored -> new AtomicLong()).getAndIncrement();
         JournalDispatcher[] holder = new JournalDispatcher[1];
-        JournalDispatcher dispatcher = new JournalDispatcher(256, sequence, (principal, session, events) -> {
+        JournalDispatcher dispatcher = LoopFixtures.dispatcher(256, sequence, (principal, session, events) -> {
             if (principal.value().equals("slow")) {
                 try {
                     unstick.await();
@@ -47,7 +48,7 @@ class LaneIsolationTest {
             return true;
         });
         holder[0] = dispatcher;
-        InputRing input = new InputRing(1024, dispatcher);
+        InputRing input = LoopFixtures.inputRing(1024, dispatcher);
         input.start();
 
         int perUser = 50;
@@ -74,6 +75,6 @@ class LaneIsolationTest {
             assertEquals(i, slow.get(i).seq());
             assertEquals("slow" + i, ((Cancel) slow.get(i).event()).request().value());
         }
-        input.shutdown();
+        input.shutdown(Duration.ZERO);
     }
 }

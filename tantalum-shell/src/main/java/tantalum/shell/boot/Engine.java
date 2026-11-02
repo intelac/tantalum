@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,6 +80,7 @@ import tantalum.shell.tool.Workspaces;
 import tantalum.shell.web.ExternalGate;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
+import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
@@ -154,7 +157,7 @@ public final class Engine implements AutoCloseable {
     private volatile boolean closing;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
-    /** 构造失败时释放已拿到的锁和 journal，否则嵌入方重试会一直撞上“store is locked”。 */
+    /** 构造失败时释放已拿到的锁、索引、会话文件和快照写线程，否则嵌入方重试会一直撞上“store is locked”。 */
     public Engine(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
@@ -258,7 +261,7 @@ public final class Engine implements AutoCloseable {
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
-        Map<Class<? extends tantalum.value.command.Command>, Handler> handlers = Map.of(
+        Map<Class<? extends Command>, Handler> handlers = Map.of(
                 AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories, knowledge, mcp.fixedNote(),
                         properties.compactionSettings()),
                 CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
@@ -439,7 +442,7 @@ public final class Engine implements AutoCloseable {
     }
 
     /**
-     * 手动压缩（context-compaction 决定 D4）。会话不存在或不是该用户的 → 404；正在运行、没有压缩设置或没有可压缩的内容 → 409。
+     * 手动压缩。会话不存在或不是该用户的 → 404；正在运行、没有压缩设置或没有可压缩的内容 → 409。
      * 通过后发布 {@code CompactRequested}，内核在空闲会话上开一个特殊运行。{@code instructions} 可为 null。
      */
     public Submission compact(Principal principal, SessionId session, RequestId request, String instructions) {
@@ -506,10 +509,6 @@ public final class Engine implements AutoCloseable {
         return hub;
     }
 
-    public Transcript transcript() {
-        return transcript;
-    }
-
     public TurnQuery turns() {
         return turns;
     }
@@ -556,7 +555,7 @@ public final class Engine implements AutoCloseable {
     /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
     public List<SessionSummary> sessions(Principal principal) throws SQLException {
         KernelState state = view.current();
-        Map<SessionId, SessionSummary> summaries = new java.util.HashMap<>();
+        Map<SessionId, SessionSummary> summaries = new HashMap<>();
         for (SessionIndex.Session row : index.sessions(principal)) {
             summaries.put(row.session(), new SessionSummary(row.session(), row.title(), row.lastActivity(), row.runStatus()));
         }
@@ -566,13 +565,13 @@ public final class Engine implements AutoCloseable {
                         session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id())));
             }
         }
-        return summaries.values().stream().sorted(java.util.Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
+        return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
 
     /**
-     * 关闭（需求 7.1）：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
+     * 关闭：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
      * 排空输入环、各用户通道和两个下游环 → 写投影缓存 → 关 MCP、索引、文件，释放锁。每一步失败都不跳过后面的。
-     * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动由 H9 收尾。
+     * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动时以“因重启中断”收尾。
      */
     @Override
     public void close() throws IOException {

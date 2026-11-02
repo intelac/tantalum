@@ -40,8 +40,8 @@ class JournalDispatcherTest {
     void withoutPermitsTheInputRingFillsUpAndNothingIsLost() throws Exception {
         int permits = 4;
         int ringSize = 8;
-        JournalDispatcher dispatcher = new JournalDispatcher(permits, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
-        InputRing input = new InputRing(ringSize, dispatcher);
+        JournalDispatcher dispatcher = LoopFixtures.dispatcher(permits, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        InputRing input = LoopFixtures.inputRing(ringSize, dispatcher);
         input.start();
         int accepted = 0;
         for (int i = 0; i < 100 && input.tryPublish(event("u", i)); i++) {
@@ -55,12 +55,12 @@ class JournalDispatcherTest {
             Thread.sleep(1);
         }
         awaitReached(accepted);
-        input.shutdown();
+        input.shutdown(Duration.ZERO);
     }
 
     @Test
     void awaitIdleWaitsForEveryEventToBeReleased() throws Exception {
-        JournalDispatcher dispatcher = new JournalDispatcher(4, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        JournalDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
         InputRing.Slot slot = new InputRing.Slot();
         slot.envelope = event("u", 0);
         dispatcher.onEvent(slot, 0, true);
@@ -72,7 +72,7 @@ class JournalDispatcherTest {
 
     @Test
     void writeFailureHaltsAndReturnsThePermits() throws Exception {
-        JournalDispatcher dispatcher = new JournalDispatcher(4, sequence, (p, s, events) -> {
+        JournalDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> {
             throw new IOException("disk full");
         }, envelope -> reached.add(envelope));
         InputRing.Slot slot = new InputRing.Slot();

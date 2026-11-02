@@ -101,7 +101,7 @@ class SessionFileTest {
     @Test
     void noFileUntilFirstWrite() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFiles files = new SessionFiles(paths, codec, 4)) {
+        try (SessionFiles files = new SessionFiles(paths, codec, 4, (principal, session, seq, offset) -> { })) {
             assertFalse(Files.exists(paths.sessionFile(ALICE, S1)));
             files.append(ALICE, S1, List.of(event(ALICE, S1, 1, "x")));
             assertTrue(Files.exists(paths.sessionFile(ALICE, S1)));
@@ -112,7 +112,7 @@ class SessionFileTest {
     void writingAfterHandleWasEvictedStillAppends() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
         SessionId s2 = new SessionId("s-2");
-        try (SessionFiles files = new SessionFiles(paths, codec, 1)) {
+        try (SessionFiles files = new SessionFiles(paths, codec, 1, (principal, session, seq, offset) -> { })) {
             files.append(ALICE, S1, List.of(event(ALICE, S1, 1, "a")));
             files.append(ALICE, s2, List.of(event(ALICE, s2, 2, "b")));
             assertEquals(1, files.openCount());
@@ -129,7 +129,7 @@ class SessionFileTest {
         SessionPaths paths = new SessionPaths(dir);
         int sessions = 40;
         int perSession = 25;
-        try (SessionFiles files = new SessionFiles(paths, codec, 3);
+        try (SessionFiles files = new SessionFiles(paths, codec, 3, (principal, session, seq, offset) -> { });
                 ExecutorService writers = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> running = new ArrayList<>();
             for (int s = 0; s < sessions; s++) {

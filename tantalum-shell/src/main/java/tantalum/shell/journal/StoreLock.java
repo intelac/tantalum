@@ -23,7 +23,7 @@ public final class StoreLock implements AutoCloseable {
 
     public static StoreLock acquire(Path dir) throws IOException {
         Files.createDirectories(dir);
-        // 和数据目录里的其他文件一样只有本人可读写；旧版本建的锁文件也改过来。
+        // 和数据目录里的其他文件一样只有本人可读写；已存在的锁文件也收紧。
         Path file = dir.resolve("store.lock");
         FileChannel channel = FileChannel.open(file, Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE),
                 PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));

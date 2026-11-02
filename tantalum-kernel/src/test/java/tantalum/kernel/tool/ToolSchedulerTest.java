@@ -34,7 +34,7 @@ class ToolSchedulerTest {
     }
 
     private static List<Integer> next(int max, ToolSlot... slots) {
-        return ToolScheduler.next(new ToolRound(List.of(slots)), max);
+        return ToolScheduler.next(new ToolRound(List.of(slots), slots.length), max);
     }
 
     @Test

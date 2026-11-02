@@ -13,12 +13,7 @@ import tantalum.value.model.ToolResultBlock;
  */
 public final class Units {
 
-    public record Unit(int from, int to) {
-
-        public int size() {
-            return to - from;
-        }
-    }
+    public record Unit(int from, int to) {}
 
     private Units() {}
 

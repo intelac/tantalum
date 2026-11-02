@@ -25,12 +25,14 @@ import com.anthropic.models.messages.ToolResultBlockParam;
 import com.anthropic.models.messages.ToolUseBlockParam;
 import com.anthropic.models.messages.UserMessageParam;
 import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import tantalum.shell.journal.JsonText;
 import tantalum.value.json.Json;
@@ -142,7 +144,7 @@ public final class ClaudeClient implements ModelClient {
             return true;
         }
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof InterruptedIOException && !(cause instanceof java.net.SocketTimeoutException)) {
+            if (cause instanceof InterruptedIOException && !(cause instanceof SocketTimeoutException)) {
                 return true;
             }
         }
@@ -339,7 +341,7 @@ public final class ClaudeClient implements ModelClient {
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
             List<ContentBlockParam> blocks = new ArrayList<>(message.content().stream()
-                    .map(ClaudeClient::param).filter(java.util.Objects::nonNull).toList());
+                    .map(ClaudeClient::param).filter(Objects::nonNull).toList());
             if (blocks.isEmpty()) {
                 continue;
             }

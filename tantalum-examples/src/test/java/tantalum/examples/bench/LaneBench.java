@@ -2,6 +2,7 @@ package tantalum.examples.bench;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.loop.InputRing;
 import tantalum.shell.loop.JournalDispatcher;
+import tantalum.shell.loop.LoopFixtures;
 import tantalum.shell.loop.TailSequence;
 import tantalum.shell.store.SessionFiles;
 import tantalum.shell.store.SessionPaths;
@@ -45,9 +47,9 @@ public final class LaneBench {
         /** 第一秒每个会话都是新文件（建文件并 fsync 目录），单独统计。 */
         List<Long> firstSecond = Collections.synchronizedList(new ArrayList<>());
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256)) {
+        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256, (principal, session, seq, offset) -> { })) {
             JournalDispatcher[] holder = new JournalDispatcher[1];
-            holder[0] = new JournalDispatcher(1024, new TailSequence(paths), files::append, envelope -> {
+            holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> {
                 long now = System.nanoTime();
                 String request = ((UserPrompt) envelope.event()).request().value();
                 Long start = sent.remove(request);
@@ -58,7 +60,7 @@ public final class LaneBench {
                 holder[0].released();
                 return true;
             });
-            InputRing input = new InputRing(1024, holder[0]);
+            InputRing input = LoopFixtures.inputRing(1024, holder[0]);
             input.start();
             if (Boolean.getBoolean("lane.warmup")) {
                 // 对照实验：先让另外 100 个会话各写一次（JIT、类加载、用户目录都预热），再开始计时。
@@ -94,7 +96,7 @@ public final class LaneBench {
             for (int i = 0; i < 500 && latencies.size() < SECONDS * SESSIONS; i++) {
                 Thread.sleep(10);
             }
-            input.shutdown();
+            input.shutdown(Duration.ZERO);
         }
         List<Long> sorted = latencies.stream().sorted().toList();
         if (sorted.size() != SECONDS * SESSIONS) {

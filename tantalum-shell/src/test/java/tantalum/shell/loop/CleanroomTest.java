@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,16 +52,16 @@ class CleanroomTest {
         return slot;
     }
 
-    private InputRing ring = new InputRing(8, (slot, seq, end) -> { });
+    private InputRing ring = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
     private final List<EventEnvelope> published = new ArrayList<>();
 
     private Cleanroom cleanroom() {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> published.add(slot.envelope));
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> published.add(slot.envelope));
         captureRing.start();
         ring = captureRing;
         ResultPublisher publisher = new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0);
-        return new Cleanroom(kernel(), KernelState.empty(), () -> halted,
-                command -> accept && commands.add(command), Projection.NONE, (seq, index, fact) -> facts.add(fact), view, publisher);
+        return LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> halted,
+                command -> accept && commands.add(command), LoopFixtures.NO_PROJECTION, (seq, index, fact) -> facts.add(fact), view, publisher);
     }
 
     @Test
@@ -69,7 +70,7 @@ class CleanroomTest {
         assertInstanceOf(AssembleContext.class, commands.getFirst());
         assertEquals(1, facts.size());
         assertEquals(1, view.current().runs().size());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -78,7 +79,7 @@ class CleanroomTest {
         cleanroom.onEvent(prompt(0), 0, false);
         cleanroom.onEvent(prompt(1), 1, true);
         assertEquals(1, view.current().sessions().get(new SessionId("s")).followUps().size());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -88,7 +89,7 @@ class CleanroomTest {
         cleanroom().onEvent(prompt(0), 0, true);
         assertSame(before, view.current());
         assertEquals(List.of(), commands);
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
@@ -99,25 +100,25 @@ class CleanroomTest {
             Thread.sleep(10);
         }
         assertTrue(published.getFirst().event() instanceof CommandDropped);
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
     void factListenerFailureDoesNotStopTheLoop() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
-        Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, Projection.NONE,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { throw new IllegalStateException("subscriber gone"); }, view,
                 new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(1, view.current().runs().size());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
     void projectedItemsAreNumberedAfterTheFactsOfTheSameEvent() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         List<String> notified = new ArrayList<>();
@@ -132,24 +133,24 @@ class CleanroomTest {
                 notified.add(seq + "." + index + ":" + owner.value() + ":" + item.getClass().getSimpleName());
             }
         };
-        Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, new Transcript(),
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, new Transcript(),
                 listener, view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(List.of("0.0:PhaseChanged", "0.1:u:UserMessage", "0.2:u:RunStatus"), notified);
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     /** 内核之外抛出（这里用 Error 模拟）不能让消费者线程静默死掉：置 broken，后续事件跳过，入口据此返回 503。 */
     @Test
     void unexpectedThrowableMarksTheCleanroomBrokenInsteadOfKillingTheThread() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         // 内核只把 RuntimeException 变成运行失败；Error 会穿出来。
         TransitionTable table = new TransitionTable();
         table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, context -> { throw new AssertionError("step bug"); });
         Kernel exploding = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
-        Cleanroom cleanroom = new Cleanroom(exploding, KernelState.empty(), () -> false, commands::add, Projection.NONE,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(exploding, KernelState.empty(), () -> false, commands::add, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> facts.add(fact), view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
 
         InputRing.Slot first = prompt(0);
@@ -159,20 +160,20 @@ class CleanroomTest {
 
         cleanroom.onEvent(prompt(1), 1, true);
         assertEquals(List.of(), commands);
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 
     @Test
     void projectionFailureDoesNotStopTheLoop() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         Projection broken = (envelope, decision) -> { throw new IllegalStateException("projection bug"); };
-        Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, broken,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, broken,
                 (seq, index, fact) -> facts.add(fact), view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(1, view.current().runs().size());
         assertEquals(1, facts.size());
-        ring.shutdown();
+        ring.shutdown(Duration.ZERO);
     }
 }

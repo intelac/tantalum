@@ -48,8 +48,4 @@ public final class MemoryStores {
         }
         return workspaces.of(principal).root().resolve("memory");
     }
-
-    public MemoryLimits limits() {
-        return limits;
-    }
 }

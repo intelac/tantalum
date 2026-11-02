@@ -1,6 +1,7 @@
 package tantalum.value.state;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
@@ -40,7 +41,7 @@ public record KernelState(Map<Principal, PrincipalState> principals,
     }
 
     /** 放回一个会话和它的运行。只由外壳在载入时调用，不是事件。 */
-    public KernelState withResident(SessionState session, java.util.List<RunState> sessionRuns) {
+    public KernelState withResident(SessionState session, List<RunState> sessionRuns) {
         Map<SessionId, SessionState> keptSessions = new HashMap<>(sessions);
         keptSessions.put(session.id(), session);
         Map<RunId, RunState> keptRuns = new HashMap<>(runs);

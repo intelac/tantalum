@@ -2,6 +2,7 @@ package tantalum.kernel.step;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.StepContext;
@@ -72,7 +73,7 @@ final class Outcome {
         return next;
     }
 
-    RunState await(RunState run, String resumeAt, java.util.Set<CommandId> awaited) {
+    RunState await(RunState run, String resumeAt, Set<CommandId> awaited) {
         return enter(run, new Awaiting(awaited, resumeAt));
     }
 

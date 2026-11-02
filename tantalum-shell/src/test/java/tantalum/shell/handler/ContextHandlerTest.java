@@ -66,7 +66,7 @@ class ContextHandlerTest {
     }
 
     private ContextHandler handler(Workspaces workspaces, KnowledgeBase knowledge) {
-        return new ContextHandler(workspaces, "Base prompt.", catalog(), memories(workspaces), knowledge);
+        return new ContextHandler(workspaces, "Base prompt.", catalog(), memories(workspaces), knowledge, "", null);
     }
 
     private ContextHandler shared() {
@@ -122,7 +122,7 @@ class ContextHandlerTest {
         Files.writeString(workspaces.of(ALICE).root().resolve("AGENTS.md"), "Agents rules.");
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
         ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories,
-                new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024));
+                new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", null);
 
         String system = assembled(handler, command(ALICE)).system();
 
@@ -141,7 +141,7 @@ class ContextHandlerTest {
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("alice-fact", "user", "alice likes tabs", "x");
         memories.of(BOB).write("bob-fact", "user", "bob likes spaces", "x");
-        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories, KnowledgeBase.none());
+        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories, KnowledgeBase.none(), "", null);
 
         String alice = assembled(handler, command(ALICE)).system();
         String bob = assembled(handler, command(BOB)).system();
@@ -155,7 +155,7 @@ class ContextHandlerTest {
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories, KnowledgeBase.none());
+        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories, KnowledgeBase.none(), "", null);
         ContextAssembled event = assembled(handler, command(ALICE));
 
         RunState run = RunState.start(command(ALICE).run(), new OwnerRef.OfSession(new SessionId("s")))

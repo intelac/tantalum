@@ -45,10 +45,6 @@ public final class OutputRing {
         return failure.broken();
     }
 
-    public void shutdown() {
-        disruptor.halt();
-    }
-
     /** 先把已发布的命令分发完，超时再强制停止。 */
     public void shutdown(Duration drain) {
         try {

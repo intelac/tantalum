@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,7 +59,7 @@ class RingIntegrationTest {
         return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
     }
 
-    private static Handler handler(Handler.Body body) {
+    private static Handler handler(LoopFixtures.HandlerBody body) {
         return new Handler() {
             @Override public Event handle(Command command) throws Exception { return body.run(command); }
             @Override public Event failed(Command command, Exception failure) {
@@ -72,7 +73,7 @@ class RingIntegrationTest {
         int sessions = 20;
         SessionPaths paths = new SessionPaths(dir);
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
-        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 8)) {
+        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 8, (principal, session, seq, offset) -> { })) {
             StateView view = new StateView(KernelState.empty());
             InFlightCommands inFlight = new InFlightCommands();
             Kernel kernel = kernel();
@@ -84,9 +85,9 @@ class RingIntegrationTest {
                             StopReason.END_TURN, "m", null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
-            JournalDispatcher journal = new JournalDispatcher(1024, new TailSequence(paths), files::append, ring::tryPublish);
+            JournalDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null));
             List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
-            Cleanroom cleanroom = new Cleanroom(kernel, KernelState.empty(), journal::halted, output::tryPublish, Projection.NONE,
+            Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, KernelState.empty(), journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
                     (seq, index, fact) -> { }, view, publisher);
             ring.connect((slot, seq, end) -> {
                 EventEnvelope envelope = slot.envelope;
@@ -117,9 +118,9 @@ class RingIntegrationTest {
                 assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, run.phase()).reason());
             }
 
-            input.shutdown();
+            input.shutdown(Duration.ZERO);
             ring.shutdown(java.time.Duration.ofSeconds(5));
-            output.shutdown();
+            output.shutdown(Duration.ZERO);
 
             assertEquals(List.of(), notDurable, "events must be durable before the kernel sees them");
             List<EventEnvelope> events = new SessionStore(dir, EventCodec.withBuiltins()).readAll();

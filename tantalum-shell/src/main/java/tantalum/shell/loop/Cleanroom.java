@@ -38,11 +38,6 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
     private volatile boolean broken;
 
     public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
-                     Projection projection, FactListener facts, StateView view, ResultPublisher results) {
-        this(kernel, initial, halted, output, projection, facts, view, results, StepListener.NONE, Evictor.never(projection));
-    }
-
-    public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
                      Projection projection, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
         this.steps = steps;
         this.evictor = evictor;
@@ -104,7 +99,7 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         }
     }
 
-    /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已落盘，下次启动由 H9 收尾。 */
+    /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已落盘，下次启动时以“因重启中断”收尾。 */
     private void rejected(EventEnvelope envelope, Preload preload) {
         LOG.warn("dropping seq {} for session {}: {}", envelope.seq(), envelope.session().value(), preload.failure());
         if (envelope.run() == null) {

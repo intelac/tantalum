@@ -11,10 +11,6 @@ public record ToolRound(List<ToolSlot> slots, int checked) {
         slots = List.copyOf(slots);
     }
 
-    public ToolRound(List<ToolSlot> slots) {
-        this(slots, slots.size());
-    }
-
     public ToolRound withChecked(int newChecked) {
         return new ToolRound(slots, newChecked);
     }

@@ -24,7 +24,7 @@ class ToolPairingTest {
         ToolRound round = new ToolRound(List.of(
                 ToolSlot.pending(call("done"), true).sent(new CommandId("1")).done(real),
                 ToolSlot.pending(call("sent"), true).sent(new CommandId("2")),
-                ToolSlot.pending(call("waiting"), true)));
+                ToolSlot.pending(call("waiting"), true)), 3);
 
         List<ToolResultBlock> results = ToolPairing.complete(round);
 
@@ -38,7 +38,7 @@ class ToolPairingTest {
 
     @Test
     void unknownOutcomeWarnsTheModelNotToRepeatBlindly() {
-        ToolRound round = new ToolRound(List.of(ToolSlot.pending(call("a"), true).sent(new CommandId("1"))));
+        ToolRound round = new ToolRound(List.of(ToolSlot.pending(call("a"), true).sent(new CommandId("1"))), 1);
         assertTrue(ToolPairing.complete(round).getFirst().text().contains("idempotent"));
     }
 }

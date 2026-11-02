@@ -43,11 +43,6 @@ public final class ContextHandler implements Handler {
     private final String fixedNote;
     private final CompactionSettings compaction;
 
-    public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
-                          KnowledgeBase knowledge) {
-        this(workspaces, basePrompt, catalog, memories, knowledge, "", null);
-    }
-
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
      * {@code compaction} 是当前的压缩设置，随事件写进 journal，会话第一次组装时冻结；null 表示不压缩。

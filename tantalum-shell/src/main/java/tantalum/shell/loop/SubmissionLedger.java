@@ -30,10 +30,6 @@ public final class SubmissionLedger {
     private final History history;
     private final Map<Key, SubmissionId> recent;
 
-    public SubmissionLedger() {
-        this((principal, request) -> Optional.empty(), DEFAULT_CAPACITY);
-    }
-
     public SubmissionLedger(History history, int capacity) {
         this.history = history;
         this.recent = new LinkedHashMap<>(16, 0.75f, true) {
