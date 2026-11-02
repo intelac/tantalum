@@ -41,8 +41,8 @@
 Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handler、journal 都是普通 Java 类，通过构造函数注入，不使用 Spring 注解，这样插件 SDK 不绑定 Spring。
 
 ### Data Storage
-- **Primary storage**：单个 SQLite 文件（WAL 模式），原生 JDBC，不用 ORM。
-- **Caching**：无。内存状态树由 journal 投影得出，不算缓存。
+- **Primary storage**（`ops-hardening` 起）：每个会话一个只追加的 JSONL 文件 `sessions/<用户>/<会话>.jsonl`，是唯一的事实来源。
+- **Caching**：`index.db`（SQLite，WAL，原生 JDBC）存会话列表、提交去重和用量；`snapshots/` 存会话投影快照。两者都可由会话文件重建，启动时补齐落后的部分。内存里只常驻有活动的会话，其余按需载入（README“运维”）。
 - **Data formats**：事件以 JSON 存储，带类型名和 schema 版本。
 
 ### External Integrations
@@ -114,7 +114,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 ### Security & Compliance
 - 默认模型是云端的 Claude（Yi 决定），完整 prompt 可能含客户代码，会发送到 Anthropic，启动日志会提示。不能外发代码的部署要切换到 strata。
-- journal 文件权限限制为进程所有者。
+- 数据目录下的文件和目录限制为进程所有者（600/700），含 `store.lock` 和 SQLite 的附属文件；数据目录本身的权限不改（BACKLOG）。
 
 ### Scalability & Reliability
 - 明确不做跨进程和水平扩展：一个进程拥有一份存储，启动时取得独占锁。
@@ -125,7 +125,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 1. **Spring Boot，放在 shell 边缘**：SIer 客户熟悉，认证和监控以后可以直接接入。备选 Javalin 更轻，但这些能力要自己搭。
 2. **不用 Spring AI**：其工具循环、Advisor、ChatMemory 分别与等待状态显式（I3）、内核钩子、journal 作为事实来源（I2）重叠，统一抽象也不利于精确还原 prompt。需要时可以在 shell 中加 `ModelClient` 适配器。
 3. **自写 OpenAI 兼容客户端**：实际只需发送 prompt、取回回复和工具调用。
-4. **SQLite + 原生 JDBC**：满足单进程，journal 是追加写入，不需要 ORM。
+4. **SQLite + 原生 JDBC**：满足单进程，不需要 ORM。`ops-hardening` 起 journal 改为每会话一个 JSONL 文件（Yi 决定“journal 按 session 分开”），SQLite 只做可重建的索引。
 5. **使用 Disruptor（Yi 决定）**：Input Disruptor → cleanroom → Output Disruptor，结构与架构图一致，框架成熟。Input Disruptor 上 journal 消费者在前，cleanroom 消费者依赖其进度，直接表达“先落盘再处理”，并用 `endOfBatch` 批量提交。Disruptor 只存在于 shell；`Kernel.step` 仍是纯函数，不感知它。一律用 `tryPublishEvent`；等待策略用不空转的 `BlockingWaitStrategy`，避免占满 CPU。
 6. **流式调用模型，分片不落盘**：pi 和 DeepSeek Harness 都用流式。分片只作瞬态进度，每次调用结束时写一个结算事件，内核只看到结果（与 DeepSeek Harness 的 `assistant/message` / `assistant/attempt` 同构）。两级持久化仍未排期，因此崩溃会丢失进行中那次调用的全部分片。
 7. **React + `fetch` 流式读取 SSE**：生态大，且以后接认证不用换 SSE 客户端。
@@ -295,6 +295,17 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 | 会话文件 | 3531 KB |
 
 快照省了约 37% 的冷载入时间，但快照文件比会话文件还大 60%：快照里既有完整的消息历史，也有对话条目，内容重复。载入有快照时仍要 254 ms，主要花在解析这份 5.6 MB 的 JSON 上。
+
+### ops-hardening 收尾验证（2026-11-02，任务 42–44）
+
+- **`kill -9` 打包的 jar（`JarCrashIT`，`mvn verify` 的集成测试阶段）：** 两个用户，一个会话已结束、一个在等 Claude 兼容的假模型、一个在等 MCP 工具时杀掉，再把索引里已结束的会话改回落后。重启后：会话文件以被杀前内容开头；索引补齐（会话列表、提交去重、用量和会话文件推出的一致）；两个运行以“因重启中断”结束；模型和工具调用次数不变；两个会话都能继续，发给模型的历史里每个工具调用都有结果。被杀时索引本来就会落后（某次运行里 bob 的一条用量还没写），关掉启动补齐时测试失败。
+- **Playwright（`ops.spec.ts`）：** 同一用户两个浏览器，一个退出另一个照常收推送；回收出内存的会话重新打开完整；崩溃中断的运行显示“服务重启，这次运行已中断”并能继续。`E2eServer` 空闲 2 秒就回收，全部 19 个端到端测试在不断回收下通过。
+- **顺带修复：** 重启中断的运行原来显示“已取消”；`tantalum.residency.*` 只配一项时其余为 0、启动失败（默认值移进 `application.properties`）；启动日志补上载入的会话数、收尾的运行数和耗时。
+- **真实 Claude（`claude-sonnet-5-5`，改造完成后重跑，只跑改造可能影响的三项）：**
+  - 工具执行中崩溃、严格校验下继续（需求 9.5，合成的“结果未知”跟着 thinking 签名发出）：被接受，模型回答 `UNKNOWN` 且没有重试。2 次调用，input 8、output 395、cacheRead 1280、cacheWrite 1720。
+  - 模型调用中真实杀 JVM、重启后继续（`ClaudeCrashRecoveryTest`）：运行收尾为中断，继续提问完成并读到文件内容。测试不打印用量，共 1 次被杀的调用加 2 次正常调用。
+  - 三个用户同时调用（写路径改成每用户通道后）：三人的模型调用时间段重叠，没有被串行化。6 次调用，input 18、output 227、cacheRead 6666、cacheWrite 491。
+- **已知：** 回收只在处理事件时检查，完全没有请求的服务器不主动回收，常驻数受上限约束（BACKLOG 待 Yi）。
 
 ### strata 实测（2026-10-31）
 

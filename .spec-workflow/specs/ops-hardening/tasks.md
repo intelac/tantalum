@@ -319,7 +319,7 @@
   - 验证：真跑通过，截图看过
   - _Requirements: 9.4, 8.2_
 
-- [ ] 44. 文档和全量回归
+- [x] 44. 文档和全量回归
   - File: README.md, .spec-workflow/steering/tech.md
   - 回收配置、钩子约束、回放承诺的边界、旧 `journal.db` 被拒绝时怎么处理、启动日志
   - 验证：`mvn verify`、vitest、Playwright 全量通过；报真实模型用量
