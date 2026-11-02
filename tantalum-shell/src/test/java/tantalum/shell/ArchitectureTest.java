@@ -70,7 +70,8 @@ class ArchitectureTest {
     /** 索引和文件都不能拖住 cleanroom：它只把变化交给监听器。 */
     @ArchTest
     static final ArchRule cleanroomDoesNoIo = noClasses()
-            .that().haveFullyQualifiedName("tantalum.shell.loop.Cleanroom")
+            .that().haveFullyQualifiedName("tantalum.shell.loop.Cleanroom").or().haveFullyQualifiedName("tantalum.shell.loop.Evictor")
+            .or().haveFullyQualifiedName("tantalum.shell.loop.Residency")
             .should().dependOnClassesThat().resideInAnyPackage("java.io..", "java.sql..", "java.nio.file..", "tantalum.shell.store..");
 
     @ArchTest

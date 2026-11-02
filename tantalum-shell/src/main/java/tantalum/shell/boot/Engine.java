@@ -34,10 +34,13 @@ import tantalum.shell.journal.TurnQuery;
 import tantalum.shell.loop.Cleanroom;
 import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.Dispatcher;
+import tantalum.shell.loop.Evictor;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.InputRing;
 import tantalum.shell.loop.JournalDispatcher;
 import tantalum.shell.loop.OutputRing;
+import tantalum.shell.loop.Preload;
+import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
@@ -59,8 +62,12 @@ import tantalum.shell.store.SessionFileReader;
 import tantalum.shell.store.SessionFiles;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.SessionStore;
+import tantalum.shell.store.SnapshotStore;
+import tantalum.shell.store.SnapshotWriter;
 import tantalum.shell.store.StoreFormat;
+import tantalum.shell.store.UsageLedger;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
@@ -115,6 +122,8 @@ public final class Engine implements AutoCloseable {
     private final SessionIndex index;
     private final IndexWriter indexWriter;
     private final SubmissionLedger ledger;
+    private final Residency residency = new Residency();
+    private final SnapshotWriter snapshots;
     private final ExternalGate gate;
     private final SseHub hub;
     private final MemoryStores memories;
@@ -142,7 +151,9 @@ public final class Engine implements AutoCloseable {
         this.ledger = new SubmissionLedger(this::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
         TantalumProperties.Index throttle = properties.index() == null ? TantalumProperties.Index.defaults() : properties.index();
         this.indexWriter = new IndexWriter(index, throttle.flushEvents(), throttle.flushInterval());
-        this.files = new SessionFiles(new SessionPaths(properties.dataDir()), codec, MAX_OPEN_FILES, indexWriter::onDurable);
+        SessionPaths paths = new SessionPaths(properties.dataDir());
+        this.files = new SessionFiles(paths, codec, MAX_OPEN_FILES, indexWriter::onDurable);
+        this.snapshots = new SnapshotWriter(new SnapshotStore(paths, codec), paths);
         List<RunState> unfinished;
         try {
             Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
@@ -159,6 +170,7 @@ public final class Engine implements AutoCloseable {
             this.output = parts.output;
             unfinished = parts.unfinished;
         } catch (RuntimeException failure) {
+            closeQuietly(snapshots);
             closeQuietly(files);
             closeQuietly(indexWriter);
             closeQuietly(index);
@@ -206,8 +218,12 @@ public final class Engine implements AutoCloseable {
         TurnQuery turns = new TurnQuery(store, kernel, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
         CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
-        JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(new SessionPaths(properties.dataDir()), Integer.getInteger(SEQUENCE_STEP, 1)),
-                files::append, cleanroomRing::tryPublish);
+        SessionPaths paths = new SessionPaths(properties.dataDir());
+        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), new UsageLedger(index, indexWriter), kernel);
+        JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),
+                files::append, cleanroomRing::tryPublish, (principal, session, beforeSeq) -> replay.load(principal, session, beforeSeq)
+                .map(slice -> Preload.loaded(slice.snapshot().session(), slice.snapshot().runs(), slice.snapshot().transcript(), slice.snapshot().seq(), slice.replayedEvents())),
+                residency);
 
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
@@ -220,8 +236,13 @@ public final class Engine implements AutoCloseable {
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                 StartTimer.class, new TimerHandler());
         OutputRing output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
+        Evictor evictor = new Evictor(evictorSettings(properties), residency, recovered.transcript(), snapshots, clock);
+        for (SessionId session : recovered.state().sessions().keySet()) {
+            residency.resident(session);
+            evictor.recovered(session, recovered.transcript().snapshot(session).seq());
+        }
         Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
-                recovered.transcript(), hub, view, results, indexWriter::onStep);
+                recovered.transcript(), hub, view, results, indexWriter::onStep, evictor);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
         ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
@@ -233,6 +254,11 @@ public final class Engine implements AutoCloseable {
             dispatcher.released();
         });
         return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished());
+    }
+
+    private static Evictor.Settings evictorSettings(TantalumProperties properties) {
+        TantalumProperties.Residency settings = properties.residency() == null ? TantalumProperties.Residency.defaults() : properties.residency();
+        return new Evictor.Settings(settings.idle(), settings.maxResident(), settings.snapshotEvents(), settings.sweepInterval());
     }
 
     /** 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。 */
@@ -317,6 +343,9 @@ public final class Engine implements AutoCloseable {
     }
 
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text) {
+        if (residency.failure(session) != null) {
+            return new Submission(500, null, false);
+        }
         KernelState state = view.current();
         SessionState existing = state.sessions().get(session);
         if (existing != null && !existing.principal().equals(principal)) {
@@ -449,7 +478,7 @@ public final class Engine implements AutoCloseable {
         Exception first = null;
         for (AutoCloseable step : List.<AutoCloseable>of(
                 mcp, () -> input.shutdown(DRAIN), () -> dispatcher.awaitIdle(DRAIN), () -> cleanroom.shutdown(DRAIN),
-                () -> output.shutdown(DRAIN), indexWriter, index, files, lock)) {
+                () -> output.shutdown(DRAIN), snapshots, indexWriter, index, files, lock)) {
             try {
                 step.close();
             } catch (Exception failure) {

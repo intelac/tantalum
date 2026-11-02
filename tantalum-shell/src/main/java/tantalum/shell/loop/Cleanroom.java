@@ -11,13 +11,18 @@ import tantalum.shell.conversation.TranscriptItem;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
+import tantalum.value.decision.PhaseChanged;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.id.RunId;
+import tantalum.value.id.RunRef;
 import tantalum.value.state.KernelState;
 
 /** Cleanroom Ring 的消费者：按序调内核，发布命令、事实和条目变化。只看到已提交的事件，不做 I/O，不等待。 */
 public final class Cleanroom implements EventHandler<InputRing.Slot> {
 
     private static final Logger LOG = LoggerFactory.getLogger(Cleanroom.class);
+    /** 载入失败时推给客户端的状态名，让界面结束等待。 */
+    public static final String LOAD_FAILED = "LoadFailed";
 
     private final Kernel kernel;
     private final BooleanSupplier halted;
@@ -27,18 +32,20 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
     private final StateView view;
     private final ResultPublisher results;
     private final StepListener steps;
+    private final Evictor evictor;
     private KernelState state;
     /** 内核或状态发布抛出后置位：之后的事件全部跳过，入口返回 503，而不是让消费者线程静默死掉。 */
     private volatile boolean broken;
 
     public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
                      Projection projection, FactListener facts, StateView view, ResultPublisher results) {
-        this(kernel, initial, halted, output, projection, facts, view, results, StepListener.NONE);
+        this(kernel, initial, halted, output, projection, facts, view, results, StepListener.NONE, Evictor.never(projection));
     }
 
     public Cleanroom(Kernel kernel, KernelState initial, BooleanSupplier halted, Predicate<Command> output,
-                     Projection projection, FactListener facts, StateView view, ResultPublisher results, StepListener steps) {
+                     Projection projection, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
         this.steps = steps;
+        this.evictor = evictor;
         this.kernel = kernel;
         this.state = initial;
         this.halted = halted;
@@ -56,27 +63,75 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
 
     @Override
     public void onEvent(InputRing.Slot slot, long sequence, boolean endOfBatch) {
-        if (halted.getAsBoolean() || broken) {
-            slot.envelope = null;
-            return;
-        }
         EventEnvelope envelope = slot.envelope;
+        Preload preload = slot.preload;
         slot.envelope = null;
+        slot.preload = null;
+        boolean live = !halted.getAsBoolean() && !broken;
         try {
-            step(envelope, endOfBatch);
+            if (live) {
+                process(envelope, preload, endOfBatch);
+            }
         } catch (Throwable failure) {
             broken = true;
             LOG.error("cleanroom broken at seq {}: refusing all further events", envelope.seq(), failure);
         }
+        evictor.finished(envelope.session());
+        if (live && !broken) {
+            sweep();
+        }
     }
 
-    private void step(EventEnvelope envelope, boolean endOfBatch) {
+    private void process(EventEnvelope envelope, Preload preload, boolean endOfBatch) {
+        if (preload != null && preload.isFailure()) {
+            rejected(envelope, preload);
+        } else {
+            if (preload != null) {
+                merge(envelope, preload);
+            }
+            step(envelope);
+        }
+        if (endOfBatch) {
+            results.flushDropped();
+        }
+    }
+
+    /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已落盘，下次启动由 H9 收尾。 */
+    private void rejected(EventEnvelope envelope, Preload preload) {
+        LOG.warn("dropping seq {} for session {}: {}", envelope.seq(), envelope.session().value(), preload.failure());
+        if (envelope.run() == null) {
+            RunRef run = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+            notifyListener(envelope.seq(), 0, new PhaseChanged(run, LOAD_FAILED));
+        }
+    }
+
+    private void merge(EventEnvelope envelope, Preload preload) {
+        state = state.withResident(preload.session(), preload.runs());
+        projection.restore(envelope.session(), preload.transcript());
+        evictor.loaded(envelope.session(), preload);
+    }
+
+    private void sweep() {
+        try {
+            KernelState swept = evictor.sweep(state);
+            if (swept != state) {
+                state = swept;
+                view.publish(state);
+            }
+        } catch (RuntimeException | Error failure) {
+            broken = true;
+            LOG.error("eviction failed: refusing all further events", failure);
+        }
+    }
+
+    private void step(EventEnvelope envelope) {
         long seq = envelope.seq();
         KernelState before = state;
         Decision decision = kernel.step(before, envelope);
         state = decision.newState();
         view.publish(state);
         notifyListener(envelope, before);
+        evictor.stepped(envelope, before, state);
         for (Command command : decision.commands()) {
             if (!output.test(command)) {
                 results.reportDropped(command, "output ring full");
@@ -88,9 +143,6 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         }
         for (TranscriptItem item : project(envelope, decision)) {
             notifyListener(seq, index++, envelope, item);
-        }
-        if (endOfBatch) {
-            results.flushDropped();
         }
     }
 

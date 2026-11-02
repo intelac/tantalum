@@ -39,6 +39,15 @@ public record KernelState(Map<Principal, PrincipalState> principals,
         return new KernelState(principals, sessions, updated);
     }
 
+    /** 放回一个会话和它的运行。只由外壳在载入时调用，不是事件。 */
+    public KernelState withResident(SessionState session, java.util.List<RunState> sessionRuns) {
+        Map<SessionId, SessionState> keptSessions = new HashMap<>(sessions);
+        keptSessions.put(session.id(), session);
+        Map<RunId, RunState> keptRuns = new HashMap<>(runs);
+        sessionRuns.forEach(run -> keptRuns.put(run.ref().run(), run));
+        return new KernelState(principals, keptSessions, keptRuns);
+    }
+
     /** 去掉一个会话和它的运行。只由外壳在回收时调用，不是事件。 */
     public KernelState without(SessionId session) {
         Map<SessionId, SessionState> keptSessions = new HashMap<>(sessions);

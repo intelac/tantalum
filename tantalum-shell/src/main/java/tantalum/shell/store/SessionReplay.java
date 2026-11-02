@@ -52,18 +52,29 @@ public final class SessionReplay {
             progress.seq = found.seq();
             progress.offset = found.offset();
         });
-        UsageLedger.Cursor cursor = usage.cursor(principal, snapshot.map(found -> found.seq() + 1).orElse(0L));
-        reader.scan(file, snapshot.map(SessionSnapshot::offset).orElse(0L), (envelope, end) -> {
-            if (envelope.seq() >= beforeSeq) {
-                return;
+        long usageFrom = snapshot.map(found -> found.seq() + 1).orElse(0L);
+        try {
+            reader.scan(file, snapshot.map(SessionSnapshot::offset).orElse(0L), (envelope, end) -> {
+                if (envelope.seq() >= beforeSeq) {
+                    return;
+                }
+                if (progress.cursor == null) {
+                    progress.cursor = cursor(principal, usageFrom);
+                }
+                Decision decision = kernel.step(progress.state.with(progress.cursor.before(envelope.seq())), envelope);
+                progress.state = decision.newState();
+                progress.transcript.apply(envelope, decision);
+                progress.seq = envelope.seq();
+                progress.offset = end;
+                progress.replayed++;
+            });
+        } catch (UsageUnavailable failure) {
+            switch (failure.getCause()) {
+                case SQLException sql -> throw sql;
+                case InterruptedException interrupted -> throw interrupted;
+                default -> throw failure;
             }
-            Decision decision = kernel.step(progress.state.with(cursor.before(envelope.seq())), envelope);
-            progress.state = decision.newState();
-            progress.transcript.apply(envelope, decision);
-            progress.seq = envelope.seq();
-            progress.offset = end;
-            progress.replayed++;
-        });
+        }
         if (progress.seq < 0 || progress.state.sessions().get(session) == null) {
             return Optional.empty();
         }
@@ -72,7 +83,23 @@ public final class SessionReplay {
                 progress.transcript.export(session), progress.seq, progress.offset), progress.replayed));
     }
 
+    /** 只在真有事件要重放时才等写入线程和查库：全新会话走这条路径时不用付这个代价。 */
+    private UsageLedger.Cursor cursor(Principal principal, long seq) {
+        try {
+            return usage.cursor(principal, seq);
+        } catch (SQLException | InterruptedException failure) {
+            throw new UsageUnavailable(failure);
+        }
+    }
+
+    private static final class UsageUnavailable extends RuntimeException {
+        UsageUnavailable(Exception cause) {
+            super(cause);
+        }
+    }
+
     private static final class Progress {
+        UsageLedger.Cursor cursor;
         KernelState state = KernelState.empty();
         final Transcript transcript = new Transcript();
         long seq = -1;

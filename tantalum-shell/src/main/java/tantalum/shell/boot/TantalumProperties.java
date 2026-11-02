@@ -9,7 +9,22 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
-                                 Compaction compaction, Index index) {
+                                 Compaction compaction, Index index, Residency residency) {
+
+    /** 常驻会话。{@code idle} 为 null 时不按时间回收。 */
+    public record Residency(Duration idle, int maxResident, int snapshotEvents, Duration sweepInterval) {
+
+        public Residency {
+            requirePositive("maxResident", maxResident);
+            requirePositive("snapshotEvents", snapshotEvents);
+        }
+
+        /** 冷会话的只读查询（任务 30）做好之前不回收，否则回收后的会话查不到内容。 */
+        public static Residency defaults() {
+            return new Residency(null, Integer.MAX_VALUE, 200, Duration.ofSeconds(1));
+        }
+    }
+
 
     /** 索引库的节流：攒够事件数或到时间就写。运行结束总是写。 */
     public record Index(int flushEvents, Duration flushInterval) {

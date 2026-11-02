@@ -87,6 +87,7 @@ public final class Transcript implements Projection {
     private final Map<SessionId, Conversation> sessions = new ConcurrentHashMap<>();
 
     /** 没有该会话时返回空的状态。 */
+    @Override
     public Part export(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {
@@ -98,6 +99,7 @@ public final class Transcript implements Projection {
         }
     }
 
+    @Override
     public void restore(SessionId session, Part part) {
         Conversation conversation = new Conversation();
         part.items().forEach(item -> conversation.items.put(item.id(), item));
@@ -108,6 +110,7 @@ public final class Transcript implements Projection {
         sessions.put(session, conversation);
     }
 
+    @Override
     public void remove(SessionId session) {
         sessions.remove(session);
     }
