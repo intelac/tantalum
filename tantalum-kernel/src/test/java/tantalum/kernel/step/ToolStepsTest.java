@@ -34,7 +34,7 @@ class ToolStepsTest {
 
     private static void reply(LoopFixture loop, ContentBlock... calls) {
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(calls), StopReason.TOOL_USE, "m", null));
     }
 

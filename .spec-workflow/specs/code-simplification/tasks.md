@@ -157,35 +157,35 @@
 
 ## 阶段 5：内核
 
-- [ ] 28. 规则 8 对照表和缺的测试
+- [x] 28. 规则 8 对照表和缺的测试
   - File: CompactStepsTest
   - 列出规则 8 每种组合（触发方式 × 钩子拒绝/摘要失败/内容太少 × 能否裁剪）对应的测试，缺的先补；补“压缩途中取消，迟到的摘要回复不进历史”的测试
   - 验证：补的测试在现有代码上通过（取消那一项若失败，记下来由任务 29 修）
   - _Requirements: 1.4, 2.7_
 
-- [ ] 29. 压缩“未采用”重写
+- [x] 29. 压缩“未采用”重写
   - File: value/state/Compacting.java, `kernel/step/{CompactSteps,ModelSteps,RunEnd,CancelSteps}.java`
   - 密封的 `Trigger`；`tryStart` 返回枚举；`notAdopted` 一张表；`adoptTrim`；`RunEnd.finish` 统一保留 `compacting`
   - 验证：任务 28 的全部测试和 `CompactionStressTest` 通过
   - _Requirements: 1.4, 2.7_
 
-- [ ] 30. 上下文变化只留一套
+- [x] 30. 上下文变化只留一套
   - File: value/event/ContextAssembled.java, value/state/SessionContext.java, `kernel/context/{ContextDiff,ContextUpdate}.java`, kernel/step/ModelSteps.java, kernel/compaction/Compactor.java, shell/handler/ContextHandler.java, shell/journal/StoreFormat.java
   - 验证：`ModelStepsTest`、`CompactStepsTest`、`EventCodecTest`、`ContextHandlerTest` 通过；语义版本加一，旧版本数据启动时有警告
   - _Requirements: 2.2, C2_
 
-- [ ] 31. 状态只存一处
+- [x] 31. 状态只存一处
   - File: `value/state/{RunState,SessionState,PrincipalState}.java`, value/hook/HookPoint.java（来自 kernel）, value/model/TokenUsage.java, kernel/**, shell/store/IndexChange.java
   - 验证：内核和 shell 测试通过；快照形状变化时旧快照改为重放（`SnapshotStoreTest`）
   - _Requirements: 3.6_
 
-- [ ] 32. 步骤代码整理
+- [x] 32. 步骤代码整理
   - File: `kernel/{Kernel,step/*,table/BuiltinSteps}.java`, shell/store/TurnQuery.java
   - `StepContext`、`Outcome`、`BuiltinSteps` 移包、`RunPhase.name()`、拆 `ModelSteps`、`scheduleRetry`、`PromptPatch` 合并方法、工作恢复的 `switch`
   - 验证：内核全部测试、`TheLoopTest`、`TenLoopIntegrationTest` 通过；kernel 包之间无循环
   - _Requirements: 2.7, 3.4_
 
-- [ ] 33. 阶段 5 收尾
+- [x] 33. 阶段 5 收尾
   - 验证：全量回归；变异检查（`notAdopted` 的自动分支在同步时继续调用，任务 1 的测试失败）；真实 Claude：`ClaudeScenarioTest` 中记忆中途变化、压缩保留约束、两次压缩后约束仍在三项，报用量；提交；汇报
 
 ## 阶段 6：前端

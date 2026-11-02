@@ -22,7 +22,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
@@ -241,7 +241,8 @@ class EvictionInvarianceTest {
                 RunId run = next.run().run();
                 switch (next) {
                     case AssembleContext assemble -> pipeline.send(principal, session, run,
-                            new ContextAssembled(assemble.id(), "system", List.of(), "memory-" + dynamic++, SETTINGS));
+                            new ContextAssembled(assemble.id(), "system", List.of(), SETTINGS,
+                    List.of(new tantalum.value.state.ContextSection("memory-index", "memory-" + dynamic++, true))));
                     case CallModel model -> {
                         boolean summary = !model.prompt().output().toolsAllowed();
                         List<ContentBlock> content = summary ? List.of(new TextBlock("the summary of everything so far"))

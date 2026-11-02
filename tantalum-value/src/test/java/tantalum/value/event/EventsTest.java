@@ -31,7 +31,7 @@ class EventsTest {
                 new SteerSubmitted(SUB, REQ, "hi"),
                 new FollowUpSubmitted(SUB, REQ, "hi"),
                 new Cancel(REQ),
-                new ContextAssembled(CMD, "system", List.of()),
+                new ContextAssembled(CMD, "system", List.of(), null, List.of()),
                 new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null),
                 new ModelFailed(CMD, FailureReason.TIMEOUT, true, Duration.ZERO, "", ""),
                 new ModelInterrupted(CMD, "partial"),

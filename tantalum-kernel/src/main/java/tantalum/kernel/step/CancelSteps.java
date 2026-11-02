@@ -22,7 +22,7 @@ public final class CancelSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        RunEnd.finish(out, run.withCompacting(null), EndReason.CANCELLED, INTERRUPTED_BY_RESTART);
+        RunEnd.finish(out, run, EndReason.CANCELLED, INTERRUPTED_BY_RESTART);
         return out.decision();
     }
 

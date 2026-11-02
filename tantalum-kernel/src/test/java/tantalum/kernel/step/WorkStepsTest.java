@@ -38,7 +38,7 @@ class WorkStepsTest {
     private static LoopFixture atWork(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null));
         assertInstanceOf(DoWork.class, loop.onlyCommand());
         return loop;

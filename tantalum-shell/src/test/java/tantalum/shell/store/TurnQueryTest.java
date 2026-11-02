@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFile;
@@ -84,7 +84,7 @@ class TurnQueryTest {
 
     private void writeScript() throws Exception {
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of()));
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, List.of()));
         write(RUN, new ModelFailed(new CommandId("s_1-0"), FailureReason.SERVER_ERROR, true, null, "pa", "500"));
         write(RUN, new TimerFired(new CommandId("s_2-0")));
         write(RUN, new ModelReplied(new CommandId("s_3-0"), List.of(new TextBlock("answer")), StopReason.END_TURN, "m", null));
@@ -155,19 +155,19 @@ class TurnQueryTest {
         tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
         String q = ("q ").repeat(45);
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, settings));
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), settings, List.of()));
         write(RUN, new ModelReplied(new CommandId("s_1-0"), List.of(new TextBlock(("a ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(700, 10, 0, 0)));
         write(null, new UserPrompt(new SubmissionId("b"), new RequestId("b"), new OwnerRef.OfSession(SESSION), q));
-        write(RunId.of(SESSION, 3), new ContextAssembled(new CommandId("s_3-0"), "system prompt", List.of(), null, settings));
+        write(RunId.of(SESSION, 3), new ContextAssembled(new CommandId("s_3-0"), "system prompt", List.of(), settings, List.of()));
         write(RunId.of(SESSION, 3), new ModelReplied(new CommandId("s_4-0"), List.of(new TextBlock(("b ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(790, 10, 0, 0)));
         write(null, new UserPrompt(new SubmissionId("c"), new RequestId("c"), new OwnerRef.OfSession(SESSION), q));
         RunId second = RunId.of(SESSION, 6);
-        write(second, new ContextAssembled(new CommandId("s_6-0"), "system prompt", List.of(), null, settings));
+        write(second, new ContextAssembled(new CommandId("s_6-0"), "system prompt", List.of(), settings, List.of()));
         write(second, new ModelReplied(new CommandId("s_7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(50, 20, 0, 0)));
-        write(second, new ContextAssembled(new CommandId("s_8-0"), "system prompt", List.of(), null, settings));
+        write(second, new ContextAssembled(new CommandId("s_8-0"), "system prompt", List.of(), settings, List.of()));
         write(second, new ModelReplied(new CommandId("s_9-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
 
         List<TurnQuery.Turn> turns = query.turns(USER, second);
@@ -193,7 +193,7 @@ class TurnQueryTest {
     @Test
     void traceOfAnUnfinishedRunHasAnOpenLastSegment() throws Exception {
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of()));
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, List.of()));
         TurnQuery.Trace trace = query.trace(USER, RUN);
         assertEquals(2, trace.segments().size());
         assertNull(trace.segments().getLast().to());

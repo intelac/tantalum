@@ -1,4 +1,4 @@
-package tantalum.kernel.hook;
+package tantalum.value.hook;
 
 /** 六个钩子位置。 */
 public enum HookPoint {

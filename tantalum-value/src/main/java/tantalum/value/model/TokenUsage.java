@@ -9,6 +9,19 @@ public record TokenUsage(long input, long output, long cacheRead, long cacheWrit
         }
     }
 
+    public static final TokenUsage ZERO = new TokenUsage(0, 0, 0, 0);
+
+    public TokenUsage plus(TokenUsage other) {
+        return new TokenUsage(input + other.input, output + other.output,
+                cacheRead + other.cacheRead, cacheWrite + other.cacheWrite);
+    }
+
+    /** {@code other} 必须是不大于本值的早先累计，否则结果为负而抛异常。 */
+    public TokenUsage minus(TokenUsage other) {
+        return new TokenUsage(input - other.input, output - other.output,
+                cacheRead - other.cacheRead, cacheWrite - other.cacheWrite);
+    }
+
     /** 模型实际读入的 token 数，含缓存读写。计量上下文大小和额度都用它。 */
     public long promptTotal() {
         return input + cacheRead + cacheWrite;

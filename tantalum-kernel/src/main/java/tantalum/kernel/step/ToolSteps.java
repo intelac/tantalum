@@ -5,12 +5,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import tantalum.kernel.hook.HookOutcome;
-import tantalum.kernel.hook.HookPoint;
 import tantalum.kernel.table.StepContext;
 import tantalum.kernel.tool.ToolScheduler;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.ToolFinished;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
@@ -26,7 +26,7 @@ import tantalum.value.state.ToolSlot;
 /** 工具轮的处理函数。 */
 public final class ToolSteps {
 
-    static final String AWAITING_TOOLS = "AwaitingTools";
+    public static final String AWAITING_TOOLS = "AwaitingTools";
 
     private ToolSteps() {}
 
@@ -56,7 +56,7 @@ public final class ToolSteps {
                 round = block(round, i, "Tool arguments are not valid JSON: " + call.rawArguments());
                 continue;
             }
-            HookOutcome hook = out.hooks.run(HookPoint.BEFORE_TOOL_CALL, out.state,
+            HookOutcome hook = out.hooks.run(HookPoint.BEFORE_TOOL_CALL, out.state(),
                     out.hookContext(run.ref()).withCall(call));
             out.report(hook.facts());
             if (hook.result() instanceof Stop stop) {
@@ -74,12 +74,12 @@ public final class ToolSteps {
         return round.withSlot(index, ToolSlot.blocked(call, new ToolResultBlock(call.id(), reason, true, null)));
     }
 
-    /** 工作完成后继续检查。{@code allowed} 为 false 时拦截正在等待的调用。 */
-    static void resumeChecks(Outcome out, RunState run, boolean allowed, String reason) {
+    /** 工作完成后继续检查。{@code blockedReason} 不为空时拦截正在等待的调用。 */
+    static void resumeChecks(Outcome out, RunState run, String blockedReason) {
         ToolRound round = run.tools();
         int current = round.checked();
-        if (!allowed) {
-            round = block(round, current, "Tool call blocked: " + reason);
+        if (blockedReason != null) {
+            round = block(round, current, "Tool call blocked: " + blockedReason);
         }
         checkRemaining(out, run, round.withChecked(current + 1));
     }
@@ -123,8 +123,6 @@ public final class ToolSteps {
                 sent.add(slot.command());
             }
         }
-        run = run.withTools(round);
-        out.put(run);
-        out.await(run, AWAITING_TOOLS, sent);
+        out.await(run.withTools(round), AWAITING_TOOLS, sent);
     }
 }

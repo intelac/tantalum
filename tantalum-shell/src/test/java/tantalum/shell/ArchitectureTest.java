@@ -85,6 +85,16 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule shellPackagesHaveNoCycles = slices().matching("tantalum.shell.(*)..").should().beFreeOfCycles();
 
+    /** 内核子包也单向依赖：转移表只认处理函数的形状，由步骤包把自己注册进去。 */
+    @ArchTest
+    static final ArchRule kernelPackagesHaveNoCycles = slices().matching("tantalum.kernel.(*)..").should().beFreeOfCycles();
+
+    /** {@code Kernel} 在最上层调用步骤，子包不回头依赖它，否则又绕成环。 */
+    @ArchTest
+    static final ArchRule kernelRootSitsOnTop = noClasses()
+            .that().resideInAPackage("tantalum.kernel.*..")
+            .should().dependOnClassesThat().resideInAPackage("tantalum.kernel");
+
     /** 只有组装和 Web 层读全局配置；其余的包拿自己的设置记录。 */
     @ArchTest
     static final ArchRule onlyTheEdgeReadsTheConfiguration = noClasses()

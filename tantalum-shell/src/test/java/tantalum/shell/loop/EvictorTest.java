@@ -109,7 +109,7 @@ class EvictorTest {
     @Test
     void aSessionWithAnActiveRunOrQueuedSubmissionStays() {
         Evictor evictor = evictor(NONE, 1000, 200);
-        KernelState state = state(idle(A).withActiveRun(RunId.of(A, 1)), idle(B).withFollowUps(List.of("next")));
+        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).withFollowUps(List.of("next")));
         touch(evictor, A, state, state);
         touch(evictor, B, state, state);
         KernelState after = evictor.sweep(state);
@@ -146,7 +146,7 @@ class EvictorTest {
     @Test
     void overTheLimitAnActiveSessionIsSkippedForTheNextOldest() {
         Evictor evictor = evictor(null, 2, 200);
-        KernelState state = state(idle(A).withActiveRun(RunId.of(A, 1)), idle(B), idle(C));
+        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B), idle(C));
         touch(evictor, A, state, state);
         touch(evictor, B, state, state);
         touch(evictor, C, state, state);
@@ -158,7 +158,7 @@ class EvictorTest {
     @Test
     void aRunEndingWritesASnapshotOnlyAfterEnoughEvents() {
         Evictor evictor = evictor(null, 1000, 3);
-        KernelState running = state(idle(A).withActiveRun(RunId.of(A, 1)));
+        KernelState running = state(idle(A).startRun(RunId.of(A, 1)));
         KernelState ended = state(idle(A));
         touch(evictor, A, running, running);
         touch(evictor, A, running, ended);

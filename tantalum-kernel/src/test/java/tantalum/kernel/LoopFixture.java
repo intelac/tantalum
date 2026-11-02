@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Decision;
@@ -87,7 +87,7 @@ public final class LoopFixture {
     }
 
     public String phase() {
-        return Kernel.stateName(run());
+        return run().phase().name();
     }
 
     public Command onlyCommand() {

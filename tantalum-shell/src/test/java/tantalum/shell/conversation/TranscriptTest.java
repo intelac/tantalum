@@ -58,7 +58,7 @@ class TranscriptTest {
     private RunId nextRun(String text) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
-        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
+        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         return run;
     }
 
@@ -79,7 +79,7 @@ class TranscriptTest {
         assertTrue(fx.items(Text.class).stream().noneMatch(item -> item.text().contains("Goal")), "the summary is not a reply");
         assertTrue(fx.items(Thinking.class).stream().noneMatch(item -> item.text().equals("summarizing")));
         assertEquals("AwaitingContext", fx.status(run).phase(), "the context is reassembled after compaction");
-        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
+        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
 
         fx.feed(run, fx.reply(text("a3")));
         assertEquals("a3", fx.items(Text.class).getLast().text());

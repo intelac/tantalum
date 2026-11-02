@@ -11,4 +11,9 @@ public record Awaiting(Set<CommandId> commands, String resumeAt) implements RunP
         commands = Set.copyOf(commands);
         Objects.requireNonNull(resumeAt, "resumeAt");
     }
+
+    @Override
+    public String name() {
+        return resumeAt;
+    }
 }

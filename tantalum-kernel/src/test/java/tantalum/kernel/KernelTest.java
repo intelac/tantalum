@@ -43,7 +43,7 @@ class KernelTest {
 
     private static KernelState state() {
         return KernelState.empty().with(awaiting(A)).with(awaiting(B))
-                .with(SessionState.start(SESSION, USER).withActiveRun(A.run()));
+                .with(SessionState.start(SESSION, USER).startRun(A.run()));
     }
 
     private static EventEnvelope timer(RunRef ref, String command) {

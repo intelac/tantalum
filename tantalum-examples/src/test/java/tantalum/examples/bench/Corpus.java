@@ -16,7 +16,7 @@ import java.util.Random;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.compaction.TokenEstimate;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.journal.EventCodec;
@@ -224,7 +224,7 @@ public final class Corpus {
 
     private Event resultOf(Command command) {
         return switch (command) {
-            case AssembleContext assemble -> new ContextAssembled(assemble.id(), SYSTEM, TOOLS, null, COMPACTION);
+            case AssembleContext assemble -> new ContextAssembled(assemble.id(), SYSTEM, TOOLS, COMPACTION, List.of());
             case CallModel call -> reply(call);
             case RunTool tool -> new ToolFinished(tool.id(), tool.call().id(), words(200 + random.nextInt(3800)), false);
             default -> throw new IllegalStateException("corpus does not produce " + command);

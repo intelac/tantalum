@@ -12,7 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
@@ -74,13 +74,13 @@ class TranscriptReplayTest {
         live.feed(first, live.reply(new tantalum.value.model.TokenUsage(700, 10, 0, 0), text(("a ").repeat(45))));
         live.feed(null, live.prompt(q));
         RunId second = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
-        live.feed(second, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
+        live.feed(second, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(second, live.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(("b ").repeat(45))));
         live.feed(null, live.prompt(q));
         RunId third = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
-        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
+        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(third, live.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
-        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
+        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(third, live.truncatedReply("a3 cut"));
 
         Transcript transcript = new Transcript();

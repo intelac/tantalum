@@ -2,71 +2,64 @@ package tantalum.value.state;
 
 import java.util.List;
 import java.util.Objects;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
-import tantalum.value.model.ToolSpec;
 
-/** 一次运行的状态。{@code system} 和 {@code toolSpecs} 来自 {@code ContextAssembled}，组装前为空；
+/** 一次运行的状态。system 和工具只存在会话的 {@code SessionContext} 里，这里不复制；
  * {@code workOrigin} 是发起当前工作的钩子位置；{@code compacting} 在等摘要时有值；
  * {@code autoCompactionFailed} 为真后本运行不再自动压缩；{@code overflowRecovered} 为真后再超长就直接失败。 */
-public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, String system, List<ToolSpec> toolSpecs,
-                       ToolRound tools, List<Message> pendingSteers, int retries,
-                       String workOrigin, Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered) {
+public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, ToolRound tools, List<Message> pendingSteers, int retries,
+                       HookPoint workOrigin, Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered) {
 
     public RunState {
         Objects.requireNonNull(ref, "ref");
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(phase, "phase");
-        toolSpecs = List.copyOf(toolSpecs);
         pendingSteers = List.copyOf(pendingSteers);
     }
 
     public static RunState start(RunRef ref, OwnerRef owner) {
-        return new RunState(ref, owner, new Deciding(), null, List.of(), null, List.of(), 0, null, null, false, false);
+        return new RunState(ref, owner, new Deciding(), null, List.of(), 0, null, null, false, false);
     }
 
     public RunState withPhase(RunPhase newPhase) {
-        return new RunState(ref, owner, newPhase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
-                compacting, autoCompactionFailed, overflowRecovered);
-    }
-
-    public RunState withContext(String newSystem, List<ToolSpec> newToolSpecs) {
-        return new RunState(ref, owner, phase, newSystem, newToolSpecs, tools, pendingSteers, retries, workOrigin,
+        return new RunState(ref, owner, newPhase, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withTools(ToolRound newTools) {
-        return new RunState(ref, owner, phase, system, toolSpecs, newTools, pendingSteers, retries, workOrigin,
+        return new RunState(ref, owner, phase, newTools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withPendingSteers(List<Message> newSteers) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, newSteers, retries, workOrigin,
+        return new RunState(ref, owner, phase, tools, newSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withRetries(int newRetries) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, newRetries, workOrigin,
+        return new RunState(ref, owner, phase, tools, pendingSteers, newRetries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
-    public RunState withWorkOrigin(String newWorkOrigin) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, newWorkOrigin,
+    public RunState withWorkOrigin(HookPoint newWorkOrigin) {
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, newWorkOrigin,
                 compacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withCompacting(Compacting newCompacting) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
                 newCompacting, autoCompactionFailed, overflowRecovered);
     }
 
     public RunState withAutoCompactionFailed(boolean failed) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
                 compacting, failed, overflowRecovered);
     }
 
     public RunState withOverflowRecovered(boolean recovered) {
-        return new RunState(ref, owner, phase, system, toolSpecs, tools, pendingSteers, retries, workOrigin,
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, recovered);
     }
 

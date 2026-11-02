@@ -58,7 +58,7 @@ class WireFormatTest {
     private RunId nextRun(String text) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
-        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
+        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         return run;
     }
 
@@ -72,7 +72,7 @@ class WireFormatTest {
         fx.feed(second, fx.reply(new TokenUsage(790, 10, 0, 0), text(block("a2"))));
         RunId third = nextRun(block("q3"));
         fx.feed(third, fx.reply(new TokenUsage(50, 20, 0, 0), claudeThinking("summarizing"), text("Goal: q")));
-        fx.feed(third, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
+        fx.feed(third, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         fx.feed(third, fx.reply(text("a3")));
         RunId refused = nextRun("q4");
         fx.tick(Duration.ofSeconds(30));

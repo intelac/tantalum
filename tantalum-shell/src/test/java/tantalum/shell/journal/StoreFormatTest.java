@@ -23,7 +23,7 @@ class StoreFormatTest {
     @Test
     void newDirectoryGetsCurrentVersions() throws Exception {
         assertEquals(new StoreFormat(StoreFormat.STORAGE, StoreFormat.SEMANTICS), StoreFormat.check(dir));
-        assertEquals("{\"storage\":1,\"semantics\":1}\n", Files.readString(file()));
+        assertEquals("{\"storage\":1,\"semantics\":" + StoreFormat.SEMANTICS + "}\n", Files.readString(file()));
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
         assertEquals(1, Files.list(dir).count());
     }
@@ -50,7 +50,7 @@ class StoreFormatTest {
     void semanticsChangeStartsAndIsRecorded() throws Exception {
         Files.writeString(file(), "{\"storage\":1,\"semantics\":0}\n");
         assertEquals(StoreFormat.SEMANTICS, StoreFormat.check(dir).semantics());
-        assertEquals("{\"storage\":1,\"semantics\":1}\n", Files.readString(file()));
+        assertEquals("{\"storage\":1,\"semantics\":" + StoreFormat.SEMANTICS + "}\n", Files.readString(file()));
     }
 
     @Test

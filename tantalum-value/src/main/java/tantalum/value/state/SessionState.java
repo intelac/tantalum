@@ -45,9 +45,15 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor);
     }
 
-    /** 开始运行时传入运行 ID，同时记为 {@code lastRun}；结束时传 null 只清 {@code activeRun}。 */
-    public SessionState withActiveRun(RunId run) {
-        return new SessionState(id, principal, messages, run, run == null ? lastRun : run, followUps, context, compaction, anchor);
+    /** 运行开始：同时记为 {@code lastRun}。 */
+    public SessionState startRun(RunId run) {
+        Objects.requireNonNull(run, "run");
+        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor);
+    }
+
+    /** 运行结束：只清 {@code activeRun}，{@code lastRun} 留着判断迟到的结果。 */
+    public SessionState endRun() {
+        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor);
     }
 
     public SessionState withFollowUps(List<String> newFollowUps) {

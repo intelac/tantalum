@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import tantalum.value.decision.HookReported;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.HookResult;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.PromptPatch;

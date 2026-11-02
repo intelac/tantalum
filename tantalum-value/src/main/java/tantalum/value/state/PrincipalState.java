@@ -20,17 +20,12 @@ public record PrincipalState(Principal principal, Map<LocalDate, TokenUsage> dai
     }
 
     public TokenUsage usageOn(LocalDate day) {
-        return dailyUsage.getOrDefault(day, new TokenUsage(0, 0, 0, 0));
+        return dailyUsage.getOrDefault(day, TokenUsage.ZERO);
     }
 
     public PrincipalState add(LocalDate day, TokenUsage usage) {
-        TokenUsage current = usageOn(day);
         Map<LocalDate, TokenUsage> updated = new HashMap<>(dailyUsage);
-        updated.put(day, new TokenUsage(
-                current.input() + usage.input(),
-                current.output() + usage.output(),
-                current.cacheRead() + usage.cacheRead(),
-                current.cacheWrite() + usage.cacheWrite()));
+        updated.put(day, usageOn(day).plus(usage));
         return new PrincipalState(principal, updated);
     }
 }

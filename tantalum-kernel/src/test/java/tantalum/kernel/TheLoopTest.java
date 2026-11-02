@@ -45,7 +45,7 @@ class TheLoopTest {
         assertInstanceOf(AssembleContext.class, loop.onlyCommand(), "turn 1");
 
         // 第 2 圈
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         assertEquals("AwaitingModel", loop.phase(), "turn 2");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 2");
 

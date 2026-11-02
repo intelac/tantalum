@@ -22,7 +22,7 @@ import tantalum.value.json.Json;
 public record StoreFormat(int storage, int semantics) {
 
     public static final int STORAGE = 1;
-    public static final int SEMANTICS = 1;
+    public static final int SEMANTICS = 2;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);
     private static final String FILE = "format.json";

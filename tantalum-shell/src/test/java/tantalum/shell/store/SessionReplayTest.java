@@ -27,7 +27,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.EventCodec;
@@ -152,7 +152,8 @@ class SessionReplayTest {
         var run = next.command().run().run();
         switch (next.command()) {
             case AssembleContext assemble -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ContextAssembled(assemble.id(), "system", List.of(), "memory-" + dynamic++, SETTINGS)));
+                    new ContextAssembled(assemble.id(), "system", List.of(), SETTINGS,
+                    List.of(new tantalum.value.state.ContextSection("memory-index", "memory-" + dynamic++, true)))));
             case CallModel model -> {
                 boolean summary = !model.prompt().output().toolsAllowed();
                 List<ContentBlock> content = summary ? List.of(new TextBlock("the summary of everything so far"))
@@ -272,7 +273,7 @@ class SessionReplayTest {
         Set<String> phases = new HashSet<>();
         List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(COMPACTED)).toList();
         for (EventEnvelope event : events) {
-            replay.load(ALICE, COMPACTED, event.seq()).ifPresent(slice -> slice.snapshot().slice().runs().forEach(run -> phases.add(Kernel.stateName(run))));
+            replay.load(ALICE, COMPACTED, event.seq()).ifPresent(slice -> slice.snapshot().slice().runs().forEach(run -> phases.add(run.phase().name())));
         }
         assertTrue(phases.containsAll(Set.of("AwaitingContext", "AwaitingModel", "AwaitingSummary")), phases.toString());
     }

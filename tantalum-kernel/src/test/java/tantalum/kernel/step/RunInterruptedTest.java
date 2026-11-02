@@ -49,12 +49,13 @@ class RunInterruptedTest {
     private static LoopFixture atModel(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return loop;
     }
 
     /** 判定：运行以 CANCELLED 结束、详情固定、没有命令、会话空闲、每个工具调用都有配对的结果。 */
     private static void assertClosed(LoopFixture loop) {
+        tantalum.value.state.Compacting compacting = loop.run().compacting();
         loop.feed(loop.runId(), EVENT);
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
         assertEquals(EndReason.CANCELLED, ended.reason());
@@ -62,7 +63,8 @@ class RunInterruptedTest {
         assertEquals(List.of(), loop.last.commands());
         assertNull(loop.session().activeRun());
         assertNull(loop.run().tools());
-        assertNull(loop.run().compacting());
+        // 结束时 compacting 原样保留（RunEnd.finish 的规则），收尾本身不改它。
+        assertEquals(compacting, loop.run().compacting());
         Set<String> calls = new HashSet<>();
         Set<String> results = new HashSet<>();
         for (Message message : loop.session().messages()) {

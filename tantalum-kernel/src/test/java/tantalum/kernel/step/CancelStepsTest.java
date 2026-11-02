@@ -45,7 +45,7 @@ class CancelStepsTest {
     void unanweredToolCallsArePairedWithSyntheticResults() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
                 List.of(call("a", "safe1"), call("b", "write")), StopReason.TOOL_USE, "m", null));
         RunId run = loop.runId();
@@ -62,7 +62,7 @@ class CancelStepsTest {
     void lateToolResultAfterCancelDoesNotChangeHistory() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
                 List.of(call("a", "safe1")), StopReason.TOOL_USE, "m", null));
         var sent = loop.onlyCommandId();

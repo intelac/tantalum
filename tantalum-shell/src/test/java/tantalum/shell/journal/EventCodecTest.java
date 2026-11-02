@@ -78,8 +78,9 @@ class EventCodecTest {
                 new FollowUpSubmitted(SUB, REQ, "x"),
                 new Cancel(REQ),
                 new tantalum.value.event.RunInterrupted(),
-                new ContextAssembled(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson()))),
-                new ContextAssembled(CMD, "system", List.of(), "idx", new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192)),
+                new ContextAssembled(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson())), null, List.of()),
+                new ContextAssembled(CMD, "system", List.of(), new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192),
+                List.of(new tantalum.value.state.ContextSection("memory-index", "idx", true))),
                 new tantalum.value.event.CompactRequested(SUB, REQ, "focus on the test results"),
                 new tantalum.value.event.CompactRequested(SUB, REQ, null),
                 new ModelReplied(CMD, content, StopReason.TOOL_USE, "m", new TokenUsage(1, 2, 3, 4)),
@@ -92,16 +93,6 @@ class EventCodecTest {
                 new WorkDone(CMD, "citation", complexJson(), false, "fix it"),
                 new WorkDone(CMD, "citation", new Json.Null(), true, null));
         events.forEach(this::assertRoundTrip);
-    }
-
-    /** 压缩之前写下的 ContextAssembled 没有 compaction 字段，读出来是 null，这些会话不压缩。 */
-    @Test
-    void legacyContextAssembledWithoutCompactionStillDecodes() {
-        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 1,
-                "{\"command\":{\"value\":\"1-0\"},\"system\":\"s\",\"tools\":[]}");
-        assertEquals("s", decoded.system());
-        assertNull(decoded.dynamic());
-        assertNull(decoded.compaction());
     }
 
     @Test

@@ -2,14 +2,12 @@ package tantalum.kernel.step;
 
 import java.util.ArrayList;
 import java.util.List;
-import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.HookOutcome;
-import tantalum.kernel.hook.HookPoint;
+import tantalum.kernel.table.StepContext;
 import tantalum.kernel.tool.ToolPairing;
-import tantalum.kernel.tool.ToolSafety;
 import tantalum.value.decision.Decision;
-import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.WorkDone;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.model.ContentBlock;
@@ -17,7 +15,6 @@ import tantalum.value.model.Message;
 import tantalum.value.model.Role;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
-import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -28,10 +25,9 @@ public final class RunEnd {
     private RunEnd() {}
 
     /** 处理函数抛异常时使用，只让该运行失败。 */
-    public static Decision fail(KernelState state, EventEnvelope envelope, HookChain hooks, ToolSafety toolSafety,
-                                int maxParallelTools, RunState run, RuntimeException failure) {
-        Outcome out = new Outcome(state, envelope, hooks, toolSafety, maxParallelTools);
-        finish(out, run, EndReason.FAILED, failure.toString());
+    public static Decision fail(StepContext context, RuntimeException failure) {
+        Outcome out = new Outcome(context);
+        finish(out, context.run(), EndReason.FAILED, failure.toString());
         return out.decision();
     }
 
@@ -45,7 +41,7 @@ public final class RunEnd {
             ModelSteps.callModel(out, run, work);
             return;
         }
-        HookOutcome hook = out.hooks.run(HookPoint.BEFORE_RUN_END, out.state,
+        HookOutcome hook = out.hooks.run(HookPoint.BEFORE_RUN_END, out.state(),
                 out.hookContext(run.ref()).withWork(work));
         out.report(hook.facts());
         switch (hook.result()) {
@@ -55,7 +51,10 @@ public final class RunEnd {
         }
     }
 
-    /** 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。 */
+    /**
+     * 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。
+     * {@code compacting} 原样保留：在等摘要时结束的运行，迟到的摘要回复据此不进历史。
+     */
     static void finish(Outcome out, RunState run, EndReason reason, String detail) {
         if (run.tools() != null && !run.tools().allFinished()) {
             List<ContentBlock> results = new ArrayList<>(ToolPairing.complete(run.tools()));
@@ -67,12 +66,12 @@ public final class RunEnd {
         out.enter(run.withTools(null).withPendingSteers(List.of()),
                 new Ended(reason, detail));
 
-        SessionState session = out.session(run.ref()).withActiveRun(null);
-        out.state = out.state.with(session);
+        SessionState session = out.session(run.ref()).endRun();
+        out.put(session);
         if (!session.followUps().isEmpty()) {
             String next = session.followUps().getFirst();
-            out.state = out.state.with(session.withFollowUps(session.followUps().subList(1, session.followUps().size())));
-            ModelSteps.startRun(out, new OwnerRef.OfSession(session.id()), next);
+            out.put(session.withFollowUps(session.followUps().subList(1, session.followUps().size())));
+            SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next);
         }
     }
 }

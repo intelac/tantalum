@@ -144,11 +144,20 @@ class ClaudeScenarioTest {
 
     /** 等到该会话最新的运行结束，返回它的视图。 */
     private static JsonNode waitForLatestRun(TestServer server, String user, String session, Duration limit) throws Exception {
+        return waitForRun(server, user, session, 1, limit);
+    }
+
+    /**
+     * 等到该会话至少有 {@code count} 个运行、且最新的那个结束。提交是异步的：返回 200 时新运行可能还没开始，
+     * 只看“最新的运行”会拿到上一个已经结束的。
+     */
+    private static JsonNode waitForRun(TestServer server, String user, String session, int count, Duration limit) throws Exception {
         Instant deadline = Instant.now().plus(limit);
         JsonNode latest = null;
         while (Instant.now().isBefore(deadline)) {
-            JsonNode runs = JSON.readTree(server.get(user, "/api/sessions/" + session + "/runs").body()).get("runs");
-            if (runs != null && !runs.isEmpty()) {
+            HttpResponse<String> response = server.get(user, "/api/sessions/" + session + "/runs");
+            JsonNode runs = response.statusCode() == 200 ? JSON.readTree(response.body()).get("runs") : null;
+            if (runs != null && runs.size() >= count) {
                 latest = runs.get(runs.size() - 1);
                 if (latest.has("endReason")) {
                     return latest;
@@ -440,7 +449,7 @@ class ClaudeScenarioTest {
             assertEquals("CANCELLED", cancelled.get("endReason").asString(), cancelled.toString());
 
             submit(server, "cancel", "s1", "In one sentence, what was the story about so far?");
-            JsonNode followUp = waitForLatestRun(server, "cancel", "s1", Duration.ofMinutes(4));
+            JsonNode followUp = waitForRun(server, "cancel", "s1", 2, Duration.ofMinutes(4));
             assertEquals("COMPLETED", followUp.get("endReason").asString(), followUp.toString());
             stream.body().close();
         }
@@ -494,7 +503,7 @@ class ClaudeScenarioTest {
             for (int i = 0; i < 500 && JSON.readTree(server.get("crash", "/api/sessions/s1/runs").body()).get("runs").size() < 2; i++) {
                 Thread.sleep(10);
             }
-            JsonNode after = waitForLatestRun(server, "crash", "s1", Duration.ofMinutes(4));
+            JsonNode after = waitForRun(server, "crash", "s1", 2, Duration.ofMinutes(4));
             assertEquals("COMPLETED", after.get("endReason").asString(), after.toString());
         }
 
@@ -649,7 +658,7 @@ class ClaudeScenarioTest {
             assertEquals(201, server.post("drift", "/api/memory",
                     "{\"name\":\"style\",\"type\":\"user\",\"description\":\"Prefers short answers\",\"content\":\"Short answers.\"}").statusCode());
             submit(server, "drift", "s1", "Also, what short-answer preference do you know about me? Then compute a13 modulo 7.");
-            JsonNode second = waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3));
+            JsonNode second = waitForRun(server, "drift", "s1", 2, Duration.ofMinutes(3));
             System.out.println("[claude memory drift] second run=" + second);
             assertEquals("COMPLETED", second.get("endReason").asString(), second.toString());
         }
@@ -697,7 +706,7 @@ class ClaudeScenarioTest {
             submit(server, "manual", "s1", "The deployment code is ZEPHYR-9182. Reply with one short sentence. " + "Background only: " + "lorem ipsum ".repeat(1500));
             assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
             submit(server, "manual", "s1", "Reply with the single word: ok.");
-            assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
+            assertEquals("COMPLETED", waitForRun(server, "manual", "s1", 2, Duration.ofMinutes(2)).get("endReason").asString());
 
             HttpResponse<String> compact = server.post("manual", "/api/sessions/s1/compact", "{\"instructions\":\"Keep the deployment code exactly.\"}");
             assertEquals(200, compact.statusCode(), compact.body());
@@ -716,7 +725,8 @@ class ClaudeScenarioTest {
             assertTrue(messages.contains("\"trigger\":\"MANUAL\"") && messages.contains("ZEPHYR-9182"), messages.substring(0, Math.min(500, messages.length())));
 
             submit(server, "manual", "s1", "What is the deployment code? Answer from what you know, without using tools.");
-            assertEquals("COMPLETED", waitForLatestRun(server, "manual", "s1", Duration.ofMinutes(2)).get("endReason").asString());
+            // 第三个运行是手动压缩本身。
+            assertEquals("COMPLETED", waitForRun(server, "manual", "s1", 4, Duration.ofMinutes(2)).get("endReason").asString());
         }
         List<EventEnvelope> journal = journal(data);
         assertTrue(lastText(journal).contains("ZEPHYR-9182"), lastText(journal));

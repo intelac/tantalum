@@ -2,7 +2,6 @@ package tantalum.value.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,14 +27,11 @@ class StateTreeTest {
     void runUpdatesReturnNewObjects() {
         RunState run = RunState.start(REF, OWNER);
         RunState changed = run.withPhase(new Awaiting(Set.of(), "AwaitingModel"))
-                .withContext("sys", List.of())
                 .withTools(new ToolRound(List.of(), 0))
                 .withPendingSteers(List.of(Message.user("x")))
                 .withRetries(2);
 
         assertEquals(new Deciding(), run.phase());
-        assertNull(run.system());
-        assertEquals("sys", changed.system());
         assertEquals(2, changed.retries());
         assertEquals(1, changed.pendingSteers().size());
         assertEquals(0, changed.tools().slots().size());
@@ -50,14 +46,14 @@ class StateTreeTest {
         assertThrows(NullPointerException.class, () -> RunState.start(null, OWNER));
         assertThrows(NullPointerException.class, () -> RunState.start(REF, null));
         assertThrows(NullPointerException.class,
-                () -> new RunState(REF, OWNER, null, null, List.of(), null, List.of(), 0, null, null, false, false));
+                () -> new RunState(REF, OWNER, null, null, List.of(), 0, null, null, false, false));
     }
 
     @Test
     void sessionAppendsWithoutChangingTheOriginal() {
         SessionState session = SessionState.start(SESSION, USER);
         SessionState changed = session.append(Message.user("a"))
-                .withActiveRun(REF.run())
+                .startRun(REF.run())
                 .withFollowUps(List.of("next"));
 
         assertEquals(0, session.messages().size());

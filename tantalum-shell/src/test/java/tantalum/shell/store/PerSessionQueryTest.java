@@ -19,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
@@ -132,7 +132,7 @@ class PerSessionQueryTest {
         Decision submitted = send(principal, session, null,
                 new UserPrompt(new SubmissionId("sub-" + text), new RequestId(text), new OwnerRef.OfSession(session), text));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
-        Decision assembled = send(principal, session, assemble.run().run(), new ContextAssembled(assemble.id(), "s", List.of()));
+        Decision assembled = send(principal, session, assemble.run().run(), new ContextAssembled(assemble.id(), "s", List.of(), null, List.of()));
         CallModel call = assembled.commands().isEmpty() ? null : (CallModel) assembled.commands().getFirst();
         return new Started(assemble.run().run(), call);
     }
