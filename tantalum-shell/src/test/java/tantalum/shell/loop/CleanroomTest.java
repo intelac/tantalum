@@ -15,6 +15,7 @@ import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
+import tantalum.shell.conversation.Projection;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.value.command.AssembleContext;

@@ -101,7 +101,7 @@ class McpRegistryTest {
         assertTrue(catalog.find("mcp__s__search").isPresent());
         assertFalse(catalog.safety().isConcurrencySafe("mcp__s__search", new Json.Null()));
         Tool found = catalog.find("mcp__s__search").orElseThrow();
-        assertEquals(2, catalog.limiterFor(found).available());
+        assertEquals(2, found.serverConcurrency());
     }
 
     @Test

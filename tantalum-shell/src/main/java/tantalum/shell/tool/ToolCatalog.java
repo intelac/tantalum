@@ -6,14 +6,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import tantalum.kernel.tool.ToolSafety;
-import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.model.ToolSpec;
 
-/** 已注册的工具，以及每个服务端共享的并发名额。动态工具（如 MCP）来自 {@link ToolSource}，同名时已注册的工具优先。 */
+/** 已注册的工具。同一服务端的工具必须声明相同的并发上限。动态工具（如 MCP）来自 {@link ToolSource}，同名时已注册的工具优先。 */
 public final class ToolCatalog {
 
     /** 运行中会变化的工具来源。必须线程安全。 */
@@ -32,7 +30,6 @@ public final class ToolCatalog {
     };
 
     private final Map<String, Tool> tools = new LinkedHashMap<>();
-    private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
     private final Map<String, Integer> limits = new HashMap<>();
 
     public void register(Tool tool) {
@@ -44,7 +41,6 @@ public final class ToolCatalog {
             throw new IllegalStateException("server " + tool.server() + " declared with limits "
                     + declared + " and " + tool.serverConcurrency());
         }
-        limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
         tools.put(tool.name(), tool);
     }
 
@@ -59,10 +55,6 @@ public final class ToolCatalog {
     public Optional<Tool> find(String name) {
         Tool registered = tools.get(name);
         return registered != null ? Optional.of(registered) : source.find(name);
-    }
-
-    public CallLimiter limiterFor(Tool tool) {
-        return limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
     }
 
     /** 按名称排序，工具顺序不随注册或连接的先后变化，缓存前缀才稳定。 */

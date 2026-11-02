@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
-import tantalum.shell.boot.TantalumProperties;
 
 /** 校验过的 MCP 配置。任何一项不合法都让启动失败，错误里只有配置项名字，没有凭据内容。 */
 public record McpSettings(List<Server> servers, Duration startupWait) {
@@ -38,7 +37,7 @@ public record McpSettings(List<Server> servers, Duration startupWait) {
         return servers.isEmpty();
     }
 
-    public static McpSettings from(TantalumProperties.Mcp mcp, Duration toolTimeout, UnaryOperator<String> environment) {
+    public static McpSettings from(McpProperties mcp, Duration toolTimeout, UnaryOperator<String> environment) {
         if (mcp == null || mcp.servers() == null) {
             return none();
         }
@@ -47,7 +46,7 @@ public record McpSettings(List<Server> servers, Duration startupWait) {
         return new McpSettings(List.copyOf(servers), mcp.startupWait() == null ? Duration.ofSeconds(10) : mcp.startupWait());
     }
 
-    private static Server server(String name, TantalumProperties.McpServer config, Duration toolTimeout, UnaryOperator<String> environment) {
+    private static Server server(String name, McpProperties.Server config, Duration toolTimeout, UnaryOperator<String> environment) {
         String key = "tantalum.mcp.servers." + name;
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException(key + ": server name must match " + NAME.pattern());

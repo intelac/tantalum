@@ -10,9 +10,9 @@ import tantalum.value.command.Command;
 import tantalum.value.event.Event;
 
 /** 输出环的消费者，只分发：每条命令一个虚拟线程，慢 Handler 不占消费者线程。 */
-public final class Dispatcher implements EventHandler<OutputRing.Slot> {
+public final class HandlerDispatcher implements EventHandler<OutputRing.Slot> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(Dispatcher.class);
+    private static final Logger LOG = LoggerFactory.getLogger(HandlerDispatcher.class);
 
     private final Map<Class<? extends Command>, Handler> handlers;
     private final InFlightCommands inFlight;
@@ -20,7 +20,7 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
     /** 关闭中不再启动新的 Handler：这些运行在文件里没结束，下次启动时以“因重启中断”收尾，不会重复调用。 */
     private volatile boolean closing;
 
-    public Dispatcher(Map<Class<? extends Command>, Handler> handlers, InFlightCommands inFlight, ResultPublisher results) {
+    public HandlerDispatcher(Map<Class<? extends Command>, Handler> handlers, InFlightCommands inFlight, ResultPublisher results) {
         this.handlers = Map.copyOf(handlers);
         this.inFlight = inFlight;
         this.results = results;

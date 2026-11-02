@@ -60,14 +60,6 @@ class ToolCatalogTest {
     }
 
     @Test
-    void toolsOnOneServerShareALimiter() {
-        ToolCatalog catalog = new ToolCatalog();
-        catalog.register(tool("a", "s", 2, false));
-        catalog.register(tool("b", "s", 2, false));
-        assertTrue(catalog.limiterFor(catalog.find("a").orElseThrow()) == catalog.limiterFor(catalog.find("b").orElseThrow()));
-    }
-
-    @Test
     void conflictingLimitsForOneServerFail() {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool("a", "s", 2, false));

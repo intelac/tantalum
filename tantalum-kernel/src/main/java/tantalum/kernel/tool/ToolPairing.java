@@ -18,7 +18,7 @@ public final class ToolPairing {
     }
 
     private static ToolResultBlock resultOf(ToolSlot slot) {
-        if (slot.finished()) {
+        if (slot.isFinished()) {
             return slot.result();
         }
         String id = slot.call().id();

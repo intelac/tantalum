@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.journal.JsonText;
+import tantalum.shell.json.JsonText;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.value.json.Json;

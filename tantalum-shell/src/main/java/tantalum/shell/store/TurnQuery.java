@@ -1,4 +1,4 @@
-package tantalum.shell.journal;
+package tantalum.shell.store;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,10 +14,10 @@ import java.util.stream.Stream;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
-import tantalum.shell.store.SessionFileReader;
-import tantalum.shell.store.SessionPaths;
 import tantalum.shell.store.SessionReplay;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;

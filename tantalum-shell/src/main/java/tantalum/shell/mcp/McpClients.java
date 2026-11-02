@@ -16,15 +16,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** 构造 MCP 客户端的唯一地方。不跟随重定向，否则凭据可能被带到别的主机。 */
-final class McpTools {
+final class McpClients {
 
     private static final int MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
 
-    private static final Logger LOG = LoggerFactory.getLogger(McpTools.class);
+    private static final Logger LOG = LoggerFactory.getLogger(McpClients.class);
     static final int MAX_PAGES = 100;
 
-    private McpTools() {}
+    private McpClients() {}
 
     static McpSyncClient client(McpSettings.Server server, Consumer<List<McpSchema.Tool>> onToolsChanged) {
         URI url = server.url();

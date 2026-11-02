@@ -1,4 +1,4 @@
-package tantalum.shell.loop;
+package tantalum.shell.journal;
 
 import tantalum.value.id.Principal;
 

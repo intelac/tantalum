@@ -19,6 +19,9 @@ import org.slf4j.LoggerFactory;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.journal.StoreFormat;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.Awaiting;
@@ -61,7 +64,7 @@ public final class SnapshotStore {
 
     private record Header(int storage, int semantics, long seq, long offset, String checksum) {}
 
-    private record Body(SessionState session, List<RunState> runs, Transcript.Part transcript) {}
+    private record Body(SessionState session, List<RunState> runs, Transcript.Saved transcript) {}
 
     private final SessionPaths paths;
     private final JsonMapper mapper;

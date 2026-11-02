@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;

@@ -34,7 +34,7 @@ public final class MemoryStores {
         if (existing != null) {
             return existing;
         }
-        if (!Workspaces.isSafeName(principal.value())) {
+        if (!Principal.isUsable(principal.value())) {
             throw new IllegalArgumentException("user name cannot be used as a directory: " + principal.value());
         }
         MemoryStore opened = new MemoryStore(directoryFor(principal), limits, clock);

@@ -2,16 +2,16 @@ package tantalum.shell.boot;
 
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import tantalum.shell.mcp.McpProperties;
+import tantalum.shell.memory.MemoryLimits;
 import tantalum.value.state.CompactionSettings;
 
 /** 全部配置，默认值在 {@code application.properties}。 */
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
-                                 String provider, Loop loop, Claude claude, OpenAi openai, Memory memory, Knowledge knowledge, Mcp mcp,
+                                 String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
                                  Compaction compaction, Index index, Residency residency, Duration shutdownWait) {
 
     /** 关闭时等在途的模型和工具调用最多多久，到时中断它们，下次启动时收尾。未配置时 30 秒。 */
@@ -61,27 +61,6 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
 
         public static Compaction defaults() {
             return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192);
-        }
-    }
-
-    /** MCP 服务器，只由管理员配置。没配时可以整个为 null。校验在 {@code McpSettings}。 */
-    public record Mcp(Map<String, McpServer> servers, Duration startupWait) {}
-
-    /** 一个远程 MCP 服务器。凭据只从 {@code tokenEnv} 指向的环境变量读取；数字和时长为空时用默认值。 */
-    public record McpServer(String url, String auth, String tokenEnv, List<String> allow, List<String> deny,
-                            Integer concurrency, Duration timeout, Integer maxResultBytes, Integer maxTools) {}
-
-    /** 每用户长期记忆的上限：条目数、索引总字节、单条正文字节。超限时写入被拒，不自动整理。 */
-    public record Memory(int maxEntries, int maxIndexBytes, int maxEntryBytes) {
-
-        public Memory {
-            requirePositive("maxEntries", maxEntries);
-            requirePositive("maxIndexBytes", maxIndexBytes);
-            requirePositive("maxEntryBytes", maxEntryBytes);
-        }
-
-        public static Memory defaults() {
-            return new Memory(200, 16 * 1024, 8 * 1024);
         }
     }
 

@@ -11,10 +11,10 @@ import tantalum.value.state.SessionState;
  * {@code principal} 是这个用户在本进程第一个事件之前的累计用量，只随他的第一个事件来一次。
  * {@code failure} 不为 null 时会话载入失败，会话相关字段为空。
  */
-public record Preload(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq, int replayed, String failure,
+public record Preload(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq, int replayed, String failure,
                       PrincipalState principal) {
 
-    public static Preload loaded(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq, int replayed) {
+    public static Preload loaded(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq, int replayed) {
         return new Preload(session, List.copyOf(runs), transcript, seq, replayed, null, null);
     }
 

@@ -21,9 +21,10 @@ import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.handler.Handler;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionFileReader;
-import tantalum.shell.store.SessionFiles;
-import tantalum.shell.store.SessionPaths;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionFiles;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.journal.TailSequence;
 import tantalum.shell.store.SessionStore;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
@@ -79,13 +80,13 @@ class RingIntegrationTest {
             Kernel kernel = kernel();
             InputRing input = new InputRing(1024);
             ResultPublisher publisher = new ResultPublisher(input, inFlight, Clock.systemUTC(), 640);
-            Dispatcher dispatcher = new Dispatcher(Map.of(
+            HandlerDispatcher dispatcher = new HandlerDispatcher(Map.of(
                     AssembleContext.class, handler(c -> new ContextAssembled(c.id(), "system", List.of())),
                     CallModel.class, handler(c -> new ModelReplied(c.id(), List.of(new TextBlock("done")),
                             StopReason.END_TURN, "m", null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
-            JournalDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null));
+            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null));
             List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
             Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, KernelState.empty(), journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
                     (seq, index, fact) -> { }, view, publisher);

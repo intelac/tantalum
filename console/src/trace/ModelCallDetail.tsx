@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { getTurn } from "../api/client";
 import type { ContentBlock, Turn } from "../api/types";
-import { compact } from "../composer/status";
+import { tokenCount } from "../composer/status";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 
@@ -122,8 +122,8 @@ export function ModelCallDetail({ run, turn, refreshKey }: Props) {
               <>
                 <dt>{zh.trace.usage}</dt>
                 <dd className="font-mono">
-                  {zh.status.inOut(compact(usage.input + usage.cacheRead + usage.cacheWrite), compact(usage.output))}
-                  {usage.cacheRead > 0 && ` · cache ${compact(usage.cacheRead)}`}
+                  {zh.status.inOut(tokenCount(usage.input + usage.cacheRead + usage.cacheWrite), tokenCount(usage.output))}
+                  {usage.cacheRead > 0 && ` · cache ${tokenCount(usage.cacheRead)}`}
                 </dd>
               </>
             )}

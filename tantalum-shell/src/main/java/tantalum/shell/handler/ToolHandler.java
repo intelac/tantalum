@@ -2,8 +2,10 @@ package tantalum.shell.handler;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -30,6 +32,8 @@ public final class ToolHandler implements Handler {
     private final Workspaces workspaces;
     private final List<AfterToolHook> afterHooks;
     private final Duration timeout;
+    /** 每个服务端一份名额，同一服务端的工具共用。 */
+    private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
 
     public ToolHandler(ToolCatalog catalog, Workspaces workspaces, List<AfterToolHook> afterHooks, Duration timeout) {
         this.catalog = catalog;
@@ -55,12 +59,16 @@ public final class ToolHandler implements Handler {
         return finished(run, applyHooks(tool.get(), context, run.call().arguments(), output));
     }
 
+    CallLimiter limiterFor(Tool tool) {
+        return limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
+    }
+
     /** 等待名额计入超时。名额由执行工具的线程持有，工具真正结束才归还，超时也不会超过服务端上限。 */
     private ToolOutput execute(Tool tool, ToolContext context, Json arguments) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         CallLimiter.Permit permit;
         try {
-            permit = catalog.limiterFor(tool).acquire(timeout);
+            permit = limiterFor(tool).acquire(timeout);
         } catch (TimeoutException waiting) {
             return ToolOutput.error("Tool timed out after " + timeout + " waiting for server capacity.");
         }

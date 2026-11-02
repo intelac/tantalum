@@ -18,7 +18,7 @@ public final class CancelSteps {
     /** 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。 */
     public static Decision interrupted(StepContext context) {
         RunState run = context.run();
-        if (run == null || run.ended()) {
+        if (run == null || run.isEnded()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
@@ -37,7 +37,7 @@ public final class CancelSteps {
 
     private static Decision end(StepContext context, EndReason reason, String detail) {
         RunState run = context.run();
-        if (run == null || run.ended()) {
+        if (run == null || run.isEnded()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);

@@ -1,5 +1,5 @@
 import type { Config } from "../api/types";
-import { compact } from "../composer/status";
+import { tokenCount } from "../composer/status";
 import { zh } from "../text/zh";
 
 interface Props {
@@ -20,7 +20,7 @@ export function ModelPane({ config }: Props) {
         {config.contextWindow !== undefined && (
           <>
             <dt className="text-fg-muted">{zh.settings.contextWindow}</dt>
-            <dd className="font-mono text-fg">{compact(config.contextWindow)}</dd>
+            <dd className="font-mono text-fg">{tokenCount(config.contextWindow)}</dd>
           </>
         )}
       </dl>

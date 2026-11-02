@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import tantalum.shell.boot.TantalumProperties.Loop;
+import tantalum.shell.memory.MemoryLimits;
 
 class TantalumPropertiesTest {
 
@@ -66,13 +67,13 @@ class TantalumPropertiesTest {
 
     @Test
     void memoryLimitsHaveDefaultsAndMustBePositive() {
-        TantalumProperties.Memory memory = TantalumProperties.Memory.defaults();
+        MemoryLimits memory = MemoryLimits.defaults();
         assertEquals(200, memory.maxEntries());
         assertEquals(16 * 1024, memory.maxIndexBytes());
         assertEquals(8 * 1024, memory.maxEntryBytes());
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(0, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(1, 0, 1));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Memory(1, 1, -1));
+        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(0, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(1, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(1, 1, -1));
     }
 
     @Test
@@ -107,7 +108,7 @@ class TantalumPropertiesTest {
                         java.time.Duration.ofSeconds(1), 4, claudeWindow),
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 1, openAiWindow),
-                TantalumProperties.Memory.defaults(), TantalumProperties.Knowledge.none(), null, compaction, null, null, null);
+                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, null, null, null);
     }
 
     /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */

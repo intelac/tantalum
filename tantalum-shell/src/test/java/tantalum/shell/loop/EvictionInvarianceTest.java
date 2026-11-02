@@ -27,11 +27,12 @@ import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionFiles;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.journal.TailSequence;
 import tantalum.shell.store.IndexWriter;
-import tantalum.shell.store.SessionFileReader;
-import tantalum.shell.store.SessionFiles;
 import tantalum.shell.store.SessionIndex;
-import tantalum.shell.store.SessionPaths;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.SnapshotStore;
 import tantalum.shell.store.SnapshotWriter;
@@ -112,7 +113,7 @@ class EvictionInvarianceTest {
         final Deque<Command> pending = new ArrayDeque<>();
         final StateView view = new StateView(KernelState.empty());
         /** 场景结束时每个会话完整的对话视图：在内存的直接导出，不在的按线上冷查询的方式读（有快照就用快照）。 */
-        final Map<SessionId, Transcript.Part> views = new java.util.TreeMap<>(java.util.Comparator.comparing(SessionId::value));
+        final Map<SessionId, Transcript.Saved> views = new java.util.TreeMap<>(java.util.Comparator.comparing(SessionId::value));
         private final Transcript transcript;
         private final SessionReplay replay;
         private final SessionIndex index;
@@ -121,7 +122,7 @@ class EvictionInvarianceTest {
         private final SnapshotWriter snapshots;
         private final InputRing input;
         private final CleanroomRing ring;
-        private final JournalDispatcher dispatcher;
+        private final LaneDispatcher dispatcher;
         private final Mode mode;
 
         Pipeline(Path dir, Mode mode) throws Exception {
@@ -147,7 +148,7 @@ class EvictionInvarianceTest {
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
-            dispatcher = new JournalDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
+            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
                     LoopFixtures.loader((principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq)), residency);
             FactListener facts = new FactListener() {
                 @Override

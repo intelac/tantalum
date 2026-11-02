@@ -1,10 +1,9 @@
-package tantalum.shell.web;
+package tantalum.shell.loop;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
-import tantalum.shell.boot.TantalumProperties.Loop;
-import tantalum.shell.web.ExternalGate.Verdict;
+import tantalum.shell.loop.ExternalGate.Verdict;
 import tantalum.value.id.Principal;
 
 class ExternalGateTest {
@@ -16,7 +15,7 @@ class ExternalGateTest {
     private boolean halted;
 
     private ExternalGate gate(int maxActive, int perUser, int total) {
-        return new ExternalGate(new Loop(maxActive, 1, perUser, total, 1024, 1024), () -> active, () -> halted);
+        return new ExternalGate(new ExternalGate.Limits(maxActive, perUser, total), () -> active, () -> halted);
     }
 
     @Test

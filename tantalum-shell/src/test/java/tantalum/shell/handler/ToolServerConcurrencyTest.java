@@ -141,9 +141,9 @@ class ToolServerConcurrencyTest {
             callAll(handler, List.of(command("single", "r" + round + "a", run("a")),
                     command("single", "r" + round + "b", run("a"))));
         }
-        for (int i = 0; i < 200 && catalog.limiterFor(server).available() != 1; i++) {
+        for (int i = 0; i < 200 && handler.limiterFor(server).available() != 1; i++) {
             Thread.sleep(5);
         }
-        assertEquals(1, catalog.limiterFor(server).available());
+        assertEquals(1, handler.limiterFor(server).available());
     }
 }

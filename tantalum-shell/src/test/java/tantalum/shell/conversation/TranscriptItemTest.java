@@ -48,8 +48,8 @@ class TranscriptItemTest {
         assertEquals("g-3", running.group());
         assertEquals(StepStatus.DONE, done.status());
         assertEquals(Duration.ofSeconds(3), done.elapsed());
-        assertTrue(done.finished());
-        assertFalse(running.finished());
+        assertTrue(done.isFinished());
+        assertFalse(running.isFinished());
     }
 
     @Test
@@ -63,7 +63,7 @@ class TranscriptItemTest {
         assertEquals("TOOL_OUTCOME_UNKNOWN", failed.result().code());
         assertEquals(StepStatus.BLOCKED, blocked.status());
         assertEquals(Duration.ZERO, blocked.elapsed());
-        assertTrue(blocked.finished());
+        assertTrue(blocked.isFinished());
     }
 
     @Test
@@ -73,7 +73,7 @@ class TranscriptItemTest {
                 .ended(EndReason.COMPLETED, null, T0.plusSeconds(32));
 
         assertEquals("run:run-0", status.id());
-        assertTrue(status.ended());
+        assertTrue(status.isEnded());
         assertEquals("Ended", status.phase());
         assertEquals(Duration.ofSeconds(32), status.elapsed());
     }

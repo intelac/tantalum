@@ -11,13 +11,14 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import tantalum.shell.journal.Sequence;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 
-class JournalDispatcherTest {
+class LaneDispatcherTest {
 
     private final AtomicLong counter = new AtomicLong();
     private final Sequence sequence = principal -> counter.getAndIncrement();
@@ -40,7 +41,7 @@ class JournalDispatcherTest {
     void withoutPermitsTheInputRingFillsUpAndNothingIsLost() throws Exception {
         int permits = 4;
         int ringSize = 8;
-        JournalDispatcher dispatcher = LoopFixtures.dispatcher(permits, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(permits, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
         InputRing input = LoopFixtures.inputRing(ringSize, dispatcher);
         input.start();
         int accepted = 0;
@@ -60,7 +61,7 @@ class JournalDispatcherTest {
 
     @Test
     void awaitIdleWaitsForEveryEventToBeReleased() throws Exception {
-        JournalDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
         InputRing.Slot slot = new InputRing.Slot();
         slot.envelope = event("u", 0);
         dispatcher.onEvent(slot, 0, true);
@@ -72,7 +73,7 @@ class JournalDispatcherTest {
 
     @Test
     void writeFailureHaltsAndReturnsThePermits() throws Exception {
-        JournalDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> {
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> {
             throw new IOException("disk full");
         }, envelope -> reached.add(envelope));
         InputRing.Slot slot = new InputRing.Slot();

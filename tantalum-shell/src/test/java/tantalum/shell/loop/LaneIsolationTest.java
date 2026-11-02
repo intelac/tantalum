@@ -7,12 +7,13 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import tantalum.shell.journal.Sequence;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -33,8 +34,8 @@ class LaneIsolationTest {
         List<EventEnvelope> reached = new CopyOnWriteArrayList<>();
         ConcurrentHashMap<Principal, AtomicLong> counters = new ConcurrentHashMap<>();
         Sequence sequence = principal -> counters.computeIfAbsent(principal, ignored -> new AtomicLong()).getAndIncrement();
-        JournalDispatcher[] holder = new JournalDispatcher[1];
-        JournalDispatcher dispatcher = LoopFixtures.dispatcher(256, sequence, (principal, session, events) -> {
+        LaneDispatcher[] holder = new LaneDispatcher[1];
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(256, sequence, (principal, session, events) -> {
             if (principal.value().equals("slow")) {
                 try {
                     unstick.await();

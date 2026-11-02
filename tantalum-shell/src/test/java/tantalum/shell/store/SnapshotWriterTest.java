@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -22,7 +24,7 @@ class SnapshotWriterTest {
 
     private static final Principal ALICE = new Principal("alice");
     private static final SessionId S = new SessionId("s");
-    private static final Transcript.Part EMPTY = new Transcript.Part(List.of(), List.of(), java.util.Map.of(), 0, -1);
+    private static final Transcript.Saved EMPTY = new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, -1);
 
     @TempDir
     Path temp;

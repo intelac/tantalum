@@ -15,13 +15,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
-import tantalum.shell.store.SessionPaths;
-import tantalum.value.model.TextBlock;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.StopReason;
+import tantalum.value.model.TextBlock;
 
 /** 需求 2.8：同一个新会话 ID 只属于一个用户。这些用例走真实 HTTP 和真实文件。 */
 class OwnershipTest {

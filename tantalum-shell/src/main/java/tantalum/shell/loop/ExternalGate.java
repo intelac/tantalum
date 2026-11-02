@@ -1,14 +1,16 @@
-package tantalum.shell.web;
+package tantalum.shell.loop;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
-import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.value.id.Principal;
 
 /** 外部事件的入口限额。超限直接拒绝，不排队，这样 Input Ring 总有内部结果的位置。所有方法都在同一把锁下。 */
 public final class ExternalGate {
+
+    /** 每个用户和全部外部事件的在途上限，以及活跃运行上限。 */
+    public record Limits(int maxActiveRuns, int maxUserInFlight, int maxExternalInFlight) {}
 
     public enum Verdict {
         ADMITTED,
@@ -16,7 +18,7 @@ public final class ExternalGate {
         HALTED
     }
 
-    private final Loop limits;
+    private final Limits limits;
     private final IntSupplier activeRuns;
     private final BooleanSupplier halted;
     /** 只保存在途数大于 0 的用户，归零即删，不随见过的用户数增长。 */
@@ -24,7 +26,7 @@ public final class ExternalGate {
     private int total;
     private int newRuns;
 
-    public ExternalGate(Loop limits, IntSupplier activeRuns, BooleanSupplier halted) {
+    public ExternalGate(Limits limits, IntSupplier activeRuns, BooleanSupplier halted) {
         this.limits = limits;
         this.activeRuns = activeRuns;
         this.halted = halted;

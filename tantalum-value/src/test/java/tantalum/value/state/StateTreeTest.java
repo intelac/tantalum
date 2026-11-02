@@ -41,8 +41,8 @@ class StateTreeTest {
         assertEquals(0, changed.tools().slots().size());
         assertEquals(REF, changed.ref());
         assertEquals(OWNER, changed.owner());
-        assertFalse(changed.ended());
-        assertTrue(changed.withPhase(new Ended(EndReason.COMPLETED, null)).ended());
+        assertFalse(changed.isEnded());
+        assertTrue(changed.withPhase(new Ended(EndReason.COMPLETED, null)).isEnded());
     }
 
     @Test

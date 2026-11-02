@@ -44,12 +44,12 @@ class WorkspacesTest {
     void unsafeNamesAreRejected() {
         Workspaces workspaces = Workspaces.perUser(root);
         for (String name : new String[] {"..", "a/b", "A", "a b", "a.b", ""}) {
-            assertFalse(Workspaces.isSafeName(name), name);
+            assertFalse(Principal.isUsable(name), name);
         }
-        assertFalse(Workspaces.isSafeName(null));
+        assertFalse(Principal.isUsable(null));
         assertThrows(IllegalArgumentException.class, () -> workspaces.of(new Principal("..")));
         assertThrows(IllegalArgumentException.class, () -> workspaces.of(new Principal("a/b")));
-        assertTrue(Workspaces.isSafeName("alice_1-x"));
+        assertTrue(Principal.isUsable("alice_1-x"));
     }
 
     /** 用户目录被换成指向外面的符号链接：不能把外面的目录当成它的工作区。 */

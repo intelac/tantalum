@@ -9,6 +9,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
 
 /** 读数据目录里的会话文件。同一用户的事件按序号合并；不同用户的序号不能比较，所以按用户依次排列。 */

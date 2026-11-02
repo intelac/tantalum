@@ -144,11 +144,11 @@ final class McpConnection implements AutoCloseable {
 
     private void connectOnce() {
         long current = ++generation;
-        McpSyncClient fresh = McpTools.client(server, changed -> toolsChanged(current, changed));
+        McpSyncClient fresh = McpClients.client(server, changed -> toolsChanged(current, changed));
         client = fresh;
         fresh.initialize();
         boolean hasTools = fresh.getServerCapabilities() != null && fresh.getServerCapabilities().tools() != null;
-        publish(hasTools ? McpTools.listAll(fresh) : List.of());
+        publish(hasTools ? McpClients.listAll(fresh) : List.of());
         synchronized (lock) {
             broken = false;
         }
@@ -272,7 +272,7 @@ final class McpConnection implements AutoCloseable {
         if (first != null) {
             return first;
         }
-        awaitReady();
+        waitForReconnect();
         ToolOutput second = attempt(tool, arguments, true);
         return second != null ? second : unavailable();
     }
@@ -337,7 +337,7 @@ final class McpConnection implements AutoCloseable {
                 || failure.getMessage() != null && failure.getMessage().contains("session with server terminated");
     }
 
-    private void awaitReady() throws InterruptedException {
+    private void waitForReconnect() throws InterruptedException {
         long deadline = System.nanoTime() + RETRY_WAIT.toNanos();
         Thread.sleep(50);
         while (state != State.READY && System.nanoTime() < deadline) {

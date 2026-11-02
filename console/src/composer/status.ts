@@ -2,7 +2,7 @@ import type { TokenUsage } from "../api/types";
 import { zh } from "../text/zh";
 
 /** 1234 → 1.2K，1234567 → 1.2M。 */
-export function compact(count: number): string {
+export function tokenCount(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(count);
@@ -28,8 +28,8 @@ export function statusParts(turns: number, usage: TokenUsage | undefined, contex
   const percent = usage !== undefined && contextWindow !== undefined && contextWindow > 0 ? Math.min(100, Math.round((input / contextWindow) * 100)) : null;
   return {
     turns: turns > 0 ? zh.status.turns(turns) : null,
-    tokens: usage === undefined ? null : zh.status.tokens(compact(total)),
-    inOut: usage === undefined ? null : zh.status.inOut(compact(input), compact(usage.output)),
+    tokens: usage === undefined ? null : zh.status.tokens(tokenCount(total)),
+    inOut: usage === undefined ? null : zh.status.inOut(tokenCount(input), tokenCount(usage.output)),
     context: percent === null ? null : zh.status.context(percent),
     warn: percent !== null && percent >= WARN_PERCENT,
   };

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.HashMap;
 import java.util.Map;
+import tantalum.shell.json.JsonText;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;

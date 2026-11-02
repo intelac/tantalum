@@ -1,4 +1,4 @@
-package tantalum.shell.loop;
+package tantalum.shell.journal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -12,8 +12,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionFile;
-import tantalum.shell.store.SessionPaths;
+import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;

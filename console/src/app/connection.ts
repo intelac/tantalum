@@ -6,14 +6,14 @@ export interface Connection {
   connected: boolean;
   /** 曾经连上过，之后断开：这时才显示断线提示。 */
   lost: boolean;
-  /** 每次重新连上加一。 */
-  reconnects: number;
+  /** 第一次连上和每次重新连上都加一。 */
+  connects: number;
   unauthorized: boolean;
   /** 服务返回过 503：已停止处理事件，重启前不会恢复。 */
   halted: boolean;
 }
 
-let state: Connection = { connected: false, lost: false, reconnects: 0, unauthorized: false, halted: false };
+let state: Connection = { connected: false, lost: false, connects: 0, unauthorized: false, halted: false };
 const listeners = new Set<() => void>();
 
 function set(next: Connection): void {
@@ -23,9 +23,9 @@ function set(next: Connection): void {
 
 export function reportConnection(connected: boolean): void {
   if (connected) {
-    set({ ...state, connected: true, lost: false, reconnects: state.connected ? state.reconnects : state.reconnects + 1 });
+    set({ ...state, connected: true, lost: false, connects: state.connected ? state.connects : state.connects + 1 });
   } else {
-    set({ ...state, connected: false, lost: state.reconnects > 0 });
+    set({ ...state, connected: false, lost: state.connects > 0 });
   }
 }
 
@@ -38,7 +38,7 @@ export function reportHalted(): void {
 }
 
 export function resetConnection(): void {
-  set({ connected: false, lost: false, reconnects: 0, unauthorized: false, halted: false });
+  set({ connected: false, lost: false, connects: 0, unauthorized: false, halted: false });
 }
 
 export function connectionState(): Connection {

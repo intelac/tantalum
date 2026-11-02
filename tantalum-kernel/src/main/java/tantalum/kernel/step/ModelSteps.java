@@ -70,7 +70,7 @@ public final class ModelSteps {
 
     private static Decision submit(StepContext context, OwnerRef owner, String text) {
         Outcome out = new Outcome(context);
-        if (context.run() == null || context.run().ended()) {
+        if (context.run() == null || context.run().isEnded()) {
             startRun(out, owner, text);
         } else {
             SessionState session = out.session(context.run().ref());
@@ -85,7 +85,7 @@ public final class ModelSteps {
         SteerSubmitted event = (SteerSubmitted) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
-        if (run == null || run.ended()) {
+        if (run == null || run.isEnded()) {
             startRun(out, new OwnerRef.OfSession(context.envelope().session()), event.text());
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());
@@ -228,7 +228,7 @@ public final class ModelSteps {
             return Decision.unchanged(context.state());
         }
         boolean awaited = run.phase() instanceof Awaiting awaiting && awaiting.commands().contains(event.command());
-        boolean historyOpen = awaited || (run.ended() && session.isLatestRun(run.ref().run()));
+        boolean historyOpen = awaited || (run.isEnded() && session.isLatestRun(run.ref().run()));
         if (!historyOpen) {
             return Decision.unchanged(context.state());
         }

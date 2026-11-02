@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.conversation.Transcript;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.loop.Evictor;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -24,7 +26,7 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
     private static final long CLOSE_WAIT_MILLIS = 10_000;
     private static final Object STOP = new Object();
 
-    private record Request(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq) {}
+    private record Request(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq) {}
 
     private record Barrier(CountDownLatch done) {}
 
@@ -40,7 +42,7 @@ public final class SnapshotWriter implements Evictor.Sink, AutoCloseable {
     }
 
     @Override
-    public void offer(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq) {
+    public void offer(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq) {
         if (!queue.offer(new Request(session, runs, transcript, seq))) {
             LOG.warn("snapshot queue full, skipping session {}; it will replay from its session file", session.id().value());
         }

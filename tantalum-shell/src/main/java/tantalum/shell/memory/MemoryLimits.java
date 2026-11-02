@@ -1,8 +1,6 @@
 package tantalum.shell.memory;
 
-import tantalum.shell.boot.TantalumProperties;
-
-/** 每用户记忆上限。超限时写入被拒，不自动整理。 */
+/** 每用户长期记忆的上限：条目数、索引总字节、单条正文字节。超限时写入被拒，不自动整理。 */
 public record MemoryLimits(int maxEntries, int maxIndexBytes, int maxEntryBytes) {
 
     public MemoryLimits {
@@ -11,11 +9,7 @@ public record MemoryLimits(int maxEntries, int maxIndexBytes, int maxEntryBytes)
         }
     }
 
-    public static MemoryLimits of(TantalumProperties.Memory memory) {
-        return new MemoryLimits(memory.maxEntries(), memory.maxIndexBytes(), memory.maxEntryBytes());
-    }
-
     public static MemoryLimits defaults() {
-        return of(TantalumProperties.Memory.defaults());
+        return new MemoryLimits(200, 16 * 1024, 8 * 1024);
     }
 }

@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.value.event.EventEnvelope;
 
-/** 输入环。外部提交和 Handler 结果都进这里，唯一消费者是 {@link JournalDispatcher}。只用非阻塞发布。 */
+/** 输入环。外部提交和 Handler 结果都进这里，唯一消费者是 {@link LaneDispatcher}。只用非阻塞发布。 */
 public final class InputRing {
 
     private static final Logger LOG = LoggerFactory.getLogger(InputRing.class);

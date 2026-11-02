@@ -6,8 +6,8 @@ import java.util.Objects;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
-import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.TokenUsage;
+import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.EndReason;
@@ -120,7 +120,7 @@ public sealed interface TranscriptItem {
             return new ToolStep(id, session, run, at, call, StepStatus.BLOCKED, group, when, when, toolResult);
         }
 
-        public boolean finished() {
+        public boolean isFinished() {
             return status == StepStatus.DONE || status == StepStatus.FAILED || status == StepStatus.BLOCKED;
         }
 
@@ -188,7 +188,7 @@ public sealed interface TranscriptItem {
             return new RunStatus(id, session, run, at, when, phase, endReason, detail, reason);
         }
 
-        public boolean ended() {
+        public boolean isEnded() {
             return endReason != null;
         }
 
