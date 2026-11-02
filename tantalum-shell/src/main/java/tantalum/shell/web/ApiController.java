@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
@@ -50,6 +51,7 @@ import tools.jackson.databind.JsonNode;
 public class ApiController {
 
     private static final Set<String> MODES = Set.of("prompt", "steer", "follow-up");
+    private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
     private final Engine engine;
     private final UserStore users;
     private final TantalumProperties properties;
@@ -87,6 +89,9 @@ public class ApiController {
     /** 全部条目和排队数。排队中的提交也是条目，{@code queued} 为 true。 */
     @GetMapping("/api/sessions/{session}/messages")
     ResponseEntity<String> messages(@PathVariable String session) {
+        if (!SESSION_ID.matcher(session).matches()) {
+            return error(400, "invalid session id");
+        }
         SessionId id = new SessionId(session);
         SessionState state = engine.state().sessions().get(id);
         if (state == null || !state.principal().equals(current())) {
@@ -128,6 +133,9 @@ public class ApiController {
 
     @PostMapping("/api/sessions/{session}/submissions")
     ResponseEntity<String> submit(@PathVariable String session, @RequestBody String body) {
+        if (!SESSION_ID.matcher(session).matches()) {
+            return error(400, "invalid session id");
+        }
         JsonNode request;
         try {
             request = engine.codec().mapper().readTree(body);
@@ -160,6 +168,9 @@ public class ApiController {
     /** 手动压缩。body 可为空或 {@code {"requestId": "...", "instructions": "..."}}；没给 requestId 时每次都是新请求。 */
     @PostMapping("/api/sessions/{session}/compact")
     ResponseEntity<String> compact(@PathVariable String session, @RequestBody(required = false) String body) {
+        if (!SESSION_ID.matcher(session).matches()) {
+            return error(400, "invalid session id");
+        }
         JsonNode request = null;
         if (body != null && !body.isBlank()) {
             try {
@@ -207,6 +218,9 @@ public class ApiController {
 
     @GetMapping("/api/sessions/{session}/runs")
     ResponseEntity<String> runs(@PathVariable String session) {
+        if (!SESSION_ID.matcher(session).matches()) {
+            return error(400, "invalid session id");
+        }
         Principal user = current();
         SessionId id = new SessionId(session);
         SessionState state = engine.state().sessions().get(id);
@@ -215,7 +229,7 @@ public class ApiController {
         }
         List<Map<String, Object>> runs = engine.state().runs().values().stream()
                 .filter(run -> run.ref().session().equals(id))
-                .sorted(Comparator.comparingLong(run -> runOrder(run.ref().run())))
+                .sorted(Comparator.comparingLong(run -> run.ref().run().seq()))
                 .map(ApiController::describe).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("runs", runs);
@@ -263,19 +277,6 @@ public class ApiController {
         emitter.onError(failure -> subscription.close());
         Thread.ofVirtual().start(() -> pump(user, subscription, emitter));
         return emitter;
-    }
-
-    /** 运行 ID 由内核按事件序号生成（{@code run-<seq>}）；格式不对的排在最前，不让整个接口 500。 */
-    static long runOrder(RunId run) {
-        String value = run.value();
-        if (!value.startsWith("run-")) {
-            return -1;
-        }
-        try {
-            return Long.parseLong(value.substring(4));
-        } catch (NumberFormatException odd) {
-            return -1;
-        }
     }
 
     /** 心跳时检查用户是否被停用：停用可能来自另一个进程的命令行，这边收不到通知。无论怎么退出，订阅都要注销。 */

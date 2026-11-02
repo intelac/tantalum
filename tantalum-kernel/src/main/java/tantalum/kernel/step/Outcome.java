@@ -46,7 +46,7 @@ final class Outcome {
     }
 
     CommandId nextCommandId() {
-        return CommandIds.of(envelope.seq(), nextCommand++);
+        return CommandIds.of(envelope.session(), envelope.seq(), nextCommand++);
     }
 
     void emit(Command command) {

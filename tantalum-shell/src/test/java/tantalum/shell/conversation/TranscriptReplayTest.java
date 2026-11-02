@@ -73,11 +73,11 @@ class TranscriptReplayTest {
         RunId first = live.start(q, settings);
         live.feed(first, live.reply(new tantalum.value.model.TokenUsage(700, 10, 0, 0), text(("a ").repeat(45))));
         live.feed(null, live.prompt(q));
-        RunId second = new RunId("run-" + live.lastSeq());
+        RunId second = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
         live.feed(second, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
         live.feed(second, live.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(("b ").repeat(45))));
         live.feed(null, live.prompt(q));
-        RunId third = new RunId("run-" + live.lastSeq());
+        RunId third = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
         live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));
         live.feed(third, live.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
         live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), null, settings));

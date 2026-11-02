@@ -54,7 +54,7 @@ final class SmokeRun {
             }
             System.out.println("[smoke " + label + "] model call millis=" + timed.millis + " runs=" + runs);
             assertTrue(runs.contains("COMPLETED"), runs);
-            int start = runs.indexOf("run-");
+            int start = runs.indexOf("s1_");
             String run = runs.substring(start, runs.indexOf('"', start));
             String last = server.get("smoke", "/api/runs/" + run + "/turns/" + timed.millis.size()).body();
             assertTrue(last.contains("ZEBRA-4417"), last);

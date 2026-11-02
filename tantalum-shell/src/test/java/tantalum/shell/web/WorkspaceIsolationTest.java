@@ -68,7 +68,7 @@ class WorkspaceIsolationTest {
             runs = server.get(user, "/api/sessions/" + session + "/runs").body();
         }
         assertTrue(runs.contains("COMPLETED"), runs);
-        int start = runs.indexOf("run-");
+        int start = runs.indexOf(session + "_");
         String run = runs.substring(start, runs.indexOf('"', start));
         return server.get(user, "/api/runs/" + run + "/turns/2").body();
     }
@@ -109,7 +109,7 @@ class WorkspaceIsolationTest {
         String runs = "";
         read("bob", "b4", "missing.txt");
         runs = server.get("bob", "/api/sessions/b4/runs").body();
-        int start = runs.indexOf("run-");
+        int start = runs.indexOf("b4_");
         String turn = server.get("bob", "/api/runs/" + runs.substring(start, runs.indexOf('"', start)) + "/turns/1").body();
         assertFalse(turn.contains("alice-only-rules"), turn);
     }

@@ -78,7 +78,7 @@ public final class LoopFixture {
 
     private RunState latestRun() {
         return state.runs().values().stream()
-                .max(java.util.Comparator.comparingLong(run -> Long.parseLong(run.ref().run().value().substring(4))))
+                .max(java.util.Comparator.comparingLong(run -> run.ref().run().seq()))
                 .orElseThrow();
     }
 

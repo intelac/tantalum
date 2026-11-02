@@ -56,7 +56,7 @@ class MultiUserTest {
             body = server.get(user, "/api/sessions/" + session + "/runs").body();
         }
         assertTrue(body.contains("COMPLETED"), body);
-        int start = body.indexOf("run-");
+        int start = body.indexOf(session + "_");
         return body.substring(start, body.indexOf('"', start));
     }
 

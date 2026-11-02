@@ -37,7 +37,7 @@ class TurnQueryTest {
 
     private static final Principal USER = new Principal("u");
     private static final SessionId SESSION = new SessionId("s");
-    private static final RunId RUN = new RunId("run-0");
+    private static final RunId RUN = RunId.of(SESSION, 0);
 
     @TempDir
     Path dir;
@@ -61,10 +61,10 @@ class TurnQueryTest {
 
     private void writeScript() throws Exception {
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("0-0"), "system prompt", List.of()));
-        write(RUN, new ModelFailed(new CommandId("1-0"), FailureReason.SERVER_ERROR, true, null, "pa", "500"));
-        write(RUN, new TimerFired(new CommandId("2-0")));
-        write(RUN, new ModelReplied(new CommandId("3-0"), List.of(new TextBlock("answer")), StopReason.END_TURN, "m", null));
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of()));
+        write(RUN, new ModelFailed(new CommandId("s_1-0"), FailureReason.SERVER_ERROR, true, null, "pa", "500"));
+        write(RUN, new TimerFired(new CommandId("s_2-0")));
+        write(RUN, new ModelReplied(new CommandId("s_3-0"), List.of(new TextBlock("answer")), StopReason.END_TURN, "m", null));
     }
 
     @Test
@@ -132,20 +132,20 @@ class TurnQueryTest {
         tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
         String q = ("q ").repeat(45);
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
-        write(RUN, new ContextAssembled(new CommandId("0-0"), "system prompt", List.of(), null, settings));
-        write(RUN, new ModelReplied(new CommandId("1-0"), List.of(new TextBlock(("a ").repeat(45))), StopReason.END_TURN, "m",
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, settings));
+        write(RUN, new ModelReplied(new CommandId("s_1-0"), List.of(new TextBlock(("a ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(700, 10, 0, 0)));
         write(null, new UserPrompt(new SubmissionId("b"), new RequestId("b"), new OwnerRef.OfSession(SESSION), q));
-        write(new RunId("run-3"), new ContextAssembled(new CommandId("3-0"), "system prompt", List.of(), null, settings));
-        write(new RunId("run-3"), new ModelReplied(new CommandId("4-0"), List.of(new TextBlock(("b ").repeat(45))), StopReason.END_TURN, "m",
+        write(RunId.of(SESSION, 3), new ContextAssembled(new CommandId("s_3-0"), "system prompt", List.of(), null, settings));
+        write(RunId.of(SESSION, 3), new ModelReplied(new CommandId("s_4-0"), List.of(new TextBlock(("b ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(790, 10, 0, 0)));
         write(null, new UserPrompt(new SubmissionId("c"), new RequestId("c"), new OwnerRef.OfSession(SESSION), q));
-        RunId second = new RunId("run-6");
-        write(second, new ContextAssembled(new CommandId("6-0"), "system prompt", List.of(), null, settings));
-        write(second, new ModelReplied(new CommandId("7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
+        RunId second = RunId.of(SESSION, 6);
+        write(second, new ContextAssembled(new CommandId("s_6-0"), "system prompt", List.of(), null, settings));
+        write(second, new ModelReplied(new CommandId("s_7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(50, 20, 0, 0)));
-        write(second, new ContextAssembled(new CommandId("8-0"), "system prompt", List.of(), null, settings));
-        write(second, new ModelReplied(new CommandId("9-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
+        write(second, new ContextAssembled(new CommandId("s_8-0"), "system prompt", List.of(), null, settings));
+        write(second, new ModelReplied(new CommandId("s_9-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null));
 
         List<TurnQuery.Turn> turns = query.turns(USER, second);
         assertEquals(2, turns.size());
@@ -170,7 +170,7 @@ class TurnQueryTest {
     @Test
     void traceOfAnUnfinishedRunHasAnOpenLastSegment() throws Exception {
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("0-0"), "system prompt", List.of()));
+        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of()));
         TurnQuery.Trace trace = query.trace(USER, RUN);
         assertEquals(2, trace.segments().size());
         assertNull(trace.segments().getLast().to());
