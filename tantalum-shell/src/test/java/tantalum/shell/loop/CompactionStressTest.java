@@ -143,12 +143,12 @@ class CompactionStressTest {
             converse(server, "alice", "alice-long", TURNS);
             other.join();
             assertTrue(failures.isEmpty(), failures.toString());
-            longBody = server.get("alice", "/api/sessions/alice-long/messages").body();
-            otherBody = server.get("bob", "/api/sessions/bob-short/messages").body();
+            longBody = history(server, "alice", "alice-long");
+            otherBody = history(server, "bob", "bob-short");
         }
 
         // 1. 压缩发生了很多次，且每次让视图变小；普通调用的视图始终有界。
-        JsonNode items = JSON.readTree(longBody).get("items");
+        JsonNode items = JSON.readTree(longBody);
         int compactions = 0;
         int users = 0;
         int texts = 0;
@@ -218,12 +218,29 @@ class CompactionStressTest {
         // 4. 重启：视图逐字节相同，模型没被调用。
         CountingModel mustNotRun = new CountingModel();
         try (TestServer restarted = new TestServer(data, workspace, mustNotRun, SETTINGS)) {
-            assertEquals(longBody, restarted.get("alice", "/api/sessions/alice-long/messages").body());
-            assertEquals(otherBody, restarted.get("bob", "/api/sessions/bob-short/messages").body());
+            assertEquals(longBody, history(restarted, "alice", "alice-long"));
+            assertEquals(otherBody, history(restarted, "bob", "bob-short"));
             Thread.sleep(100);
             assertEquals(0, mustNotRun.prompts.size());
         }
         System.out.println("[compaction stress] turns=" + TURNS + " compactions=" + compactions + " modelCalls=" + model.prompts.size()
                 + " events=" + journal.size() + " maxMessagesInPrompt=" + maxMessages);
+    }
+
+    /** 接口分页（任务 35）：从最近一页往前翻到头，拼成完整历史，返回条目数组的 JSON。 */
+    private static String history(TestServer server, String user, String session) throws Exception {
+        tools.jackson.databind.node.ArrayNode all = JSON.createArrayNode();
+        String query = "";
+        while (true) {
+            JsonNode page = JSON.readTree(server.get(user, "/api/sessions/" + session + "/messages" + query).body());
+            tools.jackson.databind.node.ArrayNode items = JSON.createArrayNode();
+            page.get("items").forEach(items::add);
+            items.addAll(all);
+            all = items;
+            if (!page.get("hasMore").asBoolean()) {
+                return all.toString();
+            }
+            query = "?before=" + page.get("start").asInt();
+        }
     }
 }

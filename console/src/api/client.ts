@@ -100,12 +100,13 @@ export function listSessions(): Promise<{ sessions: SessionSummary[] }> {
   return call("/api/sessions");
 }
 
-/** 还没有任何提交的会话在后端不存在，当作空会话。 */
-export async function listMessages(session: string): Promise<Messages> {
+/** 默认最近一页；`before` 是已加载部分的 `start`。还没有任何提交的会话在后端不存在，当作空会话。 */
+export async function listMessages(session: string, before?: number): Promise<Messages> {
+  const page = before === undefined ? "" : `?before=${before}`;
   try {
-    return await call(`/api/sessions/${encodeURIComponent(session)}/messages`);
+    return await call(`/api/sessions/${encodeURIComponent(session)}/messages${page}`);
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 404) return { seq: -1, items: [], followUps: 0 };
+    if (failure instanceof ApiError && failure.status === 404) return { seq: -1, items: [], followUps: 0, start: 0, hasMore: false };
     throw failure;
   }
 }

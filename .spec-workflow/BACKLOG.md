@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
-| `ops-hardening` | 39/50，阶段 0–6 完成：启动只载入未结束的会话，空闲会话自动回收，冷会话按需只读，`/turns`、`/trace`、SSE 补读按会话读；下一步任务 35（历史分页） | `specs/ops-hardening/tasks.md` |
+| `ops-hardening` | 41/50，阶段 0–7 完成：按需载入和回收、按会话读的回放接口、历史分页；下一步任务 37（按登录会话断开 SSE） | `specs/ops-hardening/tasks.md` |
 
 ## 2. 已定要做，还没开 spec
 

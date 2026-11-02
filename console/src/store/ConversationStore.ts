@@ -95,11 +95,13 @@ export class ConversationStore {
   }
 
   /**
-   * 从接口整体加载一个会话。{@code seq} 是快照截至的事件序号：SSE 已经推过更新版本的条目保留，
+   * 从接口加载一个会话的最近一页。{@code seq} 是快照截至的事件序号：SSE 已经推过更新版本的条目保留，
    * 快照里没有但比快照新的条目也保留并排在后面；其余以快照为准。只通知真正变了的条目。
    * 不给 {@code seq} 时快照无条件生效，且不记录版本，之后任何推送都能更新这些条目。
+   * 之前向上加载过的更早条目，只要这一页的第一个条目原来就在，就接在前面保留（中间没有缺口）；否则丢掉。
+   * 返回保留的更早条目数。
    */
-  replace(session: string, items: readonly Item[], seq?: number): void {
+  replace(session: string, items: readonly Item[], seq?: number): number {
     const changed: string[] = [];
     const ids = items.map((item) => item.id);
     const cutoff = seq ?? Number.MAX_SAFE_INTEGER;
@@ -114,20 +116,40 @@ export class ConversationStore {
       else this.versions.set(item.id, Math.max(seq, this.versions.get(item.id) ?? -1));
     }
     const previous = this.getOrder(session);
+    const firstIndex = ids.length > 0 ? previous.indexOf(ids[0]) : -1;
+    const older = firstIndex > 0 ? previous.slice(0, firstIndex).filter((id) => !ids.includes(id)) : [];
+    const kept = new Set(older);
     for (const id of previous) {
-      if (ids.includes(id)) continue;
+      if (ids.includes(id) || kept.has(id)) continue;
       if ((this.versions.get(id) ?? -1) > cutoff) ids.push(id);
       else {
         this.items.delete(id);
         this.versions.delete(id);
       }
     }
-    const sameOrder = previous.length === ids.length && previous.every((id, index) => id === ids[index]);
+    const next = [...older, ...ids];
+    const sameOrder = previous.length === next.length && previous.every((id, index) => id === next[index]);
     if (!sameOrder) {
-      this.order.set(session, ids);
+      this.order.set(session, next);
       this.notify(ConversationStore.orderKey(session));
     }
     for (const id of changed) this.notify(ConversationStore.itemKey(id));
+    return older.length;
+  }
+
+  /**
+   * 向上加载的更早一页，接在最前面。已经有的条目不动（SSE 可能推过更新的版本）。
+   * {@code seq} 同 {@link replace}，记为这些条目的版本。
+   */
+  prependItems(session: string, items: readonly Item[], seq?: number): void {
+    const fresh = items.filter((item) => !this.items.has(item.id));
+    if (fresh.length === 0) return;
+    for (const item of fresh) {
+      this.items.set(item.id, item);
+      if (seq !== undefined) this.versions.set(item.id, seq);
+    }
+    this.order.set(session, [...fresh.map((item) => item.id), ...this.getOrder(session)]);
+    this.notify(ConversationStore.orderKey(session));
   }
 
   private notify(key: string): void {

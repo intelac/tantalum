@@ -257,13 +257,13 @@
 
 ## 阶段 7：历史分页
 
-- [ ] 35. 分页接口
+- [x] 35. 分页接口
   - File: shell/web/ApiController.java, 对应测试
   - `?before=<seq>`、`hasMore`；按运行取，至少 50 条且跨 2 个运行，最多 500 条
   - 验证：边界（单运行超 500 条、不足一页、第一页）；各页拼接等于完整历史
   - _Requirements: 8.1_
 
-- [ ] 36. 控制台分页
+- [x] 36. 控制台分页
   - File: ConversationStore 及对话视图组件，vitest 测试
   - `prependItems`，滚到顶部加载，用高度差保持位置
   - 验证：分页和 SSE 交错不缺不重复；断线重连同样

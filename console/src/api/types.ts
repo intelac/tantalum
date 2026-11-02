@@ -131,6 +131,10 @@ export interface Messages {
   seq: number;
   items: Item[];
   followUps: number;
+  /** 这一页第一个条目在会话里的位置，用作上一页的 `before`。 */
+  start: number;
+  /** 前面还有更早的条目。 */
+  hasMore: boolean;
 }
 
 export interface RunView {

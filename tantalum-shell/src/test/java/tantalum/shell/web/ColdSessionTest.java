@@ -72,10 +72,15 @@ class ColdSessionTest {
         assertTrue(condition.getAsBoolean(), what);
     }
 
+    /** 等这次提交开始的运行结束：只看 {@code activeRun} 会被上一个运行骗过去。 */
     private static void prompt(Engine engine, SessionId session, String text) throws InterruptedException {
+        var before = engine.state().sessions().get(session);
+        var previous = before == null ? null : before.lastRun();
         assertEquals(200, engine.submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text).status());
-        await("run of " + session.value() + " ended", () -> engine.state().sessions().get(session) != null
-                && engine.state().sessions().get(session).activeRun() == null);
+        await("run of " + session.value() + " ended", () -> {
+            var current = engine.state().sessions().get(session);
+            return current != null && current.lastRun() != null && !current.lastRun().equals(previous) && current.activeRun() == null;
+        });
     }
 
     private record Bodies(String sessions, String messages, String runs, String run) {}
@@ -143,6 +148,32 @@ class ColdSessionTest {
             assertTrue(messages.contains("hello") && messages.contains("reply 1") && messages.contains("COMPLETED"), messages);
             assertEquals(409, engine.compact(ALICE, s1, new RequestId("c1"), null).status(), "found cold; nothing worth compacting");
             assertEquals(404, engine.compact(new Principal("bob"), s1, new RequestId("c2"), null).status());
+        }
+    }
+
+    /** 任务 35：默认最近一页，用 {@code start} 往前翻，拼起来是完整历史；不在内存的会话也一样。 */
+    @Test
+    void historyIsPagedFromTheEnd() throws Exception {
+        Files.createDirectories(temp.resolve("workspace"));
+        try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("workspace"), model)) {
+            Engine engine = server.context.getBean(Engine.class);
+            for (int i = 0; i < 30; i++) {
+                prompt(engine, new SessionId("long"), "question " + i);
+            }
+        }
+        try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("workspace"), model)) {
+            var json = tools.jackson.databind.json.JsonMapper.builder().build();
+            var last = json.readTree(server.get("alice", "/api/sessions/long/messages").body());
+            assertTrue(last.get("hasMore").asBoolean());
+            int start = last.get("start").asInt();
+            assertTrue(start > 0);
+            var first = json.readTree(server.get("alice", "/api/sessions/long/messages?before=" + start).body());
+            assertEquals(false, first.get("hasMore").asBoolean());
+            assertEquals(0, first.get("start").asInt());
+            assertEquals(start, first.get("items").size());
+            assertTrue(first.get("items").get(0).toString().contains("question 0"));
+            assertEquals(30 * 3, start + last.get("items").size(), "question, status and reply per run");
+            assertEquals(400, server.get("alice", "/api/sessions/long/messages?before=-1").statusCode());
         }
     }
 }
