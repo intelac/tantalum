@@ -72,7 +72,7 @@ class RestartInterruptTest {
         Files.createDirectories(data());
         List<EventEnvelope> events = new java.util.ArrayList<>(List.of(
                 event(1, null, new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "hi")),
-                event(2, RUN, new ContextAssembled(new CommandId("s1_1-0"), "s", List.of())),
+                event(2, RUN, new ContextAssembled(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 event(3, RUN, new ModelReplied(new CommandId("s1_2-0"),
                         List.of(new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(java.util.Map.of()))), StopReason.TOOL_USE, "m", null))));
         long seq = 4;
@@ -191,13 +191,13 @@ class RestartInterruptTest {
         try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, other, EventCodec.withBuiltins())) {
             file.append(List.of(
                     new EventEnvelope(20, AT, ALICE, other, null, new UserPrompt(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
-                    new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of()))));
+                    new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
         }
         // 先让索引记下两个未结束的运行，再把 s1 的中间一行改坏：启动时索引仍说它没结束，载入时才发现坏了。
         Path s1 = new SessionPaths(data()).sessionFile(ALICE, S1);
         try (var index = tantalum.shell.store.SessionIndex.open(data())) {
             tantalum.kernel.table.TransitionTable table = new tantalum.kernel.table.TransitionTable();
-            tantalum.kernel.table.BuiltinSteps.register(table);
+            tantalum.kernel.step.BuiltinSteps.register(table);
             tantalum.shell.store.IndexCatchUp.run(index, new SessionPaths(data()), new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins()),
                     new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()), (tool, args) -> false, 10));
             assertEquals(2, index.unfinished().size());

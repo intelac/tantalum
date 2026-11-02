@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFiles;
@@ -82,7 +82,7 @@ final class IndexFixture {
                 new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
-        Decision assembled = send(principal, session, run, at, new ContextAssembled(assemble.id(), "s", List.of()));
+        Decision assembled = send(principal, session, run, at, new ContextAssembled(assemble.id(), "s", List.of(), null, List.of()));
         CallModel call = (CallModel) assembled.commands().getFirst();
         return new Pending(principal, session, run, call.id());
     }

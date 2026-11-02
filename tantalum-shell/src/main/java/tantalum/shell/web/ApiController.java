@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tantalum.kernel.Kernel;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
@@ -226,7 +225,7 @@ public class ApiController {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("run", run.ref().run().value());
         view.put("session", run.ref().session().value());
-        view.put("phase", Kernel.stateName(run));
+        view.put("phase", run.phase().name());
         if (run.phase() instanceof Ended ended) {
             view.put("endReason", ended.reason().name());
             view.put("detail", ended.detail());

@@ -24,7 +24,7 @@ import tantalum.value.state.ContextSection;
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
  * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → AGENTS.md → 该用户的记忆索引；每段只在有内容时加入。
- * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只用 {@code dynamic} 判断是否追加变更说明，不再换 system。
+ * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只比较这几段，把变化追加给模型，不再换 system。
  */
 public final class ContextHandler implements Handler {
 
@@ -80,13 +80,11 @@ public final class ContextHandler implements Handler {
         if (!index.isEmpty()) {
             sections.add(new ContextSection(INDEX_TAG, escape(INDEX_HEADING + "\n" + INDEX_NOTE + "\n\n" + index), true));
         }
-        StringBuilder dynamic = new StringBuilder();
-        sections.forEach(section -> append(dynamic, "<" + section.name() + ">\n" + section.body() + "\n</" + section.name() + ">"));
         StringBuilder system = new StringBuilder(basePrompt);
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
-        append(system, dynamic.toString());
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), dynamic.toString(), compaction, sections);
+        sections.forEach(section -> append(system, section.tagged()));
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction, sections);
     }
 
     /** 让正文里的闭合标签跳不出包裹。这只降低注入风险，不是保证。 */

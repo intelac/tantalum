@@ -8,7 +8,7 @@ import java.util.Map;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
@@ -126,7 +126,7 @@ final class TranscriptFixture {
         feed(null, prompt(text));
         RunId run = RunId.of(SESSION, lastSeq());
         CommandId assemble = lastCommands().getFirst().id();
-        feed(run, new ContextAssembled(assemble, "sys", List.of(), null, settings));
+        feed(run, new ContextAssembled(assemble, "sys", List.of(), settings, List.of()));
         return run;
     }
 

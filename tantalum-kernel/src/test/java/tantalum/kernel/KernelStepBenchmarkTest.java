@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelReplied;
@@ -22,6 +22,7 @@ import tantalum.value.state.Awaiting;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
+import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
 /** 记录 64 个活跃运行、长会话下 {@code Kernel.step} 的 P99。门槛 5 ms，不含 journal 写入。 */
@@ -46,9 +47,8 @@ class KernelStepBenchmarkTest {
             for (int m = 0; m < 500; m++) {
                 history = history.append(Message.user("message " + m));
             }
-            state = state.with(history.withActiveRun(ref.run()))
+            state = state.with(history.startRun(ref.run()).withContext(new SessionContext("system", List.of(), null, List.of())))
                     .with(RunState.start(ref, new OwnerRef.OfSession(session))
-                            .withContext("system", List.of())
                             .withPhase(new Awaiting(Set.of(waiting), "AwaitingModel")));
         }
 

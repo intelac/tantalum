@@ -9,4 +9,9 @@ public record ContextSection(String name, String body, boolean byLine) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(body, "body");
     }
+
+    /** 放进 system 和变更说明时的样子：用段名做标签包起来。 */
+    public String tagged() {
+        return "<" + name + ">\n" + body + "\n</" + name + ">";
+    }
 }

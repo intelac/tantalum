@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.LoopFixture;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.kernel.projection.ContextUpdate;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.DoWork;
@@ -34,6 +35,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TokenUsage;
+import tantalum.value.state.ContextSection;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
@@ -56,7 +58,7 @@ class ModelStepsTest {
 
     private static void toModel(LoopFixture loop) {
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
     }
 
     private static ModelReplied reply(LoopFixture loop, String text) {
@@ -178,17 +180,17 @@ class ModelStepsTest {
         var two = List.of(new tantalum.value.state.ContextSection("memory-index", "- a\n- b", true));
         LoopFixture loop = new LoopFixture();
         loop.prompt("one");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d1", null, one));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, one));
         loop.feed(loop.runId(), reply(loop, "a"));
         loop.prompt("two");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d1", null, one));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, one));
         assertEquals(Message.user("two"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "b"));
         loop.prompt("three");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), "d2", null, two));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, two));
         Message update = assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast();
         String text = ((tantalum.value.model.TextBlock) update.content().getFirst()).text();
-        assertTrue(text.startsWith(ModelSteps.CONTEXT_UPDATE_PREFIX), text);
+        assertTrue(ContextUpdate.isUpdate(text), text);
         assertTrue(text.contains("Added:\n- b"), text);
         assertTrue(!text.contains("- a"), text);
     }
@@ -196,13 +198,15 @@ class ModelStepsTest {
     /** 所有模型相同：第二个运行的 system 和工具逐字节不变，可变内容的变化只作为追加消息出现。 */
     @Test
     void laterRunsKeepTheFrozenContextAndAppendChanges() {
+        var idx1 = List.of(new ContextSection("memory-index", "idx1", false));
+        var idx2 = List.of(new ContextSection("memory-index", "idx2", false));
         LoopFixture loop = new LoopFixture();
         loop.prompt("one");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), "idx1"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
         loop.feed(loop.runId(), reply(loop, "a"));
 
         loop.prompt("two");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), "idx1"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
         CallModel same = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals("sys idx1", same.prompt().system());
         assertEquals(Message.user("two"), same.prompt().messages().getLast());
@@ -210,21 +214,21 @@ class ModelStepsTest {
 
         loop.prompt("three");
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(
-                new tantalum.value.model.ToolSpec("late", "d", new Json.Null())), "idx2"));
+                new tantalum.value.model.ToolSpec("late", "d", new Json.Null())), null, idx2));
         CallModel changed = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals("sys idx1", changed.prompt().system());
         assertEquals(List.of(), changed.prompt().tools());
-        assertEquals(Message.user(ModelSteps.CONTEXT_UPDATE + "idx2"), changed.prompt().messages().getLast());
+        assertEquals(ContextUpdate.message(idx2.getFirst().tagged()), changed.prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "c"));
 
         // 没再变就不重复说明；清空也要说明。
         loop.prompt("four");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(), "idx2"));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(), null, idx2));
         assertEquals(Message.user("four"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "d"));
         loop.prompt("five");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), ""));
-        assertEquals(Message.user(ModelSteps.CONTEXT_UPDATE + "(now empty)"),
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, List.of()));
+        assertEquals(ContextUpdate.message("memory-index no longer applies; ignore what you were given earlier."),
                 assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
     }
 
@@ -316,7 +320,7 @@ class ModelStepsTest {
         assertEquals(List.of(), loop.run().pendingSteers());
         loop.prompt("next");
         CallModel call = null;
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of()));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         call = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals(List.of(Message.user("hi"), Message.user("also this"), Message.user("next")),
                 call.prompt().messages());

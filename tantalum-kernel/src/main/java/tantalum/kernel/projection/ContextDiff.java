@@ -20,7 +20,7 @@ public final class ContextDiff {
         for (ContextSection section : after) {
             ContextSection previous = old.get(section.name());
             if (previous == null || !previous.body().equals(section.body())) {
-                parts.add(section.byLine() && previous != null ? lineChanges(section, previous) : wrap(section.name(), section.body()));
+                parts.add(section.byLine() && previous != null ? lineChanges(section, previous) : section.tagged());
             }
         }
         Set<String> names = after.stream().map(ContextSection::name).collect(Collectors.toSet());
@@ -44,14 +44,11 @@ public final class ContextDiff {
         if (!removed.isEmpty()) {
             text.append(text.isEmpty() ? "" : "\n").append("Removed:\n").append(String.join("\n", removed));
         }
-        return wrap(now.name(), text.toString());
+        return new ContextSection(now.name(), text.toString(), true).tagged();
     }
 
     private static Set<String> lines(String body) {
         return body.lines().filter(line -> !line.isBlank()).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private static String wrap(String name, String body) {
-        return "<" + name + ">\n" + body + "\n</" + name + ">";
-    }
 }

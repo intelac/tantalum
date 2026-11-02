@@ -17,7 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.handler.Handler;
 import tantalum.shell.journal.EventCodec;
@@ -81,7 +81,7 @@ class RingIntegrationTest {
             InputRing input = new InputRing(1024);
             ResultPublisher publisher = new ResultPublisher(input, inFlight, Clock.systemUTC(), 640);
             HandlerDispatcher dispatcher = new HandlerDispatcher(Map.of(
-                    AssembleContext.class, handler(c -> new ContextAssembled(c.id(), "system", List.of())),
+                    AssembleContext.class, handler(c -> new ContextAssembled(c.id(), "system", List.of(), null, List.of())),
                     CallModel.class, handler(c -> new ModelReplied(c.id(), List.of(new TextBlock("done")),
                             StopReason.END_TURN, "m", null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);

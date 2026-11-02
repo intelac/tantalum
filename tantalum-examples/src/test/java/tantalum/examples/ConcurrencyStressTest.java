@@ -31,10 +31,9 @@ import tantalum.kernel.Kernel;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionStore;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -43,6 +42,7 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
@@ -358,7 +358,7 @@ class ConcurrencyStressTest {
                     }
                     assertTrue(run != null, "round " + round + ": run of " + session + " did not end");
                     endReasons.put(session, run.get("endReason").asString());
-                    messagesBefore.put(session, server.get(user, "/api/sessions/" + session + "/messages").body());
+                    messagesBefore.put(session, settledMessages(server, user, session));
                 }
             }
             if (evict) {
@@ -474,5 +474,23 @@ class ConcurrencyStressTest {
         }
         System.out.println("[stress round " + round + "] users=" + USERS + " sessions=" + (USERS * SESSIONS) + " modelCalls=" + model.prompts.size()
                 + " events=" + journal.size() + " cancelled=" + cancelled);
+    }
+
+    /**
+     * 运行结束后，被取消的模型调用还可能晚一点送回“被中断”的结果，追加到历史里。
+     * 连续两次读到同样的内容才算稳定，再拿它和重启后回放的视图比较。
+     */
+    private static String settledMessages(TestServer server, String user, String session) throws Exception {
+        String path = "/api/sessions/" + session + "/messages";
+        String previous = server.get(user, path).body();
+        for (int i = 0; i < 50; i++) {
+            Thread.sleep(200);
+            String current = server.get(user, path).body();
+            if (current.equals(previous)) {
+                return current;
+            }
+            previous = current;
+        }
+        throw new AssertionError("messages of " + session + " kept changing");
     }
 }

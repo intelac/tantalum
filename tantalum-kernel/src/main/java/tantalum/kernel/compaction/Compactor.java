@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import tantalum.kernel.compaction.Units.Unit;
-import tantalum.kernel.step.ModelSteps;
+import tantalum.kernel.projection.ContextUpdate;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
@@ -181,6 +181,6 @@ public final class Compactor {
             }
         }
         String text = ((TextBlock) message.content().getFirst()).text();
-        return !text.startsWith(ModelSteps.CONTEXT_UPDATE_PREFIX) && !text.startsWith(SummaryPrompt.SUMMARY_PREFIX);
+        return !ContextUpdate.isUpdate(text) && !text.startsWith(SummaryPrompt.SUMMARY_PREFIX);
     }
 }

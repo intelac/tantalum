@@ -9,7 +9,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.SessionFileReader;
@@ -131,7 +130,7 @@ public final class TurnQuery {
                     turn = ++turns[0];
                 }
             }
-            entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), Kernel.stateName(current), turn,
+            entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), current.phase().name(), turn,
                     compactionOf(decision, run)));
         });
         List<Trace.Segment> segments = new ArrayList<>();

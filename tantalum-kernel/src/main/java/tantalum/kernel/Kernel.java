@@ -13,10 +13,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.id.RunId;
 import tantalum.value.state.Awaiting;
-import tantalum.value.state.Deciding;
-import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.RunPhase;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
@@ -44,13 +41,14 @@ public final class Kernel {
         if (step.isEmpty()) {
             return Decision.unchanged(state);
         }
+        StepContext context = new StepContext(state, envelope, run, hooks, toolSafety, maxParallelTools);
         try {
-            return step.get().apply(new StepContext(state, envelope, run, hooks, toolSafety, maxParallelTools));
+            return step.get().apply(context);
         } catch (RuntimeException failure) {
             if (run == null) {
                 return Decision.unchanged(state);
             }
-            return RunEnd.fail(state, envelope, hooks, toolSafety, maxParallelTools, run, failure);
+            return RunEnd.fail(context, failure);
         }
     }
 
@@ -67,24 +65,11 @@ public final class Kernel {
         if (event instanceof ResultEvent result && !isAwaited(run, result)) {
             return table.find(TransitionTable.ANY_STATE, event.type());
         }
-        return table.find(stateName(run), event.type());
+        return table.find(run == null ? NEW_RUN : run.phase().name(), event.type());
     }
 
     private static boolean isAwaited(RunState run, ResultEvent result) {
         return run != null && run.phase() instanceof Awaiting awaiting
                 && awaiting.commands().contains(result.command());
-    }
-
-    /** 状态名：等待时是 {@code resumeAt}，其余是固定状态的名字。 */
-    public static String stateName(RunState run) {
-        if (run == null) {
-            return NEW_RUN;
-        }
-        RunPhase phase = run.phase();
-        return switch (phase) {
-            case Awaiting awaiting -> awaiting.resumeAt();
-            case Deciding deciding -> "Deciding";
-            case Ended ended -> "Ended";
-        };
     }
 }

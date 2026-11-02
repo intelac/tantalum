@@ -71,20 +71,20 @@ class CompactionStateTest {
     void sessionUpdatesKeepCompactionAndAnchor() {
         Compaction compaction = new Compaction(List.of(Message.user("s")), 0);
         SessionState session = SessionState.start(SESSION, USER).compacted(compaction).withAnchor(new UsageAnchor(5, 0));
-        SessionState changed = session.append(Message.user("x")).withActiveRun(new RunId("r")).withFollowUps(List.of("f"))
-                .withContext(new SessionContext("sys", List.of(), null, SETTINGS));
+        SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).withFollowUps(List.of("f"))
+                .withContext(new SessionContext("sys", List.of(), SETTINGS, List.of()));
         assertEquals(compaction, changed.compaction());
         assertEquals(new UsageAnchor(5, 0), changed.anchor());
         assertEquals(SETTINGS, changed.context().compaction());
-        assertNull(new SessionContext("sys", List.of(), null).compaction());
-        assertEquals(SETTINGS, changed.context().withDynamic("d").compaction());
+        assertNull(new SessionContext("sys", List.of(), null, List.of()).compaction());
+        assertEquals(SETTINGS, changed.context().withSections(List.of()).compaction());
     }
 
     @Test
     void runCarriesCompactionFlags() {
         RunRef ref = new RunRef(USER, SESSION, new RunId("r"));
         Plan plan = new Plan(3, 2, 1, 900, null);
-        Compacting compacting = new Compacting(Compacting.Trigger.OVERFLOW, plan, null, "prompt is too long", PromptPatch.NONE);
+        Compacting compacting = new Compacting(new Compacting.Overflow("prompt is too long"), plan, PromptPatch.NONE);
         RunState run = RunState.start(ref, new OwnerRef.OfSession(SESSION))
                 .withCompacting(compacting).withAutoCompactionFailed(true).withOverflowRecovered(true);
         assertEquals(compacting, run.compacting());
@@ -93,6 +93,7 @@ class CompactionStateTest {
         assertEquals(compacting, run.withRetries(1).withPhase(new Deciding()).compacting());
         assertNull(run.withCompacting(null).compacting());
         assertThrows(IllegalArgumentException.class, () -> new Plan(0, 0, 0, 0, null));
-        assertThrows(NullPointerException.class, () -> new Compacting(null, plan, null, null, PromptPatch.NONE));
+        assertThrows(NullPointerException.class, () -> new Compacting(null, plan, PromptPatch.NONE));
+        assertEquals(Compacting.Trigger.OVERFLOW, compacting.trigger());
     }
 }

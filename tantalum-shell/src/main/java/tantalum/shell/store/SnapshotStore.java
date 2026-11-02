@@ -25,6 +25,7 @@ import tantalum.shell.loop.SessionSlice;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.Awaiting;
+import tantalum.value.state.Compacting;
 import tantalum.value.state.Deciding;
 import tantalum.value.state.Ended;
 import tantalum.value.state.RunPhase;
@@ -51,6 +52,14 @@ public final class SnapshotStore {
     })
     private interface RunPhaseMixin {}
 
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = Compacting.Auto.class, name = "auto"),
+        @JsonSubTypes.Type(value = Compacting.Overflow.class, name = "overflow"),
+        @JsonSubTypes.Type(value = Compacting.Manual.class, name = "manual")
+    })
+    private interface CauseMixin {}
+
     private record Header(int storage, int semantics, long seq, long offset, String checksum) {}
 
     private record Body(SessionState session, List<RunState> runs, Transcript.Saved transcript) {}
@@ -62,6 +71,7 @@ public final class SnapshotStore {
         this.paths = paths;
         this.mapper = codec.mapper().rebuild()
                 .addMixIn(RunPhase.class, RunPhaseMixin.class)
+                .addMixIn(Compacting.Cause.class, CauseMixin.class)
                 .build();
     }
 

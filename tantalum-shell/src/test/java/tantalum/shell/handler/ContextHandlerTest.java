@@ -33,8 +33,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Prompt;
-import tantalum.value.state.OwnerRef;
-import tantalum.value.state.RunState;
+import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
 class ContextHandlerTest {
@@ -166,10 +165,9 @@ class ContextHandlerTest {
         ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), memories, KnowledgeBase.none(), "", null);
         ContextAssembled event = assembled(handler, command(ALICE));
 
-        RunState run = RunState.start(command(ALICE).run(), new OwnerRef.OfSession(new SessionId("s")))
-                .withContext(event.system(), event.tools());
-        Prompt prompt = PromptProjection.project(run, SessionState.start(new SessionId("s"), ALICE),
-                new PromptPatch("\n\n## Quota\nhalf used", List.of()));
+        SessionState session = SessionState.start(new SessionId("s"), ALICE)
+                .withContext(new SessionContext(event.system(), event.tools(), event.compaction(), event.sections()));
+        Prompt prompt = PromptProjection.project(session, new PromptPatch("\n\n## Quota\nhalf used", List.of()));
         assertTrue(prompt.system().indexOf("Java 25 only") < prompt.system().indexOf("## Quota"));
         assertTrue(prompt.system().startsWith(event.system()));
     }

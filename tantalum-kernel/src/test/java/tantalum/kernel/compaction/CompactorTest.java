@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import tantalum.kernel.step.ModelSteps;
+import tantalum.kernel.projection.ContextUpdate;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
@@ -43,7 +43,7 @@ class CompactorTest {
 
     private static SessionState session(CompactionSettings settings, Message... messages) {
         SessionState session = SessionState.start(new SessionId("s"), new Principal("u"))
-                .withContext(new SessionContext("sys", NO_TOOLS, null, settings));
+                .withContext(new SessionContext("sys", NO_TOOLS, settings, List.of()));
         for (Message message : messages) {
             session = session.append(message);
         }
@@ -178,7 +178,7 @@ class CompactorTest {
 
     @Test
     void requestSkipsContextUpdatesSummariesAndToolResults() {
-        Message update = Message.user(ModelSteps.CONTEXT_UPDATE + "idx");
+        Message update = ContextUpdate.message("idx");
         Message summary = SummaryPrompt.summaryMessage("old");
         Message results = new Message(Role.USER, List.of(new ToolResultBlock("t", "r", false, null)), false);
         assertEquals(user(1), Compactor.request(List.of(user(1), update, summary, results)));

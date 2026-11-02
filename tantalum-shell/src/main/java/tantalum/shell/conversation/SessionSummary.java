@@ -2,7 +2,6 @@ package tantalum.shell.conversation;
 
 import java.time.Instant;
 import java.util.List;
-import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.id.SessionId;
@@ -26,7 +25,7 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
                 last = at;
             }
         }
-        String status = activeRun == null ? IDLE : Kernel.stateName(activeRun);
+        String status = activeRun == null ? IDLE : activeRun.phase().name();
         return new SessionSummary(id, title, last, status);
     }
 

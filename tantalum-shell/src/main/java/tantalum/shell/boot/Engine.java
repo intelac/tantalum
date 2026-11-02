@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.table.BuiltinSteps;
+import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.conversation.Transcript;

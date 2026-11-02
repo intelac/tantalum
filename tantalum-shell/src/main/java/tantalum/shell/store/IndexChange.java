@@ -3,7 +3,6 @@ package tantalum.shell.store;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
@@ -42,7 +41,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         RunId previous = activeRun(before, envelope.session());
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
                 text == null ? "" : SessionSummary.titleOf(text),
-                active == null ? SessionSummary.IDLE : Kernel.stateName(after.runs().get(active)), active,
+                active == null ? SessionSummary.IDLE : after.runs().get(active).phase().name(), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active));
     }
 
@@ -59,10 +58,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
             return null;
         }
         LocalDate day = LocalDate.ofInstant(envelope.at(), ZoneOffset.UTC);
-        TokenUsage total = now.usageOn(day);
-        TokenUsage old = was == null ? new TokenUsage(0, 0, 0, 0) : was.usageOn(day);
-        TokenUsage amount = new TokenUsage(total.input() - old.input(), total.output() - old.output(),
-                total.cacheRead() - old.cacheRead(), total.cacheWrite() - old.cacheWrite());
-        return amount.equals(new TokenUsage(0, 0, 0, 0)) ? null : new Usage(envelope.seq(), day, amount);
+        TokenUsage amount = now.usageOn(day).minus(was == null ? TokenUsage.ZERO : was.usageOn(day));
+        return amount.equals(TokenUsage.ZERO) ? null : new Usage(envelope.seq(), day, amount);
     }
 }
