@@ -112,11 +112,24 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     public record OpenAi(String baseUrl, String model, int maxTokens, Duration firstChunkTimeout,
                          Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
 
-    /** 当前供应商的压缩设置快照；窗口未配置时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
+    private boolean usesClaude() {
+        return "claude".equals(provider);
+    }
+
+    /** 当前供应商的模型名。 */
+    public String model() {
+        return usesClaude() ? claude.model() : openai.model();
+    }
+
+    /** 当前供应商的上下文窗口；0 表示未知：不压缩，控制台不显示占比。 */
+    public long contextWindow() {
+        return usesClaude() ? claude.contextWindow() : openai.contextWindow();
+    }
+
+    /** 当前供应商的压缩设置快照；窗口未知时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
     public CompactionSettings compactionSettings() {
-        boolean claude = "claude".equals(provider);
-        long window = claude ? claude().contextWindow() : openai().contextWindow();
-        long maxTokens = claude ? claude().maxTokens() : openai().maxTokens();
+        long window = contextWindow();
+        long maxTokens = usesClaude() ? claude.maxTokens() : openai.maxTokens();
         if (window <= 0) {
             return null;
         }

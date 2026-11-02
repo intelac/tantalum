@@ -5,22 +5,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
-import tantalum.value.json.Json;
-import tantalum.value.model.ToolCallBlock;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
+import tantalum.value.json.Json;
+import tantalum.value.model.ToolCallBlock;
 import tools.jackson.databind.json.JsonMapper;
-import java.time.Instant;
-import java.util.Map;
 
 class SseHubTest {
 
@@ -61,7 +61,7 @@ class SseHubTest {
         SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
         SseHub.Subscription bob = hub.subscribe(BOB, null, null);
 
-        hub.onChunk(run(ALICE), "text", "Hel");
+        hub.chunks(run(ALICE)).onText("Hel");
 
         SseMessage message = alice.poll(1, TimeUnit.SECONDS);
         assertNull(message.id());
@@ -202,7 +202,7 @@ class SseHubTest {
     void closedSubscriptionsLeaveNoEntryBehind() throws Exception {
         SseHub hub = hub();
         SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
-        hub.onChunk(run(BOB), "text", "bob never subscribed");
+        hub.chunks(run(BOB)).onText("bob never subscribed");
         hub.closeAll(BOB);
         assertEquals(1, hub.subscriberCount());
         alice.close();

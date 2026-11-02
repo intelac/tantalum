@@ -77,7 +77,7 @@ class ClaudeClientTest {
 
     private ClaudeClient client(Duration first, Duration between) {
         AnthropicClient sdk = AnthropicOkHttpClient.builder().apiKey("test-key").baseUrl(server.url()).maxRetries(0).build();
-        return new ClaudeClient(sdk, "claude-sonnet-5-5", 64000, "medium", true, first, between, OverflowRules.defaults());
+        return new ClaudeClient(sdk, new ClaudeClient.Settings("claude-sonnet-5-5", 64000, "medium", true, first, between, OverflowRules.defaults(), false));
     }
 
     private ModelOutcome call(Prompt prompt) throws Exception {

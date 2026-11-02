@@ -1,10 +1,8 @@
 package tantalum.shell.mcp;
 
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.McpHttpClientTransportAuthorizationException;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransportSessionNotFoundException;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
@@ -95,12 +93,12 @@ final class McpConnection implements AutoCloseable {
                 } catch (InterruptedException stopped) {
                     throw stopped;
                 } catch (RuntimeException failure) {
-                    if (isInterrupt(failure)) {
+                    if (McpFailures.isInterrupt(failure)) {
                         throw new InterruptedException();
                     }
-                    LOG.warn("mcp server {}: {}", server.name(), category(failure));
+                    LOG.warn("mcp server {}: {}", server.name(), McpFailures.category(failure));
                     firstAttempt.countDown();
-                    if (isUnauthorized(failure)) {
+                    if (McpFailures.isUnauthorized(failure)) {
                         giveUp(State.UNAUTHORIZED);
                         discardClient();
                         Thread.sleep(policy.failedRetry());
@@ -300,16 +298,16 @@ final class McpConnection implements AutoCloseable {
             McpSchema.CallToolResult result = current.callTool(new McpSchema.CallToolRequest(tool, arguments));
             return McpResults.toOutput(result, server.maxResultBytes());
         } catch (RuntimeException failure) {
-            if (isInterrupt(failure)) {
+            if (McpFailures.isInterrupt(failure)) {
                 throw new InterruptedException();
             }
             if (failure instanceof McpError protocol) {
                 return ToolOutput.error("MCP server " + server.name() + " rejected the call: " + protocol.getMessage());
             }
-            if (has(failure, TimeoutException.class)) {
+            if (McpFailures.has(failure, TimeoutException.class)) {
                 return ToolOutput.error("MCP tool timed out after " + server.timeout() + ". Its outcome is unknown.");
             }
-            if (isSessionLost(failure)) {
+            if (McpFailures.isSessionLost(failure)) {
                 rotate(current);
                 // 会话失效时 SDK 用同一个错误结束所有在途调用，分不清哪个被服务器拒绝、哪个已经执行。
                 // 只有期间没有别的调用才能确定是这次被拒绝，重试才不会重复执行。
@@ -318,23 +316,17 @@ final class McpConnection implements AutoCloseable {
                 }
                 return ToolOutput.error("MCP server " + server.name() + " lost the session during this call. Its outcome is unknown.");
             }
-            if (isUnauthorized(failure)) {
+            if (McpFailures.isUnauthorized(failure)) {
                 markBroken(current);
                 return ToolOutput.error("MCP server " + server.name() + " refused the configured credentials.");
             }
-            LOG.warn("mcp server {}: call failed: {}", server.name(), category(failure));
+            LOG.warn("mcp server {}: call failed: {}", server.name(), McpFailures.category(failure));
             return ToolOutput.error("MCP server " + server.name() + " failed this call. Its outcome is unknown.");
         } finally {
             synchronized (inFlight) {
                 inFlight.remove(call);
             }
         }
-    }
-
-    /** SDK 2.1.0 把 404 变成这条没有原因的 RuntimeException（{@code McpClientSession.dismissPendingResponses}），只能靠消息识别。 */
-    private static boolean isSessionLost(Throwable failure) {
-        return has(failure, McpTransportSessionNotFoundException.class)
-                || failure.getMessage() != null && failure.getMessage().contains("session with server terminated");
     }
 
     private void waitForReconnect() throws InterruptedException {
@@ -349,34 +341,6 @@ final class McpConnection implements AutoCloseable {
         return ToolOutput.error("MCP server " + server.name() + " is unavailable.");
     }
 
-    private static boolean isInterrupt(Throwable failure) {
-        return Thread.currentThread().isInterrupted() || has(failure, InterruptedException.class);
-    }
-
-    private static boolean isUnauthorized(Throwable failure) {
-        return has(failure, McpHttpClientTransportAuthorizationException.class);
-    }
-
-    private static boolean has(Throwable failure, Class<? extends Throwable> type) {
-        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (type.isInstance(cause)) {
-                return true;
-            }
-            if (cause.getCause() == cause) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    /** 只给类别，不给消息原文。 */
-    private static String category(Throwable failure) {
-        Throwable root = failure;
-        while (root.getCause() != null && root.getCause() != root) {
-            root = root.getCause();
-        }
-        return root.getClass().getSimpleName();
-    }
 
     @Override
     public void close() {

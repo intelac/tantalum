@@ -122,37 +122,37 @@
 
 ## 阶段 4：外围
 
-- [ ] 21. 取样现有输出
+- [x] 21. 取样现有输出
   - File: 测试资源：`/messages`、SSE 消息、快照文件各几份样例
   - 改 SSE 和序列化前先存下来，作为逐字节比较的期望
   - _Requirements: 非功能 行为不变_
 
-- [ ] 22. `ModelFailures` 和 `ClaudeClient.Settings`
+- [x] 22. `ModelFailures` 和 `ClaudeClient.Settings`
   - File: `shell/model/{ModelFailures,ClaudeClient,OpenAiClient,Reasoning}.java`, shell/conversation/Transcript.java，examples 里构造 `ClaudeClient` 的地方
   - 验证：`ClaudeClientTest`、`OpenAiClientTest`、`StreamWatchdogTest`、`OverflowRulesTest` 通过
   - _Requirements: 2.3_
 
-- [ ] 23. Web 拆分和 `Json` 工具类
+- [x] 23. Web 拆分和 `Json` 工具类
   - File: `shell/web/{ApiController,EventStreamController,RunTraceController,Json,AuthController,MemoryController}.java`
   - 验证：全部 web 测试和 `LoginStreamsTest` 通过；`ApiController` 不超过 300 行
   - _Requirements: 2.4, 3.4_
 
-- [ ] 24. 上下文窗口一个来源
+- [x] 24. 上下文窗口一个来源
   - File: shell/boot/TantalumProperties.java, shell/web/ApiController.java
   - 先写测试：只配置 openai 的窗口时，配置接口和压缩看到同一个值
   - _Requirements: 1.3_
 
-- [ ] 25. SSE 和条目格式集中
+- [x] 25. SSE 和条目格式集中
   - File: `shell/conversation/{TranscriptItem,ItemJson}.java`, `shell/store/{SnapshotStore,TurnQuery}.java`, shell/sse/SseHub.java, shell/handler/ModelHandler.java
   - 验证：任务 21 的样例逐字节相同；`ItemJsonTest`、`SseHubTest`、`MessagesApiTest`、`ModelHandlerTest` 通过
   - _Requirements: 2.4_
 
-- [ ] 26. 处理器、MCP、用户库、记忆的小重复
+- [x] 26. 处理器、MCP、用户库、记忆的小重复
   - File: `shell/handler/{Deadline,ToolHandler,WorkHandler,ContextHandler}.java`, `shell/mcp/{McpFailures,McpConnection}.java`, `shell/auth/{UserStore,SecurityConfig}.java`, shell/mcp/McpSettings.java, shell/memory/*.java
   - 验证：相关单元测试、`McpIntegrationTest`、`UserStoreTest`、`AuthApiTest` 通过
   - _Requirements: 2.3, C6_
 
-- [ ] 27. 阶段 4 收尾
+- [x] 27. 阶段 4 收尾
   - 验证：全量回归；变异检查（`ModelFailures` 把 429 归为不可重试，有测试失败）；真实 Claude：`ClaudeSmokeTest` 和思考签名多轮回传一项，报用量；提交；汇报
 
 ## 阶段 5：内核

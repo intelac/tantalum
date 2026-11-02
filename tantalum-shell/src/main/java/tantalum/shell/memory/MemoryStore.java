@@ -67,7 +67,7 @@ public final class MemoryStore {
                 if (line.isBlank()) {
                     continue;
                 }
-                if (MemoryFormat.parseIndex(line).isEmpty()) {
+                if (!MemoryFormat.isIndexLine(line)) {
                     LOG.warn("memory index of {}: skipping a malformed line", dir.getFileName());
                     continue;
                 }
@@ -131,7 +131,9 @@ public final class MemoryStore {
         if (invalid.isPresent()) {
             return new WriteResult.Rejected(invalid.get());
         }
-        if (CredentialGuard.looksLikeCredential(description, content)) {
+        Optional<String> credential = CredentialGuard.detect(description, content);
+        if (credential.isPresent()) {
+            LOG.info("memory write rejected: looks like {}", credential.get());
             return new WriteResult.Rejected(CredentialGuard.REASON);
         }
         MemoryEntry entry = new MemoryEntry(name, MemoryType.parse(type).orElseThrow(), description.trim(), content, clock.instant());

@@ -4,10 +4,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,22 +71,14 @@ public final class ToolHandler implements Handler {
             return ToolOutput.error("Tool timed out after " + timeout + " waiting for server capacity.");
         }
 
-        CompletableFuture<ToolOutput> result = new CompletableFuture<>();
-        Thread worker = Thread.ofVirtual().start(() -> {
-            try (permit) {
-                result.complete(tool.run(context, arguments));
-            } catch (Throwable failure) {
-                result.completeExceptionally(failure);
-            }
-        });
         try {
-            return result.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            return Deadline.call(() -> {
+                try (permit) {
+                    return tool.run(context, arguments);
+                }
+            }, Duration.ofNanos(deadline - System.nanoTime()));
         } catch (TimeoutException late) {
-            worker.interrupt();
             return ToolOutput.error("Tool timed out after " + timeout + ". Its outcome is unknown.");
-        } catch (InterruptedException cancelled) {
-            worker.interrupt();
-            throw cancelled;
         } catch (ExecutionException failure) {
             return ToolOutput.error("Tool failed: " + failure.getCause());
         }

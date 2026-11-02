@@ -1,7 +1,9 @@
 package tantalum.shell.memory;
 
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /** 记忆条目的类型，决定模型什么时候该查它，不决定存在哪。 */
 public enum MemoryType {
@@ -31,7 +33,8 @@ public enum MemoryType {
         return Optional.empty();
     }
 
+    /** 全部类型的小写名字，逗号分隔，给模型和错误信息看。 */
     public static String keys() {
-        return "user, feedback, project, reference";
+        return Arrays.stream(values()).map(MemoryType::key).collect(Collectors.joining(", "));
     }
 }

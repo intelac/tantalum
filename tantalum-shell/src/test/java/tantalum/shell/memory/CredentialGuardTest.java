@@ -24,7 +24,7 @@ class CredentialGuardTest {
             "-----BEGIN RSA PRIVATE KEY-----\nMIIE...",
         };
         for (String sample : samples) {
-            assertTrue(CredentialGuard.looksLikeCredential(sample), sample);
+            assertTrue(CredentialGuard.detect(sample).isPresent(), sample);
         }
     }
 
@@ -40,7 +40,7 @@ class CredentialGuardTest {
             "project uses Java 25 and Spring Boot 4",
         };
         for (String sample : samples) {
-            assertFalse(CredentialGuard.looksLikeCredential(sample), sample);
+            assertFalse(CredentialGuard.detect(sample).isPresent(), sample);
         }
     }
 

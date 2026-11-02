@@ -1,0 +1,16 @@
+{"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 ","queued":false}
+{"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:04Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"thinking","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"plan","redacted":false}
+{"kind":"tool","id":"2.1","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","call":{"kind":"toolCall","id":"c1","name":"read_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"DONE","group":"g2","startedAt":"2026-10-31T00:00:02Z","endedAt":"2026-10-31T00:00:03Z","result":{"kind":"toolResult","toolCallId":"c1","text":"file body","error":false}}
+{"kind":"thinking","id":"4.0","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"check","redacted":false}
+{"kind":"thinking","id":"4.1","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"","redacted":true}
+{"kind":"text","id":"4.2","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ","interrupted":false,"truncated":false}
+{"kind":"user","id":"5.0","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","text":"q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 ","queued":false}
+{"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"text","id":"7.0","session":"s","run":"s_5","at":"2026-10-31T00:00:07Z","text":"a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 ","interrupted":false,"truncated":false}
+{"kind":"user","id":"8.0","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","text":"q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 ","queued":false}
+{"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:12Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"compaction","id":"10.0","session":"s","run":"s_8","at":"2026-10-31T00:00:10Z","trigger":"AUTO","summary":"Goal: q","estimateBefore":196,"estimateAfter":116,"usage":{"input":50,"output":20,"cacheRead":0,"cacheWrite":0}}
+{"kind":"text","id":"12.0","session":"s","run":"s_8","at":"2026-10-31T00:00:12Z","text":"a3","interrupted":false,"truncated":false}
+{"kind":"user","id":"13.0","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","text":"q4","queued":false}
+{"kind":"run","id":"run:s_13","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","updatedAt":"2026-10-31T00:00:45Z","phase":"Ended","endReason":"FAILED","detail":"refused","failure":"REFUSAL"}

@@ -17,6 +17,7 @@ import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
+import tantalum.shell.model.Reasoning;
 import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.CompactionFailed;
@@ -36,7 +37,6 @@ import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
-import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
@@ -268,14 +268,10 @@ public final class Transcript implements Projection {
             }
         }
 
-        /** 供应商把思考文本放在不同位置：Claude 在对象的 {@code thinking} 字段，OpenAI 兼容接口是字符串。 */
         private Thinking thinking(String id, RunId run, ReasoningBlock reasoning) {
-            return switch (reasoning.raw()) {
-                case Json.Str text -> new Thinking(id, session, run, at, text.value(), false);
-                case Json.Obj object when object.fields().get("thinking") instanceof Json.Str text ->
-                        new Thinking(id, session, run, at, text.value(), false);
-                default -> new Thinking(id, session, run, at, "", true);
-            };
+            return Reasoning.displayText(reasoning)
+                    .map(text -> new Thinking(id, session, run, at, text, false))
+                    .orElseGet(() -> new Thinking(id, session, run, at, "", true));
         }
 
         private void interrupted(ModelInterrupted interrupted) {

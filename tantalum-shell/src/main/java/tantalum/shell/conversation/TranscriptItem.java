@@ -1,5 +1,7 @@
 package tantalum.shell.conversation;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -14,8 +16,17 @@ import tantalum.value.state.EndReason;
 
 /**
  * 对话里的一个条目，是事件的展示投影。ID 由事件序号和块下标算出，回放时相同；
- * 同一 ID 的新版本覆盖旧版本，客户端据此原地更新。
+ * 同一 ID 的新版本覆盖旧版本，客户端据此原地更新。{@code kind} 是接口和快照里的类型名，只在这里定义。
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = TranscriptItem.UserMessage.class, name = "user"),
+    @JsonSubTypes.Type(value = TranscriptItem.Text.class, name = "text"),
+    @JsonSubTypes.Type(value = TranscriptItem.Thinking.class, name = "thinking"),
+    @JsonSubTypes.Type(value = TranscriptItem.ToolStep.class, name = "tool"),
+    @JsonSubTypes.Type(value = TranscriptItem.RunStatus.class, name = "run"),
+    @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction")
+})
 public sealed interface TranscriptItem {
 
     String id();

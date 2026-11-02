@@ -37,10 +37,6 @@ public final class KnowledgeBase {
         return new KnowledgeBase(Optional.empty(), 64 * 1024);
     }
 
-    public int maxBytes() {
-        return maxBytes;
-    }
-
     /** 共享知识正文；没有配置、目录不存在或为空时返回空串。 */
     public String text() {
         if (dir.isEmpty()) {

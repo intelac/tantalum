@@ -20,9 +20,9 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionStore;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.OverflowRules;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
 import tools.jackson.databind.JsonNode;
@@ -120,8 +120,7 @@ class ClaudeCrashRecoveryTest {
         assertTrue(types.getLast().equals("ContextAssembled") || types.getLast().equals("ToolFinished"),
                 "the journal must end right before a model call: " + types);
 
-        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                "claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults());
+        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
         try (TestServer restarted = new TestServer(data, workspace, client)) {
             JsonNode view = JSON.readTree(restarted.get("alice", "/api/runs/" + runId).body());
             assertEquals("CANCELLED", view.get("endReason").asString(), view.toString());

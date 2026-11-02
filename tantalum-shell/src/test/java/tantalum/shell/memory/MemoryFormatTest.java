@@ -43,12 +43,11 @@ class MemoryFormatTest {
                 + "- [java-version](java-version.md) — user — 回答一律用 Java 25 语法\n", index);
 
         String damaged = index + "random prose someone typed\n- [Mismatch](other.md) — user — x\n- [weird](weird.md) — video — x\n";
-        List<MemoryFormat.IndexLine> parsed = MemoryFormat.parseIndex(damaged);
+        List<String> valid = damaged.lines().filter(MemoryFormat::isIndexLine).toList();
         assertEquals(List.of(
-                new MemoryFormat.IndexLine("cobol-rules", MemoryType.PROJECT, "COBOL 迁移约束"),
-                new MemoryFormat.IndexLine("java-version", MemoryType.USER, "回答一律用 Java 25 语法")), parsed);
-        assertEquals(List.of(), MemoryFormat.parseIndex(null));
-        assertEquals(List.of(), MemoryFormat.parseIndex(""));
+                "- [cobol-rules](cobol-rules.md) — project — COBOL 迁移约束",
+                "- [java-version](java-version.md) — user — 回答一律用 Java 25 语法"), valid);
+        assertEquals(false, MemoryFormat.isIndexLine(""));
     }
 
     @Test

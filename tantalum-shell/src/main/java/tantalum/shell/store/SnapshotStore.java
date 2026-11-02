@@ -17,7 +17,6 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.conversation.Transcript;
-import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
@@ -52,17 +51,6 @@ public final class SnapshotStore {
     })
     private interface RunPhaseMixin {}
 
-    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
-    @JsonSubTypes({
-        @JsonSubTypes.Type(value = TranscriptItem.UserMessage.class, name = "user"),
-        @JsonSubTypes.Type(value = TranscriptItem.Text.class, name = "text"),
-        @JsonSubTypes.Type(value = TranscriptItem.Thinking.class, name = "thinking"),
-        @JsonSubTypes.Type(value = TranscriptItem.ToolStep.class, name = "tool"),
-        @JsonSubTypes.Type(value = TranscriptItem.RunStatus.class, name = "run"),
-        @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction")
-    })
-    private interface ItemMixin {}
-
     private record Header(int storage, int semantics, long seq, long offset, String checksum) {}
 
     private record Body(SessionState session, List<RunState> runs, Transcript.Saved transcript) {}
@@ -74,7 +62,6 @@ public final class SnapshotStore {
         this.paths = paths;
         this.mapper = codec.mapper().rebuild()
                 .addMixIn(RunPhase.class, RunPhaseMixin.class)
-                .addMixIn(TranscriptItem.class, ItemMixin.class)
                 .build();
     }
 

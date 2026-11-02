@@ -29,6 +29,18 @@ class TantalumPropertiesTest {
         return new Binder(new MapConfigurationPropertySource(properties)).bind("tantalum", TantalumProperties.class).get();
     }
 
+    /** 配置接口显示的窗口和压缩用的窗口是同一个值，换供应商也一样。 */
+    @Test
+    void contextWindowHasOneSourceForBothProviders() throws Exception {
+        TantalumProperties openai = bind("tantalum.provider", "openai", "tantalum.openai.context-window", "64000");
+        assertEquals(64000, openai.contextWindow());
+        assertEquals(64000, openai.compactionSettings().window());
+        TantalumProperties claude = bind("tantalum.claude.context-window", "150000");
+        assertEquals(150000, claude.contextWindow());
+        assertEquals(150000, claude.compactionSettings().window());
+        assertNull(bind("tantalum.provider", "openai", "tantalum.openai.context-window", "0").compactionSettings());
+    }
+
     @Test
     void changingOneResidencySettingKeepsTheOtherDefaults() throws Exception {
         assertEquals(Evictor.Settings.defaults(), bind().residency());

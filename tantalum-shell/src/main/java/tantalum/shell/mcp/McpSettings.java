@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
+import tantalum.shell.net.Hosts;
 
 /** 校验过的 MCP 配置。任何一项不合法都让启动失败，错误里只有配置项名字，没有凭据内容。 */
 public record McpSettings(List<Server> servers, Duration startupWait) {
@@ -97,16 +98,10 @@ public record McpSettings(List<Server> servers, Duration startupWait) {
         if (url.getUserInfo() != null) {
             throw new IllegalArgumentException(key + ".url must not contain credentials; use token-env");
         }
-        if (auth == Auth.SERVICE && scheme.equals("http") && !isLoopback(url.getHost())) {
+        if (auth == Auth.SERVICE && scheme.equals("http") && !Hosts.isLoopback(url.getHost())) {
             throw new IllegalArgumentException(key + ".url: credentials must not be sent over plain http to a non-loopback host");
         }
         return url;
-    }
-
-    /** 只认字面量，不走 DNS：DNS 结果不可信，也不能让校验发网络请求（pi 相同）。 */
-    static boolean isLoopback(String host) {
-        return host.equals("localhost") || host.equals("[::1]") || host.equals("::1")
-                || host.matches("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
     }
 
     private static Set<String> names(List<String> names) {

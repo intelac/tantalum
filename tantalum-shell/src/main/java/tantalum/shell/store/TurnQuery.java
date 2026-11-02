@@ -192,13 +192,13 @@ public final class TurnQuery {
                 int index = 0;
                 for (Fact fact : decision.facts()) {
                     if (later(envelope.seq(), index, lastSeq, lastIndex)) {
-                        messages.add(new Positioned(envelope.seq(), index, SseHub.toMessage(envelope.seq(), index, fact)));
+                        messages.add(new Positioned(envelope.seq(), index, SseHub.factMessage(mapper, envelope.seq(), index, fact)));
                     }
                     index++;
                 }
                 for (TranscriptItem item : transcript.apply(envelope, decision)) {
                     if (later(envelope.seq(), index, lastSeq, lastIndex)) {
-                        messages.add(new Positioned(envelope.seq(), index, SseHub.toMessage(mapper, envelope.seq(), index, item)));
+                        messages.add(new Positioned(envelope.seq(), index, SseHub.itemMessage(mapper, envelope.seq(), index, item)));
                     }
                     index++;
                 }

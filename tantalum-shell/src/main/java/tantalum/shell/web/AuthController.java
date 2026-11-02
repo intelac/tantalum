@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpSession;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import org.springframework.http.MediaType;
+import java.util.Optional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,7 +24,6 @@ import tantalum.shell.auth.LoginThrottle;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.value.id.Principal;
-import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 
 /** 登录、退出和当前用户。失败时不透露是用户名还是密码错了。 */
@@ -39,12 +38,14 @@ public class AuthController {
     private final LoginThrottle throttle;
     private final SecurityContextRepository contexts;
     private final Engine engine;
+    private final WebJson json;
 
-    public AuthController(UserStore users, LoginThrottle throttle, SecurityContextRepository contexts, Engine engine) {
+    public AuthController(UserStore users, LoginThrottle throttle, SecurityContextRepository contexts, Engine engine, WebJson json) {
         this.users = users;
         this.throttle = throttle;
         this.contexts = contexts;
         this.engine = engine;
+        this.json = json;
     }
 
     /** 未认证入口：先限长度再解析，超长输入不进 Argon2，也不占限速表。 */
@@ -52,26 +53,24 @@ public class AuthController {
     ResponseEntity<String> login(@RequestBody String body, HttpServletRequest request, HttpServletResponse response)
             throws SQLException {
         if (body.length() > MAX_BODY) {
-            return json(400, Map.of("error", "invalid_request"));
+            return json.error(400, "invalid_request");
         }
-        JsonNode input;
-        try {
-            input = engine.codec().mapper().readTree(body);
-        } catch (JacksonException failure) {
-            return json(400, Map.of("error", "invalid_request"));
+        Optional<JsonNode> input = json.read(body);
+        if (input.isEmpty()) {
+            return json.error(400, "invalid_request");
         }
-        String username = text(input, "username");
-        String password = text(input, "password");
+        String username = WebJson.text(input.get(), "username");
+        String password = WebJson.text(input.get(), "password");
         if (username == null || password == null || username.isEmpty() || username.length() > MAX_USERNAME
                 || password.length() > MAX_PASSWORD) {
-            return json(400, Map.of("error", "invalid_request"));
+            return json.error(400, "invalid_request");
         }
         String source = request.getRemoteAddr();
         if (!throttle.tryBegin(username, source)) {
-            return json(429, Map.of("error", "too_many_attempts"));
+            return json.error(429, "too_many_attempts");
         }
         if (!users.verify(username, password)) {
-            return json(401, Map.of("error", "invalid_credentials"));
+            return json.error(401, "invalid_credentials");
         }
         throttle.succeeded(username, source);
 
@@ -90,32 +89,22 @@ public class AuthController {
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))));
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
-        return json(200, Map.of("username", username));
+        return json.json(200, Map.of("username", username));
     }
 
     @PostMapping("/api/auth/logout")
     ResponseEntity<String> logout(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session != null) {
-            engine.hub().closeLogin(new Principal(SecurityContextHolder.getContext().getAuthentication().getName()), session.getId());
+            engine.hub().closeLogin(WebJson.currentUser(), session.getId());
             session.invalidate();
         }
         SecurityContextHolder.clearContext();
-        return json(200, Map.of("loggedOut", true));
+        return json.json(200, Map.of("loggedOut", true));
     }
 
     @GetMapping("/api/auth/me")
     ResponseEntity<String> me() {
-        return json(200, Map.of("username", SecurityContextHolder.getContext().getAuthentication().getName()));
-    }
-
-    private static String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        return value == null || !value.isString() ? null : value.asString();
-    }
-
-    private ResponseEntity<String> json(int status, Object body) {
-        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON)
-                .body(engine.codec().mapper().writeValueAsString(body));
+        return json.json(200, Map.of("username", WebJson.currentUser().value()));
     }
 }
