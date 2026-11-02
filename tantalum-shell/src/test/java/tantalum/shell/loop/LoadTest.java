@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import tantalum.shell.journal.Sequence;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -33,8 +34,8 @@ class LoadTest {
     private final Sequence sequence = principal -> counters.computeIfAbsent(principal, ignored -> new AtomicLong(100)).getAndIncrement();
 
     private InputRing start(LoopFixtures.Load loader) {
-        JournalDispatcher[] holder = new JournalDispatcher[1];
-        holder[0] = new JournalDispatcher(256, sequence, (principal, session, events) -> { }, (envelope, preload) -> {
+        LaneDispatcher[] holder = new LaneDispatcher[1];
+        holder[0] = new LaneDispatcher(256, sequence, (principal, session, events) -> { }, (envelope, preload) -> {
             reached.add(new Reached(envelope, preload));
             holder[0].released();
             return true;

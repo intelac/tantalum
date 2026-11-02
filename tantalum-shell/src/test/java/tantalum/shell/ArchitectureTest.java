@@ -2,6 +2,7 @@ package tantalum.shell;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -79,4 +80,15 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.shell..")
             .and().resideOutsideOfPackages("tantalum.shell.boot..", "tantalum.shell.web..", "tantalum.shell.auth..")
             .should().dependOnClassesThat().resideInAPackage("org.springframework..");
+
+    /** 包之间单向依赖：原始记录 ← 缓存，管线 ← 组装。循环会让包名不再说明里面是什么。 */
+    @ArchTest
+    static final ArchRule shellPackagesHaveNoCycles = slices().matching("tantalum.shell.(*)..").should().beFreeOfCycles();
+
+    /** 只有组装和 Web 层读全局配置；其余的包拿自己的设置记录。 */
+    @ArchTest
+    static final ArchRule onlyTheEdgeReadsTheConfiguration = noClasses()
+            .that().resideInAPackage("tantalum.shell..")
+            .and().resideOutsideOfPackages("tantalum.shell.boot..", "tantalum.shell.web..")
+            .should().dependOnClassesThat().resideInAPackage("tantalum.shell.boot..");
 }

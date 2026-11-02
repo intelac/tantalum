@@ -1,7 +1,7 @@
 package tantalum.shell.mcp;
 
 import java.util.Map;
-import tantalum.shell.journal.JsonText;
+import tantalum.shell.json.JsonText;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;

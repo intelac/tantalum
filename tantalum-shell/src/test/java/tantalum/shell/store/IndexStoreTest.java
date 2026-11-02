@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -150,7 +152,7 @@ class IndexStoreTest {
                 assertEquals(offsetBefore, index.session(S1).orElseThrow().fileOffset());
             }
             fixture.files.close();
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), fixture.kernel);
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), fixture.kernel);
             assertEquals(Files.size(paths().sessionFile(ALICE, S1)), index.session(S1).orElseThrow().fileOffset());
             assertEquals(List.of(5L, 7L, 9L), index.usage(ALICE).stream().map(row -> row.amount().input()).toList());
         }
@@ -246,7 +248,7 @@ class IndexStoreTest {
         deleteIndex();
         try (SessionIndex index = SessionIndex.open(dir)) {
             assertEquals(List.of(), index.sessions());
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertEquals(original, Dump.of(index));
         }
     }
@@ -262,14 +264,14 @@ class IndexStoreTest {
         deleteIndex();
         try (SessionIndex index = SessionIndex.open(dir);
                 var connection = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve(SessionIndex.FILE))) {
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             try (var statement = connection.createStatement()) {
                 statement.execute("UPDATE sessions SET file_offset = 10, run_status = 'stale', last_activity = '2000-01-01T00:00:00Z' WHERE session = 's2'");
                 statement.execute("DELETE FROM usage WHERE principal = 'alice' AND input = 100");
                 statement.execute("DELETE FROM submissions WHERE request_id = 'req-1'");
             }
             assertFalse(Dump.of(index).equals(complete));
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertEquals(complete, Dump.of(index));
         }
     }
@@ -287,7 +289,7 @@ class IndexStoreTest {
                     var statement = connection.createStatement()) {
                 statement.execute("UPDATE sessions SET run_status = 'untouched' WHERE session = 's1'");
             }
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertEquals("untouched", index.session(S1).orElseThrow().runStatus());
         }
     }
@@ -302,7 +304,7 @@ class IndexStoreTest {
         deleteSidecars();
         Files.writeString(dir.resolve(SessionIndex.FILE), "this is not a database, and it is long enough to be read as a header");
         try (SessionIndex index = SessionIndex.open(dir)) {
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertEquals(original, Dump.of(index));
         }
     }
@@ -320,7 +322,7 @@ class IndexStoreTest {
         }
         try (SessionIndex index = SessionIndex.open(dir)) {
             assertEquals(List.of(), index.sessions());
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertEquals(original, Dump.of(index));
         }
     }
@@ -336,7 +338,7 @@ class IndexStoreTest {
         lines.set(1, "{broken");
         Files.write(bad, lines);
         try (SessionIndex index = SessionIndex.open(dir)) {
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             assertTrue(index.session(S1).isEmpty());
             assertTrue(index.session(S2).isPresent());
             assertTrue(index.session(new SessionId("b1")).isPresent());
@@ -353,7 +355,7 @@ class IndexStoreTest {
             fixture.files.close();
         }
         try (SessionIndex index = SessionIndex.open(dir)) {
-            IndexRecovery.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
+            IndexCatchUp.run(index, paths(), new SessionFileReader(EventCodec.withBuiltins()), IndexFixture.kernel());
             tantalum.shell.loop.SubmissionLedger ledger = new tantalum.shell.loop.SubmissionLedger((principal, id) -> {
                 try {
                     return index.submission(principal, id);

@@ -8,7 +8,9 @@ import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import tantalum.kernel.Kernel;
+import tantalum.shell.conversation.Projection;
 import tantalum.shell.handler.Handler;
+import tantalum.shell.journal.Sequence;
 import tantalum.value.command.Command;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
@@ -71,8 +73,8 @@ public final class LoopFixtures {
     }
 
     /** 不载入冷会话的分发器，下游只看事件。 */
-    public static JournalDispatcher dispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
-        return new JournalDispatcher(capacity, sequence, writer, (envelope, preload) -> cleanroom.test(envelope), NO_LOADER, new Residency());
+    public static LaneDispatcher dispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
+        return new LaneDispatcher(capacity, sequence, writer, (envelope, preload) -> cleanroom.test(envelope), NO_LOADER, new Residency());
     }
 
     /** 建环时就接好消费者。 */

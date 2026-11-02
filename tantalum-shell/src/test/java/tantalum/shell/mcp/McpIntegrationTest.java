@@ -19,10 +19,10 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionStore;
 import tantalum.shell.mcp.TestMcpServer.Definition;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.ToolFinished;
@@ -95,7 +95,7 @@ class McpIntegrationTest {
 
     private static void awaitTool(TestServer server, String name) throws Exception {
         for (int i = 0; i < 1000; i++) {
-            if (server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas(name)) {
+            if (server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas(name)) {
                 return;
             }
             Thread.sleep(10);

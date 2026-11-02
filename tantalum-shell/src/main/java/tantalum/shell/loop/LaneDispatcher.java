@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.journal.Sequence;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 
@@ -16,9 +17,9 @@ import tantalum.value.id.Principal;
  * 输入环的唯一消费者：取一个放行名额，把事件放进该用户的通道。名额总数等于 Cleanroom Ring 的大小，
  * 所以那个环不会满，已落盘的事件不会丢。名额用完时这里等待，输入环随之填满，入口返回 429。
  */
-public final class JournalDispatcher implements EventHandler<InputRing.Slot>, UserLane.Exit {
+public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserLane.Exit {
 
-    private static final Logger LOG = LoggerFactory.getLogger(JournalDispatcher.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LaneDispatcher.class);
     private static final long POLL_MILLIS = 100;
 
     private final int capacity;
@@ -32,7 +33,7 @@ public final class JournalDispatcher implements EventHandler<InputRing.Slot>, Us
     private final Map<Principal, UserLane> lanes = new HashMap<>();
     private volatile boolean halted;
 
-    public JournalDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, BiPredicate<EventEnvelope, Preload> cleanroom,
+    public LaneDispatcher(int capacity, Sequence sequence, UserLane.Writer writer, BiPredicate<EventEnvelope, Preload> cleanroom,
                              UserLane.Loader loader, Residency residency) {
         this.loader = loader;
         this.residency = residency;

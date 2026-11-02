@@ -16,6 +16,9 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.shell.journal.SessionCorruptException;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.state.KernelState;
@@ -25,13 +28,13 @@ import tantalum.value.state.PrincipalState;
  * 启动时让索引追上会话文件。只比较文件大小，不读内容；大小不符的文件整个重放，
  * 因为用量要比较内核状态才知道。写入都可以重复，所以重放和已有内容重叠没有关系。
  */
-public final class IndexRecovery {
+public final class IndexCatchUp {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IndexRecovery.class);
+    private static final Logger LOG = LoggerFactory.getLogger(IndexCatchUp.class);
 
     private record Lagging(Path file, long size, SessionIndex.Session known) {}
 
-    private IndexRecovery() {}
+    private IndexCatchUp() {}
 
     /** 单个文件读不了时跳过，索引保持落后，下次启动再试。 */
     public static void run(SessionIndex index, SessionPaths paths, SessionFileReader reader, Kernel kernel) throws IOException, SQLException {

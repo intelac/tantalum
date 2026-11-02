@@ -83,7 +83,7 @@ class TranscriptTest {
 
         fx.feed(run, fx.reply(text("a3")));
         assertEquals("a3", fx.items(Text.class).getLast().text());
-        assertTrue(fx.status(run).ended());
+        assertTrue(fx.status(run).isEnded());
         // 原始条目都还在：三条用户消息、三条回复文本。
         assertEquals(3, fx.items(UserMessage.class).size());
         assertEquals(3, fx.items(Text.class).size());
@@ -101,7 +101,7 @@ class TranscriptTest {
         assertEquals("AwaitingModel", fx.status(run).phase());
 
         fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(block("a3"))));
-        assertTrue(fx.status(run).ended());
+        assertTrue(fx.status(run).isEnded());
         RunId again = nextRun(block("q4"));
         fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, null, "", "429"));
         assertNull(fx.status(again).failure(), "waiting to retry the summary is not a run failure");
@@ -143,7 +143,7 @@ class TranscriptTest {
         }).toList();
         assertEquals(List.of("user:hi", "run", "think:plan", "tool:read_file", "think:check", "tool:grep",
                 "think:wrap up", "text:done"), kinds);
-        assertTrue(fx.status(run).ended());
+        assertTrue(fx.status(run).isEnded());
         assertEquals(EndReason.COMPLETED, fx.status(run).endReason());
     }
 
@@ -162,11 +162,11 @@ class TranscriptTest {
 
     @Test
     void snapshotCarriesTheLastAppliedSeqSoClientsCanMergeItWithSse() {
-        assertEquals(new Transcript.Snapshot(-1, List.of()), fx.transcript.snapshot(SESSION));
+        assertEquals(new Transcript.View(-1, List.of()), fx.transcript.view(SESSION));
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(text("a"), call("c1", "read_file")));
 
-        Transcript.Snapshot snapshot = fx.transcript.snapshot(SESSION);
+        Transcript.View snapshot = fx.transcript.view(SESSION);
         assertEquals(fx.lastSeq(), snapshot.seq());
         assertEquals(fx.items(), snapshot.items());
     }

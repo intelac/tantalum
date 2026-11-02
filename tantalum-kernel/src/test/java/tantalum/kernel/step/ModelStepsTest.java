@@ -249,7 +249,7 @@ class ModelStepsTest {
         toModel(loop);
         loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), ""));
         assertEquals(1, loop.session().messages().size());
-        assertTrue(loop.run().ended());
+        assertTrue(loop.run().isEnded());
     }
 
     /** Cancel 之后迟到的中断结果：会话还没开新运行，用户看到的文本留在历史里。 */

@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 

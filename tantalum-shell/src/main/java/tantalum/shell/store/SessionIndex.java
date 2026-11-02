@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.journal.SessionFile;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
@@ -46,7 +47,7 @@ public final class SessionIndex implements AutoCloseable {
         this.connection = connection;
     }
 
-    /** 文件损坏或版本不符时删掉重建，记警告；内容由 {@link IndexRecovery} 从会话文件补回。 */
+    /** 文件损坏或版本不符时删掉重建，记警告；内容由 {@link IndexCatchUp} 从会话文件补回。 */
     public static SessionIndex open(Path dataDir) throws IOException, SQLException {
         Path file = dataDir.resolve(FILE);
         try {

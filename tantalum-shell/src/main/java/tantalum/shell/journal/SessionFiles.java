@@ -1,4 +1,4 @@
-package tantalum.shell.store;
+package tantalum.shell.journal;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -7,6 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;

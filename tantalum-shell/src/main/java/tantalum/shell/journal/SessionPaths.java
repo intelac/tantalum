@@ -1,4 +1,4 @@
-package tantalum.shell.store;
+package tantalum.shell.journal;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;

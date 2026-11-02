@@ -269,12 +269,12 @@ class McpConnectionTest {
     void pagingStopsAtTheLimit() {
         int[] calls = new int[1];
         McpSchema.ListToolsResult endless = new McpSchema.ListToolsResult(List.of(), "more");
-        List<McpSchema.Tool> tools = McpTools.collectPages(endless, cursor -> {
+        List<McpSchema.Tool> tools = McpClients.collectPages(endless, cursor -> {
             calls[0]++;
             return endless;
         });
         assertEquals(List.of(), tools);
-        assertEquals(McpTools.MAX_PAGES - 1, calls[0]);
+        assertEquals(McpClients.MAX_PAGES - 1, calls[0]);
     }
 
     @Test

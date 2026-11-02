@@ -9,30 +9,28 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import tantalum.shell.boot.TantalumProperties.Mcp;
-import tantalum.shell.boot.TantalumProperties.McpServer;
 
 class McpSettingsTest {
 
     private static final Duration TOOL_TIMEOUT = Duration.ofSeconds(60);
     private static final String SECRET = "very-secret-token";
 
-    private static McpServer server(String url, String auth, String env) {
-        return new McpServer(url, auth, env, null, null, null, null, null, null);
+    private static McpProperties.Server server(String url, String auth, String env) {
+        return new McpProperties.Server(url, auth, env, null, null, null, null, null, null);
     }
 
-    private static McpSettings load(String name, McpServer server) {
-        return McpSettings.from(new Mcp(Map.of(name, server), null), TOOL_TIMEOUT, key -> key.equals("TOKEN") ? SECRET : null);
+    private static McpSettings load(String name, McpProperties.Server server) {
+        return McpSettings.from(new McpProperties(Map.of(name, server), null), TOOL_TIMEOUT, key -> key.equals("TOKEN") ? SECRET : null);
     }
 
-    private static String failure(String name, McpServer server) {
+    private static String failure(String name, McpProperties.Server server) {
         return assertThrows(IllegalArgumentException.class, () -> load(name, server)).getMessage();
     }
 
     @Test
     void absentConfigurationMeansNoServers() {
         assertTrue(McpSettings.from(null, TOOL_TIMEOUT, key -> null).isEmpty());
-        assertTrue(McpSettings.from(new Mcp(null, null), TOOL_TIMEOUT, key -> null).isEmpty());
+        assertTrue(McpSettings.from(new McpProperties(null, null), TOOL_TIMEOUT, key -> null).isEmpty());
     }
 
     @Test
@@ -75,9 +73,9 @@ class McpSettingsTest {
 
     @Test
     void limitsAreChecked() {
-        McpServer tooLong = new McpServer("https://x/mcp", null, null, null, null, null, Duration.ofSeconds(61), null, null);
+        McpProperties.Server tooLong = new McpProperties.Server("https://x/mcp", null, null, null, null, null, Duration.ofSeconds(61), null, null);
         assertTrue(failure("a", tooLong).contains(".timeout"));
-        McpServer zero = new McpServer("https://x/mcp", null, null, List.of("a"), List.of("b"), 0, null, null, null);
+        McpProperties.Server zero = new McpProperties.Server("https://x/mcp", null, null, List.of("a"), List.of("b"), 0, null, null, null);
         assertTrue(failure("a", zero).contains(".concurrency"));
     }
 

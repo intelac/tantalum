@@ -32,22 +32,26 @@ import tantalum.shell.handler.TimerHandler;
 import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionFiles;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.journal.StoreFormat;
 import tantalum.shell.journal.StoreLock;
-import tantalum.shell.journal.TurnQuery;
+import tantalum.shell.journal.TailSequence;
 import tantalum.shell.loop.Cleanroom;
 import tantalum.shell.loop.CleanroomRing;
-import tantalum.shell.loop.Dispatcher;
 import tantalum.shell.loop.Evictor;
+import tantalum.shell.loop.ExternalGate;
+import tantalum.shell.loop.HandlerDispatcher;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.InputRing;
-import tantalum.shell.loop.JournalDispatcher;
+import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.Preload;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
-import tantalum.shell.loop.TailSequence;
 import tantalum.shell.loop.UserLane;
 import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.mcp.McpSettings;
@@ -61,23 +65,19 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.ColdReads;
-import tantalum.shell.store.IndexRecovery;
+import tantalum.shell.store.IndexCatchUp;
 import tantalum.shell.store.IndexWriter;
-import tantalum.shell.store.SessionFileReader;
-import tantalum.shell.store.SessionFiles;
 import tantalum.shell.store.SessionIndex;
-import tantalum.shell.store.SessionPaths;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.SessionStore;
 import tantalum.shell.store.SnapshotStore;
 import tantalum.shell.store.SnapshotWriter;
-import tantalum.shell.store.StoreFormat;
+import tantalum.shell.store.TurnQuery;
 import tantalum.shell.store.UsageLedger;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
-import tantalum.shell.web.ExternalGate;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -119,7 +119,7 @@ public final class Engine implements AutoCloseable {
     public record Submission(int status, SubmissionId submission, boolean duplicate) {}
 
     /** 一个会话的只读视图：在内存的取当前状态，不在的重放文件得到，不进常驻。 */
-    public record SessionView(SessionState state, List<RunState> runs, Transcript.Snapshot transcript) {}
+    public record SessionView(SessionState state, List<RunState> runs, Transcript.View transcript) {}
 
     /** 会话文件读不了（中间损坏、索引库不可用）。 */
     public static final class SessionUnreadable extends RuntimeException {
@@ -132,7 +132,7 @@ public final class Engine implements AutoCloseable {
     private final StoreLock lock;
     private final SessionFiles files;
     private final EventCodec codec;
-    private final JournalDispatcher dispatcher;
+    private final LaneDispatcher dispatcher;
     private final InputRing input;
     private final CleanroomRing cleanroom;
     private final OutputRing output;
@@ -150,7 +150,7 @@ public final class Engine implements AutoCloseable {
     private final TurnQuery turns;
     private final ColdReads cold;
     private final Cleanroom cleanroomStep;
-    private final Dispatcher handlers;
+    private final HandlerDispatcher handlers;
     private final InFlightCommands inFlight;
     private final Duration shutdownWait;
     /** 关闭开始后入口返回 503。 */
@@ -218,9 +218,9 @@ public final class Engine implements AutoCloseable {
                 properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), loaded, unfinished.size());
     }
 
-    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
+    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, LaneDispatcher dispatcher,
                             ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp,
-                            List<RunState> unfinished, ColdReads cold, Cleanroom cleanroomStep, Dispatcher handlers,
+                            List<RunState> unfinished, ColdReads cold, Cleanroom cleanroomStep, HandlerDispatcher handlers,
                             InFlightCommands inFlight) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
@@ -235,7 +235,7 @@ public final class Engine implements AutoCloseable {
         }
         catalog.register(new ReadFileTool());
         catalog.register(new GrepTool());
-        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), MemoryLimits.of(properties.memory()), clock);
+        MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
         KnowledgeBase knowledge = new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes());
         MemoryTools.all(memories).forEach(catalog::register);
         tools.forEach(catalog::register);
@@ -255,7 +255,7 @@ public final class Engine implements AutoCloseable {
         TurnQuery turns = new TurnQuery(paths, replay, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
         CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
-        JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),
+        LaneDispatcher dispatcher = new LaneDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),
                 files::append, cleanroomRing::tryPublish, loader(replay, usage), residency);
 
         InFlightCommands inFlight = new InFlightCommands();
@@ -268,19 +268,19 @@ public final class Engine implements AutoCloseable {
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                 StartTimer.class, new TimerHandler());
-        Dispatcher commands = new Dispatcher(handlers, inFlight, results);
+        HandlerDispatcher commands = new HandlerDispatcher(handlers, inFlight, results);
         OutputRing output = new OutputRing(loop.outputRingSize(), commands);
         Evictor evictor = new Evictor(evictorSettings(properties), residency, recovered.transcript(), snapshots, clock);
         for (SessionId session : recovered.state().sessions().keySet()) {
             residency.resident(session);
-            evictor.recovered(session, recovered.transcript().snapshot(session).seq());
+            evictor.recovered(session, recovered.transcript().view(session).seq());
         }
         recovered.failed().forEach(residency::fail);
         Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
                 recovered.transcript(), hub, view, results, indexWriter::onStep, evictor);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> closing || dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
-        ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
+        ExternalGate gate = new ExternalGate(new ExternalGate.Limits(loop.maxActiveRuns(), loop.maxUserInFlight(), loop.maxExternalInFlight()), () -> (int) view.current().activeRunCount(), halted);
         input.connect(dispatcher);
         cleanroomRing.connect((slot, sequence, endOfBatch) -> {
             EventEnvelope envelope = slot.envelope;
@@ -322,7 +322,7 @@ public final class Engine implements AutoCloseable {
     /** 平常只载入有未结束运行的会话；索引补不上时不知道哪些会话没结束，只能全量重放。 */
     private Startup.Recovered recover(TantalumProperties properties, Kernel kernel, SessionStore store, SessionReplay replay) {
         try {
-            IndexRecovery.run(index, new SessionPaths(properties.dataDir()), new SessionFileReader(codec), kernel);
+            IndexCatchUp.run(index, new SessionPaths(properties.dataDir()), new SessionFileReader(codec), kernel);
             return Startup.resume(index, replay);
         } catch (IOException | SQLException failure) {
             LOG.warn("index could not catch up with session files, replaying everything: {}", failure.toString());
@@ -496,7 +496,7 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 某个工具当前是否对模型可见。 */
-    public boolean catalogHas(String tool) {
+    public boolean mcpHas(String tool) {
         return mcp.find(tool).isPresent();
     }
 
@@ -539,11 +539,11 @@ public final class Engine implements AutoCloseable {
                 return Optional.empty();
             }
             List<RunState> runs = state.runs().values().stream().filter(run -> run.ref().session().equals(session)).toList();
-            return Optional.of(new SessionView(resident, runs, transcript.snapshot(session)));
+            return Optional.of(new SessionView(resident, runs, transcript.view(session)));
         }
         try {
             return cold.read(principal, session).map(found -> new SessionView(found.session(), found.runs(),
-                    new Transcript.Snapshot(found.transcript().lastSeq(), found.transcript().items())));
+                    new Transcript.View(found.transcript().lastSeq(), found.transcript().items())));
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
             throw new SessionUnreadable(session, stopping);

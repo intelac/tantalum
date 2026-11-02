@@ -1,5 +1,5 @@
 import type { Trace, TraceEntry } from "../api/types";
-import { compact } from "../composer/status";
+import { tokenCount } from "../composer/status";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 import { offsetSeconds } from "./layout";
@@ -51,7 +51,7 @@ export function EventList({ trace, selectedTurn, onSelectTurn }: Props) {
               {entry.compaction !== undefined && (
                 <span className={cx("ml-2 rounded-xs px-1.5 py-0.5 text-xs", entry.compaction.ok ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger")}>
                   {entry.compaction.ok
-                    ? zh.trace.compaction(compact(entry.compaction.estimateBefore), compact(entry.compaction.estimateAfter))
+                    ? zh.trace.compaction(tokenCount(entry.compaction.estimateBefore), tokenCount(entry.compaction.estimateAfter))
                     : zh.trace.compactionFailed(entry.compaction.reason ?? "")}
                 </span>
               )}

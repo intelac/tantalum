@@ -70,7 +70,7 @@ public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, String system
                 compacting, autoCompactionFailed, recovered);
     }
 
-    public boolean ended() {
+    public boolean isEnded() {
         return phase instanceof Ended;
     }
 }

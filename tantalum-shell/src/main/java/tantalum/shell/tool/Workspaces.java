@@ -8,7 +8,6 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 import tantalum.shell.plugin.Workspace;
 import tantalum.value.id.Principal;
 
@@ -18,7 +17,6 @@ import tantalum.value.id.Principal;
  */
 public final class Workspaces {
 
-    private static final Pattern SAFE_NAME = Pattern.compile("[a-z0-9_-]{1,64}");
 
     private final Path root;
     private final boolean shared;
@@ -35,11 +33,6 @@ public final class Workspaces {
 
     public static Workspaces shared(Path root) {
         return new Workspaces(root, true);
-    }
-
-    /** 用户名可以安全地用作目录名：不含路径分隔符，也不可能是 {@code ..}。 */
-    public static boolean isSafeName(String name) {
-        return name != null && SAFE_NAME.matcher(name).matches();
     }
 
     public boolean isShared() {
@@ -65,7 +58,7 @@ public final class Workspaces {
                 Files.createDirectories(root);
                 return new Workspace(root);
             }
-            if (!isSafeName(principal.value())) {
+            if (!Principal.isUsable(principal.value())) {
                 throw new IllegalArgumentException("user name cannot be used as a directory: " + principal.value());
             }
             Path dir = root.resolve(principal.value());

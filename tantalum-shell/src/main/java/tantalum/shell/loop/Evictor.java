@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tantalum.shell.conversation.Projection;
 import tantalum.shell.conversation.Transcript;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
@@ -25,7 +26,7 @@ public final class Evictor {
     /** 接收要写的快照，不能阻塞。参数都不可变。 */
     @FunctionalInterface
     public interface Sink {
-        void offer(SessionState session, List<RunState> runs, Transcript.Part transcript, long seq);
+        void offer(SessionState session, List<RunState> runs, Transcript.Saved transcript, long seq);
     }
 
     private static final class Entry {

@@ -127,7 +127,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
             <ConversationPage
               store={store}
               session={route.session}
-              reloadKey={connection.reconnects}
+              reloadKey={connection.connects}
               composer={(state) => (
                 <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
                   <QueueDock store={store} ids={state.queued} />

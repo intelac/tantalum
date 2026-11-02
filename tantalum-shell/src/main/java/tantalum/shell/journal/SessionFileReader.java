@@ -1,4 +1,4 @@
-package tantalum.shell.store;
+package tantalum.shell.journal;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
@@ -20,7 +20,8 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.JsonText;
+import tantalum.shell.journal.SessionFile;
+import tantalum.shell.json.JsonText;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -221,7 +222,7 @@ public final class SessionFileReader {
     }
 
     /** 在 {@code offset} 结束的那一行的序号。{@code offset} 不是行尾或那一行不是事件时为 -1。 */
-    static long seqEndingAt(Path file, long offset) throws IOException {
+    public static long seqEndingAt(Path file, long offset) throws IOException {
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
             if (offset <= 0 || offset > channel.size() || byteAt(channel, offset - 1) != '\n') {
                 return -1;
@@ -233,7 +234,7 @@ public final class SessionFileReader {
     }
 
     /** 序号为 {@code seq} 的那一行结束的文件位置，没有时为 -1。从末尾往前找，所以落后不多时很快。 */
-    static long endOffsetOf(Path file, long seq) throws IOException {
+    public static long endOffsetOf(Path file, long seq) throws IOException {
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
             long end = channel.size();
             if (end > 0 && byteAt(channel, end - 1) != '\n') {

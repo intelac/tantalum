@@ -59,6 +59,6 @@ public record KernelState(Map<Principal, PrincipalState> principals,
     }
 
     public long activeRunCount() {
-        return runs.values().stream().filter(run -> !run.ended()).count();
+        return runs.values().stream().filter(run -> !run.isEnded()).count();
     }
 }

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { compact, statusParts } from "./status";
+import { tokenCount, statusParts } from "./status";
 
 describe("status", () => {
   it("compacts counts", () => {
-    expect(compact(999)).toBe("999");
-    expect(compact(1234)).toBe("1.2K");
-    expect(compact(18000)).toBe("18K");
-    expect(compact(2_500_000)).toBe("2.5M");
+    expect(tokenCount(999)).toBe("999");
+    expect(tokenCount(1234)).toBe("1.2K");
+    expect(tokenCount(18000)).toBe("18K");
+    expect(tokenCount(2_500_000)).toBe("2.5M");
   });
 
   it("shows turns, tokens and the context share when the window is known", () => {

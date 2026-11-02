@@ -32,7 +32,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
 
-class DispatcherTest {
+class HandlerDispatcherTest {
 
     private static final RunRef RUN = new RunRef(new Principal("p"), new SessionId("s"), new RunId("r"));
     private static final Command CONTEXT = new AssembleContext(new CommandId("c"), RUN);
@@ -54,11 +54,11 @@ class DispatcherTest {
         ring.shutdown(Duration.ZERO);
     }
 
-    private Dispatcher dispatcher(Handler handler) {
-        return new Dispatcher(Map.of(AssembleContext.class, handler), inFlight, publisher);
+    private HandlerDispatcher dispatcher(Handler handler) {
+        return new HandlerDispatcher(Map.of(AssembleContext.class, handler), inFlight, publisher);
     }
 
-    private static void send(Dispatcher dispatcher, Command command) throws Exception {
+    private static void send(HandlerDispatcher dispatcher, Command command) throws Exception {
         OutputRing.Slot slot = new OutputRing.Slot();
         slot.command = command;
         dispatcher.onEvent(slot, 0, true);
@@ -84,7 +84,7 @@ class DispatcherTest {
     void hungHandlerDoesNotHoldTheConsumerThread() throws Exception {
         CountDownLatch hold = new CountDownLatch(1);
         CountDownLatch running = new CountDownLatch(2);
-        Dispatcher dispatcher = dispatcher(handler(command -> {
+        HandlerDispatcher dispatcher = dispatcher(handler(command -> {
             running.countDown();
             hold.await();
             return null;
@@ -106,7 +106,7 @@ class DispatcherTest {
 
     @Test
     void commandWithoutAHandlerIsReportedAsDropped() throws Exception {
-        Dispatcher dispatcher = dispatcher(handler(command -> null));
+        HandlerDispatcher dispatcher = dispatcher(handler(command -> null));
         send(dispatcher, new StartTimer(new CommandId("t"), RUN, java.time.Duration.ZERO));
         publisher.flushDropped();
         assertInstanceOf(CommandDropped.class, results.poll(5, TimeUnit.SECONDS).event());
@@ -115,7 +115,7 @@ class DispatcherTest {
     @Test
     void abortCommandInterruptsTheHandler() throws Exception {
         CountDownLatch started = new CountDownLatch(1);
-        Dispatcher dispatcher = dispatcher(handler(command -> {
+        HandlerDispatcher dispatcher = dispatcher(handler(command -> {
             started.countDown();
             Thread.sleep(60_000);
             return null;
@@ -136,7 +136,7 @@ class DispatcherTest {
 
     @Test
     void completedCommandsLeaveNoTrace() throws Exception {
-        Dispatcher dispatcher = dispatcher(handler(command -> new TimerFired(command.id())));
+        HandlerDispatcher dispatcher = dispatcher(handler(command -> new TimerFired(command.id())));
         for (int i = 0; i < 20; i++) {
             send(dispatcher, new AssembleContext(new CommandId("c" + i), RUN));
         }

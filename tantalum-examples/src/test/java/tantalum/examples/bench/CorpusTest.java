@@ -45,7 +45,7 @@ class CorpusTest {
             List<EventEnvelope> events = store.readAll();
             assertEquals(manifest.events(), events.size());
             Startup.Recovered recovered = Startup.recover(store, kernel());
-            assertTrue(recovered.state().runs().values().stream().allMatch(run -> run.ended()));
+            assertTrue(recovered.state().runs().values().stream().allMatch(run -> run.isEnded()));
             assertTrue(recovered.state().runs().values().stream()
                     .noneMatch(run -> ((tantalum.value.state.Ended) run.phase()).reason().name().equals("FAILED")));
             assertTrue(events.stream().map(envelope -> envelope.principal().value()).distinct().count() >= 3);

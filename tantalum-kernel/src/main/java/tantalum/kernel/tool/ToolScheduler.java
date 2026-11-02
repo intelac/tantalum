@@ -18,7 +18,7 @@ public final class ToolScheduler {
 
         for (int i = 0; i < round.checked(); i++) {
             ToolSlot slot = slots.get(i);
-            if (slot.finished()) {
+            if (slot.isFinished()) {
                 continue;
             }
             if (slot.status() == ToolSlot.Status.SENT) {

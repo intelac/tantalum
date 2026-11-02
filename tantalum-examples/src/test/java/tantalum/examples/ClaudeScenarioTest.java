@@ -32,7 +32,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.store.SessionStore;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.OverflowRules;
@@ -41,6 +40,7 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
@@ -781,10 +781,10 @@ class ClaudeScenarioTest {
             CompactionScenario.ask(server, "gone", "s1", "Read note01.txt to note04.txt one at a time, then say done.");
             CompactionScenario.ask(server, "gone", "s1", "Call the lookup tool with key a and tell me the value.");
             mcp.stop();
-            for (int i = 0; i < 600 && server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__lookup"); i++) {
+            for (int i = 0; i < 600 && server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas("mcp__demo__lookup"); i++) {
                 Thread.sleep(500);
             }
-            boolean removed = !server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__lookup");
+            boolean removed = !server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas("mcp__demo__lookup");
             String manual = server.post("gone", "/api/sessions/s1/compact", "{}").body();
             Thread.sleep(50);
             CompactionScenario.waitForLatestRun(server, "gone", "s1", Duration.ofMinutes(3));
@@ -848,7 +848,7 @@ class ClaudeScenarioTest {
                 arguments -> TestMcpServer.text("after-note05".equals(arguments.get("key")) ? "read note06.txt" : "unknown key")));
              TestServer server = new TestServer(data, workspace, strict("medium"),
                      CompactionScenario.SETTINGS_CLAUDE[0], CompactionScenario.SETTINGS_CLAUDE[1], "--tantalum.mcp.servers.demo.url=" + mcp.url())) {
-            for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__next_note"); i++) {
+            for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas("mcp__demo__next_note"); i++) {
                 Thread.sleep(10);
             }
             Thread stopper = Thread.ofVirtual().start(() -> {
@@ -914,7 +914,7 @@ class ClaudeScenarioTest {
                         : "Ticket B-7: owner is MARGOT-4417.")),
                 new TestMcpServer.Definition("delete_all", null, arguments -> TestMcpServer.text("everything deleted")));
              TestServer server = new TestServer(data, workspace, strict, "--tantalum.mcp.servers.demo.url=" + mcp.url())) {
-            for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).catalogHas("mcp__demo__get_ticket"); i++) {
+            for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas("mcp__demo__get_ticket"); i++) {
                 Thread.sleep(10);
             }
             submit(server, "ext", "s1", "Look up ticket A-1 with the ticket tool. It is blocked by another ticket: look that one up as well and tell me its owner.");

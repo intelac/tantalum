@@ -41,9 +41,9 @@ import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
-import tantalum.shell.journal.TurnQuery;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.store.TurnQuery;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
@@ -103,7 +103,7 @@ public class ApiController {
         if (found.isEmpty()) {
             return error(404, "no such session");
         }
-        Transcript.Snapshot snapshot = found.get().transcript();
+        Transcript.View snapshot = found.get().transcript();
         MessagePage page = MessagePage.of(snapshot.items(), before);
         List<Map<String, Object>> items = page.items().stream()
                 .map(item -> ItemJson.toMap(engine.codec().mapper(), item)).toList();

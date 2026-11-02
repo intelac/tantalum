@@ -45,29 +45,29 @@
 
 ## 阶段 2：包结构
 
-- [ ] 7. 新建 `json` 包，`journal` 只放原始记录
+- [x] 7. 新建 `json` 包，`journal` 只放原始记录
   - File: shell/json/JsonText.java；shell/journal/ 收入 `SessionPaths`、`SessionFile`、`SessionFiles`、`SessionFileReader`、`SessionCorruptException`、`StoreFormat`、`Sequence`、`TailSequence`；`TurnQuery` 移到 shell/store/
   - 只移动，测试跟着移动
   - 验证：编译、测试通过
   - _Requirements: 3.1_
 
-- [ ] 8. 断开其余循环和反向依赖
+- [x] 8. 断开其余循环和反向依赖
   - File: shell/conversation/Projection.java（来自 loop）、shell/loop/ExternalGate.java（来自 web）、shell/tool/ToolCatalog.java 和 shell/handler/ToolHandler.java（`CallLimiter` 移到处理器）、shell/mcp/McpSettings.java 和 shell/memory/MemoryLimits.java（不再 import boot）、value/id/Principal.java（`isUsable`）
   - 验证：编译、测试通过；`ToolServerConcurrencyTest` 的并发断言不变
   - _Requirements: 3.2_
 
-- [ ] 9. ArchUnit 规则
+- [x] 9. ArchUnit 规则
   - File: tantalum-shell/src/test/java/tantalum/shell/ArchitectureTest.java
   - 新增：shell 各包无循环；除 `boot`、`web` 外不依赖 `boot`
   - 验证：规则通过；临时加一个反向 import，规则失败
   - _Requirements: 3.2_
 
-- [ ] 10. 改名
+- [x] 10. 改名
   - File: 设计“阶段 2 改名”一节列出的类、方法、字段，含前端 `tokenCount`、`connects`
   - 验证：编译、测试、vitest 通过；grep 不到旧名字（文档和实现日志除外）
   - _Requirements: 3.5_
 
-- [ ] 11. 阶段 2 收尾
+- [x] 11. 阶段 2 收尾
   - 验证：全量回归；变异检查即任务 9 的反向 import；提交；汇报（附新的包依赖表）
 
 ## 阶段 3：管线

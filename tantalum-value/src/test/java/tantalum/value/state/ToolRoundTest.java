@@ -30,14 +30,14 @@ class ToolRoundTest {
 
         assertEquals(ToolSlot.Status.SENT, sent.status());
         assertEquals(new CommandId("1-0"), done.command());
-        assertTrue(done.finished());
-        assertFalse(sent.finished());
+        assertTrue(done.isFinished());
+        assertFalse(sent.isFinished());
         assertTrue(done.concurrencySafe());
     }
 
     @Test
     void blockedSlotCountsAsFinished() {
-        assertTrue(ToolSlot.blocked(call("a"), result("a")).finished());
+        assertTrue(ToolSlot.blocked(call("a"), result("a")).isFinished());
     }
 
     @Test

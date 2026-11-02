@@ -35,7 +35,7 @@ public final class Startup {
 
         /** 重启前没有结束的运行。 */
         public List<RunState> unfinished() {
-            return state.runs().values().stream().filter(run -> !run.ended()).toList();
+            return state.runs().values().stream().filter(run -> !run.isEnded()).toList();
         }
     }
 

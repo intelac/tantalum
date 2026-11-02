@@ -1,4 +1,4 @@
-package tantalum.shell.loop;
+package tantalum.shell.journal;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -8,8 +8,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
-import tantalum.shell.store.SessionFileReader;
-import tantalum.shell.store.SessionPaths;
+import tantalum.shell.journal.Sequence;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionPaths;
 import tantalum.value.id.Principal;
 
 /** 第一次见到用户时读他所有会话文件的尾部，从最大值往后取号。读文件只拖慢这个用户。同一用户由它的通道串行调用。 */

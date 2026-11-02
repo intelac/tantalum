@@ -11,12 +11,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFiles;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.journal.TailSequence;
 import tantalum.shell.loop.InputRing;
-import tantalum.shell.loop.JournalDispatcher;
+import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.LoopFixtures;
-import tantalum.shell.loop.TailSequence;
-import tantalum.shell.store.SessionFiles;
-import tantalum.shell.store.SessionPaths;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
@@ -48,7 +48,7 @@ public final class LaneBench {
         List<Long> firstSecond = Collections.synchronizedList(new ArrayList<>());
         SessionPaths paths = new SessionPaths(dir);
         try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256, (principal, session, seq, offset) -> { })) {
-            JournalDispatcher[] holder = new JournalDispatcher[1];
+            LaneDispatcher[] holder = new LaneDispatcher[1];
             holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> {
                 long now = System.nanoTime();
                 String request = ((UserPrompt) envelope.event()).request().value();

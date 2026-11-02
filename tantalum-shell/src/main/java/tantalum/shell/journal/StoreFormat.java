@@ -1,4 +1,4 @@
-package tantalum.shell.store;
+package tantalum.shell.journal;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.journal.JsonText;
+import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
 
 /**

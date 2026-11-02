@@ -1,4 +1,4 @@
-package tantalum.shell.journal;
+package tantalum.shell.json;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,7 +38,7 @@ public final class JsonText {
     }
 
     /** 按 token 读取，数字取原文，避免经过树节点时丢失精度。 */
-    static Json read(JsonParser in) {
+    public static Json read(JsonParser in) {
         return switch (in.currentToken()) {
             case VALUE_NULL -> new Json.Null();
             case VALUE_TRUE -> new Json.Bool(true);

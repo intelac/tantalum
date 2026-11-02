@@ -1,4 +1,4 @@
-package tantalum.shell.store;
+package tantalum.shell.journal;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -13,7 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.JsonText;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.json.JsonText;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -22,7 +23,7 @@ import tantalum.value.id.SessionId;
 /** 一个会话的只追加文件。第一行是头部，之后每行一个事件。{@link #append} 返回才算落盘。调用方保证同一文件同时只有一个写入者。 */
 public final class SessionFile implements AutoCloseable {
 
-    static final int FORMAT = 1;
+    public static final int FORMAT = 1;
 
     private static final String DIR_MODE = "rwx------";
     private static final String FILE_MODE = "rw-------";

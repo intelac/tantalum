@@ -38,7 +38,7 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
         return new ToolSlot(call, Status.DONE, concurrencySafe, command, toolResult);
     }
 
-    public boolean finished() {
+    public boolean isFinished() {
         return status == Status.BLOCKED || status == Status.DONE;
     }
 }

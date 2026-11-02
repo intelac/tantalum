@@ -13,7 +13,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
-import tantalum.shell.tool.Workspaces;
+import tantalum.value.id.Principal;
 
 /** 用户表。单独的 SQLite 文件，不进 journal；密码只存 Argon2id 哈希。 */
 public final class UserStore implements AutoCloseable {
@@ -53,7 +53,7 @@ public final class UserStore implements AutoCloseable {
     }
 
     public synchronized void add(String name, String password) throws SQLException {
-        if (!Workspaces.isSafeName(name)) {
+        if (!Principal.isUsable(name)) {
             throw new IllegalArgumentException("user name may only contain a-z, 0-9, - and _: " + name);
         }
         if (hashOf(name) != null) {

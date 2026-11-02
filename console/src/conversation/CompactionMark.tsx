@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import type { CompactionItem } from "../api/types";
-import { compact } from "../composer/status";
+import { tokenCount } from "../composer/status";
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
@@ -36,12 +36,12 @@ export function CompactionMark({ store, id }: Props) {
     return (
       <div role="note" className="my-3 flex items-center gap-3 text-xs text-fg-faint">
         <span className="h-px flex-1 bg-line" />
-        <span>{zh.conversation.trimmed(compact(item.estimateBefore), compact(item.estimateAfter)) + triggerLabel(item)}</span>
+        <span>{zh.conversation.trimmed(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item)}</span>
         <span className="h-px flex-1 bg-line" />
       </div>
     );
   }
-  const label = zh.conversation.compacted(compact(item.estimateBefore), compact(item.estimateAfter)) + triggerLabel(item);
+  const label = zh.conversation.compacted(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item);
   return (
     <div className="my-3 text-xs text-fg-faint">
       <div className="flex items-center gap-3">

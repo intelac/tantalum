@@ -16,7 +16,7 @@ public record ToolRound(List<ToolSlot> slots, int checked) {
     }
 
     public boolean allFinished() {
-        return slots.stream().allMatch(ToolSlot::finished);
+        return slots.stream().allMatch(ToolSlot::isFinished);
     }
 
     public ToolRound withSlot(int index, ToolSlot slot) {
@@ -27,6 +27,6 @@ public record ToolRound(List<ToolSlot> slots, int checked) {
 
     /** 已有的结果，按模型请求的顺序。 */
     public List<ToolResultBlock> results() {
-        return slots.stream().filter(ToolSlot::finished).map(ToolSlot::result).toList();
+        return slots.stream().filter(ToolSlot::isFinished).map(ToolSlot::result).toList();
     }
 }

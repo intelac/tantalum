@@ -1,6 +1,5 @@
 package tantalum.shell.conversation;
 
-import tantalum.value.id.Principal;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -14,7 +13,6 @@ import tantalum.kernel.Kernel;
 import tantalum.kernel.compaction.SummaryPrompt;
 import tantalum.shell.conversation.TranscriptItem.CompactionMark;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
-import tantalum.shell.loop.Projection;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
@@ -35,6 +33,7 @@ import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
+import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
@@ -72,12 +71,12 @@ public final class Transcript implements Projection {
     }
 
     /** 一个会话的全部条目和它们截至的事件序号：序号更大的 SSE 推送比快照新，反之快照更新。 */
-    public record Snapshot(long seq, List<TranscriptItem> items) {}
+    public record View(long seq, List<TranscriptItem> items) {}
 
     /** 一个会话的完整内部状态，可以写进快照，恢复后接着处理事件和没中断时相同。 */
-    public record Part(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq) {
+    public record Saved(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq) {
 
-        public Part {
+        public Saved {
             items = List.copyOf(items);
             queued = List.copyOf(queued);
             stepByCall = Map.copyOf(stepByCall);
@@ -88,25 +87,25 @@ public final class Transcript implements Projection {
 
     /** 没有该会话时返回空的状态。 */
     @Override
-    public Part export(SessionId session) {
+    public Saved export(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {
-            return new Part(List.of(), List.of(), Map.of(), 0, -1);
+            return new Saved(List.of(), List.of(), Map.of(), 0, -1);
         }
         synchronized (conversation) {
-            return new Part(List.copyOf(conversation.items.values()), List.copyOf(conversation.queued), conversation.stepByCall,
+            return new Saved(List.copyOf(conversation.items.values()), List.copyOf(conversation.queued), conversation.stepByCall,
                     conversation.seenMessages, conversation.lastSeq);
         }
     }
 
     @Override
-    public void restore(SessionId session, Part part) {
+    public void restore(SessionId session, Saved saved) {
         Conversation conversation = new Conversation();
-        part.items().forEach(item -> conversation.items.put(item.id(), item));
-        conversation.queued.addAll(part.queued());
-        conversation.stepByCall.putAll(part.stepByCall());
-        conversation.seenMessages = part.seenMessages();
-        conversation.lastSeq = part.lastSeq();
+        saved.items().forEach(item -> conversation.items.put(item.id(), item));
+        conversation.queued.addAll(saved.queued());
+        conversation.stepByCall.putAll(saved.stepByCall());
+        conversation.seenMessages = saved.seenMessages();
+        conversation.lastSeq = saved.lastSeq();
         sessions.put(session, conversation);
     }
 
@@ -117,17 +116,17 @@ public final class Transcript implements Projection {
 
     /** 没有该会话时返回空列表。 */
     public List<TranscriptItem> items(SessionId session) {
-        return snapshot(session).items();
+        return view(session).items();
     }
 
     /** 条目和序号在同一把锁里读出，所以彼此一致。没有该会话时序号为 -1。 */
-    public Snapshot snapshot(SessionId session) {
+    public View view(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {
-            return new Snapshot(-1, List.of());
+            return new View(-1, List.of());
         }
         synchronized (conversation) {
-            return new Snapshot(conversation.lastSeq, List.copyOf(conversation.items.values()));
+            return new View(conversation.lastSeq, List.copyOf(conversation.items.values()));
         }
     }
 
@@ -296,7 +295,7 @@ public final class Transcript implements Projection {
         }
 
         private void toolFinished(ToolFinished finished) {
-            if (step(finished.toolCallId()) instanceof ToolStep step && !step.finished()) {
+            if (step(finished.toolCallId()) instanceof ToolStep step && !step.isFinished()) {
                 put(step.finished(new ToolResultBlock(finished.toolCallId(), finished.text(), finished.error(), null), at));
             }
         }
@@ -332,7 +331,7 @@ public final class Transcript implements Projection {
             }
             for (ToolSlot slot : current.tools().slots()) {
                 if (slot.status() == ToolSlot.Status.BLOCKED && step(slot.call().id()) instanceof ToolStep step
-                        && !step.finished()) {
+                        && !step.isFinished()) {
                     put(step.blocked(slot.result(), at));
                 }
             }
@@ -352,7 +351,7 @@ public final class Transcript implements Projection {
                 }
                 for (ContentBlock block : message.content()) {
                     if (block instanceof ToolResultBlock result && step(result.toolCallId()) instanceof ToolStep step
-                            && !step.finished()) {
+                            && !step.isFinished()) {
                         put(result.code() != null ? step.finished(result, at) : step.blocked(result, at));
                     }
                 }

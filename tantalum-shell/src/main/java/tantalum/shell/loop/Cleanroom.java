@@ -7,6 +7,7 @@ import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.shell.conversation.Projection;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Decision;
