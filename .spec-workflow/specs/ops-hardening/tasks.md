@@ -308,7 +308,7 @@
   - 验证：恶意 ID 经 HTTP 不越出目录；权限 600/700
   - _Requirements: 非功能 Security_
 
-- [ ] 42. `kill -9` 崩溃测试
+- [x] 42. `kill -9` 崩溃测试
   - File: tantalum-examples 集成测试（打包的 jar）
   - 验证：已提交事件不丢，缓存补齐，运行收尾，模型和工具调用次数没有增加
   - _Requirements: 9.3_

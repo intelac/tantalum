@@ -38,6 +38,31 @@
     </dependency>
   </dependencies>
 
+  <build>
+    <plugins>
+      <!-- *IT 测试启动打包好的 jar，只在 integration-test 阶段跑：那时 tantalum-shell 的 jar 已经打好。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
+          <systemPropertyVariables>
+            <tantalum.jar>${project.basedir}/../tantalum-shell/target/tantalum-shell-${project.version}-exec.jar</tantalum.jar>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
   <profiles>
     <!-- 端到端测试的后端：mvn -P e2e -pl tantalum-examples -am -DskipTests test-compile
          在编译完测试代码后启动 E2eServer（脚本化模型，固定端口），由 console/playwright.config.ts 调用。 -->
