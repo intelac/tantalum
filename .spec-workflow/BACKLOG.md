@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
-| `ops-hardening` | 26/50，阶段 0–4 完成（重启自动收尾，启动仍全量重放）；下一步阶段 5，从任务 25 开始 | `specs/ops-hardening/tasks.md` |
+| `ops-hardening` | 29/50，阶段 0–4 完成，阶段 5 做了重放和快照读取（还没接进运行路径，启动仍全量重放）；下一步任务 26 | `specs/ops-hardening/tasks.md` |
 
 ## 2. 已定要做，还没开 spec
 

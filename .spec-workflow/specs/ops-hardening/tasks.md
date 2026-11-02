@@ -175,19 +175,19 @@
 
 ## 阶段 5：按需载入和回收
 
-- [ ] 25. 会话重放
+- [x] 25. 会话重放
   - File: shell/store/SessionReplay.java, SessionReplayTest.java；kernel/（`KernelState.without`）
   - 读一个文件，从空状态重放，每个事件前注入截至该序号的用量
   - 验证：多用户交错下，结果和全量回放中该会话的部分逐字节相同
   - _Requirements: 5.4, 3.6, H2, H4_
 
-- [ ] 46. 快照编解码
+- [x] 46. 快照编解码
   - File: shell/store/SessionSnapshot.java, SessionSnapshotTest.java；shell/conversation/Transcript.java（导出和恢复内部状态）
   - 含 `SessionState`、`RunState` 和 `Transcript` 内部状态；校验和
   - 验证：覆盖压缩、工具轮、记忆变化的状态，编码再解码后相等；恢复的 `Transcript` 接着处理事件，结果和未中断时相同
   - _Requirements: 10.2, H13_
 
-- [ ] 47. 快照载入和校验
+- [x] 47. 快照载入和校验
   - File: shell/store/SessionReplay.java, SessionReplayTest.java
   - 读快照，从 `offset` 重放尾部；校验校验和、版本、`offset` 和该位置的序号
   - 验证：只读了尾部事件（计数）；截断、改字节、超前、版本不符都回到全量重放并有警告；删除 `snapshots/` 后结果不变

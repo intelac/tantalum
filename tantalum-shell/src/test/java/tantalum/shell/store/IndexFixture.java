@@ -38,7 +38,7 @@ final class IndexFixture {
     }
 
     final SessionFiles files;
-    final Kernel kernel = kernel();
+    final Kernel kernel;
     final List<EventEnvelope> events = new ArrayList<>();
     private final Step listener;
     private final Map<Principal, Long> sequences = new HashMap<>();
@@ -46,6 +46,11 @@ final class IndexFixture {
     private int requests;
 
     IndexFixture(SessionPaths paths, SessionFiles.DurableListener durable, Step listener) {
+        this(paths, durable, listener, kernel());
+    }
+
+    IndexFixture(SessionPaths paths, SessionFiles.DurableListener durable, Step listener, Kernel kernel) {
+        this.kernel = kernel;
         this.files = new SessionFiles(paths, EventCodec.withBuiltins(), 16, durable);
         this.listener = listener;
     }
