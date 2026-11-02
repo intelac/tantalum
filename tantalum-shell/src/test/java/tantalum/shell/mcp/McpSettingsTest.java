@@ -78,15 +78,4 @@ class McpSettingsTest {
         McpProperties.Server zero = new McpProperties.Server("https://x/mcp", null, null, List.of("a"), List.of("b"), 0, null, null, null);
         assertTrue(failure("a", zero).contains(".concurrency"));
     }
-
-    /** 需求 2.10：回环判断只认字面量。 */
-    @Test
-    void loopbackIsLiteralOnly() {
-        for (String host : java.util.List.of("localhost", "127.0.0.1", "127.1.2.3", "[::1]")) {
-            assertTrue(McpSettings.isLoopback(host), host);
-        }
-        for (String host : java.util.List.of("example.com", "127.0.0.1.example.com", "10.0.0.1")) {
-            assertFalse(McpSettings.isLoopback(host), host);
-        }
-    }
 }

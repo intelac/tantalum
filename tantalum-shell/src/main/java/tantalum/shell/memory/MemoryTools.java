@@ -5,7 +5,6 @@ import java.util.List;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
-import tantalum.value.json.Json;
 
 /** 三个记忆工具共用的部分：服务端名、并发、参数读取、错误文案。工具无状态，身份来自 {@link ToolContext}。 */
 public final class MemoryTools {
@@ -17,13 +16,6 @@ public final class MemoryTools {
 
     public static List<Tool> all(MemoryStores stores) {
         return List.of(new MemoryWriteTool(stores), new MemoryReadTool(stores), new MemoryDeleteTool(stores));
-    }
-
-    static String string(Json arguments, String name) {
-        if (arguments instanceof Json.Obj object && object.fields().get(name) instanceof Json.Str value) {
-            return value.value();
-        }
-        return null;
     }
 
     static ToolOutput missing(String name) {

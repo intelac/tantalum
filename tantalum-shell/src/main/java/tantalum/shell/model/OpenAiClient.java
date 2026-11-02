@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -20,7 +19,6 @@ import java.util.TreeMap;
 import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
-import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
@@ -89,31 +87,23 @@ public final class OpenAiClient implements ModelClient {
                     return httpFailure(response);
                 }
                 return read(response.body(), chunks, watchdog, text);
-            } catch (InterruptedException | InterruptedIOException interrupted) {
-                closeQuietly(open);
-                return new ModelOutcome.Interrupted(text.toString());
             } catch (HttpTimeoutException noHeaders) {
-                return timeout(text);
-            } catch (IOException failure) {
+                return ModelFailures.timeout(text.toString());
+            } catch (InterruptedException | IOException failure) {
                 closeQuietly(open);
-                if (Thread.currentThread().isInterrupted()) {
+                if (ModelFailures.isInterrupt(failure)) {
                     return new ModelOutcome.Interrupted(text.toString());
                 }
                 if (watchdog.expired()) {
-                    return timeout(text);
+                    return ModelFailures.timeout(text.toString());
                 }
-                return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, text.toString(), failure.toString());
+                return ModelFailures.connection(text.toString(), failure.toString());
             } catch (JacksonException malformed) {
                 // 畸形分片：流本身坏了，按连接错误重试，已收到的文本保留。
                 closeQuietly(open);
-                return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, text.toString(),
-                        "malformed stream chunk: " + malformed.getOriginalMessage());
+                return ModelFailures.connection(text.toString(), "malformed stream chunk: " + malformed.getOriginalMessage());
             }
         }
-    }
-
-    private ModelOutcome timeout(StringBuilder text) {
-        return new ModelOutcome.Failed(FailureReason.TIMEOUT, true, null, text.toString(), "model stream timed out");
     }
 
     private static void closeQuietly(InputStream[] open) {
@@ -133,27 +123,7 @@ public final class OpenAiClient implements ModelClient {
             byte[] head = in.readNBytes(MAX_ERROR_BODY);
             body = new String(head, StandardCharsets.UTF_8) + (in.read() >= 0 ? "..." : "");
         }
-        int status = response.statusCode();
-        Duration retryAfter = response.headers().firstValue("retry-after").map(OpenAiClient::seconds).orElse(null);
-        String detail = "HTTP " + status + ": " + body;
-        if (overflow.matches(status, body)) {
-            return new ModelOutcome.Failed(FailureReason.CONTEXT_OVERFLOW, false, null, "", detail);
-        }
-        if (status == 429) {
-            return new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, retryAfter, "", detail);
-        }
-        if (status >= 500) {
-            return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, true, retryAfter, "", detail);
-        }
-        return new ModelOutcome.Failed(FailureReason.INVALID_REQUEST, false, null, "", detail);
-    }
-
-    static Duration seconds(String value) {
-        try {
-            return Duration.ofSeconds(Long.parseLong(value.trim()));
-        } catch (NumberFormatException notSeconds) {
-            return null;
-        }
+        return ModelFailures.http(response.statusCode(), body, response.headers().firstValue("retry-after").orElse(null), "", overflow);
     }
 
     private ModelOutcome read(InputStream body, ChunkListener chunks, StreamWatchdog watchdog, StringBuilder text)
@@ -218,14 +188,9 @@ public final class OpenAiClient implements ModelClient {
                 }
             }
         }
-        if (Thread.currentThread().isInterrupted()) {
-            return new ModelOutcome.Interrupted(text.toString());
-        }
-        if (watchdog.expired()) {
-            return timeout(text);
-        }
-        if (finishReason == null) {
-            return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, text.toString(), "stream ended early");
+        ModelOutcome cut = ModelFailures.afterStream(text.toString(), watchdog, finishReason != null);
+        if (cut != null) {
+            return cut;
         }
         return new ModelOutcome.Replied(content(reasoning, text, tools), stop(finishReason), actualModel, usage);
     }
@@ -240,7 +205,7 @@ public final class OpenAiClient implements ModelClient {
         }
         for (ToolFragments tool : tools.values()) {
             String raw = tool.arguments.toString();
-            content.add(new ToolCallBlock(tool.id, tool.name, raw, JsonText.parseOrNull(raw.isBlank() ? "{}" : raw)));
+            content.add(ModelFailures.toolCall(tool.id, tool.name, raw));
         }
         return content;
     }

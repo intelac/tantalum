@@ -97,6 +97,14 @@ class ContextHandlerTest {
         assertEquals(COMMAND.id(), event.command());
     }
 
+    @Test
+    void longAgentsFileIsCutAtItsOwnLimit() throws Exception {
+        Files.writeString(dir.resolve("AGENTS.md"), "r".repeat(ContextHandler.AGENTS_MAX_BYTES + 100));
+        String system = assembled(shared(), COMMAND).system();
+        assertTrue(system.contains("truncated at " + ContextHandler.AGENTS_MAX_BYTES + " bytes"), system.substring(0, 200));
+        assertFalse(system.contains("r".repeat(ContextHandler.AGENTS_MAX_BYTES + 1)));
+    }
+
     /** AGENTS.md 若是指向工作目录外的符号链接，不能把外面的文件读进 prompt。 */
     @Test
     void agentsFileLinkingOutsideTheWorkspaceIsIgnored(@TempDir Path elsewhere) throws Exception {

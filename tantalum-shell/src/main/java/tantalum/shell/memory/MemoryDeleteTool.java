@@ -25,7 +25,7 @@ public final class MemoryDeleteTool implements Tool {
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {
-        String name = MemoryTools.string(arguments, "name");
+        String name = ToolArguments.string(arguments, "name");
         if (name == null) {
             return MemoryTools.missing("name");
         }

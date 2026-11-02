@@ -3,7 +3,6 @@ package tantalum.shell.memory;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +24,6 @@ public final class MemoryFormat {
     private static final Pattern INDEX_LINE = Pattern.compile("^- \\[([a-z0-9-]{1,64})]\\(\\1\\.md\\) — ([a-z]+) — (.*)$");
 
     /** 索引里的一条：名字、类型、描述。 */
-    public record IndexLine(String name, MemoryType type, String description) {}
 
     private MemoryFormat() {}
 
@@ -126,20 +124,10 @@ public final class MemoryFormat {
         return text.toString();
     }
 
-    /** 能解析的行照常，坏行跳过。 */
-    public static List<IndexLine> parseIndex(String text) {
-        List<IndexLine> lines = new ArrayList<>();
-        if (text == null) {
-            return lines;
-        }
-        for (String line : text.replace("\r\n", "\n").split("\n")) {
-            Matcher matcher = INDEX_LINE.matcher(line.strip());
-            if (!matcher.matches()) {
-                continue;
-            }
-            MemoryType.parse(matcher.group(2)).ifPresent(type -> lines.add(new IndexLine(matcher.group(1), type, matcher.group(3))));
-        }
-        return lines;
+    /** 索引里格式正确、类型也认识的一行。坏行在读索引时跳过。 */
+    public static boolean isIndexLine(String line) {
+        Matcher matcher = INDEX_LINE.matcher(line.strip());
+        return matcher.matches() && MemoryType.parse(matcher.group(2)).isPresent();
     }
 
     public static int utf8Length(String text) {

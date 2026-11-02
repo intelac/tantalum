@@ -1,5 +1,6 @@
 package tantalum.shell.journal;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -75,6 +76,8 @@ public final class EventCodec {
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))
                 .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                // 只写记录的字段：isEnded() 这类判断方法不是数据，不进 journal、快照和接口。
+                .changeDefaultVisibility(visibility -> visibility.withIsGetterVisibility(JsonAutoDetect.Visibility.NONE))
                 .build();
     }
 

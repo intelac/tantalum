@@ -4,9 +4,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
@@ -43,23 +41,11 @@ public final class WorkHandler implements Handler {
             return failed(work, "unknown work type: " + work.workType());
         }
         ToolContext context = new ToolContext(work.run().principal(), workspaces.of(work.run().principal()));
-        CompletableFuture<WorkResult> result = new CompletableFuture<>();
-        Thread worker = Thread.ofVirtual().start(() -> {
-            try {
-                result.complete(type.run(context, work.input()));
-            } catch (Throwable failure) {
-                result.completeExceptionally(failure);
-            }
-        });
         try {
-            WorkResult done = result.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+            WorkResult done = Deadline.call(() -> type.run(context, work.input()), timeout);
             return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText());
         } catch (TimeoutException late) {
-            worker.interrupt();
             return failed(work, "work timed out after " + timeout);
-        } catch (InterruptedException cancelled) {
-            worker.interrupt();
-            throw cancelled;
         } catch (ExecutionException failure) {
             return failed(work, failure.getCause().toString());
         }

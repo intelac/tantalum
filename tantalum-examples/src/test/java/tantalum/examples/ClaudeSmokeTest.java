@@ -38,8 +38,7 @@ class ClaudeSmokeTest {
     Path temp;
 
     private static ClaudeClient client() {
-        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                "claude-sonnet-5-5", 4096, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults());
+        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 4096, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
     }
 
     private static final ChunkListener IGNORE = new ChunkListener() {
@@ -62,8 +61,7 @@ class ClaudeSmokeTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void thinkingBlocksSurviveTheRoundTrip() {
-        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                "claude-sonnet-5-5", 8192, "high", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults());
+        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "high", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
         ToolSpec lookup = new ToolSpec("lookup_price", "Look up the price of an item.",
                 new Json.Obj(Map.of("type", new Json.Str("object"), "properties",
                         new Json.Obj(Map.of("item", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
@@ -102,8 +100,7 @@ class ClaudeSmokeTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void historyMayCallAToolThatIsNoLongerListed() {
-        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                "claude-sonnet-5-5", 1024, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true);
+        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 1024, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true));
         ToolSpec other = new ToolSpec("read_file", "Read a file.", new Json.Obj(Map.of("type", new Json.Str("object"),
                 "properties", new Json.Obj(Map.of("path", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
         List<Message> messages = List.of(

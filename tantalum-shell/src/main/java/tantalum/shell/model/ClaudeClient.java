@@ -24,8 +24,6 @@ import com.anthropic.models.messages.ToolChoiceNone;
 import com.anthropic.models.messages.ToolResultBlockParam;
 import com.anthropic.models.messages.ToolUseBlockParam;
 import com.anthropic.models.messages.UserMessageParam;
-import java.io.InterruptedIOException;
-import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -85,23 +83,22 @@ public final class ClaudeClient implements ModelClient {
     private final OverflowRules overflow;
     private final boolean strictThinking;
 
-    public ClaudeClient(AnthropicClient client, String model, long maxTokens, String effort, boolean fallbacks,
-                        Duration firstChunk, Duration betweenChunks, OverflowRules overflow) {
-        this(client, model, maxTokens, effort, fallbacks, firstChunk, betweenChunks, overflow, false);
-    }
+    /**
+     * 模型参数。{@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题，测试用。
+     */
+    public record Settings(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunk,
+                           Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {}
 
-    /** {@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题。测试用。 */
-    public ClaudeClient(AnthropicClient client, String model, long maxTokens, String effort, boolean fallbacks,
-                        Duration firstChunk, Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {
-        this.strictThinking = strictThinking;
+    public ClaudeClient(AnthropicClient client, Settings settings) {
         this.client = client;
-        this.model = model;
-        this.maxTokens = maxTokens;
-        this.effort = effort;
-        this.fallbacks = fallbacks;
-        this.firstChunk = firstChunk;
-        this.betweenChunks = betweenChunks;
-        this.overflow = overflow;
+        this.model = settings.model();
+        this.maxTokens = settings.maxTokens();
+        this.effort = settings.effort();
+        this.fallbacks = settings.fallbacks();
+        this.firstChunk = settings.firstChunk();
+        this.betweenChunks = settings.betweenChunks();
+        this.overflow = settings.overflow();
+        this.strictThinking = settings.strictThinking();
     }
 
     @Override
@@ -122,33 +119,22 @@ public final class ClaudeClient implements ModelClient {
                 }
                 return finish(blocks, reply, visible, watchdog);
             } catch (AnthropicServiceException failure) {
-                return serviceFailure(failure, visible);
+                return ModelFailures.http(failure.statusCode(), failure.getMessage(),
+                        failure.headers().values("retry-after").stream().findFirst().orElse(null), visible.toString(), overflow);
             } catch (RuntimeException failure) {
                 closeQuietly(open);
-                if (isInterrupt(failure)) {
+                if (ModelFailures.isInterrupt(failure)) {
                     return new ModelOutcome.Interrupted(visible.toString());
                 }
                 if (watchdog.expired()) {
-                    return timeout(visible);
+                    return ModelFailures.timeout(visible.toString());
                 }
                 if (failure instanceof AnthropicIoException) {
-                    return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, visible.toString(), failure.toString());
+                    return ModelFailures.connection(visible.toString(), failure.toString());
                 }
                 throw failure;
             }
         }
-    }
-
-    private static boolean isInterrupt(Throwable failure) {
-        if (Thread.currentThread().isInterrupted()) {
-            return true;
-        }
-        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof InterruptedIOException && !(cause instanceof SocketTimeoutException)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static void closeQuietly(StreamResponse<?>[] open) {
@@ -157,26 +143,6 @@ public final class ClaudeClient implements ModelClient {
         }
     }
 
-    private static ModelOutcome timeout(StringBuilder visible) {
-        return new ModelOutcome.Failed(FailureReason.TIMEOUT, true, null, visible.toString(), "model stream timed out");
-    }
-
-    private ModelOutcome serviceFailure(AnthropicServiceException failure, StringBuilder visible) {
-        int status = failure.statusCode();
-        String detail = "HTTP " + status + ": " + failure.getMessage();
-        Duration retryAfter = failure.headers().values("retry-after").stream()
-                .findFirst().map(OpenAiClient::seconds).orElse(null);
-        if (overflow.matches(status, failure.getMessage())) {
-            return new ModelOutcome.Failed(FailureReason.CONTEXT_OVERFLOW, false, null, visible.toString(), detail);
-        }
-        if (status == 429) {
-            return new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, retryAfter, visible.toString(), detail);
-        }
-        if (status >= 500) {
-            return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, true, retryAfter, visible.toString(), detail);
-        }
-        return new ModelOutcome.Failed(FailureReason.INVALID_REQUEST, false, null, visible.toString(), detail);
-    }
 
     /** 从事件累积出的回复头信息。 */
     private static final class Reply {
@@ -258,18 +224,14 @@ public final class ClaudeClient implements ModelClient {
     }
 
     private ModelOutcome finish(Map<Long, Pending> blocks, Reply reply, StringBuilder visible, StreamWatchdog watchdog) {
-        if (Thread.currentThread().isInterrupted()) {
-            return new ModelOutcome.Interrupted(visible.toString());
+        boolean refused = com.anthropic.models.messages.StopReason.REFUSAL.equals(reply.stop);
+        ModelOutcome cut = ModelFailures.afterStream(visible.toString(), watchdog, reply.stopped || refused);
+        if (cut != null) {
+            return cut;
         }
-        if (watchdog.expired()) {
-            return timeout(visible);
-        }
-        if (com.anthropic.models.messages.StopReason.REFUSAL.equals(reply.stop)) {
+        if (refused) {
             return new ModelOutcome.Failed(FailureReason.REFUSAL, false, null, visible.toString(),
                     "refused: " + reply.refusal);
-        }
-        if (!reply.stopped) {
-            return new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, visible.toString(), "stream ended early");
         }
         List<ContentBlock> content = new ArrayList<>();
         blocks.values().forEach(block -> content.add(toBlock(block)));
@@ -308,7 +270,7 @@ public final class ClaudeClient implements ModelClient {
             }
             case "tool_use" -> {
                 String raw = block.text.toString();
-                yield new ToolCallBlock(block.id, block.name, raw, JsonText.parseOrNull(raw.isBlank() ? "{}" : raw));
+                yield ModelFailures.toolCall(block.id, block.name, raw);
             }
             default -> new TextBlock(block.text.toString());
         };

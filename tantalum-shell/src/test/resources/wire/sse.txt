@@ -1,0 +1,46 @@
+0.0 item {"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 q1 ","queued":false}
+0.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:00Z","phase":"AwaitingContext"}
+1.0 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:01Z","phase":"AwaitingModel"}
+2.0 item {"kind":"thinking","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"plan","redacted":false}
+2.1 item {"kind":"tool","id":"2.1","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","call":{"kind":"toolCall","id":"c1","name":"read_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"RUNNING","group":"g2","startedAt":"2026-10-31T00:00:02Z"}
+2.2 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:02Z","phase":"AwaitingTools"}
+3.0 item {"kind":"tool","id":"2.1","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","call":{"kind":"toolCall","id":"c1","name":"read_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"DONE","group":"g2","startedAt":"2026-10-31T00:00:02Z","endedAt":"2026-10-31T00:00:03Z","result":{"kind":"toolResult","toolCallId":"c1","text":"file body","error":false}}
+3.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:03Z","phase":"AwaitingModel"}
+4.0 item {"kind":"thinking","id":"4.0","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"check","redacted":false}
+4.1 item {"kind":"thinking","id":"4.1","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"","redacted":true}
+4.2 item {"kind":"text","id":"4.2","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ","interrupted":false,"truncated":false}
+4.3 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:04Z","phase":"Ended","endReason":"COMPLETED"}
+5.0 item {"kind":"user","id":"5.0","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","text":"q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 ","queued":false}
+5.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:05Z","phase":"AwaitingContext"}
+6.0 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:06Z","phase":"AwaitingModel"}
+7.0 item {"kind":"text","id":"7.0","session":"s","run":"s_5","at":"2026-10-31T00:00:07Z","text":"a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 ","interrupted":false,"truncated":false}
+7.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+8.0 item {"kind":"user","id":"8.0","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","text":"q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 ","queued":false}
+8.1 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:08Z","phase":"AwaitingContext"}
+9.0 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:09Z","phase":"AwaitingSummary"}
+10.0 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:10Z","phase":"AwaitingContext"}
+10.1 item {"kind":"compaction","id":"10.0","session":"s","run":"s_8","at":"2026-10-31T00:00:10Z","trigger":"AUTO","summary":"Goal: q","estimateBefore":196,"estimateAfter":116,"usage":{"input":50,"output":20,"cacheRead":0,"cacheWrite":0}}
+11.0 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:11Z","phase":"AwaitingModel"}
+12.0 item {"kind":"text","id":"12.0","session":"s","run":"s_8","at":"2026-10-31T00:00:12Z","text":"a3","interrupted":false,"truncated":false}
+12.1 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:12Z","phase":"Ended","endReason":"COMPLETED"}
+13.0 item {"kind":"user","id":"13.0","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","text":"q4","queued":false}
+13.1 item {"kind":"run","id":"run:s_13","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","updatedAt":"2026-10-31T00:00:13Z","phase":"AwaitingContext"}
+14.0 item {"kind":"run","id":"run:s_13","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","updatedAt":"2026-10-31T00:00:14Z","phase":"AwaitingModel"}
+15.0 item {"kind":"run","id":"run:s_13","session":"s","run":"s_13","at":"2026-10-31T00:00:13Z","updatedAt":"2026-10-31T00:00:45Z","phase":"Ended","endReason":"FAILED","detail":"refused","failure":"REFUSAL"}
+0.0 PhaseChanged {"phase":"AwaitingContext","run":"s_0","session":"s"}
+1.0 PhaseChanged {"phase":"AwaitingModel","run":"s_0","session":"s"}
+2.0 PhaseChanged {"phase":"AwaitingTools","run":"s_0","session":"s"}
+3.0 PhaseChanged {"phase":"AwaitingModel","run":"s_0","session":"s"}
+4.0 PhaseChanged {"phase":"Ended","run":"s_0","session":"s"}
+5.0 PhaseChanged {"phase":"AwaitingContext","run":"s_5","session":"s"}
+6.0 PhaseChanged {"phase":"AwaitingModel","run":"s_5","session":"s"}
+7.0 PhaseChanged {"phase":"Ended","run":"s_5","session":"s"}
+8.0 PhaseChanged {"phase":"AwaitingContext","run":"s_8","session":"s"}
+9.0 PhaseChanged {"phase":"AwaitingSummary","run":"s_8","session":"s"}
+10.0 ContextCompacted {"estimateAfter":116,"session":"s","usage":{"input":50,"output":20,"cacheRead":0,"cacheWrite":0},"headUnits":4,"run":"s_8","trigger":"AUTO","keptUnits":2,"estimateBefore":196,"trimOnly":false}
+10.1 PhaseChanged {"phase":"AwaitingContext","run":"s_8","session":"s"}
+11.0 PhaseChanged {"phase":"AwaitingModel","run":"s_8","session":"s"}
+12.0 PhaseChanged {"phase":"Ended","run":"s_8","session":"s"}
+13.0 PhaseChanged {"phase":"AwaitingContext","run":"s_13","session":"s"}
+14.0 PhaseChanged {"phase":"AwaitingModel","run":"s_13","session":"s"}
+15.0 PhaseChanged {"phase":"Ended","run":"s_13","session":"s"}

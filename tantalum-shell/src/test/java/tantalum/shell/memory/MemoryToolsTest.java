@@ -151,13 +151,13 @@ class MemoryToolsTest {
         "LTAI5tAbCdEfGhIjKlMn", "AKIDabcdefghij1234567", "whsec_abcdefghijklmnopqrstuvwx", "sk_live_abcdefghij0123456789",
         "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop", "postgres://admin:hunter2@db.example.com/x"})
     void moreCredentialFormatsAreRefused(String secret) {
-        assertTrue(CredentialGuard.looksLikeCredential("value " + secret), secret);
+        assertTrue(CredentialGuard.detect("value " + secret).isPresent(), secret);
     }
 
     @Test
     void longKebabNamesAreNotMistakenForKeys() {
-        assertFalse(CredentialGuard.looksLikeCredential("see sk-learn-pipeline-tuning-notes for this"));
-        assertTrue(CredentialGuard.looksLikeCredential("sk-abc123def456ghi789jkl"));
+        assertFalse(CredentialGuard.detect("see sk-learn-pipeline-tuning-notes for this").isPresent());
+        assertTrue(CredentialGuard.detect("sk-abc123def456ghi789jkl").isPresent());
     }
 
     /** 需求 3.4：坏行跳过，好行留下。 */

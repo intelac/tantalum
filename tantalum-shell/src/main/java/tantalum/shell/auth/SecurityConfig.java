@@ -6,9 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
@@ -27,6 +25,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tantalum.shell.net.Hosts;
 
 /**
  * 认证规则：{@code /api} 只有登录后才能访问，未登录返回 401。
@@ -64,25 +63,12 @@ public class SecurityConfig {
      * {@code server.address} 没设时 Spring 绑定全部网卡，不算回环。
      */
     public static void requireSecureCookie(String address, boolean secure) {
-        if (!isLoopback(address) && !secure) {
+        if (!Hosts.isLoopback(address) && !secure) {
             throw new IllegalStateException("server.address is " + address + " but the session cookie is not Secure. "
                     + "Serve over HTTPS and set server.servlet.session.cookie.secure=true.");
         }
     }
 
-    static boolean isLoopback(String address) {
-        if (address == null || address.isBlank()) {
-            return false;
-        }
-        if (address.equals("localhost")) {
-            return true;
-        }
-        try {
-            return InetAddress.getByName(address).isLoopbackAddress();
-        } catch (UnknownHostException unknown) {
-            return false;
-        }
-    }
 
     @Bean
     SecurityContextRepository securityContextRepository(Environment environment) {

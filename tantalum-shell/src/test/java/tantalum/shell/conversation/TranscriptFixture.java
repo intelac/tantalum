@@ -182,14 +182,20 @@ final class TranscriptFixture {
         return new TextBlock(text);
     }
 
+    /** 字段顺序和 ClaudeClient 写入的一样；Map.of 的顺序每次 JVM 启动都不同，会让输出格式的对比不稳定。 */
     static ReasoningBlock claudeThinking(String text) {
-        return new ReasoningBlock("anthropic", new Json.Obj(Map.of(
-                "type", new Json.Str("thinking"), "thinking", new Json.Str(text), "signature", new Json.Str("sig"))));
+        Map<String, Json> raw = new java.util.LinkedHashMap<>();
+        raw.put("type", new Json.Str("thinking"));
+        raw.put("thinking", new Json.Str(text));
+        raw.put("signature", new Json.Str("sig"));
+        return new ReasoningBlock("anthropic", new Json.Obj(raw));
     }
 
     static ReasoningBlock redacted() {
-        return new ReasoningBlock("anthropic", new Json.Obj(Map.of(
-                "type", new Json.Str("redacted_thinking"), "data", new Json.Str("xxx"))));
+        Map<String, Json> raw = new java.util.LinkedHashMap<>();
+        raw.put("type", new Json.Str("redacted_thinking"));
+        raw.put("data", new Json.Str("xxx"));
+        return new ReasoningBlock("anthropic", new Json.Obj(raw));
     }
 
     static ReasoningBlock openAiThinking(String text) {

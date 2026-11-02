@@ -2,6 +2,7 @@ package tantalum.shell.handler;
 
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.model.ChunkListener;
@@ -16,27 +17,22 @@ import tantalum.value.event.ModelReplied;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.FailureReason;
 
-/** 调用模型。分片只走 {@link Progress}，一次调用只产生一个结算事件。 */
+/** 调用模型。分片只交给每个运行的 {@link ChunkListener}，一次调用只产生一个结算事件。 */
 public final class ModelHandler implements Handler {
 
     private static final Logger LOG = LoggerFactory.getLogger(ModelHandler.class);
 
-    /** 接收瞬态进度。必须立即返回。 */
-    @FunctionalInterface
-    public interface Progress {
-        void onChunk(RunRef run, String kind, String text);
-    }
-
     private final ModelClient client;
     private final CallLimiter limiter;
     private final Duration waitTimeout;
-    private final Progress progress;
+    /** 每个运行的分片发给谁。必须立即返回。 */
+    private final Function<RunRef, ChunkListener> listeners;
 
-    public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Progress progress) {
+    public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners) {
         this.client = client;
         this.limiter = limiter;
         this.waitTimeout = waitTimeout;
-        this.progress = progress;
+        this.listeners = listeners;
     }
 
     @Override
@@ -57,18 +53,20 @@ public final class ModelHandler implements Handler {
         }
     }
 
+    /** 分片只用于显示进度：监听者出错只记日志，不影响这次调用。 */
     private ChunkListener chunks(RunRef run) {
+        ChunkListener listener = listeners.apply(run);
         return new ChunkListener() {
-            @Override public void onText(String text) { forward(run, "text", text); }
-            @Override public void onReasoning(String text) { forward(run, "reasoning", text); }
+            @Override public void onText(String text) { safely(() -> listener.onText(text)); }
+            @Override public void onReasoning(String text) { safely(() -> listener.onReasoning(text)); }
         };
     }
 
-    private void forward(RunRef run, String kind, String text) {
+    private static void safely(Runnable delivery) {
         try {
-            progress.onChunk(run, kind, text);
+            delivery.run();
         } catch (RuntimeException failure) {
-            LOG.warn("progress listener failed", failure);
+            LOG.warn("chunk listener failed", failure);
         }
     }
 

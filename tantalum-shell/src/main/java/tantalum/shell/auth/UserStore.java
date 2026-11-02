@@ -42,12 +42,10 @@ public final class UserStore implements AutoCloseable {
                     CREATE TABLE IF NOT EXISTS users (
                       name          TEXT PRIMARY KEY,
                       password_hash TEXT NOT NULL,
-                      disabled      INTEGER NOT NULL DEFAULT 0,
-                      created_at    TEXT NOT NULL
+                      disabled       INTEGER NOT NULL DEFAULT 0,
+                      created_at     TEXT NOT NULL,
+                      password_stamp INTEGER NOT NULL DEFAULT 0
                     )""");
-            if (!hasColumn(connection, "password_stamp")) {
-                statement.execute("ALTER TABLE users ADD COLUMN password_stamp INTEGER NOT NULL DEFAULT 0");
-            }
         }
         return new UserStore(connection);
     }
@@ -56,7 +54,7 @@ public final class UserStore implements AutoCloseable {
         if (!Principal.isUsable(name)) {
             throw new IllegalArgumentException("user name may only contain a-z, 0-9, - and _: " + name);
         }
-        if (hashOf(name) != null) {
+        if (find(name).isPresent()) {
             throw new IllegalArgumentException("user already exists: " + name);
         }
         try (PreparedStatement insert = connection.prepareStatement(
@@ -70,9 +68,10 @@ public final class UserStore implements AutoCloseable {
 
     /** 用户不存在、已停用或密码错误都返回 false。 */
     public synchronized boolean verify(String name, String password) throws SQLException {
-        String hash = hashOf(name);
-        boolean matches = encoder.matches(password, hash == null ? decoyHash : hash);
-        return matches && hash != null && !isDisabled(name);
+        Optional<Row> row = find(name);
+        // 用户不存在时也算一次哈希，响应时间不暴露用户名是否存在。
+        boolean matches = encoder.matches(password, row.map(Row::hash).orElse(decoyHash));
+        return matches && row.isPresent() && !row.get().disabled();
     }
 
     /** 口令戳随之变化，之前的登录在下一次请求或下一个心跳时失效。 */
@@ -85,23 +84,18 @@ public final class UserStore implements AutoCloseable {
 
     /** 用户不存在时为空。每次都读库，所以命令行在服务外的修改立即可见。 */
     public synchronized Optional<Status> status(String name) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT disabled, password_stamp FROM users WHERE name = ?")) {
-            query.setString(1, name);
-            try (ResultSet row = query.executeQuery()) {
-                return row.next() ? Optional.of(new Status(row.getInt(1) != 0, row.getLong(2))) : Optional.empty();
-            }
-        }
+        return find(name).map(row -> new Status(row.disabled(), row.stamp()));
     }
 
-    private static boolean hasColumn(Connection connection, String column) throws SQLException {
-        try (Statement statement = connection.createStatement();
-                ResultSet columns = statement.executeQuery("PRAGMA table_info(users)")) {
-            while (columns.next()) {
-                if (column.equals(columns.getString("name"))) {
-                    return true;
-                }
+    private record Row(String hash, boolean disabled, long stamp) {}
+
+    private Optional<Row> find(String name) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement(
+                "SELECT password_hash, disabled, password_stamp FROM users WHERE name = ?")) {
+            query.setString(1, name);
+            try (ResultSet row = query.executeQuery()) {
+                return row.next() ? Optional.of(new Row(row.getString(1), row.getInt(2) != 0, row.getLong(3))) : Optional.empty();
             }
-            return false;
         }
     }
 
@@ -109,30 +103,11 @@ public final class UserStore implements AutoCloseable {
         update("UPDATE users SET disabled = ? WHERE name = ?", "1", name);
     }
 
-    public synchronized boolean isDisabled(String name) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT disabled FROM users WHERE name = ?")) {
-            query.setString(1, name);
-            try (ResultSet row = query.executeQuery()) {
-                return row.next() && row.getInt(1) != 0;
-            }
-        }
-    }
-
     public synchronized long count() throws SQLException {
         try (Statement statement = connection.createStatement();
                 ResultSet row = statement.executeQuery("SELECT count(*) FROM users")) {
             row.next();
             return row.getLong(1);
-        }
-    }
-
-    /** 不存在时返回 null。 */
-    synchronized String hashOf(String name) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT password_hash FROM users WHERE name = ?")) {
-            query.setString(1, name);
-            try (ResultSet row = query.executeQuery()) {
-                return row.next() ? row.getString(1) : null;
-            }
         }
     }
 

@@ -30,12 +30,11 @@ class UserStoreTest {
     void passwordIsStoredOnlyAsAnArgon2Hash() throws Exception {
         try (UserStore store = UserStore.open(dir)) {
             store.add("alice", "correct horse");
-            String hash = store.hashOf("alice");
-            assertTrue(hash.startsWith("$argon2id$"), hash);
-            assertFalse(hash.contains("correct horse"));
+            assertTrue(store.verify("alice", "correct horse"));
         }
-        assertFalse(new String(Files.readAllBytes(dir.resolve(UserStore.FILE)), java.nio.charset.StandardCharsets.ISO_8859_1)
-                .contains("correct horse"));
+        String file = new String(Files.readAllBytes(dir.resolve(UserStore.FILE)), java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertTrue(file.contains("$argon2id$"));
+        assertFalse(file.contains("correct horse"));
     }
 
     @Test
@@ -81,7 +80,7 @@ class UserStoreTest {
             store.add("alice", "pw");
             store.disable("alice");
             assertFalse(store.verify("alice", "pw"));
-            assertTrue(store.isDisabled("alice"));
+            assertTrue(store.status("alice").orElseThrow().disabled());
         }
     }
 
@@ -117,19 +116,4 @@ class UserStoreTest {
         }
     }
 
-    /** 已有的用户库没有口令戳这一列：打开时补上，已有用户照常登录。 */
-    @Test
-    void anOlderUserDatabaseGetsTheStampColumn() throws Exception {
-        try (java.sql.Connection connection = java.sql.DriverManager.getConnection("jdbc:sqlite:" + dir.resolve(UserStore.FILE));
-                java.sql.Statement statement = connection.createStatement()) {
-            statement.execute("CREATE TABLE users (name TEXT PRIMARY KEY, password_hash TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)");
-        }
-        try (UserStore store = UserStore.open(dir)) {
-            store.add("alice", "pw");
-            assertEquals(0, store.status("alice").orElseThrow().stamp());
-        }
-        try (UserStore store = UserStore.open(dir)) {
-            assertTrue(store.verify("alice", "pw"), "reopening does not add the column twice");
-        }
-    }
 }

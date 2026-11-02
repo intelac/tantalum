@@ -146,7 +146,7 @@ public final class Engine implements AutoCloseable {
                     AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
                             properties.compactionSettings()),
-                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::onChunk),
+                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks),
                     RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                     DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                     StartTimer.class, new TimerHandler());

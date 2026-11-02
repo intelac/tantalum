@@ -54,7 +54,4 @@ public final class CredentialGuard {
         return Optional.empty();
     }
 
-    public static boolean looksLikeCredential(String... texts) {
-        return detect(texts).isPresent();
-    }
 }

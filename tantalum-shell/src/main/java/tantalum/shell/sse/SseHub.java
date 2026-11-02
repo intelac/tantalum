@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.loop.FactListener;
+import tantalum.shell.model.ChunkListener;
 import tantalum.value.decision.Fact;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunRef;
@@ -84,13 +85,11 @@ public final class SseHub implements FactListener {
 
     private record Stored(long seq, int index, Principal owner, SseMessage message) {}
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
-
     private final int queueCapacity;
     private final int recentCapacity;
     private final History history;
-    /** 序列化条目用，要能处理 {@code Json} 和内容块。 */
-    private final JsonMapper itemMapper;
+    /** journal 的 mapper：条目、事实和分片都用它，和接口、快照的格式一致。 */
+    private final JsonMapper mapper;
     private final Map<Principal, Set<Subscription>> subscribers = new ConcurrentHashMap<>();
     private final Deque<Stored> recent = new ArrayDeque<>();
     /**
@@ -99,11 +98,11 @@ public final class SseHub implements FactListener {
      */
     private final Map<Principal, long[]> replayBefore = new HashMap<>();
 
-    public SseHub(int queueCapacity, int recentCapacity, History history, JsonMapper itemMapper) {
+    public SseHub(int queueCapacity, int recentCapacity, History history, JsonMapper mapper) {
         this.queueCapacity = queueCapacity;
         this.recentCapacity = recentCapacity;
         this.history = history;
-        this.itemMapper = itemMapper;
+        this.mapper = mapper;
     }
 
     /** 加入和删除都在同一个 compute 里做，否则刚建的空集合可能在加入前被另一边当作空集合删掉。 */
@@ -207,12 +206,12 @@ public final class SseHub implements FactListener {
 
     @Override
     public void onFact(long seq, int index, Fact fact) {
-        publish(seq, index, fact.run().principal(), toMessage(seq, index, fact));
+        publish(seq, index, fact.run().principal(), factMessage(mapper, seq, index, fact));
     }
 
     @Override
     public void onItem(long seq, int index, Principal owner, TranscriptItem item) {
-        publish(seq, index, owner, toMessage(itemMapper, seq, index, item));
+        publish(seq, index, owner, itemMessage(mapper, seq, index, item));
     }
 
     private void publish(long seq, int index, Principal owner, SseMessage message) {
@@ -227,26 +226,34 @@ public final class SseHub implements FactListener {
         }
     }
 
-    public void onChunk(RunRef run, String kind, String text) {
+    /** 一个运行的流式分片推给它的用户：不进 journal，不能补读。 */
+    public ChunkListener chunks(RunRef run) {
+        return new ChunkListener() {
+            @Override public void onText(String text) { chunk(run, "text", text); }
+            @Override public void onReasoning(String text) { chunk(run, "reasoning", text); }
+        };
+    }
+
+    private void chunk(RunRef run, String kind, String text) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("run", run.run().value());
         data.put("session", run.session().value());
         data.put("kind", kind);
         data.put("text", text);
-        SseMessage message = new SseMessage(null, "chunk", MAPPER.writeValueAsString(data));
+        SseMessage message = new SseMessage(null, "chunk", mapper.writeValueAsString(data));
         forEachSubscriber(run.principal(), subscription -> subscription.offer(message));
     }
 
     /** 把条目变化转成 {@code item} 消息：完整条目，客户端按 ID 覆盖。回放补读时也用它。 */
-    public static SseMessage toMessage(JsonMapper mapper, long seq, int index, TranscriptItem item) {
+    public static SseMessage itemMessage(JsonMapper mapper, long seq, int index, TranscriptItem item) {
         return new SseMessage(seq + "." + index, "item", mapper.writeValueAsString(ItemJson.toMap(mapper, item)));
     }
 
     /** 把事实转成消息，回放补读时也用它。 */
-    public static SseMessage toMessage(long seq, int index, Fact fact) {
-        Map<String, Object> data = new HashMap<>(MAPPER.convertValue(fact, new TypeReference<Map<String, Object>>() { }));
+    public static SseMessage factMessage(JsonMapper mapper, long seq, int index, Fact fact) {
+        Map<String, Object> data = new HashMap<>(mapper.convertValue(fact, new TypeReference<Map<String, Object>>() { }));
         data.put("run", fact.run().run().value());
         data.put("session", fact.run().session().value());
-        return new SseMessage(seq + "." + index, fact.type(), MAPPER.writeValueAsString(data));
+        return new SseMessage(seq + "." + index, fact.type(), mapper.writeValueAsString(data));
     }
 }

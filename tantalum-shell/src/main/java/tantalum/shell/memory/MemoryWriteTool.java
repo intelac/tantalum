@@ -29,15 +29,15 @@ public final class MemoryWriteTool implements Tool {
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {
         for (String required : List.of("name", "type", "description", "content")) {
-            if (MemoryTools.string(arguments, required) == null) {
+            if (ToolArguments.string(arguments, required) == null) {
                 return MemoryTools.missing(required);
             }
         }
-        String name = MemoryTools.string(arguments, "name");
+        String name = ToolArguments.string(arguments, "name");
         try {
             MemoryStore.WriteResult result = stores.of(context.principal()).write(name,
-                    MemoryTools.string(arguments, "type"), MemoryTools.string(arguments, "description"),
-                    MemoryTools.string(arguments, "content"));
+                    ToolArguments.string(arguments, "type"), ToolArguments.string(arguments, "description"),
+                    ToolArguments.string(arguments, "content"));
             return switch (result) {
                 case MemoryStore.WriteResult.Created created -> ToolOutput.ok("Remembered " + name + ".");
                 case MemoryStore.WriteResult.Updated updated -> ToolOutput.ok("Updated " + name + ".");

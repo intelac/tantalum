@@ -116,10 +116,10 @@ class PerSessionQueryTest {
             long seq = fixture.events.getLast().seq();
             int at = 0;
             for (Fact fact : decision.facts()) {
-                live.add(SseHub.toMessage(seq, at++, fact));
+                live.add(SseHub.factMessage(EventCodec.withBuiltins().mapper(), seq, at++, fact));
             }
             for (TranscriptItem item : transcript.apply(fixture.events.getLast(), decision)) {
-                live.add(SseHub.toMessage(EventCodec.withBuiltins().mapper(), seq, at++, item));
+                live.add(SseHub.itemMessage(EventCodec.withBuiltins().mapper(), seq, at++, item));
             }
         }
         return decision;

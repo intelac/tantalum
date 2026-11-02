@@ -32,10 +32,15 @@ class ModelHandlerTest {
     private static final CallModel COMMAND = new CallModel(new CommandId("c"), RUN, new Prompt("s", List.of(), List.of()));
 
     private final List<String> progress = new ArrayList<>();
-    private final ModelHandler.Progress listener = (run, kind, text) -> progress.add(run.run().value() + ":" + kind + ":" + text);
+    private ChunkListener listener(RunRef run) {
+        return new ChunkListener() {
+            @Override public void onText(String text) { progress.add(run.run().value() + ":text:" + text); }
+            @Override public void onReasoning(String text) { progress.add(run.run().value() + ":reasoning:" + text); }
+        };
+    }
 
     private ModelHandler handler(ModelClient client, CallLimiter limiter, Duration wait) {
-        return new ModelHandler(client, limiter, wait, listener);
+        return new ModelHandler(client, limiter, wait, this::listener);
     }
 
     @Test
@@ -104,12 +109,15 @@ class ModelHandlerTest {
 
     @Test
     void progressFailureDoesNotBreakTheCall() throws Exception {
-        ModelHandler.Progress broken = (run, kind, text) -> { throw new IllegalStateException("subscriber gone"); };
+        ChunkListener broken = new ChunkListener() {
+            @Override public void onText(String text) { throw new IllegalStateException("subscriber gone"); }
+            @Override public void onReasoning(String text) { throw new IllegalStateException("subscriber gone"); }
+        };
         ModelClient client = (prompt, chunks) -> {
             ChunkListener listener = chunks;
             listener.onText("Hi");
             return new ModelOutcome.Replied(List.of(), StopReason.END_TURN, "m", null);
         };
-        assertInstanceOf(ModelReplied.class, new ModelHandler(client, new CallLimiter(1), Duration.ofSeconds(1), broken).handle(COMMAND));
+        assertInstanceOf(ModelReplied.class, new ModelHandler(client, new CallLimiter(1), Duration.ofSeconds(1), run -> broken).handle(COMMAND));
     }
 }

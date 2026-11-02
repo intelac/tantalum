@@ -88,8 +88,8 @@ public class TantalumApplication {
                         + "Use --tantalum.provider=openai for a local model.");
                 TantalumProperties.Claude claude = properties.claude();
                 return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(key).maxRetries(0).build(),
-                        claude.model(), claude.maxTokens(), claude.effort(), claude.fallbacks(),
-                        claude.firstChunkTimeout(), claude.betweenChunkTimeout(), rules);
+                        new ClaudeClient.Settings(claude.model(), claude.maxTokens(), claude.effort(), claude.fallbacks(),
+                                claude.firstChunkTimeout(), claude.betweenChunkTimeout(), rules, false));
             }
             case "openai" -> {
                 TantalumProperties.OpenAi openai = properties.openai();
