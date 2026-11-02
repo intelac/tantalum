@@ -18,6 +18,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
@@ -40,15 +43,15 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.Ended;
-import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
-import tantalum.value.state.SessionState;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 
 /** REST 接口和 SSE。只校验和转发，不等待模型结果。身份只来自登录会话，不看任何请求头。 */
 @RestController
 public class ApiController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ApiController.class);
 
     private static final Set<String> MODES = Set.of("prompt", "steer", "follow-up");
     private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
@@ -73,16 +76,8 @@ public class ApiController {
 
     /** 当前用户的会话，最近活动的在前。 */
     @GetMapping("/api/sessions")
-    ResponseEntity<String> sessions() {
-        Principal user = current();
-        KernelState state = engine.state();
-        List<Map<String, Object>> sessions = state.sessions().values().stream()
-                .filter(session -> session.principal().equals(user))
-                .map(session -> SessionSummary.of(session.id(),
-                        session.activeRun() == null ? null : state.runs().get(session.activeRun()),
-                        engine.transcript().items(session.id())))
-                .sorted(Comparator.comparing(SessionSummary::lastActivity).reversed())
-                .map(ApiController::describe).toList();
+    ResponseEntity<String> sessions() throws SQLException {
+        List<Map<String, Object>> sessions = engine.sessions(current()).stream().map(ApiController::describe).toList();
         return json(200, Map.of("sessions", sessions));
     }
 
@@ -92,19 +87,24 @@ public class ApiController {
         if (!SESSION_ID.matcher(session).matches()) {
             return error(400, "invalid session id");
         }
-        SessionId id = new SessionId(session);
-        SessionState state = engine.state().sessions().get(id);
-        if (state == null || !state.principal().equals(current())) {
+        Optional<Engine.SessionView> found = engine.session(current(), new SessionId(session));
+        if (found.isEmpty()) {
             return error(404, "no such session");
         }
-        Transcript.Snapshot snapshot = engine.transcript().snapshot(id);
+        Transcript.Snapshot snapshot = found.get().transcript();
         List<Map<String, Object>> items = snapshot.items().stream()
                 .map(item -> ItemJson.toMap(engine.codec().mapper(), item)).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("seq", snapshot.seq());
         response.put("items", items);
-        response.put("followUps", state.followUps().size());
+        response.put("followUps", found.get().state().followUps().size());
         return json(200, response);
+    }
+
+    @ExceptionHandler(Engine.SessionUnreadable.class)
+    ResponseEntity<String> unreadable(Engine.SessionUnreadable failure) {
+        LOG.error("session unreadable", failure);
+        return error(500, "session unreadable");
     }
 
     /** 供应商、模型名、是否云端、上下文窗口（不知道时省略，前端就不显示占比）。Key 只在环境变量里，这里碰不到。 */
@@ -221,19 +221,16 @@ public class ApiController {
         if (!SESSION_ID.matcher(session).matches()) {
             return error(400, "invalid session id");
         }
-        Principal user = current();
-        SessionId id = new SessionId(session);
-        SessionState state = engine.state().sessions().get(id);
-        if (state == null || !state.principal().equals(user)) {
+        Optional<Engine.SessionView> found = engine.session(current(), new SessionId(session));
+        if (found.isEmpty()) {
             return error(404, "no such session");
         }
-        List<Map<String, Object>> runs = engine.state().runs().values().stream()
-                .filter(run -> run.ref().session().equals(id))
+        List<Map<String, Object>> runs = found.get().runs().stream()
                 .sorted(Comparator.comparingLong(run -> run.ref().run().seq()))
                 .map(ApiController::describe).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("runs", runs);
-        response.put("followUps", state.followUps().size());
+        response.put("followUps", found.get().state().followUps().size());
         return json(200, response);
     }
 

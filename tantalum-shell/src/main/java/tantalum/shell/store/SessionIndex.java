@@ -246,6 +246,20 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
+    /** 一个用户写过事件的会话；只认领还没写过的不算。 */
+    public synchronized List<Session> sessions(Principal principal) throws SQLException {
+        List<Session> sessions = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND last_activity IS NOT NULL")) {
+            select.setString(1, principal.value());
+            try (ResultSet result = select.executeQuery()) {
+                while (result.next()) {
+                    sessions.add(session(result));
+                }
+            }
+        }
+        return sessions;
+    }
+
     private static final String SELECT_SESSION =
             "SELECT session, principal, title, last_activity, run_status, last_seq, file_offset FROM sessions";
 

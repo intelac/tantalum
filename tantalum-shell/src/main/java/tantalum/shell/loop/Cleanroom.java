@@ -83,10 +83,13 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
     }
 
     private void process(EventEnvelope envelope, Preload preload, boolean endOfBatch) {
+        if (preload != null && preload.principal() != null && !state.principals().containsKey(envelope.principal())) {
+            state = state.with(preload.principal());
+        }
         if (preload != null && preload.isFailure()) {
             rejected(envelope, preload);
         } else {
-            if (preload != null) {
+            if (preload != null && preload.session() != null) {
                 merge(envelope, preload);
             }
             step(envelope);
@@ -131,7 +134,6 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         state = decision.newState();
         view.publish(state);
         notifyListener(envelope, before);
-        evictor.stepped(envelope, before, state);
         for (Command command : decision.commands()) {
             if (!output.test(command)) {
                 results.reportDropped(command, "output ring full");
@@ -144,6 +146,8 @@ public final class Cleanroom implements EventHandler<InputRing.Slot> {
         for (TranscriptItem item : project(envelope, decision)) {
             notifyListener(seq, index++, envelope, item);
         }
+        // 投影之后：运行结束时的快照要包含这个事件产生的条目，否则从它载入会丢掉这些条目。
+        evictor.stepped(envelope, before, state);
     }
 
     /** 投影出错只丢这次的条目，环继续。 */

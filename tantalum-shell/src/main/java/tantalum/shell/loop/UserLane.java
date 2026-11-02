@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.PrincipalState;
 
 /**
  * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部事件，按到达顺序取号，
@@ -41,6 +42,11 @@ public final class UserLane {
         Loader NONE = (principal, session, beforeSeq) -> Optional.empty();
 
         Optional<Preload> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
+
+        /** 这个用户序号小于 {@code beforeSeq} 的累计用量。为 null 时不并入。 */
+        default PrincipalState usage(Principal principal, long beforeSeq) throws Exception {
+            return null;
+        }
     }
 
     /** 通道的下游。 */
@@ -68,6 +74,8 @@ public final class UserLane {
     private final Residency residency;
     private final Queue<EventEnvelope> queue = new ArrayDeque<>();
     private boolean running;
+    /** 只有通道线程访问。用户的用量在本进程只载入一次，跟着他的第一个事件。 */
+    private boolean usageLoaded;
 
     UserLane(Principal principal, Sequence sequence, Writer writer, Exit exit) {
         this(principal, sequence, writer, exit, Loader.NONE, new Residency());
@@ -134,11 +142,16 @@ public final class UserLane {
             return;
         }
         Map<SessionId, Preload> preloads = load(numbered, states);
+        PrincipalState usage = usage(numbered.getFirst().seq());
         for (int i = 0; i < numbered.size(); i++) {
             EventEnvelope envelope = numbered.get(i);
             Preload preload = preloads.get(envelope.session());
             if (preload != null && !preload.isFailure()) {
                 preloads.remove(envelope.session());
+            }
+            if (usage != null) {
+                preload = preload == null ? Preload.usage(usage) : preload.withPrincipal(usage);
+                usage = null;
             }
             if (!exit.publish(envelope, preload)) {
                 exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
@@ -165,6 +178,24 @@ public final class UserLane {
             }
         }
         return preloads;
+    }
+
+    /** 失败时下一批再试；在那之前钩子看到的用量偏少，所以记错误日志。 */
+    private PrincipalState usage(long beforeSeq) {
+        if (usageLoaded) {
+            return null;
+        }
+        try {
+            PrincipalState usage = loader.usage(principal, beforeSeq);
+            usageLoaded = true;
+            return usage;
+        } catch (Exception | Error failure) {
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            LOG.error("cannot load usage of {}; quota hooks see less than the real usage until it loads", principal.value(), failure);
+            return null;
+        }
     }
 
     private Optional<Preload> loadOne(SessionId session, long beforeSeq) {

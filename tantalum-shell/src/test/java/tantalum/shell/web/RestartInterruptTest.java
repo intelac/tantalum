@@ -92,6 +92,22 @@ class RestartInterruptTest {
         return server.get("alice", "/api/sessions/s1/runs").body();
     }
 
+    /** 需求 2.1：启动只载入有未结束运行的会话。 */
+    @Test
+    void onlyTheUnfinishedSessionIsLoadedAtStartup() throws Exception {
+        diedDuringTool();
+        SessionId idle = new SessionId("s2");
+        try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, idle, EventCodec.withBuiltins())) {
+            file.append(List.of(new EventEnvelope(10, AT, ALICE, idle, null,
+                    new tantalum.value.event.Cancel(new RequestId("nothing to cancel")))));
+        }
+        try (TestServer server = server()) {
+            var engine = server.context.getBean(tantalum.shell.boot.Engine.class);
+            assertEquals(java.util.Set.of(S1), engine.state().sessions().keySet());
+            assertTrue(server.get("alice", "/api/sessions").body().contains("\"id\":\"s1\""));
+        }
+    }
+
     @Test
     void closedBeforeTheFirstRequestWithoutRerunningAnything() throws Exception {
         diedDuringTool();

@@ -217,25 +217,25 @@
   - 验证：触发时机；写失败时运行不受影响、旧快照还在；写到一半崩溃时旧快照或全量重放仍正确；cleanroom 没有文件 I/O
   - _Requirements: 10.4, 10.5, 非功能 Security_
 
-- [ ] 29. 不变量测试
+- [x] 29. 不变量测试
   - File: tantalum-shell/src/test/java/tantalum/shell/loop/EvictionInvarianceTest.java
   - “从不回收”“每个事件后回收”“每次都从快照载入”三种配置
   - 验证：prompt、对话视图、钩子结果逐字节相同，覆盖压缩、工具轮、记忆变化、额度钩子
   - _Requirements: 9.1, 2.4, 10.2_
 
-- [ ] 30. 冷会话只读查询和启动
+- [x] 30. 冷会话只读查询和启动
   - File: shell/store/ColdReads.java, ColdReadsTest.java；shell/loop/StateView.java；shell/boot/Startup.java
   - 查询重放到私有状态，LRU 16 个，文件大小判断变化；启动只载入未结束的会话
   - 验证：查询不改变常驻；文件变化后不读到旧结果；别人的会话 404 且没有读文件；启动后常驻数等于未结束会话数
   - _Requirements: 2.1, 2.8_
 
-- [ ] 31. 会话列表
+- [x] 31. 会话列表
   - File: shell/web/ApiController.java, 对应测试
   - 只读索引并补读落后部分
   - 验证：列表不载入内容；崩溃后和文件一致
   - _Requirements: 4.1, 4.2_
 
-- [ ] 32. 回收压测
+- [x] 32. 回收压测
   - File: tantalum-examples 或 tantalum-shell 现有并发压测
   - 回收和载入不断发生，含迟到的工具结果
   - 验证：已有不变量全部成立，事件不丢不重复

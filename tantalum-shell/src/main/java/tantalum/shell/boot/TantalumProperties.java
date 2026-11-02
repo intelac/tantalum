@@ -19,9 +19,9 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             requirePositive("snapshotEvents", snapshotEvents);
         }
 
-        /** 冷会话的只读查询（任务 30）做好之前不回收，否则回收后的会话查不到内容。 */
+        /** 空闲 30 分钟或超过 1000 个常驻时回收（H3），运行结束距上次快照超过 200 个事件时写快照。 */
         public static Residency defaults() {
-            return new Residency(null, Integer.MAX_VALUE, 200, Duration.ofSeconds(1));
+            return new Residency(Duration.ofMinutes(30), 1000, 200, Duration.ofSeconds(1));
         }
     }
 
