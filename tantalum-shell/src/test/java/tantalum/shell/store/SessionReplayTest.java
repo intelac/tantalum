@@ -30,6 +30,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
+import tantalum.shell.conversation.TranscriptReplay;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
@@ -195,7 +196,7 @@ class SessionReplayTest {
     private Full full() {
         Transcript transcript = new Transcript();
         List<EventEnvelope> events = new ArrayList<>(fixture.events);
-        return new Full(transcript.replay(kernel, events), transcript);
+        return new Full(TranscriptReplay.run(transcript, kernel, events), transcript);
     }
 
     private static List<RunState> sorted(List<RunState> runs) {

@@ -4,13 +4,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { LoginPage } from "../auth/LoginPage";
 import { useCurrentUser } from "../auth/useCurrentUser";
-import { Composer } from "../composer/Composer";
-import { QueueDock } from "../composer/QueueDock";
-import { StatusBar } from "../composer/StatusBar";
+import { ComposerDock } from "../composer/ComposerDock";
 import { ConversationPage } from "../conversation/ConversationPage";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { AppFrame } from "../shell/AppFrame";
 import { ConnectionBanner } from "../shell/ConnectionBanner";
+import { sessionTitle } from "../shell/SessionRow";
 import { Sidebar } from "../shell/Sidebar";
 import { useConfig } from "../shell/useConfig";
 import { useSessions } from "../shell/useSessions";
@@ -18,8 +17,7 @@ import { ConversationStore } from "../store/ConversationStore";
 import { zh } from "../text/zh";
 import { TracePage } from "../trace/TracePage";
 import { Tabs } from "../ui/Tabs";
-import { useConnection } from "./connection";
-import { useEventStream } from "./events";
+import { useEventStream } from "../store/events";
 import { loginPath, navigate, sessionPath, tracePath, useRoute, type Route } from "./router";
 
 const TABS = [
@@ -65,13 +63,12 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
   useEventStream(store, queries);
-  const connection = useConnection();
   const sessions = useSessions();
   const config = useConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const list = sessions.data ?? [];
   const summary = list.find((session) => session.id === route.session);
-  const title = summary === undefined || summary.title === "" ? zh.sidebar.untitled : summary.title;
+  const title = sessionTitle(summary);
 
   return (
     <AppFrame
@@ -124,23 +121,10 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
           {route.page === "trace" ? (
             <TracePage store={store} session={route.session} run={route.run} />
           ) : (
-            <ConversationPage
-              store={store}
-              session={route.session}
-              reloadKey={connection.connects}
-              composer={(state) => (
-                <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
-                  <QueueDock store={store} ids={state.queued} />
-                  <Composer
-                    session={route.session}
-                    activeRun={state.running ? state.latestRun : null}
-                    modelName={config.data?.model ?? zh.composer.model}
-                    cloud={config.data?.cloud ?? false}
-                  />
-                  <StatusBar session={route.session} run={state.latestRun} ended={!state.running} contextWindow={config.data?.contextWindow} />
-                </div>
-              )}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              <ConversationPage store={store} session={route.session} />
+              <ComposerDock store={store} session={route.session} config={config.data} />
+            </div>
           )}
         </div>
       </div>

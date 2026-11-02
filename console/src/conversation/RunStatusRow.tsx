@@ -1,19 +1,18 @@
 import { AlertCircle, Ban, OctagonX } from "lucide-react";
-import { INTERRUPTED_BY_RESTART, type RunStatusItem } from "../api/types";
 import type { ConversationStore } from "../store/ConversationStore";
-import { useItem } from "../store/hooks";
-import { zh } from "../text/zh";
+import { useRunStatus } from "../store/hooks";
+import { runOutcome } from "./runOutcome";
 
 interface Props {
   store: ConversationStore;
-  id: string;
+  run: string;
 }
 
 /** 运行没有正常完成时的说明行：失败按原因解释，取消、重启中断和钩子停止各有说法。 */
-export function RunStatusRow({ store, id }: Props) {
-  const item = useItem(store, id);
-  if (item === undefined || item.kind !== "run") return null;
-  const text = explain(item);
+export function RunStatusRow({ store, run }: Props) {
+  const item = useRunStatus(store, run);
+  if (item === undefined) return null;
+  const text = runOutcome(item).explanation;
   if (text === null) return null;
   const Icon = item.endReason === "CANCELLED" ? Ban : item.endReason === "STOPPED" ? OctagonX : AlertCircle;
   const danger = item.endReason === "FAILED";
@@ -33,19 +32,4 @@ export function RunStatusRow({ store, id }: Props) {
       </div>
     </div>
   );
-}
-
-export function explain(item: RunStatusItem): string | null {
-  switch (item.endReason) {
-    case "FAILED":
-      if (item.failure !== undefined) return zh.failure[item.failure] ?? zh.failure.UNKNOWN;
-      if (item.detail?.includes("output ring full")) return zh.failure.dropped;
-      return zh.failure.generic;
-    case "CANCELLED":
-      return item.detail === INTERRUPTED_BY_RESTART ? zh.failure.restarted : zh.failure.cancelled;
-    case "STOPPED":
-      return item.detail === undefined || item.detail === "" ? zh.failure.stopped : `${zh.failure.stopped}：${item.detail}`;
-    default:
-      return null;
-  }
 }

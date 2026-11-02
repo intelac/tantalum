@@ -14,6 +14,7 @@ import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
+import tantalum.shell.conversation.TranscriptReplay;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.store.SessionStore;
 import tantalum.value.event.EventEnvelope;
@@ -46,7 +47,7 @@ class CorpusTest {
             List<EventEnvelope> events = store.readAll();
             assertEquals(manifest.events(), events.size());
             Transcript transcript = new Transcript();
-            KernelState state = transcript.replay(kernel(), events);
+            KernelState state = TranscriptReplay.run(transcript, kernel(), events);
             assertTrue(state.runs().values().stream().allMatch(run -> run.isEnded()));
             assertTrue(state.runs().values().stream()
                     .noneMatch(run -> ((tantalum.value.state.Ended) run.phase()).reason().name().equals("FAILED")));

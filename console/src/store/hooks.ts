@@ -1,8 +1,8 @@
 // 组件只订阅自己需要的键，其他条目变化不触发重绘。
 
-import { useCallback, useRef, useSyncExternalStore } from "react";
-import type { Item } from "../api/types";
-import { ConversationStore, type Live } from "./ConversationStore";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import type { Item, RunStatusItem } from "../api/types";
+import { ConversationStore, type Live, type Paging } from "./ConversationStore";
 
 export function useItem(store: ConversationStore, id: string): Item | undefined {
   const subscribe = useCallback((listener: () => void) => store.subscribe(ConversationStore.itemKey(id), listener), [store, id]);
@@ -25,6 +25,15 @@ export function useLive(store: ConversationStore, run: string): Live {
   return useSyncExternalStore(subscribe, get, get);
 }
 
+export function usePaging(store: ConversationStore, session: string): Paging {
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(ConversationStore.pagingKey(session), listener),
+    [store, session],
+  );
+  const get = useCallback(() => store.getPaging(session), [store, session]);
+  return useSyncExternalStore(subscribe, get, get);
+}
+
 /** 订阅一组条目；只要有一个变了就重绘，快照数组只在内容变化时换新引用。 */
 export function useItems(store: ConversationStore, ids: readonly string[]): (Item | undefined)[] {
   const cache = useRef<(Item | undefined)[]>([]);
@@ -43,4 +52,35 @@ export function useItems(store: ConversationStore, ids: readonly string[]): (Ite
     return next;
   }, [store, ids]);
   return useSyncExternalStore(subscribe, get, get);
+}
+
+/** 运行状态条目的 ID。只有这里知道后端用的 `run:` 前缀。 */
+export function runStatusId(run: string): string {
+  return `run:${run}`;
+}
+
+export function useRunStatus(store: ConversationStore, run: string | null): RunStatusItem | undefined {
+  const item = useItem(store, run === null ? "" : runStatusId(run));
+  return item?.kind === "run" ? item : undefined;
+}
+
+/** 运行状态每变一次就变的字符串，用作查询缓存键的最后一段：运行推进时重新读回放数据。 */
+export function useRunVersion(store: ConversationStore, run: string | null): string {
+  const status = useRunStatus(store, run);
+  return status === undefined ? "" : `${status.phase}@${status.updatedAt}`;
+}
+
+/** 会话里最近的运行，以及它是否还没结束。 */
+export function useLatestRun(store: ConversationStore, session: string): { run: string | null; running: boolean } {
+  const order = useOrder(store, session);
+  // 用户条目在运行开始后也带运行 ID，所以只看运行产生的条目；它们的运行 ID 不会变。
+  const run = useMemo(() => {
+    for (let index = order.length - 1; index >= 0; index--) {
+      const item = store.getItem(order[index] ?? "");
+      if (item !== undefined && item.kind !== "user" && item.kind !== "compaction" && item.run !== undefined) return item.run;
+    }
+    return null;
+  }, [order, store]);
+  const status = useRunStatus(store, run);
+  return { run, running: status !== undefined && status.endReason === undefined };
 }

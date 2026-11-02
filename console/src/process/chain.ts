@@ -1,4 +1,30 @@
-import type { ToolStepItem } from "../api/types";
+import type { Item, TextItem, ThinkingItem, ToolStepItem } from "../api/types";
+
+/** 过程区的一行：一段思考、一段中间文本，或一条工具链（连续的工具步骤，同一批并行调用成一组）。 */
+export type ProcessRow =
+  | { kind: "thinking"; item: ThinkingItem }
+  | { kind: "text"; item: TextItem }
+  | { kind: "tools"; groups: ToolStepItem[][] };
+
+export function processRows(items: readonly (Item | undefined)[]): ProcessRow[] {
+  const rows: ProcessRow[] = [];
+  let tools: ToolStepItem[] = [];
+  const flushTools = () => {
+    if (tools.length > 0) rows.push({ kind: "tools", groups: chainOf(tools) });
+    tools = [];
+  };
+  for (const item of items) {
+    if (item?.kind === "tool") {
+      tools.push(item);
+      continue;
+    }
+    flushTools();
+    if (item?.kind === "thinking") rows.push({ kind: "thinking", item });
+    else if (item?.kind === "text") rows.push({ kind: "text", item });
+  }
+  flushTools();
+  return rows;
+}
 
 /** 把连续的工具步骤按 group 分组：同一事件发出的并行调用一组，其他各自一组。 */
 export function chainOf(steps: readonly ToolStepItem[]): ToolStepItem[][] {

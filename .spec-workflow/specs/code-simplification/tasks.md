@@ -190,32 +190,32 @@
 
 ## 阶段 6：前端
 
-- [ ] 34. 仓库保管翻页位置
+- [x] 34. 仓库保管翻页位置
   - File: console/store/ConversationStore.ts, console/conversation/ConversationPage.tsx
   - 验证：`ConversationStore.test.ts` 改用 `getPaging` 断言后通过；`compaction.spec` 的 500 条消息翻页通过
   - _Requirements: 2.8, 3.4_
 
-- [ ] 35. 运行状态的钩子和查询键
+- [x] 35. 运行状态的钩子和查询键
   - File: console/store/hooks.ts, `console/conversation/{blocks,MessageList,RunStatusRow}.ts(x)`, console/process/ProcessGroup.tsx, `console/trace/{TracePage,ModelCallDetail}.tsx`, console/composer/StatusBar.tsx
   - 验证：`blocks.test.ts`、`process.test.tsx`、`trace.test.tsx` 通过
   - _Requirements: 2.8_
 
-- [ ] 36. `ComposerDock`
+- [x] 36. `ComposerDock`
   - File: `console/composer/{ComposerDock,QueueDock}.tsx`, console/app/App.tsx, console/conversation/ConversationPage.tsx
   - 验证：`Composer.test.tsx`、`run-control.spec` 通过
   - _Requirements: 3.4_
 
-- [ ] 37. 过程区分组和运行结束文案
+- [x] 37. 过程区分组和运行结束文案
   - File: `console/process/{chain,ProcessGroup}.ts(x)`，删 ToolChain.tsx；console/conversation/runOutcome.ts
   - 验证：`process.test.tsx`、`chat.spec`、`mcp.spec`、`ops.spec` 通过
   - _Requirements: 2.8_
 
-- [ ] 38. 其余整理
+- [x] 38. 其余整理
   - File: 本地存储 helper、`useNow` 移到 ui、`events.ts` 移到 store、`client` 直接报 503、`MessageList` 拆出 `useScrollFollow` 和 `RunBlock`、会话标题函数、`ModelCallDetail` 的组件改名
   - 验证：vitest、`connection.spec`、`login.spec`、`compaction.spec` 通过
   - _Requirements: 2.8, 3.4_
 
-- [ ] 39. 阶段 6 收尾和文档
+- [x] 39. 阶段 6 收尾和文档
   - File: README.md、tech.md、本 spec 涉及的设计文档里关于结构的说法
   - 验证：全量回归；变异检查（`runOutcome` 把重启中断写成已取消，`ops.spec` 失败）；shell 里没有超过 300 行的类（例外写明理由）；提交；汇报最终的行数变化
   - _Requirements: 4.3, 非功能 可读性_

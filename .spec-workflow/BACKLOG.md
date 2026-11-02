@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
-| `code-simplification` | 0/39，2026-11-03 开始。整体审查后的重构，6 个阶段；Yi 决定其他任务先放一放 | `specs/code-simplification/tasks.md` |
+| `code-simplification` | 39/39，2026-11-03 完成（结果见 tech.md）。`SessionIndex`、`McpConnection` 仍超过 300 行，理由见 tech.md | `specs/code-simplification/tasks.md` |
 
 `ops-hardening` 50/50 已完成（2026-11-02）。
 

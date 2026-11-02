@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { connectionState, reportConnection, reportHalted, reportUnauthorized, resetConnection } from "./connection";
+import { connectionState, reportConnection, reportHalted, resetConnection } from "./connection";
 
 beforeEach(resetConnection);
 
@@ -17,11 +17,10 @@ describe("connection", () => {
     expect(connectionState().connects).toBe(2);
   });
 
-  it("remembers 503 and 401 until reset", () => {
+  it("remembers 503 until reset", () => {
     reportHalted();
-    reportUnauthorized();
-    expect(connectionState()).toMatchObject({ halted: true, unauthorized: true, connected: false });
+    expect(connectionState().halted).toBe(true);
     resetConnection();
-    expect(connectionState()).toMatchObject({ halted: false, unauthorized: false });
+    expect(connectionState().halted).toBe(false);
   });
 });

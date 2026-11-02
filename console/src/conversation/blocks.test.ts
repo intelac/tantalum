@@ -21,10 +21,10 @@ describe("groupBlocks", () => {
     const order = ["0.0", "run:run-0", "2.0", "2.1", "2.2", "4.0", "4.1", "4.2", "5.0", "6.0", "run:run-6", "8.0"];
     expect(groupBlocks(order, (id) => shapes[id])).toEqual([
       { kind: "user", id: "0.0" },
-      { kind: "run", run: "run-0", statusId: "run:run-0", process: ["2.0", "2.1", "2.2", "4.0"], reply: ["4.1", "4.2"] },
+      { kind: "run", run: "run-0", process: ["2.0", "2.1", "2.2", "4.0"], reply: ["4.1", "4.2"] },
       { kind: "user", id: "5.0" },
       { kind: "user", id: "6.0" },
-      { kind: "run", run: "run-6", statusId: "run:run-6", process: [], reply: ["8.0"] },
+      { kind: "run", run: "run-6", process: [], reply: ["8.0"] },
     ]);
   });
 
@@ -40,7 +40,7 @@ describe("groupBlocks", () => {
     const blocks = groupBlocks(["0.0", "run:run-0", "2.0", "3.0", "4.1"], (id) => withMark[id]);
     expect(blocks).toEqual([
       { kind: "user", id: "0.0" },
-      { kind: "run", run: "run-0", statusId: "run:run-0", process: ["2.0"], reply: ["4.1"] },
+      { kind: "run", run: "run-0", process: ["2.0"], reply: ["4.1"] },
       { kind: "compaction", id: "3.0" },
     ]);
   });

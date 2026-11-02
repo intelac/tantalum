@@ -10,10 +10,15 @@ interface Props {
   now?: Date;
 }
 
+/** 会话的显示标题：还没有第一条消息时是“新会话”。 */
+export function sessionTitle(session: SessionSummary | undefined): string {
+  return session === undefined || session.title === "" ? zh.sidebar.untitled : session.title;
+}
+
 /** 一行会话：标题，右侧相对时间；运行中显示跳动的点。 */
 export function SessionRow({ session, selected, onSelect, now }: Props) {
   const running = session.runStatus !== "idle";
-  const title = session.title === "" ? zh.sidebar.untitled : session.title;
+  const title = sessionTitle(session);
   return (
     <li>
       <button

@@ -22,7 +22,7 @@ stateDiagram-v2
 |---|---|---|---|
 | 4.1 | journal 追加 `ContextCompacted` 事件 | `ContextCompacted` 是 **Fact**（进 SSE 和轨迹），不是事件。持久记录是摘要调用自己的 `ModelReplied`，回放时内核从它重新算出替换视图 | 内核只能发命令和事实，不能写事件。摘要文本、用量、停止原因都已在 `ModelReplied` 里，再写一个事件是重复 |
 | 1.5 | 配置项 | 配置项照提供，但**在会话第一次组装上下文时随 `ContextAssembled` 快照进 `SessionContext`**，之后该会话一直用这份 | 阈值和保留量决定切点，切点决定 prompt。回放用当时的值才能和实时逐字相同；改配置只影响新会话，与“新工具等新会话”一致 |
-| 规则 7 | 调用失败不采用 | 摘要调用**不重试**，限流也不重试 | 自动压缩失败后主调用照常进行，真超长再走恢复；多一层重试只会让状态机变复杂 |
+| 规则 7 | 调用失败不采用 | 摘要调用**不重试**，限流也不重试（已由 spec-audit-fixes A5 改为：可重试的失败退避重试，用完再按规则 8） | 自动压缩失败后主调用照常进行，真超长再走恢复；多一层重试只会让状态机变复杂 |
 | D4 | 手动压缩期间提交排队 | 接口在会话有运行时返回 409；极少数和新运行同时到达的请求被内核忽略 | 排队已由 `followUps` 机制覆盖；竞争窗口只有几毫秒 |
 
 ## Steering Document Alignment
@@ -247,7 +247,7 @@ tantalum.compaction.summary-max-tokens=8192
 | 情况 | 处理 |
 |---|---|
 | 摘要被截断、含工具调用、为空、没变小 | `CompactionFailed`，按触发方式走规则 8 |
-| 摘要调用 `ModelFailed`（任何原因） | 同上，不重试 |
+| 摘要调用 `ModelFailed`（任何原因） | 同上，不重试（已由 spec-audit-fixes A5 改为可重试的先退避重试） |
 | 摘要调用被取消或中断 | `modelInterrupted` 看到 `run.compacting != null` 时不把文本追加进历史，运行 CANCELLED |
 | 超长恢复后仍超长 | 第二次 `CONTEXT_OVERFLOW` 时 `overflowRecovered` 已为 true，按原路 FAILED，详情是原始错误 |
 | 头部估算超过阈值 | 从最早单元丢起，指令里说明；只在超长恢复时可能发生 |

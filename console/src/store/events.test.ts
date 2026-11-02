@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
-import { ConversationStore } from "../store/ConversationStore";
+import { ConversationStore } from "./ConversationStore";
 import { handleEvent } from "./events";
 
 describe("handleEvent", () => {

@@ -18,7 +18,7 @@
 - 自动和超长恢复路径上，摘要失败时，如果裁剪能让视图变小，也改用裁剪。手动压缩仍报失败。
 - 都不能变小时按规则 8。裁剪后 `Transcript` 显示“已裁剪”，没有摘要。
 
-**重新组装（1.9）。** 摘要成功或裁剪后，`SessionState.context` 置空，发 `AssembleContext`，运行进 `AwaitingContext`。`contextAssembled` 重新冻结，不追加更新消息。`RunState.justCompacted` 让这之后的那次调用不再判断（规则 3.1）。手动压缩不重新组装，下一个运行自然会组装。
+**重新组装（1.9）。** 摘要成功或裁剪后，`SessionState.context` 置空，发 `AssembleContext`，运行进 `AwaitingContext`。`contextAssembled` 重新冻结，不追加更新消息。实现里没有单独的字段：`contextAssembled` 看到会话上下文为空、压缩记录不为空，就知道刚压缩过，这之后的那次调用不再判断（规则 3.1）。手动压缩不重新组装，下一个运行自然会组装。
 
 风险：保留段可能含已下线工具的调用，而新工具列表里没有它。这要靠真实 Claude 验证，如果被拒，保留段里这类调用要转成文字。
 

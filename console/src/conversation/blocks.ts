@@ -8,7 +8,6 @@ export type Block =
   | {
       kind: "run";
       run: string;
-      statusId?: string;
       /** 思考、工具步骤和中间文本，按发生顺序。 */
       process: string[];
       /** 结尾连续的文本段，是这轮的回复。 */
@@ -19,7 +18,7 @@ type Shape = Pick<Item, "kind" | "run">;
 
 export function groupBlocks(order: readonly string[], shapeOf: (id: string) => Shape | undefined): Block[] {
   const blocks: Block[] = [];
-  const open = new Map<string, { statusId?: string; all: { id: string; text: boolean }[] }>();
+  const open = new Map<string, { id: string; text: boolean }[]>();
 
   for (const id of order) {
     const shape = shapeOf(id);
@@ -32,25 +31,23 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
       blocks.push({ kind: "user", id });
       continue;
     }
-    let block = open.get(shape.run);
-    if (block === undefined) {
-      block = { all: [] };
-      open.set(shape.run, block);
+    let entries = open.get(shape.run);
+    if (entries === undefined) {
+      entries = [];
+      open.set(shape.run, entries);
       blocks.push({ kind: "run", run: shape.run, process: [], reply: [] });
     }
-    if (shape.kind === "run") block.statusId = id;
-    else block.all.push({ id, text: shape.kind === "text" });
+    // 运行状态条目由 RunStatusRow 按运行 ID 自己取，不进过程区也不进回复。
+    if (shape.kind !== "run") entries.push({ id, text: shape.kind === "text" });
   }
 
   for (const block of blocks) {
     if (block.kind !== "run") continue;
-    const collected = open.get(block.run);
-    if (collected === undefined) continue;
-    block.statusId = collected.statusId;
-    let split = collected.all.length;
-    while (split > 0 && collected.all[split - 1]?.text) split--;
-    block.process = collected.all.slice(0, split).map((entry) => entry.id);
-    block.reply = collected.all.slice(split).map((entry) => entry.id);
+    const entries = open.get(block.run) ?? [];
+    let split = entries.length;
+    while (split > 0 && entries[split - 1]?.text) split--;
+    block.process = entries.slice(0, split).map((entry) => entry.id);
+    block.reply = entries.slice(split).map((entry) => entry.id);
   }
   return blocks;
 }

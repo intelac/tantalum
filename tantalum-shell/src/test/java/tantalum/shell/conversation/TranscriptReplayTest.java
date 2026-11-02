@@ -42,7 +42,7 @@ class TranscriptReplayTest {
         live.feed(null, live.prompt("third"));
 
         Transcript transcript = new Transcript();
-        KernelState state = transcript.replay(freshKernel(false), live.envelopes);
+        KernelState state = TranscriptReplay.run(transcript, freshKernel(false), live.envelopes);
 
         assertEquals(live.items(), transcript.items(SESSION));
         assertEquals(live.state(), state);
@@ -58,7 +58,7 @@ class TranscriptReplayTest {
         live.feed(run, live.reply(claudeThinking("done thinking"), text("done")));
 
         Transcript transcript = new Transcript();
-        transcript.replay(freshKernel(true), live.envelopes);
+        TranscriptReplay.run(transcript, freshKernel(true), live.envelopes);
 
         assertEquals(live.items(), transcript.items(SESSION));
         assertEquals(6, transcript.items(SESSION).size());
@@ -84,7 +84,7 @@ class TranscriptReplayTest {
         live.feed(third, live.truncatedReply("a3 cut"));
 
         Transcript transcript = new Transcript();
-        KernelState state = transcript.replay(freshKernel(true), live.envelopes);
+        KernelState state = TranscriptReplay.run(transcript, freshKernel(true), live.envelopes);
 
         assertEquals(live.items(), transcript.items(SESSION));
         assertEquals(live.state(), state);
@@ -98,6 +98,6 @@ class TranscriptReplayTest {
         live.start("hi");
         List<EventEnvelope> reversed = live.envelopes.reversed();
 
-        assertThrows(IllegalArgumentException.class, () -> new Transcript().replay(freshKernel(true), reversed));
+        assertThrows(IllegalArgumentException.class, () -> TranscriptReplay.run(new Transcript(), freshKernel(true), reversed));
     }
 }

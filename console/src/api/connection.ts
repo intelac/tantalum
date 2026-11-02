@@ -8,12 +8,11 @@ export interface Connection {
   lost: boolean;
   /** 第一次连上和每次重新连上都加一。 */
   connects: number;
-  unauthorized: boolean;
   /** 服务返回过 503：已停止处理事件，重启前不会恢复。 */
   halted: boolean;
 }
 
-let state: Connection = { connected: false, lost: false, connects: 0, unauthorized: false, halted: false };
+let state: Connection = { connected: false, lost: false, connects: 0, halted: false };
 const listeners = new Set<() => void>();
 
 function set(next: Connection): void {
@@ -29,16 +28,12 @@ export function reportConnection(connected: boolean): void {
   }
 }
 
-export function reportUnauthorized(): void {
-  set({ ...state, connected: false, unauthorized: true });
-}
-
 export function reportHalted(): void {
   if (!state.halted) set({ ...state, halted: true });
 }
 
 export function resetConnection(): void {
-  set({ connected: false, lost: false, connects: 0, unauthorized: false, halted: false });
+  set({ connected: false, lost: false, connects: 0, halted: false });
 }
 
 export function connectionState(): Connection {
