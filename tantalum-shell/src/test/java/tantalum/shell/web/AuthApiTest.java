@@ -153,13 +153,6 @@ class AuthApiTest {
     }
 
     @Test
-    void runOrderToleratesOddRunIds() {
-        assertEquals(12, ApiController.runOrder(new tantalum.value.id.RunId("run-12")));
-        assertEquals(-1, ApiController.runOrder(new tantalum.value.id.RunId("legacy")));
-        assertEquals(-1, ApiController.runOrder(new tantalum.value.id.RunId("run-x")));
-    }
-
-    @Test
     void cookieMustBeSecureWhenNotBoundToLoopback() {
         assertThrows(IllegalStateException.class, () -> tantalum.shell.auth.SecurityConfig.requireSecureCookie("0.0.0.0", false));
         // 没设 server.address 时 Spring 绑定全部网卡，不算回环。

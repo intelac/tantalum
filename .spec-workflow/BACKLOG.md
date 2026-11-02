@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
-| `ops-hardening` | 5/50，阶段 0 完成；加了快照、按用户的序号和新 ID，取消旧 journal 拆分；文档待审批，批准后从任务 6 开始 | `specs/ops-hardening/tasks.md` |
+| `ops-hardening` | 11/50，阶段 0、1 完成（每会话文件类已写好但未接入，运行路径仍是 SQLite）；下一步阶段 2，从任务 10 开始 | `specs/ops-hardening/tasks.md` |
 
 ## 2. 已定要做，还没开 spec
 

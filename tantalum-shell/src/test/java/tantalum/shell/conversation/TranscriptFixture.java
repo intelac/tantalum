@@ -124,7 +124,7 @@ final class TranscriptFixture {
     /** 同上，但带压缩设置（会话第一次组装时冻结）。 */
     RunId start(String text, CompactionSettings settings) {
         feed(null, prompt(text));
-        RunId run = new RunId("run-" + lastSeq());
+        RunId run = RunId.of(SESSION, lastSeq());
         CommandId assemble = lastCommands().getFirst().id();
         feed(run, new ContextAssembled(assemble, "sys", List.of(), null, settings));
         return run;

@@ -48,7 +48,7 @@ class TraceApiTest {
             body = server.get("alice", "/api/sessions/s1/runs").body();
         }
         assertTrue(body.contains("COMPLETED"), body);
-        int start = body.indexOf("run-");
+        int start = body.indexOf("s1_");
         return body.substring(start, body.indexOf('"', start));
     }
 

@@ -98,7 +98,7 @@ public final class ModelSteps {
     /** 新运行：追加用户消息，请求组装上下文。运行 ID 由事件序号算出，回放时相同。 */
     static void startRun(Outcome out, OwnerRef owner, String text) {
         EventEnvelope envelope = out.envelope;
-        RunRef ref = new RunRef(envelope.principal(), envelope.session(), new RunId("run-" + envelope.seq()));
+        RunRef ref = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
         SessionState session = out.state.sessions().get(envelope.session());
         if (session == null) {
             session = SessionState.start(envelope.session(), envelope.principal());

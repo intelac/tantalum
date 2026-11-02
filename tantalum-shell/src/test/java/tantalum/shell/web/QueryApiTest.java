@@ -53,7 +53,7 @@ class QueryApiTest {
             body = server.get("alice", "/api/sessions/s1/runs").body();
         }
         assertTrue(body.contains("COMPLETED"), body);
-        int start = body.indexOf("run-");
+        int start = body.indexOf("s1_");
         return body.substring(start, body.indexOf('"', start));
     }
 
@@ -63,6 +63,32 @@ class QueryApiTest {
         assertEquals(200, server.get("alice", "/api/runs/" + run).statusCode());
         assertEquals(404, server.get("bob", "/api/runs/" + run).statusCode());
         assertEquals(404, server.get("alice", "/api/runs/nope").statusCode());
+    }
+
+    @Test
+    void runIdNamesItsSessionAndMalformedOrForeignIdsAre404() throws Exception {
+        String run = finishedRun();
+        assertTrue(run.matches("s1_\\d+"), run);
+        for (String malformed : List.of("s1", "s1_", "_0", "s1_x", "run-0", "s1_99999999999999999999", "s1_0-0")) {
+            assertEquals(404, server.get("alice", "/api/runs/" + malformed).statusCode(), malformed);
+            assertEquals(404, server.get("alice", "/api/runs/" + malformed + "/turns").statusCode(), malformed);
+        }
+        assertEquals(404, server.get("bob", "/api/runs/" + run + "/turns").statusCode());
+        assertEquals(404, server.get("bob", "/api/runs/" + run + "/trace").statusCode());
+    }
+
+    @Test
+    void invalidSessionIdIsRejectedAndWritesNothing() throws Exception {
+        String submission = "{\"requestId\":\"bad\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+        String tooLong = "x".repeat(129);
+        for (String invalid : List.of("a.b", "a%20b", "a%2Fb", "%2E%2E", "%E4%BC%9A", "a%0A", tooLong)) {
+            assertEquals(400, server.post("alice", "/api/sessions/" + invalid + "/submissions", submission).statusCode(), invalid);
+            assertEquals(400, server.post("alice", "/api/sessions/" + invalid + "/compact", "").statusCode(), invalid);
+            assertEquals(400, server.get("alice", "/api/sessions/" + invalid + "/messages").statusCode(), invalid);
+            assertEquals(400, server.get("alice", "/api/sessions/" + invalid + "/runs").statusCode(), invalid);
+        }
+        assertEquals("{\"sessions\":[]}", server.get("alice", "/api/sessions").body());
+        assertEquals(200, server.post("alice", "/api/sessions/" + "A-b_9".repeat(25) + "/submissions", submission).statusCode());
     }
 
     @Test

@@ -97,7 +97,7 @@ class MessagesApiTest {
         assertTrue(tool.get("group").asString().startsWith("g"), tool.toString());
         assertTrue(tool.has("startedAt") && tool.has("endedAt"), tool.toString());
         assertEquals("s1", tool.get("session").asString());
-        assertTrue(tool.get("run").asString().startsWith("run-"));
+        assertTrue(tool.get("run").asString().startsWith("s1_"));
         assertTrue(items.get(3).get("text").asString().contains("hello file"));
     }
 

@@ -195,7 +195,7 @@ public final class Transcript implements Projection {
         /** 用户提交：直接开始运行、插进当前运行，或排队。 */
         private void submission(String text, boolean steer) {
             String id = TranscriptItem.id(envelope.seq(), 0);
-            RunId fresh = new RunId("run-" + envelope.seq());
+            RunId fresh = RunId.of(session, envelope.seq());
             SessionState current = state.sessions().get(session);
             if (state.runs().containsKey(fresh)) {
                 startedBySubmission = fresh;

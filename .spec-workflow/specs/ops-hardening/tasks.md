@@ -66,13 +66,13 @@
   - 验证：未来版本拒绝且文件未变；语义变化能启动并有警告
   - _Requirements: 3.4, 3.5_
 
-- [ ] 50. 会话 ID 字符集
+- [x] 50. 会话 ID 字符集
   - File: shell/web/ApiController.java, 对应测试
   - 入口校验 `[A-Za-z0-9_-]{1,128}`
   - 验证：不符合的返回 400 且不写事件；控制台生成的 ID 通过
   - _Requirements: 11.4, H14_
 
-- [ ] 51. 运行 ID 和命令 ID 格式
+- [x] 51. 运行 ID 和命令 ID 格式
   - File: kernel/step/ModelSteps.java, CompactSteps.java, CommandIds.java, Outcome.java；shell/conversation/Transcript.java；shell/web/ApiController.java（`runOrder`、从运行 ID 取会话）；写死 `run-` 的测试和控制台文件
   - `<会话ID>_<序号>`、`<会话ID>_<序号>-<下标>`；这一步序号仍是全局的
   - 验证：`mvn verify`、vitest 通过；格式不对的运行 ID 和别人的运行返回 404

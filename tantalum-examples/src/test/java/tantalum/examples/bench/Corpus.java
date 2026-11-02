@@ -165,7 +165,7 @@ public final class Corpus {
         RunId last = state.runs().values().stream()
                 .filter(run -> run.ref().session().equals(session))
                 .map(run -> run.ref().run())
-                .max(java.util.Comparator.comparingLong(id -> Long.parseLong(id.value().substring(4))))
+                .max(java.util.Comparator.comparingLong(tantalum.value.id.RunId::seq))
                 .orElseThrow();
         if (plan == longPlan) {
             longRun = last.value();

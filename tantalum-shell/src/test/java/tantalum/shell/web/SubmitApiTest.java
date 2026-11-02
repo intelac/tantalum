@@ -146,11 +146,11 @@ class SubmitApiTest {
 
     private String runOf(String principal, String session) throws Exception {
         String body = "";
-        for (int i = 0; i < 300 && !body.contains("run-"); i++) {
+        for (int i = 0; i < 300 && !body.contains(session + "_"); i++) {
             Thread.sleep(10);
             body = server.get(principal, "/api/sessions/" + session + "/runs").body();
         }
-        int start = body.indexOf("run-");
+        int start = body.indexOf(session + "_");
         return body.substring(start, body.indexOf('"', start));
     }
 }

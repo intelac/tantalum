@@ -133,7 +133,7 @@ public final class CompactSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        RunRef ref = new RunRef(envelope.principal(), envelope.session(), new RunId("run-" + envelope.seq()));
+        RunRef ref = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
         out.state = out.state.with(session.withActiveRun(ref.run()));
         RunState run = RunState.start(ref, new OwnerRef.OfSession(envelope.session()))
                 .withContext(session.context().system(), session.context().tools());

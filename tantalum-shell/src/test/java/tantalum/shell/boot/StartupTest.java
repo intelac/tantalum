@@ -47,7 +47,7 @@ class StartupTest {
 
     private static final Principal USER = new Principal("u");
     private static final SessionId SESSION = new SessionId("s");
-    private static final RunId RUN = new RunId("run-0");
+    private static final RunId RUN = RunId.of(SESSION, 0);
 
     @TempDir
     Path dir;
@@ -77,7 +77,7 @@ class StartupTest {
         try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
             journal.append(prompt());
             journal.append(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
-                    new ContextAssembled(new CommandId("0-0"), "s", List.of())));
+                    new ContextAssembled(new CommandId("s_0-0"), "s", List.of())));
             journal.commit();
             Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());
 
@@ -128,11 +128,11 @@ class StartupTest {
             ToolCallBlock call = new ToolCallBlock("c1", "read_file", "{}", new Json.Obj(Map.of()));
             journal.append(prompt());
             journal.append(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
-                    new ContextAssembled(new CommandId("0-0"), "s", List.of())));
+                    new ContextAssembled(new CommandId("s_0-0"), "s", List.of())));
             journal.append(new EventEnvelope(2, Instant.EPOCH.plusSeconds(5), USER, SESSION, RUN,
-                    new ModelReplied(new CommandId("1-0"), List.of(call), StopReason.TOOL_USE, "m", null)));
+                    new ModelReplied(new CommandId("s_1-0"), List.of(call), StopReason.TOOL_USE, "m", null)));
             journal.append(new EventEnvelope(3, Instant.EPOCH.plusSeconds(9), USER, SESSION, RUN,
-                    new ToolFinished(new CommandId("2-0"), "c1", "file body", false)));
+                    new ToolFinished(new CommandId("s_2-0"), "c1", "file body", false)));
             journal.commit();
 
             Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());

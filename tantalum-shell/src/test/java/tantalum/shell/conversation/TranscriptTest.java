@@ -57,7 +57,7 @@ class TranscriptTest {
 
     private RunId nextRun(String text) {
         fx.feed(null, fx.prompt(text));
-        RunId run = new RunId("run-" + fx.lastSeq());
+        RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), null, SETTINGS));
         return run;
     }
@@ -228,7 +228,7 @@ class TranscriptTest {
 
         UserMessage started = fx.items(UserMessage.class).get(1);
         assertFalse(started.queued());
-        assertEquals(new RunId("run-" + fx.lastSeq()), started.run());
+        assertEquals(RunId.of(TranscriptFixture.SESSION, fx.lastSeq()), started.run());
         assertEquals(queued.id(), started.id());
         assertEquals(2, fx.items(RunStatus.class).size());
         assertEquals("AwaitingContext", fx.status(started.run()).phase());

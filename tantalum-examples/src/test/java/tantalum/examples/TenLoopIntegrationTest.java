@@ -103,7 +103,7 @@ class TenLoopIntegrationTest {
                 runs = server.get("alice", "/api/sessions/s1/runs").body();
             }
             assertTrue(runs.contains("COMPLETED"), runs);
-            int start = runs.indexOf("run-");
+            int start = runs.indexOf("s1_");
             run = runs.substring(start, runs.indexOf('"', start));
 
             for (int i = 0; i < 500 && phases(events).size() < PHASES.size(); i++) {

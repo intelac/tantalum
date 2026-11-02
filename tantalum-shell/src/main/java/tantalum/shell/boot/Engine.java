@@ -339,6 +339,9 @@ public final class Engine implements AutoCloseable {
     }
 
     public Optional<tantalum.value.state.RunState> run(Principal principal, tantalum.value.id.RunId id) {
+        if (id.session().isEmpty()) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(view.current().runs().get(id)).filter(run -> run.ref().principal().equals(principal));
     }
 
