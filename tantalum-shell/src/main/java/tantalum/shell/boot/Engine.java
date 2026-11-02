@@ -76,6 +76,7 @@ import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
@@ -85,6 +86,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
 /** 把环、journal、Handler 和插件装配起来，并提供外部提交的入口。不依赖 Spring。 */
@@ -92,6 +94,7 @@ public final class Engine implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
     private static final Duration DRAIN = Duration.ofSeconds(5);
+    private static final Duration INTERRUPT_RETRY = Duration.ofMillis(10);
     private static final int MAX_OPEN_FILES = 256;
     /** 只供回归测试：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
@@ -140,6 +143,7 @@ public final class Engine implements AutoCloseable {
         TantalumProperties.Index throttle = properties.index() == null ? TantalumProperties.Index.defaults() : properties.index();
         this.indexWriter = new IndexWriter(index, throttle.flushEvents(), throttle.flushInterval());
         this.files = new SessionFiles(new SessionPaths(properties.dataDir()), codec, MAX_OPEN_FILES, indexWriter::onDurable);
+        List<RunState> unfinished;
         try {
             Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
             this.view = parts.view;
@@ -153,6 +157,7 @@ public final class Engine implements AutoCloseable {
             this.gate = parts.gate;
             this.input = parts.input;
             this.output = parts.output;
+            unfinished = parts.unfinished;
         } catch (RuntimeException failure) {
             closeQuietly(files);
             closeQuietly(indexWriter);
@@ -163,11 +168,13 @@ public final class Engine implements AutoCloseable {
         output.start();
         cleanroom.start();
         input.start();
+        interrupt(unfinished);
         LOG.info("store ready at {}", properties.dataDir());
     }
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
-                            ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp) {}
+                            ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp,
+                            List<RunState> unfinished) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -225,7 +232,30 @@ public final class Engine implements AutoCloseable {
             releaseIfExternal(envelope);
             dispatcher.released();
         });
-        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp);
+        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished());
+    }
+
+    /** 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。 */
+    private void interrupt(List<RunState> unfinished) {
+        if (unfinished.isEmpty()) {
+            return;
+        }
+        try {
+            for (RunState run : unfinished) {
+                EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), run.ref().principal(),
+                        run.ref().session(), run.ref().run(), new RunInterrupted());
+                while (!input.tryPublish(envelope)) {
+                    Thread.sleep(INTERRUPT_RETRY.toMillis());
+                }
+            }
+            input.awaitDrained(DRAIN);
+            if (!dispatcher.awaitIdle(DRAIN)) {
+                LOG.warn("{} unfinished runs were not closed within {}", unfinished.size(), DRAIN);
+            }
+            LOG.info("closed {} runs left unfinished by the previous process", unfinished.size());
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** 索引只是缓存，补不上也能服务，下次启动再试。 */

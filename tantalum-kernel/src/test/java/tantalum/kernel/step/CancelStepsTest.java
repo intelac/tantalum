@@ -95,16 +95,6 @@ class CancelStepsTest {
     }
 
     @Test
-    void endingARunClearsThePendingRecoveryMark() {
-        LoopFixture loop = new LoopFixture();
-        loop.prompt("hi");
-        RunId run = loop.runId();
-        loop.state = loop.state.with(loop.run().withPendingRecovery(true));
-        loop.feed(run, CANCEL);
-        assertEquals(false, loop.state.runs().get(run).pendingRecovery());
-    }
-
-    @Test
     void droppedCommandFailsTheRun() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("hi");

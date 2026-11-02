@@ -77,6 +77,7 @@ class EventCodecTest {
                 new SteerSubmitted(SUB, REQ, "x"),
                 new FollowUpSubmitted(SUB, REQ, "x"),
                 new Cancel(REQ),
+                new tantalum.value.event.RunInterrupted(),
                 new ContextAssembled(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson()))),
                 new ContextAssembled(CMD, "system", List.of(), "idx", new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192)),
                 new tantalum.value.event.CompactRequested(SUB, REQ, "focus on the test results"),

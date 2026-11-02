@@ -334,7 +334,6 @@ public class ApiController {
         view.put("title", summary.title());
         view.put("lastActivity", summary.lastActivity().toString());
         view.put("runStatus", summary.runStatus());
-        view.put("pendingRecovery", summary.pendingRecovery());
         return view;
     }
 
@@ -343,7 +342,6 @@ public class ApiController {
         view.put("run", run.ref().run().value());
         view.put("session", run.ref().session().value());
         view.put("phase", Kernel.stateName(run));
-        view.put("pendingRecovery", run.pendingRecovery());
         if (run.phase() instanceof Ended ended) {
             view.put("endReason", ended.reason().name());
             view.put("detail", ended.detail());

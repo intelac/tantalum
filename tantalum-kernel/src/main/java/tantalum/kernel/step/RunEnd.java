@@ -63,7 +63,7 @@ public final class RunEnd {
         for (Message steer : run.pendingSteers()) {
             out.append(run.ref(), steer);
         }
-        out.enter(run.withTools(null).withPendingSteers(List.of()).withPendingRecovery(false),
+        out.enter(run.withTools(null).withPendingSteers(List.of()),
                 new Ended(reason, detail));
 
         SessionState session = out.session(run.ref()).withActiveRun(null);

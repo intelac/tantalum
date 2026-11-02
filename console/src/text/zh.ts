@@ -26,7 +26,6 @@ export const zh = {
     settings: "设置",
     logout: "退出登录",
     running: "运行中",
-    pendingRecovery: "待恢复",
     untitled: "新会话",
   },
   tabs: {

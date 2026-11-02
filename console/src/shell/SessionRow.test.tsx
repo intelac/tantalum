@@ -7,7 +7,7 @@ import { SessionRow } from "./SessionRow";
 afterEach(cleanup);
 
 const now = new Date("2026-10-31T12:00:00Z");
-const base: SessionSummary = { id: "s1", title: "利息在哪里算的", lastActivity: "2026-10-31T11:55:00Z", runStatus: "idle", pendingRecovery: false };
+const base: SessionSummary = { id: "s1", title: "利息在哪里算的", lastActivity: "2026-10-31T11:55:00Z", runStatus: "idle" };
 
 describe("SessionRow", () => {
   it("shows title and relative time when idle, and selects on click", async () => {
@@ -23,20 +23,17 @@ describe("SessionRow", () => {
     expect(onSelect).toHaveBeenCalledWith("s1");
   });
 
-  it("shows running and pending-recovery states instead of the time", () => {
+  it("shows the running state instead of the time", () => {
     render(
       <ul>
         <SessionRow session={{ ...base, runStatus: "AwaitingModel" }} selected onSelect={vi.fn()} now={now} />
-        <SessionRow session={{ ...base, id: "s2", runStatus: "AwaitingModel", pendingRecovery: true }} selected={false} onSelect={vi.fn()} now={now} />
         <SessionRow session={{ ...base, id: "s3", title: "" }} selected={false} onSelect={vi.fn()} now={now} />
       </ul>,
     );
-    const [running, pending, untitled] = screen.getAllByRole("button");
+    const [running, untitled] = screen.getAllByRole("button");
     expect(running?.textContent).toContain("运行中");
     expect(running?.textContent).not.toContain("分钟前");
     expect(running?.getAttribute("aria-current")).toBe("page");
-    expect(pending?.textContent).toContain("待恢复");
-    expect(pending?.textContent).not.toContain("运行中");
     expect(untitled?.textContent).toContain("新会话");
   });
 });

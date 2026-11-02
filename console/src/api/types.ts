@@ -20,7 +20,6 @@ export interface SessionSummary {
   lastActivity: string;
   /** `idle` 或内核状态名，如 `AwaitingModel`。 */
   runStatus: string;
-  pendingRecovery: boolean;
 }
 
 export interface TextBlock {
@@ -138,7 +137,6 @@ export interface RunView {
   run: string;
   session: string;
   phase: string;
-  pendingRecovery: boolean;
   endReason?: EndReason;
   detail?: string;
 }

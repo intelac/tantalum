@@ -81,7 +81,7 @@ class StartupTest {
     }
 
     @Test
-    void unfinishedRunStaysWaitingMarkedForRecoveryWithoutNewCommands() throws Exception {
+    void unfinishedRunIsReportedAndItsWaitingStateIsRebuilt() throws Exception {
         {
             write(prompt());
             write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
@@ -89,17 +89,17 @@ class StartupTest {
             Startup.Recovered recovered = Startup.recover(store(), kernel());
 
             RunState run = recovered.state().runs().get(RUN);
-            assertTrue(run.pendingRecovery());
+            assertEquals(List.of(run), recovered.unfinished());
             assertEquals("AwaitingModel", ((Awaiting) run.phase()).resumeAt());
         }
     }
 
     @Test
-    void finishedRunIsNotMarked() throws Exception {
+    void finishedRunIsNotReported() throws Exception {
         {
             write(prompt());
             write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN, new Cancel(new RequestId("c"))));
-            assertFalse(Startup.recover(store(), kernel()).state().runs().get(RUN).pendingRecovery());
+            assertEquals(List.of(), Startup.recover(store(), kernel()).unfinished());
         }
     }
 

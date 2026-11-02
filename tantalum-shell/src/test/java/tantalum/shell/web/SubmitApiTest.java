@@ -141,7 +141,6 @@ class SubmitApiTest {
             runs = server.get("alice", "/api/sessions/s1/runs").body();
         }
         assertTrue(runs.contains("followUps\":1"), runs);
-        assertFalse(runs.contains("\"pendingRecovery\":true"), runs);
     }
 
     private String runOf(String principal, String session) throws Exception {

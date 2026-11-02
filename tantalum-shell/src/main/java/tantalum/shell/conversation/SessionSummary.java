@@ -9,7 +9,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.state.RunState;
 
 /** 侧栏里的一行：标题取第一条提问的开头，最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}。 */
-public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus, boolean pendingRecovery) {
+public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus) {
 
     public static final String IDLE = "idle";
     static final int TITLE_LENGTH = 40;
@@ -27,7 +27,7 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
             }
         }
         String status = activeRun == null ? IDLE : Kernel.stateName(activeRun);
-        return new SessionSummary(id, title, last, status, activeRun != null && activeRun.pendingRecovery());
+        return new SessionSummary(id, title, last, status);
     }
 
     /** 第一行，最多 {@value #TITLE_LENGTH} 个字符，截断时加省略号。 */

@@ -29,8 +29,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 任务恢复，用真实的 Claude：在模型调用进行中杀掉 JVM，重启后运行标为“待恢复”且不会自动重放那次调用；
- * 撤销后在同一个会话里继续提问，Anthropic 要接受这段带着一条没有回复的用户消息的历史。
+ * 任务恢复，用真实的 Claude：在模型调用进行中杀掉 JVM，重启后运行自动收尾且不会重放那次调用；
+ * 在同一个会话里继续提问，Anthropic 要接受这段带着一条没有回复的用户消息的历史。
  * 会产生费用；同时设置 {@code ANTHROPIC_API_KEY} 和 {@code TANTALUM_SMOKE_CLAUDE} 才运行。
  */
 @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
@@ -124,19 +124,8 @@ class ClaudeCrashRecoveryTest {
                 "claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults());
         try (TestServer restarted = new TestServer(data, workspace, client)) {
             JsonNode view = JSON.readTree(restarted.get("alice", "/api/runs/" + runId).body());
-            assertEquals("AwaitingModel", view.get("phase").asString(), view.toString());
-            assertTrue(view.get("pendingRecovery").asBoolean(), view.toString());
-            Thread.sleep(500);
-            JsonNode still = JSON.readTree(restarted.get("alice", "/api/runs/" + runId).body());
-            assertTrue(still.get("pendingRecovery").asBoolean(), "the lost call must not be replayed on its own: " + still);
-
-            assertEquals(200, restarted.post("alice", "/api/runs/" + runId + "/cancel", "{}").statusCode());
-            JsonNode ended = null;
-            for (int i = 0; i < 500 && (ended == null || !ended.has("endReason")); i++) {
-                Thread.sleep(10);
-                ended = JSON.readTree(restarted.get("alice", "/api/runs/" + runId).body());
-            }
-            assertEquals("CANCELLED", ended.get("endReason").asString(), ended.toString());
+            assertEquals("CANCELLED", view.get("endReason").asString(), view.toString());
+            assertEquals("interrupted by restart", view.get("detail").asString(), view.toString());
 
             assertEquals(200, restarted.post("alice", "/api/sessions/s1/submissions",
                     "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"Just read note.txt with read_file and tell me the secret word.\"}").statusCode());

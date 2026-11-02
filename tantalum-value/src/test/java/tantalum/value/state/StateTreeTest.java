@@ -31,15 +31,13 @@ class StateTreeTest {
                 .withContext("sys", List.of())
                 .withTools(new ToolRound(List.of()))
                 .withPendingSteers(List.of(Message.user("x")))
-                .withRetries(2)
-                .withPendingRecovery(true);
+                .withRetries(2);
 
         assertEquals(new Deciding(), run.phase());
         assertNull(run.system());
         assertEquals("sys", changed.system());
         assertEquals(2, changed.retries());
         assertEquals(1, changed.pendingSteers().size());
-        assertTrue(changed.pendingRecovery());
         assertEquals(0, changed.tools().slots().size());
         assertEquals(REF, changed.ref());
         assertEquals(OWNER, changed.owner());
@@ -52,7 +50,7 @@ class StateTreeTest {
         assertThrows(NullPointerException.class, () -> RunState.start(null, OWNER));
         assertThrows(NullPointerException.class, () -> RunState.start(REF, null));
         assertThrows(NullPointerException.class,
-                () -> new RunState(REF, OWNER, null, null, List.of(), null, List.of(), 0, false, null, null, false, false));
+                () -> new RunState(REF, OWNER, null, null, List.of(), null, List.of(), 0, null, null, false, false));
     }
 
     @Test
