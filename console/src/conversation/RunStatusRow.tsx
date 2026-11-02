@@ -1,5 +1,5 @@
 import { AlertCircle, Ban, OctagonX } from "lucide-react";
-import type { RunStatusItem } from "../api/types";
+import { INTERRUPTED_BY_RESTART, type RunStatusItem } from "../api/types";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
 import { zh } from "../text/zh";
@@ -9,7 +9,7 @@ interface Props {
   id: string;
 }
 
-/** 运行没有正常完成时的说明行：失败按原因解释，取消和钩子停止各有说法。 */
+/** 运行没有正常完成时的说明行：失败按原因解释，取消、重启中断和钩子停止各有说法。 */
 export function RunStatusRow({ store, id }: Props) {
   const item = useItem(store, id);
   if (item === undefined || item.kind !== "run") return null;
@@ -42,7 +42,7 @@ export function explain(item: RunStatusItem): string | null {
       if (item.detail?.includes("output ring full")) return zh.failure.dropped;
       return zh.failure.generic;
     case "CANCELLED":
-      return zh.failure.cancelled;
+      return item.detail === INTERRUPTED_BY_RESTART ? zh.failure.restarted : zh.failure.cancelled;
     case "STOPPED":
       return item.detail === undefined || item.detail === "" ? zh.failure.stopped : `${zh.failure.stopped}：${item.detail}`;
     default:

@@ -53,6 +53,9 @@ export type ContentBlock = TextBlock | ReasoningBlock | ToolCallBlock | ToolResu
 
 export type StepStatus = "WAITING" | "RUNNING" | "DONE" | "FAILED" | "BLOCKED";
 export type EndReason = "COMPLETED" | "FAILED" | "CANCELLED" | "STOPPED";
+
+/** 服务重启时没结束的运行以 CANCELLED 收尾，detail 是这个固定值（内核 CancelSteps.INTERRUPTED_BY_RESTART）。 */
+export const INTERRUPTED_BY_RESTART = "interrupted by restart";
 export type FailureReason =
   | "CONTEXT_OVERFLOW"
   | "REFUSAL"
