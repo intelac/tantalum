@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listMessages } from "../api/client";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem, useOrder } from "../store/hooks";
@@ -25,17 +25,33 @@ interface Props {
   composer: (state: ComposerState) => ReactNode;
 }
 
-/** 一个会话：先从接口加载全部条目，之后由 SSE 增量更新。 */
+/** 已加载部分的起点和前面是否还有。 */
+interface Loaded {
+  session: string;
+  start: number;
+  hasMore: boolean;
+}
+
+/** 一个会话：先从接口加载最近一页，之后由 SSE 增量更新；滚到顶部时向上加载更早的页。 */
 export function ConversationPage({ store, session, reloadKey, composer }: Props) {
   const order = useOrder(store, session);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<Loaded>({ session, start: 0, hasMore: false });
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     listMessages(session)
       .then((messages) => {
-        if (!cancelled) store.replace(session, messages.items, messages.seq);
+        if (cancelled) return;
+        const keptOlder = store.replace(session, messages.items, messages.seq);
+        // 重连时保留了之前向上加载的部分，起点不变；否则从这一页开始。
+        const current = loadedRef.current;
+        if (keptOlder === 0 || current.session !== session) {
+          setLoaded({ session, start: messages.start, hasMore: messages.hasMore });
+        }
       })
       .catch((failure: Error) => {
         if (!cancelled) setError(failure.message);
@@ -44,6 +60,19 @@ export function ConversationPage({ store, session, reloadKey, composer }: Props)
       cancelled = true;
     };
   }, [store, session, reloadKey]);
+
+  const loadOlder = useCallback(async () => {
+    const current = loadedRef.current;
+    if (current.session !== session || !current.hasMore) return;
+    try {
+      const page = await listMessages(session, current.start);
+      if (loadedRef.current !== current) return;
+      store.prependItems(session, page.items, page.seq);
+      setLoaded({ session, start: page.start, hasMore: page.hasMore });
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+  }, [store, session]);
 
   const blocks = useMemo(() => groupBlocks(order, (id) => store.getItem(id)), [order, store]);
   const latest = [...blocks].reverse().find((block) => block.kind === "run");
@@ -66,7 +95,7 @@ export function ConversationPage({ store, session, reloadKey, composer }: Props)
             {error}
           </p>
         )}
-        {blocks.length === 0 ? <EmptyState /> : <MessageList store={store} blocks={blocks} />}
+        {blocks.length === 0 ? <EmptyState /> : <MessageList store={store} blocks={blocks} hasMore={loaded.session === session && loaded.hasMore} onLoadOlder={loadOlder} />}
       </div>
       {composer(state)}
     </div>

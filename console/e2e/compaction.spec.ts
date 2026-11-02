@@ -53,7 +53,7 @@ test.describe("上下文压缩", () => {
     await expect(page.getByRole("button", { name: /^上下文已压缩 .* · 手动$/ })).toBeVisible({ timeout: 30_000 });
   });
 
-  test("500 条消息的会话：多次压缩，页面能打开并到底", async ({ page }) => {
+  test("500 条消息的会话：多次压缩，打开只载最近一页，向上滚动逐页加载且不跳", async ({ page }) => {
     test.setTimeout(300_000);
     await login(page);
     const origin = new URL(page.url().startsWith("http") ? page.url() : "http://localhost:5174").origin;
@@ -77,8 +77,34 @@ test.describe("上下文压缩", () => {
     }
     await page.goto(`/s/${session}`);
     await expect(page.getByText(/^你说：第 250 条/)).toBeVisible({ timeout: 30_000 });
+    const asked = page.getByText(/^你说：第 \d+ 条/);
+    const firstPage = await asked.count();
+    expect(firstPage, "only the latest page is loaded").toBeLessThan(250);
+    await expect(page.getByText(/^你说：第 1 条/)).toHaveCount(0);
+
+    // 反复滚到顶部加载更早的页。每次加载后，原来最上面的那条提问还在原来的位置：不跳。
+    const scroller = page.locator("div.overflow-y-auto").first();
+    for (let pages = 0; (await page.getByText(/^你说：第 1 条/).count()) === 0; pages++) {
+      expect(pages, "the first message never showed up").toBeLessThan(20);
+      const loadedBefore = await asked.count();
+      const top = await asked.first().elementHandle();
+      const yAtTop = await scroller.evaluate((element, anchor) => {
+        element.scrollTop = 0;
+        return (anchor as HTMLElement).getBoundingClientRect().top;
+      }, top);
+      await expect.poll(() => asked.count(), { timeout: 10_000 }).toBeGreaterThan(loadedBefore);
+      await page.waitForTimeout(100);
+      const yAfter = await top!.evaluate((anchor) => (anchor as HTMLElement).getBoundingClientRect().top);
+      expect(Math.abs(yAfter - yAtTop), "the view jumped while an older page was inserted").toBeLessThan(2);
+    }
+
+    const texts = await asked.allTextContents();
+    const numbers = texts.map((text) => Number(/第 (\d+) 条/.exec(text)![1]));
+    expect(new Set(numbers).size, "no message twice").toBe(numbers.length);
+    expect(numbers.length).toBe(250);
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     const marks = page.getByRole("button", { name: /^上下文已压缩/ });
     expect(await marks.count()).toBeGreaterThanOrEqual(2);
-    await expect(page.getByText(/^你说：第 1 条/)).toHaveCount(1);
+    await page.screenshot({ path: "test-results/paging-top.png" });
   });
 });

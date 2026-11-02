@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
+import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.TurnQuery;
@@ -81,22 +83,31 @@ public class ApiController {
         return json(200, Map.of("sessions", sessions));
     }
 
-    /** 全部条目和排队数。排队中的提交也是条目，{@code queued} 为 true。 */
+    /**
+     * 一页条目和排队数，默认最近一页；{@code before} 是上一页的 {@code start}。排队中的提交也是条目，{@code queued} 为 true。
+     * {@code seq} 是整个会话截至的事件序号，客户端据此和 SSE 推送合并。
+     */
     @GetMapping("/api/sessions/{session}/messages")
-    ResponseEntity<String> messages(@PathVariable String session) {
+    ResponseEntity<String> messages(@PathVariable String session, @RequestParam(required = false) Integer before) {
         if (!SESSION_ID.matcher(session).matches()) {
             return error(400, "invalid session id");
+        }
+        if (before != null && before < 0) {
+            return error(400, "invalid page position");
         }
         Optional<Engine.SessionView> found = engine.session(current(), new SessionId(session));
         if (found.isEmpty()) {
             return error(404, "no such session");
         }
         Transcript.Snapshot snapshot = found.get().transcript();
-        List<Map<String, Object>> items = snapshot.items().stream()
+        MessagePage page = MessagePage.of(snapshot.items(), before);
+        List<Map<String, Object>> items = page.items().stream()
                 .map(item -> ItemJson.toMap(engine.codec().mapper(), item)).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("seq", snapshot.seq());
         response.put("items", items);
+        response.put("start", page.start());
+        response.put("hasMore", page.hasMore());
         response.put("followUps", found.get().state().followUps().size());
         return json(200, response);
     }

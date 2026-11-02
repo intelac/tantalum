@@ -140,4 +140,54 @@ describe("ConversationStore", () => {
     expect(store.getOrder("nope")).toBe(store.getOrder("nope"));
     expect(store.getItem("nope")).toBeUndefined();
   });
+
+  describe("paging", () => {
+    const at = "2026-10-31T00:00:00Z";
+    function u(n: number): UserItem {
+      return { kind: "user", id: `${n}.0`, session: "s", run: `s_${n}`, at, text: `q${n}`, queued: false };
+    }
+
+    it("prepends an older page in front without touching what is already there", () => {
+      const store = new ConversationStore();
+      store.replace("s", [u(4), u(5)], 5);
+      const onOrder = vi.fn();
+      store.subscribe(ConversationStore.orderKey("s"), onOrder);
+      store.prependItems("s", [u(1), u(2), u(3)], 5);
+      expect(store.getOrder("s")).toEqual(["1.0", "2.0", "3.0", "4.0", "5.0"]);
+      expect(onOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it("a reconnect keeps the older pages when the new latest page connects to them", () => {
+      const store = new ConversationStore();
+      store.replace("s", [u(3), u(4)], 4);
+      store.prependItems("s", [u(1), u(2)], 4);
+      store.applyItem(u(5), 5);
+      const kept = store.replace("s", [u(4), u(5), u(6)], 6);
+      expect(kept).toBe(3);
+      expect(store.getOrder("s")).toEqual(["1.0", "2.0", "3.0", "4.0", "5.0", "6.0"]);
+    });
+
+    it("a reconnect after missing more than a page drops the older part instead of leaving a gap", () => {
+      const store = new ConversationStore();
+      store.replace("s", [u(3), u(4)], 4);
+      store.prependItems("s", [u(1), u(2)], 4);
+      const kept = store.replace("s", [u(8), u(9)], 9);
+      expect(kept).toBe(0);
+      expect(store.getOrder("s")).toEqual(["8.0", "9.0"]);
+      expect(store.getItem("1.0")).toBeUndefined();
+    });
+
+    it("paging and pushes interleave without losing or repeating items", () => {
+      const store = new ConversationStore();
+      store.replace("s", [u(3), u(4)], 4);
+      store.applyItem(u(5), 5);
+      store.applyItem({ ...u(4), text: "edited by a later push" }, 6);
+      // 上一页的请求在推送之后才回来，里面有一个已经有的条目（旧版本）。
+      store.prependItems("s", [u(1), u(2), { ...u(3), text: "stale" }], 4);
+      expect(store.getOrder("s")).toEqual(["1.0", "2.0", "3.0", "4.0", "5.0"]);
+      expect((store.getItem("3.0") as UserItem).text).toBe("q3");
+      expect((store.getItem("4.0") as UserItem).text).toBe("edited by a later push");
+      expect(new Set(store.getOrder("s")).size).toBe(store.getOrder("s").length);
+    });
+  });
 });
