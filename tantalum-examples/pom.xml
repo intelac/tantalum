@@ -80,6 +80,10 @@
         <bench.main>tantalum.examples.bench.ReadBench</bench.main>
         <bench.sizes>10000,100000,500000</bench.sizes>
         <bench.samples>3</bench.samples>
+        <!-- 只能收紧（0 到 1），用来确认超预算时 bench 失败；预算本身在 Budgets.java。 -->
+        <bench.tighten>1</bench.tighten>
+        <!-- LaneBench 的对照实验：先预热再计时。 -->
+        <lane.warmup>false</lane.warmup>
       </properties>
       <build>
         <plugins>
@@ -100,6 +104,8 @@
                   <arguments>
                     <argument>-Xmx4g</argument>
                     <argument>--enable-native-access=ALL-UNNAMED</argument>
+                    <argument>-Dbench.tighten=${bench.tighten}</argument>
+                    <argument>-Dlane.warmup=${lane.warmup}</argument>
                     <argument>-classpath</argument>
                     <classpath/>
                     <argument>${bench.main}</argument>
