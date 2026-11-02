@@ -234,7 +234,7 @@ public final class Engine implements AutoCloseable {
         SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), usage, kernel);
         Startup.Recovered recovered = recover(properties, kernel, store, replay);
         StateView view = new StateView(recovered.state());
-        TurnQuery turns = new TurnQuery(store, kernel, codec.mapper());
+        TurnQuery turns = new TurnQuery(paths, replay, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
         CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
         JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(paths, Integer.getInteger(SEQUENCE_STEP, 1)),

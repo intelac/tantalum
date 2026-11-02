@@ -2,7 +2,12 @@ package tantalum.shell.journal;
 
 import tantalum.shell.store.SessionFile;
 import tantalum.shell.store.SessionPaths;
-import tantalum.shell.store.SessionStore;
+import tantalum.shell.store.IndexWriter;
+import tantalum.shell.store.SessionFileReader;
+import tantalum.shell.store.SessionIndex;
+import tantalum.shell.store.SessionReplay;
+import tantalum.shell.store.SnapshotStore;
+import tantalum.shell.store.UsageLedger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -46,13 +52,27 @@ class TurnQueryTest {
     Path dir;
 
     private TurnQuery query;
+    private SessionIndex index;
+    private IndexWriter writer;
     private long seq;
 
     @BeforeEach
     void setUp() throws Exception {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        query = new TurnQuery(new SessionStore(dir, EventCodec.withBuiltins()), new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10), EventCodec.withBuiltins().mapper());
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        index = SessionIndex.open(dir);
+        writer = new IndexWriter(index, 100, java.time.Duration.ofHours(1));
+        SessionPaths paths = new SessionPaths(dir);
+        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()),
+                new SnapshotStore(paths, EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
+        query = new TurnQuery(paths, replay, EventCodec.withBuiltins().mapper());
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        writer.close();
+        index.close();
     }
 
     private void write(RunId run, Event event) throws Exception {

@@ -9,6 +9,7 @@ import java.util.Optional;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.value.decision.Decision;
+import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
@@ -81,6 +82,37 @@ public final class SessionReplay {
         List<RunState> runs = List.copyOf(progress.state.runs().values());
         return Optional.of(new Slice(new SessionSnapshot(progress.state.sessions().get(session), runs,
                 progress.transcript.export(session), progress.seq, progress.offset), progress.replayed));
+    }
+
+    /** 每个事件经过内核之后调用：处理前的状态和内核的决定。 */
+    @FunctionalInterface
+    public interface Step {
+        void accept(EventEnvelope envelope, KernelState before, Decision decision);
+    }
+
+    /**
+     * 从头重放一个会话文件的全部事件，每个事件前注入截至该序号的用量，所以钩子的结果和当时相同。
+     * 回答要逐个事件内容的问题（{@code /turns}、{@code /trace}、SSE 补读），不用快照。文件不存在时什么也不做。
+     */
+    public void each(Principal principal, Path file, Step step) throws IOException, SQLException, InterruptedException {
+        Progress progress = new Progress();
+        try {
+            reader.scan(file, 0, (envelope, end) -> {
+                if (progress.cursor == null) {
+                    progress.cursor = cursor(principal, 0);
+                }
+                KernelState before = progress.state.with(progress.cursor.before(envelope.seq()));
+                Decision decision = kernel.step(before, envelope);
+                progress.state = decision.newState();
+                step.accept(envelope, before, decision);
+            });
+        } catch (UsageUnavailable failure) {
+            switch (failure.getCause()) {
+                case SQLException sql -> throw sql;
+                case InterruptedException interrupted -> throw interrupted;
+                default -> throw failure;
+            }
+        }
     }
 
     /** 只在真有事件要重放时才等写入线程和查库：全新会话走这条路径时不用付这个代价。 */

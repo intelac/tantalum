@@ -1,23 +1,30 @@
 package tantalum.shell.journal;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
-import tantalum.shell.store.SessionStore;
+import tantalum.shell.store.SessionFileReader;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionReplay;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
-import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.id.CommandId;
@@ -25,11 +32,13 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.TokenUsage;
-import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 回放该用户的会话文件回答历史问题。不属于他的运行不在里面，和不存在一样。 */
+/**
+ * 重放会话文件回答历史问题。{@code /turns}、{@code /trace} 只读运行所在的那一个会话文件；SSE 补读只读该用户
+ * 末尾序号比位置新的文件。路径由用户名决定，所以别人的运行读不到，和不存在一样。
+ */
 public final class TurnQuery {
 
     /** 一次模型调用：完整输入和结果。 */
@@ -58,64 +67,76 @@ public final class TurnQuery {
         public record Segment(String handler, Instant from, Instant to) {}
     }
 
-    private final SessionStore store;
-    private final Kernel kernel;
+    /** 一条补读消息和它的位置，用来把各会话的结果按（序号，下标）合并。 */
+    private record Positioned(long seq, int index, SseMessage message) {}
+
+    private final SessionPaths paths;
+    private final SessionReplay replay;
     private final JsonMapper mapper;
 
-    public TurnQuery(SessionStore store, Kernel kernel, JsonMapper mapper) {
-        this.store = store;
-        this.kernel = kernel;
+    public TurnQuery(SessionPaths paths, SessionReplay replay, JsonMapper mapper) {
+        this.paths = paths;
+        this.replay = replay;
         this.mapper = mapper;
+    }
+
+    /** 运行所在会话的全部事件，读不了时抛 {@link IllegalStateException}。 */
+    private void eachOfRun(Principal principal, RunId run, SessionReplay.Step step) {
+        if (run.session().isEmpty()) {
+            return;
+        }
+        each(principal, paths.sessionFile(principal, run.session().get()), step);
+    }
+
+    private void each(Principal principal, Path file, SessionReplay.Step step) {
+        try {
+            replay.each(principal, file, step);
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while reading " + file, stopping);
+        } catch (IOException | SQLException failure) {
+            throw new IllegalStateException("cannot read " + file, failure);
+        }
     }
 
     /** 不属于该用户的运行返回空，和不存在一样。 */
     public List<Turn> turns(Principal principal, RunId run) {
         Map<CommandId, Turn> turns = new LinkedHashMap<>();
-        KernelState state = KernelState.empty();
-        for (EventEnvelope envelope : store.readUser(principal)) {
+        eachOfRun(principal, run, (envelope, before, decision) -> {
             if (envelope.event() instanceof ModelReplied reply && turns.containsKey(reply.command())) {
                 turns.compute(reply.command(), (id, turn) -> turn.withReply(reply));
             } else if (envelope.event() instanceof ModelFailed failure && turns.containsKey(failure.command())) {
                 turns.compute(failure.command(), (id, turn) -> turn.withFailure(failure));
             }
-            Decision decision = kernel.step(state, envelope);
-            state = decision.newState();
             for (Command command : decision.commands()) {
-                if (command instanceof CallModel call && call.run().run().equals(run)
-                        && call.run().principal().equals(principal)) {
+                if (command instanceof CallModel call && call.run().run().equals(run)) {
                     turns.put(call.id(), new Turn(turns.size() + 1, call.id(), call.prompt(), null, null));
                 }
             }
-        }
+        });
         return new ArrayList<>(turns.values());
     }
 
     /** 运行的轨迹。不属于该用户或不存在时事件为空。 */
     public Trace trace(Principal principal, RunId run) {
         List<Trace.Entry> entries = new ArrayList<>();
-        KernelState state = KernelState.empty();
-        int turns = 0;
-        for (EventEnvelope envelope : store.readUser(principal)) {
-            boolean existed = state.runs().containsKey(run);
-            Decision decision = kernel.step(state, envelope);
-            state = decision.newState();
-            RunState current = state.runs().get(run);
+        int[] turns = {0};
+        eachOfRun(principal, run, (envelope, before, decision) -> {
+            boolean existed = before.runs().containsKey(run);
+            RunState current = decision.newState().runs().get(run);
             boolean belongs = envelope.run() != null ? envelope.run().equals(run) : !existed && current != null;
             if (!belongs || current == null) {
-                continue;
-            }
-            if (!current.ref().principal().equals(principal)) {
-                return new Trace(List.of(), List.of());
+                return;
             }
             Integer turn = null;
             for (Command command : decision.commands()) {
                 if (command instanceof CallModel call && call.run().run().equals(run)) {
-                    turn = ++turns;
+                    turn = ++turns[0];
                 }
             }
             entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), Kernel.stateName(current), turn,
                     compactionOf(decision, run)));
-        }
+        });
         List<Trace.Segment> segments = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             Trace.Entry entry = entries.get(i);
@@ -152,33 +173,53 @@ public final class TurnQuery {
         };
     }
 
-    /** SSE 补读：某用户在某位置之后的事实和条目变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实再条目。 */
+    /**
+     * SSE 补读：某用户在某位置之后的事实和条目变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实再条目。
+     * 只完整重放末尾序号不早于位置的文件，其余文件只读末尾一行；不依赖可能落后的索引。
+     */
     public List<SseMessage> messagesAfter(Principal principal, String lastEventId) {
         String[] parts = lastEventId.split("\\.");
         long lastSeq = Long.parseLong(parts[0]);
         int lastIndex = Integer.parseInt(parts[1]);
-        List<SseMessage> messages = new ArrayList<>();
-        KernelState state = KernelState.empty();
-        Transcript transcript = new Transcript();
-        for (EventEnvelope envelope : store.readUser(principal)) {
-            Decision decision = kernel.step(state, envelope);
-            state = decision.newState();
-            boolean mine = envelope.principal().equals(principal);
-            int index = 0;
-            for (Fact fact : decision.facts()) {
-                if (later(envelope.seq(), index, lastSeq, lastIndex) && fact.run().principal().equals(principal)) {
-                    messages.add(SseHub.toMessage(envelope.seq(), index, fact));
+        List<Positioned> messages = new ArrayList<>();
+        for (Path file : files(paths.userDir(principal))) {
+            try {
+                if (SessionFileReader.lastSeq(file) < lastSeq) {
+                    continue;
                 }
-                index++;
+            } catch (IOException failure) {
+                throw new IllegalStateException("cannot read " + file, failure);
             }
-            for (TranscriptItem item : transcript.apply(envelope, decision)) {
-                if (later(envelope.seq(), index, lastSeq, lastIndex) && mine) {
-                    messages.add(SseHub.toMessage(mapper, envelope.seq(), index, item));
+            Transcript transcript = new Transcript();
+            each(principal, file, (envelope, before, decision) -> {
+                int index = 0;
+                for (Fact fact : decision.facts()) {
+                    if (later(envelope.seq(), index, lastSeq, lastIndex)) {
+                        messages.add(new Positioned(envelope.seq(), index, SseHub.toMessage(envelope.seq(), index, fact)));
+                    }
+                    index++;
                 }
-                index++;
-            }
+                for (TranscriptItem item : transcript.apply(envelope, decision)) {
+                    if (later(envelope.seq(), index, lastSeq, lastIndex)) {
+                        messages.add(new Positioned(envelope.seq(), index, SseHub.toMessage(mapper, envelope.seq(), index, item)));
+                    }
+                    index++;
+                }
+            });
         }
-        return messages;
+        messages.sort(Comparator.comparingLong(Positioned::seq).thenComparingInt(Positioned::index));
+        return messages.stream().map(Positioned::message).toList();
+    }
+
+    private static List<Path> files(Path dir) {
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> entries = Files.list(dir)) {
+            return entries.sorted().toList();
+        } catch (IOException failure) {
+            throw new IllegalStateException("cannot list " + dir, failure);
+        }
     }
 
     private static boolean later(long seq, int index, long lastSeq, int lastIndex) {
