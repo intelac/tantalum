@@ -14,14 +14,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionPaths;
-import tantalum.shell.loop.SessionSlice;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
-import tantalum.shell.store.SessionSnapshot;
-import tantalum.shell.store.SnapshotStore;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.ContextAssembled;
@@ -30,13 +25,12 @@ import tantalum.value.id.RunId;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.CompactionSettings;
-import tantalum.value.state.KernelState;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 浏览器和磁盘看到的 JSON：{@code /messages} 的条目、SSE 消息、会话快照文件。改序列化代码时这些必须逐字节不变
+ * 浏览器看到的 JSON：{@code /messages} 的条目和 SSE 消息。改序列化代码时这些必须逐字节不变
  * （SSE 事实消息的键顺序不是约定，按键排序后比较）。有意改格式时用 {@code -Dwire.record=true} 重新生成期望文件，并在提交里说明。
  */
 class WireFormatTest {
@@ -47,9 +41,6 @@ class WireFormatTest {
 
     private final EventCodec codec = EventCodec.withBuiltins();
     private final TranscriptFixture fx = new TranscriptFixture();
-
-    @TempDir
-    Path temp;
 
     private static String block(String tag) {
         return (tag + " ").repeat(45).substring(0, 90);
@@ -117,17 +108,5 @@ class WireFormatTest {
             }
         }
         check("sse.txt", out.toString());
-    }
-
-    @Test
-    void sessionSnapshotFile() throws IOException {
-        scenario();
-        KernelState state = fx.state();
-        SessionPaths paths = new SessionPaths(temp);
-        new SnapshotStore(paths, codec).write(TranscriptFixture.USER, new SessionSnapshot(new SessionSlice(
-                state.sessions().get(TranscriptFixture.SESSION),
-                List.copyOf(state.runs().values().stream().sorted(java.util.Comparator.comparing(run -> run.ref().run().value())).toList()),
-                fx.transcript.export(TranscriptFixture.SESSION), fx.lastSeq()), 1234));
-        check("snapshot.json", Files.readString(paths.snapshotFile(TranscriptFixture.USER, TranscriptFixture.SESSION), StandardCharsets.UTF_8));
     }
 }

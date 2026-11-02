@@ -16,16 +16,13 @@ import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
-import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 
 /** 管线的测试替身和简化装配。生产代码总是给全依赖，这些只给测试用，所以不放在 main 里。 */
 public final class LoopFixtures {
 
-    /** 从不回收、从不写快照。 */
-    public static final Evictor.Settings NEVER = new Evictor.Settings(null, Integer.MAX_VALUE, Integer.MAX_VALUE, Duration.ofSeconds(1));
-
-    public static final Evictor.Sink NO_SINK = slice -> { };
+    /** 从不回收。 */
+    public static final Evictor.Settings NEVER = new Evictor.Settings(null, Integer.MAX_VALUE, Duration.ofSeconds(1));
 
     public static final Projection NO_PROJECTION = (envelope, decision) -> List.of();
 
@@ -63,7 +60,7 @@ public final class LoopFixtures {
     }
 
     public static Evictor never(Projection projection) {
-        return new Evictor(NEVER, new Residency(), projection, NO_SINK, Clock.systemUTC());
+        return new Evictor(NEVER, new Residency(), projection, Clock.systemUTC());
     }
 
     /** 不监听步骤、不回收的 cleanroom。 */

@@ -22,7 +22,6 @@ import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionReplay;
-import tantalum.shell.store.SnapshotStore;
 import tantalum.shell.store.UsageLedger;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
@@ -65,8 +64,7 @@ class TurnQueryTest {
         index = SessionIndex.open(dir);
         writer = new IndexWriter(index, 100, java.time.Duration.ofHours(1));
         SessionPaths paths = new SessionPaths(dir);
-        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()),
-                new SnapshotStore(paths, EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
+        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
         query = new TurnQuery(paths, replay, EventCodec.withBuiltins().mapper());
     }
 

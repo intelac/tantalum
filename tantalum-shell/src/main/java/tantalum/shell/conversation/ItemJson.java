@@ -6,7 +6,7 @@ import java.util.Set;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 条目的接口格式：和快照相同的记录字段（{@code kind} 在最前），只是会话和运行摊平成字符串。 */
+/** 条目的接口格式：记录的字段（{@code kind} 在最前），只是会话和运行摊平成字符串。 */
 public final class ItemJson {
 
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() { };

@@ -34,7 +34,7 @@ public final class Transcript implements Projection {
     /** 一个会话的全部条目和它们截至的事件序号：序号更大的 SSE 推送比快照新，反之快照更新。 */
     public record View(long seq, List<TranscriptItem> items) {}
 
-    /** 一个会话的完整内部状态，可以写进快照，恢复后接着处理事件和没中断时相同。 */
+    /** 一个会话的完整内部状态，重放会话文件得到，恢复后接着处理事件和没中断时相同。 */
     public record Saved(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq) {
 
         public Saved {
@@ -47,7 +47,6 @@ public final class Transcript implements Projection {
     private final Map<SessionId, Conversation> sessions = new ConcurrentHashMap<>();
 
     /** 没有该会话时返回空的状态。 */
-    @Override
     public Saved export(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {

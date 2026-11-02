@@ -32,8 +32,7 @@ class EvictAndLoadTest {
     private static final SessionId S1 = new SessionId("s1");
     private static final SessionId S2 = new SessionId("s2");
     private static final String[] ALWAYS_EVICT = {
-        "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000",
-        "--tantalum.residency.snapshot-events=1", "--tantalum.residency.sweep-interval=0s"
+        "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s"
     };
 
     @TempDir
@@ -85,13 +84,6 @@ class EvictAndLoadTest {
         assertEquals(5, always.get(2).messages().size(), "two earlier turns plus the new prompt");
     }
 
-    @Test
-    void anEvictedSessionHasASnapshotAndLeavesNoRunBehind() throws Exception {
-        conversation("snapshots", true, ALWAYS_EVICT);
-        Path snapshot = new SessionPaths(temp.resolve("snapshots")).snapshotFile(ALICE, S1);
-        assertTrue(Files.exists(snapshot), "written before leaving memory");
-    }
-
     /** 文件中间坏了：这个会话拒绝，其他会话照常。坏事件之后不会被当成新会话从头开始。 */
     @Test
     void aSessionThatCannotBeLoadedIsRefusedWithoutHurtingOthers() throws Exception {
@@ -101,9 +93,6 @@ class EvictAndLoadTest {
             await("evicted", () -> prompts.size() == 1 && !engine.state().sessions().containsKey(S1));
 
             SessionPaths paths = new SessionPaths(temp.resolve("corrupt"));
-            await("snapshot written", () -> Files.exists(paths.snapshotFile(ALICE, S1)));
-            Thread.sleep(100);
-            Files.delete(paths.snapshotFile(ALICE, S1));
             Path file = paths.sessionFile(ALICE, S1);
             List<String> lines = new ArrayList<>(Files.readAllLines(file));
             lines.set(2, "not json");

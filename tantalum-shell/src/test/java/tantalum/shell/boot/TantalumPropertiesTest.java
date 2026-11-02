@@ -45,7 +45,7 @@ class TantalumPropertiesTest {
     void changingOneResidencySettingKeepsTheOtherDefaults() throws Exception {
         assertEquals(Evictor.Settings.defaults(), bind().residency());
         Evictor.Settings residency = bind("tantalum.residency.idle", "2s").residency();
-        assertEquals(new Evictor.Settings(Duration.ofSeconds(2), 1000, 200, Duration.ofSeconds(1)), residency);
+        assertEquals(new Evictor.Settings(Duration.ofSeconds(2), 1000, Duration.ofSeconds(1)), residency);
     }
 
     @Test

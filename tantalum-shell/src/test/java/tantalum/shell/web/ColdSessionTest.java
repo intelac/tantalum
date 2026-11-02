@@ -138,8 +138,7 @@ class ColdSessionTest {
     void anEvictedSessionIsStillReadableAndCompactable() throws Exception {
         Files.createDirectories(temp.resolve("workspace"));
         try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("workspace"), model,
-                "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000",
-                "--tantalum.residency.snapshot-events=1", "--tantalum.residency.sweep-interval=0s")) {
+                "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s")) {
             Engine engine = server.context.getBean(Engine.class);
             SessionId s1 = new SessionId("s1");
             assertEquals(200, engine.intake().submit(ALICE, s1, new RequestId("r1"), "follow-up", "hello").status());

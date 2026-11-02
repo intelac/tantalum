@@ -23,7 +23,7 @@
 | `boot` | 组装、启动、关闭：`Engine`、`Storage`（打开和关闭数据目录）、配置。只有它和 `web` 读全局配置 |
 | `loop` | 管线：输入环 → 用户通道（落盘、载入冷会话）→ cleanroom（`Kernel.step`）→ 输出环 → Handler；`Intake` 接收提交，`Evictor` 回收空闲会话 |
 | `journal` | 原始记录：每会话一个只追加的文件、事件编解码、格式版本、锁、序号 |
-| `store` | 能从原始记录重建的东西：索引、快照、回放查询，以及读会话的 `SessionQueries` |
+| `store` | 能从原始记录重建的东西：索引、回放查询，以及读会话的 `SessionQueries` |
 | `conversation` | 控制台看到的对话条目，是事件的展示投影 |
 | `handler` | 执行命令：组装上下文、调模型、跑工具和插件工作 |
 | `model` | Claude 和 OpenAI 兼容两个模型客户端，失败分类共用 `ModelFailures` |
@@ -99,13 +99,12 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 |---|---|
 | `sessions/<用户>/<会话>.jsonl` | journal：每个会话一个文件，第一行是文件头，之后每行一个事件，只追加 |
 | `index.db` | 会话列表、提交去重、用量的索引（SQLite）。可以由会话文件重建 |
-| `snapshots/<用户>/<会话>.json` | 会话的投影快照，加快冷载入。可以删除 |
 | `format.json` | 存储格式和内核语义的版本 |
 | `users.db` | 账号 |
 | `store.lock` | 进程独占锁：一份数据目录同时只能被一个进程使用 |
 | `memory/<用户>/` | 只在 `workspace-mode=shared` 时使用的记忆目录；默认每个用户的记忆在自己工作目录的 `memory/` 下 |
 
-用户名和会话 ID 里不能直接做文件名的字符会被编码，太长的名字截短后加哈希。只有会话文件是事实来源，索引和快照落后或丢失时，启动时从会话文件补齐。
+用户名和会话 ID 里不能直接做文件名的字符会被编码，太长的名字截短后加哈希。只有会话文件是事实来源，索引落后或丢失时，启动时从会话文件补齐。旧版本留下的 `snapshots/` 目录不再使用，可以删除。
 
 ## 用 journal 查看一个运行
 
@@ -128,7 +127,7 @@ curl -b cookie http://127.0.0.1:8080/api/runs/<run>/trace      # 事件、处理
 jq -c 'select(.seq) | [.seq, .type, .run, .at]' ~/.local/share/tantalum/sessions/yi/<session>.jsonl
 ```
 
-**回放能保证什么。** 同一版本的程序回放一个会话，得到的 prompt 和当时发给模型的逐字节相同，会话在不在内存、从快照还是从文件载入都一样。内核语义变了（升级后 `format.json` 的 `semantics` 变化，启动日志会警告 `kernel semantics changed`），旧会话的 prompt 回放可能不再和当时逐字节相同；journal 原文不受影响，旧会话照常打开、继续。
+**回放能保证什么。** 同一版本的程序回放一个会话，得到的 prompt 和当时发给模型的逐字节相同，会话在不在内存都一样。内核语义变了（升级后 `format.json` 的 `semantics` 变化，启动日志会警告 `kernel semantics changed`），旧会话的 prompt 回放可能不再和当时逐字节相同；journal 原文不受影响，旧会话照常打开、继续。
 
 ## 运维
 
@@ -151,16 +150,15 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 
 旧数据不迁移。用 `--tantalum.data-dir` 指向一个新目录；旧目录不再需要时自行删除。`format.json` 的存储版本比程序新时同样拒绝启动，要升级程序。
 
-**会话常驻内存。** 没有运行、没有排队提交的会话，空闲超过 `idle` 或常驻数超过 `max-resident`（最久没用的先走）时移出内存，下次打开从快照和会话文件载入。回收在处理事件时顺带检查，所以完全没有请求的服务器不会主动回收，常驻数仍受上限约束。
+**会话常驻内存。** 没有运行、没有排队提交的会话，空闲超过 `idle` 或常驻数超过 `max-resident`（最久没用的先走）时移出内存，下次打开时重放它的会话文件载入（1890 个事件的长会话约 0.4 秒）。回收在处理事件时顺带检查，所以完全没有请求的服务器不会主动回收，常驻数仍受上限约束。
 
 | 配置 | 默认 | 含义 |
 |---|---|---|
 | `tantalum.residency.idle` | `30m` | 空闲多久移出内存 |
 | `tantalum.residency.max-resident` | `1000` | 常驻会话上限 |
-| `tantalum.residency.snapshot-events` | `200` | 运行结束时距上次快照超过这么多事件就写一份快照 |
 | `tantalum.residency.sweep-interval` | `1s` | 两次回收检查的最小间隔 |
 
-**关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后写快照、关索引和文件。被中断的运行下次启动按上面的规则收尾。
+**关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后关索引和文件。被中断的运行下次启动按上面的规则收尾。
 
 ## 记忆
 
@@ -241,7 +239,7 @@ mvn clean verify          # 不访问外网，不花钱
 
 `mvn verify` 在集成测试阶段还会用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。
 
-浏览器和磁盘看到的 JSON（`/messages` 的条目、SSE 消息、会话快照文件）由 `WireFormatTest` 逐字节钉住，期望文件在 `tantalum-shell/src/test/resources/wire/`。有意改格式时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么。
+浏览器和磁盘看到的 JSON（`/messages` 的条目、SSE 消息）由 `WireFormatTest` 逐字节钉住，期望文件在 `tantalum-shell/src/test/resources/wire/`。有意改格式时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么。
 
 跳号回归：让事件序号每次加 7 再跑一遍全部测试，确认没有代码假设“下一个序号是加一”（运行 ID、命令 ID 和断点续传都从序号来）：
 

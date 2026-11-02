@@ -1,13 +1,9 @@
 package tantalum.shell.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,7 +12,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -34,7 +29,6 @@ import tantalum.shell.conversation.TranscriptReplay;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
-import tantalum.shell.journal.StoreFormat;
 import tantalum.shell.loop.SessionSlice;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
@@ -68,7 +62,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 
-/** 任务 25、46、47：单个会话重放和全量回放相同，快照只省时间不改结果。 */
+/** 任务 25：单个会话重放和全量回放相同。 */
 class SessionReplayTest {
 
     private static final Principal ALICE = new Principal("alice");
@@ -101,7 +95,6 @@ class SessionReplayTest {
     private IndexWriter writer;
     private IndexFixture fixture;
     private SessionPaths paths;
-    private SnapshotStore snapshots;
     private SessionReplay replay;
     private Kernel kernel;
 
@@ -122,8 +115,7 @@ class SessionReplayTest {
         writer = new IndexWriter(index, 100, Duration.ofHours(1));
         paths = new SessionPaths(dir);
         fixture = new IndexFixture(paths, writer::onDurable, writer::onStep, kernel);
-        snapshots = new SnapshotStore(paths, EventCodec.withBuiltins());
-        replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), snapshots, new UsageLedger(index, writer), kernel);
+        replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
     }
 
     @AfterEach
@@ -227,7 +219,7 @@ class SessionReplayTest {
         for (var session : List.of(Set.of(ALICE, TOOLS), Set.of(ALICE, COMPACTED), Set.of(ALICE, STOPPED), Set.of(BOB, BOBS))) {
             Principal principal = session.stream().filter(Principal.class::isInstance).map(Principal.class::cast).findFirst().orElseThrow();
             SessionId id = session.stream().filter(SessionId.class::isInstance).map(SessionId.class::cast).findFirst().orElseThrow();
-            SessionSlice slice = replay.load(principal, id, Long.MAX_VALUE).orElseThrow().snapshot().slice();
+            SessionSlice slice = replay.load(principal, id, Long.MAX_VALUE).orElseThrow();
             assertSameAsFull(full, id, slice);
         }
     }
@@ -237,9 +229,8 @@ class SessionReplayTest {
         scenario();
         List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(TOOLS)).toList();
         long cut = events.get(4).seq();
-        SessionReplay.Result slice = replay.load(ALICE, TOOLS, cut).orElseThrow();
-        assertEquals(4, slice.replayedEvents());
-        assertEquals(events.get(3).seq(), slice.snapshot().slice().seq());
+        SessionSlice slice = replay.load(ALICE, TOOLS, cut).orElseThrow();
+        assertEquals(events.get(3).seq(), slice.seq());
     }
 
     @Test
@@ -248,135 +239,5 @@ class SessionReplayTest {
         scenario();
         long first = fixture.events.stream().filter(event -> event.session().equals(TOOLS)).findFirst().orElseThrow().seq();
         assertEquals(Optional.empty(), replay.load(ALICE, TOOLS, first));
-    }
-
-    // ---- 任务 46 ----
-
-    /** 每个前缀都编解码一次，所以等工具、等摘要、压缩后这些中间状态都走过。 */
-    @Test
-    void everyPrefixSurvivesEncodingAndContinuesLikeTheOriginal() throws Exception {
-        scenario();
-        for (SessionId session : List.of(TOOLS, COMPACTED, STOPPED)) {
-            List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(session)).toList();
-            for (EventEnvelope event : events) {
-                Optional<SessionReplay.Result> slice = replay.load(ALICE, session, event.seq());
-                if (slice.isPresent()) {
-                    SessionSnapshot original = slice.get().snapshot();
-                    assertEquals(original, snapshots.decode(snapshots.encode(original)), session + " before seq " + event.seq());
-                }
-            }
-        }
-    }
-
-    @Test
-    void snapshotCoversPhasesSeenInTheScenario() throws Exception {
-        scenario();
-        Set<String> phases = new HashSet<>();
-        List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(COMPACTED)).toList();
-        for (EventEnvelope event : events) {
-            replay.load(ALICE, COMPACTED, event.seq()).ifPresent(slice -> slice.snapshot().slice().runs().forEach(run -> phases.add(run.phase().name())));
-        }
-        assertTrue(phases.containsAll(Set.of("AwaitingContext", "AwaitingModel", "AwaitingSummary")), phases.toString());
-    }
-
-    // ---- 任务 47 ----
-
-    private SessionSnapshot snapshotAt(SessionId session, int eventsKept) throws Exception {
-        List<EventEnvelope> events = fixture.events.stream().filter(event -> event.session().equals(session)).toList();
-        SessionSnapshot snapshot = replay.load(ALICE, session, events.get(eventsKept).seq()).orElseThrow().snapshot();
-        snapshots.write(ALICE, snapshot);
-        return snapshot;
-    }
-
-    @Test
-    void validSnapshotReplaysOnlyTheTailWithTheSameResult() throws Exception {
-        scenario();
-        Full full = full();
-        for (SessionId session : List.of(TOOLS, COMPACTED, STOPPED)) {
-            int total = (int) fixture.events.stream().filter(event -> event.session().equals(session)).count();
-            for (int kept = 1; kept < total; kept++) {
-                snapshotAt(session, kept);
-                SessionReplay.Result slice = replay.load(ALICE, session, Long.MAX_VALUE).orElseThrow();
-                assertEquals(total - kept, slice.replayedEvents(), session + " from event " + kept);
-                assertSameAsFull(full, session, slice.snapshot().slice());
-            }
-        }
-    }
-
-    private void assertFallsBackToFullReplay(java.util.function.Function<String, String> damage) throws Exception {
-        snapshotAt(TOOLS, 3);
-        Path file = paths.snapshotFile(ALICE, TOOLS);
-        Files.writeString(file, damage.apply(Files.readString(file)));
-        int total = (int) fixture.events.stream().filter(event -> event.session().equals(TOOLS)).count();
-        SessionReplay.Result slice = replay.load(ALICE, TOOLS, Long.MAX_VALUE).orElseThrow();
-        assertEquals(total, slice.replayedEvents());
-        assertSameAsFull(full(), TOOLS, slice.snapshot().slice());
-    }
-
-    @Test
-    void truncatedSnapshotIsIgnored() throws Exception {
-        scenario();
-        assertFallsBackToFullReplay(text -> text.substring(0, text.length() / 2));
-    }
-
-    @Test
-    void changedByteIsIgnored() throws Exception {
-        scenario();
-        assertFallsBackToFullReplay(text -> text.replace("read two files", "read two fileZ"));
-    }
-
-    @Test
-    void wrongVersionsAreIgnored() throws Exception {
-        scenario();
-        assertFallsBackToFullReplay(text -> text.replace("\"semantics\":" + StoreFormat.SEMANTICS, "\"semantics\":" + (StoreFormat.SEMANTICS + 1)));
-        assertFallsBackToFullReplay(text -> text.replace("\"storage\":" + StoreFormat.STORAGE, "\"storage\":" + (StoreFormat.STORAGE + 1)));
-    }
-
-    @Test
-    void offsetBeyondTheFileOrOnAnotherLineIsIgnored() throws Exception {
-        scenario();
-        assertFallsBackToFullReplay(text -> text.replaceFirst("\"offset\":\\d+", "\"offset\":99999999"));
-        assertFallsBackToFullReplay(text -> text.replaceFirst("\"offset\":\\d+", "\"offset\":10"));
-        assertFallsBackToFullReplay(text -> text.replaceFirst("\"seq\":\\d+", "\"seq\":1234567"));
-    }
-
-    @Test
-    void snapshotOfAnotherSessionIsIgnored() throws Exception {
-        scenario();
-        SessionSnapshot other = snapshotAt(COMPACTED, 3);
-        Files.createDirectories(paths.snapshotFile(ALICE, TOOLS).getParent());
-        Files.copy(paths.snapshotFile(ALICE, COMPACTED), paths.snapshotFile(ALICE, TOOLS));
-        assertTrue(other.slice().seq() >= 0);
-        int total = (int) fixture.events.stream().filter(event -> event.session().equals(TOOLS)).count();
-        assertEquals(total, replay.load(ALICE, TOOLS, Long.MAX_VALUE).orElseThrow().replayedEvents());
-    }
-
-    @Test
-    void deletingSnapshotsChangesNothing() throws Exception {
-        scenario();
-        SessionSnapshot withSnapshot;
-        snapshotAt(COMPACTED, 3);
-        withSnapshot = replay.load(ALICE, COMPACTED, Long.MAX_VALUE).orElseThrow().snapshot();
-        Files.delete(paths.snapshotFile(ALICE, COMPACTED));
-        assertEquals(withSnapshot, replay.load(ALICE, COMPACTED, Long.MAX_VALUE).orElseThrow().snapshot());
-    }
-
-    @Test
-    void snapshotIsPrivateAndWriteLeavesNoTemporaryFile() throws Exception {
-        scenario();
-        snapshotAt(TOOLS, 3);
-        Path file = paths.snapshotFile(ALICE, TOOLS);
-        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
-        assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file.getParent())));
-        try (var entries = Files.list(file.getParent())) {
-            assertEquals(List.of(file), entries.toList());
-        }
-    }
-
-    @Test
-    void decodeRejectsGarbage() {
-        assertThrows(IllegalArgumentException.class, () -> snapshots.decode("not a snapshot"));
-        assertThrows(IllegalArgumentException.class, () -> snapshots.decode("{}\n{}\n"));
-        assertFalse(Files.exists(paths.snapshotFile(ALICE, TOOLS)));
     }
 }

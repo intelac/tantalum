@@ -16,7 +16,7 @@ import tantalum.value.state.EndReason;
 
 /**
  * 对话里的一个条目，是事件的展示投影。ID 由事件序号和块下标算出，回放时相同；
- * 同一 ID 的新版本覆盖旧版本，客户端据此原地更新。{@code kind} 是接口和快照里的类型名，只在这里定义。
+ * 同一 ID 的新版本覆盖旧版本，客户端据此原地更新。{@code kind} 是接口里的类型名，只在这里定义。
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
 @JsonSubTypes({
