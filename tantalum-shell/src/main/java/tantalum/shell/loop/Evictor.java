@@ -121,6 +121,16 @@ public final class Evictor {
         return result;
     }
 
+    /** 关闭时调用：给没有活动运行、快照又不是最新的会话各写一份。cleanroom 已经停了才能调。 */
+    public void snapshotAll(KernelState state) {
+        for (Map.Entry<SessionId, Entry> next : entries.entrySet()) {
+            SessionState session = state.sessions().get(next.getKey());
+            if (session != null && session.activeRun() == null && next.getValue().snapshotSeq != next.getValue().seq) {
+                snapshot(state, session, next.getValue());
+            }
+        }
+    }
+
     private boolean overLimit() {
         return entries.size() > settings.maxResident();
     }

@@ -242,6 +242,23 @@ class SseHubTest {
         assertFalse(other.closed());
     }
 
+    /** 任务 37：退出只断开这一次登录的订阅。 */
+    @Test
+    void closeLoginEndsOnlyThatLoginsSubscriptions() {
+        SseHub hub = hub();
+        SseHub.Subscription laptop = hub.subscribe(ALICE, "login-1", null);
+        SseHub.Subscription laptopTab = hub.subscribe(ALICE, "login-1", null);
+        SseHub.Subscription phone = hub.subscribe(ALICE, "login-2", null);
+        SseHub.Subscription other = hub.subscribe(BOB, "login-1", null);
+        hub.closeLogin(ALICE, "login-1");
+        assertTrue(laptop.closed());
+        assertTrue(laptopTab.closed());
+        assertFalse(phone.closed());
+        assertFalse(other.closed(), "the same login id under another user is a different login");
+        hub.closeLogin(ALICE, null);
+        assertFalse(phone.closed());
+    }
+
     @Test
     void closedSubscriptionStopsReceiving() throws Exception {
         SseHub hub = hub();

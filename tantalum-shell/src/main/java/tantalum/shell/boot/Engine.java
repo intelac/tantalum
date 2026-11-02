@@ -107,6 +107,7 @@ public final class Engine implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
     private static final Duration DRAIN = Duration.ofSeconds(5);
     private static final Duration INTERRUPT_RETRY = Duration.ofMillis(10);
+    private static final Duration INTERRUPT_GRACE = Duration.ofSeconds(2);
     private static final int MAX_OPEN_FILES = 256;
     /** 只供回归测试：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
@@ -145,6 +146,12 @@ public final class Engine implements AutoCloseable {
     private final McpRegistry mcp;
     private final TurnQuery turns;
     private final ColdReads cold;
+    private final Cleanroom cleanroomStep;
+    private final Dispatcher handlers;
+    private final InFlightCommands inFlight;
+    private final Duration shutdownWait;
+    /** 关闭开始后入口返回 503。 */
+    private volatile boolean closing;
     private final Set<SubmissionId> newRunSubmissions = ConcurrentHashMap.newKeySet();
 
     /** 构造失败时释放已拿到的锁和 journal，否则嵌入方重试会一直撞上“store is locked”。 */
@@ -153,6 +160,7 @@ public final class Engine implements AutoCloseable {
                   EventCodec codec, Clock clock) throws IOException {
         this.clock = clock;
         this.codec = codec;
+        this.shutdownWait = properties.shutdownWaitOrDefault();
         this.lock = StoreLock.acquire(properties.dataDir());
         try {
             StoreFormat.check(properties.dataDir());
@@ -177,6 +185,9 @@ public final class Engine implements AutoCloseable {
             this.transcript = parts.transcript;
             this.turns = parts.turns;
             this.cold = parts.cold;
+            this.cleanroomStep = parts.cleanroomStep;
+            this.handlers = parts.handlers;
+            this.inFlight = parts.inFlight;
             this.hub = parts.hub;
             this.memories = parts.memories;
             this.mcp = parts.mcp;
@@ -203,7 +214,8 @@ public final class Engine implements AutoCloseable {
 
     private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
                             ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp,
-                            List<RunState> unfinished, ColdReads cold) {}
+                            List<RunState> unfinished, ColdReads cold, Cleanroom cleanroomStep, Dispatcher handlers,
+                            InFlightCommands inFlight) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -250,7 +262,8 @@ public final class Engine implements AutoCloseable {
                 RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout()),
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                 StartTimer.class, new TimerHandler());
-        OutputRing output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
+        Dispatcher commands = new Dispatcher(handlers, inFlight, results);
+        OutputRing output = new OutputRing(loop.outputRingSize(), commands);
         Evictor evictor = new Evictor(evictorSettings(properties), residency, recovered.transcript(), snapshots, clock);
         for (SessionId session : recovered.state().sessions().keySet()) {
             residency.resident(session);
@@ -260,7 +273,7 @@ public final class Engine implements AutoCloseable {
         Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
                 recovered.transcript(), hub, view, results, indexWriter::onStep, evictor);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
-        BooleanSupplier halted = () -> dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
+        BooleanSupplier halted = () -> closing || dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
         ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
         input.connect(dispatcher);
         cleanroomRing.connect((slot, sequence, endOfBatch) -> {
@@ -270,7 +283,7 @@ public final class Engine implements AutoCloseable {
             dispatcher.released();
         });
         return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp, recovered.unfinished(),
-                new ColdReads(paths, replay));
+                new ColdReads(paths, replay), cleanroom, commands, inFlight);
     }
 
     private static Evictor.Settings evictorSettings(TantalumProperties properties) {
@@ -554,25 +567,40 @@ public final class Engine implements AutoCloseable {
         return summaries.values().stream().sorted(java.util.Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
 
-    /** 入口先关（{@code halted} 之外由 Web 层停止接收），再依次排空输入环、用户通道和两个下游环，最后关文件和锁；每一步失败都不跳过后面的。 */
+    /**
+     * 关闭（需求 7.1）：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
+     * 排空输入环、各用户通道和两个下游环 → 写投影缓存 → 关 MCP、索引、文件，释放锁。每一步失败都不跳过后面的。
+     * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动由 H9 收尾。
+     */
     @Override
     public void close() throws IOException {
-        Exception first = null;
-        for (AutoCloseable step : List.<AutoCloseable>of(
-                mcp, () -> input.shutdown(DRAIN), () -> dispatcher.awaitIdle(DRAIN), () -> cleanroom.shutdown(DRAIN),
-                () -> output.shutdown(DRAIN), snapshots, indexWriter, index, files, lock)) {
-            try {
-                step.close();
-            } catch (Exception failure) {
-                LOG.error("engine close step failed", failure);
-                first = first == null ? failure : first;
-            }
+        Shutdown.run(List.of(
+                new Shutdown.Step("refuse new submissions", () -> closing = true),
+                new Shutdown.Step("close event streams", hub::closeEveryone),
+                new Shutdown.Step("stop starting handlers", handlers::close),
+                new Shutdown.Step("wait for running handlers", this::awaitHandlers),
+                new Shutdown.Step("drain input ring", () -> input.shutdown(DRAIN)),
+                new Shutdown.Step("drain user lanes", () -> dispatcher.awaitIdle(DRAIN)),
+                new Shutdown.Step("drain cleanroom ring", () -> cleanroom.shutdown(DRAIN)),
+                new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
+                new Shutdown.Step("write snapshots", cleanroomStep::snapshotAll),
+                new Shutdown.Step("flush snapshots", snapshots),
+                new Shutdown.Step("close mcp", mcp),
+                new Shutdown.Step("flush index", indexWriter),
+                new Shutdown.Step("close index", index),
+                new Shutdown.Step("close session files", files),
+                new Shutdown.Step("release lock", lock)));
+    }
+
+    /** 到时中断；被中断的 Handler 产生的结果还会经过排空的环落盘。不响应中断的再等一小会儿就不管了。 */
+    private void awaitHandlers() throws InterruptedException {
+        if (inFlight.awaitEmpty(shutdownWait)) {
+            return;
         }
-        switch (first) {
-            case null -> { }
-            case IOException io -> throw io;
-            case RuntimeException runtime -> throw runtime;
-            default -> throw new IllegalStateException(first);
+        LOG.warn("{} handlers still running after {}; interrupting them", inFlight.size(), shutdownWait);
+        inFlight.abortAll();
+        if (!inFlight.awaitEmpty(INTERRUPT_GRACE)) {
+            LOG.warn("{} handlers ignored the interrupt; closing without them", inFlight.size());
         }
     }
 }

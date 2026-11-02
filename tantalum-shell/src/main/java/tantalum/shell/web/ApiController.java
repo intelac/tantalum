@@ -12,6 +12,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
@@ -30,6 +32,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.shell.auth.LoginCheck;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumProperties;
@@ -276,21 +279,25 @@ public class ApiController {
     }
 
     @GetMapping(path = "/api/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    SseEmitter events(@RequestHeader(name = "Last-Event-ID", required = false) String lastEventId) {
+    SseEmitter events(@RequestHeader(name = "Last-Event-ID", required = false) String lastEventId, HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(0L);
         Principal user = current();
-        SseHub.Subscription subscription = engine.hub().subscribe(user, lastEventId);
+        HttpSession login = request.getSession(false);
+        SseHub.Subscription subscription = engine.hub().subscribe(user, login == null ? null : login.getId(), lastEventId);
         emitter.onCompletion(subscription::close);
         emitter.onTimeout(subscription::close);
         emitter.onError(failure -> subscription.close());
-        Thread.ofVirtual().start(() -> pump(user, subscription, emitter));
+        Thread.ofVirtual().start(() -> pump(user, login, subscription, emitter));
         return emitter;
     }
 
-    /** 心跳时检查用户是否被停用：停用可能来自另一个进程的命令行，这边收不到通知。无论怎么退出，订阅都要注销。 */
-    private void pump(Principal user, SseHub.Subscription subscription, SseEmitter emitter) {
+    /**
+     * 每个心跳周期检查一次登录是否还有效（过期、停用、改密码），不管连接忙不忙：停用和改密码可能来自另一个进程的命令行，
+     * 这边收不到通知。无论怎么退出，订阅都要注销。
+     */
+    private void pump(Principal user, HttpSession login, SseHub.Subscription subscription, SseEmitter emitter) {
         try {
-            stream(user, subscription, emitter);
+            stream(user, login, subscription, emitter);
         } catch (IOException | SQLException | IllegalStateException gone) {
             // 客户端走了，或容器已经结束这次响应。
         } catch (InterruptedException stopping) {
@@ -302,19 +309,27 @@ public class ApiController {
         }
     }
 
-    private void stream(Principal user, SseHub.Subscription subscription, SseEmitter emitter)
+    private void stream(Principal user, HttpSession login, SseHub.Subscription subscription, SseEmitter emitter)
             throws IOException, SQLException, InterruptedException {
+        LoginCheck check = new LoginCheck(users);
+        long nextCheck = System.currentTimeMillis() + heartbeat.toMillis();
         while (!subscription.closed()) {
-            SseMessage message = subscription.poll(heartbeat.toMillis(), TimeUnit.MILLISECONDS);
-            if (message == null) {
-                if (subscription.closed()) {
-                    break;
-                }
-                if (users.isDisabled(user.value())) {
+            SseMessage message = subscription.poll(Math.max(1, nextCheck - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
+            if (subscription.closed()) {
+                break;
+            }
+            long now = System.currentTimeMillis();
+            if (now >= nextCheck) {
+                if (!check.stillValid(user.value(), login, now)) {
                     subscription.close();
                     break;
                 }
-                emitter.send(SseEmitter.event().comment("keep-alive"));
+                nextCheck = now + heartbeat.toMillis();
+                if (message == null) {
+                    emitter.send(SseEmitter.event().comment("keep-alive"));
+                }
+            }
+            if (message == null) {
                 continue;
             }
             SseEmitter.SseEventBuilder event = SseEmitter.event().name(message.event()).data(message.data(), MediaType.TEXT_PLAIN);

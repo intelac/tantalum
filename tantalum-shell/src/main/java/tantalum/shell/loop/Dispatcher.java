@@ -17,6 +17,8 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
     private final Map<Class<? extends Command>, Handler> handlers;
     private final InFlightCommands inFlight;
     private final ResultPublisher results;
+    /** 关闭中不再启动新的 Handler：这些运行在文件里没结束，下次启动由 H9 收尾，不会重复调用。 */
+    private volatile boolean closing;
 
     public Dispatcher(Map<Class<? extends Command>, Handler> handlers, InFlightCommands inFlight, ResultPublisher results) {
         this.handlers = Map.copyOf(handlers);
@@ -32,6 +34,10 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
             inFlight.abort(abort.commands());
             return;
         }
+        if (closing) {
+            LOG.info("closing: not starting {} for run {}", command.getClass().getSimpleName(), command.run().run().value());
+            return;
+        }
         Handler handler = handlers.get(command.getClass());
         if (handler == null) {
             results.reportDropped(command, "no handler for " + command.getClass().getSimpleName());
@@ -40,6 +46,10 @@ public final class Dispatcher implements EventHandler<OutputRing.Slot> {
         Thread thread = Thread.ofVirtual().unstarted(() -> run(handler, command));
         inFlight.register(command.id(), thread);
         thread.start();
+    }
+
+    public void close() {
+        closing = true;
     }
 
     private void run(Handler handler, Command command) {

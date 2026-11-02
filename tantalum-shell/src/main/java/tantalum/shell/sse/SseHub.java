@@ -38,13 +38,16 @@ public final class SseHub implements FactListener {
     /** 一个订阅。消费方循环 {@link #poll}，用完 {@link #close}。 */
     public final class Subscription implements AutoCloseable {
         private final Principal principal;
+        /** 所属的登录会话；退出时只断开这一次登录的订阅。可为 null。 */
+        private final String login;
         private final BlockingQueue<SseMessage> queue;
         /** 补读的内容，先于新消息发出。不占队列容量，否则落后太多时会断开、重连、再断开。 */
         private final Queue<SseMessage> catchUp = new ConcurrentLinkedQueue<>();
         private volatile boolean closed;
 
-        private Subscription(Principal principal, int capacity) {
+        private Subscription(Principal principal, String login, int capacity) {
             this.principal = principal;
+            this.login = login;
             this.queue = new ArrayBlockingQueue<>(capacity);
         }
 
@@ -128,7 +131,12 @@ public final class SseHub implements FactListener {
 
     /** {@code lastEventId} 为空或无法解析时只接收之后的消息。回放失败时订阅不会留在表里。 */
     public Subscription subscribe(Principal principal, String lastEventId) {
-        Subscription subscription = new Subscription(principal, queueCapacity);
+        return subscribe(principal, null, lastEventId);
+    }
+
+    /** {@code login} 是登录会话 ID，{@link #closeLogin} 按它断开。 */
+    public Subscription subscribe(Principal principal, String login, String lastEventId) {
+        Subscription subscription = new Subscription(principal, login, queueCapacity);
         long[] position = parse(lastEventId);
         List<SseMessage> missed = new ArrayList<>();
         boolean fromHistory = false;
@@ -172,6 +180,14 @@ public final class SseHub implements FactListener {
     }
 
     /** 用户退出或被停用时调用，断开它的全部连接。 */
+    /** 退出登录：只断开这一次登录的订阅，同一用户的其他登录不受影响。 */
+    public void closeLogin(Principal principal, String login) {
+        Set<Subscription> set = subscribers.get(principal);
+        if (set != null && login != null) {
+            List.copyOf(set).stream().filter(subscription -> login.equals(subscription.login)).forEach(Subscription::close);
+        }
+    }
+
     public void closeAll(Principal principal) {
         Set<Subscription> set = subscribers.get(principal);
         if (set != null) {
