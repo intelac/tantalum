@@ -89,14 +89,13 @@ public final class SseHub implements FactListener {
     private final JsonMapper itemMapper;
     private final Map<Principal, Set<Subscription>> subscribers = new ConcurrentHashMap<>();
     private final Deque<Stored> recent = new ArrayDeque<>();
-    /** 最后一条被挤出内存的消息位置（序号.下标）；在它之前的位置要回放，之后的内存都有。 */
-    private long evictedSeq;
-    private int evictedIndex;
+    /**
+     * 每个用户的回放边界（序号.下标）：比它早的位置内存里没有，要回放。第一条实时消息时设为它的位置，
+     * 之后是最后一条被挤出内存的消息。序号只在一个用户内可比，所以每用户一份。没有条目的用户一律回放。
+     */
+    private final Map<Principal, long[]> replayBefore = new HashMap<>();
 
-    public SseHub(long firstLiveSeq, int queueCapacity, int recentCapacity, History history, JsonMapper itemMapper) {
-        // 启动前的消息都不在内存：把上一个序号的全部下标都当作已挤出。
-        this.evictedSeq = firstLiveSeq - 1;
-        this.evictedIndex = Integer.MAX_VALUE;
+    public SseHub(int queueCapacity, int recentCapacity, History history, JsonMapper itemMapper) {
         this.queueCapacity = queueCapacity;
         this.recentCapacity = recentCapacity;
         this.history = history;
@@ -134,7 +133,8 @@ public final class SseHub implements FactListener {
         List<SseMessage> missed = new ArrayList<>();
         boolean fromHistory = false;
         synchronized (recent) {
-            if (position != null && isBefore(position[0], position[1], evictedSeq, evictedIndex)) {
+            long[] boundary = replayBefore.get(principal);
+            if (position != null && (boundary == null || isBefore(position[0], position[1], boundary[0], boundary[1]))) {
                 fromHistory = true;
             } else if (position != null) {
                 for (Stored stored : recent) {
@@ -203,11 +203,11 @@ public final class SseHub implements FactListener {
 
     private void publish(long seq, int index, Principal owner, SseMessage message) {
         synchronized (recent) {
+            replayBefore.putIfAbsent(owner, new long[] {seq, index});
             recent.addLast(new Stored(seq, index, owner, message));
             if (recent.size() > recentCapacity) {
                 Stored evicted = recent.removeFirst();
-                evictedSeq = evicted.seq();
-                evictedIndex = evicted.index();
+                replayBefore.put(evicted.owner(), new long[] {evicted.seq(), evicted.index()});
             }
             forEachSubscriber(owner, subscription -> subscription.offer(message));
         }

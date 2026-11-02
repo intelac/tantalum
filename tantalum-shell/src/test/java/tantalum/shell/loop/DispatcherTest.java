@@ -43,7 +43,7 @@ class DispatcherTest {
 
     @BeforeEach
     void start() {
-        ring = new InputRing(64, (slot, seq, end) -> results.add(slot.envelope), (slot, seq, end) -> { });
+        ring = new InputRing(64, (slot, seq, end) -> results.add(slot.envelope));
         ring.start();
         publisher = new ResultPublisher(ring, inFlight, Clock.systemUTC(), 0);
     }

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
@@ -136,9 +136,7 @@ final class CompactionScenario {
             }
         }
         List<EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         List<ModelReplied> replies = journal.stream().map(EventEnvelope::event).filter(ModelReplied.class::isInstance)
                 .map(ModelReplied.class::cast).toList();
         int reads = 0;

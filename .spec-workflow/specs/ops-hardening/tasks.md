@@ -80,43 +80,43 @@
 
 ## 阶段 2：写入管线（接入后行为仍是全量内存）
 
-- [ ] 10. 写入分发
+- [x] 10. 写入分发
   - File: shell/loop/JournalDispatcher.java, JournalDispatcherTest.java
   - 消费 Input Ring，取放行名额（总数 = Cleanroom Ring 大小），放进用户通道
   - 验证：名额用完时分发等待、Input Ring 满后入口 429；已落盘事件不丢
   - _Requirements: H12_
 
-- [ ] 45. 按用户的序号
+- [x] 45. 按用户的序号
   - File: shell/loop/Sequence.java, SequenceTest.java
   - 接口和实现：`next(用户)`；第一次见到用户时读他的文件尾部；上限 2^53；测试用一个跳号的实现
   - 验证：重启后新序号大于该用户已有的序号；只读了该用户的文件；超上限时报错而不是静默溢出
   - _Requirements: 11.2, 11.3, H14_
 
-- [ ] 11. 用户通道
+- [x] 11. 用户通道
   - File: shell/loop/UserLane.java, UserLaneTest.java
   - 每用户一个虚拟线程，没事件就退出；按到达顺序取号，按会话分组并行写，全部完成后按序号发布
   - 验证：同一用户并发提交时发布严格按序；写失败置 `halted`；通道退出和新事件到达竞争时不丢事件
   - _Requirements: H12, 3.1b_
 
-- [ ] 12. 慢用户隔离
+- [x] 12. 慢用户隔离
   - File: tantalum-shell/src/test/java/tantalum/shell/loop/LaneIsolationTest.java
   - 注入放慢 fsync 的写入器
   - 验证：A 卡住时 B 的事件正常到达 cleanroom；A 内部仍按序
   - _Requirements: 2.9_
 
-- [ ] 13. 切换 cleanroom 和启动
+- [x] 13. 切换 cleanroom 和启动
   - File: shell/loop/Cleanroom.java, shell/boot/Engine.java, shell/boot/Startup.java；删除 JournalWriter、Journal；tantalum-examples 的 Corpus 改为生成每会话文件
   - cleanroom 改从 Cleanroom Ring 取事件；启动暂时全量重放所有文件；`TurnQuery` 改读文件；读取不再要求序号连续；有旧 `journal.db` 且无 `format.json` 时拒绝启动
   - 验证：现有后端测试全部通过（必要的改动逐条列出）；两个用户序号相同时运行和命令不串；旧 `journal.db` 的目录启动被拒绝且文件未变；Corpus 生成的数据能完整回放
   - _Requirements: H1, H12, 3.1, 3.1b, 11.1_
 
-- [ ] 14. SSE 每用户位置
+- [x] 14. SSE 每用户位置
   - File: shell/sse/SseHub.java, SseHubTest.java
   - `recent`、`evictedSeq` 改每用户
   - 验证：先写失败测试：不同用户乱序到达时，现有实现的补读位置算错；修后正确；`Last-Event-ID` 语义不变
   - _Requirements: H12_
 
-- [ ] 15. 阶段回归
+- [x] 15. 阶段回归
   - File: 无新文件
   - 验证：`mvn verify` 全量和现有并发压测通过，并用跳号的 `Sequence` 再跑一次；`kill -9` 后事件不丢（手工跑一次，自动化在任务 42）
   - _Requirements: 3.1a, 3.1b, 11.1_

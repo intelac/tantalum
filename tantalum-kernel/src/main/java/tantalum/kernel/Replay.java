@@ -1,5 +1,8 @@
 package tantalum.kernel;
 
+import tantalum.value.id.Principal;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 import tantalum.value.command.Command;
@@ -19,12 +22,12 @@ public final class Replay {
         KernelState state = KernelState.empty();
         List<Command> commands = new ArrayList<>();
         List<Fact> facts = new ArrayList<>();
-        long previous = Long.MIN_VALUE;
+        Map<Principal, Long> previous = new HashMap<>();
         for (EventEnvelope envelope : events) {
-            if (envelope.seq() <= previous) {
+            Long last = previous.put(envelope.principal(), envelope.seq());
+            if (last != null && envelope.seq() <= last) {
                 throw new IllegalArgumentException("event out of order at seq " + envelope.seq());
             }
-            previous = envelope.seq();
             Decision decision = kernel.step(state, envelope);
             state = decision.newState();
             commands.addAll(decision.commands());

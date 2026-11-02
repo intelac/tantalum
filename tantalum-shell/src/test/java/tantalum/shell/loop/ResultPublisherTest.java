@@ -39,7 +39,7 @@ class ResultPublisherTest {
         ring = new InputRing(size, (slot, seq, end) -> {
             release.await();
             received.add(slot.envelope);
-        }, (slot, seq, end) -> { });
+        });
         ring.start();
         return new ResultPublisher(ring, inFlight, Clock.fixed(NOW, ZoneOffset.UTC), reserve);
     }

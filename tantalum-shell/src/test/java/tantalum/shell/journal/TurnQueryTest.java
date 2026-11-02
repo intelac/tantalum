@@ -1,5 +1,8 @@
 package tantalum.shell.journal;
 
+import tantalum.shell.store.SessionFile;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionStore;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,21 +45,20 @@ class TurnQueryTest {
     @TempDir
     Path dir;
 
-    private Journal journal;
     private TurnQuery query;
     private long seq;
 
     @BeforeEach
     void setUp() throws Exception {
-        journal = Journal.open(dir, EventCodec.withBuiltins());
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        query = new TurnQuery(journal, new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10), EventCodec.withBuiltins().mapper());
+        query = new TurnQuery(new SessionStore(dir, EventCodec.withBuiltins()), new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10), EventCodec.withBuiltins().mapper());
     }
 
     private void write(RunId run, Event event) throws Exception {
-        journal.append(new EventEnvelope(seq++, Instant.EPOCH, USER, SESSION, run, event));
-        journal.commit();
+        try (SessionFile file = SessionFile.open(new SessionPaths(dir), USER, SESSION, EventCodec.withBuiltins())) {
+            file.append(List.of(new EventEnvelope(seq++, Instant.EPOCH, USER, SESSION, run, event)));
+        }
     }
 
     private void writeScript() throws Exception {

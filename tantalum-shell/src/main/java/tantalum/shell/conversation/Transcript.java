@@ -1,5 +1,6 @@
 package tantalum.shell.conversation;
 
+import tantalum.value.id.Principal;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -341,12 +342,12 @@ public final class Transcript implements Projection {
     /** 回放：每个事件先过内核再投影，和实时路径用同一个 {@link #apply}。返回折叠出的状态。 */
     public KernelState replay(Kernel kernel, List<EventEnvelope> events) {
         KernelState state = KernelState.empty();
-        long previous = Long.MIN_VALUE;
+        Map<Principal, Long> previous = new HashMap<>();
         for (EventEnvelope envelope : events) {
-            if (envelope.seq() <= previous) {
+            Long last = previous.put(envelope.principal(), envelope.seq());
+            if (last != null && envelope.seq() <= last) {
                 throw new IllegalArgumentException("event out of order at seq " + envelope.seq());
             }
-            previous = envelope.seq();
             Decision decision = kernel.step(state, envelope);
             state = decision.newState();
             apply(envelope, decision);

@@ -26,7 +26,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.RunId;
@@ -122,9 +122,7 @@ class CrashRestartTest {
             int callsBeforeRestart = modelCalls.get();
 
             List<EventEnvelope> events;
-            try (Journal journal = Journal.open(data, EventCodec.withBuiltins())) {
-                events = journal.readAll();
-            }
+            events = new SessionStore(data, EventCodec.withBuiltins()).readAll();
             assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished"),
                     events.stream().map(envelope -> envelope.event().type()).toList());
             TransitionTable table = new TransitionTable();

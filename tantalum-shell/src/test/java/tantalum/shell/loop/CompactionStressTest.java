@@ -21,7 +21,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -103,8 +103,8 @@ class CompactionStressTest {
         Instant deadline = Instant.now().plusSeconds(60);
         while (Instant.now().isBefore(deadline)) {
             JsonNode runs = JSON.readTree(server.get(user, "/api/sessions/" + session + "/runs").body()).get("runs");
-            if (runs != null && runs.size() == count && runs.get(0).has("endReason")) {
-                assertEquals("COMPLETED", runs.get(0).get("endReason").asString(), runs.get(0).toString());
+            if (runs != null && runs.size() == count && runs.get(count - 1).has("endReason")) {
+                assertEquals("COMPLETED", runs.get(count - 1).get("endReason").asString(), runs.get(count - 1).toString());
                 return;
             }
             Thread.sleep(3);
@@ -202,9 +202,7 @@ class CompactionStressTest {
 
         // 3. 回放：每一次 CallModel（含摘要调用）的 prompt 与实时逐个相同。
         List<EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);

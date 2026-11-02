@@ -36,34 +36,16 @@ class RingTest {
         return new AssembleContext(new CommandId("c" + i), RUN);
     }
 
-    @Test
-    void inputRingRunsTheSecondHandlerAfterTheFirst() throws Exception {
-        List<String> order = new CopyOnWriteArrayList<>();
-        CountDownLatch done = new CountDownLatch(1);
-        InputRing ring = new InputRing(8,
-                (slot, seq, end) -> order.add("first"),
-                (slot, seq, end) -> {
-                    order.add("second");
-                    done.countDown();
-                });
-        ring.start();
-        assertTrue(ring.tryPublish(envelope()));
-        assertTrue(done.await(5, TimeUnit.SECONDS));
-        assertEquals(List.of("first", "second"), order);
-        ring.shutdown();
-    }
-
     /** 消费者抛出后环必须继续转并留下信号；Disruptor 默认处理器会把线程杀掉而无人知道。 */
     @Test
     void consumerExceptionMarksTheRingBrokenButKeepsConsuming() throws Exception {
         CountDownLatch second = new CountDownLatch(2);
-        InputRing ring = new InputRing(8,
-                (slot, seq, end) -> {
-                    if (seq == 0) {
-                        throw new IllegalStateException("writer bug");
-                    }
-                },
-                (slot, seq, end) -> second.countDown());
+        InputRing ring = new InputRing(8, (slot, seq, end) -> {
+            second.countDown();
+            if (seq == 0) {
+                throw new IllegalStateException("writer bug");
+            }
+        });
         ring.start();
         assertFalse(ring.broken());
         assertTrue(ring.tryPublish(envelope()));
@@ -95,7 +77,7 @@ class RingTest {
     void gracefulShutdownDrainsPublishedEvents() throws Exception {
         List<Long> seen = new CopyOnWriteArrayList<>();
         CountDownLatch running = new CountDownLatch(1);
-        InputRing ring = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> {
+        InputRing ring = new InputRing(8, (slot, seq, end) -> {
             running.countDown();
             Thread.sleep(20);
             seen.add(seq);
@@ -113,7 +95,7 @@ class RingTest {
     @Test
     void fullInputRingReturnsFalseWithoutWaiting() throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        InputRing ring = new InputRing(4, (slot, seq, end) -> release.await(), (slot, seq, end) -> { });
+        InputRing ring = new InputRing(4, (slot, seq, end) -> release.await());
         ring.start();
         boolean sawFull = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
             for (int i = 0; i < 16; i++) {

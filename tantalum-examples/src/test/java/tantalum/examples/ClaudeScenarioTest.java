@@ -32,7 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.OverflowRules;
@@ -161,9 +161,7 @@ class ClaudeScenarioTest {
     }
 
     private static List<EventEnvelope> journal(Path data) throws Exception {
-        try (Journal journal = Journal.open(data, EventCodec.withBuiltins())) {
-            return journal.readAll();
-        }
+        return new SessionStore(data, EventCodec.withBuiltins()).readAll();
     }
 
     private static <T> List<T> events(List<EventEnvelope> journal, Class<T> type) {

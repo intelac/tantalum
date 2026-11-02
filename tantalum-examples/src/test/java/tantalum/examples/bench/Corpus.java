@@ -20,7 +20,9 @@ import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionFile;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.StoreFormat;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -76,9 +78,14 @@ public final class Corpus {
 
     private record Pending(SessionId session, Principal principal, RunId run, Event event) {}
 
+    private static final int FLUSH_EVENTS = 20_000;
+
     private final Random random;
     private final Kernel kernel;
-    private final Journal journal;
+    private final SessionPaths paths;
+    private final EventCodec codec = EventCodec.withBuiltins();
+    private final java.util.Map<SessionId, List<EventEnvelope>> buffered = new java.util.LinkedHashMap<>();
+    private int bufferedEvents;
     private KernelState state = KernelState.empty();
     private final List<Pending> pending = new ArrayList<>();
     private final Deque<SessionPlan> waiting = new ArrayDeque<>();
@@ -100,8 +107,8 @@ public final class Corpus {
         }
     }
 
-    private Corpus(Journal journal, long seed) {
-        this.journal = journal;
+    private Corpus(SessionPaths paths, long seed) {
+        this.paths = paths;
         this.random = new Random(seed);
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
@@ -110,18 +117,17 @@ public final class Corpus {
 
     /** 写到一个空目录。事件数略超 {@code targetEvents}：到数后不再开新轮，把进行中的走完，并走完长会话。 */
     public static Manifest generate(Path dataDir, int targetEvents, long seed) throws IOException, SQLException {
-        try (Journal journal = Journal.open(dataDir, EventCodec.withBuiltins())) {
-            Manifest manifest = new Corpus(journal, seed).run(targetEvents);
-            writeManifest(dataDir, manifest);
-            try (UserStore users = UserStore.open(dataDir)) {
-                users.add(LONG_USER, PASSWORD);
-                users.add(QUIET_USER, PASSWORD);
-            }
-            return manifest;
+        Manifest manifest = new Corpus(new SessionPaths(dataDir), seed).run(targetEvents);
+        StoreFormat.check(dataDir);
+        writeManifest(dataDir, manifest);
+        try (UserStore users = UserStore.open(dataDir)) {
+            users.add(LONG_USER, PASSWORD);
+            users.add(QUIET_USER, PASSWORD);
         }
+        return manifest;
     }
 
-    private Manifest run(int targetEvents) throws SQLException {
+    private Manifest run(int targetEvents) throws IOException {
         SessionPlan longPlan = new SessionPlan(LONG_USER, "long-session", LONG_PROMPTS);
         SessionPlan quietPlan = new SessionPlan(QUIET_USER, "quiet-session", 3);
         waiting.add(longPlan);
@@ -145,7 +151,7 @@ public final class Corpus {
                 fill(targetEvents);
             }
         }
-        journal.commit();
+        flush();
         return new Manifest(seq, sessions, longPlan.session.value(), longRun, quietPlan.session.value(), quietRun);
     }
 
@@ -188,12 +194,24 @@ public final class Corpus {
                 new RequestId("req-" + id), new OwnerRef.OfSession(plan.session), words(40 + random.nextInt(400)))));
     }
 
-    private void feed(Pending next) throws SQLException {
+    /** 攒一批再写：每事件 fsync 时，生成几十万事件要几十分钟。 */
+    private void flush() throws IOException {
+        for (List<EventEnvelope> events : buffered.values()) {
+            EventEnvelope first = events.getFirst();
+            try (SessionFile file = SessionFile.open(paths, first.principal(), first.session(), codec)) {
+                file.append(events);
+            }
+        }
+        buffered.clear();
+        bufferedEvents = 0;
+    }
+
+    private void feed(Pending next) throws IOException {
         EventEnvelope envelope = new EventEnvelope(seq, START.plusSeconds(seq * 3), next.principal(), next.session(), next.run(), next.event());
         seq++;
-        journal.append(envelope);
-        if (seq % 1000 == 0) {
-            journal.commit();
+        buffered.computeIfAbsent(next.session(), ignored -> new ArrayList<>()).add(envelope);
+        if (++bufferedEvents >= FLUSH_EVENTS) {
+            flush();
         }
         Decision decision = kernel.step(state, envelope);
         state = decision.newState();

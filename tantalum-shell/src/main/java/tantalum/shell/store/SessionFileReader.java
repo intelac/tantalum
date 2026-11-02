@@ -184,6 +184,25 @@ public final class SessionFileReader {
         }
     }
 
+    /** 文件里最后一个完整事件的序号，没有时为 -1。尾部残缺的行不算。不读其他内容。 */
+    public static long lastSeq(Path file) throws IOException {
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            long end = channel.size();
+            if (end > 0 && byteAt(channel, end - 1) != '\n') {
+                end = lineStart(channel, end);
+            }
+            while (end > 0) {
+                long start = lineStart(channel, end - 1);
+                if (parse(bytes(channel, start, end - 1)) instanceof Json.Obj record
+                        && record.fields().get("seq") instanceof Json.Num seq) {
+                    return seq.value().longValueExact();
+                }
+                end = start;
+            }
+            return -1;
+        }
+    }
+
     /** {@code position} 所在行的起点，即它之前最后一个换行符的下一个字节。 */
     private static long lineStart(FileChannel channel, long position) throws IOException {
         long end = position;

@@ -6,7 +6,7 @@
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
-| `ops-hardening` | 11/50，阶段 0、1 完成（每会话文件类已写好但未接入，运行路径仍是 SQLite）；下一步阶段 2，从任务 10 开始 | `specs/ops-hardening/tasks.md` |
+| `ops-hardening` | 18/50，阶段 0–2 完成（已切到每会话文件，启动仍全量重放）；下一步阶段 3，从任务 16 开始 | `specs/ops-hardening/tasks.md` |
 
 ## 2. 已定要做，还没开 spec
 
@@ -34,6 +34,8 @@
 | `spec-audit-fixes` | A8 重试范围比需求窄 | 未排期 |
 | `spec-audit-fixes` | A7 “在途调用走完”只对普通失败成立；MCP 会话被服务端终止时在途调用会一起失败（SDK 2.1.0 行为） | 未排期，受 SDK 限制 |
 | `spec-audit-fixes` | 需求 5.4 没有在连接层用两个账号验证 | 未排期 |
+| `ops-hardening` 阶段 2 | 放行名额没有按用户限额：一个磁盘卡住的用户，如果有大量运行的工具结果在途，理论上能占满全部名额，拖住其他用户。现有测试只覆盖在途事件少于名额的情况 | 未排期 |
+| `ops-hardening` 阶段 2 | 两个用户同时用同一个新会话 ID 的竞争还在，任务 18 修 | 任务 18 |
 | `spec-audit-fixes` | 提交 b885dfd 补的 2 个测试只跑了 `CompactStepsTest`，之后没有跑全量 | 由 `ops-hardening` 任务 15 的 `mvn verify` 覆盖 |
 
 ## 5. 长期限制

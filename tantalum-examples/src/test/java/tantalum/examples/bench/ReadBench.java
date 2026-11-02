@@ -36,7 +36,7 @@ public final class ReadBench {
             }
             Corpus.Manifest manifest = Corpus.readManifest(data);
             System.out.printf("%n== %d events, %d sessions, journal %d MB%n", manifest.events(), manifest.sessions(),
-                    Files.size(data.resolve("journal.db")) / (1 << 20));
+                    directorySize(data.resolve("sessions")) / (1 << 20));
             Map<String, List<Long>> results = new LinkedHashMap<>();
             for (int i = 0; i < samples; i++) {
                 sample(data, root.resolve("sample-" + events + "-" + i + ".log"))
@@ -74,6 +74,12 @@ public final class ReadBench {
     private static int freePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
+        }
+    }
+
+    private static long directorySize(Path dir) throws java.io.IOException {
+        try (var files = Files.walk(dir)) {
+            return files.filter(Files::isRegularFile).mapToLong(file -> file.toFile().length()).sum();
         }
     }
 }
