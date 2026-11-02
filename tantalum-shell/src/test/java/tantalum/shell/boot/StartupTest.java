@@ -23,7 +23,6 @@ import tantalum.shell.store.SessionCorruptException;
 import tantalum.shell.store.SessionFile;
 import tantalum.shell.store.SessionPaths;
 import tantalum.shell.store.SessionStore;
-import tantalum.shell.loop.SubmissionLedger;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
@@ -76,7 +75,7 @@ class StartupTest {
     @Test
     void emptyJournalStartsEmpty() throws Exception {
         {
-            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store(), kernel());
             assertTrue(recovered.state().runs().isEmpty());
         }
     }
@@ -87,7 +86,7 @@ class StartupTest {
             write(prompt());
             write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
                     new ContextAssembled(new CommandId("s_0-0"), "s", List.of())));
-            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store(), kernel());
 
             RunState run = recovered.state().runs().get(RUN);
             assertTrue(run.pendingRecovery());
@@ -100,17 +99,7 @@ class StartupTest {
         {
             write(prompt());
             write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN, new Cancel(new RequestId("c"))));
-            assertFalse(Startup.recover(store(), kernel(), new SubmissionLedger()).state().runs().get(RUN).pendingRecovery());
-        }
-    }
-
-    @Test
-    void ledgerIsRebuilt() throws Exception {
-        {
-            write(prompt());
-            SubmissionLedger ledger = new SubmissionLedger();
-            Startup.recover(store(), kernel(), ledger);
-            assertEquals(new SubmissionId("sub"), ledger.claim(USER, new RequestId("req")).submission());
+            assertFalse(Startup.recover(store(), kernel()).state().runs().get(RUN).pendingRecovery());
         }
     }
 
@@ -123,7 +112,7 @@ class StartupTest {
             List<String> lines = new java.util.ArrayList<>(Files.readAllLines(file));
             lines.set(1, "{\"seq\":0,\"at\":\"1970-01-01T00:00:00Z\",\"type\":\"Mystery\",\"version\":1,\"run\":null,\"payload\":{}}");
             Files.write(file, lines);
-            assertThrows(SessionCorruptException.class, () -> Startup.recover(store(), kernel(), new SubmissionLedger()));
+            assertThrows(SessionCorruptException.class, () -> Startup.recover(store(), kernel()));
         }
     }
 
@@ -139,7 +128,7 @@ class StartupTest {
             write(new EventEnvelope(3, Instant.EPOCH.plusSeconds(9), USER, SESSION, RUN,
                     new ToolFinished(new CommandId("s_2-0"), "c1", "file body", false)));
 
-            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store(), kernel());
 
             List<TranscriptItem> items = recovered.transcript().items(SESSION);
             assertEquals(3, items.size());

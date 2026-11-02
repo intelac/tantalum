@@ -94,8 +94,8 @@ public final class SessionFile implements AutoCloseable {
         return (JsonText.toText(JsonText.fromPlain(fields)) + "\n").getBytes(StandardCharsets.UTF_8);
     }
 
-    /** 一批事件写完后 fsync 一次。失败时文件尾部可能残缺，由下次 {@link #open} 截掉。 */
-    public void append(List<EventEnvelope> events) throws IOException {
+    /** 一批事件写完后 fsync 一次，返回落盘后的文件大小。失败时文件尾部可能残缺，由下次 {@link #open} 截掉。 */
+    public long append(List<EventEnvelope> events) throws IOException {
         StringBuilder lines = new StringBuilder();
         for (EventEnvelope envelope : events) {
             if (!envelope.principal().equals(principal) || !envelope.session().equals(session)) {
@@ -106,6 +106,7 @@ public final class SessionFile implements AutoCloseable {
         }
         writeFully(channel, ByteBuffer.wrap(lines.toString().getBytes(StandardCharsets.UTF_8)));
         channel.force(true);
+        return channel.size();
     }
 
     private String line(EventEnvelope envelope) {

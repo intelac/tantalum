@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -52,7 +53,11 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.sse.SseHub;
+import tantalum.shell.store.IndexRecovery;
+import tantalum.shell.store.IndexWriter;
+import tantalum.shell.store.SessionFileReader;
 import tantalum.shell.store.SessionFiles;
+import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionPaths;
 import tantalum.shell.store.SessionStore;
 import tantalum.shell.store.StoreFormat;
@@ -104,7 +109,9 @@ public final class Engine implements AutoCloseable {
     private final OutputRing output;
     private final StateView view;
     private final Transcript transcript;
-    private final SubmissionLedger ledger = new SubmissionLedger();
+    private final SessionIndex index;
+    private final IndexWriter indexWriter;
+    private final SubmissionLedger ledger;
     private final ExternalGate gate;
     private final SseHub hub;
     private final MemoryStores memories;
@@ -121,11 +128,18 @@ public final class Engine implements AutoCloseable {
         this.lock = StoreLock.acquire(properties.dataDir());
         try {
             StoreFormat.check(properties.dataDir());
+            this.index = SessionIndex.open(properties.dataDir());
         } catch (IOException | RuntimeException failure) {
             closeQuietly(lock);
             throw failure;
+        } catch (SQLException failure) {
+            closeQuietly(lock);
+            throw new IOException("cannot open index", failure);
         }
-        this.files = new SessionFiles(new SessionPaths(properties.dataDir()), codec, MAX_OPEN_FILES);
+        this.ledger = new SubmissionLedger(this::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
+        TantalumProperties.Index throttle = properties.index() == null ? TantalumProperties.Index.defaults() : properties.index();
+        this.indexWriter = new IndexWriter(index, throttle.flushEvents(), throttle.flushInterval());
+        this.files = new SessionFiles(new SessionPaths(properties.dataDir()), codec, MAX_OPEN_FILES, indexWriter::onDurable);
         try {
             Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
             this.view = parts.view;
@@ -141,6 +155,8 @@ public final class Engine implements AutoCloseable {
             this.output = parts.output;
         } catch (RuntimeException failure) {
             closeQuietly(files);
+            closeQuietly(indexWriter);
+            closeQuietly(index);
             closeQuietly(lock);
             throw failure;
         }
@@ -177,7 +193,8 @@ public final class Engine implements AutoCloseable {
         Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
 
         SessionStore store = new SessionStore(properties.dataDir(), codec);
-        Startup.Recovered recovered = Startup.recover(store, kernel, ledger);
+        catchUpIndex(properties, kernel);
+        Startup.Recovered recovered = Startup.recover(store, kernel);
         StateView view = new StateView(recovered.state());
         TurnQuery turns = new TurnQuery(store, kernel, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
@@ -197,7 +214,7 @@ public final class Engine implements AutoCloseable {
                 StartTimer.class, new TimerHandler());
         OutputRing output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
         Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
-                recovered.transcript(), hub, view, results);
+                recovered.transcript(), hub, view, results, indexWriter::onStep);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
         ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
@@ -209,6 +226,35 @@ public final class Engine implements AutoCloseable {
             dispatcher.released();
         });
         return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp);
+    }
+
+    /** 索引只是缓存，补不上也能服务，下次启动再试。 */
+    private void catchUpIndex(TantalumProperties properties, Kernel kernel) {
+        try {
+            IndexRecovery.run(index, new SessionPaths(properties.dataDir()), new SessionFileReader(codec), kernel);
+        } catch (IOException | SQLException failure) {
+            LOG.warn("index could not catch up with session files: {}", failure.toString());
+        }
+    }
+
+    /** 查不到时当作新提交：可用性优先，日志留痕。 */
+    private Optional<SubmissionId> findSubmission(Principal principal, RequestId request) {
+        try {
+            return index.submission(principal, request);
+        } catch (SQLException failure) {
+            LOG.warn("index lookup failed, treating request as new: {}", failure.toString());
+            return Optional.empty();
+        }
+    }
+
+    /** 新会话 ID 只属于第一个认领的用户。内存里已有的会话不用查，这里只走一次。 */
+    private int claimSession(Principal principal, SessionId session) {
+        try {
+            return index.claim(session, principal) ? 200 : 404;
+        } catch (SQLException failure) {
+            LOG.error("cannot record session ownership", failure);
+            return 503;
+        }
     }
 
     private static void closeQuietly(AutoCloseable resource) {
@@ -245,6 +291,12 @@ public final class Engine implements AutoCloseable {
         SessionState existing = state.sessions().get(session);
         if (existing != null && !existing.principal().equals(principal)) {
             return new Submission(404, null, false);
+        }
+        if (existing == null) {
+            int owner = claimSession(principal, session);
+            if (owner != 200) {
+                return new Submission(owner, null, false);
+            }
         }
         SubmissionLedger.Claim claim = ledger.claim(principal, request);
         if (!claim.isNew()) {
@@ -367,7 +419,7 @@ public final class Engine implements AutoCloseable {
         Exception first = null;
         for (AutoCloseable step : List.<AutoCloseable>of(
                 mcp, () -> input.shutdown(DRAIN), () -> dispatcher.awaitIdle(DRAIN), () -> cleanroom.shutdown(DRAIN),
-                () -> output.shutdown(DRAIN), files, lock)) {
+                () -> output.shutdown(DRAIN), indexWriter, index, files, lock)) {
             try {
                 step.close();
             } catch (Exception failure) {

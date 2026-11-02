@@ -1,52 +1,78 @@
 package tantalum.shell.loop;
 
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import tantalum.value.event.Event;
-import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
-import tantalum.value.event.SteerSubmitted;
-import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SubmissionId;
 
-/** 按 {@code (用户, requestId)} 原子去重。启动时由 journal 重建，所以重启后重复提交也不会重复执行。 */
+/**
+ * 按 {@code (用户, requestId)} 原子去重。内存只占位最近的提交，未命中时查索引库，
+ * 所以重启后或很久以前的重复提交也不会重复执行，全部历史也不用常驻内存。
+ */
 public final class SubmissionLedger {
+
+    public static final int DEFAULT_CAPACITY = 100_000;
 
     /** 认领结果。{@code isNew} 为 false 时不要再提交。 */
     public record Claim(SubmissionId submission, boolean isNew) {}
 
+    /** 查已持久化的提交。 */
+    @FunctionalInterface
+    public interface History {
+        Optional<SubmissionId> find(Principal principal, RequestId request);
+    }
+
     private record Key(Principal principal, RequestId request) {}
 
-    private final Map<Key, SubmissionId> submissions = new ConcurrentHashMap<>();
+    private final History history;
+    private final Map<Key, SubmissionId> recent;
 
+    public SubmissionLedger() {
+        this((principal, request) -> Optional.empty(), DEFAULT_CAPACITY);
+    }
+
+    public SubmissionLedger(History history, int capacity) {
+        this.history = history;
+        this.recent = new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Key, SubmissionId> eldest) {
+                return size() > capacity;
+            }
+        };
+    }
+
+    /** 查索引不持锁，慢查询不会拖住其他提交；并发的相同请求最后在锁里只有一个胜出。 */
     public Claim claim(Principal principal, RequestId request) {
-        SubmissionId fresh = new SubmissionId(UUID.randomUUID().toString());
-        SubmissionId existing = submissions.putIfAbsent(new Key(principal, request), fresh);
-        return existing == null ? new Claim(fresh, true) : new Claim(existing, false);
+        Key key = new Key(principal, request);
+        synchronized (recent) {
+            SubmissionId existing = recent.get(key);
+            if (existing != null) {
+                return new Claim(existing, false);
+            }
+        }
+        Optional<SubmissionId> stored = history.find(principal, request);
+        synchronized (recent) {
+            SubmissionId existing = recent.get(key);
+            if (existing != null) {
+                return new Claim(existing, false);
+            }
+            if (stored.isPresent()) {
+                recent.put(key, stored.get());
+                return new Claim(stored.get(), false);
+            }
+            SubmissionId fresh = new SubmissionId(UUID.randomUUID().toString());
+            recent.put(key, fresh);
+            return new Claim(fresh, true);
+        }
     }
 
     /** 事件没能进入环时撤销认领，让调用方可以重试。 */
     public void release(Principal principal, RequestId request) {
-        submissions.remove(new Key(principal, request));
-    }
-
-    public void rebuild(List<EventEnvelope> events) {
-        for (EventEnvelope envelope : events) {
-            Event event = envelope.event();
-            switch (event) {
-                case UserPrompt prompt -> put(envelope.principal(), prompt.request(), prompt.submission());
-                case SteerSubmitted steer -> put(envelope.principal(), steer.request(), steer.submission());
-                case FollowUpSubmitted followUp -> put(envelope.principal(), followUp.request(), followUp.submission());
-                default -> { }
-            }
+        synchronized (recent) {
+            recent.remove(new Key(principal, request));
         }
-    }
-
-    private void put(Principal principal, RequestId request, SubmissionId submission) {
-        submissions.put(new Key(principal, request), submission);
     }
 }

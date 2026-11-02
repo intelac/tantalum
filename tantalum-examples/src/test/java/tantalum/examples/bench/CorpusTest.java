@@ -16,7 +16,6 @@ import tantalum.shell.boot.Startup;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.store.SessionStore;
-import tantalum.shell.loop.SubmissionLedger;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
 
@@ -45,7 +44,7 @@ class CorpusTest {
             SessionStore store = new SessionStore(temp, EventCodec.withBuiltins());
             List<EventEnvelope> events = store.readAll();
             assertEquals(manifest.events(), events.size());
-            Startup.Recovered recovered = Startup.recover(store, kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store, kernel());
             assertTrue(recovered.state().runs().values().stream().allMatch(run -> run.ended()));
             assertTrue(recovered.state().runs().values().stream()
                     .noneMatch(run -> ((tantalum.value.state.Ended) run.phase()).reason().name().equals("FAILED")));

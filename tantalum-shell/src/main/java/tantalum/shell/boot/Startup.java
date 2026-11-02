@@ -3,7 +3,6 @@ package tantalum.shell.boot;
 import java.util.List;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
-import tantalum.shell.loop.SubmissionLedger;
 import tantalum.shell.store.SessionStore;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.state.KernelState;
@@ -18,7 +17,7 @@ public final class Startup {
 
     private Startup() {}
 
-    public static Recovered recover(SessionStore store, Kernel kernel, SubmissionLedger ledger) {
+    public static Recovered recover(SessionStore store, Kernel kernel) {
         List<EventEnvelope> events = store.readAll();
         Transcript transcript = new Transcript();
         KernelState state = transcript.replay(kernel, events);
@@ -27,7 +26,6 @@ public final class Startup {
                 state = state.with(run.withPendingRecovery(true));
             }
         }
-        ledger.rebuild(events);
         return new Recovered(state, transcript);
     }
 }

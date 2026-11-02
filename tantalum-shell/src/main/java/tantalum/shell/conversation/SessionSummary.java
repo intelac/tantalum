@@ -31,7 +31,7 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
     }
 
     /** 第一行，最多 {@value #TITLE_LENGTH} 个字符，截断时加省略号。 */
-    static String titleOf(String text) {
+    public static String titleOf(String text) {
         String line = text.strip().lines().findFirst().orElse("");
         return line.length() <= TITLE_LENGTH ? line : line.substring(0, TITLE_LENGTH) + "…";
     }
