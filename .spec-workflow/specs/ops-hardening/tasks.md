@@ -243,13 +243,13 @@
 
 ## 阶段 6：回放接口
 
-- [ ] 33. `/turns`、`/trace` 按会话读
+- [x] 33. `/turns`、`/trace` 按会话读
   - File: shell/journal/TurnQuery.java, 对应测试
   - 从运行 ID 得到会话，只读该文件和用量表
   - 验证：统计读取的文件，只有一个；结果和全量回放相同
   - _Requirements: 5.1, 5.4_
 
-- [ ] 34. SSE 超范围补读
+- [x] 34. SSE 超范围补读
   - File: shell/sse/SseHub.java 或新类 shell/sse/Catchup.java，对应测试
   - 取该用户 `last_seq` 大于位置的会话和常驻会话，分别重放，按（序号，下标）合并
   - 验证：索引落后时不缺事件；只读该用户的文件
