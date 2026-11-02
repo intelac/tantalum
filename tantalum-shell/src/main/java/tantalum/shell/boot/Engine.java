@@ -152,7 +152,7 @@ public final class Engine implements AutoCloseable {
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
-            Evictor evictor = new Evictor(properties.residency(), residency, transcript, storage.snapshots, clock);
+            Evictor evictor = new Evictor(properties.residency(), residency, transcript, clock);
             cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, transcript, hub, view, results,
                     storage.indexWriter::onStep, evictor);
 
@@ -243,7 +243,7 @@ public final class Engine implements AutoCloseable {
 
     /**
      * 关闭：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
-     * 排空输入环、各用户通道和两个下游环 → 写投影缓存 → 关 MCP 和存储。每一步失败都不跳过后面的。
+     * 排空输入环、各用户通道和两个下游环 → 关 MCP 和存储。每一步失败都不跳过后面的。
      * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动时以“因重启中断”收尾。
      */
     @Override
@@ -257,7 +257,6 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("drain user lanes", () -> lanes.awaitIdle(DRAIN)),
                 new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
-                new Shutdown.Step("write snapshots", cleanroom::snapshotAll),
                 new Shutdown.Step("close mcp", mcp),
                 new Shutdown.Step("close storage", storage)));
     }

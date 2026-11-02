@@ -34,8 +34,6 @@ import tantalum.shell.journal.TailSequence;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionReplay;
-import tantalum.shell.store.SnapshotStore;
-import tantalum.shell.store.SnapshotWriter;
 import tantalum.shell.store.UsageLedger;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
@@ -72,7 +70,7 @@ import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 
 /**
- * 任务 29（需求 9.1）：同一组输入在“从不回收”“每个事件后回收”“每次从快照载入”下，
+ * 任务 29（需求 9.1）：同一组输入在“从不回收”“每个事件后回收”下，
  * 内核发出的命令（含给模型的完整 prompt）、事实（含钩子结果）和对话条目逐字节相同。走真实的环、通道、文件和索引。
  */
 class EvictionInvarianceTest {
@@ -101,32 +99,29 @@ class EvictionInvarianceTest {
         }
     };
 
-    private enum Mode { NEVER, EVERY_EVENT, FROM_SNAPSHOT }
+    private enum Mode { NEVER, EVERY_EVENT }
 
     @TempDir
     Path temp;
 
-    /** 一套完整的管线。命令不执行，记下来由场景按脚本回复，所以三种配置的输入完全相同。 */
+    /** 一套完整的管线。命令不执行，记下来由场景按脚本回复，所以两种配置的输入完全相同。 */
     private static final class Pipeline implements AutoCloseable {
         final List<String> log = new ArrayList<>();
-        final List<Integer> loads = new ArrayList<>();
+        final List<SessionId> loads = new ArrayList<>();
         final Deque<Command> pending = new ArrayDeque<>();
         final StateView view = new StateView();
-        /** 场景结束时每个会话完整的对话视图：在内存的直接导出，不在的按线上冷查询的方式读（有快照就用快照）。 */
+        /** 场景结束时每个会话完整的对话视图：在内存的直接导出，不在的按线上冷查询的方式重放会话文件。 */
         final Map<SessionId, Transcript.Saved> views = new java.util.TreeMap<>(java.util.Comparator.comparing(SessionId::value));
         private final Transcript transcript;
         private final SessionReplay replay;
         private final SessionIndex index;
         private final IndexWriter writer;
         private final SessionFiles files;
-        private final SnapshotWriter snapshots;
         private final InputRing input;
         private final CleanroomRing ring;
         private final LaneDispatcher dispatcher;
-        private final Mode mode;
 
         Pipeline(Path dir, Mode mode) throws Exception {
-            this.mode = mode;
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
             Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> tool.startsWith("safe"), 10);
@@ -135,16 +130,12 @@ class EvictionInvarianceTest {
             index = SessionIndex.open(dir);
             writer = new IndexWriter(index, 100, Duration.ofHours(1));
             files = new SessionFiles(paths, codec, 16, writer::onDurable);
-            snapshots = new SnapshotWriter(new SnapshotStore(paths, codec), paths);
-            SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new SnapshotStore(paths, codec), new UsageLedger(index, writer), kernel);
+            SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
             this.replay = replay;
             Residency residency = new Residency();
             transcript = new Transcript();
-            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, transcript, LoopFixtures.NO_SINK, Clock.systemUTC())
-                    // 快照配置下运行结束也写快照（门槛 1 个事件），回收时快照已是最新，载入用的就是运行结束时写的那份。
-                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, mode == Mode.FROM_SNAPSHOT ? 1 : Integer.MAX_VALUE, Duration.ZERO),
-                            residency, transcript,
-                            mode == Mode.FROM_SNAPSHOT ? snapshots : LoopFixtures.NO_SINK, Clock.systemUTC());
+            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, transcript, Clock.systemUTC())
+                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO), residency, transcript, Clock.systemUTC());
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
@@ -176,28 +167,24 @@ class EvictionInvarianceTest {
         }
 
         private Optional<CleanroomRing.Loaded> load(SessionReplay replay, Principal principal, SessionId session, long beforeSeq) throws Exception {
-            return replay.load(principal, session, beforeSeq).map(result -> {
-                loads.add(result.replayedEvents());
-                return new CleanroomRing.Loaded(result.snapshot().slice(), result.replayedEvents());
+            return replay.load(principal, session, beforeSeq).map(slice -> {
+                loads.add(session);
+                return new CleanroomRing.Loaded(slice);
             });
         }
 
-        /** 一个事件走完整条管线才返回；快照配置下还等快照写完，下一次载入一定用得上它。 */
+        /** 一个事件走完整条管线才返回。 */
         void send(Principal principal, SessionId session, RunId run, Event event) throws Exception {
             assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, AT, principal, session, run, event)));
             assertTrue(input.awaitDrained(WAIT));
             assertTrue(dispatcher.awaitIdle(WAIT));
-            if (mode == Mode.FROM_SNAPSHOT) {
-                snapshots.flush();
-            }
         }
 
         void captureViews(Map<SessionId, Principal> sessions) throws Exception {
-            snapshots.flush();
             for (var entry : sessions.entrySet()) {
                 SessionId session = entry.getKey();
                 views.put(session, transcript.sessions().contains(session) ? transcript.export(session)
-                        : replay.load(entry.getValue(), session, Long.MAX_VALUE).orElseThrow().snapshot().slice().transcript());
+                        : replay.load(entry.getValue(), session, Long.MAX_VALUE).orElseThrow().transcript());
             }
         }
 
@@ -205,7 +192,6 @@ class EvictionInvarianceTest {
         public void close() throws Exception {
             input.shutdown(WAIT);
             ring.shutdown(WAIT);
-            snapshots.close();
             files.close();
             writer.close();
             index.close();
@@ -308,19 +294,8 @@ class EvictionInvarianceTest {
         Pipeline never = run(Mode.NEVER);
         Pipeline every = run(Mode.EVERY_EVENT);
         assertFalse(every.loads.isEmpty());
-        assertTrue(every.loads.stream().allMatch(replayed -> replayed > 0), "no snapshots in this configuration: " + every.loads);
         assertEquals(never.log, every.log);
         assertEquals(never.views, every.views);
         assertTrue(every.view.current().sessions().isEmpty(), "everything idle has left memory");
-    }
-
-    @Test
-    void loadingFromASnapshotEveryTimeChangesNothing() throws Exception {
-        Pipeline never = run(Mode.NEVER);
-        Pipeline snapshot = run(Mode.FROM_SNAPSHOT);
-        assertFalse(snapshot.loads.isEmpty());
-        assertTrue(snapshot.loads.stream().allMatch(replayed -> replayed == 0), "every load came from a snapshot: " + snapshot.loads);
-        assertEquals(never.log, snapshot.log);
-        assertEquals(never.views, snapshot.views);
     }
 }

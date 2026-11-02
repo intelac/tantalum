@@ -19,8 +19,8 @@ public final class CleanroomRing extends Ring<CleanroomRing.Slot> {
     /** 通道载入冷会话的结果。 */
     public sealed interface Load permits Loaded, Failed {}
 
-    /** 载入成功，只随这个会话的第一个事件来。{@code replayed} 是真正重放的事件数，0 表示全部来自快照。 */
-    public record Loaded(SessionSlice slice, int replayed) implements Load {}
+    /** 载入成功，只随这个会话的第一个事件来。 */
+    public record Loaded(SessionSlice slice) implements Load {}
 
     /** 载入失败，这个会话的每个事件都带着它。 */
     public record Failed(String reason) implements Load {}

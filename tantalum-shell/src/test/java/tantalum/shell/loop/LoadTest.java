@@ -57,7 +57,7 @@ class LoadTest {
     }
 
     private static CleanroomRing.Loaded slice(SessionId session, Principal principal) {
-        return new CleanroomRing.Loaded(new SessionSlice(SessionState.start(session, principal), List.of(), null, 1), 1);
+        return new CleanroomRing.Loaded(new SessionSlice(SessionState.start(session, principal), List.of(), null, 1));
     }
 
     @Test

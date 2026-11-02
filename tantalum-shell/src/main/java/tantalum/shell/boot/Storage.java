@@ -22,8 +22,6 @@ import tantalum.shell.store.IndexCatchUp;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionReplay;
-import tantalum.shell.store.SnapshotStore;
-import tantalum.shell.store.SnapshotWriter;
 import tantalum.shell.store.UsageLedger;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -32,7 +30,7 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.state.PrincipalState;
 
 /**
- * 数据目录：锁、格式、会话文件、索引和快照，以及读它们共用的对象。
+ * 数据目录：锁、格式、会话文件和索引，以及读它们共用的对象。
  * 按顺序打开，中途失败时关掉已打开的，免得嵌入方重试时一直撞上“store is locked”；关闭顺序和打开相反。
  */
 final class Storage implements AutoCloseable {
@@ -47,8 +45,6 @@ final class Storage implements AutoCloseable {
     final IndexWriter indexWriter;
     final UsageLedger usage;
     final SessionFiles files;
-    final SnapshotStore snapshotStore;
-    final SnapshotWriter snapshots;
 
     private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, Deque<AutoCloseable> opened) throws IOException {
         paths = new SessionPaths(dataDir);
@@ -67,8 +63,6 @@ final class Storage implements AutoCloseable {
         usage = new UsageLedger(index, indexWriter);
         files = new SessionFiles(paths, codec, MAX_OPEN_FILES, indexWriter::onDurable);
         opened.push(files);
-        snapshotStore = new SnapshotStore(paths, codec);
-        snapshots = new SnapshotWriter(snapshotStore, paths);
     }
 
     static Storage open(Path dataDir, EventCodec codec, TantalumProperties.Index throttle) throws IOException {
@@ -82,7 +76,7 @@ final class Storage implements AutoCloseable {
     }
 
     SessionReplay replay(Kernel kernel) {
-        return new SessionReplay(paths, reader, snapshotStore, usage, kernel);
+        return new SessionReplay(paths, reader, usage, kernel);
     }
 
     /** 让索引追上会话文件，返回有未结束运行的会话。补不上就不知道哪些运行要收尾，拒绝启动；索引可以删掉重建。 */
@@ -101,8 +95,7 @@ final class Storage implements AutoCloseable {
         return new UserLane.Loader() {
             @Override
             public Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
-                return replay.load(principal, session, beforeSeq)
-                        .map(result -> new CleanroomRing.Loaded(result.snapshot().slice(), result.replayedEvents()));
+                return replay.load(principal, session, beforeSeq).map(CleanroomRing.Loaded::new);
             }
 
             @Override
@@ -135,7 +128,6 @@ final class Storage implements AutoCloseable {
     @Override
     public void close() throws IOException {
         Shutdown.run(List.of(
-                new Shutdown.Step("flush snapshots", snapshots),
                 new Shutdown.Step("flush index", indexWriter),
                 new Shutdown.Step("close index", index),
                 new Shutdown.Step("close session files", files),

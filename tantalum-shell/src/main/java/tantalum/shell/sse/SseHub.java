@@ -88,7 +88,7 @@ public final class SseHub implements FactListener {
     private final int queueCapacity;
     private final int recentCapacity;
     private final History history;
-    /** journal 的 mapper：条目、事实和分片都用它，和接口、快照的格式一致。 */
+    /** journal 的 mapper：条目、事实和分片都用它，和接口的格式一致。 */
     private final JsonMapper mapper;
     private final Map<Principal, Set<Subscription>> subscribers = new ConcurrentHashMap<>();
     private final Deque<Stored> recent = new ArrayDeque<>();

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.store.SessionStore;
@@ -23,7 +22,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 
-/** 任务 39（需求 7.1–7.3、H8）：关闭不丢已接受的提交，卡住的模型调用拖不过上限，空闲会话写快照，关闭后拒绝提交。 */
+/** 任务 39（需求 7.1–7.3、H8）：关闭不丢已接受的提交，卡住的模型调用拖不过上限，关闭后拒绝提交。 */
 class ShutdownOrderTest {
 
     private static final Principal ALICE = new Principal("alice");
@@ -139,22 +138,6 @@ class ShutdownOrderTest {
             assertTrue(took < 1_000 + 2_000 + 3_000, "closing took " + took + " ms");
         } finally {
             release.countDown();
-        }
-    }
-
-    @Test
-    void idleSessionsGetASnapshotOnClose() throws Exception {
-        try (TestServer server = server((prompt, chunks) ->
-                new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null))) {
-            Engine engine = server.context.getBean(Engine.class);
-            assertEquals(200, engine.intake().submit(ALICE, S1, new RequestId("r1"), "prompt", "hi").status());
-            for (int i = 0; i < 500 && (engine.state().sessions().get(S1) == null || engine.state().sessions().get(S1).activeRun() != null); i++) {
-                Thread.sleep(10);
-            }
-            Path snapshot = new SessionPaths(temp.resolve("data")).snapshotFile(ALICE, S1);
-            assertTrue(Files.notExists(snapshot), "a short run does not reach the run-end snapshot threshold");
-            server.context.close();
-            assertTrue(Files.exists(snapshot), "closing writes the projection cache");
         }
     }
 }

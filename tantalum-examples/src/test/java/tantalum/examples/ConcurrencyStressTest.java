@@ -67,7 +67,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 其中一部分运行在模型调用进行中被取消。检查的不是“没抛异常”，而是并发下的不变量：
  * 每个用户的 prompt 只含自己的文件内容；SSE 只收到自己的事件；没有命令丢失；
  * 从 journal 回放得到的 prompt 和实时发给模型的逐个相同；重启后由回放重建的对话视图和实时视图逐字节相同。
- * 不用真实模型，整个场景重复若干轮。第 2 轮激进回收（任务 32）：会话一空闲就离开内存、运行结束就写快照，
+ * 不用真实模型，整个场景重复若干轮。第 2 轮激进回收（任务 32）：会话一空闲就离开内存，
  * 全部结束后每个会话再同时提交一轮，迫使 32 个会话并发载入；取消后迟到的模型回复也会落到已回收的会话上。
  */
 class ConcurrencyStressTest {
@@ -190,7 +190,7 @@ class ConcurrencyStressTest {
         return "s-" + user + "-" + number;
     }
 
-    /** 等全部会话离开内存，再让每个会话同时提交第二轮：每个都要从快照载入，载入和别的用户的事件、回收交错。 */
+    /** 等全部会话离开内存，再让每个会话同时提交第二轮：每个都要重放会话文件载入，载入和别的用户的事件、回收交错。 */
     private static void secondTurnFromCold(TestServer server, Instant deadline, Map<String, String> messagesBefore) throws Exception {
         tantalum.shell.boot.Engine engine = server.context.getBean(tantalum.shell.boot.Engine.class);
         while (!engine.state().sessions().isEmpty() && Instant.now().isBefore(deadline)) {
@@ -281,7 +281,7 @@ class ConcurrencyStressTest {
         List<HttpResponse<InputStream>> streams = new ArrayList<>();
         boolean evict = round == 2;
         String[] args = evict ? new String[] {"--tantalum.claude.concurrency=16", "--tantalum.residency.idle=0s",
-                "--tantalum.residency.max-resident=1000", "--tantalum.residency.snapshot-events=1", "--tantalum.residency.sweep-interval=0s"}
+                "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s"}
                 : new String[] {"--tantalum.claude.concurrency=16"};
         try (TestServer server = new TestServer(data, workspace, model, plugins, args)) {
             for (int i = 0; i < USERS; i++) {

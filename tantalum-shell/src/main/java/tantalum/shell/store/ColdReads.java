@@ -43,7 +43,7 @@ public final class ColdReads {
     }
 
     public ColdReads(SessionPaths paths, SessionReplay replay) {
-        this(paths, (principal, session) -> replay.load(principal, session, Long.MAX_VALUE).map(result -> result.snapshot().slice()));
+        this(paths, (principal, session) -> replay.load(principal, session, Long.MAX_VALUE));
     }
 
     /** 文件不存在时为空，不重放。 */

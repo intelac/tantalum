@@ -53,11 +53,6 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         this.results = results;
     }
 
-    /** 关闭时写投影缓存（快照）。只能在 Cleanroom Ring 停了以后调用，那时没有别的线程碰状态。 */
-    public void snapshotAll() {
-        evictor.snapshotAll(state);
-    }
-
     /** 内核自己不会抛出（{@code Kernel.step} 把处理函数的异常变成运行失败）；这里防的是内核之外的 bug 和 {@code Error}。 */
     public boolean broken() {
         return broken;
@@ -116,7 +111,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         SessionSlice slice = loaded.slice();
         state = state.withResident(slice.session(), slice.runs());
         projection.restore(envelope.session(), slice.transcript());
-        evictor.loaded(envelope.session(), loaded);
+        evictor.used(envelope.session());
     }
 
     private void sweep() {
@@ -151,8 +146,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         for (TranscriptItem item : project(envelope, decision)) {
             notifyListener(seq, index++, envelope, item);
         }
-        // 投影之后：运行结束时的快照要包含这个事件产生的条目，否则从它载入会丢掉这些条目。
-        evictor.stepped(envelope, before, state);
+        evictor.used(envelope.session());
     }
 
     /** 投影出错只丢这次的条目，环继续。 */
