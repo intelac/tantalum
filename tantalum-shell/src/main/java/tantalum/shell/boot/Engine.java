@@ -1,7 +1,6 @@
 package tantalum.shell.boot;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -29,18 +28,19 @@ import tantalum.shell.handler.TimerHandler;
 import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
 import tantalum.shell.journal.StoreLock;
 import tantalum.shell.journal.TurnQuery;
 import tantalum.shell.loop.Cleanroom;
+import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.Dispatcher;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.InputRing;
-import tantalum.shell.loop.JournalWriter;
+import tantalum.shell.loop.JournalDispatcher;
 import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.loop.SubmissionLedger;
+import tantalum.shell.loop.TailSequence;
 import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
@@ -52,6 +52,10 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.sse.SseHub;
+import tantalum.shell.store.SessionFiles;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionStore;
+import tantalum.shell.store.StoreFormat;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
@@ -83,16 +87,20 @@ public final class Engine implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
     private static final Duration DRAIN = Duration.ofSeconds(5);
+    private static final int MAX_OPEN_FILES = 256;
+    /** 只供回归测试：让序号跳号运行，证明没有代码依赖序号连续。 */
+    private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
 
     /** 提交的结果。{@code status} 对应 HTTP 状态。 */
     public record Submission(int status, SubmissionId submission, boolean duplicate) {}
 
     private final Clock clock;
     private final StoreLock lock;
-    private final Journal journal;
+    private final SessionFiles files;
     private final EventCodec codec;
-    private final JournalWriter writer;
+    private final JournalDispatcher dispatcher;
     private final InputRing input;
+    private final CleanroomRing cleanroom;
     private final OutputRing output;
     private final StateView view;
     private final Transcript transcript;
@@ -112,11 +120,12 @@ public final class Engine implements AutoCloseable {
         this.codec = codec;
         this.lock = StoreLock.acquire(properties.dataDir());
         try {
-            this.journal = Journal.open(properties.dataDir(), codec);
+            StoreFormat.check(properties.dataDir());
         } catch (IOException | RuntimeException failure) {
             closeQuietly(lock);
             throw failure;
         }
+        this.files = new SessionFiles(new SessionPaths(properties.dataDir()), codec, MAX_OPEN_FILES);
         try {
             Assembly parts = assemble(properties, model, modelWait, modelConcurrency, tools, hooks, workTypes, afterHooks);
             this.view = parts.view;
@@ -125,22 +134,24 @@ public final class Engine implements AutoCloseable {
             this.hub = parts.hub;
             this.memories = parts.memories;
             this.mcp = parts.mcp;
-            this.writer = parts.writer;
+            this.dispatcher = parts.dispatcher;
+            this.cleanroom = parts.cleanroom;
             this.gate = parts.gate;
             this.input = parts.input;
             this.output = parts.output;
         } catch (RuntimeException failure) {
-            closeQuietly(journal);
+            closeQuietly(files);
             closeQuietly(lock);
             throw failure;
         }
         output.start();
+        cleanroom.start();
         input.start();
-        LOG.info("store ready at {}, next seq {}", properties.dataDir(), writer.nextSeq());
+        LOG.info("store ready at {}", properties.dataDir());
     }
 
-    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalWriter writer,
-                            ExternalGate gate, InputRing input, OutputRing output, MemoryStores memories, McpRegistry mcp) {}
+    private record Assembly(StateView view, Transcript transcript, TurnQuery turns, SseHub hub, JournalDispatcher dispatcher,
+                            ExternalGate gate, InputRing input, CleanroomRing cleanroom, OutputRing output, MemoryStores memories, McpRegistry mcp) {}
 
     private Assembly assemble(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
                               List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes,
@@ -165,11 +176,14 @@ public final class Engine implements AutoCloseable {
         BuiltinSteps.register(table);
         Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
 
-        Startup.Recovered recovered = Startup.recover(journal, kernel, ledger);
+        SessionStore store = new SessionStore(properties.dataDir(), codec);
+        Startup.Recovered recovered = Startup.recover(store, kernel, ledger);
         StateView view = new StateView(recovered.state());
-        TurnQuery turns = new TurnQuery(journal, kernel, codec.mapper());
-        SseHub hub = new SseHub(recovered.nextSeq(), 1024, 4096, turns::messagesAfter, codec.mapper());
-        JournalWriter writer = new JournalWriter(journal, recovered.nextSeq());
+        TurnQuery turns = new TurnQuery(store, kernel, codec.mapper());
+        SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
+        CleanroomRing cleanroomRing = new CleanroomRing(loop.inputRingSize());
+        JournalDispatcher dispatcher = new JournalDispatcher(loop.inputRingSize(), new TailSequence(new SessionPaths(properties.dataDir()), Integer.getInteger(SEQUENCE_STEP, 1)),
+                files::append, cleanroomRing::tryPublish);
 
         InFlightCommands inFlight = new InFlightCommands();
         InputRing input = new InputRing(loop.inputRingSize());
@@ -182,17 +196,19 @@ public final class Engine implements AutoCloseable {
                 DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout()),
                 StartTimer.class, new TimerHandler());
         OutputRing output = new OutputRing(loop.outputRingSize(), new Dispatcher(handlers, inFlight, results));
-        Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), writer::halted, output::tryPublish,
+        Cleanroom cleanroom = new Cleanroom(kernel, recovered.state(), dispatcher::halted, output::tryPublish,
                 recovered.transcript(), hub, view, results);
         // journal 写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
-        BooleanSupplier halted = () -> writer.halted() || cleanroom.broken() || input.broken() || output.broken();
+        BooleanSupplier halted = () -> dispatcher.halted() || cleanroom.broken() || input.broken() || cleanroomRing.broken() || output.broken();
         ExternalGate gate = new ExternalGate(loop, () -> (int) view.current().activeRunCount(), halted);
-        input.connect(writer, (slot, sequence, endOfBatch) -> {
+        input.connect(dispatcher);
+        cleanroomRing.connect((slot, sequence, endOfBatch) -> {
             EventEnvelope envelope = slot.envelope;
             cleanroom.onEvent(slot, sequence, endOfBatch);
             releaseIfExternal(envelope);
+            dispatcher.released();
         });
-        return new Assembly(view, recovered.transcript(), turns, hub, writer, gate, input, output, memories, mcp);
+        return new Assembly(view, recovered.transcript(), turns, hub, dispatcher, gate, input, cleanroomRing, output, memories, mcp);
     }
 
     private static void closeQuietly(AutoCloseable resource) {
@@ -345,12 +361,13 @@ public final class Engine implements AutoCloseable {
         return Optional.ofNullable(view.current().runs().get(id)).filter(run -> run.ref().principal().equals(principal));
     }
 
-    /** 入口先关（{@code halted} 之外由 Web 层停止接收），再排空两个环，最后关 journal 和锁；每一步失败都不跳过后面的。 */
+    /** 入口先关（{@code halted} 之外由 Web 层停止接收），再依次排空输入环、用户通道和两个下游环，最后关文件和锁；每一步失败都不跳过后面的。 */
     @Override
-    public void close() throws IOException, SQLException {
+    public void close() throws IOException {
         Exception first = null;
         for (AutoCloseable step : List.<AutoCloseable>of(
-                mcp, () -> input.shutdown(DRAIN), () -> output.shutdown(DRAIN), journal, lock)) {
+                mcp, () -> input.shutdown(DRAIN), () -> dispatcher.awaitIdle(DRAIN), () -> cleanroom.shutdown(DRAIN),
+                () -> output.shutdown(DRAIN), files, lock)) {
             try {
                 step.close();
             } catch (Exception failure) {
@@ -361,7 +378,6 @@ public final class Engine implements AutoCloseable {
         switch (first) {
             case null -> { }
             case IOException io -> throw io;
-            case SQLException sql -> throw sql;
             case RuntimeException runtime -> throw runtime;
             default -> throw new IllegalStateException(first);
         }

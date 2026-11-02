@@ -12,7 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.value.event.EventEnvelope;
 
-/** 输入环。第二个消费者依赖第一个的进度，这就是“先落盘再处理”。只用非阻塞发布。 */
+/** 输入环。外部提交和 Handler 结果都进这里，唯一消费者是 {@link JournalDispatcher}。只用非阻塞发布。 */
 public final class InputRing {
 
     private static final Logger LOG = LoggerFactory.getLogger(InputRing.class);
@@ -31,14 +31,14 @@ public final class InputRing {
         disruptor.setDefaultExceptionHandler(failure);
     }
 
-    public InputRing(int size, EventHandler<Slot> first, EventHandler<Slot> second) {
+    public InputRing(int size, EventHandler<Slot> consumer) {
         this(size);
-        connect(first, second);
+        connect(consumer);
     }
 
     /** 消费者要用到发布方，发布方又要用到环，所以分两步装配。 */
-    public void connect(EventHandler<Slot> first, EventHandler<Slot> second) {
-        disruptor.handleEventsWith(first).then(second);
+    public void connect(EventHandler<Slot> consumer) {
+        disruptor.handleEventsWith(consumer);
     }
 
     public void start() {

@@ -18,7 +18,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.ContextAssembled;
@@ -86,9 +86,7 @@ class MemorySnapshotTest {
         assertTrue(model.prompts.get(2).system().endsWith(INDEX_LINE + "\n</memory-index>"), model.prompts.get(2).system());
 
         List<EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         List<String> systems = journal.stream().filter(envelope -> envelope.event() instanceof ContextAssembled)
                 .map(envelope -> ((ContextAssembled) envelope.event()).system()).toList();
         assertEquals(2, systems.size());

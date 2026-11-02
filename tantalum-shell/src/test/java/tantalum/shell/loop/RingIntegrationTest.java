@@ -20,7 +20,10 @@ import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.handler.Handler;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionFileReader;
+import tantalum.shell.store.SessionFiles;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionStore;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -67,7 +70,9 @@ class RingIntegrationTest {
     @Test
     void submittedEventsReachTheEndAndReplayMatches() throws Exception {
         int sessions = 20;
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
+        SessionPaths paths = new SessionPaths(dir);
+        SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
+        try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 8)) {
             StateView view = new StateView(KernelState.empty());
             InFlightCommands inFlight = new InFlightCommands();
             Kernel kernel = kernel();
@@ -78,15 +83,21 @@ class RingIntegrationTest {
                     CallModel.class, handler(c -> new ModelReplied(c.id(), List.of(new TextBlock("done")),
                             StopReason.END_TURN, "m", null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
-            JournalWriter writer = new JournalWriter(journal, journal.nextSeq());
-            List<Long> durableAtStep = new ArrayList<>();
-            Cleanroom cleanroom = new Cleanroom(kernel, KernelState.empty(), writer::halted, output::tryPublish, Projection.NONE,
+            CleanroomRing ring = new CleanroomRing(1024);
+            JournalDispatcher journal = new JournalDispatcher(1024, new TailSequence(paths), files::append, ring::tryPublish);
+            List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
+            Cleanroom cleanroom = new Cleanroom(kernel, KernelState.empty(), journal::halted, output::tryPublish, Projection.NONE,
                     (seq, index, fact) -> { }, view, publisher);
-            input.connect(writer, (slot, seq, end) -> {
-                durableAtStep.add(slot.envelope.seq());
-                assertTrue(journal.readAll().size() > slot.envelope.seq(), "event must be durable before the kernel sees it");
+            ring.connect((slot, seq, end) -> {
+                EventEnvelope envelope = slot.envelope;
+                if (reader.readAll(paths.sessionFile(envelope.principal(), envelope.session())).stream().noneMatch(envelope::equals)) {
+                    notDurable.add(envelope.toString());
+                }
                 cleanroom.onEvent(slot, seq, end);
+                journal.released();
             });
+            input.connect(journal);
+            ring.start();
             output.start();
             input.start();
 
@@ -107,14 +118,14 @@ class RingIntegrationTest {
             }
 
             input.shutdown();
+            ring.shutdown(java.time.Duration.ofSeconds(5));
             output.shutdown();
 
-            List<EventEnvelope> events = journal.readAll();
+            assertEquals(List.of(), notDurable, "events must be durable before the kernel sees them");
+            List<EventEnvelope> events = new SessionStore(dir, EventCodec.withBuiltins()).readAll();
             assertEquals(sessions * 3, events.size());
-            assertEquals(view.current(), Replay.run(kernel, events).state());
-            for (int i = 1; i < durableAtStep.size(); i++) {
-                assertEquals(durableAtStep.get(i - 1) + 1, durableAtStep.get(i));
-            }
+            assertEquals(view.current().runs(), Replay.run(kernel, events).state().runs());
+            assertEquals(view.current().sessions(), Replay.run(kernel, events).state().sessions());
         }
     }
 

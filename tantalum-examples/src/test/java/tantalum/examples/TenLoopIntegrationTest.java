@@ -23,7 +23,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolOutput;
@@ -120,9 +120,7 @@ class TenLoopIntegrationTest {
         assertEquals(4, model.prompts.size());
 
         List<EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished", "ModelReplied",
                 "ToolFinished", "ModelReplied", "ToolFinished", "ModelReplied", "WorkDone"),
                 journal.stream().map(envelope -> envelope.event().type()).toList());

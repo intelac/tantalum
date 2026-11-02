@@ -5,10 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -21,8 +19,10 @@ import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.conversation.TranscriptItem;
-import tantalum.shell.journal.Journal;
-import tantalum.shell.journal.JournalCorruptException;
+import tantalum.shell.store.SessionCorruptException;
+import tantalum.shell.store.SessionFile;
+import tantalum.shell.store.SessionPaths;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.loop.SubmissionLedger;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
@@ -58,6 +58,16 @@ class StartupTest {
         return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
     }
 
+    private void write(EventEnvelope envelope) throws Exception {
+        try (SessionFile file = SessionFile.open(new SessionPaths(dir), envelope.principal(), envelope.session(), EventCodec.withBuiltins())) {
+            file.append(List.of(envelope));
+        }
+    }
+
+    private SessionStore store() {
+        return new SessionStore(dir, EventCodec.withBuiltins());
+    }
+
     private static EventEnvelope prompt() {
         return new EventEnvelope(0, Instant.EPOCH, USER, SESSION, null,
                 new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(SESSION), "hi"));
@@ -65,77 +75,71 @@ class StartupTest {
 
     @Test
     void emptyJournalStartsEmpty() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
-            Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());
-            assertEquals(0, recovered.nextSeq());
+        {
+            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
             assertTrue(recovered.state().runs().isEmpty());
         }
     }
 
     @Test
     void unfinishedRunStaysWaitingMarkedForRecoveryWithoutNewCommands() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
-            journal.append(prompt());
-            journal.append(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
+        {
+            write(prompt());
+            write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
                     new ContextAssembled(new CommandId("s_0-0"), "s", List.of())));
-            journal.commit();
-            Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
 
             RunState run = recovered.state().runs().get(RUN);
             assertTrue(run.pendingRecovery());
             assertEquals("AwaitingModel", ((Awaiting) run.phase()).resumeAt());
-            assertEquals(2, recovered.nextSeq());
         }
     }
 
     @Test
     void finishedRunIsNotMarked() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
-            journal.append(prompt());
-            journal.append(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN, new Cancel(new RequestId("c"))));
-            journal.commit();
-            assertFalse(Startup.recover(journal, kernel(), new SubmissionLedger()).state().runs().get(RUN).pendingRecovery());
+        {
+            write(prompt());
+            write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN, new Cancel(new RequestId("c"))));
+            assertFalse(Startup.recover(store(), kernel(), new SubmissionLedger()).state().runs().get(RUN).pendingRecovery());
         }
     }
 
     @Test
     void ledgerIsRebuilt() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
-            journal.append(prompt());
-            journal.commit();
+        {
+            write(prompt());
             SubmissionLedger ledger = new SubmissionLedger();
-            Startup.recover(journal, kernel(), ledger);
+            Startup.recover(store(), kernel(), ledger);
             assertEquals(new SubmissionId("sub"), ledger.claim(USER, new RequestId("req")).submission());
         }
     }
 
     @Test
     void corruptJournalRefusesToStart() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
-            journal.append(prompt());
-            journal.commit();
-            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + dir.resolve(Journal.FILE));
-                    Statement statement = connection.createStatement()) {
-                statement.execute("UPDATE events SET type = 'Mystery'");
-            }
-            assertThrows(JournalCorruptException.class, () -> Startup.recover(journal, kernel(), new SubmissionLedger()));
+        {
+            write(prompt());
+            write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN, new Cancel(new RequestId("c"))));
+            Path file = new SessionPaths(dir).sessionFile(USER, SESSION);
+            List<String> lines = new java.util.ArrayList<>(Files.readAllLines(file));
+            lines.set(1, "{\"seq\":0,\"at\":\"1970-01-01T00:00:00Z\",\"type\":\"Mystery\",\"version\":1,\"run\":null,\"payload\":{}}");
+            Files.write(file, lines);
+            assertThrows(SessionCorruptException.class, () -> Startup.recover(store(), kernel(), new SubmissionLedger()));
         }
     }
 
     @Test
     void transcriptIsRebuiltWithTheToolChain() throws Exception {
-        try (Journal journal = Journal.open(dir, EventCodec.withBuiltins())) {
+        {
             ToolCallBlock call = new ToolCallBlock("c1", "read_file", "{}", new Json.Obj(Map.of()));
-            journal.append(prompt());
-            journal.append(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
+            write(prompt());
+            write(new EventEnvelope(1, Instant.EPOCH, USER, SESSION, RUN,
                     new ContextAssembled(new CommandId("s_0-0"), "s", List.of())));
-            journal.append(new EventEnvelope(2, Instant.EPOCH.plusSeconds(5), USER, SESSION, RUN,
+            write(new EventEnvelope(2, Instant.EPOCH.plusSeconds(5), USER, SESSION, RUN,
                     new ModelReplied(new CommandId("s_1-0"), List.of(call), StopReason.TOOL_USE, "m", null)));
-            journal.append(new EventEnvelope(3, Instant.EPOCH.plusSeconds(9), USER, SESSION, RUN,
+            write(new EventEnvelope(3, Instant.EPOCH.plusSeconds(9), USER, SESSION, RUN,
                     new ToolFinished(new CommandId("s_2-0"), "c1", "file body", false)));
-            journal.commit();
 
-            Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store(), kernel(), new SubmissionLedger());
 
             List<TranscriptItem> items = recovered.transcript().items(SESSION);
             assertEquals(3, items.size());

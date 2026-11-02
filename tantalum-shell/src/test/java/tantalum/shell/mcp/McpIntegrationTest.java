@@ -19,7 +19,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.mcp.TestMcpServer.Definition;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -166,9 +166,7 @@ class McpIntegrationTest {
         }
 
         List<tantalum.value.event.EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         assertTrue(journal.stream().anyMatch(envelope -> envelope.event() instanceof ToolFinished));
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);

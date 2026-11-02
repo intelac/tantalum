@@ -10,6 +10,7 @@ import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.store.SessionStore;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.decision.CompactionFailed;
@@ -28,7 +29,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 回放 journal 回答历史问题。没有快照，每次都是全量回放。 */
+/** 回放该用户的会话文件回答历史问题。不属于他的运行不在里面，和不存在一样。 */
 public final class TurnQuery {
 
     /** 一次模型调用：完整输入和结果。 */
@@ -57,12 +58,12 @@ public final class TurnQuery {
         public record Segment(String handler, Instant from, Instant to) {}
     }
 
-    private final Journal journal;
+    private final SessionStore store;
     private final Kernel kernel;
     private final JsonMapper mapper;
 
-    public TurnQuery(Journal journal, Kernel kernel, JsonMapper mapper) {
-        this.journal = journal;
+    public TurnQuery(SessionStore store, Kernel kernel, JsonMapper mapper) {
+        this.store = store;
         this.kernel = kernel;
         this.mapper = mapper;
     }
@@ -71,7 +72,7 @@ public final class TurnQuery {
     public List<Turn> turns(Principal principal, RunId run) {
         Map<CommandId, Turn> turns = new LinkedHashMap<>();
         KernelState state = KernelState.empty();
-        for (EventEnvelope envelope : journal.readAll()) {
+        for (EventEnvelope envelope : store.readUser(principal)) {
             if (envelope.event() instanceof ModelReplied reply && turns.containsKey(reply.command())) {
                 turns.compute(reply.command(), (id, turn) -> turn.withReply(reply));
             } else if (envelope.event() instanceof ModelFailed failure && turns.containsKey(failure.command())) {
@@ -94,7 +95,7 @@ public final class TurnQuery {
         List<Trace.Entry> entries = new ArrayList<>();
         KernelState state = KernelState.empty();
         int turns = 0;
-        for (EventEnvelope envelope : journal.readAll()) {
+        for (EventEnvelope envelope : store.readUser(principal)) {
             boolean existed = state.runs().containsKey(run);
             Decision decision = kernel.step(state, envelope);
             state = decision.newState();
@@ -159,7 +160,7 @@ public final class TurnQuery {
         List<SseMessage> messages = new ArrayList<>();
         KernelState state = KernelState.empty();
         Transcript transcript = new Transcript();
-        for (EventEnvelope envelope : journal.readAll()) {
+        for (EventEnvelope envelope : store.readUser(principal)) {
             Decision decision = kernel.step(state, envelope);
             state = decision.newState();
             boolean mine = envelope.principal().equals(principal);

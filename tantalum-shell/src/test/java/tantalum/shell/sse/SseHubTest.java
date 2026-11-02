@@ -37,7 +37,7 @@ class SseHubTest {
     }
 
     private static SseHub hub() {
-        return new SseHub(0, 4, 8, (principal, after) -> List.of(), MAPPER);
+        return new SseHub(4, 8, (principal, after) -> List.of(), MAPPER);
     }
 
     @Test
@@ -112,7 +112,7 @@ class SseHubTest {
     @Test
     void reconnectBeyondMemoryFallsBackToHistory() throws Exception {
         List<String> asked = new ArrayList<>();
-        SseHub hub = new SseHub(100, 4, 8, (principal, after) -> {
+        SseHub hub = new SseHub(4, 8, (principal, after) -> {
             asked.add(principal.value() + "@" + after);
             return List.of(new SseMessage("50.0", "PhaseChanged", "{}"));
         }, MAPPER);
@@ -124,7 +124,7 @@ class SseHubTest {
     @Test
     void evictedMemoryFallsBackToHistory() throws Exception {
         List<String> asked = new ArrayList<>();
-        SseHub hub = new SseHub(0, 4, 2, (principal, after) -> {
+        SseHub hub = new SseHub(4, 2, (principal, after) -> {
             asked.add(after);
             return List.of();
         }, MAPPER);
@@ -139,7 +139,7 @@ class SseHubTest {
     @Test
     void evictionWithinOneSeqIsTrackedByIndex() throws Exception {
         List<String> asked = new ArrayList<>();
-        SseHub hub = new SseHub(0, 4, 2, (principal, after) -> {
+        SseHub hub = new SseHub(4, 2, (principal, after) -> {
             asked.add(after);
             return List.of();
         }, MAPPER);
@@ -156,9 +156,44 @@ class SseHubTest {
         assertEquals(List.of("5.0"), asked, "5.1 is gone from memory, so 5.0 must replay from the journal");
     }
 
+    /** 序号只在一个用户内可比。全局边界下，序号大的 alice 被挤出后，bob 还在内存里的位置会被误判为要回放。 */
+    @Test
+    void evictingOneUserDoesNotMoveAnotherUsersPosition() throws Exception {
+        List<String> asked = new ArrayList<>();
+        SseHub hub = new SseHub(4, 3, (principal, after) -> {
+            asked.add(principal.value() + "@" + after);
+            return List.of();
+        }, MAPPER);
+        hub.onFact(5, 0, fact(BOB, "b5"));
+        hub.onFact(100, 0, fact(ALICE, "a"));
+        hub.onFact(6, 0, fact(BOB, "b6"));
+        hub.onFact(101, 0, fact(ALICE, "c")); // 挤出 bob 的 5.0
+        hub.onFact(102, 0, fact(ALICE, "d")); // 挤出 alice 的 100.0
+
+        SseHub.Subscription bob = hub.subscribe(BOB, "5.0");
+        assertEquals(List.of(), asked);
+        assertEquals("6.0", bob.poll(1, TimeUnit.SECONDS).id());
+
+        hub.subscribe(ALICE, "99.0");
+        assertEquals(List.of("alice@99.0"), asked);
+    }
+
+    /** 同样的序号属于不同用户：补读不串。 */
+    @Test
+    void usersWithTheSameSeqDoNotSeeEachOther() throws Exception {
+        SseHub hub = new SseHub(4, 8, (principal, after) -> List.of(), MAPPER);
+        hub.onFact(1, 0, fact(ALICE, "a"));
+        hub.onFact(1, 0, fact(BOB, "b"));
+        hub.onFact(2, 0, fact(ALICE, "a"));
+        hub.onFact(2, 0, fact(BOB, "b"));
+        SseHub.Subscription alice = hub.subscribe(ALICE, "1.0");
+        assertEquals("2.0", alice.poll(1, TimeUnit.SECONDS).id());
+        assertEquals(null, alice.poll(50, TimeUnit.MILLISECONDS));
+    }
+
     @Test
     void failedHistoryReplayDoesNotLeakTheSubscription() {
-        SseHub hub = new SseHub(100, 4, 8, (principal, after) -> { throw new IllegalStateException("journal gone"); }, MAPPER);
+        SseHub hub = new SseHub(4, 8, (principal, after) -> { throw new IllegalStateException("journal gone"); }, MAPPER);
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> hub.subscribe(ALICE, "1.0"));
         assertEquals(0, hub.subscriberCount());
     }
@@ -180,7 +215,7 @@ class SseHubTest {
         for (int i = 0; i < 50; i++) {
             history.add(new SseMessage(i + ".0", "PhaseChanged", "{}"));
         }
-        SseHub hub = new SseHub(100, 4, 8, (principal, after) -> history, MAPPER);
+        SseHub hub = new SseHub(4, 8, (principal, after) -> history, MAPPER);
         SseHub.Subscription again = hub.subscribe(ALICE, "-1.0");
         assertFalse(again.closed());
         for (int i = 0; i < 50; i++) {

@@ -58,7 +58,7 @@ class BackpressureTest {
         CountDownLatch stuck = new CountDownLatch(1);
         OutputRing output = new OutputRing(2, (slot, sequence, end) -> stuck.await());
         output.start();
-        InputRing input = new InputRing(64, (slot, sequence, end) -> { }, (slot, sequence, end) -> { });
+        InputRing input = new InputRing(64, (slot, sequence, end) -> { });
         input.start();
         StateView view = new StateView(KernelState.empty());
         ResultPublisher results = new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 0);
@@ -91,7 +91,10 @@ class BackpressureTest {
         Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, output::tryPublish, Projection.NONE,
                 (seq, index, fact) -> { }, view, results);
         long[] nextSeq = {0};
-        input.connect((slot, sequence, end) -> slot.envelope = slot.envelope.withSeq(nextSeq[0]++), cleanroom);
+        input.connect((slot, sequence, end) -> {
+            slot.envelope = slot.envelope.withSeq(nextSeq[0]++);
+            cleanroom.onEvent(slot, sequence, end);
+        });
         input.start();
 
         for (int i = 0; i < 8; i++) {
@@ -120,7 +123,7 @@ class BackpressureTest {
         InputRing input = new InputRing(2, (slot, sequence, end) -> {
             stuck.await();
             received.add(slot.envelope);
-        }, (slot, sequence, end) -> { });
+        });
         input.start();
         ResultPublisher results = new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 0);
 

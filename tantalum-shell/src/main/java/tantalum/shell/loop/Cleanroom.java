@@ -14,7 +14,7 @@ import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.state.KernelState;
 
-/** 输入环的第二个消费者：按序调内核，发布命令、事实和条目变化。只看到已提交的事件，不做 I/O，不等待。 */
+/** Cleanroom Ring 的消费者：按序调内核，发布命令、事实和条目变化。只看到已提交的事件，不做 I/O，不等待。 */
 public final class Cleanroom implements EventHandler<InputRing.Slot> {
 
     private static final Logger LOG = LoggerFactory.getLogger(Cleanroom.class);

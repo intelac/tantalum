@@ -34,7 +34,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.table.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -367,9 +367,7 @@ class ConcurrencyStressTest {
 
         // 4. journal：没有命令丢失；回放得到的 prompt 和实时发给模型的逐个相同。
         List<EventEnvelope> journal;
-        try (Journal reopened = Journal.open(data, EventCodec.withBuiltins())) {
-            journal = reopened.readAll();
-        }
+        journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         assertTrue(journal.stream().noneMatch(envelope -> envelope.event() instanceof CommandDropped), "a command was dropped");
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);

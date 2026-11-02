@@ -68,8 +68,8 @@ test.describe("上下文压缩", () => {
       await expect
         .poll(
           async () => {
-            const runs = (await (await request.get(`/api/sessions/${session}/runs`)).json()) as { runs: { endReason?: string }[] };
-            return runs.runs.length === n && runs.runs[n - 1]?.endReason !== undefined;
+            const runs = (await (await request.get(`/api/sessions/${session}/runs`)).json()) as { runs?: { endReason?: string }[] };
+            return runs.runs?.length === n && runs.runs[n - 1]?.endReason !== undefined;
           },
           { timeout: 20_000 },
         )

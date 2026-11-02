@@ -51,11 +51,11 @@ class CleanroomTest {
         return slot;
     }
 
-    private InputRing ring = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+    private InputRing ring = new InputRing(8, (slot, seq, end) -> { });
     private final List<EventEnvelope> published = new ArrayList<>();
 
     private Cleanroom cleanroom() {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> published.add(slot.envelope), (slot, seq, end) -> { });
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> published.add(slot.envelope));
         captureRing.start();
         ring = captureRing;
         ResultPublisher publisher = new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0);
@@ -104,7 +104,7 @@ class CleanroomTest {
 
     @Test
     void factListenerFailureDoesNotStopTheLoop() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         Cleanroom cleanroom = new Cleanroom(kernel(), KernelState.empty(), () -> false, commands::add, Projection.NONE,
@@ -117,7 +117,7 @@ class CleanroomTest {
 
     @Test
     void projectedItemsAreNumberedAfterTheFactsOfTheSameEvent() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         List<String> notified = new ArrayList<>();
@@ -142,7 +142,7 @@ class CleanroomTest {
     /** 内核之外抛出（这里用 Error 模拟）不能让消费者线程静默死掉：置 broken，后续事件跳过，入口据此返回 503。 */
     @Test
     void unexpectedThrowableMarksTheCleanroomBrokenInsteadOfKillingTheThread() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         // 内核只把 RuntimeException 变成运行失败；Error 会穿出来。
@@ -164,7 +164,7 @@ class CleanroomTest {
 
     @Test
     void projectionFailureDoesNotStopTheLoop() throws Exception {
-        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { }, (slot, seq, end) -> { });
+        InputRing captureRing = new InputRing(8, (slot, seq, end) -> { });
         captureRing.start();
         ring = captureRing;
         Projection broken = (envelope, decision) -> { throw new IllegalStateException("projection bug"); };

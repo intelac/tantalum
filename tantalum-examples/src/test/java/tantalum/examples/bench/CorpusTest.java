@@ -15,7 +15,7 @@ import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.boot.Startup;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.loop.SubmissionLedger;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
@@ -41,10 +41,11 @@ class CorpusTest {
         assertNotNull(manifest.longRun());
         assertNotNull(manifest.quietRun());
 
-        try (Journal journal = Journal.open(temp, EventCodec.withBuiltins())) {
-            List<EventEnvelope> events = journal.readAll();
+        {
+            SessionStore store = new SessionStore(temp, EventCodec.withBuiltins());
+            List<EventEnvelope> events = store.readAll();
             assertEquals(manifest.events(), events.size());
-            Startup.Recovered recovered = Startup.recover(journal, kernel(), new SubmissionLedger());
+            Startup.Recovered recovered = Startup.recover(store, kernel(), new SubmissionLedger());
             assertTrue(recovered.state().runs().values().stream().allMatch(run -> run.ended()));
             assertTrue(recovered.state().runs().values().stream()
                     .noneMatch(run -> ((tantalum.value.state.Ended) run.phase()).reason().name().equals("FAILED")));
@@ -60,9 +61,7 @@ class CorpusTest {
     void sameSeedGivesTheSameEvents() throws Exception {
         Corpus.generate(temp.resolve("a"), 1_000, 7);
         Corpus.generate(temp.resolve("b"), 1_000, 7);
-        try (Journal a = Journal.open(temp.resolve("a"), EventCodec.withBuiltins());
-                Journal b = Journal.open(temp.resolve("b"), EventCodec.withBuiltins())) {
-            assertEquals(a.readAll(), b.readAll());
-        }
+        assertEquals(new SessionStore(temp.resolve("a"), EventCodec.withBuiltins()).readAll(),
+                new SessionStore(temp.resolve("b"), EventCodec.withBuiltins()).readAll());
     }
 }

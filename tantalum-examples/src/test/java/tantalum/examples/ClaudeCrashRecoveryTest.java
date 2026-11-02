@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.Journal;
+import tantalum.shell.store.SessionStore;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.OverflowRules;
 import tantalum.shell.web.TestServer;
@@ -115,9 +115,7 @@ class ClaudeCrashRecoveryTest {
         }
 
         List<EventEnvelope> events;
-        try (Journal journal = Journal.open(data, EventCodec.withBuiltins())) {
-            events = journal.readAll();
-        }
+        events = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         List<String> types = events.stream().map(envelope -> envelope.event().type()).toList();
         assertTrue(types.getLast().equals("ContextAssembled") || types.getLast().equals("ToolFinished"),
                 "the journal must end right before a model call: " + types);
