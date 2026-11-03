@@ -4,10 +4,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zh } from "../text/zh";
 import { useLatestTrace, useTracePaging, useTraceRecords } from "./hooks";
-import { buildLedger, expansionFor } from "./rows";
+import { buildLedger, expansionFor, focusRows } from "./rows";
 import { Inspector } from "./inspector/Inspector";
 import { Ledger } from "./Ledger";
 import { matchRecords } from "./search";
+import { localArea, readStored, writeStored } from "../ui/storage";
+import { Timeline } from "./Timeline";
+import { buildTimeline, spansInRange, type TimelineMode, type TimeRange } from "./segments";
 import { Toolbar } from "./Toolbar";
 import type { TraceStore } from "./TraceStore";
 
@@ -21,6 +24,11 @@ interface Props {
 }
 
 const NONE: ReadonlySet<string> = new Set();
+const MODE_KEY = "tantalum.trace.timelineMode";
+
+function storedMode(): TimelineMode {
+  return readStored(MODE_KEY, localArea()) === "sequence" ? "sequence" : "duration";
+}
 /** 比这窄时检查器盖在记录表上（手机 390 px）。 */
 const OVERLAY_WIDTH_PX = 640;
 
@@ -47,6 +55,8 @@ export function TracePage({ store, session, run, record }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [scrollTo, setScrollTo] = useState<{ key: string; nonce: number } | null>(null);
   const nonce = useRef(0);
+  const [mode, setMode] = useState<TimelineMode>(storedMode);
+  const [range, setRange] = useState<TimeRange | null>(null);
   const page = useRef<HTMLDivElement>(null);
   const [pageWidth, setPageWidth] = useState(1280);
 
@@ -58,13 +68,21 @@ export function TracePage({ store, session, run, record }: Props) {
     return () => observer.disconnect();
   }, [paging.loaded]);
 
-  const rows = useMemo(() => buildLedger(records, collapsedTurns, collapsedCalls), [records, collapsedTurns, collapsedCalls]);
+  const allRows = useMemo(() => buildLedger(records, NONE, NONE), [records]);
+  const collapsedRows = useMemo(() => buildLedger(records, collapsedTurns, collapsedCalls), [records, collapsedTurns, collapsedCalls]);
+  // 时间概览选了区间时，记录表只留与区间相交的记录。
+  const focused = useMemo(() => {
+    if (range === null) return null;
+    const model = buildTimeline(allRows, mode);
+    return model === null ? null : spansInRange(model, range);
+  }, [allRows, mode, range]);
+  const rows = useMemo(() => (focused === null ? collapsedRows : focusRows(collapsedRows, focused)), [collapsedRows, focused]);
   const matches = useMemo(() => matchRecords(records, query), [records, query]);
   // 匹配按页面上的先后排（不收起时的顺序），跳转时依次经过。
   const ordered = useMemo(() => {
     if (matches.size === 0) return [];
-    return buildLedger(records, NONE, NONE).flatMap((row) => (row.type === "record" && matches.has(row.record.id) ? [row.record.id] : []));
-  }, [records, matches]);
+    return allRows.flatMap((row) => (row.type === "record" && matches.has(row.record.id) ? [row.record.id] : []));
+  }, [allRows, matches]);
 
   const reveal = useCallback(
     (id: string, key = id) => {
@@ -154,6 +172,23 @@ export function TracePage({ store, session, run, record }: Props) {
         current={matchIndex < 0 ? 0 : matchIndex + 1}
         total={ordered.length}
         onJump={jump}
+        mode={mode}
+        onMode={(next) => {
+          setMode(next);
+          writeStored(MODE_KEY, next, localArea());
+        }}
+      />
+      <Timeline
+        rows={allRows}
+        mode={mode}
+        range={range}
+        onRange={setRange}
+        selected={selected}
+        matches={matches}
+        onSelect={openRecord}
+        onFocus={(id) => reveal(id)}
+        hasEarlier={paging.hasMore}
+        onLoadEarlier={loadOlder}
       />
       <div ref={page} className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">

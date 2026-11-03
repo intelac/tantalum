@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "../ui/Button";
 import { zh } from "../text/zh";
+import type { TimelineMode } from "./segments";
 
 const t = zh.trace.toolbar;
 
@@ -17,9 +18,12 @@ interface Props {
   current: number;
   total: number;
   onJump: (step: 1 | -1) => void;
+  /** 时间概览的画法：按实际时长，或每个操作等宽。 */
+  mode: TimelineMode;
+  onMode: (mode: TimelineMode) => void;
 }
 
-export function Toolbar({ turnsCollapsed, callsCollapsed, onTurns, onCalls, query, onQuery, current, total, onJump }: Props) {
+export function Toolbar({ turnsCollapsed, callsCollapsed, onTurns, onCalls, query, onQuery, current, total, onJump, mode, onMode }: Props) {
   return (
     <div role="toolbar" aria-label={t.aria} className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-1.5 text-xs">
       <span className="flex items-center gap-1">
@@ -32,6 +36,12 @@ export function Toolbar({ turnsCollapsed, callsCollapsed, onTurns, onCalls, quer
         <span className="text-fg-faint">{t.calls}</span>
         <Button size="sm" variant="ghost" onClick={() => onCalls(!callsCollapsed)}>
           {callsCollapsed ? t.expandCalls : t.collapseCalls}
+        </Button>
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="text-fg-faint">{t.duration}</span>
+        <Button size="sm" variant="ghost" aria-pressed={mode === "duration"} onClick={() => onMode(mode === "duration" ? "sequence" : "duration")}>
+          {mode === "duration" ? t.useEqualWidth : t.useActualDuration}
         </Button>
       </span>
       <label className="ml-auto flex min-w-[180px] flex-1 items-center gap-1.5 rounded-md border border-line bg-raised px-2 sm:max-w-[320px]">
