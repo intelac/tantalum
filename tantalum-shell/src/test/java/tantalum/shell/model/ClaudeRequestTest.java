@@ -19,14 +19,24 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.attachment.AttachmentLimits;
+import tantalum.shell.attachment.AttachmentStore;
+import tantalum.shell.attachment.ImageNormalizer;
+import tantalum.shell.attachment.RequestImages;
+import tantalum.shell.attachment.StoredMedia;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ModelHandler;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.json.JsonText;
 import tantalum.shell.journal.SessionFile;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
@@ -35,6 +45,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
+import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
@@ -232,5 +243,92 @@ class ClaudeRequestTest {
             assertFalse(text.contains("q8Zr2Lw7"), "key leaked");
             assertFalse(text.contains(server.url()), "address leaked");
         }
+    }
+
+    // ---- 附件（attachments 任务 15）：claude-attachment-requests.txt ----
+
+    private static final Path ATTACHMENT_EXPECTED = Path.of("src/test/resources/model/claude-attachment-requests.txt");
+    private static final ImageRef PNG = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
+    private static final ImageRef SHOT = new ImageRef("sha256:" + "b".repeat(64), "shot.jpg", "image/jpeg", 3, 2048, 1024, 4096, 2048);
+    private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);
+    private static final FileRef PDF = new FileRef("sha256:" + "d".repeat(64), "report.pdf", "application/pdf", 9, 3);
+    private static final FileRef LONG_PDF = new FileRef("sha256:" + "e".repeat(64), "book.pdf", "application/pdf", 9, 101);
+    private static final FileRef HUGE_PDF = new FileRef("sha256:" + "f".repeat(64), "scan.pdf", "application/pdf", 32L * 1024 * 1024 + 1, 3);
+
+    /** 内容固定的假附件：图片字节是 {@code IMG}，文件是 {@code %PDF-1}。只对 PDF 取文件内容，其余文件不该被读。 */
+    private static final AttachmentMedia MEDIA = new AttachmentMedia() {
+        @Override
+        public Image image(ImageRef ref) {
+            return new Image("IMG".getBytes(StandardCharsets.US_ASCII), ref.mediaType());
+        }
+
+        @Override
+        public byte[] file(FileRef ref) {
+            if (!ref.pdf()) {
+                throw new AssertionError("only PDFs are read: " + ref.name());
+            }
+            return "%PDF-1".getBytes(StandardCharsets.US_ASCII);
+        }
+    };
+
+    private static Message user(String text, AttachmentRef... refs) {
+        return Message.user(text, List.of(refs));
+    }
+
+    private static List<Sample> attachmentSamples() {
+        ClaudeClient.Settings plain = settings(4096, "medium", false, false);
+        List<ContentBlock> calls = List.of(new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(Map.of())),
+                new ToolCallBlock("t2", "read_file", "{}", new Json.Obj(Map.of())));
+        Message results = new Message(Role.USER, List.of(
+                new ToolResultBlock("t1", AttachmentText.image(SHOT), false, null, List.of(SHOT)),
+                new ToolResultBlock("t2", "could not read all of it", true, null, List.of(PNG))), false);
+        return List.of(
+                new Sample("text then an image; the image block takes the cache mark", plain,
+                        new Prompt("sys", List.of(), List.of(user("what is this?", PNG)))),
+                new Sample("attachments only: (see attached) first", plain,
+                        new Prompt("sys", List.of(), List.of(user("", SHOT, NOTES)))),
+                new Sample("a PDF also goes as a document; too long or too large ones only as text", plain,
+                        new Prompt("sys", List.of(), List.of(user("summarize", PDF, LONG_PDF, HUGE_PDF)))),
+                new Sample("tool results: images inside a good result, after an error result", plain,
+                        new Prompt("sys", List.of(), List.of(Message.user("look"), new Message(Role.ASSISTANT, calls, false), results))),
+                new Sample("an omitted image is only its text", plain,
+                        new Prompt("sys", List.of(), List.of(new Message(Role.USER, List.of(new TextBlock("again"),
+                                new TextBlock(AttachmentText.omitted(PNG))), false)))));
+    }
+
+    @Test
+    void attachmentRequestBodies() throws IOException {
+        StringBuilder actual = new StringBuilder();
+        for (Sample sample : attachmentSamples()) {
+            client(sample.settings()).call(sample.prompt(), MEDIA, IGNORE);
+            int last = server.requests.size() - 1;
+            actual.append("== ").append(sample.name()).append('\n').append(server.requests.get(last)).append('\n');
+        }
+        if (Boolean.getBoolean("claude.record")) {
+            Files.writeString(ATTACHMENT_EXPECTED, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(ATTACHMENT_EXPECTED, StandardCharsets.UTF_8), actual.toString(), "request changed; see the class comment");
+    }
+
+    /** 附件被删了：这次调用失败、不重试，原因写明附件 ID；请求根本没有发出去（需求 4.2）。 */
+    @Test
+    void aDeletedAttachmentFailsTheCallWithItsId(@TempDir Path dir) throws Exception {
+        AttachmentLimits limits = AttachmentLimits.defaults();
+        AttachmentStore store = new AttachmentStore(dir, limits, new ImageNormalizer(limits));
+        Principal alice = new Principal("alice");
+        AttachmentRef notes = store.upload(alice, "notes.pdf", null,
+                new java.io.ByteArrayInputStream("%PDF-1.4 not really".getBytes(StandardCharsets.US_ASCII)), -1);
+        FileRef pdf = new FileRef(notes.id(), "notes.pdf", "application/pdf", notes.bytes(), 1);
+        Files.delete(store.find(alice, notes.id()).orElseThrow().file());
+        RunRef run = new RunRef(alice, new SessionId("s1"), new RunId("r1"));
+        int before = server.requests.size();
+        ModelHandler handler = new ModelHandler(client(settings(4096, "medium", false, false)), new CallLimiter(1), Duration.ofSeconds(5),
+                ignored -> IGNORE, Clock.systemUTC(), ref -> new StoredMedia(store, new RequestImages(store), ref.principal(), ref.session()));
+        ModelFailed failed = (ModelFailed) handler.handle(new CallModel(new CommandId("c1"), run,
+                new Prompt("sys", List.of(), List.of(user("read it", pdf)))));
+        assertEquals(FailureReason.INVALID_REQUEST, failed.reason());
+        assertFalse(failed.retryable());
+        assertTrue(failed.detail().contains(notes.id()) && failed.detail().contains("s1"), failed.detail());
+        assertEquals(before, server.requests.size());
     }
 }

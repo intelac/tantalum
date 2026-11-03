@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.model.AttachmentMedia;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -36,14 +37,22 @@ public final class ModelHandler implements Handler {
     private final Function<RunRef, ChunkListener> listeners;
     /** 和信封时刻同源，计时才能和事件时刻比较。 */
     private final Clock clock;
+    /** 每个运行从谁的附件目录取内容。 */
+    private final Function<RunRef, AttachmentMedia> media;
 
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock) {
+        this(client, limiter, waitTimeout, listeners, clock, run -> AttachmentMedia.NONE);
+    }
+
+    public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
+                        Clock clock, Function<RunRef, AttachmentMedia> media) {
         this.client = client;
         this.limiter = limiter;
         this.waitTimeout = waitTimeout;
         this.listeners = listeners;
         this.clock = clock;
+        this.media = media;
     }
 
     @Override
@@ -56,7 +65,15 @@ public final class ModelHandler implements Handler {
                 Instant startedAt = clock.instant();
                 RequestOptions options = client.options(call.prompt());
                 AtomicReference<Instant> firstToken = new AtomicReference<>();
-                ModelOutcome outcome = client.call(call.prompt(), chunks(call.run(), firstToken));
+                ModelOutcome outcome;
+                try {
+                    outcome = client.call(call.prompt(), media.apply(call.run()), chunks(call.run(), firstToken));
+                } catch (AttachmentMedia.Unavailable missing) {
+                    // 附件不在了或被改过：这次调用失败，不重试，原因写明附件（需求 4.2）。别的会话不受影响。
+                    LOG.warn("model call {} failed: {}", call.id().value(), missing.getMessage());
+                    return new ModelFailed(call.id(), FailureReason.INVALID_REQUEST, false, null, "", missing.getMessage(),
+                            startedAt, null, options);
+                }
                 return toEvent(call, outcome, new Timing(startedAt, firstToken.get(), options));
             } finally {
                 permit.close();

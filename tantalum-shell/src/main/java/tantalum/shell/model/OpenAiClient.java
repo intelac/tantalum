@@ -12,11 +12,14 @@ import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import tantalum.shell.json.JsonText;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
@@ -41,6 +44,8 @@ public final class OpenAiClient implements ModelClient {
     private static final String PROVIDER = "openai";
     private static final int MAX_ERROR_BODY = 4096;
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    /** 工具结果里的图片放进紧接着的用户消息，前面这一句（同 pi）。 */
+    private static final String TOOL_IMAGES = "Attached image(s) from tool result:";
 
     private static final class ToolFragments {
         String id;
@@ -56,10 +61,17 @@ public final class OpenAiClient implements ModelClient {
     private final Duration betweenChunks;
     private final OverflowRules overflow;
     private final HttpClient http;
+    /** 模型收不收图片（A7）。不收时图片只发占位文字。 */
+    private final boolean vision;
+
+    public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
+                        Duration betweenChunks, OverflowRules overflow) {
+        this(baseUrl, model, apiKey, maxTokens, firstChunk, betweenChunks, overflow, false);
+    }
 
     /** 连接和响应头都受首块超时约束：看门狗只能关已拿到的响应体，服务端接受连接却不回头部时它无能为力。 */
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
-                        Duration betweenChunks, OverflowRules overflow) {
+                        Duration betweenChunks, OverflowRules overflow, boolean vision) {
         this.endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/chat/completions");
         this.model = model;
         this.apiKey = apiKey;
@@ -68,6 +80,7 @@ public final class OpenAiClient implements ModelClient {
         this.betweenChunks = betweenChunks;
         this.overflow = overflow;
         this.http = HttpClient.newBuilder().connectTimeout(firstChunk).build();
+        this.vision = vision;
     }
 
     /** 地址不记：可能带凭据。{@code extra} 和请求体里的流式选项一致。 */
@@ -82,11 +95,16 @@ public final class OpenAiClient implements ModelClient {
 
     @Override
     public ModelOutcome call(Prompt prompt, ChunkListener chunks) {
+        return call(prompt, AttachmentMedia.NONE, chunks);
+    }
+
+    @Override
+    public ModelOutcome call(Prompt prompt, AttachmentMedia media, ChunkListener chunks) {
         StringBuilder text = new StringBuilder();
         HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
                 .header("content-type", "application/json")
                 .timeout(firstChunk)
-                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body(prompt))));
+                .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body(prompt, media))));
         if (apiKey != null) {
             request.header("authorization", "Bearer " + apiKey);
         }
@@ -238,7 +256,7 @@ public final class OpenAiClient implements ModelClient {
     }
 
     /** 模型、输出上限和流式选项从 {@link #options} 读，记下的就是发出的。 */
-    private Map<String, Object> body(Prompt prompt) {
+    private Map<String, Object> body(Prompt prompt, AttachmentMedia media) {
         RequestOptions options = options(prompt);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", options.model());
@@ -249,7 +267,7 @@ public final class OpenAiClient implements ModelClient {
         system.put("role", "system");
         system.put("content", prompt.system());
         messages.add(system);
-        prompt.messages().forEach(message -> addMessage(messages, message));
+        prompt.messages().forEach(message -> addMessage(messages, message, media));
         body.put("messages", messages);
         if (!prompt.tools().isEmpty()) {
             body.put("tools", prompt.tools().stream().map(OpenAiClient::tool).toList());
@@ -271,10 +289,17 @@ public final class OpenAiClient implements ModelClient {
         return tool;
     }
 
-    private static void addMessage(List<Object> messages, Message message) {
+    /**
+     * 一条消息。收图片时，带图片的用户消息改用内容数组：文字段加 {@code image_url}（data URL）；工具结果里的图片放进紧接着的
+     * 一条用户消息（pi {@code openai-completions.ts:1257-1272,1395-1462}）。不收图片时图片换成占位文字（A7）。
+     * 文件和 PDF 都只给说明文字。
+     */
+    private void addMessage(List<Object> messages, Message message, AttachmentMedia media) {
         StringBuilder text = new StringBuilder();
         StringBuilder reasoning = new StringBuilder();
         List<Object> calls = new ArrayList<>();
+        List<Object> parts = new ArrayList<>();
+        List<Object> resultImages = new ArrayList<>();
         for (ContentBlock block : message.content()) {
             switch (block) {
                 case TextBlock plain -> text.append(plain.text());
@@ -282,22 +307,49 @@ public final class OpenAiClient implements ModelClient {
                         reasoning.append(value.value());
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
-                case AttachmentBlock attachment -> text.append(AttachmentPlaceholder.text(attachment.ref()));
+                case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
+                    flush(parts, text);
+                    parts.add(textPart(AttachmentText.image(image)));
+                    parts.add(imagePart(media.image(image)));
+                }
+                case AttachmentBlock attachment -> append(text, AttachmentPlaceholder.text(attachment.ref()));
                 case ToolResultBlock result -> {
+                    StringBuilder content = new StringBuilder(result.text());
+                    for (ImageRef image : result.images()) {
+                        if (vision) {
+                            resultImages.add(imagePart(media.image(image)));
+                        } else {
+                            append(content, AttachmentText.textOnly(image));
+                        }
+                    }
                     Map<String, Object> tool = new LinkedHashMap<>();
                     tool.put("role", "tool");
                     tool.put("tool_call_id", result.toolCallId());
-                    tool.put("content", result.text());
+                    tool.put("content", content.toString());
                     messages.add(tool);
                 }
             }
         }
-        if (text.isEmpty() && reasoning.isEmpty() && calls.isEmpty()) {
+        if (!resultImages.isEmpty()) {
+            List<Object> content = new ArrayList<>();
+            content.add(textPart(TOOL_IMAGES));
+            content.addAll(resultImages);
+            Map<String, Object> images = new LinkedHashMap<>();
+            images.put("role", "user");
+            images.put("content", content);
+            messages.add(images);
+        }
+        if (text.isEmpty() && reasoning.isEmpty() && calls.isEmpty() && parts.isEmpty()) {
             return;
         }
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("role", message.role() == Role.USER ? "user" : "assistant");
-        entry.put("content", text.toString());
+        if (parts.isEmpty()) {
+            entry.put("content", text.toString());
+        } else {
+            flush(parts, text);
+            entry.put("content", parts);
+        }
         if (!reasoning.isEmpty()) {
             entry.put("reasoning_content", reasoning.toString());
         }
@@ -305,6 +357,38 @@ public final class OpenAiClient implements ModelClient {
             entry.put("tool_calls", calls);
         }
         messages.add(entry);
+    }
+
+    /** 占位文字和前面的文字之间空一行。 */
+    private static void append(StringBuilder text, String more) {
+        if (!text.isEmpty()) {
+            text.append("\n\n");
+        }
+        text.append(more);
+    }
+
+    /** 已攒的文字成为一个文字段。空文字不发。 */
+    private static void flush(List<Object> parts, StringBuilder text) {
+        if (!text.isEmpty()) {
+            parts.add(textPart(text.toString()));
+            text.setLength(0);
+        }
+    }
+
+    private static Map<String, Object> textPart(String text) {
+        Map<String, Object> part = new LinkedHashMap<>();
+        part.put("type", "text");
+        part.put("text", text);
+        return part;
+    }
+
+    private static Map<String, Object> imagePart(AttachmentMedia.Image image) {
+        Map<String, Object> url = new LinkedHashMap<>();
+        url.put("url", "data:" + image.mediaType() + ";base64," + Base64.getEncoder().encodeToString(image.bytes()));
+        Map<String, Object> part = new LinkedHashMap<>();
+        part.put("type", "image_url");
+        part.put("image_url", url);
+        return part;
     }
 
     private static Map<String, Object> call(ToolCallBlock call) {

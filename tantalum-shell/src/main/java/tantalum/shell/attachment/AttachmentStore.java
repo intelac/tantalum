@@ -181,6 +181,26 @@ public final class AttachmentStore {
         return bytes;
     }
 
+    /** 请求用图片版本的缓存（设计第 4 节）：{@code requests/<哈希>-<版本键>}，可以删，删了重新生成。 */
+    Path requestCache(Principal principal, String hash, String versionKey) throws IOException {
+        Path requests = userDir(principal).resolve("requests");
+        createPrivateDir(requests);
+        return requests.resolve(hash + "-" + versionKey);
+    }
+
+    /** 原子地写一个只有本人能读的文件：先写临时文件再改名，读的人不会看到半个。 */
+    static void writePrivately(Path target, byte[] bytes) throws IOException {
+        Path part = target.resolveSibling(target.getFileName() + "-" + UUID.randomUUID() + PART);
+        try {
+            createPrivateFile(part);
+            Files.write(part, bytes);
+            force(part);
+            Files.move(part, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(part);
+        }
+    }
+
     /** 用户已存储的字节数。 */
     public long used(Principal principal) throws IOException {
         return used(principal, userDir(principal));
@@ -234,15 +254,7 @@ public final class AttachmentStore {
             }
             force(part);
             Files.move(part, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            Path metaPart = userDir.resolve("meta-" + UUID.randomUUID() + PART);
-            try {
-                createPrivateFile(metaPart);
-                Files.write(metaPart, JSON.writeValueAsBytes(meta));
-                force(metaPart);
-                Files.move(metaPart, metaFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } finally {
-                Files.deleteIfExists(metaPart);
-            }
+            writePrivately(metaFile, JSON.writeValueAsBytes(meta));
             if (!known) {
                 counted.bytes += meta.bytes();
             }

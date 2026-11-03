@@ -10,7 +10,6 @@ import tantalum.kernel.compaction.TokenEstimate;
 import tantalum.kernel.hook.HookOutcome;
 import tantalum.kernel.projection.PromptProjection;
 import tantalum.kernel.table.StepContext;
-import tantalum.value.command.CallModel;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
@@ -108,8 +107,7 @@ public final class CompactSteps {
         messages.add(SummaryPrompt.instruction(head.dropped(), instructions));
         Prompt prompt = new Prompt(base.system(), base.tools(), messages, new Prompt.Output(false, settings.summaryMaxTokens()));
 
-        CommandId id = out.nextCommandId();
-        out.emit(new CallModel(id, run.ref(), prompt));
+        CommandId id = ModelSteps.emitCall(out, run.ref(), prompt);
         out.await(run.withCompacting(compacting), AWAITING_SUMMARY, Set.of(id));
         return true;
     }

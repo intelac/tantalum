@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 import tantalum.kernel.compaction.Units.Unit;
 import tantalum.kernel.projection.ContextUpdate;
+import tantalum.kernel.attachment.ImageBudget;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
@@ -100,14 +101,16 @@ public final class Compactor {
                 .orElse(false);
     }
 
-    /** 规则 1：有锚点用实测加新增估算，否则全部估算。 */
+    /** 规则 1：有锚点用实测加新增估算，否则全部估算。省略过的图片按省略说明算，和实际发送的一致（A11）。 */
     public static long size(SessionState session, String system, List<ToolSpec> tools) {
         if (session.anchor() != null) {
             List<Message> messages = session.messages();
             int from = Math.min(session.anchor().messageCount(), messages.size());
-            return session.anchor().tokens() + TokenEstimate.ofMessages(messages.subList(from, messages.size()));
+            return session.anchor().tokens()
+                    + TokenEstimate.ofMessages(ImageBudget.omit(messages.subList(from, messages.size()), session.omittedImages()));
         }
-        return TokenEstimate.ofText(system) + TokenEstimate.ofTools(tools) + TokenEstimate.ofMessages(session.view());
+        return TokenEstimate.ofText(system) + TokenEstimate.ofTools(tools)
+                + TokenEstimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
     }
 
     /** 规则 5：摘要、当前请求原文、处理过的保留段。 */

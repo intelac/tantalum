@@ -84,37 +84,37 @@
 
 ## 阶段 3：发给模型
 
-- [ ] 13. 请求版本
+- [x] 13. 请求版本
   - File: shell/attachment/RequestImages.java（新）
   - 目标长边 2048、3.75 MiB；满足时用存储的字节；否则确定性再编码并缓存到 `requests/`；版本键含目标和变换版本号
   - 测试：同一附件两次取到的字节相同且第二次不编码；超限的被缩小到目标内；缓存文件删了能重新生成
   - _Requirements: 3.4, 非功能“性能”, 设计第 4 节_
 
-- [ ] 14. 省略规则和估算
+- [x] 14. 省略规则和估算
   - File: kernel/attachment/ImageBudget.java（新）、kernel/compaction/TokenEstimate.java、kernel/step/ModelSteps.java、value/state/SessionState.java（`omittedImages`）
   - 从新往旧累计 base64 大小，超过 20 MiB 省略更早的；已省略的一直省略；`ImagesOmitted` 事实；图片 `ceil(宽×高/750)`、文件按说明文字、PDF 每页 3000
   - 测试：预算边界；单调；回放得到同样的省略和同样的 prompt；摘要请求同样经过省略；估算公式
   - _Requirements: A10, A11, 3.8, 4.1, 4.4, 4.5_
 
-- [ ] 15. Claude 请求格式
+- [x] 15. Claude 请求格式
   - File: shell/model/ClaudeRequest.java、ModelHandler（取字节和完整性检查）
   - 图片说明加图片块；只有附件时补 `(see attached)`；文件说明；PDF 文档块（超过 32 MiB 或 100 页不发）；工具结果里的图片、出错时放在结果之后；缓存断点
   - 测试：新的期望文件 `claude-attachment-requests.txt` 逐字节比较；现有 `claude-requests.txt` 不变；附件被删时调用失败并写明附件 ID
   - _Requirements: 3.1, 3.3–3.8, A6, 4.2_
 
-- [ ] 16. OpenAI 兼容请求格式
+- [x] 16. OpenAI 兼容请求格式
   - File: shell/model/OpenAiClient.java
   - `vision` 开时内容数组和 `image_url`；工具结果里的图片放进紧接着的用户消息；关时换成纯文字占位
   - 测试：期望文件逐字节比较，开和关各一组
   - _Requirements: 3.2, 3.7, A7_
 
-- [ ] 17. `read_file` 的附件路径和图片
+- [x] 17. `read_file` 的附件路径和图片
   - File: shell/tool/ReadFileTool.java、shell/plugin/ToolOutput.java、handler/ToolHandler、kernel/step/ToolSteps
   - `/attachments/sha256-<哈希>` 读本人附件目录；读到图片时规范化、存进附件目录、结果带图片；读到 PDF 给说明；这个前缀不能写（钉一条测试）
   - 测试：读自己的附件；读别人的哈希等于不存在；读工作区里的图片得到图片引用；`ToolFinished` 带图片后回放相同
   - _Requirements: 3.5, 3.7, A6, A8, 安全_
 
-- [ ] 18. 真实 Claude 和阶段 3 收尾
+- [x] 18. 真实 Claude 和阶段 3 收尾
   - 三项真实测试照设计“真实模型”，每项有判定标准，报用量；全量回归；变异检查（省略不单调；出错的工具结果里带图片）；提交；汇报
   - _Requirements: 非功能“测试”_
 

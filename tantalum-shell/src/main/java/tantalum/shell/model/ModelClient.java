@@ -9,6 +9,14 @@ public interface ModelClient {
 
     ModelOutcome call(Prompt prompt, ChunkListener chunks);
 
+    /**
+     * 带附件内容的调用。prompt 里的附件引用按 {@code media} 取内容；不认附件的客户端（如脚本化模型）忽略它。
+     * 取不到附件时抛 {@link AttachmentMedia.Unavailable}，由调用方让这次调用失败。
+     */
+    default ModelOutcome call(Prompt prompt, AttachmentMedia media, ChunkListener chunks) {
+        return call(prompt, chunks);
+    }
+
     /** 这个 prompt 会发出的请求选项，记进结算事件供轨迹显示。必须是纯函数，不含密钥和地址；默认 null，显示为“未记录”。 */
     default RequestOptions options(Prompt prompt) {
         return null;

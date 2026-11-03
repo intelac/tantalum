@@ -1043,4 +1043,122 @@ class ClaudeScenarioTest {
     private static void requireNonNull(Object value) {
         assertNotNull(value);
     }
+
+    // ---- 附件（attachments 任务 18）：三项只有真实模型才能证明的事 ----
+
+    static {
+        System.setProperty("java.awt.headless", "true");
+    }
+
+    /** 每次运行都换一个词，模型不可能事先知道。 */
+    private static String secret(String prefix) {
+        return prefix + "-" + (1000 + new java.util.Random().nextInt(9000));
+    }
+
+    private static JsonNode upload(TestServer server, String user, String session, String name, byte[] body) throws Exception {
+        HttpResponse<String> response = server.http.send(server.request(user, "/api/sessions/" + session + "/attachments?name=" + name)
+                .header("content-type", "application/octet-stream").POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body)).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        return JSON.readTree(response.body());
+    }
+
+    private static void submitWith(TestServer server, String user, String session, String text, JsonNode attachment) throws Exception {
+        String refs = "[{\"id\":" + JSON.writeValueAsString(attachment.get("id").asString()) + ",\"name\":"
+                + JSON.writeValueAsString(attachment.get("name").asString()) + "}]";
+        HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text)
+                        + ",\"attachments\":" + refs + "}");
+        assertEquals(200, response.statusCode(), response.body());
+    }
+
+    /** 白底黑字的 PNG，字够大，只靠看图才能读出。 */
+    private static byte[] picture(String word) throws Exception {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(640, 200, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, 640, 200);
+        g.setColor(java.awt.Color.BLACK);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 72));
+        g.drawString(word, 40, 130);
+        g.dispose();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", out);
+        return out.toByteArray();
+    }
+
+    private static byte[] pdf(String sentence) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument document = new org.apache.pdfbox.pdmodel.PDDocument()) {
+            org.apache.pdfbox.pdmodel.PDPage page = new org.apache.pdfbox.pdmodel.PDPage();
+            document.addPage(page);
+            try (org.apache.pdfbox.pdmodel.PDPageContentStream text = new org.apache.pdfbox.pdmodel.PDPageContentStream(document, page)) {
+                text.beginText();
+                text.setFont(new org.apache.pdfbox.pdmodel.font.PDType1Font(org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA), 18);
+                text.newLineAtOffset(72, 700);
+                text.showText(sentence);
+                text.endText();
+            }
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            document.save(out);
+            return out.toByteArray();
+        }
+    }
+
+    /** 需求 3.1、3.3：图片作为图片块发出，模型看图答出图里的词。判定：回答里有这个词，且没有调用工具。 */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void readsAWordThatIsOnlyInThePicture() throws Exception {
+        String word = secret("KESTREL");
+        Path data = temp.resolve("data-picture");
+        try (TestServer server = new TestServer(data, workspace("pic"), claude(MODEL, "low"))) {
+            JsonNode image = upload(server, "pic", "s1", "word.png", picture(word));
+            submitWith(server, "pic", "s1", "What word is written in the attached image? Answer with the word only.", image);
+            JsonNode run = waitForLatestRun(server, "pic", "s1", Duration.ofMinutes(4));
+            assertEquals("COMPLETED", run.get("endReason").asString(), run.toString());
+        }
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(lastText(journal).contains(word), "expected " + word + " in: " + lastText(journal));
+        assertEquals(0, events(journal, ToolFinished.class).size(), "the picture had to be seen, not read with a tool");
+        usage("picture", journal);
+    }
+
+    /** 需求 3.6：PDF 作为文档块发出。判定：回答里有 PDF 里的词，且没有调用工具（read_file 读不了 PDF）。 */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void readsAWordInsideAnAttachedPdf() throws Exception {
+        String word = secret("MERLIN");
+        Path data = temp.resolve("data-pdf");
+        try (TestServer server = new TestServer(data, workspace("pdf"), claude(MODEL, "low"))) {
+            JsonNode file = upload(server, "pdf", "s1", "memo.pdf", pdf("Memo. The code word for this quarter is " + word + "."));
+            assertEquals(1, file.get("pages").asInt(), file.toString());
+            submitWith(server, "pdf", "s1", "What is the code word in the attached PDF? Answer with the code word only.", file);
+            JsonNode run = waitForLatestRun(server, "pdf", "s1", Duration.ofMinutes(4));
+            assertEquals("COMPLETED", run.get("endReason").asString(), run.toString());
+        }
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(lastText(journal).contains(word), "expected " + word + " in: " + lastText(journal));
+        assertEquals(0, events(journal, ToolFinished.class).size(), "the PDF had to arrive as a document");
+        usage("pdf", journal);
+    }
+
+    /** 需求 A6、3.5：文件只给只读路径，模型自己用 read_file 读。判定：有一次 read_file 读到了文件内容，回答里有文件里的词。 */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void readsAnAttachedTextFileThroughItsReadonlyPath() throws Exception {
+        String word = secret("PLOVER");
+        Path data = temp.resolve("data-file");
+        try (TestServer server = new TestServer(data, workspace("file"), claude(MODEL, "low"))) {
+            JsonNode file = upload(server, "file", "s1", "notes.txt",
+                    ("Meeting notes.\nThe code word is " + word + ".\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            submitWith(server, "file", "s1", "The attached file contains a code word. What is it? Answer with the code word only.", file);
+            JsonNode run = waitForLatestRun(server, "file", "s1", Duration.ofMinutes(4));
+            assertEquals("COMPLETED", run.get("endReason").asString(), run.toString());
+        }
+        List<EventEnvelope> journal = journal(data);
+        assertTrue(events(journal, ToolFinished.class).stream().anyMatch(tool -> !tool.error() && tool.text().contains(word)),
+                "expected a read_file call that returned the file");
+        assertTrue(lastText(journal).contains(word), "expected " + word + " in: " + lastText(journal));
+        usage("text file", journal);
+    }
 }

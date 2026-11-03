@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
@@ -345,5 +348,54 @@ class OpenAiClientTest {
         caller.join(5_000);
         assertEquals("seen", assertInstanceOf(ModelOutcome.Interrupted.class, outcome[0]).text());
         assertTrue(server.disconnected.await(5, TimeUnit.SECONDS));
+    }
+
+    // ---- 附件（attachments 任务 16）：openai-attachment-requests.txt，收图片和不收图片各一组 ----
+
+    private static final java.nio.file.Path ATTACHMENT_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-attachment-requests.txt");
+    private static final ImageRef PNG = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
+    private static final FileRef PDF = new FileRef("sha256:" + "d".repeat(64), "report.pdf", "application/pdf", 9, 3);
+
+    /** 图片字节固定是 {@code IMG}；OpenAI 兼容路线不读文件内容。 */
+    private static final AttachmentMedia MEDIA = new AttachmentMedia() {
+        @Override
+        public Image image(ImageRef ref) {
+            return new Image("IMG".getBytes(java.nio.charset.StandardCharsets.US_ASCII), ref.mediaType());
+        }
+
+        @Override
+        public byte[] file(FileRef ref) {
+            throw new AssertionError("files are never read on this route: " + ref.name());
+        }
+    };
+
+    private static List<Prompt> attachmentPrompts() {
+        List<ContentBlock> call = List.of(new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(Map.of())));
+        return List.of(
+                new Prompt("sys", List.of(), List.of(Message.user("what is this?", List.of(PNG, PDF)))),
+                new Prompt("sys", List.of(), List.of(Message.user("", List.of(PNG)))),
+                new Prompt("sys", List.of(), List.of(Message.user("look"), new Message(Role.ASSISTANT, call, false),
+                        new Message(Role.USER, List.of(new ToolResultBlock("t1", AttachmentText.image(PNG), false, null, List.of(PNG)),
+                                new TextBlock("steer")), false))));
+    }
+
+    @Test
+    void attachmentRequestBodiesWithAndWithoutVision() throws Exception {
+        StringBuilder actual = new StringBuilder();
+        for (boolean vision : new boolean[] {true, false}) {
+            OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                    OverflowRules.defaults(), vision);
+            List<Prompt> prompts = attachmentPrompts();
+            for (int i = 0; i < prompts.size(); i++) {
+                server.body = finish("stop");
+                client.call(prompts.get(i), MEDIA, listener);
+                actual.append("== vision ").append(vision).append(", prompt ").append(i + 1).append('\n')
+                        .append(server.requests.getLast()).append('\n');
+            }
+        }
+        if (Boolean.getBoolean("openai.record")) {
+            java.nio.file.Files.writeString(ATTACHMENT_EXPECTED, actual);
+        }
+        assertEquals(java.nio.file.Files.readString(ATTACHMENT_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
     }
 }
