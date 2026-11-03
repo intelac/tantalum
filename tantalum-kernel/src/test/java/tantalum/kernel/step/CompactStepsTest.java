@@ -691,4 +691,66 @@ class CompactStepsTest {
         assertEquals(live, replayed.commands(), "every CallModel, including the summary call, is recomputed exactly");
         assertEquals(loop.state, replayed.state());
     }
+
+    /** 记下每次 {@code beforeCompact} 看到的触发方式，模型调用前也记一次（那里应当没有触发方式）。测试专用，不是纯函数。 */
+    static final class TriggerRecorder implements KernelHook {
+        final List<Compacting.Trigger> compacts = new java.util.ArrayList<>();
+        final List<Compacting.Trigger> modelCalls = new java.util.ArrayList<>();
+
+        @Override public String name() { return "recorder"; }
+        @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
+            modelCalls.add(context.trigger());
+            return tantalum.value.hook.Allow.PLAIN;
+        }
+        @Override public HookResult beforeCompact(KernelState state, HookContext context) {
+            assertNotNull(context.plan());
+            compacts.add(context.trigger());
+            return tantalum.value.hook.Allow.PLAIN;
+        }
+    }
+
+    /** 回放会重跑钩子：回放时看到的触发方式和实时的一样，状态也一样。 */
+    static void assertReplaySeesTheSame(LoopFixture loop, TriggerRecorder recorder) {
+        List<Compacting.Trigger> live = List.copyOf(recorder.compacts);
+        assertEquals(loop.state, Replay.run(loop.kernel, loop.journal).state());
+        assertEquals(live, recorder.compacts.subList(live.size(), recorder.compacts.size()));
+    }
+
+    /** 需求 3.1、3.3：自动、超长恢复、手动三种触发方式都传给 {@code beforeCompact}；其他位置没有触发方式。 */
+    @Test
+    void beforeCompactSeesHowCompactionWasTriggered() {
+        TriggerRecorder auto = new TriggerRecorder();
+        LoopFixture loop = overThreshold(auto);
+        assertEquals("AwaitingSummary", loop.phase());
+        assertEquals(List.of(Compacting.Trigger.AUTO), auto.compacts);
+        assertTrue(auto.modelCalls.stream().allMatch(java.util.Objects::isNull), auto.modelCalls.toString());
+        assertReplaySeesTheSame(loop, auto);
+
+        TriggerRecorder overflow = new TriggerRecorder();
+        loop = overflowed(overflow);
+        loop.feed(loop.runId(), overflow(loop));
+        assertEquals("AwaitingSummary", loop.phase());
+        assertEquals(List.of(Compacting.Trigger.OVERFLOW), overflow.compacts);
+        assertReplaySeesTheSame(loop, overflow);
+
+        TriggerRecorder manual = new TriggerRecorder();
+        loop = idleAfterTwoRuns(manual);
+        loop.feed(null, compactRequest(null));
+        assertEquals("AwaitingSummary", loop.phase());
+        assertEquals(List.of(Compacting.Trigger.MANUAL), manual.compacts);
+        assertReplaySeesTheSame(loop, manual);
+    }
+
+    /** 需求 3.2：摘要重试用同一个计划重发，不再问 {@code beforeCompact}。 */
+    @Test
+    void summaryRetryDoesNotAskBeforeCompactAgain() {
+        TriggerRecorder recorder = new TriggerRecorder();
+        LoopFixture loop = overThreshold(recorder);
+        assertEquals(List.of(Compacting.Trigger.AUTO), recorder.compacts);
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
+        assertEquals("AwaitingSummary", loop.phase(), "the summary was sent again");
+        assertEquals(List.of(Compacting.Trigger.AUTO), recorder.compacts, "the retry does not ask beforeCompact");
+        assertReplaySeesTheSame(loop, recorder);
+    }
 }

@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
@@ -57,7 +58,7 @@ class RingIntegrationTest {
     private static Kernel kernel() {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
     }
 
     private static Handler handler(LoopFixtures.HandlerBody body) {

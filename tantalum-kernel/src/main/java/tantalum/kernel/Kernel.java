@@ -26,13 +26,13 @@ public final class Kernel {
     private final TransitionTable table;
     private final HookChain hooks;
     private final ToolSafety toolSafety;
-    private final int maxParallelTools;
+    private final Limits limits;
 
-    public Kernel(TransitionTable table, HookChain hooks, ToolSafety toolSafety, int maxParallelTools) {
+    public Kernel(TransitionTable table, HookChain hooks, ToolSafety toolSafety, Limits limits) {
         this.table = table;
         this.hooks = hooks;
         this.toolSafety = toolSafety;
-        this.maxParallelTools = maxParallelTools;
+        this.limits = limits;
     }
 
     public Decision step(KernelState state, EventEnvelope envelope) {
@@ -41,7 +41,8 @@ public final class Kernel {
         if (step.isEmpty()) {
             return Decision.unchanged(state);
         }
-        StepContext context = new StepContext(state, envelope, run, hooks, toolSafety, maxParallelTools);
+        StepContext context = new StepContext(state, envelope, run, hooks, toolSafety,
+                limits.maxParallelTools(), limits.maxWorkRounds());
         try {
             return step.get().apply(context);
         } catch (RuntimeException failure) {

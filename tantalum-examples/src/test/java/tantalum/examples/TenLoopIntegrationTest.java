@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
@@ -127,7 +128,7 @@ class TenLoopIntegrationTest {
 
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of(new CitationCheckHook())), (tool, args) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of(new CitationCheckHook())), (tool, args) -> false, Limits.DEFAULT);
         Replay.Result replay = Replay.run(kernel, journal);
         List<Prompt> replayed = replay.commands().stream().filter(CallModel.class::isInstance)
                 .map(command -> ((CallModel) command).prompt()).toList();

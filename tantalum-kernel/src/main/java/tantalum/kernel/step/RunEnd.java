@@ -46,7 +46,7 @@ public final class RunEnd {
         out.report(hook.facts());
         switch (hook.result()) {
             case Stop stop -> finish(out, run, EndReason.STOPPED, stop.reason());
-            case NeedWork need -> WorkSteps.start(out, run, need, HookPoint.BEFORE_RUN_END);
+            case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_RUN_END);
             default -> finish(out, run, EndReason.COMPLETED, detail);
         }
     }

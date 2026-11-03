@@ -20,6 +20,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
@@ -124,7 +125,7 @@ class EvictionInvarianceTest {
         Pipeline(Path dir, Mode mode) throws Exception {
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
-            Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> tool.startsWith("safe"), 10);
+            Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> tool.startsWith("safe"), Limits.DEFAULT);
             EventCodec codec = EventCodec.withBuiltins();
             SessionPaths paths = new SessionPaths(dir);
             index = SessionIndex.open(dir);

@@ -13,6 +13,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
@@ -104,7 +105,7 @@ class MemorySnapshotTest {
         }
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, Limits.DEFAULT);
         List<Prompt> replayed = Replay.run(kernel, journal).commands().stream()
                 .filter(CallModel.class::isInstance).map(command -> ((CallModel) command).prompt()).toList();
         assertEquals(model.prompts, replayed);

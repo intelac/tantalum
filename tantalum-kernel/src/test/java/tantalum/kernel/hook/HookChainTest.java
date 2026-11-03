@@ -2,6 +2,7 @@ package tantalum.kernel.hook;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -125,5 +126,19 @@ class HookChainTest {
                 .run(HookPoint.BEFORE_TOOL_CALL, KernelState.empty(), CONTEXT);
         assertInstanceOf(Stop.class, outcome.result());
         assertTrue(!outcome.facts().isEmpty());
+    }
+
+    /** 超过工作轮数上限时，原因里要写是哪个钩子：取拦截或要求工作的那个，异常和 null 算在出问题的钩子上。 */
+    @Test
+    void decidedByNamesTheHookThatDecided() {
+        assertNull(modelCall(hook("a", false, Allow.PLAIN), hook("b", false, Allow.PLAIN)).decidedBy());
+        assertEquals("b", modelCall(hook("a", false, Allow.PLAIN), hook("b", false, new Stop("quota"))).decidedBy());
+        assertEquals("a", modelCall(hook("a", false, new NeedWork("citation", new Json.Null())), hook("b", false, Allow.PLAIN)).decidedBy());
+        assertEquals("quota", modelCall(throwing("quota", true), hook("b", false, Allow.PLAIN)).decidedBy());
+        assertNull(modelCall(throwing("metrics", false), hook("b", false, Allow.PLAIN)).decidedBy(), "a skipped hook decides nothing");
+        assertEquals("broken", modelCall(hook("a", false, Allow.PLAIN), hook("broken", false, null)).decidedBy());
+        assertEquals("metrics", new HookChain(List.of(hook("a", false, Allow.PLAIN), throwing("metrics", false)))
+                .run(HookPoint.BEFORE_TOOL_CALL, KernelState.empty(), CONTEXT).decidedBy());
+        assertNull(new HookChain(List.of()).run(HookPoint.BEFORE_RUN_END, KernelState.empty(), CONTEXT).decidedBy());
     }
 }

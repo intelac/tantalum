@@ -12,19 +12,19 @@
 
 ## 阶段 1：内核
 
-- [ ] 1. `Limits` 取代 `maxParallelTools` 参数
+- [x] 1. `Limits` 取代 `maxParallelTools` 参数
   - File: kernel/Limits.java（新）、kernel/Kernel.java、kernel/table/StepContext.java、shell/boot/{TantalumProperties,Engine}.java、application.properties；`new Kernel(` 的 23 处调用
   - `Limits(maxParallelTools, maxWorkRounds)`，`DEFAULT = (10, 8)`。新增配置项 `tantalum.hooks.max-work-rounds`（默认 8），小于 1 时启动失败
   - 验证：全部模块编译、测试通过；`TantalumPropertiesTest` 覆盖默认值和非法值
   - _Requirements: 2.5_
 
-- [ ] 2. `HookOutcome.decidedBy`
+- [x] 2. `HookOutcome.decidedBy`
   - File: kernel/hook/{HookOutcome,HookChain}.java；测试 HookChainTest
   - 返回 `Stop` 或 `NeedWork` 的那个钩子名；放行时为 null；抛异常、返回 null 导致拦截时，填出问题的那个钩子名
   - 验证：HookChainTest 覆盖每种情况
   - _Requirements: 2.1_
 
-- [ ] 3. 工作轮数计数和上限（先写测试）
+- [x] 3. 工作轮数计数和上限（先写测试）
   - File: value/state/RunState.java、kernel/step/{WorkSteps,ModelSteps,ToolSteps}.java；测试 WorkStepsTest
   - 测试先行，并且要在现有代码上失败：四个等待点（模型调用前、工具调用前、结束前、工作结果后）各有一个“每次都要求工作”的钩子，第 9 轮时运行以 FAILED 结束，详情写明钩子、位置和轮数，并报 `HookReported`。清零规则：
     - 模型回复后清零；
@@ -38,14 +38,14 @@
   - 验证：新测试通过，kernel 全部测试通过
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 4. `beforeCompact` 能看到触发方式
+- [x] 4. `beforeCompact` 能看到触发方式
   - File: value/hook/HookContext.java、kernel/step/CompactSteps.java；测试 CompactStepsTest
   - `HookContext` 加 `trigger`；`withPlan` 改名为 `withCompaction(plan, trigger)`
   - 测试：自动、超长恢复、手动三种触发方式都传到钩子；摘要重试不再调 `beforeCompact`；回放结果相同
   - 验证：CompactStepsTest 通过
   - _Requirements: 3.1, 3.2, 3.3_
 
-- [ ] 5. 阶段 1 收尾
+- [x] 5. 阶段 1 收尾
   - 全量回归、跳号回归。变异检查：去掉 `WorkSteps.start` 里的上限检查，任务 3 的测试必须失败
   - 提交，写实现日志，汇报
   - _Requirements: 非功能“行为不变”_

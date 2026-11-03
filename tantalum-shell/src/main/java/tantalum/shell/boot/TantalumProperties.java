@@ -13,7 +13,15 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
-                                 Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait) {
+                                 Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks) {
+
+    /** 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。 */
+    public record Hooks(int maxWorkRounds) {
+
+        public Hooks {
+            requirePositive("maxWorkRounds", maxWorkRounds);
+        }
+    }
 
     /** 索引库的节流：攒够事件数或到时间就写。运行结束总是写。 */
     public record Index(int flushEvents, Duration flushInterval) {

@@ -1,7 +1,6 @@
 package tantalum.examples;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
@@ -28,6 +27,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
@@ -442,7 +442,7 @@ class ConcurrencyStressTest {
         catalog.register(new ReadFileTool());
         catalog.register(new GrepTool());
         catalog.register(writeFile(new AtomicInteger()));
-        Kernel kernel = new Kernel(table, new HookChain(hooks()), catalog.safety(), 10);
+        Kernel kernel = new Kernel(table, new HookChain(hooks()), catalog.safety(), Limits.DEFAULT);
         Replay.Result replay = Replay.run(kernel, journal);
         Map<String, List<Prompt>> replayed = new LinkedHashMap<>();
         for (var command : replay.commands()) {

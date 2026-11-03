@@ -30,6 +30,7 @@ final class Outcome {
     final HookChain hooks;
     final ToolSafety toolSafety;
     final int maxParallelTools;
+    final int maxWorkRounds;
     private KernelState state;
     private final List<Command> commands = new ArrayList<>();
     private final List<Fact> facts = new ArrayList<>();
@@ -41,6 +42,7 @@ final class Outcome {
         this.hooks = context.hooks();
         this.toolSafety = context.toolSafety();
         this.maxParallelTools = context.maxParallelTools();
+        this.maxWorkRounds = context.maxWorkRounds();
     }
 
     KernelState state() {

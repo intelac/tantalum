@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
@@ -60,7 +61,7 @@ class TurnQueryTest {
     void setUp() throws Exception {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
         index = SessionIndex.open(dir);
         writer = new IndexWriter(index, 100, java.time.Duration.ofHours(1));
         SessionPaths paths = new SessionPaths(dir);

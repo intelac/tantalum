@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
@@ -66,7 +67,7 @@ final class TranscriptFixture {
     TranscriptFixture(boolean concurrencySafe, List<KernelHook> hooks) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, 10);
+        kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, Limits.DEFAULT);
     }
 
     Decision feed(RunId run, Event event) {

@@ -52,7 +52,7 @@ class KernelTest {
     }
 
     private static Kernel kernel(TransitionTable table) {
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
     }
 
     @Test

@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
@@ -60,7 +61,7 @@ final class IndexFixture {
     static Kernel kernel() {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
     }
 
     Decision send(Principal principal, SessionId session, RunId run, Instant at, Event event) throws Exception {

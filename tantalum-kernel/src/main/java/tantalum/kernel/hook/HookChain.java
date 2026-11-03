@@ -35,21 +35,21 @@ public final class HookChain {
             } catch (RuntimeException failure) {
                 facts.add(new HookReported(context.run(), hook.name(), failure.toString()));
                 if (hook.mandatory() || point == HookPoint.BEFORE_TOOL_CALL) {
-                    return new HookOutcome(new Stop("hook failed: " + hook.name()), facts);
+                    return new HookOutcome(new Stop("hook failed: " + hook.name()), facts, hook.name());
                 }
                 continue;
             }
             if (result == null) {
                 facts.add(new HookReported(context.run(), hook.name(), "hook returned null"));
-                return new HookOutcome(new Stop("hook returned null: " + hook.name()), facts);
+                return new HookOutcome(new Stop("hook returned null: " + hook.name()), facts, hook.name());
             }
             if (!(result instanceof Allow allow)) {
-                return new HookOutcome(result, facts);
+                return new HookOutcome(result, facts, hook.name());
             }
             system.append(allow.patch().systemAppend());
             tools.addAll(allow.patch().addTools());
         }
-        return new HookOutcome(new Allow(new PromptPatch(system.toString(), tools)), facts);
+        return new HookOutcome(new Allow(new PromptPatch(system.toString(), tools)), facts, null);
     }
 
     private static HookResult call(KernelHook hook, HookPoint point, KernelState state, HookContext context) {

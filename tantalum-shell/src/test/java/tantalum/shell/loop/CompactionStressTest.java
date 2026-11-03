@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.compaction.SummaryPrompt;
 import tantalum.kernel.compaction.TokenEstimate;
@@ -205,7 +206,7 @@ class CompactionStressTest {
         journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
         List<Prompt> replayed = Replay.run(kernel, journal).commands().stream()
                 .filter(CallModel.class::isInstance).map(command -> ((CallModel) command).prompt()).toList();
         List<Prompt> live = List.copyOf(model.prompts);
