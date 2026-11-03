@@ -1,4 +1,4 @@
-// 页面只有三类：登录、会话、轨迹。自己写一个小路由，不引入路由库。
+// 页面只有几类：登录、会话、轨迹、统计。自己写一个小路由，不引入路由库。
 
 import { useSyncExternalStore } from "react";
 
@@ -7,6 +7,7 @@ export type Route =
   | { page: "login"; next?: string }
   | { page: "session"; session: string }
   | { page: "trace"; session: string; run?: string; record?: string }
+  | { page: "stats"; session: string }
   | { page: "notFound"; path: string };
 
 export function parseRoute(pathname: string, search = ""): Route {
@@ -24,6 +25,7 @@ export function parseRoute(pathname: string, search = ""): Route {
       const record = new URLSearchParams(search).get("record");
       return record !== null && record !== "" ? { page: "trace", session, record } : { page: "trace", session };
     }
+    if (parts.length === 3 && parts[2] === "stats") return { page: "stats", session };
     if (parts.length === 4 && parts[2] === "trace" && parts[3] !== undefined) {
       const run = decode(parts[3]);
       if (run !== null) return { page: "trace", session, run };
@@ -54,6 +56,10 @@ export function sessionPath(session: string): string {
 export function tracePath(session: string, run?: string): string {
   const base = `${sessionPath(session)}/trace`;
   return run === undefined ? base : `${base}/${encodeURIComponent(run)}`;
+}
+
+export function statsPath(session: string): string {
+  return `${sessionPath(session)}/stats`;
 }
 
 /** 轨迹页上的一条记录：展开所在的轮和调用、滚到并选中。 */

@@ -15,17 +15,26 @@ import { useConfig } from "../shell/useConfig";
 import { useSessions } from "../shell/useSessions";
 import { ConversationStore } from "../store/ConversationStore";
 import { zh } from "../text/zh";
+import { StatsPage } from "../stats/StatsPage";
 import { TracePage } from "../trace/TracePage";
 import { Tabs } from "../ui/Tabs";
 import { useEventStream } from "../store/events";
 import { fetchOlderTrace } from "../trace/hooks";
 import { TraceStore } from "../trace/TraceStore";
-import { loginPath, navigate, sessionPath, tracePath, useRoute, type Route } from "./router";
+import { loginPath, navigate, sessionPath, statsPath, tracePath, useRoute, type Route } from "./router";
 
+// 页签 ID 就是路由的页面名，选中状态直接比较。
 const TABS = [
-  { id: "conversation", label: zh.tabs.conversation },
+  { id: "session", label: zh.tabs.conversation },
   { id: "trace", label: zh.tabs.trace },
+  { id: "stats", label: zh.tabs.stats },
 ] as const;
+
+function tabPath(id: string, session: string): string {
+  if (id === "trace") return tracePath(session);
+  if (id === "stats") return statsPath(session);
+  return sessionPath(session);
+}
 
 /** 新会话只是一个新 ID；后端在第一次提交时才创建它。 */
 export function newSessionId(): string {
@@ -51,12 +60,12 @@ export function App() {
 
   if (loading) return null;
   if (user === null) return <LoginPage onLoggedIn={setUser} />;
-  if (route.page !== "session" && route.page !== "trace") return null;
+  if (route.page !== "session" && route.page !== "trace" && route.page !== "stats") return null;
   return <Workspace route={route} username={user.username} onLogout={() => void logout()} />;
 }
 
 interface WorkspaceProps {
-  route: Extract<Route, { page: "session" | "trace" }>;
+  route: Extract<Route, { page: "session" | "trace" | "stats" }>;
   username: string;
   onLogout: () => void;
 }
@@ -84,7 +93,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
             label={zh.tabs.conversation}
             tabs={TABS}
             selected={route.page}
-            onSelect={(id) => navigate(id === "trace" ? tracePath(route.session) : sessionPath(route.session))}
+            onSelect={(id) => navigate(tabPath(id, route.session))}
             className="h-12"
           />
         </div>
@@ -123,6 +132,8 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
         <div className="min-h-0 flex-1">
           {route.page === "trace" ? (
             <TracePage key={route.session} store={trace} session={route.session} run={route.run} record={route.record} />
+          ) : route.page === "stats" ? (
+            <StatsPage key={route.session} store={trace} session={route.session} />
           ) : (
             <div className="flex h-full min-h-0 flex-col">
               <ConversationPage store={store} session={route.session} />
