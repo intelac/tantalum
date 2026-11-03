@@ -1,0 +1,275 @@
+# Design Document
+
+## Overview
+
+需求批准于 2026-11-03（16 条决定 C1–C16、8 条需求）。本设计分两部分：
+
+1. **文件工具**（需求 1–6）：`read_file` 按行窗口读取，新增 `write_file`、`edit_file`、`list_dir`、`find_files`，先读后写。都在 `shell/tool`，实现插件接口 `plugin/Tool`。
+2. **插件开关**（需求 7–8）：每个用户在插件页开关工具、MCP 服务器和钩子插件；从下一次提问开始生效；所有插件调用经过一个按用户过滤的入口。
+
+难点在第 2 部分的“会话中途换工具”。Claude 现在的模型把每段思考内容和当时的 system、工具列表绑在一起，直接改工具列表会让历史里的思考失效（新账号直接 400）。官方的正确做法是工具列表从头到尾不改，增减工具用追加在历史里的系统消息表达（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。设计前做了实测（2026-11-03，claude-sonnet-5-5，严格校验模式）：
+
+| 做法 | 结果 |
+|---|---|
+| 第二次请求直接把 `write_file` 加进 `tools` | 400：`Invalid signature in thinking block. The block is bound to a different conversation.` |
+| `write_file` 一开始就在 `tools` 里、标 `defer_loading`；第二次请求追加系统消息 `tool_addition` | 200，模型调用了 `write_file`，`input_transformations` 为空（历史思考通过校验） |
+| 第三次请求追加 `tool_removal` | 200，模型说只剩 `read_file` |
+| 同一条系统消息里同时 `tool_addition` 和 `tool_removal` | 200，模型说只有 `write_file`、`read_file` 已不可用 |
+
+我们的账号目前默认不强制校验（不带严格模式时直接改工具也返回 200），但新账号和以后都会强制，所以按官方做法设计。
+
+## Steering Document Alignment
+
+### Technical Standards (tech.md)
+
+- 内核仍是纯函数：开关在 shell 里读，结果随 `ContextAssembled` 事件写进 journal，内核只读事件。回放读同一份记录，结果和当时相同。
+- 历史只追加：工具变化是一条新消息，不改已有消息，和 journal 只追加一致。
+
+### Project Structure (structure.md)
+
+- 文件工具在 `shell/tool`；先读后写的记录在 `shell/tool/Observations`。
+- 插件开关是新包 `shell/plugin` 里的 `PluginSwitches`（存取）和 `PluginGate`（过滤和调用入口）；插件 SDK 已经在 `shell/plugin`，放在一起。
+- 内核只改 `kernel/step/ContextSteps`、`kernel/hook/HookChain`、`kernel/projection/PromptProjection` 和 `kernel/compaction/Trimming`。
+
+## Code Reuse Analysis
+
+### Existing Components to Leverage
+
+- `plugin/Workspace`：路径校验（越界、符号链接）。写新文件时目标还不存在，加一个按“已存在的上级目录”校验的方法。
+- `ToolSafety`、`Tool.isConcurrencySafe`：写工具声明不能并行，内核已有的调度就够了。
+- `ContextDiff`、`ContextUpdate`：现有的“可变内容有变化就追加说明”的机制，工具变化沿用同一个位置。
+- `Trimming`：压缩时去掉保留段里的推理块；这次加上去掉工具变化消息。
+- 附件的 `AttachmentStore.writePrivately`：先写临时文件再改名，写文件工具复用同样的写法。
+- `UserStore`（`users.db`）：开关存在同一个库的新表里。
+
+### Integration Points
+
+- `ContextHandler`：组装上下文时问 `PluginGate` 这个用户开着哪些工具和插件。
+- `ToolHandler`、`WorkHandler`：执行前经 `PluginGate`。
+- `ClaudeRequest`、`OpenAiClient`：把延后加载的工具和工具变化消息翻成各自的格式。
+- 控制台：侧栏加“插件”，`ToolStep` 加差异视图。
+
+## Architecture
+
+```mermaid
+flowchart LR
+    P[插件页] -- PUT 开关 --> S[PluginSwitches]
+    S -- users.db --> D[(plugin_settings)]
+    C[ContextHandler] -- 这个用户开着什么 --> G[PluginGate]
+    G --> S
+    C --> E[ContextAssembled: 全部工具 + 开着的工具和插件]
+    E --> K[内核 ContextSteps]
+    K -- 名单变了 --> M[追加系统消息: 工具变化]
+    K --> H[HookChain 只跑会话里开着的插件]
+    K --> R[RunTool]
+    R --> T[ToolHandler]
+    T -- 执行前 --> G
+    G -- 允许才调用 --> X[Tool.run / AfterToolHook]
+```
+
+### 1. 会话中途换工具（C14、C15、需求 8）
+
+**会话的工具列表一开始就是全集。** 会话第一次组装上下文时，`ContextAssembled.tools` 照旧是服务器当时所有的工具（内置加已连上的 MCP），新增两个字段：
+
+| 字段 | 内容 |
+|---|---|
+| `enabledTools` | 这个用户当时开着的工具名 |
+| `enabledPlugins` | 这个用户当时开着的钩子插件名 |
+
+两个字段在旧事件里不存在，读成“全部开着”，所以旧会话的回放和现在一样（需求 8 第 6 条）。
+
+`SessionContext` 记下全集、开始时开着的工具（`initialTools`）、当前开着的工具（`activeTools`）和当前开着的插件（`activePlugins`）。
+
+**发请求时：** 全集照发，开始时没开的工具标“延后加载”。延后加载的工具模型看不见，也不计入思考内容的绑定（官方文档：a `defer_loading: true` tool is outside the comparison until something references it）。
+
+**每次提问开始组装上下文时**（`ContextSteps`，运行开始时本来就组装一次）：
+
+1. 和会话的 `activeTools` 比：新开的、新关的工具名算出来。只认全集里有的工具；会话开始之后才连上的 MCP 工具不在全集里，等压缩或新会话（现有规则，见“风险”）。
+2. 有变化时，在这次提问的用户消息后面追加一条新角色的消息：`Role.SYSTEM`，内容是一个新的内容块 `ToolChangeBlock(added, removed)`。会话的 `activeTools` 随之更新。
+3. 插件名单变了只更新 `activePlugins`，不给模型发消息：钩子模型看不见。
+4. 运行进行到一半不换（C14），因为只有运行开始时组装上下文。
+
+**放置规则**（官方文档）：系统消息必须跟在用户消息后面，后面要么是助手消息、要么是最后一条。正常情况下 `[用户提问][工具变化][助手回复]` 满足。异常情况：一次提问的模型调用最终失败，没有助手回复，下一次提问又带了工具变化，就成了 `[用户][变化1][用户][变化2]`，变化 1 后面跟的是用户消息。处理：`PromptProjection` 组请求时，把“后面没有助手回复的工具变化”合并进下一条工具变化（按顺序算净变化）。被合并的那条后面没有助手回复，也就没有思考内容绑定过它，合并不影响任何思考的校验。规则是纯函数，回放结果相同。
+
+**关掉的工具立即不能用**（需求 8 第 3 条）：模型在本次运行里仍可能调用刚关掉的工具（工具变化要到下一次提问才告诉它），`PluginGate` 在执行前拒绝，返回 `This tool was turned off in the plugin page and is not available.`。这也是官方文档对“撤回的工具被调用”推荐的处理（return an ordinary "not available" error）。
+
+**两种模型的翻法：**
+
+| | Claude | OpenAI 兼容 |
+|---|---|---|
+| 延后加载的工具 | `tools[]` 里带 `defer_loading: true` | 不发 |
+| 工具变化消息 | `{"role": "system", "content": [{"type": "tool_addition" 或 "tool_removal", "tool": {"type": "tool_reference", "name": ...}}]}`，请求头加 `mid-conversation-tool-changes-2026-07-01` | `tools` 发当前开着的；变化翻成一条系统消息文字 `Tools changed: added X; removed Y.` |
+
+anthropic-java 3.3.0 还没有这些类型：工具的 `defer_loading` 用 `putAdditionalProperty`；系统消息用请求体的附加属性整段写 `messages`（实现时先写一个测试钉住发出的 JSON，见“风险”）。
+
+**支持的模型：** 官方列表是 Opus 5、Opus 5.5、Opus 4.8、Fable 5、Fable 5.1、Mythos 5、Mythos 5.1、Sonnet 5.5，不含 Sonnet 5（`platform-availability.md`）。配置的 Claude 模型不在列表里时，`ClaudeRequest` 不能发这种消息：这时会话中途打开的工具要等新会话（关掉的照样执行前拒绝），插件页写明。判断放在 `ClaudeClient.Settings` 的一个模型名单里。
+
+**压缩：** 压缩后重新组装上下文（现有规则），新的全集和名单从当前开关算起。保留段里的工具变化消息和推理块一起去掉（`Trimming`），因为新上下文已经反映了当前状态，保留段的思考本来就不保留。
+
+### 2. 插件开关和过滤入口（C12、C13、C16、需求 7）
+
+**什么算一个插件：** 内置工具和 MCP 工具一个工具一项；MCP 服务器一项（关掉等于关掉它的全部工具）；钩子插件按插件名分组。插件 SDK 的三个接口加一个默认方法 `default String plugin() { return name(); }`（`KernelHook`、`WorkType`、`AfterToolHook`），同一个插件的钩子、插件工作和工具后处理返回同一个名字，在插件页上是一项（C13）。
+
+**必须开着的插件：** `KernelHook.mandatory()` 已经存在，表示“出错就拦截”的策略类钩子（如每日额度）。这类插件在插件页上显示为“必须开启”，不能关；否则用户关掉额度钩子就绕过了额度。这是插件自己声明的，不是管理员替用户关，和 C12 不冲突。
+
+**`PluginSwitches`（存取）：** `users.db` 新表 `plugin_settings(user, kind, name, enabled, updated_at)`，`kind` 是 `tool`、`mcp`、`plugin`。默认全开，只存关掉的项（C15）。内存里按用户缓存，写入时更新。
+
+**`PluginGate`（过滤和调用入口）：** 所有插件调用都只能经过它：
+
+| 方法 | 谁调用 | 做什么 |
+|---|---|---|
+| `enabledTools(principal)`、`enabledPlugins(principal)` | `ContextHandler` | 组装上下文时的名单 |
+| `runTool(principal, session, tool, context, args)` | `ToolHandler` | 查开关，关掉的返回“不可用”；开着的调 `Tool.run` |
+| `afterTool(principal, ..., output)` | `ToolHandler` | 只跑开着的插件的 `AfterToolHook` |
+| `runWork(principal, ..., workType, input)` | `WorkHandler` | 插件关掉了就以失败结束这次工作 |
+
+钩子在内核里运行，`HookChain` 按会话的 `activePlugins` 过滤（会话名单来自 journal 里的事件，回放相同）。
+
+**ArchUnit 规则（C16）：** 除 `PluginGate` 外，任何类不得调用 `Tool.run`、`AfterToolHook.afterToolExecution`、`WorkType.run`；除 `HookChain` 外，内核里任何类不得调用 `KernelHook` 的钩子方法。以后谁加了绕过入口的调用，构建失败。
+
+**`ToolContext` 加 `session`：** 先读后写按会话记，插件以后也能用上。
+
+**接口：**
+- `GET /api/plugins`：当前用户的插件列表：`tools`（名字、中文名、说明、所属服务端、开关）、`mcp`（服务器、连接状态、开关、工具列表）、`plugins`（名字、挂在哪些位置、是否必须开启、开关），外加 `midSessionChanges`（当前模型是否支持中途生效）。
+- `PUT /api/plugins/<kind>/<name>`，请求体 `{"enabled": true/false}`：只改当前登录用户的；必须开启的插件和不存在的名字返回 400、404。
+
+### 3. 文件工具（C1–C11、需求 1–4）
+
+| 工具 | 参数 | 结果（给模型） | 并行 |
+|---|---|---|---|
+| `read_file` | `path`、`offset`（从 1 开始）、`limit`（最多 2000） | 原文；没读完时结尾 `[Showing lines a-b of N. Use offset=b+1 to continue.]`；长行 `... [line truncated to 2000 characters]` | 可以 |
+| `write_file` | `path`、`content` | `Created <path> (N bytes).` 或 `Updated <path> (N bytes).` | 不行 |
+| `edit_file` | `path`、`old_string`、`new_string`、`replace_all` | `Edited <path>: replaced 1 occurrence.` 或 `replaced N occurrences.` | 不行 |
+| `list_dir` | `path`（默认根） | 每行一项，目录带 `/`；超过 500 项时结尾写明总数 | 可以 |
+| `find_files` | `pattern`、`path` | 每行一个相对路径；没有结果 `No files found.`；超过 1000 个时写明总数并提示缩小范围 | 可以 |
+
+续读说明的格式照 pi（方括号，`read.ts:189-198`），错误信息的措辞照 DSH（`cannot read "X": not found` 等，见需求的出处）。所有路径都相对于工作目录显示，不出现服务器上的绝对路径。
+
+**读（C2–C4）：** 按行流式读，不把整个文件读进内存：先读前 8 KB 判断二进制（有空字节就拒绝），然后用严格的 UTF-8 解码器逐行读；窗口内的行放进结果，窗口外的只数行数。64 MB 以上拒绝，提示用 `grep`。行尾的 `\r` 去掉。
+
+**写（C6）：** 目标不存在时，校验“最近一个已存在的上级目录”在工作目录里，再建中间目录（700）；写临时文件（600）、`fsync`、改名替换。已有文件保留原权限。
+
+**改（C7）：** 读出全文；去掉开头的 BOM 记下；按 CRLF 和 LF 的数量判断原换行风格（同 DSH：前 4096 个字符里 CRLF 多就算 CRLF）；文件和参数里的 CRLF 都换成 LF 再逐字匹配；替换后按原风格还原换行、补回 BOM；同 `write_file` 写回。
+
+**先读后写（C5）：** `Observations`：按 `(用户, 会话, 真实路径)` 记读到时的版本（大小、修改时间、文件键）。`read_file`（任何窗口）、`write_file`、`edit_file` 成功后都记一次。`write_file` 覆盖已有文件、`edit_file` 改文件时：没有记录拒绝；记录的版本和现在不同拒绝。同一个文件的“检查版本—写入”在进程内加锁（按真实路径），两个运行同时改只有一个成功（C8、需求 5 第 2 条）。记录在内存里，会话移出内存时一起丢掉；重启后要重读（需求 5 第 4 条），错误说明写明“先读这个文件再试”。
+
+**不能写的地方（C11）：** `memory/` 下一律拒绝，提示用记忆工具；共用工作目录模式下 `write_file`、`edit_file` 不注册。
+
+### 4. 显示（需求 6、7）
+
+- **对话页：** `edit_file` 的步骤用调用参数算差异（`diff` 库已在依赖里）显示；`write_file` 显示路径、字节数和内容的前 20 行，可展开；`read_file` 有窗口时显示“第 a–b 行”。
+- **轨迹页：** 检查器给 `edit_file` 加“差异”页签；上下文记录显示工具变化（新增、移除了哪些）。
+- **插件页：** 侧栏“插件”入口，路由 `/plugins`。三块列表；每项一行：中文名、一句说明、开关；MCP 服务器可展开；必须开启的插件开关禁用并说明；页头写明“打开的从下一次提问开始可用，关掉的立即不能再调用”（模型不支持中途生效时改成“从新会话开始”）。中文名和说明：内置工具在 `text/zh.ts`；MCP 工具用服务器给的说明；钩子插件用 `plugin()` 名，SDK 加可选的 `description()`。
+
+## Components and Interfaces
+
+### 后端
+
+| 类 | 包 | 做什么 | 约行数 |
+|---|---|---|---|
+| `ReadFileTool` | shell.tool | 窗口读取（改） | +120 |
+| `WriteFileTool`、`EditFileTool`、`ListDirTool`、`FindFilesTool` | shell.tool | 新工具 | 120、160、70、110 |
+| `TextFiles` | shell.tool | 严格 UTF-8 读、二进制判断、换行和 BOM、原子写 | 150 |
+| `Observations` | shell.tool | 先读后写的记录和每文件锁 | 90 |
+| `PluginSwitches` | shell.plugin | 开关存取（`users.db`） | 120 |
+| `PluginGate` | shell.plugin | 名单和唯一的调用入口 | 150 |
+| `ToolChangeBlock`、`Role.SYSTEM` | value.model | 工具变化消息 | 30 |
+| `ContextAssembled`、`SessionContext` | value | 加名单字段 | 各 +20 |
+| `ContextSteps`、`HookChain`、`PromptProjection`、`Trimming` | kernel | 换名单、过滤钩子、延后加载和合并、压缩时去掉 | +60、+15、+50、+10 |
+| `ClaudeRequest`、`OpenAiClient` | shell.model | 两种格式 | +80、+40 |
+| `PluginController` | shell.web | 插件页接口 | 100 |
+| `ToolHandler`、`WorkHandler`、`ContextHandler` | shell.handler | 经 `PluginGate` | 小改 |
+
+### 前端
+
+- `console/src/plugins/`：`PluginsPage.tsx`、`usePlugins.ts`、`plugins.test.tsx`。
+- `conversation/ToolStep` 相关：`EditDiff.tsx`、`WriteFilePreview.tsx`。
+- `trace/inspector/ToolTabs.tsx`：差异页签；`RecordTabs.tsx`：工具变化。
+- `shell/Sidebar.tsx`、`app/router.ts`：插件入口和路由。
+
+## Data Models
+
+```java
+// value.model
+public enum Role { USER, ASSISTANT, SYSTEM }
+public record ToolChangeBlock(List<String> added, List<String> removed) implements ContentBlock {}
+
+// value.event.ContextAssembled 新增（旧事件里没有，读成 null = 全部开着）
+List<String> enabledTools; List<String> enabledPlugins;
+
+// value.state.SessionContext 新增
+List<String> initialTools; List<String> activeTools; List<String> activePlugins;
+```
+
+`ToolSpec` 加 `deferred`（默认 false，false 时不写出，journal 里现有的行逐字节不变）。
+
+## Error Handling
+
+| 情况 | 处理 |
+|---|---|
+| 读：不存在、越界、是目录、二进制、非 UTF-8、超过 64 MB、`offset` 超出 | 工具错误，说明原因（需求 1 第 4、6 条） |
+| 写和改：没读过、读过后被改过 | 工具错误：`cannot modify "X": file has not been read in this session — read it, then retry` 或 `... changed since it was read — read it again, then retry`（照 DSH `tool-fs/src/error.ts:29-42`） |
+| 改：找不到、出现多次、空、相同 | 工具错误，文件不变（需求 3） |
+| 写到 `memory/`、共用工作目录模式 | 工具错误或不注册（C11） |
+| 调用关掉的工具 | 工具错误“不可用”，不执行 |
+| 插件页改必须开启的插件 | 400 |
+| Claude 不接受工具变化消息（模型不在支持名单里却发了） | 不应发生：名单在发请求前判断；若仍 400，按 `INVALID_REQUEST` 失败，不重试，原因原样记下 |
+
+## Security
+
+- 写只在本人工作目录，经路径校验；`memory/` 拒绝；共用工作目录模式不提供写工具（C11）。
+- 开关只能读写本人的（接口按登录用户），别人的读不到也改不了（需求 7 第 6 条）。
+- 所有插件调用经 `PluginGate`，ArchUnit 钉住（C16）。
+- 必须开启的策略类钩子不能被用户关掉。
+- README、架构页里“内置工具只读”的说法改掉；`ReadOnlyHook` 示例加上新的写工具名。
+
+## Testing Strategy
+
+### Unit Testing
+- 每个工具：需求 1–4 的每条验收标准，含 CRLF、BOM、多字节字符、超长行、空文件、符号链接越界、`memory/`。
+- 先读后写：没读过、读过后被改、改完接着改、两个线程同时改同一文件只有一个成功。
+- 内核：名单变化追加工具变化消息；运行中途不换；没有助手回复的变化合并进下一条；压缩后去掉；钩子按会话名单过滤；旧事件（没有名单字段）回放和现在相同。
+- 请求格式：Claude 的 `defer_loading` 和系统消息（新期望文件），OpenAI 的当前工具和文字说明；现有 `claude-requests.txt` 不变。
+- `PluginGate`：关掉的工具、插件工作、工具后处理都不执行；ArchUnit 规则。
+
+### Integration Testing
+- 接口：两个用户各自开关互不影响；必须开启的插件 400；回放和开关无关。
+- `WireFormatTest` 加一个中途换工具的场景和期望文件；现有期望文件不变。
+
+### End-to-End Testing
+- Playwright：插件页开关；关掉 `write_file` 后当前会话里调用被拒绝；下一次提问模型拿不到它，再打开后下一次提问又能用；对话页的差异和写入预览；手机宽度。
+
+### 真实模型
+真实 Claude 三项，每项有判定标准，事后报用量：
+1. 读一个很长的文件，只用窗口读到藏在中间的词。
+2. 改一个文件里的函数，先读后改，改完测试通过。
+3. 同一个会话：先没有 `write_file`，带思考地回答一个问题；中途打开；下一次提问模型用它写文件；请求带严格校验模式（`prefix_mismatch_behavior: "error"`），不报错。
+
+### 性能
+- 64 MB 文件读一个窗口 1 秒内；一万个文件的目录树 `find_files` 1 秒内。
+
+## 阶段
+
+1. **文件工具：** `TextFiles`、窗口读取、写、改、列目录、找文件、先读后写、`memory/` 和共用模式的限制。
+2. **开关和过滤：** `PluginSwitches`、`PluginGate`、ArchUnit 规则、`ToolContext.session`、接口。
+3. **中途换工具：** 值类型、内核、两种请求格式、压缩、真实 Claude。
+4. **控制台：** 插件页、差异和写入预览、轨迹显示、端到端、文档。
+
+每个阶段结束跑全量回归、做变异检查、提交一次、向 Yi 汇报。
+
+## 风险
+
+| 风险 | 应对 |
+|---|---|
+| 工具变化依赖 beta `mid-conversation-tool-changes-2026-07-01` | 实测已通过（Overview）；模型不在支持名单时自动退回“新会话生效”；真实 Claude 测试第 3 项每次发布前跑 |
+| anthropic-java 3.3.0 没有系统消息和 `tool_addition` 类型 | 用请求体附加属性写原始 JSON；期望文件逐字节钉住发出的请求 |
+| Claude 服务端的备用模型（`fallbacks`）不支持这种消息 | 会话里出现过工具变化后，这个会话的请求不再带 `fallbacks`；在设计里写死，测试覆盖 |
+| 会话开始后才连上的 MCP 工具不在全集里 | 照现有规则，压缩或新会话后才可用；插件页标出“新连上，新会话可用” |
+| 钩子补丁（`PromptPatch`）每次调模型前改 system 或加工具，同样会让思考失效 | 已有问题，不在本 spec；记进 BACKLOG：补丁改用系统消息追加（官方的 mid-conversation system messages） |
+| 两个运行同时改一个文件 | 每文件进程内锁加版本检查；只有一个成功 |
+
+## 偏离或补充需求
+
+- **必须开启的插件**（第 2 节）：`mandatory()` 的策略类钩子在插件页上不能关。需求里没写，补上，理由是用户关掉额度一类的钩子就绕过了它。
+- **模型不支持中途生效时**：退回“新会话生效”（第 1 节），需求里没写这种情况。
+- **会话开始后才连上的 MCP 工具**：等压缩或新会话（第 1 节），和现在一样。
