@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.hook.HookPoint;
@@ -55,6 +56,34 @@ class SseHubTest {
         assertEquals("PhaseChanged", message.event());
         assertTrue(message.data().contains("AwaitingModel"), message.data());
         assertNull(bob.poll(50, TimeUnit.MILLISECONDS));
+    }
+
+    /** 轨迹记录推成 {@code trace} 消息：完整记录，只推给运行的所有者，断线重连时从近期消息里补上。 */
+    @Test
+    void traceRecordIsPushedToItsOwnerAndCaughtUpFromRecentMessages() throws Exception {
+        SseHub hub = hub();
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
+        SseHub.Subscription bob = hub.subscribe(BOB, null, null);
+        TraceRecord.Head head = new TraceRecord.Head("u:7", "7.0", new RunId("s_7"), 1, 1, null, Instant.EPOCH, Instant.EPOCH);
+
+        hub.onFact(7, 0, fact(ALICE, "AwaitingContext"));
+        hub.onRecord(7, 1, ALICE, new TraceRecord.UserInput(head, TraceRecord.UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER));
+
+        alice.poll(1, TimeUnit.SECONDS);
+        SseMessage message = alice.poll(1, TimeUnit.SECONDS);
+        assertEquals("7.1", message.id());
+        assertEquals("trace", message.event());
+        assertTrue(message.data().startsWith("{\"kind\":\"user\",\"id\":\"u:7\",\"pos\":\"7.0\",\"run\":\"s_7\""), message.data());
+        assertNull(bob.poll(50, TimeUnit.MILLISECONDS));
+        assertEquals(List.of(message), drain(hub.subscribe(ALICE, null, "7.0")));
+    }
+
+    private static List<SseMessage> drain(SseHub.Subscription subscription) throws InterruptedException {
+        List<SseMessage> messages = new ArrayList<>();
+        for (SseMessage next = subscription.poll(50, TimeUnit.MILLISECONDS); next != null; next = subscription.poll(50, TimeUnit.MILLISECONDS)) {
+            messages.add(next);
+        }
+        return messages;
     }
 
     /** 钩子的决定和其他事实一样推送：事件名是类型名，字段照记录，空字段不写。控制台不认识的类型直接忽略。 */

@@ -201,7 +201,7 @@ public class ApiController {
     }
 
     /** 会话 ID 只允许字母、数字、下划线和连字符：它会成为文件名的一部分。 */
-    private static Optional<SessionId> sessionId(String raw) {
+    static Optional<SessionId> sessionId(String raw) {
         return SESSION_ID.matcher(raw).matches() ? Optional.of(new SessionId(raw)) : Optional.empty();
     }
 

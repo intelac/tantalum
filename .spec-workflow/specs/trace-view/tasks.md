@@ -34,34 +34,34 @@
   - 先对现有请求体取样存成期望文件，重构后同一 prompt 组出的请求体逐字节相同；选项和请求体一致；选项、journal、轨迹 JSON 里都没有密钥
   - _Requirements: 2.1, 2.7, 设计第 2 节_
 
-- [ ] 5. 轨迹记录和投影
+- [x] 5. 轨迹记录和投影
   - File: shell/trace/{TraceRecord,TracePass,TraceRequests,TraceTools,TraceHooks,Trace,TraceJson}.java（新）；kernel/step/RetrySteps.java（`MAX_RETRIES` 改成公开）
   - 9 种记录；轮、步、压缩组、请求编号、重试合并、请求前记录的“待定步号”、system 和工具变化、分段来源、工具状态、MCP 拆名，都照设计第 4 节
   - 测试 TracePassTest：每种记录、每种工具状态、重试合并（含重试途中的摘要调用、重试等待期间的插话）、请求编号跨运行连续、手动压缩进“轮次之间”、分段来源和“未采用”、`Saved` 恢复后接着处理和不中断时相同
   - _Requirements: 1.1–1.4, 2.3, 3.5–3.7, 4.1–4.6, 5.1–5.8_
 
-- [ ] 6. 实时推送、冷载入和补读
+- [x] 6. 实时推送、冷载入和补读
   - File: shell/loop/Projections.java（新）、Cleanroom、Evictor、SessionSlice、FactListener；shell/store/{SessionReplay,TurnQuery}.java；shell/sse/SseHub.java
   - 每个事件只经过一次轨迹投影，结果作为 SSE `trace` 消息推送；冷载入时由同一次重放算出；断线补读和实时的编号规则一致
   - _Requirements: 9.1, 设计第 5 节_
 
-- [ ] 7. 轨迹接口
+- [x] 7. 轨迹接口
   - File: shell/store/{TraceQuery,TracePage}.java（新）、shell/web/TraceController.java（新）、SessionQueries
   - 三个接口：分页取记录（按运行从新到旧，`before` 游标）、按运行定位（`run=`）、单次调用的完整输入（`/trace/calls/{命令}`）。不是本人的会话一律 404
   - 测试：两个账号互查返回 404；分页边界；单次调用的 prompt 和 `/turns/{n}` 的一致
   - _Requirements: 1.5, 1.10, 2.1, 9.4_
 
-- [ ] 8. 格式基准和“实时 = 回放”
+- [x] 8. 格式基准和“实时 = 回放”
   - File: WireFormatTest；测试资源 wire/{trace.json,trace-sse.txt}
   - 场景带插件钩子（补丁、拦工具、要工作）、并行工具、重试、自动压缩、手动压缩、重启中断；另加一项：同一串事件在实时投影里中途做一次恢复，合并后和重放出的页面逐字节相同。现有的 `items.jsonl`、`sse.txt` 不变
   - _Requirements: 9.2, 9.3_
 
-- [ ] 9. 性能和真实模型
+- [x] 9. 性能和真实模型
   - `ReadBench` 加 `trace_page_ms`：1890 个事件的会话第一页不超过 1 秒；冷载入耗时比改动前增加不超过 20%；`ConcurrencyStressTest` 对比推送吞吐
   - 真实 Claude 跑一次：`ClaudeSmokeTest` 断言 `startedAt ≤ firstTokenAt ≤ 结果时刻`、选项和配置一致、journal 里没有密钥；跑一次思考签名多轮的场景（因为请求代码被重构过）。报用量
   - _Requirements: 非功能“性能”“测试”_
 
-- [ ] 10. 阶段 1 收尾
+- [x] 10. 阶段 1 收尾
   - README：journal 新字段、轨迹接口、`HookDecided`。全量回归；变异检查（让 `HookChain` 也为空补丁的放行报事实；让 `ModelHandler` 记最后一个分片）；提交；汇报
   - _Requirements: 设计“阶段”_
 

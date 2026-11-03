@@ -1,14 +1,13 @@
 package tantalum.shell.loop;
 
 import com.lmax.disruptor.EventHandler;
-import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
-import tantalum.shell.conversation.Projection;
 import tantalum.shell.conversation.TranscriptItem;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
@@ -19,7 +18,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 
-/** Cleanroom Ring 的消费者：按序调内核，发布命令、事实和条目变化。只看到已提交的事件，不做 I/O，不等待。 */
+/** Cleanroom Ring 的消费者：按序调内核，发布命令、事实、条目和轨迹记录的变化。只看到已提交的事件，不做 I/O，不等待。 */
 public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
 
     private static final Logger LOG = LoggerFactory.getLogger(Cleanroom.class);
@@ -29,7 +28,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private final Kernel kernel;
     private final BooleanSupplier halted;
     private final Predicate<Command> output;
-    private final Projection projection;
+    private final Projections projections;
     private final FactListener facts;
     private final StateView view;
     private final ResultPublisher results;
@@ -40,14 +39,14 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private volatile boolean broken;
 
     public Cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
-                     Projection projection, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
+                     Projections projections, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
         this.steps = steps;
         this.evictor = evictor;
         this.kernel = kernel;
         this.state = KernelState.empty();
         this.halted = halted;
         this.output = output;
-        this.projection = projection;
+        this.projections = projections;
         this.facts = facts;
         this.view = view;
         this.results = results;
@@ -110,7 +109,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private void merge(EventEnvelope envelope, CleanroomRing.Loaded loaded) {
         SessionSlice slice = loaded.slice();
         state = state.withResident(slice.session(), slice.runs());
-        projection.restore(envelope.session(), slice.transcript());
+        projections.restore(envelope.session(), slice);
         evictor.used(envelope.session());
     }
 
@@ -143,20 +142,14 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         for (Fact fact : decision.facts()) {
             notifyListener(seq, index++, fact);
         }
-        for (TranscriptItem item : project(envelope, decision)) {
+        Projections.Output projected = projections.apply(envelope, before, decision);
+        for (TranscriptItem item : projected.items()) {
             notifyListener(seq, index++, envelope, item);
         }
-        evictor.used(envelope.session());
-    }
-
-    /** 投影出错只丢这次的条目，环继续。 */
-    private List<TranscriptItem> project(EventEnvelope envelope, Decision decision) {
-        try {
-            return projection.apply(envelope, decision);
-        } catch (RuntimeException failure) {
-            LOG.error("projection failed at seq {}", envelope.seq(), failure);
-            return List.of();
+        for (TraceRecord record : projected.records()) {
+            notifyListener(seq, index++, envelope, record);
         }
+        evictor.used(envelope.session());
     }
 
     private void notifyListener(EventEnvelope envelope, KernelState before) {
@@ -180,6 +173,14 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
             facts.onItem(seq, index, envelope.principal(), item);
         } catch (RuntimeException failure) {
             LOG.error("item listener failed", failure);
+        }
+    }
+
+    private void notifyListener(long seq, int index, EventEnvelope envelope, TraceRecord record) {
+        try {
+            facts.onRecord(seq, index, envelope.principal(), record);
+        } catch (RuntimeException failure) {
+            LOG.error("trace listener failed", failure);
         }
     }
 }

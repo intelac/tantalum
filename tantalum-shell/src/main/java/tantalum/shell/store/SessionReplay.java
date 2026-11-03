@@ -10,7 +10,9 @@ import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.Projections;
 import tantalum.shell.loop.SessionSlice;
+import tantalum.shell.trace.Trace;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -49,12 +51,14 @@ public final class SessionReplay {
         }
         Progress progress = new Progress();
         Transcript transcript = new Transcript();
-        replay(principal, file, progress, beforeSeq, (envelope, before, decision) -> transcript.apply(envelope, decision));
+        Trace trace = new Trace();
+        Projections projections = new Projections(transcript, trace);
+        replay(principal, file, progress, beforeSeq, projections::apply);
         if (progress.seq < 0 || progress.state.sessions().get(session) == null) {
             return Optional.empty();
         }
         return Optional.of(new SessionSlice(progress.state.sessions().get(session), List.copyOf(progress.state.runs().values()),
-                transcript.export(session), progress.seq));
+                transcript.export(session), trace.export(session), progress.seq));
     }
 
     /**
@@ -64,6 +68,11 @@ public final class SessionReplay {
      */
     public void each(Principal principal, Path file, Step step) throws IOException, SQLException, InterruptedException {
         replay(principal, file, new Progress(), Long.MAX_VALUE, step);
+    }
+
+    /** 同 {@link #each}，只重放序号小于 {@code beforeSeq} 的事件（请求详情只需要到发出那条命令为止）。 */
+    void until(Principal principal, Path file, long beforeSeq, Step step) throws IOException, SQLException, InterruptedException {
+        replay(principal, file, new Progress(), beforeSeq, step);
     }
 
     /** 从头重放到 {@code beforeSeq} 之前。用量在第一个要重放的事件前才查。 */

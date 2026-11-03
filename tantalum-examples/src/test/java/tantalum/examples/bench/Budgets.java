@@ -21,6 +21,8 @@ final class Budgets {
     /** 需求 8.2：打开 500 条消息的会话，常驻 / 冷载入。 */
     static final long OPEN_RESIDENT_MS = 100;
     static final long OPEN_COLD_MS = 1_000;
+    /** 长会话轨迹页的第一页（trace-view 非功能需求）。 */
+    static final long TRACE_PAGE_MS = 1_000;
     /** 非功能：100 会话、每会话每秒 1 事件的落盘 P99。 */
     static final long WRITE_P99_MS = 50;
 

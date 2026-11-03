@@ -19,6 +19,7 @@ import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.conversation.Projection;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Fact;
@@ -139,6 +140,49 @@ class CleanroomTest {
                 listener, view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(List.of("0.0:PhaseChanged", "0.1:u:UserMessage", "0.2:u:RunStatus"), notified);
+        ring.shutdown(Duration.ZERO);
+    }
+
+    private List<String> numbered(Projection transcript) {
+        InputRing captureRing = LoopFixtures.inputRing(8, (slot, seq, end) -> { });
+        captureRing.start();
+        ring = captureRing;
+        List<String> notified = new ArrayList<>();
+        FactListener listener = new FactListener() {
+            @Override
+            public void onFact(long seq, int index, Fact fact) {
+                notified.add(seq + "." + index + ":" + fact.type());
+            }
+
+            @Override
+            public void onItem(long seq, int index, Principal owner, TranscriptItem item) {
+                notified.add(seq + "." + index + ":" + item.getClass().getSimpleName());
+            }
+
+            @Override
+            public void onRecord(long seq, int index, Principal owner, TraceRecord record) {
+                notified.add(seq + "." + index + ":" + owner.value() + ":" + record.id());
+            }
+        };
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, commands::add, transcript,
+                listener, view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+        cleanroom.onEvent(prompt(0), 0, true);
+        return notified;
+    }
+
+    /** 一个事件里先事实、再对话条目、最后轨迹记录，下标连续；SSE 补读按同样的顺序编号。 */
+    @Test
+    void traceRecordsAreNumberedAfterTheItemsOfTheSameEvent() throws Exception {
+        assertEquals(List.of("0.0:PhaseChanged", "0.1:UserMessage", "0.2:RunStatus", "0.3:u:run:s_0", "0.4:u:u:0"),
+                numbered(new Transcript()));
+        ring.shutdown(Duration.ZERO);
+    }
+
+    /** 对话投影出错只丢它的条目，轨迹照常，紧接着事实编号（回放时同样出错，编号一致）。 */
+    @Test
+    void aFailingTranscriptDoesNotStopTheTrace() throws Exception {
+        Projection broken = (envelope, decision) -> { throw new IllegalStateException("projection bug"); };
+        assertEquals(List.of("0.0:PhaseChanged", "0.1:u:run:s_0", "0.2:u:u:0"), numbered(broken));
         ring.shutdown(Duration.ZERO);
     }
 

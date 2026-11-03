@@ -5,7 +5,6 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import tantalum.shell.conversation.Projection;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
@@ -37,16 +36,16 @@ public final class Evictor {
 
     private final Settings settings;
     private final Residency residency;
-    private final Projection projection;
+    private final Projections projections;
     private final Clock clock;
     /** 按访问顺序，最久没用的在前。 */
     private final Map<SessionId, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
     private long lastSweep = Long.MIN_VALUE / 2;
 
-    public Evictor(Settings settings, Residency residency, Projection projection, Clock clock) {
+    public Evictor(Settings settings, Residency residency, Projections projections, Clock clock) {
         this.settings = settings;
         this.residency = residency;
-        this.projection = projection;
+        this.projections = projections;
         this.clock = clock;
     }
 
@@ -78,7 +77,7 @@ public final class Evictor {
             SessionState session = result.sessions().get(next.getKey());
             if (evictable(session) && residency.evict(next.getKey())) {
                 result = result.without(next.getKey());
-                projection.remove(next.getKey());
+                projections.remove(next.getKey());
                 oldest.remove();
             }
         }

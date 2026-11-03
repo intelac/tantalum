@@ -1,6 +1,7 @@
 package tantalum.shell.conversation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tantalum.shell.conversation.TranscriptFixture.call;
 import static tantalum.shell.conversation.TranscriptFixture.claudeThinking;
 import static tantalum.shell.conversation.TranscriptFixture.openAiThinking;
@@ -12,19 +13,61 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.SessionFileReader;
+import tantalum.shell.journal.SessionFiles;
+import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.SessionSlice;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.store.IndexWriter;
+import tantalum.shell.store.SessionIndex;
+import tantalum.shell.store.SessionReplay;
+import tantalum.shell.store.TracePage;
+import tantalum.shell.store.TraceQuery;
+import tantalum.shell.store.UsageLedger;
+import tantalum.shell.trace.Trace;
+import tantalum.shell.trace.TraceJson;
+import tantalum.shell.trace.TraceRecord;
+import tantalum.value.command.DoWork;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
+import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
+import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
+import tantalum.value.event.ModelReplied;
+import tantalum.value.event.RunInterrupted;
+import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.TimerFired;
+import tantalum.value.event.ToolFinished;
+import tantalum.value.event.WorkDone;
+import tantalum.value.hook.Allow;
+import tantalum.value.hook.HookContext;
+import tantalum.value.hook.HookResult;
+import tantalum.value.hook.NeedWork;
+import tantalum.value.hook.PromptPatch;
+import tantalum.value.hook.Stop;
+import tantalum.value.id.CommandId;
+import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
+import tantalum.value.id.SubmissionId;
+import tantalum.value.json.Json;
 import tantalum.value.model.FailureReason;
+import tantalum.value.model.Message;
+import tantalum.value.model.RequestOptions;
+import tantalum.value.model.StopReason;
 import tantalum.value.model.TokenUsage;
+import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
+import tantalum.value.state.ContextSection;
+import tantalum.value.state.KernelState;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -108,5 +151,193 @@ class WireFormatTest {
             }
         }
         check("sse.txt", out.toString());
+    }
+
+    // ---- 轨迹：trace.json（整页）、trace-sse.txt（推送），以及“实时 = 回放” ----
+
+    private static final ToolSpec READ = new ToolSpec("read_file", "Read a file", new Json.Obj(Map.of()));
+    private static final RequestOptions OPTIONS = new RequestOptions("claude", "claude-x", 8192, true,
+            new Json.Obj(new java.util.LinkedHashMap<>(Map.of("thinking", new Json.Str("adaptive")))));
+
+    /** 模型调用前给 system 补一段、加一个工具（补丁）。 */
+    private static final KernelHook STYLE = new KernelHook() {
+        @Override public String name() { return "style"; }
+        @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
+            return new Allow(new PromptPatch("\nFollow the house style.", List.of(new ToolSpec("style_check", "Check style", new Json.Obj(Map.of())))));
+        }
+    };
+
+    /** 第一次模型调用前要一轮工作，结果作为续写文字 "cited" 交给模型（要工作）。 */
+    private static final KernelHook CITE = new KernelHook() {
+        @Override public String name() { return "cite"; }
+        @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
+            boolean cited = state.sessions().get(context.run().session()).messages().contains(Message.user("cited"));
+            return cited ? Allow.PLAIN : new NeedWork("lookup", new Json.Str("q1"));
+        }
+    };
+
+    /** 拦下 rm（拦工具）。 */
+    private static final KernelHook GUARD = new KernelHook() {
+        @Override public String name() { return "guard"; }
+        @Override public HookResult beforeToolCall(KernelState state, HookContext context) {
+            return context.call().name().equals("rm") ? new Stop("destructive") : Allow.PLAIN;
+        }
+    };
+
+    /** 在重试等待里插话之后的那一步：实时投影在这里被回收、再从会话文件冷载入。 */
+    private int coldLoadAt;
+
+    private static ContextSection memory(String body) {
+        return new ContextSection("memory", body, true);
+    }
+
+    private static RunId prompt(TranscriptFixture fx, String text, String system, List<ContextSection> sections) {
+        fx.feed(null, fx.prompt(text));
+        RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembled(fx, run, system, sections);
+        return run;
+    }
+
+    private static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
+        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), system, List.of(READ), SETTINGS, sections));
+    }
+
+    private static ToolFinished startedFinish(TranscriptFixture fx, RunId run, String call, String text, boolean error) {
+        ToolFinished finished = fx.finished(run, call, text, error);
+        return new ToolFinished(finished.command(), finished.toolCallId(), text, error, fx.now().minusMillis(400));
+    }
+
+    /**
+     * 每种轨迹记录都出现：插件钩子（补丁、拦工具、要工作和续写）、一次 429 重试（等待时插话）、并行工具和 MCP 工具、上下文更新、
+     * 自动压缩后 system 更新、手动压缩（轮次之间），最后一轮工具运行时重启。
+     */
+    private TranscriptFixture traceScenario() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of(STYLE, CITE, GUARD));
+        RunId first = prompt(fx, block("q1"), "sys", List.of(memory("a")));
+        DoWork work = (DoWork) fx.lastCommands().getFirst();
+        fx.feed(first, new WorkDone(work.id(), work.workType(), new Json.Str("source: a.md"), false, "cited", fx.now().minusMillis(800)));
+        fx.feed(first, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, Duration.ofSeconds(2), "", "HTTP 429: slow down",
+                fx.now().minusMillis(900), null, OPTIONS));
+        CommandId timer = fx.lastCommands().getFirst().id();
+        fx.feed(first, new SteerSubmitted(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
+        coldLoadAt = fx.envelopes.size();
+        fx.feed(first, new TimerFired(timer));
+        fx.feed(first, new ModelReplied(fx.callModel(), List.of(claudeThinking("plan"), call("c1", "read_file"),
+                call("c2", "mcp__github__search"), call("c3", "rm")), StopReason.TOOL_USE, "claude-x-1", new TokenUsage(300, 40, 100, 0),
+                fx.now().minusMillis(900), fx.now().minusMillis(300), OPTIONS));
+        fx.feed(first, startedFinish(fx, first, "c2", "no match", true));
+        fx.feed(first, startedFinish(fx, first, "c1", "file body", false));
+        fx.feed(first, fx.reply(new TokenUsage(700, 10, 0, 0), text(block("a1"))));
+        RunId second = prompt(fx, block("q2"), "sys", List.of(memory("a\nb")));
+        fx.feed(second, fx.reply(new TokenUsage(790, 10, 0, 0), text(block("a2"))));
+        RunId third = prompt(fx, block("q3"), "sys", List.of(memory("a\nb")));
+        fx.feed(third, fx.reply(new TokenUsage(50, 20, 0, 0), text("Goal: q")));
+        assembled(fx, third, "sys v2", List.of(memory("a\nb")));
+        fx.feed(third, fx.reply(text(block("a3"))));
+        RunId fourth = prompt(fx, block("q4"), "sys v2", List.of(memory("a\nb")));
+        fx.feed(fourth, fx.reply(text(block("a4"))));
+        fx.feed(null, new CompactRequested(new SubmissionId("compact"), new RequestId("compact"), null));
+        RunId manual = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        fx.feed(manual, fx.reply(new TokenUsage(60, 20, 0, 0), text("Goal: r")));
+        RunId last = prompt(fx, "q5", "sys v2", List.of(memory("a\nb")));
+        fx.feed(last, fx.reply(call("c9", "read_file")));
+        fx.feed(last, new RunInterrupted());
+        return fx;
+    }
+
+    /** 不中断的实时推送：每个事件先事实、再条目、最后轨迹记录，下标连续，和 Cleanroom 一样。 */
+    private List<SseMessage> livePushes(TranscriptFixture fx) {
+        Trace trace = new Trace();
+        List<SseMessage> pushes = new ArrayList<>();
+        for (int i = 0; i < fx.envelopes.size(); i++) {
+            EventEnvelope envelope = fx.envelopes.get(i);
+            long items = fx.changes.stream().filter(change -> change.seq() == envelope.seq()).count();
+            int index = fx.decisions.get(i).facts().size() + (int) items;
+            for (TraceRecord record : trace.apply(envelope, fx.befores.get(i), fx.decisions.get(i))) {
+                pushes.add(SseHub.recordMessage(codec.mapper(), envelope.seq(), index++, record));
+            }
+        }
+        return pushes;
+    }
+
+    /** 把场景写成真实的会话文件，用服务里的 {@link SessionReplay} 和 {@link TraceQuery} 读。 */
+    private <T> T withJournal(TranscriptFixture fx, Path dir, JournalUse<T> use) throws Exception {
+        SessionPaths paths = new SessionPaths(dir);
+        SessionFiles files = new SessionFiles(paths, codec, 4, (principal, session, seq, offset) -> { });
+        for (EventEnvelope envelope : fx.envelopes) {
+            files.append(TranscriptFixture.USER, TranscriptFixture.SESSION, List.of(envelope));
+        }
+        files.close();
+        SessionIndex index = SessionIndex.open(dir);
+        IndexWriter writer = new IndexWriter(index, 100, Duration.ofHours(1));
+        try {
+            return use.apply(new SessionReplay(paths, new SessionFileReader(codec), new UsageLedger(index, writer), fx.kernel()), paths);
+        } finally {
+            writer.close();
+            index.close();
+        }
+    }
+
+    @FunctionalInterface
+    private interface JournalUse<T> {
+        T apply(SessionReplay replay, SessionPaths paths) throws Exception;
+    }
+
+    private String pageJson(TracePage page) {
+        return codec.mapper().writerWithDefaultPrettyPrinter().writeValueAsString(page.toMap(codec.mapper())) + "\n";
+    }
+
+    @Test
+    void traceAsTheTraceApiReturnsIt(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = traceScenario();
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+                .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
+        assertEquals(java.util.Set.of("run", "system", "user", "context", "compacted", "request", "tool", "work", "hook"),
+                page.records().stream().map(record -> TraceJson.toMap(codec.mapper(), record).get("kind")).collect(java.util.stream.Collectors.toSet()));
+        check("trace.json", pageJson(page));
+    }
+
+    @Test
+    void traceSseMessages() throws IOException {
+        StringBuilder out = new StringBuilder();
+        for (SseMessage message : livePushes(traceScenario())) {
+            out.append(message.id()).append(' ').append(message.event()).append(' ').append(message.data()).append('\n');
+        }
+        check("trace-sse.txt", out.toString());
+    }
+
+    /**
+     * 需求 9.2：实时推送（中途回收、再从会话文件冷载入）按 ID 合并后，和重放会话文件得到的页面逐字节相同。
+     * 合并照客户端的做法：每条记录留最后一次推送的版本，按 {@code pos} 排序。
+     */
+    @Test
+    void livePushesMergeIntoExactlyTheReplayedPage(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = traceScenario();
+        withJournal(fx, dir, (replay, paths) -> {
+            Map<String, TraceRecord> merged = new java.util.LinkedHashMap<>();
+            Map<String, String> pushed = new java.util.HashMap<>();
+            Trace live = new Trace();
+            for (int i = 0; i < fx.envelopes.size(); i++) {
+                if (i == coldLoadAt) {
+                    SessionSlice slice = replay.load(TranscriptFixture.USER, TranscriptFixture.SESSION, fx.envelopes.get(i).seq()).orElseThrow();
+                    live = new Trace();
+                    live.restore(TranscriptFixture.SESSION, slice.trace());
+                }
+                for (TraceRecord record : live.apply(fx.envelopes.get(i), fx.befores.get(i), fx.decisions.get(i))) {
+                    merged.put(record.id(), record);
+                    pushed.put(record.id(), codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record)));
+                }
+            }
+            TracePage page = new TraceQuery(paths, replay).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
+            List<String> fromPushes = TracePage.of(fx.lastSeq(), merged.values(), null).records().stream().map(record -> pushed.get(record.id())).toList();
+            List<String> fromReplay = page.records().stream()
+                    .map(record -> codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record))).toList();
+            assertEquals(String.join("\n", fromReplay), String.join("\n", fromPushes));
+            assertEquals(fx.lastSeq(), page.seq());
+            assertTrue(coldLoadAt > 0 && merged.values().stream().anyMatch(record -> record.id().startsWith("u:")
+                    && record.head().step() != null && record.head().step() == 1 && record instanceof TraceRecord.UserInput user
+                    && user.mode() == TraceRecord.UserInput.Mode.STEER), "the steer moved to the retried step across the cold load");
+            return null;
+        });
     }
 }

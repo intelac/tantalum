@@ -19,6 +19,8 @@ import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.loop.FactListener;
 import tantalum.shell.model.ChunkListener;
+import tantalum.shell.trace.TraceJson;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.decision.Fact;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunRef;
@@ -26,7 +28,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 按用户推送事实、条目变化和分片。发布方绝不阻塞：订阅者的队列满了就断开它，它重连后补读。
+ * 按用户推送事实、条目变化、轨迹记录和分片。发布方绝不阻塞：订阅者的队列满了就断开它，它重连后补读。
  * 近期消息留在内存；超出范围时从 journal 回放。
  */
 public final class SseHub implements FactListener {
@@ -214,6 +216,11 @@ public final class SseHub implements FactListener {
         publish(seq, index, owner, itemMessage(mapper, seq, index, item));
     }
 
+    @Override
+    public void onRecord(long seq, int index, Principal owner, TraceRecord record) {
+        publish(seq, index, owner, recordMessage(mapper, seq, index, record));
+    }
+
     private void publish(long seq, int index, Principal owner, SseMessage message) {
         synchronized (recent) {
             replayBefore.putIfAbsent(owner, new long[] {seq, index});
@@ -247,6 +254,11 @@ public final class SseHub implements FactListener {
     /** 把条目变化转成 {@code item} 消息：完整条目，客户端按 ID 覆盖。回放补读时也用它。 */
     public static SseMessage itemMessage(JsonMapper mapper, long seq, int index, TranscriptItem item) {
         return new SseMessage(seq + "." + index, "item", mapper.writeValueAsString(ItemJson.toMap(mapper, item)));
+    }
+
+    /** 把轨迹记录的变化转成 {@code trace} 消息：完整记录，客户端按 ID 覆盖。回放补读时也用它。 */
+    public static SseMessage recordMessage(JsonMapper mapper, long seq, int index, TraceRecord record) {
+        return new SseMessage(seq + "." + index, "trace", mapper.writeValueAsString(TraceJson.toMap(mapper, record)));
     }
 
     /** 把事实转成消息，回放补读时也用它。 */
