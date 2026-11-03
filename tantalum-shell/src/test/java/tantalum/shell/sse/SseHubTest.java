@@ -13,7 +13,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
+import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
@@ -53,6 +55,31 @@ class SseHubTest {
         assertEquals("PhaseChanged", message.event());
         assertTrue(message.data().contains("AwaitingModel"), message.data());
         assertNull(bob.poll(50, TimeUnit.MILLISECONDS));
+    }
+
+    /** 钩子的决定和其他事实一样推送：事件名是类型名，字段照记录，空字段不写。控制台不认识的类型直接忽略。 */
+    @Test
+    void hookDecisionIsPushedLikeAnyFact() throws Exception {
+        SseHub hub = hub();
+        SseHub.Subscription alice = hub.subscribe(ALICE, null, null);
+
+        hub.onFact(3, 1, new HookDecided(run(ALICE), "approval", HookPoint.BEFORE_TOOL_CALL, HookDecided.Kind.STOP, "needs approval",
+                0, List.of(), "call-1", null));
+
+        SseMessage message = alice.poll(1, TimeUnit.SECONDS);
+        assertEquals("3.1", message.id());
+        assertEquals("HookDecided", message.event());
+        tools.jackson.databind.JsonNode data = MAPPER.readTree(message.data());
+        assertEquals("approval", data.path("hook").asString());
+        assertEquals("BEFORE_TOOL_CALL", data.path("point").asString());
+        assertEquals("STOP", data.path("kind").asString());
+        assertEquals("needs approval", data.path("reason").asString());
+        assertEquals("call-1", data.path("toolCall").asString());
+        assertEquals(0, data.path("systemChars").asInt());
+        assertTrue(data.path("tools").isArray() && data.path("tools").isEmpty(), message.data());
+        assertTrue(data.path("workType").isMissingNode(), message.data());
+        assertEquals("r-alice", data.path("run").asString());
+        assertEquals("s-alice", data.path("session").asString());
     }
 
     @Test

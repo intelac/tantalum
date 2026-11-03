@@ -216,6 +216,25 @@ class ClaudeClientTest {
         assertEquals("seen", assertInstanceOf(ModelOutcome.Interrupted.class, outcome[0]).text());
     }
 
+    /** 工具输入分片只用来量首 token：块开始时报空串，之后每个参数分片报一次；文字和思考的分片不变。 */
+    @Test
+    void toolInputIsReportedFromTheBlockStart() throws Exception {
+        server.body = START + blockStart(0, "{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read_file\",\"input\":{}}")
+                + blockDelta(0, "{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}")
+                + blockDelta(0, "{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"a.txt\\\"}\"}") + blockStop(0)
+                + messageDelta("tool_use", "null") + STOP;
+        List<String> seen = new ArrayList<>();
+        ChunkListener recording = new ChunkListener() {
+            @Override public void onText(String text) { seen.add("text:" + text); }
+            @Override public void onReasoning(String text) { seen.add("reasoning:" + text); }
+            @Override public void onToolInput(String fragment) { seen.add("tool:" + fragment); }
+        };
+
+        assertInstanceOf(ModelOutcome.Replied.class, client(Duration.ofSeconds(5), Duration.ofSeconds(5)).call(HI, recording));
+
+        assertEquals(List.of("tool:", "tool:{\"path\":", "tool:\"a.txt\"}"), seen);
+    }
+
     @Test
     void requestSendsThePromptAndOnlyOwnReasoningUnchanged() throws Exception {
         server.body = START + messageDelta("end_turn", "null") + STOP;

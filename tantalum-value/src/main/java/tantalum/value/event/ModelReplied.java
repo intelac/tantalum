@@ -1,13 +1,20 @@
 package tantalum.value.event;
 
+import java.time.Instant;
 import java.util.List;
 import tantalum.value.id.CommandId;
 import tantalum.value.model.ContentBlock;
+import tantalum.value.model.RequestOptions;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TokenUsage;
 
-/** 一次模型调用的结算：完整回复。用量可能为空，不估算。 */
-public record ModelReplied(CommandId command, List<ContentBlock> content, StopReason stop, String actualModel, TokenUsage usage) implements ResultEvent {
+/**
+ * 一次模型调用的结算：完整回复。用量可能为空，不估算。
+ * {@code startedAt}（拿到名额后发出请求）、{@code firstTokenAt}（第一个内容分片）、{@code options}（实际发出的选项）只供展示，内核不读；
+ * 旧事件和脚本化模型没有，为 null。
+ */
+public record ModelReplied(CommandId command, List<ContentBlock> content, StopReason stop, String actualModel, TokenUsage usage,
+                           Instant startedAt, Instant firstTokenAt, RequestOptions options) implements ResultEvent {
 
     public static final String TYPE = "ModelReplied";
 

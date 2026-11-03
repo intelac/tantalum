@@ -62,7 +62,7 @@ class ModelStepsTest {
     }
 
     private static ModelReplied reply(LoopFixture loop, String text) {
-        return new ModelReplied(loop.onlyCommandId(), text(text), StopReason.END_TURN, "m", null);
+        return new ModelReplied(loop.onlyCommandId(), text(text), StopReason.END_TURN, "m", null, null, null, null);
     }
 
     @Test
@@ -115,7 +115,7 @@ class ModelStepsTest {
     void truncatedReplyCompletesWithAMarker() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("half of the ans"), StopReason.MAX_TOKENS, "m", null));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("half of the ans"), StopReason.MAX_TOKENS, "m", null, null, null, null));
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
         assertEquals(EndReason.COMPLETED, ended.reason());
         assertEquals(ModelSteps.TRUNCATED, ended.detail());
@@ -137,7 +137,7 @@ class ModelStepsTest {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m",
-                new TokenUsage(5, 1, 0, 0)));
+                new TokenUsage(5, 1, 0, 0), null, null, null));
         assertEquals(new TokenUsage(5, 1, 0, 0), loop.state.principals().get(LoopFixture.USER)
                 .usageOn(java.time.LocalDate.of(2026, 10, 31)));
     }
@@ -149,7 +149,7 @@ class ModelStepsTest {
         CommandId waiting = loop.onlyCommandId();
         loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("r"), "also this"));
         assertEquals(List.of(), loop.last.commands());
-        loop.feed(loop.runId(), new ModelReplied(waiting, text("x"), StopReason.END_TURN, "m", null));
+        loop.feed(loop.runId(), new ModelReplied(waiting, text("x"), StopReason.END_TURN, "m", null, null, null, null));
 
         assertEquals("AwaitingModel", loop.phase());
         CallModel call = assertInstanceOf(CallModel.class, loop.onlyCommand());
@@ -237,7 +237,7 @@ class ModelStepsTest {
     void interruptedAwaitedCallEndsTheRunAsCancelledAndKeepsThePartialText() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "partial"));
+        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "partial", null, null, null));
 
         Message message = loop.session().messages().getLast();
         assertTrue(message.interrupted());
@@ -251,7 +251,7 @@ class ModelStepsTest {
     void emptyInterruptedTextAddsNoMessageButStillEndsTheRun() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), ""));
+        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "", null, null, null));
         assertEquals(1, loop.session().messages().size());
         assertTrue(loop.run().isEnded());
     }
@@ -263,7 +263,7 @@ class ModelStepsTest {
         toModel(loop);
         CommandId call = loop.onlyCommandId();
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
-        loop.feed(loop.runId(), new ModelInterrupted(call, "partial"));
+        loop.feed(loop.runId(), new ModelInterrupted(call, "partial", null, null, null));
 
         Message message = loop.session().messages().getLast();
         assertTrue(message.interrupted());
@@ -282,7 +282,7 @@ class ModelStepsTest {
         assertEquals("AwaitingContext", loop.phase());
         KernelState before = loop.state;
 
-        loop.feed(first, new ModelInterrupted(call, "partial"));
+        loop.feed(first, new ModelInterrupted(call, "partial", null, null, null));
 
         assertSame(before, loop.state);
         assertEquals(Message.user("second"), loop.session().messages().getLast());
@@ -293,7 +293,7 @@ class ModelStepsTest {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
         KernelState before = loop.state;
-        loop.feed(loop.runId(), new ModelInterrupted(new CommandId("old"), "partial"));
+        loop.feed(loop.runId(), new ModelInterrupted(new CommandId("old"), "partial", null, null, null));
         assertSame(before, loop.state);
         assertEquals("AwaitingModel", loop.phase());
     }
@@ -303,7 +303,7 @@ class ModelStepsTest {
     void toolUseStopWithoutCallsCompletesTheRun() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.TOOL_USE, "m", null));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertEquals(List.of(), loop.last.commands());
     }

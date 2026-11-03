@@ -143,6 +143,59 @@ class OpenAiClientTest {
         assertEquals(StopReason.TOOL_USE, reply.stop());
     }
 
+    /** 每个 tool_calls 分片报一次工具输入，没有参数的分片报空串；只用来量首 token。 */
+    @Test
+    void toolCallFragmentsAreReportedAsToolInput() throws Exception {
+        server.body = delta("{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"grep\"}}]}")
+                + delta("{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"pat\"}}]}")
+                + delta("{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"tern\\\":1}\"}}]}")
+                + finish("tool_calls");
+        List<String> seen = new ArrayList<>();
+        ChunkListener recording = new ChunkListener() {
+            @Override public void onText(String text) { seen.add("text:" + text); }
+            @Override public void onReasoning(String text) { seen.add("reasoning:" + text); }
+            @Override public void onToolInput(String fragment) { seen.add("tool:" + fragment); }
+        };
+
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class,
+                client(Duration.ofSeconds(5), Duration.ofSeconds(5)).call(HI, recording));
+
+        assertEquals(List.of("tool:", "tool:{\"pat", "tool:tern\":1}"), seen);
+        assertEquals("{\"pattern\":1}", ((ToolCallBlock) reply.content().getFirst()).rawArguments());
+    }
+
+    /** 选项和请求体一致；不记地址（可能带凭据），也不含密钥，而密钥确实在请求头里发出去了。 */
+    @Test
+    void optionsAreWhatIsSentWithoutAddressOrKey() throws Exception {
+        server.body = finish("stop");
+        String key = "sk-fake-" + "Hq3vN9";
+        OpenAiClient client = new OpenAiClient(server.url() + "/", "qwen", key, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults());
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        Prompt summary = new Prompt("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("q")), new Prompt.Output(false, 512));
+
+        for (Prompt prompt : List.of(HI, summary)) {
+            tantalum.value.model.RequestOptions options = client.options(prompt);
+            client.call(prompt, listener);
+            tools.jackson.databind.JsonNode body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(server.requests.getLast());
+            assertEquals("openai", options.provider());
+            assertEquals(body.path("model").asString(), options.model());
+            assertEquals(body.path("max_tokens").asLong(), options.maxTokens());
+            assertEquals(prompt.output().toolsAllowed(), options.toolsAllowed());
+            assertEquals("{\"stream\":true,\"stream_options\":{\"include_usage\":true}}", tantalum.shell.json.JsonText.toText(options.extra()));
+            assertTrue(body.path("stream").asBoolean());
+            assertTrue(body.path("stream_options").path("include_usage").asBoolean());
+            assertEquals(List.of("Bearer " + key), server.requestHeaders.getLast().get("authorization"), "the fake key must really be sent");
+            String recorded = tantalum.shell.journal.EventCodec.withBuiltins().mapper().writeValueAsString(options);
+            assertFalse(recorded.contains("Hq3vN9"), "key leaked");
+            assertFalse(recorded.contains("127.0.0.1"), "address leaked");
+            assertFalse(recorded.contains(server.url()), "address leaked");
+        }
+        assertEquals(512, client.options(summary).maxTokens());
+        assertFalse(client.options(summary).toolsAllowed());
+        assertEquals(4096, client.options(HI).maxTokens());
+    }
+
     @Test
     void invalidToolArgumentsAreMarkedNotThrown() throws Exception {
         server.body = delta("{\"tool_calls\":[{\"index\":0,\"id\":\"c\",\"function\":{\"name\":\"t\",\"arguments\":\"{oops\"}}]}") + finish("length");

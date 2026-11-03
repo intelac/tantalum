@@ -3,10 +3,13 @@ package tantalum.shell.handler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -70,7 +73,7 @@ class ToolHandlerTest {
     private static ToolHandler handler(Tool tool, Duration timeout, AfterToolHook... hooks) {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool);
-        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(hooks), timeout);
+        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(hooks), timeout, java.time.Clock.systemUTC());
     }
 
     private static ToolFinished result(ToolHandler handler, String name) throws Exception {
@@ -160,7 +163,7 @@ class ToolHandlerTest {
             return ToolOutput.ok("");
         });
         catalog.register(stubborn);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofMillis(30));
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofMillis(30), java.time.Clock.systemUTC());
 
         assertTrue(result(handler, "t").text().contains("timed out"));
         assertEquals(0, handler.limiterFor(stubborn).available());
@@ -209,5 +212,83 @@ class ToolHandlerTest {
                 handler(tool(() -> ToolOutput.ok("")), Duration.ofSeconds(5)).failed(command("t"), new InterruptedException("stop")));
         assertTrue(finished.error());
         assertEquals("call", finished.toolCallId());
+    }
+
+    // ---- 开始时刻：拿到服务端名额之后才算开始，没真正执行时为空 ----
+
+    private static final Instant T0 = Instant.parse("2026-11-03T01:00:00Z");
+    private static final Instant T1 = T0.plusSeconds(3);
+
+    private static ToolHandler timed(Tool tool, Duration timeout, ManualClock clock) {
+        ToolCatalog catalog = new ToolCatalog();
+        catalog.register(tool);
+        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
+                List.of(), timeout, clock);
+    }
+
+    /** 同一服务端只有一个名额：第二个调用排队，开始时刻是它拿到名额的时刻，不是命令到达的时刻。 */
+    @Test
+    void startedAtIsTakenAfterTheServerSlot() throws Exception {
+        ManualClock clock = new ManualClock(T0);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch running = new CountDownLatch(1);
+        ToolHandler handler = timed(tool(() -> {
+            running.countDown();
+            release.await();
+            return ToolOutput.ok("");
+        }), Duration.ofSeconds(10), clock);
+        CompletableFuture<ToolFinished> first = new CompletableFuture<>();
+        Thread.ofVirtual().start(() -> first.complete(finish(handler)));
+        assertTrue(running.await(5, TimeUnit.SECONDS));
+
+        CompletableFuture<ToolFinished> second = new CompletableFuture<>();
+        Thread queued = new Thread(() -> second.complete(finish(handler)));
+        queued.start();
+        for (int i = 0; i < 1000 && queued.getState() != Thread.State.TIMED_WAITING; i++) {
+            Thread.sleep(2);
+        }
+        assertEquals(Thread.State.TIMED_WAITING, queued.getState(), "second call should wait for the server slot");
+        clock.now = T1;
+        release.countDown();
+
+        assertEquals(T0, first.get(5, TimeUnit.SECONDS).startedAt());
+        assertEquals(T1, second.get(5, TimeUnit.SECONDS).startedAt());
+    }
+
+    private static ToolFinished finish(ToolHandler handler) {
+        try {
+            return (ToolFinished) handler.handle(command("t"));
+        } catch (InterruptedException stopped) {
+            throw new IllegalStateException(stopped);
+        }
+    }
+
+    /** 工具真的跑了，失败和超时也有开始时刻；没找到工具、没拿到名额、处理器自己失败时没有。 */
+    @Test
+    void startedAtOnlyWhenTheToolReallyRan() throws Exception {
+        ManualClock clock = new ManualClock(T0);
+        assertEquals(T0, result(timed(tool(() -> { throw new java.io.IOException("refused"); }), Duration.ofSeconds(5), clock), "t").startedAt());
+        assertEquals(T0, result(timed(tool(() -> {
+            Thread.sleep(60_000);
+            return ToolOutput.ok("");
+        }), Duration.ofMillis(30), clock), "t").startedAt());
+        assertNull(result(timed(tool(() -> ToolOutput.ok("")), Duration.ofSeconds(5), clock), "nope").startedAt());
+        ToolHandler handler = timed(tool(() -> ToolOutput.ok("")), Duration.ofSeconds(5), clock);
+        assertNull(((ToolFinished) handler.failed(command("t"), new IllegalStateException("boom"))).startedAt());
+
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch running = new CountDownLatch(1);
+        ToolHandler busy = timed(tool(() -> {
+            running.countDown();
+            release.await();
+            return ToolOutput.ok("");
+        }), Duration.ofMillis(200), clock);
+        Thread holder = Thread.ofVirtual().start(() -> finish(busy));
+        assertTrue(running.await(5, TimeUnit.SECONDS));
+        ToolFinished waited = result(busy, "t");
+        assertTrue(waited.text().contains("waiting for server capacity"), waited.text());
+        assertNull(waited.startedAt());
+        release.countDown();
+        holder.join();
     }
 }

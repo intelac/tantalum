@@ -235,10 +235,10 @@ class EvictionInvarianceTest {
                         List<ContentBlock> content = summary ? List.of(new TextBlock("the summary of everything so far"))
                                 : scripted.isEmpty() ? List.of(new TextBlock("done " + "x".repeat(90))) : scripted.poll();
                         StopReason stop = content.stream().anyMatch(ToolCallBlock.class::isInstance) ? StopReason.TOOL_USE : StopReason.END_TURN;
-                        pipeline.send(principal, session, run, new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0)));
+                        pipeline.send(principal, session, run, new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0), null, null, null));
                     }
                     case RunTool tool -> pipeline.send(principal, session, run,
-                            new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false));
+                            new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null));
                     default -> { }
                 }
             }

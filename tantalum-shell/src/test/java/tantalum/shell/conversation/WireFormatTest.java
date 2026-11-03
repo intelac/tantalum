@@ -67,7 +67,7 @@ class WireFormatTest {
         fx.feed(third, fx.reply(text("a3")));
         RunId refused = nextRun("q4");
         fx.tick(Duration.ofSeconds(30));
-        fx.feed(refused, new ModelFailed(fx.callModel(), FailureReason.REFUSAL, false, null, "", "refused"));
+        fx.feed(refused, new ModelFailed(fx.callModel(), FailureReason.REFUSAL, false, null, "", "refused", null, null, null));
     }
 
     private static void check(String name, String actual) throws IOException {

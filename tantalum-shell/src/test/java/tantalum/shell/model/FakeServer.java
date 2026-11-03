@@ -6,7 +6,9 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -16,6 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class FakeServer implements AutoCloseable {
 
     final List<String> requests = new CopyOnWriteArrayList<>();
+    /** 每个请求的请求头，键是小写名字。 */
+    final List<Map<String, List<String>>> requestHeaders = new CopyOnWriteArrayList<>();
     final AtomicInteger hits = new AtomicInteger();
     final CountDownLatch disconnected = new CountDownLatch(1);
     volatile int status = 200;
@@ -36,6 +40,9 @@ final class FakeServer implements AutoCloseable {
         server.createContext("/", exchange -> {
             hits.incrementAndGet();
             requests.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            Map<String, List<String>> received = new TreeMap<>();
+            exchange.getRequestHeaders().forEach((name, values) -> received.put(name.toLowerCase(Locale.ROOT), List.copyOf(values)));
+            requestHeaders.add(received);
             if (hangBeforeHeaders) {
                 try {
                     release.await();

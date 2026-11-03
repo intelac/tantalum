@@ -35,7 +35,7 @@ class RetryStepsTest {
     }
 
     private static ModelFailed retryable(LoopFixture loop, Duration after) {
-        return new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, after, "", "500");
+        return new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, after, "", "500", null, null, null);
     }
 
     private static KernelHook onFailure(HookResult result) {
@@ -85,7 +85,7 @@ class RetryStepsTest {
     void contextOverflowAndRefusalAreNotRetried() {
         for (FailureReason reason : List.of(FailureReason.CONTEXT_OVERFLOW, FailureReason.REFUSAL)) {
             LoopFixture loop = atModel();
-            loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), reason, false, null, "", reason.name()));
+            loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), reason, false, null, "", reason.name(), null, null, null));
             Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
             assertEquals(EndReason.FAILED, ended.reason());
             assertEquals(reason.name(), ended.detail());
@@ -102,11 +102,11 @@ class RetryStepsTest {
     @Test
     void needWorkRecoversEvenWhenNotRetryable() {
         LoopFixture loop = atModel(onFailure(new NeedWork("compact", new Json.Null())));
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", ""));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "", null, null, null));
         assertEquals("AwaitingWork", loop.phase());
         DoWork work = assertInstanceOf(DoWork.class, loop.onlyCommand());
 
-        loop.feed(loop.runId(), new WorkDone(work.id(), "compact", new Json.Null(), false, null));
+        loop.feed(loop.runId(), new WorkDone(work.id(), "compact", new Json.Null(), false, null, null));
         assertEquals("AwaitingModel", loop.phase());
     }
 
@@ -117,12 +117,12 @@ class RetryStepsTest {
         for (int i = 0; i < RetrySteps.MAX_RETRIES; i++) {
             loop.feed(loop.runId(), retryable(loop, null));
             assertEquals("AwaitingWork", loop.phase(), "round " + i);
-            loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null));
+            loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null, null));
             assertEquals("AwaitingModel", loop.phase(), "round " + i);
             assertEquals(i + 1, loop.run().retries());
         }
         loop.feed(loop.runId(), retryable(loop, null));
-        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null));
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, null, null));
         assertEquals(EndReason.FAILED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
 
@@ -130,7 +130,7 @@ class RetryStepsTest {
     void continueTextAfterFailureWorkGoesToTheModelAndCounts() {
         LoopFixture loop = atModel(onFailure(new NeedWork("compact", new Json.Null())));
         loop.feed(loop.runId(), retryable(loop, null));
-        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, "summarised"));
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "compact", new Json.Null(), false, "summarised", null));
         CallModel call = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals(tantalum.value.model.Message.user("summarised"), call.prompt().messages().getLast());
         assertEquals(1, loop.run().retries());
@@ -149,7 +149,7 @@ class RetryStepsTest {
         assertEquals(1, loop.run().retries());
         loop.feed(loop.runId(), new TimerFired(loop.onlyCommandId()));
         loop.feed(loop.runId(), new tantalum.value.event.ModelReplied(loop.onlyCommandId(),
-                List.of(LoopFixture.call("a", "safe")), tantalum.value.model.StopReason.TOOL_USE, "m", null));
+                List.of(LoopFixture.call("a", "safe")), tantalum.value.model.StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals(0, loop.run().retries());
     }
 }

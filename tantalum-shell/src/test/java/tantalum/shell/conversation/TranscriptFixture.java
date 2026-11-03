@@ -157,18 +157,18 @@ final class TranscriptFixture {
 
     ModelReplied reply(TokenUsage usage, ContentBlock... content) {
         boolean tools = List.of(content).stream().anyMatch(ToolCallBlock.class::isInstance);
-        return new ModelReplied(callModel(), List.of(content), tools ? StopReason.TOOL_USE : StopReason.END_TURN, "m", usage);
+        return new ModelReplied(callModel(), List.of(content), tools ? StopReason.TOOL_USE : StopReason.END_TURN, "m", usage, null, null, null);
     }
 
     ModelReplied truncatedReply(String text) {
-        return new ModelReplied(callModel(), List.of(new TextBlock(text)), StopReason.MAX_TOKENS, "m", null);
+        return new ModelReplied(callModel(), List.of(new TextBlock(text)), StopReason.MAX_TOKENS, "m", null, null, null, null);
     }
 
     /** 某个调用的结果，命令 ID 取发出它的 {@code RunTool}。 */
     ToolFinished finished(RunId run, String callId, String text, boolean error) {
         CommandId command = state.runs().get(run).tools().slots().stream()
                 .filter(slot -> slot.call().id().equals(callId)).findFirst().orElseThrow().command();
-        return new ToolFinished(command, callId, text, error);
+        return new ToolFinished(command, callId, text, error, null);
     }
 
     static ToolCallBlock call(String id, String name) {

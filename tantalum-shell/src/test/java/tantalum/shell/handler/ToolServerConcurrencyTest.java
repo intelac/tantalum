@@ -59,7 +59,7 @@ class ToolServerConcurrencyTest {
         SingleRequestServer server = new SingleRequestServer("single");
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(server);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30));
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30), java.time.Clock.systemUTC());
 
         List<RunTool> commands = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
@@ -80,7 +80,7 @@ class ToolServerConcurrencyTest {
         SingleRequestServer server = new SingleRequestServer("single");
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(server);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30));
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30), java.time.Clock.systemUTC());
 
         List<RunTool> commands = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
@@ -111,7 +111,7 @@ class ToolServerConcurrencyTest {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(stuck);
         catalog.register(other);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30));
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30), java.time.Clock.systemUTC());
 
         Thread blocked = Thread.ofVirtual().start(() -> {
             try {
@@ -135,7 +135,7 @@ class ToolServerConcurrencyTest {
         SingleRequestServer server = new SingleRequestServer("single");
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(server);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30));
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofSeconds(30), java.time.Clock.systemUTC());
 
         for (int round = 0; round < 20; round++) {
             callAll(handler, List.of(command("single", "r" + round + "a", run("a")),

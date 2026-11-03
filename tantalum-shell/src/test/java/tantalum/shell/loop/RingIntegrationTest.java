@@ -65,7 +65,7 @@ class RingIntegrationTest {
         return new Handler() {
             @Override public Event handle(Command command) throws Exception { return body.run(command); }
             @Override public Event failed(Command command, Exception failure) {
-                return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, null, failure.toString());
+                return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, null, failure.toString(), null, null, null);
             }
         };
     }
@@ -84,7 +84,7 @@ class RingIntegrationTest {
             HandlerDispatcher dispatcher = new HandlerDispatcher(Map.of(
                     AssembleContext.class, handler(c -> new ContextAssembled(c.id(), "system", List.of(), null, List.of())),
                     CallModel.class, handler(c -> new ModelReplied(c.id(), List.of(new TextBlock("done")),
-                            StopReason.END_TURN, "m", null))), inFlight, publisher);
+                            StopReason.END_TURN, "m", null, null, null, null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
             LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null, null));

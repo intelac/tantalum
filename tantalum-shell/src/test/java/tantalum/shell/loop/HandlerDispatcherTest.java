@@ -68,7 +68,7 @@ class HandlerDispatcherTest {
         return new Handler() {
             @Override public Event handle(Command command) throws Exception { return body.run(command); }
             @Override public Event failed(Command command, Exception failure) {
-                return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, null, failure.getMessage());
+                return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, null, failure.getMessage(), null, null, null);
             }
         };
     }

@@ -52,7 +52,7 @@ class KernelStepBenchmarkTest {
                             .withPhase(new Awaiting(Set.of(waiting), "AwaitingModel")));
         }
 
-        ModelReplied reply = new ModelReplied(waiting, List.of(LoopFixture.call("c", "safe")), StopReason.TOOL_USE, "m", null);
+        ModelReplied reply = new ModelReplied(waiting, List.of(LoopFixture.call("c", "safe")), StopReason.TOOL_USE, "m", null, null, null, null);
         EventEnvelope envelope = new EventEnvelope(1, java.time.Instant.EPOCH, user, new SessionId("s0"),
                 new RunId("r0"), reply);
 

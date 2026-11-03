@@ -60,7 +60,7 @@ class CompactStepsTest {
     }
 
     static ModelReplied reply(LoopFixture loop, List<ContentBlock> content, StopReason stop, TokenUsage usage) {
-        return new ModelReplied(loop.onlyCommandId(), content, stop, "m", usage);
+        return new ModelReplied(loop.onlyCommandId(), content, stop, "m", usage, null, null, null);
     }
 
     static ModelReplied endTurn(LoopFixture loop, String text, long promptTotal) {
@@ -86,7 +86,7 @@ class CompactStepsTest {
     static LoopFixture overThreshold(KernelHook... hooks) {
         LoopFixture loop = start(hooks);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertEquals(new UsageAnchor(800, 4), loop.session().anchor());
@@ -126,7 +126,7 @@ class CompactStepsTest {
             }
         };
         LoopFixture loop = start(needsWork);
-        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null));
+        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
@@ -134,7 +134,7 @@ class CompactStepsTest {
         calls.set(0);
         sawWork.clear();
 
-        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null));
+        loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null, null));
 
         assertEquals("AwaitingModel", loop.phase());
         assertEquals(1, calls.get(), "beforeModelCall ran more than once in one step");
@@ -241,7 +241,7 @@ class CompactStepsTest {
 
         // 同一运行里再到模型调用前（工具轮后），仍超阈值但不再压缩。
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t2"), StopReason.TOOL_USE, new TokenUsage(900, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", block("r2"), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", block("r2"), false, null));
         assertEquals("AwaitingModel", loop.phase());
         assertTrue(onlyCall(loop).prompt().output().toolsAllowed());
 
@@ -271,7 +271,7 @@ class CompactStepsTest {
     @Test
     void nonRetryableSummaryFailureIsNotRetried() {
         LoopFixture loop = overThreshold();
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, false, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, false, null, "", "429", null, null, null));
         assertEquals("AwaitingModel", loop.phase());
         assertTrue(loop.run().autoCompactionFailed());
         assertTrue(fact(loop, CompactionFailed.class).reason().contains("429"));
@@ -293,7 +293,7 @@ class CompactStepsTest {
     void interruptedSummaryCallDoesNotLeakPartialTextIntoHistory() {
         LoopFixture loop = overThreshold();
         int size = loop.session().messages().size();
-        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "Goal: partial"));
+        loop.feed(loop.runId(), new ModelInterrupted(loop.onlyCommandId(), "Goal: partial", null, null, null));
         assertEquals(EndReason.CANCELLED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertEquals(size, loop.session().messages().size(), "partial summary text is not a reply");
         assertNull(loop.session().compaction());
@@ -307,7 +307,7 @@ class CompactStepsTest {
         tantalum.value.id.CommandId summary = loop.onlyCommandId();
         RunId run = loop.runId();
         loop.feed(run, new Cancel(new RequestId("c")));
-        loop.feed(run, new ModelInterrupted(summary, "Goal: partial"));
+        loop.feed(run, new ModelInterrupted(summary, "Goal: partial", null, null, null));
         assertEquals(EndReason.CANCELLED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertEquals(size, loop.session().messages().size(), "the partial summary is not a reply");
     }
@@ -365,19 +365,19 @@ class CompactStepsTest {
     }
 
     static ModelFailed overflow(LoopFixture loop) {
-        return new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "prompt is too long");
+        return new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "prompt is too long", null, null, null);
     }
 
     /** 估算说放得下（310 + 400 < 800）而服务端报超长的情形；K = 0 只留最后一个单元，其中的工具结果会被截断。 */
     static LoopFixture overflowed(KernelHook... hooks) {
         LoopFixture loop = start(hooks);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t2"), StopReason.TOOL_USE, new TokenUsage(300, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", "y".repeat(1200), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", "y".repeat(1200), false, null));
         assertEquals("AwaitingModel", loop.phase(), "the estimate says it fits, so no automatic compaction");
         return loop;
     }
@@ -386,7 +386,7 @@ class CompactStepsTest {
     void overflowCompactsToTheLastUnitAndRetriesOnce() {
         LoopFixture loop = start();
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
@@ -430,7 +430,7 @@ class CompactStepsTest {
         assertTrue(kept.contains("of 1200 bytes truncated"), "the oversized result is cut in the kept tail: " + kept.length());
         assertTrue(kept.length() < 200);
 
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "still too long"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "still too long", null, null, null));
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
         assertEquals(EndReason.FAILED, ended.reason());
         assertEquals("still too long", ended.detail());
@@ -522,7 +522,7 @@ class CompactStepsTest {
         loop.feed(null, new tantalum.value.event.FollowUpSubmitted(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
         assertEquals(List.of("q3"), loop.session().followUps());
 
-        loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0)));
+        loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0), null, null, null));
         Ended ended = assertInstanceOf(Ended.class, loop.state.runs().get(run.ref().run()).phase());
         assertEquals(EndReason.COMPLETED, ended.reason());
         assertEquals(CompactSteps.COMPACTED, ended.detail());
@@ -575,7 +575,7 @@ class CompactStepsTest {
     void hugeToolResultWithASmallHeadIsTrimmedWithoutASummaryCall() {
         LoopFixture loop = start();
         loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
         assertEquals("AwaitingContext", loop.phase(), "no summary call; the context is reassembled after trimming");
         assertNotNull(loop.session().compaction());
         assertFalse(loop.run().autoCompactionFailed());
@@ -593,7 +593,7 @@ class CompactStepsTest {
         loop.prompt(block("q1"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), large, List.of()));
         loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false));
+        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
         assertEquals("AwaitingModel", loop.phase(), "the estimate fits, so no automatic compaction");
         loop.feed(loop.runId(), overflow(loop));
         assertEquals("AwaitingContext", loop.phase());
@@ -606,7 +606,7 @@ class CompactStepsTest {
     void retryableSummaryFailureIsRetriedWithTheSamePrompt() {
         LoopFixture loop = overThreshold();
         CallModel first = onlyCall(loop);
-        loop.feed(loop.runId(), new ModelFailed(first.id(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(first.id(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         assertEquals("AwaitingSummaryRetry", loop.phase());
         loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
         assertEquals("AwaitingSummary", loop.phase());
@@ -618,10 +618,10 @@ class CompactStepsTest {
     void summaryFailureAfterTheLastRetryFallsBackToTheRule() {
         LoopFixture loop = overThreshold();
         for (int i = 0; i < RetrySteps.MAX_RETRIES; i++) {
-            loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+            loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
             loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
         }
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         assertEquals("AwaitingModel", loop.phase());
         assertTrue(loop.run().autoCompactionFailed());
         assertEquals(0, loop.run().retries());
@@ -630,7 +630,7 @@ class CompactStepsTest {
     @Test
     void cancelWhileWaitingToRetryTheSummary() {
         LoopFixture loop = overThreshold();
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
         assertEquals(EndReason.CANCELLED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertNull(loop.session().compaction());
@@ -655,7 +655,7 @@ class CompactStepsTest {
     @Test
     void replayOfARetriedSummaryCallMatches() {
         LoopFixture loop = overThreshold();
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
         loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
         Replay.Result replayed = Replay.run(loop.kernel, loop.journal);
@@ -747,7 +747,7 @@ class CompactStepsTest {
         TriggerRecorder recorder = new TriggerRecorder();
         LoopFixture loop = overThreshold(recorder);
         assertEquals(List.of(Compacting.Trigger.AUTO), recorder.compacts);
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         loop.feed(loop.runId(), new tantalum.value.event.TimerFired(loop.onlyCommandId()));
         assertEquals("AwaitingSummary", loop.phase(), "the summary was sent again");
         assertEquals(List.of(Compacting.Trigger.AUTO), recorder.compacts, "the retry does not ask beforeCompact");

@@ -51,46 +51,46 @@ class TheLoopTest {
 
         // 第 3 圈
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("1", "symbol_search")), StopReason.TOOL_USE, "m", null));
+                List.of(call("1", "symbol_search")), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals("AwaitingTools", loop.phase(), "turn 3");
         RunTool search = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 3");
 
         // 第 4 圈：工具错误，索引还在建
-        loop.feed(loop.runId(), new ToolFinished(search.id(), "1", "index still building", true));
+        loop.feed(loop.runId(), new ToolFinished(search.id(), "1", "index still building", true, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 4");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 4");
 
         // 第 5 圈
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("2", "grep")), StopReason.TOOL_USE, "m", null));
+                List.of(call("2", "grep")), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals("AwaitingTools", loop.phase(), "turn 5");
         RunTool grep = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 5");
 
         // 第 6 圈
-        loop.feed(loop.runId(), new ToolFinished(grep.id(), "2", "INTEREST.cbl:42", false));
+        loop.feed(loop.runId(), new ToolFinished(grep.id(), "2", "INTEREST.cbl:42", false, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 6");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 6");
 
         // 第 7 圈
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("3", "read_symbol")), StopReason.TOOL_USE, "m", null));
+                List.of(call("3", "read_symbol")), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals("AwaitingTools", loop.phase(), "turn 7");
         RunTool read = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 7");
 
         // 第 8 圈
-        loop.feed(loop.runId(), new ToolFinished(read.id(), "3", "COMPUTE INTEREST ...", false));
+        loop.feed(loop.runId(), new ToolFinished(read.id(), "3", "COMPUTE INTEREST ...", false, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 8");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 8");
 
         // 第 9 圈：回答完毕，beforeRunEnd 要求引用核对
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                text("It is in INTEREST.cbl:42"), StopReason.END_TURN, "m", null));
+                text("It is in INTEREST.cbl:42"), StopReason.END_TURN, "m", null, null, null, null));
         assertEquals("AwaitingWork", loop.phase(), "turn 9");
         DoWork citation = assertInstanceOf(DoWork.class, loop.onlyCommand(), "turn 9");
         assertEquals("citation", citation.workType(), "turn 9");
 
         // 第 10 圈
-        loop.feed(loop.runId(), new WorkDone(citation.id(), "citation", new Json.Null(), false, null));
+        loop.feed(loop.runId(), new WorkDone(citation.id(), "citation", new Json.Null(), false, null, null));
         assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase(), "turn 10").reason(), "turn 10");
         assertEquals(List.of(), loop.last.commands(), "turn 10");
 

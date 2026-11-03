@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.RequestOptions;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
@@ -83,21 +85,97 @@ class EventCodecTest {
                 List.of(new tantalum.value.state.ContextSection("memory-index", "idx", true))),
                 new tantalum.value.event.CompactRequested(SUB, REQ, "focus on the test results"),
                 new tantalum.value.event.CompactRequested(SUB, REQ, null),
-                new ModelReplied(CMD, content, StopReason.TOOL_USE, "m", new TokenUsage(1, 2, 3, 4)),
-                new ModelReplied(CMD, List.of(), StopReason.END_TURN, "m", null),
-                new ModelFailed(CMD, FailureReason.RATE_LIMITED, true, Duration.ofSeconds(30), "partial", "429"),
-                new ModelFailed(CMD, FailureReason.REFUSAL, false, null, null, "cyber"),
-                new ModelInterrupted(CMD, "partial"),
-                new ToolFinished(CMD, "c", "out", false),
+                new ModelReplied(CMD, content, StopReason.TOOL_USE, "m", new TokenUsage(1, 2, 3, 4), null, null, null),
+                new ModelReplied(CMD, List.of(), StopReason.END_TURN, "m", null, null, null, null),
+                new ModelFailed(CMD, FailureReason.RATE_LIMITED, true, Duration.ofSeconds(30), "partial", "429", null, null, null),
+                new ModelFailed(CMD, FailureReason.REFUSAL, false, null, null, "cyber", null, null, null),
+                new ModelInterrupted(CMD, "partial", null, null, null),
+                new ToolFinished(CMD, "c", "out", false, null),
                 new TimerFired(CMD),
-                new WorkDone(CMD, "citation", complexJson(), false, "fix it"),
-                new WorkDone(CMD, "citation", new Json.Null(), true, null));
+                new WorkDone(CMD, "citation", complexJson(), false, "fix it", null),
+                new WorkDone(CMD, "citation", new Json.Null(), true, null, null));
         events.forEach(this::assertRoundTrip);
+    }
+
+    // ---- 计时和请求选项：可空的展示字段，不升存储格式 ----
+
+    private static final Instant STARTED = Instant.parse("2026-11-03T01:02:03.456Z");
+    private static final Instant FIRST = Instant.parse("2026-11-03T01:02:04.001Z");
+    private static final RequestOptions OPTIONS = new RequestOptions("claude", "claude-sonnet-5-5", 64000, false, complexJson());
+
+    /** 改动前的程序写出的行（同样的事件，没有新字段），从 2026-11-03 的代码取样。 */
+    private static final String OLD_REPLIED = "{\"command\":{\"value\":\"1-0\"},\"content\":[{\"kind\":\"text\",\"text\":\"hi\"},"
+            + "{\"kind\":\"toolCall\",\"id\":\"c\",\"name\":\"grep\",\"rawArguments\":\"{\\\"a\\\":1}\",\"arguments\":"
+            + "{\"z\":\"last key first\",\"nothing\":null,\"exact\":1.10}}],\"stop\":\"TOOL_USE\",\"actualModel\":\"m\","
+            + "\"usage\":{\"input\":1,\"output\":2,\"cacheRead\":3,\"cacheWrite\":4}}";
+    private static final String OLD_FAILED = "{\"command\":{\"value\":\"1-0\"},\"reason\":\"RATE_LIMITED\",\"retryable\":true,"
+            + "\"retryAfter\":\"PT30S\",\"partialText\":\"partial\",\"detail\":\"429\"}";
+    private static final String OLD_INTERRUPTED = "{\"command\":{\"value\":\"1-0\"},\"text\":\"partial\"}";
+    private static final String OLD_TOOL = "{\"command\":{\"value\":\"1-0\"},\"toolCallId\":\"c\",\"text\":\"out\",\"error\":true}";
+    private static final String OLD_WORK = "{\"command\":{\"value\":\"1-0\"},\"workType\":\"citation\",\"result\":"
+            + "{\"z\":\"last key first\",\"nothing\":null,\"exact\":1.10},\"failed\":false,\"continueText\":\"fix it\"}";
+
+    private static Json oldJson() {
+        Map<String, Json> fields = new LinkedHashMap<>();
+        fields.put("z", new Json.Str("last key first"));
+        fields.put("nothing", new Json.Null());
+        fields.put("exact", new Json.Num(new BigDecimal("1.10")));
+        return new Json.Obj(fields);
+    }
+
+    /** 和取样时同样的五个事件，新字段为 null。 */
+    private static List<Event> withoutNewFields() {
+        return List.of(
+                new ModelReplied(CMD, List.of(new TextBlock("hi"), new ToolCallBlock("c", "grep", "{\"a\":1}", oldJson())),
+                        StopReason.TOOL_USE, "m", new TokenUsage(1, 2, 3, 4), null, null, null),
+                new ModelFailed(CMD, FailureReason.RATE_LIMITED, true, Duration.ofSeconds(30), "partial", "429", null, null, null),
+                new ModelInterrupted(CMD, "partial", null, null, null),
+                new ToolFinished(CMD, "c", "out", true, null),
+                new WorkDone(CMD, "citation", oldJson(), false, "fix it", null));
+    }
+
+    @Test
+    void timingAndOptionsSurviveARoundTrip() {
+        List<Event> events = List.of(
+                new ModelReplied(CMD, List.of(new TextBlock("hi")), StopReason.END_TURN, "m", null, STARTED, FIRST, OPTIONS),
+                new ModelReplied(CMD, List.of(), StopReason.END_TURN, "m", null, STARTED, null, null),
+                new ModelFailed(CMD, FailureReason.SERVER_ERROR, true, null, "", "529", STARTED, FIRST, OPTIONS),
+                new ModelInterrupted(CMD, "partial", STARTED, FIRST, OPTIONS),
+                new ToolFinished(CMD, "c", "out", false, STARTED),
+                new WorkDone(CMD, "citation", complexJson(), false, null, STARTED));
+        events.forEach(this::assertRoundTrip);
+        String line = codec.encode(events.getFirst());
+        assertTrue(line.contains("\"startedAt\":\"2026-11-03T01:02:03.456Z\""), line);
+        assertTrue(line.contains("\"firstTokenAt\":\"2026-11-03T01:02:04.001Z\""), line);
+    }
+
+    /** 字段为 null 时不写：脚本化模型和旧事件写出的行和改动前逐字节相同。 */
+    @Test
+    void nullFieldsWriteTheSameBytesAsBefore() {
+        assertEquals(List.of(OLD_REPLIED, OLD_FAILED, OLD_INTERRUPTED, OLD_TOOL, OLD_WORK),
+                withoutNewFields().stream().map(codec::encode).toList());
+    }
+
+    /** 旧行没有新字段，读成 null，所以存储格式不用升。 */
+    @Test
+    void oldLinesReadTheNewFieldsAsNull() {
+        List<String> old = List.of(OLD_REPLIED, OLD_FAILED, OLD_INTERRUPTED, OLD_TOOL, OLD_WORK);
+        List<Event> expected = withoutNewFields();
+        for (int i = 0; i < old.size(); i++) {
+            assertEquals(expected.get(i), codec.decode(expected.get(i).type(), 1, old.get(i)), old.get(i));
+        }
+    }
+
+    /** 旧程序读新行时忽略不认识的字段，不会把会话当成损坏。用一个现在也不认识的字段钉住这个默认行为。 */
+    @Test
+    void unknownFieldsAreIgnored() {
+        String later = OLD_TOOL.substring(0, OLD_TOOL.length() - 1) + ",\"queuedFor\":{\"ms\":3}}";
+        assertEquals(new ToolFinished(CMD, "c", "out", true, null), codec.decode(ToolFinished.TYPE, 1, later));
     }
 
     @Test
     void jsonKeepsKeyOrderAndNumberPrecision() {
-        WorkDone event = new WorkDone(CMD, "w", complexJson(), false, null);
+        WorkDone event = new WorkDone(CMD, "w", complexJson(), false, null, null);
         WorkDone decoded = (WorkDone) codec.decode(event.type(), event.version(), codec.encode(event));
         Json.Obj object = (Json.Obj) decoded.result();
         assertEquals(List.of("z", "nothing", "flag", "exact", "list"), List.copyOf(object.fields().keySet()));
@@ -109,7 +187,7 @@ class EventCodecTest {
         ToolCallBlock bad = new ToolCallBlock("bad", "grep", "{oops", null);
         ToolCallBlock nullArgs = new ToolCallBlock("n", "grep", "null", new Json.Null());
         ModelReplied decoded = (ModelReplied) codec.decode(ModelReplied.TYPE, 1, codec.encode(
-                new ModelReplied(CMD, List.of(bad, nullArgs), StopReason.TOOL_USE, "m", null)));
+                new ModelReplied(CMD, List.of(bad, nullArgs), StopReason.TOOL_USE, "m", null, null, null, null)));
         assertNull(((ToolCallBlock) decoded.content().get(0)).arguments());
         assertEquals(new Json.Null(), ((ToolCallBlock) decoded.content().get(1)).arguments());
     }

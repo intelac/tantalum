@@ -47,7 +47,7 @@ class CancelStepsTest {
         loop.prompt("hi");
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("a", "safe1"), call("b", "write")), StopReason.TOOL_USE, "m", null));
+                List.of(call("a", "safe1"), call("b", "write")), StopReason.TOOL_USE, "m", null, null, null, null));
         RunId run = loop.runId();
 
         loop.feed(run, CANCEL);
@@ -64,13 +64,13 @@ class CancelStepsTest {
         loop.prompt("hi");
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("a", "safe1")), StopReason.TOOL_USE, "m", null));
+                List.of(call("a", "safe1")), StopReason.TOOL_USE, "m", null, null, null, null));
         var sent = loop.onlyCommandId();
         RunId run = loop.runId();
         loop.feed(run, CANCEL);
         KernelState before = loop.state;
 
-        loop.feed(run, new ToolFinished(sent, "a", "late", false));
+        loop.feed(run, new ToolFinished(sent, "a", "late", false, null));
 
         assertSame(before, loop.state);
     }
