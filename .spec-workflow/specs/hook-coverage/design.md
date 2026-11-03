@@ -1,0 +1,206 @@
+# Design Document
+
+## Overview
+
+本 spec 分三个阶段，每个阶段结束都跑全量回归、做一次变异检查、提交一次、向 Yi 汇报。
+
+1. **内核：** 工作轮数上限（K1），`beforeCompact` 能看到触发方式（K2）。
+2. **示例插件：** 三个新插件和它们的工作，各自的单元测试，README 和 SDK 文档。
+3. **测试矩阵：** 真实管线上的“位置 × 结果”矩阵，工作中途取消和重启，钩子不做 I/O 的 ArchUnit 规则（K5）。最后做一次端到端回归。
+
+不改的东西：journal 格式、内核语义版本、发给模型的请求、钩子的接口方法。
+
+## Steering Document Alignment
+
+- 三层依赖 `value ← kernel ← shell` 不变。新增的字段放在 value，规则写在 kernel，配置放在 shell。
+- 内核仍是纯函数。计数器记在 `RunState` 里，回放时由同样的事件算出同样的值。
+
+## Code Reuse Analysis
+
+| 现有的 | 怎么用 |
+|---|---|
+| `WorkSteps.start` | 所有“钩子要求工作”都经过这一处，轮数的检查只放在这里 |
+| `RunEnd.finish` | 超过上限时用它结束运行，未配对的工具调用由它补上结果 |
+| `HookReported` 事实 | 超过上限时报一条，推送和轨迹都能看到 |
+| `PluginBoundaryTest`（`tantalum-examples`） | K5 的规则加在这个文件里 |
+| `TestServer`（shell 测试工具）、`ScriptedModelClient` | 真实管线测试用它们：真实的环、journal、处理器，模型按脚本回复 |
+| `ConcurrencyStressTest` 里“重启后视图逐字节相同”的写法 | 矩阵每一格结束后都照这样比较一次 |
+
+## Architecture
+
+### 1. 工作轮数上限（K1，需求 2）
+
+**状态。** `RunState` 加两个整数：
+
+| 字段 | 计什么 | 什么时候清零 |
+|---|---|---|
+| `workRounds` | 当前等待点连续做了几轮工作 | 收到模型回复（`ModelSteps.modelReplied`）；正在检查的那个工具发出去或被拦下（`ToolSteps` 往下检查下一个工具时）；运行开始 |
+| `endWorkRounds` | 本运行在“结束前”一共做了几轮工作 | 只在运行开始时为 0，之后不清零 |
+
+工具调用前的工作是按顺序一个工具一个工具检查的：一个工具在等审批时，后面的工具还没开始检查。所以“每个工具调用单独计数”用一个 `workRounds` 就够了，换下一个工具时清零。
+
+**检查只放在一处。** `WorkSteps.start(out, run, need, origin)` 先加计数：`origin` 是 `BEFORE_RUN_END` 时加 `endWorkRounds`，其余加 `workRounds`。`onWorkResult` 接着要的工作沿用原来的 `origin`，所以计在原来的等待点上。加完后如果超过 `maxWorkRounds`：
+- 报 `HookReported(run, <钩子名>, "asked for work N times in a row at <位置>")`。钩子名取自 `HookOutcome`，见下文。
+- `RunEnd.finish(out, run, FAILED, "plugin work did not settle: <钩子名> at <位置> after N rounds")`。
+- 不发 `DoWork`。
+
+“失败后”位置的工作已经受重试次数限制（`retryAfterWork` 会占一次重试），但仍照样计数。这样所有位置的规则都一样，而 8 大于 3，实际上碰不到这个上限。
+
+**谁要的工作。** `HookOutcome` 加一个字段 `decidedBy`：链里返回 `Stop` 或 `NeedWork` 的那个钩子名，放行时为 null。`HookChain.run` 返回结果时填上，`WorkSteps.start` 写原因时用它。trace-view 的 `HookDecided` 以后也用同一个字段。
+
+**配置。** `Kernel` 现在的构造参数是 `(table, hooks, toolSafety, maxParallelTools)`。把两个上限合成一个 value 记录：
+
+```java
+package tantalum.kernel;
+
+/** 内核的两个上限：一次最多并行几个工具；一个等待点连续最多几轮插件工作。 */
+public record Limits(int maxParallelTools, int maxWorkRounds) {
+    public static final Limits DEFAULT = new Limits(10, 8);   // 和 application.properties 的默认值一致
+}
+```
+
+`Kernel(table, hooks, toolSafety, Limits)`，`StepContext` 里的 `maxParallelTools` 换成 `limits`。23 处构造调用机械地替换。shell 的配置项是 `tantalum.hooks.max-work-rounds`（默认 8），小于 1 时启动失败（需求 2.5）。`Limits` 放在 kernel 而不是 value，因为只有内核读它。
+
+### 2. `beforeCompact` 的触发方式（K2，需求 3）
+
+`HookContext` 现在有 `(run, at, call, failure, work, plan)`。`plan` 只在压缩前有值，所以把触发方式和它放在一起，`withPlan(plan)` 改成 `withCompaction(plan, trigger)`：
+
+```java
+public record HookContext(RunRef run, Instant at, ToolCallBlock call, ModelFailed failure, WorkDone work,
+                          Plan plan, Compacting.Trigger trigger)
+```
+
+`trigger` 只在 `beforeCompact` 有值，取 `Compacting.Cause.trigger()`，取值是 `AUTO`、`OVERFLOW`、`MANUAL`。`CompactSteps.tryStart` 第 79 行是唯一的调用处。摘要重试（`summaryRetry`）不再跑 `beforeCompact`，这是现在的行为，测试钉住（需求 3.2）。
+
+`HookContext` 有 10 处构造调用，都走 `of(run, at)` 再加 `withX` 的写法，只有规范构造函数要补一个参数。
+
+### 3. 三个示例插件（K3，需求 1）
+
+都放在 `tantalum-examples/src/main/java/tantalum/examples/`。钩子只依赖 value 和 `kernel.hook`（K5）；做 I/O 的部分放在 `WorkType` 里，用 JDK 的 `java.net.http.HttpClient`。
+
+| 插件 | 钩子位置 | 工作 | 结果 |
+|---|---|---|---|
+| `ProviderBackoffHook(Duration maxWait)` | `onFailure` | `ProviderStatusWork(URI statusUrl, Duration poll)` | 限流且 `retryAfter > maxWait` 时拦截；`SERVER_ERROR`、`CONNECTION_ERROR` 时要求工作；其余放行 |
+| `ToolApprovalHook(Set<String> tools, int maxPolls)` | `beforeToolCall`、`onWorkResult` | `ApprovalWork(URI service)` | 工具调用前要求审批；审批结果“同意”放行，“拒绝”、工作失败或次数用完时拦截，“待定”再要一轮 |
+| `PinnedContextHook(String marker)` | `beforeCompact` | 不需要 | 头部有被钉住的用户消息，且触发方式是自动或手动时拦截；其余放行 |
+
+细节：
+
+- **`ProviderStatusWork`：** 每隔 `poll` 发一次 GET，返回 2xx 就结束，结果写 `{"healthy": true, "checks": n}`；工作超时由 `WorkHandler` 处理，结果标为失败。工作完成后（无论成功失败），钩子按现有规则回到 `ON_FAILURE`：`RetrySteps.retryAfterWork` 立即重试一次，占用重试次数。
+- **`ApprovalWork`：** 输入 `{"tool", "arguments", "poll"}`，向 `service` POST，返回 `{"decision": "approved|denied|pending", "poll": n}`。把 `poll` 原样带回，是因为失败的 `WorkDone` 里没有原来的输入。钩子是强制钩子，抛异常时这次调用按拦截处理。`onWorkResult` 先按 `work.workType()` 过滤，只看自己的工作（需求 5.4）。
+- **`PinnedContextHook`：** 在 `session.view()` 的前 `plan.headMessages()` 条里找用户亲笔、包含 `marker` 的消息。“用户亲笔”指不是工具结果、不是上下文更新、也不是摘要的用户文字消息，规则现在写在 `Compactor.isUserText`（`kernel.compaction`），插件依赖不到。新增 `kernel.hook.HookMessages.isUserText(Message)`，转调同一条规则，让插件和压缩用同一个判断。插件不能自己写一份：摘要里引用到的标记会被当成“被钉住”，之后每次压缩都会被拒绝。内核子包不能有循环依赖的 ArchUnit 规则会检查 `kernel.hook → kernel.compaction` 这条新依赖。
+
+三个插件都附一段注释，说明用了这个钩子的什么能力、参照了 DSH 或 pi 的哪个做法（需求 1.4，出处见 requirements）、会产生哪几种结果。
+
+### 4. 测试矩阵（K4，需求 4）
+
+放在 `tantalum-examples/src/test/java/tantalum/examples/hooks/`，分四个类：
+
+| 类 | 覆盖 |
+|---|---|
+| `HookMatrixTest` | 6 个位置 × 每种结果（表驱动，`@ParameterizedTest`） |
+| `HookWorkInterruptTest` | 会要求工作的 5 个位置，各测取消和重启 |
+| `WorkRoundLimitTest` | 4 个等待点各验证上限；正常插件不受影响 |
+| `ExampleHooksPipelineTest` | 3 个新示例插件，每种结果各跑一次 |
+
+**测试钩子。** `MatrixHook(point, result)` 只在指定位置返回指定结果，其他位置都放行；结果分别是放行、带补丁放行、拦截、要求工作、抛异常、返回 null。“强制”和“非强制”各一份。`MatrixWork` 是对应的工作：按输入决定成功、失败，或者一直等到超时（工作超时在测试里设成 1 秒）。
+
+**每一格检查四样：**
+1. 运行的结束原因和详情（`/api/sessions/<s>/runs`）；
+2. journal 里事件的类型序列（从会话文件读）；
+3. 对话页条目（`/messages`）；
+4. 发给模型的 prompt（`ScriptedModelClient` 记下的）。
+
+最后关掉服务，用同一个数据目录再开一次，比较 `/messages` 和运行视图，要逐字节相同（需求 4.5）。
+
+**取消和重启。** `MatrixWork` 的“等待”模式会卡在一个 latch 上，测试据此确认工作确实在进行中。
+- **取消：** 提交取消，运行以 `CANCELLED` 结束，迟到的工作结果被丢弃。
+- **重启：** 用很短的 `shutdown-wait` 关服务，工作被打断，结果不落盘；用同一个数据目录重开，运行按“被重启中断”收尾，`MatrixWork` 的调用次数仍是 1。
+
+真杀进程的情况已由 `JarCrashIT` 覆盖，这里不重复。
+
+**处理器钩子。** `afterToolExecution` 的修改结果、原样返回、抛异常三种，放进 `HookMatrixTest` 的另一张表里。
+
+**规模和时间。** 主矩阵大约 6 个位置 × 8 种结果，去掉不适用的格子大约 40 个；加上取消和重启 10 个、上限 5 个、示例插件 9 个。每格起一个 `TestServer`，总共约 65 个。如果太慢（目标是这一组测试 2 分钟以内），就改成每个类共用一个服务、每格用一个新会话。
+
+### 5. 钩子不做 I/O（K5，需求 5）
+
+在 `PluginBoundaryTest` 加一条规则，分析范围包括测试类（`importOptions` 改成两条规则分开设）：
+
+```java
+@ArchTest
+static final ArchRule hooksArePure = classes()
+        .that().implement(KernelHook.class)
+        .should().onlyDependOnClassesThat().resideInAnyPackage(
+                "tantalum.value..", "tantalum.kernel.hook..", "java.lang..", "java.util..", "java.time..")
+        .andShould().notCallMethodWhere(target(nameMatching("now|currentTimeMillis|nanoTime")))   // 时间只能取 context.at()
+        .because("hooks run on the shared kernel thread and are replayed; I/O goes through NeedWork");
+```
+
+- 要排除 `java.lang` 里的 `Thread`、`ProcessBuilder`、`Runtime` 和 `System.getenv`，用 `noClasses()` 另写一条规则。
+- 规则在 `tantalum.examples` 和测试代码的钩子上都生效。shell 的测试钩子（如 `HookChainTest` 里的）在 kernel 模块，由 kernel 的测试自己保证，不在这条规则的范围内。
+- **变异检查：** 让 `DailyQuotaHook` 读一个文件，规则必须失败。
+- **文档：** `KernelHook` 的类注释和 README“写插件”写明需求 5.4 列的五点。
+
+## Components and Interfaces
+
+| 类 | 模块 / 包 | 改动 |
+|---|---|---|
+| `RunState` | value.state | 加 `workRounds`、`endWorkRounds` 和对应的 `with` 方法 |
+| `HookContext` | value.hook | 加 `trigger`；`withPlan` 改名为 `withCompaction(plan, trigger)` |
+| `Limits`（新） | kernel | 两个上限 |
+| `Kernel`、`StepContext` | kernel、kernel.table | 构造参数换成 `Limits` |
+| `HookOutcome`、`HookChain` | kernel.hook | 加 `decidedBy` |
+| `HookMessages`（新） | kernel.hook | `isUserText`，转调 `Compactor.isUserText` |
+| `WorkSteps` | kernel.step | `start` 计数并检查上限 |
+| `ModelSteps`、`ToolSteps` | kernel.step | 在清零点调用 `withWorkRounds(0)` |
+| `CompactSteps` | kernel.step | `withCompaction(plan, trigger)` |
+| `TantalumProperties`、`Engine` | shell.boot | `hooks.max-work-rounds`，组装 `Limits` |
+| `ProviderBackoffHook`、`ProviderStatusWork`、`ToolApprovalHook`、`ApprovalWork`、`PinnedContextHook`（新） | examples | 第 3 节 |
+| `PluginBoundaryTest` | examples 测试 | K5 规则 |
+| `hooks/*Test`、`MatrixHook`、`MatrixWork`（新） | examples 测试 | 第 4 节 |
+
+## Data Models
+
+```java
+public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, ToolRound tools, List<Message> pendingSteers, int retries,
+                       HookPoint workOrigin, Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered,
+                       int workRounds, int endWorkRounds)
+```
+
+`RunState` 会进快照吗？快照已经删了。所以新字段只存在于内存里，回放时重新算出来，不涉及存储格式。
+
+## Error Handling
+
+| 场景 | 处理 |
+|---|---|
+| 超过工作轮数上限 | 运行以 `FAILED` 结束，详情写明钩子、位置、轮数；报 `HookReported` |
+| `max-work-rounds` 小于 1 | 启动失败，提示配置项的名字 |
+| `ProviderStatusWork`、`ApprovalWork` 连不上服务 | 工作失败（`WorkDone.failed`）。审批的工作失败时，钩子拦截这次调用；状态检查的工作失败时，内核照样重试一次 |
+| 审批服务返回无法识别的内容 | 按“拒绝”处理，原因里带上原文的前 200 个字 |
+
+## Testing Strategy
+
+### Unit Testing
+- **内核：**
+  - `WorkStepsTest` 覆盖 4 个等待点各自的计数和清零，到上限时结束，以及 `onWorkResult` 链计在原等待点上。
+  - `CompactStepsTest` 检查三种触发方式都传给了钩子，摘要重试不再跑钩子。
+  - `HookChainTest` 检查 `decidedBy`。
+  - 以上都跑一次 `Replay.run`，结果要一致。
+- **示例插件：** 每个插件一个测试类，逐个结果断言，不经过管线。两个工作用 JDK 的 `HttpServer` 起本地桩来测。
+
+### Integration Testing
+- 第 4 节的四个类。
+- 跳号回归（需求 4.7）。
+
+### End-to-End Testing
+- 第 3 阶段结束时跑全量：`mvn -o clean verify`（含 `JarCrashIT`）、跳号回归、vitest、Playwright。这次不改前端，Playwright 用来确认没有回归。
+- 不需要真实模型测试。
+
+## 阶段
+
+| 阶段 | 交付 | 变异检查 |
+|---|---|---|
+| ① 内核 | 第 1、2 节；内核单元测试 | 去掉上限检查，`WorkStepsTest` 必须失败 |
+| ② 示例插件 | 第 3 节；插件单元测试；README 和 `KernelHook` 文档 | 让 `PinnedContextHook` 也拒绝超长恢复，它的测试必须失败 |
+| ③ 测试矩阵 | 第 4、5 节；全量端到端 | 让 `WorkSteps` 回到 `BEFORE_TOOL_CALL` 时忽略 `onWorkResult` 的拦截，矩阵必须失败；让示例钩子读文件，ArchUnit 必须失败 |

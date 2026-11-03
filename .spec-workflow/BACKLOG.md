@@ -1,14 +1,15 @@
 # 待办总表
 
-所有未完成事项只记在这里。具体任务仍在各 spec 的 `tasks.md`，这里只记位置和状态。最后核对：2026-11-02。
+所有未完成事项只记在这里。具体任务仍在各 spec 的 `tasks.md`，这里只记位置和状态。最后核对：2026-11-03。
 
 ## 1. 正在做
 
 | 事项 | 状态 | 位置 |
 |---|---|---|
 | `code-simplification` | 39/39，2026-11-03 完成（结果见 tech.md）。`SessionIndex`、`McpConnection` 仍超过 300 行，理由见 tech.md | `specs/code-simplification/tasks.md` |
-| `trace-view` | 需求待批，2026-11-03 开始。轨迹页和 DSH 功能对等，另加钩子决定；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做 | `specs/trace-view/requirements.md` |
-| `attachments` | 2026-11-03 Yi 决定要做：提问时附图片和文件，对话页和轨迹页显示。正在查 DSH 和 pi 的做法 | 还没有文档 |
+| `trace-view` | 需求已批，设计待批，2026-11-03 开始。轨迹页和 DSH 功能对等，另加钩子决定；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做 | `specs/trace-view/requirements.md` |
+| `hook-coverage` | 需求待批（2026-11-03）。每个钩子都有一个实现（缺 `onFailure`、`onWorkResult`、`beforeCompact`）；插件工作的轮数上限（现在一个钩子一直要工作会无限转圈）；每个钩子在真实管线上测每种结果；钩子不能直接做 I/O 的 ArchUnit 规则。当前唯一在做的事项，trace-view、attachments 等它做完 | `specs/hook-coverage/requirements.md` |
+| `attachments` | 需求待批，2026-11-03 开始。提问时附图片和文件，每用户独立存储，发给模型，对话页和轨迹页显示。没有引用的附件怎么清理，等以后做会话删除时一起做（A9） | `specs/attachments/requirements.md` |
 
 `ops-hardening` 50/50 已完成（2026-11-02）。
 
@@ -18,7 +19,7 @@
 
 | 事项 | 已知内容 | 还缺什么 |
 |---|---|---|
-| 沙箱 | 基于开源项目，不自己写；候选要实测对比 | 开 spec |
+| 沙箱 | 基于开源项目，不自己写；候选要实测对比。2026-11-03 Yi 提出“反向沙箱”：agent 在服务器，工具在用户本机（先 macOS、Windows）执行，本机装连接程序主动连服务器。可参考 OpenClaw 的 node、MCP 隧道、DSH `sandbox-local`、Codex 的 Windows 沙箱 | 开 spec；排在 trace-view、attachments 之后 |
 | 子 agent | 已确认要做，排在沙箱附近 | 开 spec；和沙箱的先后未定 |
 | 多实例 | Yi 决定这次不做。每个用户同一时刻归一个实例，网关按用户路由，实例挂了由别的实例接管。需要共享存储（网络盘的 fsync 和锁要实测）、索引库换 Postgres、共享工作区和登录会话、租约防脑裂、SSE 路由。序号和 ID 已留好（`ops-hardening` H14） | 开 spec；和沙箱、子 agent 的先后未定 |
 | MCP 后续 | 每用户令牌、OAuth、stdio、人工审批 | Yi 决定要不要做、做哪几项 |
