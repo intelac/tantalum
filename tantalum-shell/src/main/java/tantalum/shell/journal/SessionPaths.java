@@ -42,6 +42,11 @@ public final class SessionPaths {
         return inside(root.resolve(encode(principal.value())));
     }
 
+    /** 用户目录的名字。附件目录（{@code attachments/<用户>}）用同样的规则。 */
+    public static String dirName(Principal principal) {
+        return encode(principal.value());
+    }
+
     public Path sessionFile(Principal principal, SessionId session) {
         return inside(userDir(principal).resolve(encode(session.value()) + EXTENSION));
     }

@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.mcp.McpProperties;
 import tantalum.shell.memory.MemoryLimits;
@@ -13,7 +14,8 @@ import tantalum.value.state.CompactionSettings;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
-                                 Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks) {
+                                 Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
+                                 AttachmentLimits attachments) {
 
     /** 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。 */
     public record Hooks(int maxWorkRounds) {
@@ -122,6 +124,11 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
 
     private boolean usesClaude() {
         return "claude".equals(provider);
+    }
+
+    /** 附件上限；没有配置时用默认值。 */
+    public AttachmentLimits attachmentLimits() {
+        return attachments == null ? AttachmentLimits.defaults() : attachments;
     }
 
     /** 当前供应商的模型名。 */

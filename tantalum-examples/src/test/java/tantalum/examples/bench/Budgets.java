@@ -25,6 +25,8 @@ final class Budgets {
     static final long TRACE_PAGE_MS = 1_000;
     /** 非功能：100 会话、每会话每秒 1 事件的落盘 P99。 */
     static final long WRITE_P99_MS = 50;
+    /** 附件非功能“性能”：一张 20 MB 照片的上传加规范化。 */
+    static final long UPLOAD_20MB_MS = 2_000;
 
     private final double tighten;
     private final List<String> failures = new ArrayList<>();
