@@ -281,9 +281,9 @@ export interface ToolCall extends TraceHead {
   result?: string;
   code?: string;
   reason?: string;
-  /** 发出它的事件；同组即并行。 */
-  group: string;
-  issuedAt: string;
+  /** 发出它的事件；同组即并行。被拦下和没有发出的调用没有组和发出时刻。 */
+  group?: string;
+  issuedAt?: string;
   startedAt?: string;
   request?: string;
 }

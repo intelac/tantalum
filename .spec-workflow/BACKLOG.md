@@ -7,7 +7,7 @@
 | 事项 | 状态 | 位置 |
 |---|---|---|
 | `code-simplification` | 39/39，2026-11-03 完成（结果见 tech.md）。`SessionIndex`、`McpConnection` 仍超过 300 行，理由见 tech.md | `specs/code-simplification/tasks.md` |
-| `trace-view` | 需求已批，设计待批，2026-11-03 开始。轨迹页和 DSH 功能对等，另加钩子决定；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做 | `specs/trace-view/requirements.md` |
+| `trace-view` | 23/23，2026-11-03 完成（结果见 tech.md）。轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做；DSH 统计页的“事件行”（请求头、系统提示词、工具集变更单独成行）没有做，轨迹页已经能看到这些 | `specs/trace-view/tasks.md` |
 | `hook-coverage` | 19/19，2026-11-03 完成（结果见 tech.md）。每个钩子都有示例插件；工作轮数上限；真实管线上的钩子矩阵 86 个测试；钩子不做 I/O 的 ArchUnit 规则。顺带修了两个缺陷：同一步开始又结束的运行在对话里没有结束原因；关服务时被打断的处理器结果被当成正常结果落盘（违反 ops-hardening H8） | `specs/hook-coverage/tasks.md` |
 | `attachments` | 需求待批，2026-11-03 开始。提问时附图片和文件，每用户独立存储，发给模型，对话页和轨迹页显示。没有引用的附件怎么清理，等以后做会话删除时一起做（A9） | `specs/attachments/requirements.md` |
 

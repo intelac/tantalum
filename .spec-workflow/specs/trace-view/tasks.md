@@ -125,11 +125,11 @@
 
 ## 阶段 4：统计
 
-- [ ] 22. 统计页签
+- [x] 22. 统计页签
   - File: console/stats/{StatsPage,StatsTable,metrics}.ts(x)（新）、console/app/{router.ts,App.tsx}、console/text/zh.ts
   - 每轮一行，“触发”列取用户提问、排队提交、手动压缩；展开后每步一行，列出上下文 token、输出 token、缓存命中率（按 token 加权）、首 token 延迟、模型用时、工具用时、输出速度、总用时条；没有记录的显示“未记录”；和轨迹共用分页
   - _Requirements: 8.1–8.5_
 
-- [ ] 23. 收尾和端到端
+- [x] 23. 收尾和端到端
   - Playwright 覆盖统计页签；最终全量端到端；变异检查（命中率改成各步平均；共用加载在轨迹加载中时报“已加载完”）；README、tech.md、BACKLOG、架构页；提交；汇报
   - _Requirements: 设计“阶段”，非功能_

@@ -331,6 +331,14 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
   - 关服务时被中断的处理器，结果被当成正常结果落盘，钩子据此当作真的失败处理（如引用核对以“核对失败”结束），违反 ops-hardening H8“到时中断，重启后按 H9 收尾”。现在关服务中断的结果不写回（`InFlightCommands.abortForShutdown`），用户取消的照旧写回并被内核忽略。等审批时被重启的工具因此补“没有执行”而不是“结果未知”，和事实一致。
 - **注释改正**：`application.properties` 说上下文窗口“不参与截断”，实际决定压缩阈值，已改正。
 
+### trace-view（2026-11-03）
+
+- **数据：** 内核报 `HookDecided` 事实（拦截、要求工作、带补丁放行；只放行不报）；模型结果加 `startedAt`、`firstTokenAt`、`options`，工具和工作结果加 `startedAt`，都可为空，为空时写出的行和改动前逐字节相同。组请求的代码从 `ClaudeClient` 拆到 `ClaudeRequest`，请求体和改动前逐字节相同（期望文件 `claude-requests.txt`）。
+- **投影：** `shell/trace` 的 9 种记录由 `TracePass` 每个事件算一次，Cleanroom 推 SSE `trace`，冷载入由同一次重放算出（`Projections`）。页面和推送合并后逐字节等于整页重放（`WireFormatTest`、控制台 `TraceStore.test.ts` 读同一份期望文件）。
+- **性能（ReadBench，1 万事件语料）：** 长会话轨迹第一页 151 ms（预算 1 s）；冷载入 382 → 399 ms（+4.5%，预算 +20%）；启动和留存堆不变。控制台 gzip 约 219 KB（预算 300 KB），新依赖 `@tanstack/react-virtual` 3.14.21、`diff` 9.0.0。
+- **前端：** 记录表虚拟滚动；检查器按记录类型分页签，请求详情按需取 `/trace/calls/{命令}`；时间概览四条道（多一道“插件”），两种画法；统计页签和轨迹共用一个 `TraceStore` 和一个去重的“加载更早”。旧的 `/api/runs/{run}/trace` 已删。
+- **和设计的出入：** 纯函数文件叫 `rows.ts`、`segments.ts`，不叫设计里的 `ledger.ts`、`timeline.ts`：macOS 文件系统不分大小写，和组件 `Ledger.tsx`、`Timeline.tsx` 冲突。轨迹页按会话用 `key` 重建，不在 effect 里清状态（开发模式下挂载 effect 跑两遍，会把地址定位的选中清掉）。DSH 统计页的事件行没有做。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。
