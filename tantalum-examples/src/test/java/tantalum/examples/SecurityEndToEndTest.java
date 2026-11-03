@@ -63,10 +63,11 @@ class SecurityEndToEndTest {
                 HttpResponse<String> runs = server.get("alice", "/api/sessions/" + id + "/runs");
                 HttpResponse<String> run = server.get("alice", "/api/runs/" + id + "_1");
                 HttpResponse<String> turns = server.get("alice", "/api/runs/" + id + "_1/turns");
-                HttpResponse<String> trace = server.get("alice", "/api/runs/" + id + "_1/trace");
+                HttpResponse<String> trace = server.get("alice", "/api/sessions/" + id + "/trace");
+                HttpResponse<String> call = server.get("alice", "/api/sessions/" + id + "/trace/calls/" + id + "_1-0");
                 HttpResponse<String> cancel = server.http.send(server.request("alice", "/api/runs/" + id + "_1/cancel")
                         .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
-                for (HttpResponse<String> response : List.of(submit, messages, runs, run, turns, trace, cancel)) {
+                for (HttpResponse<String> response : List.of(submit, messages, runs, run, turns, trace, call, cancel)) {
                     statuses.add(evil + " " + response.request().method() + " " + response.statusCode());
                     assertTrue(response.statusCode() == 400 || response.statusCode() == 404,
                             evil + ": " + response.request().uri() + " answered " + response.statusCode() + " " + response.body());

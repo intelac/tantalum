@@ -58,7 +58,7 @@ public final class ReadBench {
                 budgets.check("retained_heap_mb", retained, Budgets.RETAINED_HEAP_MB);
                 budgets.check("retained_growth_mb", retained - retainedAtSmallest, Budgets.RETAINED_GROWTH_MB);
                 budgets.check("quiet_turns_ms", median(results.get("quiet_turns_ms")), Budgets.QUIET_QUERY_MS);
-                budgets.check("quiet_trace_ms", median(results.get("quiet_trace_ms")), Budgets.QUIET_QUERY_MS);
+                budgets.check("quiet_trace_page_ms", median(results.get("quiet_trace_page_ms")), Budgets.QUIET_QUERY_MS);
                 budgets.check("open_cold_ms", median(results.get("open_cold_ms")), Budgets.OPEN_COLD_MS);
                 budgets.check("trace_page_ms", median(results.get("trace_page_ms")), Budgets.TRACE_PAGE_MS);
                 budgets.check("open_resident_ms", median(results.get("open_resident_ms")), Budgets.OPEN_RESIDENT_MS);

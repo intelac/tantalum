@@ -11,7 +11,8 @@ import type {
   RunView,
   SessionSummary,
   SubmitMode,
-  Trace,
+  TraceCall,
+  TracePage,
   Turn,
   TurnSummary,
   User,
@@ -134,8 +135,15 @@ export async function listRuns(session: string): Promise<{ runs: RunView[] }> {
   }
 }
 
-export function getTrace(run: string): Promise<Trace> {
-  return call(`/api/runs/${encodeURIComponent(run)}/trace`);
+/** 轨迹的一页：不带参数取最新一页；`before` 取更早一页；`run` 从最新一直取到包含这个运行的一页。 */
+export function getTracePage(session: string, cursor: { before?: number; run?: string } = {}): Promise<TracePage> {
+  const query = cursor.before !== undefined ? `?before=${cursor.before}` : cursor.run !== undefined ? `?run=${encodeURIComponent(cursor.run)}` : "";
+  return call(`/api/sessions/${encodeURIComponent(session)}/trace${query}`);
+}
+
+/** 一次尝试的完整输入（system、工具、消息），定下来后不会再变。 */
+export function getTraceCall(session: string, command: string): Promise<TraceCall> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/trace/calls/${encodeURIComponent(command)}`);
 }
 
 export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {

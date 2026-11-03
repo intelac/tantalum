@@ -4,6 +4,7 @@ import type { ToolStepItem } from "../api/types";
 import { formatDuration } from "../text/time";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
+import { navigate, traceRecordPath } from "../app/router";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
 import { useNow } from "../ui/useNow";
 
@@ -65,6 +66,16 @@ export function ToolRow({ step }: Props) {
       </button>
       {open && (
         <div className="mt-1 mb-2 ml-6 flex flex-col gap-2">
+          <a
+            href={traceRecordPath(step.session, `t:${step.id}`)}
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(traceRecordPath(step.session, `t:${step.id}`));
+            }}
+            className="self-start text-xs text-accent hover:underline"
+          >
+            {zh.conversation.viewInTrace}
+          </a>
           <section>
             <h4 className="mb-1 text-xs font-medium text-fg-muted">{zh.process.arguments}</h4>
             <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>

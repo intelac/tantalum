@@ -166,14 +166,12 @@ class PerSessionQueryTest {
     }
 
     @Test
-    void theTraceOfAStoppedRunReadsOnlyItsSessionAndStillSeesTheOtherSessionsUsage() throws Exception {
+    void theTurnsOfAStoppedRunReadOnlyItsSession() throws Exception {
         RunId stopped = scenario();
         unreadable(ALICE, FIRST);
         unreadable(BOB, BOBS);
-        TurnQuery.Trace trace = query.trace(ALICE, stopped);
-        assertEquals(List.of("AwaitingContext", "Ended"), trace.events().stream().map(TurnQuery.Trace.Entry::phase).toList());
         assertTrue(query.turns(ALICE, stopped).isEmpty(), "no model call was made");
-        assertTrue(query.trace(BOB, stopped).events().isEmpty(), "someone else's run is like a missing one");
+        assertTrue(query.turns(BOB, stopped).isEmpty(), "someone else's run is like a missing one");
     }
 
     @Test

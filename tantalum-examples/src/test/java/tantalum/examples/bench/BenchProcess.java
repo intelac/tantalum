@@ -49,7 +49,6 @@ public final class BenchProcess {
         // 启动后长会话不在内存：这是冷载入的首屏（最近一页）。
         timed(http, base, longCookie, "open_cold_ms", "/api/sessions/" + manifest.longSession() + "/messages");
         timed(http, base, longCookie, "turns_ms", "/api/runs/" + manifest.longRun() + "/turns");
-        timed(http, base, longCookie, "trace_ms", "/api/runs/" + manifest.longRun() + "/trace");
         timed(http, base, longCookie, "trace_page_ms", "/api/sessions/" + manifest.longSession() + "/trace");
         // 取消一个已结束的运行：事件经过通道，会话被载入内存，内核忽略它。之后再打开就是常驻的首屏。
         HttpRequest cancel = HttpRequest.newBuilder(URI.create(base + "/api/runs/" + manifest.longRun() + "/cancel"))
@@ -62,7 +61,6 @@ public final class BenchProcess {
         timed(http, base, longCookie, "open_resident_ms", "/api/sessions/" + manifest.longSession() + "/messages");
         String quietCookie = login(http, base, Corpus.QUIET_USER);
         timed(http, base, quietCookie, "quiet_turns_ms", "/api/runs/" + manifest.quietRun() + "/turns");
-        timed(http, base, quietCookie, "quiet_trace_ms", "/api/runs/" + manifest.quietRun() + "/trace");
         timed(http, base, quietCookie, "quiet_trace_page_ms", "/api/sessions/" + manifest.quietSession() + "/trace");
 
         long peak = ManagementFactory.getMemoryPoolMXBeans().stream().filter(pool -> pool.getType() == MemoryType.HEAP)

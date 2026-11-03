@@ -598,11 +598,16 @@ class ClaudeScenarioTest {
                 JsonNode run = waitForLatestRun(server, user, "s-" + user, Duration.ofMinutes(5));
                 assertEquals("COMPLETED", run.get("endReason").asString(), user + ": " + run);
                 String runId = run.get("run").asString();
-                JsonNode trace = JSON.readTree(server.get(user, "/api/runs/" + runId + "/trace").body());
+                // 每次模型调用的尝试：从开始（没有记录时用发出）到结束。
+                JsonNode trace = JSON.readTree(server.get(user, "/api/sessions/s-" + user + "/trace?run=" + runId).body());
                 List<Instant[]> segments = new ArrayList<>();
-                for (JsonNode segment : trace.get("segments")) {
-                    if (segment.get("handler").asString().equals("ModelHandler")) {
-                        segments.add(new Instant[] {Instant.parse(segment.get("from").asString()), Instant.parse(segment.get("to").asString())});
+                for (JsonNode record : trace.get("records")) {
+                    if (!record.get("kind").asString().equals("request") || !record.get("run").asString().equals(runId)) {
+                        continue;
+                    }
+                    for (JsonNode attempt : record.get("attempts")) {
+                        JsonNode from = attempt.has("startedAt") ? attempt.get("startedAt") : attempt.get("issuedAt");
+                        segments.add(new Instant[] {Instant.parse(from.asString()), Instant.parse(attempt.get("endedAt").asString())});
                     }
                 }
                 modelSegments.put(user, segments);

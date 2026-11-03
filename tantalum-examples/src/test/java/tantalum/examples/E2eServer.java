@@ -51,6 +51,9 @@ public final class E2eServer {
                     GenericApplicationContext generic = (GenericApplicationContext) context;
                     generic.registerBean(ModelClient.class, E2eModel::new);
                     generic.registerBean(E2eController.class);
+                    // 轨迹页的端到端测试：示例插件的引用核对工作，加一个只对 trace: 提问起作用的钩子。
+                    generic.registerBean(CitationWork.class);
+                    generic.registerBean(E2eTraceHook.class);
                 })
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,

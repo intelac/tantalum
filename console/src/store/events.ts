@@ -1,12 +1,13 @@
-// 把 SSE 事件接到 store 和查询缓存上：item 覆盖条目，chunk 更新进行中的文本，PhaseChanged 结算分片并刷新侧栏。
+// 把 SSE 事件接到 store 和查询缓存上：item 覆盖条目，chunk 更新进行中的文本，PhaseChanged 结算分片并刷新侧栏，trace 交给轨迹。
 
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { notifyUnauthorized } from "../api/client";
 import { reportConnection, resetConnection } from "../api/connection";
 import { connectEvents, type SseEvent } from "../api/sse";
-import type { Chunk, Item, PhaseChanged } from "../api/types";
+import type { Chunk, Item, PhaseChanged, TraceRecord } from "../api/types";
 import { SESSIONS_KEY } from "../shell/useSessions";
+import type { TraceStore } from "../trace/TraceStore";
 import { seqOf, type ConversationStore } from "./ConversationStore";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -18,7 +19,7 @@ function hasStrings(value: unknown, ...keys: string[]): boolean {
 }
 
 /** 形状不对的负载直接丢掉：服务端的 bug 或中间人改过的数据不该让整条流重连。 */
-export function handleEvent(event: SseEvent, store: ConversationStore, queries: QueryClient): void {
+export function handleEvent(event: SseEvent, store: ConversationStore, queries: QueryClient, trace?: TraceStore): void {
   let data: unknown;
   try {
     data = JSON.parse(event.data);
@@ -48,20 +49,26 @@ export function handleEvent(event: SseEvent, store: ConversationStore, queries: 
       void queries.invalidateQueries({ queryKey: SESSIONS_KEY });
       break;
     }
+    case "trace": {
+      const seq = seqOf(event.id);
+      if (trace === undefined || seq === undefined || !hasStrings(data, "kind", "id", "pos", "run", "at")) return;
+      trace.applyRecord(data as TraceRecord, seq);
+      break;
+    }
     default:
       break;
   }
 }
 
 /** 登录后保持一条 SSE 连接；退出或组件卸载时断开。 */
-export function useEventStream(store: ConversationStore, queries: QueryClient): void {
+export function useEventStream(store: ConversationStore, queries: QueryClient, trace?: TraceStore): void {
   useEffect(() => {
     resetConnection();
     const stop = connectEvents({
-      onEvent: (event) => handleEvent(event, store, queries),
+      onEvent: (event) => handleEvent(event, store, queries, trace),
       onConnection: reportConnection,
       onUnauthorized: notifyUnauthorized,
     });
     return stop;
-  }, [store, queries]);
+  }, [store, queries, trace]);
 }

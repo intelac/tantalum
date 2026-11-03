@@ -129,28 +129,9 @@ class TurnQueryTest {
         assertTrue(query.messagesAfter(new Principal("other"), "-1.0").isEmpty());
     }
 
+    /** 摘要调用是一个 turn，prompt 里工具被禁用；压缩结果在轨迹里看（TracePassTest）。 */
     @Test
-    void traceListsEventsPhasesTurnsAndHandlerSegments() throws Exception {
-        writeScript();
-        TurnQuery.Trace trace = query.trace(USER, RUN);
-
-        assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelFailed", "TimerFired", "ModelReplied"),
-                trace.events().stream().map(TurnQuery.Trace.Entry::type).toList());
-        assertEquals(List.of("AwaitingContext", "AwaitingModel", "AwaitingRetry", "AwaitingModel", "Ended"),
-                trace.events().stream().map(TurnQuery.Trace.Entry::phase).toList());
-        assertEquals(List.of(0L, 1L, 2L, 3L, 4L), trace.events().stream().map(TurnQuery.Trace.Entry::seq).toList());
-        assertEquals(1, trace.events().get(1).turn());
-        assertNull(trace.events().get(2).turn());
-        assertEquals(2, trace.events().get(3).turn());
-        assertEquals(List.of("ContextHandler", "ModelHandler", "TimerHandler", "ModelHandler"),
-                trace.segments().stream().map(TurnQuery.Trace.Segment::handler).toList());
-        assertEquals(Instant.EPOCH, trace.segments().getFirst().from());
-        assertTrue(trace.segments().stream().allMatch(segment -> segment.to() != null));
-    }
-
-    /** 摘要调用是一个 turn（prompt 里工具被禁用），轨迹条目带压缩结果，AwaitingSummary 归 ModelHandler。 */
-    @Test
-    void summaryCallIsATurnAndTheTraceCarriesTheCompaction() throws Exception {
+    void summaryCallIsATurnWithToolsDisabled() throws Exception {
         tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
         String q = ("q ").repeat(45);
         write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
@@ -176,33 +157,6 @@ class TurnQueryTest {
         assertTrue(turns.get(1).prompt().output().toolsAllowed());
         assertEquals(3, turns.get(1).prompt().messages().size(), "summary, kept a2, kept q3");
 
-        TurnQuery.Trace trace = query.trace(USER, second);
-        assertEquals(List.of("AwaitingContext", "AwaitingSummary", "AwaitingContext", "AwaitingModel", "Ended"),
-                trace.events().stream().map(TurnQuery.Trace.Entry::phase).toList());
-        TurnQuery.Trace.Entry summary = trace.events().get(2);
-        assertEquals("ModelReplied", summary.type());
-        assertTrue(summary.compaction().ok());
-        assertEquals("AUTO", summary.compaction().trigger());
-        assertTrue(summary.compaction().estimateAfter() < summary.compaction().estimateBefore());
-        assertNull(trace.events().get(1).compaction());
-        assertEquals(List.of("ContextHandler", "ModelHandler", "ContextHandler", "ModelHandler"),
-                trace.segments().stream().map(TurnQuery.Trace.Segment::handler).toList());
     }
 
-    @Test
-    void traceOfAnUnfinishedRunHasAnOpenLastSegment() throws Exception {
-        write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, List.of()));
-        TurnQuery.Trace trace = query.trace(USER, RUN);
-        assertEquals(2, trace.segments().size());
-        assertNull(trace.segments().getLast().to());
-        assertEquals("ModelHandler", trace.segments().getLast().handler());
-    }
-
-    @Test
-    void traceOfAnotherUsersRunIsEmpty() throws Exception {
-        writeScript();
-        assertTrue(query.trace(new Principal("other"), RUN).events().isEmpty());
-        assertTrue(query.trace(USER, new RunId("nope")).events().isEmpty());
-    }
 }

@@ -34,6 +34,8 @@
 | remark-gfm | 4.0.1 | MIT |
 | highlight.js | 11.12.0 | BSD-3-Clause |
 | lucide-react | 1.66.0 | ISC |
+| @tanstack/react-virtual（含 @tanstack/virtual-core 3.19.6） | 3.14.21 | MIT |
+| diff | 9.0.0 | BSD-3-Clause |
 
 ## 只在构建和测试时使用
 

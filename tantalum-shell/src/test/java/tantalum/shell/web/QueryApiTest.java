@@ -74,7 +74,7 @@ class QueryApiTest {
             assertEquals(404, server.get("alice", "/api/runs/" + malformed + "/turns").statusCode(), malformed);
         }
         assertEquals(404, server.get("bob", "/api/runs/" + run + "/turns").statusCode());
-        assertEquals(404, server.get("bob", "/api/runs/" + run + "/trace").statusCode());
+        assertEquals(404, server.get("bob", "/api/sessions/s1/trace").statusCode());
     }
 
     @Test
