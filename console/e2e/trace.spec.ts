@@ -123,6 +123,36 @@ test.describe("轨迹页", () => {
     await expect(inspector).toHaveCount(0);
   });
 
+  test("时间概览：点段选中记录；拖选区间过滤记录表，Esc 清除；切换画法", async ({ page }) => {
+    await runTraceScenario(page);
+    const overview = page.getByRole("region", { name: "轨迹时间线" });
+    await expect(overview.getByRole("button", { name: /^插件工作，/ })).toBeVisible();
+
+    // 点中工具段：选中对应记录，检查器打开。
+    await overview.getByRole("button", { name: /^工具，demo\/lookup/ }).click();
+    await expect(row(page, "工具", /demo\/lookup/)).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("complementary", { name: "事件详情" })).toContainText("demo/lookup");
+
+    // 在轨道上从左往右拖到一半：记录表只留这段时间里的记录。
+    await page.getByRole("button", { name: "使用等宽操作" }).click();
+    const track = overview.getByRole("group", { name: /时间线概览/ });
+    const box = await track.boundingBox();
+    if (box === null) throw new Error("timeline track not laid out");
+    const all = await rows(page).count();
+    await page.mouse.move(box.x + 2, box.y + box.height - 4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height - 4, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => rows(page).count()).toBeLessThan(all);
+    await expect(row(page, "用户").first()).toBeVisible();
+    await track.focus();
+    await page.keyboard.press("Escape");
+    await expect.poll(() => rows(page).count()).toBe(all);
+
+    await page.getByRole("button", { name: "使用实际时长" }).click();
+    await expect(page.getByRole("button", { name: "使用等宽操作" })).toBeVisible();
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     for (const width of [1280, 390]) {
       test(`截图 ${width}px ${scheme}`, async ({ page }) => {

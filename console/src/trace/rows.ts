@@ -170,3 +170,35 @@ export function expansionFor(records: readonly TraceRecord[], ids: Iterable<stri
   }
   return { turns, calls };
 }
+
+/**
+ * 时间概览选了区间时，记录表只留与区间相交的记录（{@code ids}）；摘要行藏着这些记录时留下；
+ * 没有留下任何记录的步标题和轮标题也去掉。
+ */
+export function focusRows(rows: readonly Row[], ids: ReadonlySet<string>): Row[] {
+  const kept = rows.filter((row) => {
+    if (row.type === "record") return ids.has(row.record.id);
+    if (row.type === "summary") return row.hidden.some((id) => ids.has(id));
+    return true;
+  });
+  const out: Row[] = [];
+  for (let index = 0; index < kept.length; index++) {
+    const row = kept[index] as Row;
+    if (row.type === "record" || row.type === "summary") {
+      out.push(row);
+      continue;
+    }
+    // 标题只在它后面、下一个同级或更高级标题之前还有记录时保留。
+    let hasContent = false;
+    for (let next = index + 1; next < kept.length; next++) {
+      const candidate = kept[next] as Row;
+      if (candidate.type === "turn" || (row.type === "group" && candidate.type === "group")) break;
+      if (candidate.type === "record" || candidate.type === "summary") {
+        hasContent = true;
+        break;
+      }
+    }
+    if (hasContent) out.push(row);
+  }
+  return out;
+}
