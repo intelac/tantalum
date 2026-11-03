@@ -313,6 +313,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
+| 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**，内置工具只有读文件、搜索文件和记忆 | 待开 spec |
 | 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |
