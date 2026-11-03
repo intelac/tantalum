@@ -24,6 +24,8 @@ export function ComposerDock({ store, session, config }: Props) {
         activeRun={running ? run : null}
         modelName={config?.model ?? zh.composer.model}
         cloud={config?.cloud ?? false}
+        limits={config?.attachments}
+        vision={config?.vision}
       />
       <StatusBar session={session} run={run} running={running} version={version} contextWindow={config?.contextWindow} />
     </div>

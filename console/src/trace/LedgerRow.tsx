@@ -65,7 +65,11 @@ export function contentOf(record: TraceRecord): string {
     case "user": {
       const prefix = record.mode === "PROMPT" ? "" : `${t.userMode[record.mode]} · `;
       const origin = record.source.type === "plugin" ? `${sourceLabel(record.source)} · ` : "";
-      return `${prefix}${origin}${line(record.text)}`;
+      const attachments = record.attachments ?? [];
+      const images = attachments.filter((ref) => ref.kind === "image").length;
+      const counts = attachments.length === 0 ? "" : zh.attachment.summary(images, attachments.length - images);
+      const text = line(record.text);
+      return `${prefix}${origin}${[text, counts].filter((part) => part !== "").join(" · ")}`;
     }
     case "context":
       return t.layout.contextChanged(record.sections.map((section) => section.name).join(", "));

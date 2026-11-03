@@ -1,7 +1,13 @@
-import { ArrowUp, Square } from "lucide-react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import { ArrowUp, Paperclip, Square } from "lucide-react";
+import type { ChangeEvent, ClipboardEvent, KeyboardEvent } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cancelRun, submit } from "../api/client";
+import type { AttachmentLimits, AttachmentRef } from "../api/types";
+import { AttachmentTray } from "../attachment/AttachmentTray";
+import { DropZone } from "../attachment/DropZone";
+import { draftAttachments } from "../attachment/drafts";
+import { admit, DEFAULT_LIMITS, formatBytes, isImage } from "../attachment/limits";
+import { useQueue } from "../attachment/useQueue";
 import { zh } from "../text/zh";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
@@ -13,18 +19,26 @@ interface Props {
   activeRun: string | null;
   modelName: string;
   cloud: boolean;
+  /** 附件的上限（前端先查）和模型是否收图片；默认同服务器。 */
+  limits?: AttachmentLimits;
+  vision?: boolean;
 }
 
 const MAX_HEIGHT = 200;
 
 /**
  * 大圆角输入卡片。Enter 发送、Shift+Enter 换行、输入法组字时 Enter 不发送。
- * 运行中提交进入排队，并多一个停止按钮。被拒绝时保留内容，重试用同一个 requestId。
+ * 运行中提交进入排队，并多一个停止按钮。被拒绝时保留内容和附件，重试用同一个 requestId。
+ * 附件按钮、拖放、粘贴走同一条路径（需求 1.1–1.3）；发送时等附件都传完再提交（需求 1.7）。
  */
-export function Composer({ session, activeRun, modelName, cloud }: Props) {
+export function Composer({ session, activeRun, modelName, cloud, limits = DEFAULT_LIMITS, vision = true }: Props) {
   const [text, setText] = useState(() => readDraft(session));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const queue = draftAttachments(session);
+  const pending = useQueue(queue);
+  const picker = useRef<HTMLInputElement>(null);
   const requestId = useRef<string | null>(null);
   /** 上次失败时发送的内容；改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。 */
   const failedContent = useRef<string | null>(null);
@@ -53,22 +67,69 @@ export function Composer({ session, activeRun, modelName, cloud }: Props) {
     saveDraft(session, event.target.value);
   }
 
+  /** 三种添加方式的共同入口：先查限制，收下能收的，说明第一条没收下的原因。 */
+  function addFiles(files: readonly File[]): void {
+    if (files.length === 0) return;
+    const existing = pending.map((item) => ({ name: item.name, size: item.size, image: item.image }));
+    const incoming = files.map((file) => ({ name: file.name, size: file.size, image: isImage(file) }));
+    const admission = admit(existing, incoming, limits, vision);
+    queue.add(admission.accepted.map((index) => files[index] as File));
+    setError(admission.reason ?? null);
+  }
+
+  /** 对话里拖回来的附件：已经在服务器上，不再上传。 */
+  function addRef(ref: AttachmentRef): void {
+    const existing = pending.map((item) => ({ name: item.name, size: item.size, image: item.image }));
+    const admission = admit(existing, [{ name: ref.name, size: ref.bytes, image: ref.kind === "image" }], limits, vision);
+    if (admission.accepted.length > 0) queue.addExisting(ref);
+    setError(admission.reason ?? null);
+  }
+
+  function onPick(event: ChangeEvent<HTMLInputElement>): void {
+    addFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+  }
+
+  /** 粘贴里有文件（截图、复制的图片）就作为附件；同时有文字时文字照常粘贴。 */
+  function onPaste(event: ClipboardEvent<HTMLTextAreaElement>): void {
+    const files = Array.from(event.clipboardData.files);
+    if (files.length === 0) return;
+    if (event.clipboardData.getData("text/plain") === "") event.preventDefault();
+    addFiles(files);
+  }
+
   async function send(): Promise<void> {
     const content = text.trim();
-    if (content === "" || busy) return;
-    if (requestId.current === null || failedContent.current !== content) requestId.current = crypto.randomUUID();
+    if ((content === "" && pending.length === 0) || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await submit(session, running ? "follow-up" : "prompt", content, requestId.current);
+      if (queue.busy()) {
+        setWaiting(true);
+        await queue.settled();
+      }
+      const attachments = queue.refs();
+      if (attachments === null) {
+        setError(zh.attachment.notStaged);
+        return;
+      }
+      // 内容（文字加附件）改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。
+      const signature = JSON.stringify([content, attachments.map((ref) => ref.id)]);
+      if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
+      try {
+        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments);
+      } catch (failure) {
+        failedContent.current = signature;
+        setError(failure instanceof Error ? failure.message : String(failure));
+        return;
+      }
       requestId.current = null;
       failedContent.current = null;
       setText("");
       clearDraft(session);
-    } catch (failure) {
-      failedContent.current = content;
-      setError(failure instanceof Error ? failure.message : String(failure));
+      queue.clear();
     } finally {
+      setWaiting(false);
       setBusy(false);
       area.current?.focus();
     }
@@ -91,29 +152,40 @@ export function Composer({ session, activeRun, modelName, cloud }: Props) {
     }
   }
 
-  const canSend = text.trim() !== "" && !busy;
+  const canSend = (text.trim() !== "" || pending.length > 0) && !busy;
+  const dropLimits = vision ? zh.attachment.dropDesc(limits.maxImagesPerMessage, formatBytes(limits.maxImageBytes)) : zh.attachment.modelUnsupported;
 
   return (
     <div className="flex flex-col gap-1.5">
+      <DropZone limitsText={dropLimits} onFiles={addFiles} onRef={addRef} onRefused={setError} />
       {error !== null && (
         <p role="alert" className="px-3 text-xs text-danger">
           {error}
         </p>
       )}
+      {waiting && (
+        <p role="status" className="px-3 text-xs text-fg-muted">
+          {zh.attachment.waiting}
+        </p>
+      )}
       <div className="rounded-2xl border border-line bg-raised shadow-sm focus-within:border-line-strong">
+        <AttachmentTray items={pending} onRemove={(key) => queue.remove(key)} onRetry={(key) => queue.retry(key)} />
         <textarea
           ref={area}
           rows={1}
           value={text}
           onChange={onChange}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder={zh.composer.placeholder}
           aria-label={zh.composer.placeholder}
           className="focus-plain block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-fg placeholder:text-fg-faint"
         />
         <div className="flex h-12 items-center gap-2 pr-2 pl-3">
-          {/* 左侧加号的位置留空，按 spec 不做附件。 */}
-          <span className="w-8" aria-hidden="true" />
+          <Button variant="icon" size="sm" aria-label={zh.attachment.add} title={zh.attachment.add} onClick={() => picker.current?.click()}>
+            <Paperclip size={16} />
+          </Button>
+          <input ref={picker} type="file" multiple hidden onChange={onPick} data-testid="attachment-picker" />
           <span className="flex-1" />
           <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
             {modelName}

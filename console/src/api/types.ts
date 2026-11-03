@@ -12,6 +12,46 @@ export interface Config {
   cloud: boolean;
   /** 不知道时省略，状态行就不显示占比。 */
   contextWindow?: number;
+  /** 当前模型收不收图片。旧服务没有这个字段，当作收。 */
+  vision?: boolean;
+  /** 附件的各项上限，前端先查一遍；服务器还会再查。 */
+  attachments?: AttachmentLimits;
+}
+
+export interface AttachmentLimits {
+  maxImagesPerMessage: number;
+  maxImageBytesPerMessage: number;
+  maxImageBytes: number;
+  maxFilesPerMessage: number;
+  maxFileBytes: number;
+}
+
+/** 附件引用，和服务器的 `AttachmentRef` 相同：`kind` 在前，没有值的字段不出现。 */
+export type AttachmentRef = ImageAttachment | FileAttachment;
+
+export interface ImageAttachment {
+  kind: "image";
+  /** `sha256:<64 位十六进制>`。 */
+  id: string;
+  name: string;
+  mediaType: string;
+  bytes: number;
+  width: number;
+  height: number;
+  /** 上传时缩小过才有：原尺寸。 */
+  sourceWidth?: number;
+  sourceHeight?: number;
+}
+
+export interface FileAttachment {
+  kind: "file";
+  id: string;
+  name: string;
+  /** 浏览器报的类型，只供显示。 */
+  mediaType: string;
+  bytes: number;
+  /** 只有 PDF 有。 */
+  pages?: number;
 }
 
 export interface SessionSummary {
@@ -76,6 +116,8 @@ interface ItemBase {
 export interface UserItem extends ItemBase {
   kind: "user";
   text: string;
+  /** 按上传顺序；没有附件时不出现。 */
+  attachments?: AttachmentRef[];
   queued: boolean;
 }
 
@@ -202,6 +244,8 @@ export interface UserInput extends TraceHead {
   mode: "PROMPT" | "FOLLOW_UP" | "STEER" | "CONTINUE";
   text: string;
   source: TraceSource;
+  /** 按上传顺序；没有附件时不出现。 */
+  attachments?: AttachmentRef[];
 }
 
 export interface ContextSection {
@@ -268,6 +312,8 @@ export interface ModelRequest extends TraceHead {
   options?: RequestOptions;
   /** 最后一次失败的原因名；认证失败只给 `auth`。 */
   failure?: string;
+  /** 这次请求里因图片预算省略的附件 ID；没有时不出现。 */
+  omittedImages?: string[];
 }
 
 export interface ToolCall extends TraceHead {
