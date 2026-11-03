@@ -102,6 +102,10 @@ class McpRegistryTest {
         assertFalse(catalog.safety().isConcurrencySafe("mcp__s__search", new Json.Null()));
         Tool found = catalog.find("mcp__s__search").orElseThrow();
         assertEquals(2, found.serverConcurrency());
+        // 并发名额按 mcp:s，插件页和开关按配置里的名字 s
+        assertEquals("mcp:s", found.server());
+        assertEquals("s", catalog.serverName(found));
+        assertEquals(List.of(new McpRegistry.ServerStatus("s", registry.state("s").name())), registry.servers());
     }
 
     @Test

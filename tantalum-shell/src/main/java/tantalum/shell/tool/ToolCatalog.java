@@ -20,6 +20,11 @@ public final class ToolCatalog {
 
         Optional<Tool> find(String name);
 
+        /** 插件页和开关用的服务器名，即配置里的名字。{@link Tool#server()} 是并发名额的命名空间，可能带前缀。 */
+        default String serverName(Tool tool) {
+            return tool.server();
+        }
+
         /** 等来源准备好，比如第一次连接外部服务器。有上限，不阻塞内核（在 Handler 的虚拟线程上调用）。 */
         default void awaitReady() throws InterruptedException { }
     }
@@ -71,6 +76,11 @@ public final class ToolCatalog {
     /** 动态来源（MCP）里的工具，和已注册的同名的不算。 */
     public List<Tool> dynamic() {
         return source.tools().stream().filter(tool -> !tools.containsKey(tool.name())).toList();
+    }
+
+    /** 动态来源里的工具属于哪个服务器（配置里的名字）。 */
+    public String serverName(Tool tool) {
+        return source.serverName(tool);
     }
 
     /** 内置和 Spring 注册的工具；不是的就来自动态来源。 */

@@ -108,6 +108,11 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
         return Optional.ofNullable(visible.get(name));
     }
 
+    @Override
+    public String serverName(Tool tool) {
+        return tool instanceof McpTool mcp ? mcp.serverName() : tool.server();
+    }
+
     /** 一个配置了的 MCP 服务器：名字和连接状态（READY、RECONNECTING、FAILED 等），给插件页看。 */
     public record ServerStatus(String name, String state) {}
 
