@@ -29,6 +29,8 @@ import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.trace.Trace;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.decision.Decision;
@@ -89,6 +91,7 @@ class PerSessionQueryTest {
     /** 实时推给 alice 的 SSE 消息，用来和补读比较。 */
     private final List<SseMessage> live = new ArrayList<>();
     private final Transcript transcript = new Transcript();
+    private final Trace trace = new Trace();
 
     @BeforeEach
     void start() throws Exception {
@@ -111,6 +114,7 @@ class PerSessionQueryTest {
     }
 
     private Decision send(Principal principal, SessionId session, RunId run, Event event) throws Exception {
+        KernelState before = fixture.state();
         Decision decision = fixture.send(principal, session, run, AT, event);
         if (principal.equals(ALICE)) {
             long seq = fixture.events.getLast().seq();
@@ -120,6 +124,9 @@ class PerSessionQueryTest {
             }
             for (TranscriptItem item : transcript.apply(fixture.events.getLast(), decision)) {
                 live.add(SseHub.itemMessage(EventCodec.withBuiltins().mapper(), seq, at++, item));
+            }
+            for (TraceRecord record : trace.apply(fixture.events.getLast(), before, decision)) {
+                live.add(SseHub.recordMessage(EventCodec.withBuiltins().mapper(), seq, at++, record));
             }
         }
         return decision;

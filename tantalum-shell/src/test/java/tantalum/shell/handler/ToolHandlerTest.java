@@ -280,7 +280,15 @@ class ToolHandlerTest {
         CountDownLatch running = new CountDownLatch(1);
         ToolHandler busy = timed(tool(() -> {
             running.countDown();
-            release.await();
+            // 不响应中断：自己的 200 ms 到时也不放名额，第二个调用只能等名额超时（否则名额可能刚好在它等的时候空出来）。
+            while (true) {
+                try {
+                    release.await();
+                    break;
+                } catch (InterruptedException ignored) {
+                    // 继续占着
+                }
+            }
             return ToolOutput.ok("");
         }), Duration.ofMillis(200), clock);
         Thread holder = Thread.ofVirtual().start(() -> finish(busy));

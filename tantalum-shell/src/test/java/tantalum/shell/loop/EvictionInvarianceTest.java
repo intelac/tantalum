@@ -36,6 +36,8 @@ import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.UsageLedger;
+import tantalum.shell.trace.Trace;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -135,8 +137,9 @@ class EvictionInvarianceTest {
             this.replay = replay;
             Residency residency = new Residency();
             transcript = new Transcript();
-            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, transcript, Clock.systemUTC())
-                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO), residency, transcript, Clock.systemUTC());
+            Projections projections = new Projections(transcript, new Trace());
+            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, projections, Clock.systemUTC())
+                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO), residency, projections, Clock.systemUTC());
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
@@ -152,12 +155,17 @@ class EvictionInvarianceTest {
                 public void onItem(long seq, int index, Principal owner, TranscriptItem item) {
                     log.add("item " + seq + "." + index + " " + item);
                 }
+
+                @Override
+                public void onRecord(long seq, int index, Principal owner, TraceRecord record) {
+                    log.add("trace " + seq + "." + index + " " + record);
+                }
             };
             Cleanroom cleanroom = new Cleanroom(kernel, dispatcher::halted, command -> {
                 log.add("command " + command);
                 pending.add(command);
                 return true;
-            }, transcript, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor);
+            }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor);
             input.connect(dispatcher);
             ring.connect((slot, sequence, endOfBatch) -> {
                 cleanroom.onEvent(slot, sequence, endOfBatch);

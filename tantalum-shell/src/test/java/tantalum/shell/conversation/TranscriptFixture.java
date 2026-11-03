@@ -53,6 +53,8 @@ final class TranscriptFixture {
     final Transcript transcript = new Transcript();
     final List<EventEnvelope> envelopes = new ArrayList<>();
     final List<Decision> decisions = new ArrayList<>();
+    /** 每个事件处理前的内核状态，轨迹投影要用。 */
+    final List<KernelState> befores = new ArrayList<>();
 
     private final Kernel kernel;
     private KernelState state = KernelState.empty();
@@ -73,6 +75,7 @@ final class TranscriptFixture {
     Decision feed(RunId run, Event event) {
         EventEnvelope envelope = new EventEnvelope(seq++, now, USER, SESSION, run, event);
         now = now.plusSeconds(1);
+        befores.add(state);
         Decision decision = kernel.step(state, envelope);
         state = decision.newState();
         envelopes.add(envelope);
@@ -99,6 +102,11 @@ final class TranscriptFixture {
 
     KernelState state() {
         return state;
+    }
+
+    /** 同样的钩子和工具安全规则，回放会话文件时用。 */
+    Kernel kernel() {
+        return kernel;
     }
 
     List<TranscriptItem> items() {

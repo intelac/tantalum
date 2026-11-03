@@ -36,6 +36,7 @@ import tantalum.shell.loop.InputRing;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
+import tantalum.shell.loop.Projections;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
@@ -54,11 +55,13 @@ import tantalum.shell.store.ColdReads;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.SessionReplay;
+import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.TurnQuery;
 import tantalum.shell.tool.GrepTool;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
+import tantalum.shell.trace.Trace;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -133,10 +136,12 @@ public final class Engine implements AutoCloseable {
 
             Residency residency = new Residency();
             Transcript transcript = new Transcript();
+            Projections projections = new Projections(transcript, new Trace());
             view = new StateView();
             TurnQuery turns = new TurnQuery(storage.paths, replay, codec.mapper());
             hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
-            queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths, replay), turns);
+            queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths, replay), turns,
+                    new TraceQuery(storage.paths, replay));
 
             cleanroomRing = new CleanroomRing(loop.inputRingSize());
             lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
@@ -154,8 +159,8 @@ public final class Engine implements AutoCloseable {
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
-            Evictor evictor = new Evictor(properties.residency(), residency, transcript, clock);
-            cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, transcript, hub, view, results,
+            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock);
+            cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, projections, hub, view, results,
                     storage.indexWriter::onStep, evictor);
 
             // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。

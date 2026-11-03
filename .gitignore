@@ -26,3 +26,6 @@ audit.log
 .vscode/
 *.iml
 .DS_Store
+
+# typescript incremental build cache
+*.tsbuildinfo

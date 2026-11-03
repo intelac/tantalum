@@ -22,7 +22,8 @@ import tantalum.value.state.RunState;
 public final class RetrySteps {
 
     public static final String AWAITING_RETRY = "AwaitingRetry";
-    static final int MAX_RETRIES = 3;
+    /** 一个请求最多重试几次；轨迹显示“第几次、最多几次”时也用它。 */
+    public static final int MAX_RETRIES = 3;
     static final Duration MAX_BACKOFF = Duration.ofMinutes(5);
 
     private RetrySteps() {}

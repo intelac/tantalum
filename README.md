@@ -118,8 +118,25 @@ curl -c cookie -H 'content-type: application/json' \
 curl -b cookie http://127.0.0.1:8080/api/sessions/<session>/runs
 curl -b cookie http://127.0.0.1:8080/api/runs/<run>/turns
 curl -b cookie http://127.0.0.1:8080/api/runs/<run>/turns/1
-curl -b cookie http://127.0.0.1:8080/api/runs/<run>/trace      # 事件、处理方和时间段
+curl -b cookie http://127.0.0.1:8080/api/runs/<run>/trace      # 事件、处理方和时间段（旧接口，轨迹页换新后删除）
+curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace'              # 轨迹记录：最新一页
+curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?before=<seq>' # 更早的一页
+curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?run=<run>'    # 从最新一直到这个运行
+curl -b cookie http://127.0.0.1:8080/api/sessions/<session>/trace/calls/<command> # 一次模型调用的完整输入
 ```
+
+**轨迹记录**（`/api/sessions/<session>/trace`）按运行从新到旧分页，一页至少 20 个运行或 400 条记录，不拆开一个运行。记录有 9 种：`run`、`system`、`user`、`context`、`compacted`、`request`、`tool`、`work`、`hook`，每条带 `id`、`pos`（创建它的事件“序号.下标”）、所属的轮和步、开始和结束时刻。记录里不放 prompt 的消息、system 原文和工具 Schema，这些按需从 `/trace/calls/<command>` 取。实时的变化通过 SSE 的 `trace` 消息推送，客户端按 `id` 覆盖；页面和推送来自同一个投影，所以刷新前后看到的一样。
+
+**journal 里和轨迹有关的字段**，旧版本写的行没有这些字段，读出来是空，显示“未记录”：
+
+| 事件 | 字段 | 含义 |
+|---|---|---|
+| `ModelReplied`、`ModelFailed`、`ModelInterrupted` | `startedAt` | 拿到模型并发名额、开始调用的时刻 |
+| | `firstTokenAt` | 第一个内容分片（文字、思考或工具参数）到达的时刻 |
+| | `options` | 实际发出的请求选项：提供方、模型、最大输出、是否允许工具，以及 thinking、effort 等；不含任何请求头、地址和密钥 |
+| `ToolFinished`、`WorkDone` | `startedAt` | 拿到名额、真正开始执行的时刻；没有真正执行时为空 |
+
+**钩子的决定**不写 journal：内核在钩子拦截、要求工作或带补丁放行时报一条 `HookDecided` 事实（钩子名、位置、结果、理由、补丁的长度和工具名），回放时重新算出，推送和轨迹里都看得到。只放行、没加内容的钩子不报。
 
 **直接看事件：**
 

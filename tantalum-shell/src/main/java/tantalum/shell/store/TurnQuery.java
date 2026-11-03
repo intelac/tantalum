@@ -13,8 +13,10 @@ import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.loop.Projections;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.decision.CompactionFailed;
@@ -170,7 +172,7 @@ public final class TurnQuery {
     }
 
     /**
-     * SSE 补读：某用户在某位置之后的事实和条目变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实再条目。
+     * SSE 补读：某用户在某位置之后的事实、条目和轨迹记录的变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实，再条目，再轨迹记录。
      * 只完整重放末尾序号不早于位置的文件，其余文件只读末尾一行；不依赖可能落后的索引。
      */
     public List<SseMessage> messagesAfter(Principal principal, String lastEventId) {
@@ -186,7 +188,8 @@ public final class TurnQuery {
             } catch (IOException failure) {
                 throw new IllegalStateException("cannot read " + file, failure);
             }
-            Transcript transcript = new Transcript();
+            // 全名：本类的 Trace 是旧轨迹页的视图，阶段 2 删掉。
+            Projections projections = new Projections(new Transcript(), new tantalum.shell.trace.Trace());
             each(principal, file, (envelope, before, decision) -> {
                 int index = 0;
                 for (Fact fact : decision.facts()) {
@@ -195,9 +198,16 @@ public final class TurnQuery {
                     }
                     index++;
                 }
-                for (TranscriptItem item : transcript.apply(envelope, decision)) {
+                Projections.Output projected = projections.apply(envelope, before, decision);
+                for (TranscriptItem item : projected.items()) {
                     if (later(envelope.seq(), index, lastSeq, lastIndex)) {
                         messages.add(new Positioned(envelope.seq(), index, SseHub.itemMessage(mapper, envelope.seq(), index, item)));
+                    }
+                    index++;
+                }
+                for (TraceRecord record : projected.records()) {
+                    if (later(envelope.seq(), index, lastSeq, lastIndex)) {
+                        messages.add(new Positioned(envelope.seq(), index, SseHub.recordMessage(mapper, envelope.seq(), index, record)));
                     }
                     index++;
                 }

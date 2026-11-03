@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -15,10 +17,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.handler.CallLimiter;
+import tantalum.shell.handler.ModelHandler;
+import tantalum.shell.journal.EventCodec;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.model.OverflowRules;
+import tantalum.value.command.CallModel;
+import tantalum.value.event.ModelReplied;
+import tantalum.value.id.CommandId;
+import tantalum.value.id.Principal;
+import tantalum.value.id.RunId;
+import tantalum.value.id.RunRef;
+import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
@@ -55,6 +67,36 @@ class ClaudeSmokeTest {
         System.out.println("[smoke claude] model=" + last.actualModel() + " usage=" + last.usage()
                 + " thinkingBlocksInFirstReply=" + first.content().stream().filter(ReasoningBlock.class::isInstance).count());
         assertNotNull(last.usage());
+    }
+
+    /**
+     * trace-view 任务 9：经过 ModelHandler 调真实 Claude，结果事件带上开始时刻、首 token 时刻和实际发出的请求选项。
+     * 判定：开始 ≤ 首 token ≤ 结果产生；选项和配置一致；编码后的事件里没有密钥。
+     */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void resultCarriesTimingAndTheOptionsThatWereSent() {
+        Instant before = Instant.now();
+        ModelHandler handler = new ModelHandler(client(), new CallLimiter(1),
+                Duration.ofSeconds(30), run -> IGNORE, Clock.systemUTC());
+        RunRef run = new RunRef(new Principal("smoke"),
+                new SessionId("s"), new RunId("s_0"));
+        CallModel call = new CallModel(new CommandId("s_0-0"), run,
+                new Prompt("Answer in one word.", List.of(), List.of(Message.user("Name the colour of a clear daytime sky."))));
+        ModelReplied reply = assertInstanceOf(ModelReplied.class, handler.handle(call));
+        Instant after = Instant.now();
+        System.out.println("[smoke claude timing] startedAt=" + reply.startedAt() + " firstTokenAt=" + reply.firstTokenAt()
+                + " options=" + reply.options() + " usage=" + reply.usage());
+        assertNotNull(reply.startedAt());
+        assertNotNull(reply.firstTokenAt());
+        assertTrue(!reply.startedAt().isBefore(before) && !reply.firstTokenAt().isBefore(reply.startedAt()) && !after.isBefore(reply.firstTokenAt()),
+                reply.startedAt() + " / " + reply.firstTokenAt() + " / " + after);
+        assertEquals("claude", reply.options().provider());
+        assertEquals("claude-sonnet-5-5", reply.options().model());
+        assertEquals(4096, reply.options().maxTokens());
+        String line = EventCodec.withBuiltins().encode(reply);
+        assertTrue(!line.contains(System.getenv("ANTHROPIC_API_KEY")), "the key reached the journal line");
+        assertTrue(line.contains("\"effort\":\"low\""), line);
     }
 
     /** 低 effort 时模型常常不产生 thinking 块，这里用需要推理的问题和工具轮，确认带签名的块回传后请求仍被接受。 */
