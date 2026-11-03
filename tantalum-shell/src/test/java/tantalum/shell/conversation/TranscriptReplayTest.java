@@ -11,6 +11,7 @@ import static tantalum.shell.conversation.TranscriptFixture.text;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
@@ -28,7 +29,7 @@ class TranscriptReplayTest {
     private static Kernel freshKernel(boolean concurrencySafe) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> concurrencySafe, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> concurrencySafe, Limits.DEFAULT);
     }
 
     @Test

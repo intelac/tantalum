@@ -59,7 +59,7 @@ public final class ModelSteps {
         out.report(hook.facts());
         switch (hook.result()) {
             case Stop stop -> RunEnd.finish(out, run, EndReason.STOPPED, stop.reason());
-            case NeedWork need -> WorkSteps.start(out, run, need, HookPoint.BEFORE_MODEL_CALL);
+            case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Allow allow -> {
                 if (compactionAllowed) {
                     if (CompactSteps.tryStart(out, run, allow.patch(), new Compacting.Auto()) == CompactSteps.Start.TOOK_OVER) {
@@ -78,7 +78,8 @@ public final class ModelSteps {
     public static Decision modelReplied(StepContext context) {
         ModelReplied event = (ModelReplied) context.envelope().event();
         Outcome out = new Outcome(context);
-        RunState run = context.run().withRetries(0).withOverflowRecovered(false);
+        // 收到回复就越过了模型调用前这个等待点，工作轮数清零。
+        RunState run = context.run().withRetries(0).withOverflowRecovered(false).withWorkRounds(0);
         out.put(run);
         out.append(run.ref(), new Message(Role.ASSISTANT, event.content(), false));
         out.addUsage(run.ref(), event.usage());

@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.compaction.TokenEstimate;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
@@ -112,7 +113,7 @@ public final class Corpus {
         this.random = new Random(seed);
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        this.kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, 10);
+        this.kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, Limits.DEFAULT);
     }
 
     /** 写到一个空目录。事件数略超 {@code targetEvents}：到数后不再开新轮，把进行中的走完，并走完长会话。 */

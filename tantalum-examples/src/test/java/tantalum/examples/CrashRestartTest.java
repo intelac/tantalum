@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
@@ -127,7 +128,7 @@ class CrashRestartTest {
                     events.stream().map(envelope -> envelope.event().type()).toList());
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
-            KernelState replayed = Replay.run(new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10), events).state();
+            KernelState replayed = Replay.run(new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT), events).state();
             RunId run = replayed.runs().keySet().iterator().next();
             assertEquals("AwaitingModel", ((Awaiting) replayed.runs().get(run).phase()).resumeAt());
 

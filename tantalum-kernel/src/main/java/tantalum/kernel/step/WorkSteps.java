@@ -1,10 +1,12 @@
 package tantalum.kernel.step;
 
+import java.util.List;
 import java.util.Set;
 import tantalum.kernel.hook.HookOutcome;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.command.DoWork;
 import tantalum.value.decision.Decision;
+import tantalum.value.decision.HookReported;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
@@ -21,10 +23,26 @@ public final class WorkSteps {
 
     private WorkSteps() {}
 
-    static void start(Outcome out, RunState run, NeedWork need, HookPoint origin) {
+    /**
+     * 发起 {@code hook} 要求的工作。所有钩子要的工作都经过这里，轮数只在这里数：结束前按整个运行累计（续写给模型的循环每圈都有模型回复，
+     * 按等待点数不住），其余按当前等待点连续计；{@code onWorkResult} 接着要的沿用原来的 {@code origin}。超过上限时运行失败，不再发工作。
+     */
+    static void start(Outcome out, RunState run, NeedWork need, String hook, HookPoint origin) {
+        boolean atEnd = origin == HookPoint.BEFORE_RUN_END;
+        int rounds = (atEnd ? run.endWorkRounds() : run.workRounds()) + 1;
+        RunState counted = atEnd ? run.withEndWorkRounds(rounds) : run.withWorkRounds(rounds);
+        if (rounds > out.maxWorkRounds) {
+            // 写已经做完的轮数（等于上限），不写这次被拒绝的这一轮。
+            int done = rounds - 1;
+            out.report(List.of(new HookReported(run.ref(), hook,
+                    "asked for more work after " + done + " rounds in a row at " + origin + " (limit " + out.maxWorkRounds + ")")));
+            RunEnd.finish(out, counted.withWorkOrigin(null), EndReason.FAILED,
+                    "plugin work did not settle: " + hook + " at " + origin + " after " + done + " rounds (limit " + out.maxWorkRounds + ")");
+            return;
+        }
         CommandId id = out.nextCommandId();
         out.emit(new DoWork(id, run.ref(), need.workType(), need.input()));
-        out.await(run.withWorkOrigin(origin), AWAITING_WORK, Set.of(id));
+        out.await(counted.withWorkOrigin(origin), AWAITING_WORK, Set.of(id));
     }
 
     public static Decision workDone(StepContext context) {
@@ -37,7 +55,7 @@ public final class WorkSteps {
                 out.hookContext(run.ref()).withWork(event));
         out.report(hook.facts());
         if (hook.result() instanceof NeedWork need) {
-            start(out, run, need, origin);
+            start(out, run, need, hook.decidedBy(), origin);
             return out.decision();
         }
         RunState resumed = run.withWorkOrigin(null);

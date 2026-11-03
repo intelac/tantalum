@@ -62,7 +62,7 @@ public final class ToolSteps {
             if (hook.result() instanceof Stop stop) {
                 round = block(round, i, "Tool call blocked: " + stop.reason());
             } else if (hook.result() instanceof NeedWork need) {
-                WorkSteps.start(out, run.withTools(round.withChecked(i)), need, HookPoint.BEFORE_TOOL_CALL);
+                WorkSteps.start(out, run.withTools(round.withChecked(i)), need, hook.decidedBy(), HookPoint.BEFORE_TOOL_CALL);
                 return;
             }
         }
@@ -74,14 +74,17 @@ public final class ToolSteps {
         return round.withSlot(index, ToolSlot.blocked(call, new ToolResultBlock(call.id(), reason, true, null)));
     }
 
-    /** 工作完成后继续检查。{@code blockedReason} 不为空时拦截正在等待的调用。 */
+    /**
+     * 工作完成后继续检查。{@code blockedReason} 不为空时拦截正在等待的调用。
+     * 工具按顺序一个一个检查，这个调用放行或被拦下就换下一个，所以工作轮数在这里清零，每个调用各自计数。
+     */
     static void resumeChecks(Outcome out, RunState run, String blockedReason) {
         ToolRound round = run.tools();
         int current = round.checked();
         if (blockedReason != null) {
             round = block(round, current, "Tool call blocked: " + blockedReason);
         }
-        checkRemaining(out, run, round.withChecked(current + 1));
+        checkRemaining(out, run.withWorkRounds(0), round.withChecked(current + 1));
     }
 
     public static Decision toolFinished(StepContext context) {

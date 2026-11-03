@@ -199,7 +199,7 @@ class RestartInterruptTest {
             tantalum.kernel.table.TransitionTable table = new tantalum.kernel.table.TransitionTable();
             tantalum.kernel.step.BuiltinSteps.register(table);
             tantalum.shell.store.IndexCatchUp.run(index, new SessionPaths(data()), new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins()),
-                    new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()), (tool, args) -> false, 10));
+                    new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()), (tool, args) -> false, tantalum.kernel.Limits.DEFAULT));
             assertEquals(2, index.unfinished().size());
         }
         List<String> broken = Files.readAllLines(s1);

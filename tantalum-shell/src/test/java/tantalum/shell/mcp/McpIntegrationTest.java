@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.Replay;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
@@ -171,7 +172,7 @@ class McpIntegrationTest {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         // 回放时的工具安全判断来自一个不认识 MCP 工具的目录，结果必须相同。
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, arguments) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, arguments) -> false, Limits.DEFAULT);
         List<Prompt> replayed = Replay.run(kernel, journal).commands().stream().filter(CallModel.class::isInstance)
                 .map(command -> ((CallModel) command).prompt()).toList();
         assertEquals(prompts, replayed);

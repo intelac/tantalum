@@ -35,7 +35,7 @@ class KernelStepBenchmarkTest {
     void p99StaysUnderFiveMillis() {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
         Principal user = new Principal("u");
         CommandId waiting = new CommandId("0-0");
 

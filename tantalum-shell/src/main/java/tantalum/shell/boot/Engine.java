@@ -10,6 +10,7 @@ import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
@@ -125,7 +126,8 @@ public final class Engine implements AutoCloseable {
 
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
-            Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(), loop.maxParallelTools());
+            Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(),
+                    new Limits(loop.maxParallelTools(), properties.hooks().maxWorkRounds()));
             SessionReplay replay = storage.replay(kernel);
             unfinished = storage.catchUp(kernel);
 

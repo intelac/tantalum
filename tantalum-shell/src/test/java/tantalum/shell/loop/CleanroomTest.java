@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
@@ -42,7 +43,7 @@ class CleanroomTest {
     private static Kernel kernel() {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
     }
 
     private static CleanroomRing.Slot prompt(long seq) {
@@ -150,7 +151,7 @@ class CleanroomTest {
         // 内核只把 RuntimeException 变成运行失败；Error 会穿出来。
         TransitionTable table = new TransitionTable();
         table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, context -> { throw new AssertionError("step bug"); });
-        Kernel exploding = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        Kernel exploding = new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
         Cleanroom cleanroom = LoopFixtures.cleanroom(exploding, () -> false, commands::add, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> facts.add(fact), view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
 

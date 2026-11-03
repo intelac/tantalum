@@ -26,8 +26,8 @@ import tantalum.value.id.CommandId;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.TokenUsage;
-import tantalum.value.state.Compacting.Cause;
 import tantalum.value.state.Compacting;
+import tantalum.value.state.Compacting.Cause;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
@@ -76,7 +76,8 @@ public final class CompactSteps {
         }
         Compacting compacting = new Compacting(cause, planned.orElseThrow(), patch);
 
-        HookOutcome hook = out.hooks.run(HookPoint.BEFORE_COMPACT, out.state(), out.hookContext(run.ref()).withPlan(compacting.plan()));
+        HookOutcome hook = out.hooks.run(HookPoint.BEFORE_COMPACT, out.state(), out.hookContext(run.ref())
+                .withCompaction(compacting.plan(), compacting.trigger()));
         out.report(hook.facts());
         if (!(hook.result() instanceof Allow)) {
             String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work, which is not supported";

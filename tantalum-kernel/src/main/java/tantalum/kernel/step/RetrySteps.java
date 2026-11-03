@@ -38,7 +38,7 @@ public final class RetrySteps {
         if (hook.result() instanceof Stop stop) {
             RunEnd.finish(out, run, EndReason.FAILED, stop.reason());
         } else if (hook.result() instanceof NeedWork need) {
-            WorkSteps.start(out, run, need, HookPoint.ON_FAILURE);
+            WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.ON_FAILURE);
         } else if (event.reason() == FailureReason.CONTEXT_OVERFLOW && !run.overflowRecovered()) {
             // 超长恢复（规则 2、3.2）：只留最新单元压缩后重试一次；无可压缩或摘要失败都以原始错误结束。
             RunState recovering = run.withOverflowRecovered(true);

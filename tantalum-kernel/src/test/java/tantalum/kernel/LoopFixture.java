@@ -49,7 +49,7 @@ public final class LoopFixture {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(List.of(hooks)),
-                (tool, args) -> tool.startsWith("safe"), maxParallelTools);
+                (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds()));
     }
 
     public Decision feed(RunId run, Event event) {

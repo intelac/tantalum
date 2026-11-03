@@ -9,8 +9,10 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import tantalum.kernel.Limits;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.memory.MemoryLimits;
@@ -115,6 +117,22 @@ class TantalumPropertiesTest {
         assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0));
     }
 
+    /** 工作轮数默认 8，和内核的 {@code Limits.DEFAULT} 一致；小于 1 时绑定失败，启动随之失败。 */
+    @Test
+    void maxWorkRoundsDefaultsToEightAndMustBePositive() throws Exception {
+        assertEquals(8, bind().hooks().maxWorkRounds());
+        assertEquals(Limits.DEFAULT.maxWorkRounds(), bind().hooks().maxWorkRounds());
+        assertEquals(3, bind("tantalum.hooks.max-work-rounds", "3").hooks().maxWorkRounds());
+        BindException failure = assertThrows(BindException.class, () -> bind("tantalum.hooks.max-work-rounds", "0"));
+        Throwable cause = failure;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        assertTrue(cause.getMessage().contains("maxWorkRounds"), cause.getMessage());
+        assertThrows(BindException.class, () -> bind("tantalum.hooks.max-work-rounds", "-1"));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Hooks(0));
+    }
+
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
         return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
@@ -122,7 +140,7 @@ class TantalumPropertiesTest {
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 1, openAiWindow),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30));
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8));
     }
 
     /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */

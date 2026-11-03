@@ -17,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
@@ -31,7 +32,6 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
-import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 
@@ -44,7 +44,7 @@ class BackpressureTest {
     private static Kernel kernel() {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, 10);
+        return new Kernel(table, new HookChain(List.of()), (tool, args) -> false, Limits.DEFAULT);
     }
 
     private static EventEnvelope prompt(int i) {

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.Kernel;
+import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
@@ -93,7 +94,7 @@ class PerSessionQueryTest {
     void start() throws Exception {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> false, 10);
+        Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> false, Limits.DEFAULT);
         index = SessionIndex.open(dir);
         writer = new IndexWriter(index, 100, Duration.ofHours(1));
         paths = new SessionPaths(dir);
