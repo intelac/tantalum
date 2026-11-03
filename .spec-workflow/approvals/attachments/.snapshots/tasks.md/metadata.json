@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/attachments/tasks.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T07:31:49.331Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793691109329_54fbdmw0y",
+      "approvalTitle": "附件任务：4 个阶段 23 个任务"
+    }
+  ]
+}

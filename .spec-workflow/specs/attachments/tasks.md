@@ -1,0 +1,150 @@
+# Tasks Document
+
+工作方式：一次一个任务；行为改动先写会失败的测试；任务做完就标记、写实现日志。每个阶段结束：
+- 跑全量回归：`mvn -o clean verify`（含 `JarCrashIT`）、跳号回归、vitest、Playwright；
+- 做一次变异检查；
+- 提交一次；
+- 向 Yi 汇报。
+
+提交前扫描密钥。现有测试只因构造参数变化而改，断言不放宽；现有期望文件（`items.jsonl`、`sse.txt`、`trace.json`、`trace-sse.txt`、`claude-requests.txt`）不变。设计里写的数字照设计做，偏离时写进汇报。
+
+路径前缀：`value/` = `tantalum-value/src/main/java/tantalum/value/`，`kernel/` = `tantalum-kernel/src/main/java/tantalum/kernel/`，`shell/` = `tantalum-shell/src/main/java/tantalum/shell/`，`console/` = `console/src/`。
+
+## 阶段 1：存储和上传
+
+- [ ] 1. 依赖
+  - File: tantalum-shell/pom.xml、THIRD_PARTY_NOTICES.md
+  - TwelveMonkeys `imageio-webp`、`imageio-jpeg`、`imageio-metadata`，Apache PDFBox；版本固定，发布至少两周
+  - 测试：读一个 WebP、读一个带 EXIF 方向的 JPEG、数一个 PDF 的页数
+  - _Requirements: 设计“需要 Yi 确认”第 1、2 条_
+
+- [ ] 2. 引用类型和给模型看的文字
+  - File: value/attachment/{AttachmentRef,ImageRef,FileRef,AttachmentText}.java（新）
+  - `id` 格式校验（`sha256:` 加 64 位小写十六进制）；四种说明文字（图片、文件、省略、不支持图片）
+  - 测试：格式校验；文字和设计第 4 节逐字相同
+  - _Requirements: A2, A6, A7, A10, 设计第 1、4 节_
+
+- [ ] 3. 文件名清洗和限制
+  - File: shell/attachment/{FileNames,AttachmentLimits}.java（新）、TantalumProperties
+  - 清洗规则照设计第 2 节；限制的默认值照 A4、A5、配额 5 GiB，都可配置
+  - 测试：清洗表（路径、反斜杠、控制字符、Windows 字符、首尾句点、多字节截断、清完为空）
+  - _Requirements: 2.5, 2.7, A4, A5_
+
+- [ ] 4. 图片规范化
+  - File: shell/attachment/ImageNormalizer.java（新）；测试资源 attachments/*（小样例图）
+  - 先查头再解码；判断干净；转正、缩小、去元数据、编码选择、质量序列；GIF 只取第一帧；并发上限 2
+  - 测试：每种格式的干净样例原样保存；EXIF 方向转正；元数据去掉；超大缩小并记原尺寸；透明出 PNG、不透明出 JPEG；同一输入两次输出逐字节相同；头里写超大尺寸在解码前拒绝；坏文件拒绝；声称是图片但不是
+  - _Requirements: 2.2, 2.3, A4_
+
+- [ ] 5. `AttachmentStore`
+  - File: shell/attachment/AttachmentStore.java（新）、boot/Storage
+  - 目录布局、权限；边读边写临时文件、超限即停；去重；元数据；配额（第一次用到时扫目录）；只读本人目录；PDF 页数；启动清理临时文件；完整性检查（进程内第一次用到时核对哈希）
+  - 测试：去重、配额、跨用户 404、并发上传同一内容、临时文件清理、哈希不符时报错
+  - _Requirements: A1, A2, A5, 2.7, 4.2_
+
+- [ ] 6. 上传和读取接口
+  - File: shell/web/AttachmentController.java（新）、SecurityConfig（如需）
+  - `POST /api/sessions/<会话>/attachments`、`GET /api/attachments/<id>`（`?download=1`）；响应头照设计第 2 节；错误码照“Error Handling”
+  - 测试（Web 测试）：上传后读回同样字节；415、400、404、413、422 各一例；两个账号互查 404；下载头；图片 inline、文件 attachment
+  - _Requirements: 2.1–2.7, 5.3, 安全_
+
+- [ ] 7. 阶段 1 收尾
+  - 性能：20 MB 照片上传加规范化 2 秒内；全量回归；变异检查（去掉“先查头”；读取不按用户隔离）；提交；汇报
+  - _Requirements: 非功能“性能”“安全”_
+
+## 阶段 2：进入对话
+
+- [ ] 8. 事件和内容块
+  - File: value/event/{UserPrompt,SteerSubmitted,FollowUpSubmitted,ToolFinished}.java、value/model/{AttachmentBlock,ToolResultBlock,ContentBlock}.java、value/decision/ImagesOmitted.java（新）、journal/EventCodec
+  - 新字段为空时不写出
+  - 测试（EventCodecTest）：带附件的往返；旧行读成空列表；为空时写出的行和改动前逐字节相同
+  - _Requirements: A2, 4.3, 设计第 1 节_
+
+- [ ] 9. 内核：带附件的消息、排队、插话
+  - File: kernel/step/SubmitSteps.java、value/state/SessionState.java（`followUps` 带附件）；所有 `switch (ContentBlock)`
+  - 用户消息内容顺序：文字，再附件；只有附件时文字为空串
+  - 测试：提问、排队、插话三种都进消息；排队提交在运行开始时带着附件；没有附件的会话决策和现在相同（现有内核测试全部不改）
+  - _Requirements: 1.8, 4.3_
+
+- [ ] 10. 提交检查
+  - File: loop/Intake.java、web/ApiController.java、boot/TantalumProperties（`openai.vision`）
+  - 请求体 `attachments`；按本人目录查元数据组成引用；每条消息的数量和合计大小；模型不支持图片时拒绝带图片的提交
+  - 测试：引用不存在或不是本人的 400；超数量、超合计 400 并说明哪条；不支持图片 400；正常提交的事件里是服务器的元数据，不是客户端报的
+  - _Requirements: 2.1, 2.4, A7_
+
+- [ ] 11. 对话条目和轨迹字段
+  - File: conversation/{TranscriptItem,TranscriptPass}.java、trace/{TraceRecord,TracePass,TraceRequests}.java
+  - 用户条目、轨迹用户记录加 `attachments`；请求记录加 `omittedImages`（第 3 阶段填）
+  - 测试：`WireFormatTest` 加一个带附件的场景和新的期望文件；现有期望文件不变；实时等于回放
+  - _Requirements: 4.1, 4.3, 5.5, 设计第 7 节_
+
+- [ ] 12. 阶段 2 收尾
+  - 全量回归；变异检查（排队提交丢掉附件；提交时用客户端报的尺寸）；提交；汇报
+  - _Requirements: 设计“阶段”_
+
+## 阶段 3：发给模型
+
+- [ ] 13. 请求版本
+  - File: shell/attachment/RequestImages.java（新）
+  - 目标长边 2048、3.75 MiB；满足时用存储的字节；否则确定性再编码并缓存到 `requests/`；版本键含目标和变换版本号
+  - 测试：同一附件两次取到的字节相同且第二次不编码；超限的被缩小到目标内；缓存文件删了能重新生成
+  - _Requirements: 3.4, 非功能“性能”, 设计第 4 节_
+
+- [ ] 14. 省略规则和估算
+  - File: kernel/attachment/ImageBudget.java（新）、kernel/compaction/TokenEstimate.java、kernel/step/ModelSteps.java、value/state/SessionState.java（`omittedImages`）
+  - 从新往旧累计 base64 大小，超过 20 MiB 省略更早的；已省略的一直省略；`ImagesOmitted` 事实；图片 `ceil(宽×高/750)`、文件按说明文字、PDF 每页 3000
+  - 测试：预算边界；单调；回放得到同样的省略和同样的 prompt；摘要请求同样经过省略；估算公式
+  - _Requirements: A10, A11, 3.8, 4.1, 4.4, 4.5_
+
+- [ ] 15. Claude 请求格式
+  - File: shell/model/ClaudeRequest.java、ModelHandler（取字节和完整性检查）
+  - 图片说明加图片块；只有附件时补 `(see attached)`；文件说明；PDF 文档块（超过 32 MiB 或 100 页不发）；工具结果里的图片、出错时放在结果之后；缓存断点
+  - 测试：新的期望文件 `claude-attachment-requests.txt` 逐字节比较；现有 `claude-requests.txt` 不变；附件被删时调用失败并写明附件 ID
+  - _Requirements: 3.1, 3.3–3.8, A6, 4.2_
+
+- [ ] 16. OpenAI 兼容请求格式
+  - File: shell/model/OpenAiClient.java
+  - `vision` 开时内容数组和 `image_url`；工具结果里的图片放进紧接着的用户消息；关时换成纯文字占位
+  - 测试：期望文件逐字节比较，开和关各一组
+  - _Requirements: 3.2, 3.7, A7_
+
+- [ ] 17. `read_file` 的附件路径和图片
+  - File: shell/tool/ReadFileTool.java、shell/plugin/ToolOutput.java、handler/ToolHandler、kernel/step/ToolSteps
+  - `/attachments/sha256-<哈希>` 读本人附件目录；读到图片时规范化、存进附件目录、结果带图片；读到 PDF 给说明；这个前缀不能写（钉一条测试）
+  - 测试：读自己的附件；读别人的哈希等于不存在；读工作区里的图片得到图片引用；`ToolFinished` 带图片后回放相同
+  - _Requirements: 3.5, 3.7, A6, A8, 安全_
+
+- [ ] 18. 真实 Claude 和阶段 3 收尾
+  - 三项真实测试照设计“真实模型”，每项有判定标准，报用量；全量回归；变异检查（省略不单调；出错的工具结果里带图片）；提交；汇报
+  - _Requirements: 非功能“测试”_
+
+## 阶段 4：控制台
+
+- [ ] 19. 接口和上传队列
+  - File: console/api/{types,client}.ts、console/attachment/{uploads,limits,drafts}.ts（新）；后端 `/api/config` 加限制和 `vision`
+  - 最多同时 2 个、进度、重试、移除即取消；前端先查限制；每个会话的草稿
+  - 测试（vitest）：并发上限、进度、重试、取消、限制提示、草稿切换会话后还在
+  - _Requirements: 1.6, 1.7, 1.9, 2.1_
+
+- [ ] 20. 输入框：附件条、拖放、粘贴
+  - File: console/attachment/{DropZone,AttachmentTray}.tsx（新）、console/composer/ComposerDock.tsx
+  - 附件按钮多选；整页放置提示和限制说明；文件夹拒绝；粘贴；对话里的图片拖回输入框不重新上传；发送等上传完；被拒绝时保留草稿和附件；排队和插话可用
+  - 测试（vitest）：三种添加方式走同一路径；文件夹提示；发送等待；拒绝后保留
+  - _Requirements: 1.1–1.8_
+
+- [ ] 21. 显示和灯箱
+  - File: console/attachment/{AttachmentView,Lightbox}.tsx（新）、console/conversation/UserBubble.tsx
+  - 单图长边 240、宽高比 1:4 到 4:1；多个时 64 px 方块和 240×64 文件卡片；灯箱（Esc、遮罩、关闭、缩放、下载、焦点锁定）；文件卡片下载；发送中用本地预览
+  - 测试（vitest）：尺寸规则；灯箱键盘和焦点；本地预览换成服务器地址
+  - _Requirements: 5.1–5.4, 5.6_
+
+- [ ] 22. 轨迹页显示
+  - File: console/trace/LedgerRow.tsx、trace/inspector/{RecordTabs,RequestTabs}.tsx、text/zh.ts
+  - 用户记录“图片 ×n · 文件 ×m”；检查器 48 px 缩略图和附件列表、原始引用；请求记录的省略说明
+  - 测试（vitest）：读带附件的期望文件，显示正确
+  - _Requirements: 5.5, 5.7_
+
+- [ ] 23. 端到端、文档和收尾
+  - File: console/e2e/attachments.spec.ts（新）、E2eModel（看到图片引用时回答图片名）、README、tech.md、BACKLOG、架构页
+  - Playwright 覆盖选择、拖放、粘贴、拖回、进度和移除、发送、刷新后仍在、灯箱、下载、轨迹页、手机宽度；最终全量回归；变异检查（灯箱 Esc 不关；上传并发不限）；提交；汇报
+  - _Requirements: 非功能“测试”, 设计“阶段”_
