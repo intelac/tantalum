@@ -10,7 +10,7 @@
 | `trace-view` | 23/23，2026-11-03 完成（结果见 tech.md）。轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做；DSH 统计页的“事件行”（请求头、系统提示词、工具集变更单独成行）没有做，轨迹页已经能看到这些 | `specs/trace-view/tasks.md` |
 | `hook-coverage` | 19/19，2026-11-03 完成（结果见 tech.md）。每个钩子都有示例插件；工作轮数上限；真实管线上的钩子矩阵 86 个测试；钩子不做 I/O 的 ArchUnit 规则。顺带修了两个缺陷：同一步开始又结束的运行在对话里没有结束原因；关服务时被打断的处理器结果被当成正常结果落盘（违反 ops-hardening H8） | `specs/hook-coverage/tasks.md` |
 | `attachments` | 完成（2026-11-03，23 个任务，4 个阶段）。提问时附图片和文件，每用户独立存储，发给模型，对话页和轨迹页显示。没有引用的附件怎么清理，等以后做会话删除时一起做（A9） | `specs/attachments/requirements.md` |
-| `core-tools` | 需求待批（2026-11-03）。`read_file` 按行窗口读取和续读，新增 `write_file`、`edit_file`、`list_dir`、`find_files`，先读后写的规则，控制台显示改动差异 | `specs/core-tools/requirements.md` |
+| `core-tools` | 需求待批（2026-11-03）。`read_file` 按行窗口读取和续读，新增 `write_file`、`edit_file`、`list_dir`、`find_files`，先读后写的规则，控制台显示改动差异；插件页（Yi 定并进本 spec：用户自己管自己的，按登录用户开关内置工具和 MCP 服务器） | `specs/core-tools/requirements.md` |
 
 `ops-hardening` 50/50 已完成（2026-11-02）。
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-现在模型只有 `read_file`、`grep` 和三个记忆工具：能看不能改，读大文件时整个塞进上下文（最多 1 MB）。本 spec 补上 pi 和 DSH 都有的基本文件工具：`read_file` 按行窗口读取并能续读，新增写文件、改文件、列目录、按名字找文件。
+现在模型只有 `read_file`、`grep` 和三个记忆工具：能看不能改，读大文件时整个塞进上下文（最多 1 MB）。本 spec 补上 pi 和 DSH 都有的基本文件工具：`read_file` 按行窗口读取并能续读，新增写文件、改文件、列目录、按名字找文件；再加一个像 DSH 那样的插件页，每个用户自己选用哪些工具（Yi 2026-11-03 定：并进本 spec，按登录用户分别记）。
 
 参照的是 pi-mono 的 `main`（00967748）和 DSH 2026-11-03 的 `main`（ce7073d5）：
 
@@ -20,6 +20,8 @@
 | 新增 `write_file`、`edit_file`、`list_dir`、`find_files` | 联网 `web_search`、`web_fetch`（下一个 spec `web-tools`） |
 | 先读后写的规则 | 一次补丁改多个文件的 `apply_patch`（DSH 默认也不加载） |
 | 控制台和轨迹页显示这些工具，`edit_file` 显示改动前后的差异 | 工具结果过大时整体落盘（DSH spill files），留到 `web-tools` 一起定 |
+| 插件页：每个用户给自己开关内置工具和 MCP 服务器，列出钩子插件 | 在页面上安装、卸载、升级插件（DSH 装的是 npm 包；我们的插件是启动时加载的 Java 包，不能在运行中装卸） |
+| 用户给自己开关内置工具和 MCP 服务器 | 每个用户单独开关钩子插件（钩子在内核里运行，按用户开关要写进 journal 才能回放一致，以后再定）；管理员统一替用户开关（Yi 定：用户自己管自己的） |
 | Windows 写的文件（CRLF 换行、BOM）照原样保留 | 服务器装在 Windows 上（Yi 定：单独 spec） |
 
 ### 待批准的决定
@@ -39,6 +41,10 @@
 | C9 | `list_dir` | 列一层，按名字排序（不分大小写），目录名后加 `/`，包括以 `.` 开头的文件，最多 500 项（pi `CA/src/core/tools/ls.ts:61,108`）。DSH 没有这个工具 |
 | C10 | `find_files` | 参数 `pattern`（glob）、`path`（默认工作目录根）。不带 `/` 的模式匹配任意深度的文件名，带 `/` 时按路径匹配（DSH `tool-fs-search/src/glob.ts:323-325`）。跳过 `.git`、`.svn`、`.hg` 和 `node_modules`；不读 `.gitignore`（pi 读，靠外部程序 `fd`；DSH 不读）。结果按路径排序，最多 1000 个（pi `find.ts:40`），超出时写明 |
 | C11 | 哪里不能写 | 只能写当前用户自己的工作目录，经路径校验，`..` 和指向外面的符号链接都拒绝。工作目录里的 `memory/` 不能用 `write_file`、`edit_file` 改，要用记忆工具（记忆工具会拒绝像密钥的内容，自定）。`workspace-mode=shared`（所有用户共用一个工作目录）时不提供 `write_file` 和 `edit_file`，免得用户互相改文件，自定 |
+| C12 | 插件开关由谁定 | 用户自己管自己的：每个用户在插件页给自己开关，按登录用户记，只影响自己的会话，没有管理员替用户开关的一层（Yi 2026-11-03）。DSH 是单人程序，开关对整个配置生效（`packages/boot/plugin-manager/README.zh.md`“改动影响使用该 profile 的全部会话”） |
+| C13 | 插件页上有什么 | 照 DSH 侧栏的“插件”页（`packages/client/ui-plugin-manager/README.zh.md`）：左侧栏一个“插件”入口。分三块：内置工具（每个工具一个开关，含记忆工具）；MCP 服务器（每个服务器一个开关，展开看它放行的工具，每个工具也能单独关，并显示连接状态）；钩子插件和插件工作（只列出名字、说明、挂在哪些位置，不能开关，同 DSH 设置里只读的“内置插件”列表 `packages/client/ui-settings-plugins/README.zh.md`）。每一项显示中文名和一句说明 |
+| C14 | 开关什么时候生效 | 会话的工具在第一次运行时固定，这是现有规则。所以开或关从下一个新会话开始生效，页面上写明这一点。已经开着的会话里，模型再调用被关掉的工具时，服务器在执行前拒绝，返回“这个工具已在插件页关闭”，不执行，自定。DSH 开启 HMR 时立即生效（同一文档） |
+| C15 | 开关存在哪 | 每个用户一份，存在数据目录里，重启后还在；不进 journal。回放时用的是会话第一次运行时记下的工具列表（`ContextAssembled` 事件），和开关无关，所以回放结果不变。默认全开，自定 |
 
 ## Requirements
 
@@ -133,6 +139,35 @@
 4. WHEN 打开轨迹页 THEN 这些工具 SHALL 和现有工具一样有记录和检查器页签；`edit_file` 的检查器里有差异视图。
 5. WHEN 发给模型的结果 THEN SHALL 只有简短的文字（改了几处、写了多少字节），不带差异（同 DSH、pi），不额外占上下文。
 
+### Requirement 7：插件页
+
+**User Story:** 作为用户，我希望像在 DSH 里一样有一个插件页，自己决定模型能用哪些工具，比如只给它读文件、不给它改。
+
+出处：DSH `packages/client/ui-plugin-manager/README.zh.md`（侧栏“插件”页、插件卡片和开关）、`packages/client/ui-settings-plugins/README.zh.md`（只读的内置插件列表）、`packages/boot/plugin-manager/README.zh.md`（开关的保存和生效）。
+
+#### Acceptance Criteria
+
+1. WHEN 点左侧栏的“插件” THEN 系统 SHALL 打开插件页，分“内置工具”“MCP 服务器”“钩子插件”三块，每项显示中文名、一句说明和当前状态。
+2. WHEN 用户关掉或打开一个内置工具或 MCP 服务器 THEN 系统 SHALL 立即保存，只改这个用户的设置；页面写明“从下一个新会话开始生效”。
+3. WHEN 展开一个 MCP 服务器 THEN 页面 SHALL 列出它放行的工具，每个工具可以单独关；服务器连不上时显示原因。
+4. WHEN 查看钩子插件和插件工作 THEN 页面 SHALL 列出名字、说明、挂在哪些位置（调模型前、调工具前等），不提供开关。
+5. WHEN 用户重新登录或服务重启 THEN 设置 SHALL 还在。
+6. WHEN 两个用户各自开关 THEN 互不影响；接口只读写当前登录用户自己的设置，别人的读不到也改不了。
+7. WHEN 页面宽度小于 768 px THEN 插件页 SHALL 正常显示，不横向滚动（同 DSH 窄屏规则）。
+
+### Requirement 8：开关生效
+
+**User Story:** 作为用户，我希望关掉的工具模型真的用不了。
+
+出处：现有规则——会话的工具在第一次运行时固定（README“记忆”一节）；DSH 关掉的工具不进模型这一步的工具列表（`packages/web/tool-web/src/search.ts:414` 的同类做法）。
+
+#### Acceptance Criteria
+
+1. WHEN 新会话第一次运行 THEN 发给模型的工具列表 SHALL 只包括这个用户开着的工具。
+2. WHEN 已有会话里模型调用一个后来被关掉的工具 THEN 服务器 SHALL 在执行前拒绝，结果是一句说明，不执行任何操作（C14）。
+3. WHEN 回放旧会话 THEN 结果 SHALL 和开关无关，和现在一样。
+4. WHEN 新加的写工具（`write_file`、`edit_file`）被关掉 THEN 模型 SHALL 只能读，相当于只读模式。
+
 ## Non-Functional Requirements
 
 ### 安全
@@ -152,4 +187,4 @@
 ### 测试
 - 每个工具的单元测试覆盖上面每条验收标准，包括 CRLF、BOM、多字节字符、超长行、空文件。
 - 真实 Claude 跑两项，每项有判定标准：一是读一个很长的文件，只用窗口读到藏在中间的词；二是改一个文件里的函数，先读后改，改完测试通过。
-- 端到端：对话页显示 `edit_file` 的差异和 `write_file` 的内容。
+- 端到端：对话页显示 `edit_file` 的差异和 `write_file` 的内容；插件页关掉 `write_file` 后，新会话里模型拿不到它，旧会话里调用它被拒绝；两个用户的设置互不影响。
