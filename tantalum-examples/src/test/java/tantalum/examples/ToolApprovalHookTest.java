@@ -223,6 +223,6 @@ class ToolApprovalHookTest {
     }
 
     private ToolContext context() throws Exception {
-        return new ToolContext(USER, new Workspace(dir));
+        return new ToolContext(USER, new tantalum.value.id.SessionId("s"), new Workspace(dir));
     }
 }

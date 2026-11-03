@@ -1,6 +1,7 @@
 package tantalum.examples;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
@@ -20,7 +21,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -38,14 +38,15 @@ import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.plugin.AfterToolHook;
-import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.store.SessionStore;
 import tantalum.shell.tool.GrepTool;
+import tantalum.shell.tool.Observations;
 import tantalum.shell.tool.ReadFileTool;
 import tantalum.shell.tool.ToolCatalog;
+import tantalum.shell.tool.WriteFileTool;
 import tantalum.shell.web.TestServer;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.CommandDropped;
@@ -160,20 +161,6 @@ class ConcurrencyStressTest {
         }
     }
 
-    private static Tool writeFile(AtomicInteger executions) {
-        Json schema = new Json.Obj(Map.of("type", new Json.Str("object"),
-                "properties", new Json.Obj(Map.of("path", new Json.Obj(Map.of("type", new Json.Str("string")))))));
-        return new Tool() {
-            @Override public String name() { return "write_file"; }
-            @Override public String description() { return "Write a file."; }
-            @Override public Json schema() { return schema; }
-            @Override public ToolOutput run(ToolContext context, Json arguments) {
-                executions.incrementAndGet();
-                return ToolOutput.ok("written");
-            }
-        };
-    }
-
     private static List<KernelHook> hooks() {
         return List.of(new ReadOnlyHook(Set.of("read_file", "grep")), new CitationCheckHook());
     }
@@ -266,9 +253,7 @@ class ConcurrencyStressTest {
             }
         }
         StatelessModel model = new StatelessModel(slow);
-        AtomicInteger writes = new AtomicInteger();
         Consumer<GenericApplicationContext> plugins = context -> {
-            context.registerBean("writeFile", Tool.class, () -> writeFile(writes));
             context.registerBean("readOnly", KernelHook.class, () -> hooks().get(0));
             context.registerBean("citationCheck", KernelHook.class, () -> hooks().get(1));
             context.registerBean("citationWork", WorkType.class, CitationWork::new);
@@ -388,7 +373,10 @@ class ConcurrencyStressTest {
         assertTrue(cancelled > 0, "round " + round + ": no cancel landed during a model call; the slow path was not exercised");
 
         // 2. 只读策略在并发下也拦住了每一次写；截断钩子改了每个用户的 b.txt。
-        assertEquals(0, writes.get(), "write_file must never execute");
+        // 内置的 write_file 写新文件不用先读，策略没拦住就会留下 out.txt
+        for (int i = 0; i < USERS; i++) {
+            assertFalse(Files.exists(workspace.resolve(user(i) + "/out.txt")), "write_file must never execute for " + user(i));
+        }
         for (Prompt prompt : List.copyOf(model.prompts)) {
             String user = StatelessModel.userOf(prompt);
             for (Message message : prompt.messages()) {
@@ -441,7 +429,7 @@ class ConcurrencyStressTest {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(new ReadFileTool());
         catalog.register(new GrepTool());
-        catalog.register(writeFile(new AtomicInteger()));
+        catalog.register(new WriteFileTool(new Observations()));
         Kernel kernel = new Kernel(table, new HookChain(hooks()), catalog.safety(), Limits.DEFAULT);
         Replay.Result replay = Replay.run(kernel, journal);
         Map<String, List<Prompt>> replayed = new LinkedHashMap<>();

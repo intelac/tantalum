@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
@@ -38,15 +39,22 @@ public final class Evictor {
     private final Residency residency;
     private final Projections projections;
     private final Clock clock;
+    private final Consumer<SessionId> evicted;
     /** 按访问顺序，最久没用的在前。 */
     private final Map<SessionId, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
     private long lastSweep = Long.MIN_VALUE / 2;
 
     public Evictor(Settings settings, Residency residency, Projections projections, Clock clock) {
+        this(settings, residency, projections, clock, session -> {});
+    }
+
+    /** {@code evicted} 在会话离开内存后调用，让 shell 里按会话记的东西（如先读后写的记录）一起丢掉。 */
+    public Evictor(Settings settings, Residency residency, Projections projections, Clock clock, Consumer<SessionId> evicted) {
         this.settings = settings;
         this.residency = residency;
         this.projections = projections;
         this.clock = clock;
+        this.evicted = evicted;
     }
 
     /** 会话刚载入或处理完一个事件后调用，记下最近使用的时间。 */
@@ -78,6 +86,7 @@ public final class Evictor {
             if (evictable(session) && residency.evict(next.getKey())) {
                 result = result.without(next.getKey());
                 projections.remove(next.getKey());
+                evicted.accept(next.getKey());
                 oldest.remove();
             }
         }

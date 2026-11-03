@@ -56,7 +56,7 @@ public final class ToolHandler implements Handler {
         }
         ToolContext context;
         try {
-            context = new ToolContext(run.run().principal(), workspaces.of(run.run().principal()));
+            context = new ToolContext(run.run().principal(), run.run().session(), workspaces.of(run.run().principal()));
         } catch (RuntimeException failure) {
             return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()), null);
         }

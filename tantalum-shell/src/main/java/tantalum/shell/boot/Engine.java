@@ -60,8 +60,8 @@ import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.TurnQuery;
-import tantalum.shell.tool.GrepTool;
-import tantalum.shell.tool.ReadFileTool;
+import tantalum.shell.tool.BuiltinTools;
+import tantalum.shell.tool.Observations;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.shell.trace.Trace;
@@ -122,8 +122,8 @@ public final class Engine implements AutoCloseable {
             if (workspaces.isShared()) {
                 LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
             }
-            catalog.register(new ReadFileTool(storage.attachments));
-            catalog.register(new GrepTool());
+            Observations observations = new Observations();
+            BuiltinTools.of(workspaces, storage.attachments, observations).forEach(catalog::register);
             memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
             MemoryTools.all(memories).forEach(catalog::register);
             tools.forEach(catalog::register);
@@ -164,7 +164,7 @@ public final class Engine implements AutoCloseable {
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
-            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock);
+            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock, observations::forget);
             cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, projections, hub, view, results,
                     storage.indexWriter::onStep, evictor);
 

@@ -113,7 +113,7 @@ class ProviderBackoffHookTest {
     @Test
     void statusWorkEndsOnceTheProviderIsHealthy() throws Exception {
         try (HttpStub stub = new HttpStub((n, body) -> new Reply(n < 3 ? 503 : 200, ""))) {
-            WorkResult result = new ProviderStatusWork(stub.uri(), POLL).run(new ToolContext(USER, new Workspace(dir)), new Json.Null());
+            WorkResult result = new ProviderStatusWork(stub.uri(), POLL).run(new ToolContext(USER, new tantalum.value.id.SessionId("s"), new Workspace(dir)), new Json.Null());
             assertEquals(new Json.Obj(Map.of("healthy", new Json.Bool(true), "checks", new Json.Num(BigDecimal.valueOf(3)))), result.result());
             assertEquals(null, result.continueText());
             assertEquals(3, stub.requests().size());
@@ -144,7 +144,7 @@ class ProviderBackoffHookTest {
         try (HttpStub stub = new HttpStub((n, body) -> new Reply(503, ""))) {
             AtomicReference<Throwable> ended = new AtomicReference<>();
             ProviderStatusWork work = new ProviderStatusWork(stub.uri(), POLL);
-            ToolContext context = new ToolContext(USER, new Workspace(dir));
+            ToolContext context = new ToolContext(USER, new tantalum.value.id.SessionId("s"), new Workspace(dir));
             Thread worker = Thread.ofVirtual().start(() -> {
                 try {
                     work.run(context, new Json.Null());

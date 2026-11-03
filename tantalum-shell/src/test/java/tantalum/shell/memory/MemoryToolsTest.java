@@ -45,7 +45,7 @@ class MemoryToolsTest {
     }
 
     private ToolContext as(Principal principal) {
-        return new ToolContext(principal, workspaces.of(principal));
+        return new ToolContext(principal, new tantalum.value.id.SessionId("s"), workspaces.of(principal));
     }
 
     private static Json args(String... pairs) {

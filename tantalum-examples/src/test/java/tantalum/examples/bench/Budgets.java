@@ -27,6 +27,9 @@ final class Budgets {
     static final long WRITE_P99_MS = 50;
     /** 附件非功能“性能”：一张 20 MB 照片的上传加规范化。 */
     static final long UPLOAD_20MB_MS = 2_000;
+    /** core-tools 非功能“性能”：从 64 MB、几十万行的文件里读一个窗口；一万个文件的目录树里 find_files。 */
+    static final long READ_WINDOW_64MB_MS = 1_000;
+    static final long FIND_10K_FILES_MS = 1_000;
 
     private final double tighten;
     private final List<String> failures = new ArrayList<>();

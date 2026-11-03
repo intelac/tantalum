@@ -102,6 +102,21 @@ class EvictorTest {
         assertEquals(0, evictor.resident());
     }
 
+    /** 按会话记在 shell 里的东西（先读后写的记录）随会话一起丢掉。 */
+    @Test
+    void theEvictionCallbackHearsAboutEachEvictedSession() {
+        List<SessionId> evicted = new ArrayList<>();
+        Evictor evictor = new Evictor(new Evictor.Settings(Duration.ofMinutes(30), 1000, NONE), residency,
+                new Projections(new tantalum.shell.conversation.Transcript(), new Trace()), clock, evicted::add);
+        KernelState state = state(idle(A));
+        touch(evictor, A);
+        evictor.sweep(state);
+        assertEquals(List.of(), evicted);
+        clock.millis += Duration.ofMinutes(30).toMillis();
+        evictor.sweep(state);
+        assertEquals(List.of(A), evicted);
+    }
+
     @Test
     void aSessionWithAnActiveRunOrQueuedSubmissionStays() {
         Evictor evictor = evictor(NONE, 1000);
