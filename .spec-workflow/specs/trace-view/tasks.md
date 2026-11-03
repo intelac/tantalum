@@ -12,24 +12,24 @@
 
 ## 阶段 1：数据
 
-- [ ] 1. `HookDecided` 事实
+- [x] 1. `HookDecided` 事实
   - File: value/decision/HookDecided.java（新）、kernel/hook/HookChain.java；测试 HookChainTest
   - 设计第 1 节：每个钩子返回拦截、要求工作、带补丁的放行时报一条；只放行、没有补丁时不报；钩子失败导致拦截时，在 `HookReported` 之后再报一条 STOP。字段：钩子名、位置、结果、理由、system 补丁长度、工具名、工具调用 ID、工作类型
   - 测试：表驱动，覆盖 6 个位置 × 3 种结果、空补丁不报、多个钩子的顺序、回放得到同样的事实
   - _Requirements: 5.3–5.8, T1, T2_
 
-- [ ] 2. 模型、工具、工作结果事件的计时和请求选项字段
+- [x] 2. 模型、工具、工作结果事件的计时和请求选项字段
   - File: value/model/RequestOptions.java（新）；value/event/{ModelReplied,ModelFailed,ModelInterrupted,ToolFinished,WorkDone}.java；全部构造调用处
   - 模型结果加 `startedAt`、`firstTokenAt`、`options`；工具和工作结果加 `startedAt`；都可为空，为空时不写出
   - 测试（EventCodecTest）：新字段往返；没有这些字段的旧行读成 null；字段为空时写出的行和改动前逐字节相同
   - _Requirements: T3, 设计第 2、3 节_
 
-- [ ] 3. 量首 token 和开始时刻
+- [x] 3. 量首 token 和开始时刻
   - File: shell/model/ChunkListener.java（`onToolInput` 默认方法）、ClaudeClient、OpenAiClient（调用它）、shell/handler/{ModelHandler,ToolHandler,WorkHandler}.java（注入 Clock）
   - 测试：先发文字、先发思考、只发工具输入三种情况，首 token 都等于第一个分片到达的时刻；`startedAt` 在拿到并发名额之后
   - _Requirements: 2.1, 设计第 2、3 节_
 
-- [ ] 4. 请求选项，以及拆出 `ClaudeRequest`
+- [x] 4. 请求选项，以及拆出 `ClaudeRequest`
   - File: shell/model/ModelClient.java（`options(Prompt)` 默认方法）、ClaudeRequest.java（新，从 ClaudeClient 移出组请求的代码）、OpenAiClient
   - 先对现有请求体取样存成期望文件，重构后同一 prompt 组出的请求体逐字节相同；选项和请求体一致；选项、journal、轨迹 JSON 里都没有密钥
   - _Requirements: 2.1, 2.7, 设计第 2 节_

@@ -3,6 +3,7 @@ package tantalum.shell.handler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,7 +38,7 @@ class WorkHandlerTest {
 
     @Test
     void dispatchesByType() throws Exception {
-        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(type("a", new WorkResult(new Json.Str("done"), "continue"))), TIMEOUT);
+        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(type("a", new WorkResult(new Json.Str("done"), "continue"))), TIMEOUT, java.time.Clock.systemUTC());
         WorkDone done = assertInstanceOf(WorkDone.class, handler.handle(work("a")));
         assertEquals(new Json.Str("done"), done.result());
         assertEquals("continue", done.continueText());
@@ -47,14 +48,14 @@ class WorkHandlerTest {
 
     @Test
     void unknownTypeFails() throws Exception {
-        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT).handle(work("nope")));
+        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT, java.time.Clock.systemUTC()).handle(work("nope")));
         assertTrue(done.failed());
     }
 
     @Test
     void failureBecomesAFailedResult() {
         WorkDone done = assertInstanceOf(WorkDone.class,
-                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT).failed(work("a"), new IllegalStateException("boom")));
+                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT, java.time.Clock.systemUTC()).failed(work("a"), new IllegalStateException("boom")));
         assertTrue(done.failed());
         assertEquals(new Json.Str("java.lang.IllegalStateException: boom"), done.result());
     }
@@ -62,12 +63,12 @@ class WorkHandlerTest {
     @Test
     void duplicateTypeFails() {
         WorkType a = type("a", new WorkResult(new Json.Null(), null));
-        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(a, a), TIMEOUT));
+        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(a, a), TIMEOUT, java.time.Clock.systemUTC()));
     }
 
     private static WorkHandler handler(WorkType... types) {
         return new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
-                List.of(types), java.time.Duration.ofMillis(200));
+                List.of(types), java.time.Duration.ofMillis(200), java.time.Clock.systemUTC());
     }
 
     /** 阻塞的插件不能永久占住命令：超时变成失败结果，插件线程被中断。 */
@@ -102,5 +103,35 @@ class WorkHandlerTest {
         WorkDone done = assertInstanceOf(WorkDone.class, handler(broken).handle(work("broken")));
         assertTrue(done.failed());
         assertTrue(((Json.Str) done.result()).value().contains("StackOverflowError"));
+    }
+
+    /** 开始时刻在执行前取：完成和失败都带；没有这种工作、处理器自己失败时没有真正执行，为空。 */
+    @Test
+    void startedAtIsTakenBeforeTheWorkRuns() throws Exception {
+        java.time.Instant t0 = java.time.Instant.parse("2026-11-03T01:00:00Z");
+        java.time.Instant t1 = t0.plusSeconds(2);
+        ManualClock clock = new ManualClock(t0);
+        WorkType slow = new WorkType() {
+            @Override public String name() { return "slow"; }
+            @Override public WorkResult run(tantalum.shell.plugin.ToolContext context, Json input) {
+                clock.now = t1;
+                return new WorkResult(new Json.Null(), null);
+            }
+        };
+        WorkType broken = new WorkType() {
+            @Override public String name() { return "broken"; }
+            @Override public WorkResult run(tantalum.shell.plugin.ToolContext context, Json input) {
+                throw new IllegalStateException("boom");
+            }
+        };
+        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
+                List.of(slow, broken), TIMEOUT, clock);
+
+        assertEquals(t0, assertInstanceOf(WorkDone.class, handler.handle(work("slow"))).startedAt());
+        WorkDone failed = assertInstanceOf(WorkDone.class, handler.handle(work("broken")));
+        assertTrue(failed.failed());
+        assertEquals(t1, failed.startedAt());
+        assertNull(assertInstanceOf(WorkDone.class, handler.handle(work("nope"))).startedAt());
+        assertNull(assertInstanceOf(WorkDone.class, handler.failed(work("slow"), new IllegalStateException("x"))).startedAt());
     }
 }

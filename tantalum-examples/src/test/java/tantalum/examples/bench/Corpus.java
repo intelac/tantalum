@@ -227,7 +227,7 @@ public final class Corpus {
         return switch (command) {
             case AssembleContext assemble -> new ContextAssembled(assemble.id(), SYSTEM, TOOLS, COMPACTION, List.of());
             case CallModel call -> reply(call);
-            case RunTool tool -> new ToolFinished(tool.id(), tool.call().id(), words(200 + random.nextInt(3800)), false);
+            case RunTool tool -> new ToolFinished(tool.id(), tool.call().id(), words(200 + random.nextInt(3800)), false, null);
             default -> throw new IllegalStateException("corpus does not produce " + command);
         };
     }
@@ -247,10 +247,10 @@ public final class Corpus {
                 content.add(new ToolCallBlock("call-" + ids++, "read_file", "{\"path\":\"" + path + "\"}",
                         new Json.Obj(Map.of("path", new Json.Str(path)))));
             }
-            return new ModelReplied(call.id(), content, StopReason.TOOL_USE, "bench", usage);
+            return new ModelReplied(call.id(), content, StopReason.TOOL_USE, "bench", usage, null, null, null);
         }
         content.add(new TextBlock(words(100 + random.nextInt(1200))));
-        return new ModelReplied(call.id(), content, StopReason.END_TURN, "bench", usage);
+        return new ModelReplied(call.id(), content, StopReason.END_TURN, "bench", usage, null, null, null);
     }
 
     private String words(int length) {

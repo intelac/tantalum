@@ -154,10 +154,10 @@ class SessionReplayTest {
                         : scripted.isEmpty() ? List.of(new TextBlock("done " + "x".repeat(90))) : scripted.poll();
                 StopReason stop = content.stream().anyMatch(ToolCallBlock.class::isInstance) ? StopReason.TOOL_USE : StopReason.END_TURN;
                 track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                        new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0))));
+                        new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0), null, null, null)));
             }
             case RunTool tool -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false)));
+                    new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null)));
             default -> { }
         }
     }

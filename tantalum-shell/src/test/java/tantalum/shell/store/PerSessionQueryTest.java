@@ -139,7 +139,7 @@ class PerSessionQueryTest {
 
     private void reply(Principal principal, SessionId session, Started started) throws Exception {
         send(principal, session, started.run(), new ModelReplied(started.call().id(), List.of(new TextBlock("ok")), StopReason.END_TURN, "m",
-                new TokenUsage(990, 10, 0, 0)));
+                new TokenUsage(990, 10, 0, 0), null, null, null));
     }
 
     /** alice 在第一个会话用掉 1000，第二个会话被额度钩子停下；bob 不受影响。两个用户的事件交错。 */

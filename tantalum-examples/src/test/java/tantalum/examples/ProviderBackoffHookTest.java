@@ -53,7 +53,7 @@ class ProviderBackoffHookTest {
     Path dir;
 
     private static ModelFailed failure(FailureReason reason, Duration retryAfter) {
-        return new ModelFailed(new CommandId("c"), reason, true, retryAfter, null, reason + " from provider");
+        return new ModelFailed(new CommandId("c"), reason, true, retryAfter, null, reason + " from provider", null, null, null);
     }
 
     private static Object onFailure(ModelFailed failure) {
@@ -163,7 +163,7 @@ class ProviderBackoffHookTest {
     }
 
     private WorkDone runThroughHandler(ProviderStatusWork work) throws Exception {
-        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofMillis(300));
+        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofMillis(300), java.time.Clock.systemUTC());
         return (WorkDone) handler.handle(new DoWork(new CommandId("w"), RUN, ProviderStatusWork.TYPE, new Json.Null()));
     }
 }

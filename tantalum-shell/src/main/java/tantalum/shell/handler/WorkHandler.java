@@ -1,6 +1,8 @@
 package tantalum.shell.handler;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +24,12 @@ public final class WorkHandler implements Handler {
     private final Map<String, WorkType> types = new HashMap<>();
     private final Workspaces workspaces;
     private final Duration timeout;
+    private final Clock clock;
 
-    public WorkHandler(Workspaces workspaces, List<WorkType> workTypes, Duration timeout) {
+    public WorkHandler(Workspaces workspaces, List<WorkType> workTypes, Duration timeout, Clock clock) {
         this.workspaces = workspaces;
         this.timeout = timeout;
+        this.clock = clock;
         for (WorkType type : workTypes) {
             if (types.putIfAbsent(type.name(), type) != null) {
                 throw new IllegalStateException("work type already registered: " + type.name());
@@ -38,25 +42,27 @@ public final class WorkHandler implements Handler {
         DoWork work = (DoWork) command;
         WorkType type = types.get(work.workType());
         if (type == null) {
-            return failed(work, "unknown work type: " + work.workType());
+            return failed(work, "unknown work type: " + work.workType(), null);
         }
         ToolContext context = new ToolContext(work.run().principal(), workspaces.of(work.run().principal()));
+        // 工作没有名额，几乎等于发出时刻；记下它是为了和模型、工具的计时一致。
+        Instant startedAt = clock.instant();
         try {
             WorkResult done = Deadline.call(() -> type.run(context, work.input()), timeout);
-            return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText());
+            return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText(), startedAt);
         } catch (TimeoutException late) {
-            return failed(work, "work timed out after " + timeout);
+            return failed(work, "work timed out after " + timeout, startedAt);
         } catch (ExecutionException failure) {
-            return failed(work, failure.getCause().toString());
+            return failed(work, failure.getCause().toString(), startedAt);
         }
     }
 
-    private static WorkDone failed(DoWork work, String detail) {
-        return new WorkDone(work.id(), work.workType(), new Json.Str(detail), true, null);
+    private static WorkDone failed(DoWork work, String detail, Instant startedAt) {
+        return new WorkDone(work.id(), work.workType(), new Json.Str(detail), true, null, startedAt);
     }
 
     @Override
     public Event failed(Command command, Exception failure) {
-        return failed((DoWork) command, failure.toString());
+        return failed((DoWork) command, failure.toString(), null);
     }
 }

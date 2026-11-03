@@ -51,7 +51,7 @@ class CitationCheckTest {
 
     @Test
     void hookAllowsOnceTheWorkIsDone() {
-        WorkDone done = new WorkDone(new CommandId("c"), CitationWork.TYPE, new Json.Str("ok"), false, null);
+        WorkDone done = new WorkDone(new CommandId("c"), CitationWork.TYPE, new Json.Str("ok"), false, null, null);
         assertSame(Allow.PLAIN, new CitationCheckHook().beforeRunEnd(KernelState.empty(), CONTEXT.withWork(done)));
     }
 
@@ -78,7 +78,7 @@ class CitationCheckTest {
     /** 核对本身失败（文件读不了、工作超时）不能当作通过。 */
     @Test
     void failedWorkStopsTheRunInsteadOfPassing() {
-        WorkDone failed = new WorkDone(new CommandId("c"), CitationWork.TYPE, new Json.Str("work timed out"), true, null);
+        WorkDone failed = new WorkDone(new CommandId("c"), CitationWork.TYPE, new Json.Str("work timed out"), true, null, null);
         tantalum.value.hook.Stop stop = assertInstanceOf(tantalum.value.hook.Stop.class,
                 new CitationCheckHook().beforeRunEnd(KernelState.empty(), CONTEXT.withWork(failed)));
         assertTrue(stop.reason().contains("timed out"));

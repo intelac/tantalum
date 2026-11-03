@@ -1,6 +1,8 @@
 package tantalum.shell.handler;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,12 +34,17 @@ public final class ToolHandler implements Handler {
     private final Duration timeout;
     /** 每个服务端一份名额，同一服务端的工具共用。 */
     private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
+    private final Clock clock;
 
-    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, List<AfterToolHook> afterHooks, Duration timeout) {
+    /** 执行的结果和真正开始的时刻；没拿到名额时开始时刻为 null。 */
+    private record Ran(ToolOutput output, Instant startedAt) {}
+
+    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, List<AfterToolHook> afterHooks, Duration timeout, Clock clock) {
         this.catalog = catalog;
         this.workspaces = workspaces;
         this.afterHooks = List.copyOf(afterHooks);
         this.timeout = timeout;
+        this.clock = clock;
     }
 
     @Override
@@ -45,16 +52,16 @@ public final class ToolHandler implements Handler {
         RunTool run = (RunTool) command;
         Optional<Tool> tool = catalog.find(run.call().name());
         if (tool.isEmpty()) {
-            return finished(run, ToolOutput.error("Unknown tool: " + run.call().name()));
+            return finished(run, ToolOutput.error("Unknown tool: " + run.call().name()), null);
         }
         ToolContext context;
         try {
             context = new ToolContext(run.run().principal(), workspaces.of(run.run().principal()));
         } catch (RuntimeException failure) {
-            return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()));
+            return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()), null);
         }
-        ToolOutput output = execute(tool.get(), context, run.call().arguments());
-        return finished(run, applyHooks(tool.get(), context, run.call().arguments(), output));
+        Ran ran = execute(tool.get(), context, run.call().arguments());
+        return finished(run, applyHooks(tool.get(), context, run.call().arguments(), ran.output()), ran.startedAt());
     }
 
     CallLimiter limiterFor(Tool tool) {
@@ -62,25 +69,27 @@ public final class ToolHandler implements Handler {
     }
 
     /** 等待名额计入超时。名额由执行工具的线程持有，工具真正结束才归还，超时也不会超过服务端上限。 */
-    private ToolOutput execute(Tool tool, ToolContext context, Json arguments) throws InterruptedException {
+    private Ran execute(Tool tool, ToolContext context, Json arguments) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         CallLimiter.Permit permit;
         try {
             permit = limiterFor(tool).acquire(timeout);
         } catch (TimeoutException waiting) {
-            return ToolOutput.error("Tool timed out after " + timeout + " waiting for server capacity.");
+            return new Ran(ToolOutput.error("Tool timed out after " + timeout + " waiting for server capacity."), null);
         }
 
+        // 等名额是排队：同一服务端的调用会排在后面，开始时刻从拿到名额算。
+        Instant startedAt = clock.instant();
         try {
-            return Deadline.call(() -> {
+            return new Ran(Deadline.call(() -> {
                 try (permit) {
                     return tool.run(context, arguments);
                 }
-            }, Duration.ofNanos(deadline - System.nanoTime()));
+            }, Duration.ofNanos(deadline - System.nanoTime())), startedAt);
         } catch (TimeoutException late) {
-            return ToolOutput.error("Tool timed out after " + timeout + ". Its outcome is unknown.");
+            return new Ran(ToolOutput.error("Tool timed out after " + timeout + ". Its outcome is unknown."), startedAt);
         } catch (ExecutionException failure) {
-            return ToolOutput.error("Tool failed: " + failure.getCause());
+            return new Ran(ToolOutput.error("Tool failed: " + failure.getCause()), startedAt);
         }
     }
 
@@ -96,12 +105,12 @@ public final class ToolHandler implements Handler {
         return output;
     }
 
-    private static ToolFinished finished(RunTool run, ToolOutput output) {
-        return new ToolFinished(run.id(), run.call().id(), output.text(), output.error());
+    private static ToolFinished finished(RunTool run, ToolOutput output, Instant startedAt) {
+        return new ToolFinished(run.id(), run.call().id(), output.text(), output.error(), startedAt);
     }
 
     @Override
     public Event failed(Command command, Exception failure) {
-        return finished((RunTool) command, ToolOutput.error("Tool failed: " + failure));
+        return finished((RunTool) command, ToolOutput.error("Tool failed: " + failure), null);
     }
 }

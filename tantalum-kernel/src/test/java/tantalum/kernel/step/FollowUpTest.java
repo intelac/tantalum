@@ -26,7 +26,7 @@ class FollowUpTest {
 
     private static void finish(LoopFixture loop) {
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
-        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
     }
 
     @Test
@@ -41,7 +41,7 @@ class FollowUpTest {
         assertEquals(List.of("a", "b"), loop.session().followUps());
 
         loop.feed(first, new ContextAssembled(pending, "s", List.of(), null, List.of()));
-        loop.feed(first, new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null));
+        loop.feed(first, new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
 
         assertNotEquals(first, loop.runId());
         assertEquals("AwaitingContext", loop.phase());

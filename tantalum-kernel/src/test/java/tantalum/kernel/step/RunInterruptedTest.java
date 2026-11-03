@@ -97,7 +97,7 @@ class RunInterruptedTest {
     @Test
     void waitingForARetryTimer() {
         LoopFixture loop = atModel();
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, Duration.ofSeconds(1), "", "500"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, Duration.ofSeconds(1), "", "500", null, null, null));
         assertEquals("AwaitingRetry", loop.phase());
         assertClosed(loop);
     }
@@ -106,9 +106,9 @@ class RunInterruptedTest {
     void waitingForToolsWithOneDoneAndOthersNot() {
         LoopFixture loop = atModel();
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
-                List.of(call("a", "safe1"), call("b", "safe2"), call("c", "write")), StopReason.TOOL_USE, "m", null));
+                List.of(call("a", "safe1"), call("b", "safe2"), call("c", "write")), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals("AwaitingTools", loop.phase());
-        loop.feed(loop.runId(), new ToolFinished(loop.last.commands().getFirst().id(), "a", "done", false));
+        loop.feed(loop.runId(), new ToolFinished(loop.last.commands().getFirst().id(), "a", "done", false, null));
         assertClosed(loop);
 
         List<ContentBlock> results = loop.session().messages().getLast().content();
@@ -127,7 +127,7 @@ class RunInterruptedTest {
             @Override public String name() { return "failure"; }
             @Override public HookResult onFailure(KernelState state, HookContext context) { return new NeedWork("compact", new Json.Null()); }
         });
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", ""));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.CONTEXT_OVERFLOW, false, null, "", "", null, null, null));
         assertEquals("AwaitingWork", loop.phase());
         assertClosed(loop);
     }
@@ -176,7 +176,7 @@ class RunInterruptedTest {
         var waiting = loop.onlyCommandId();
         loop.feed(run, EVENT);
         KernelState before = loop.state;
-        loop.feed(run, new ModelReplied(waiting, LoopFixture.text("late"), StopReason.END_TURN, "m", null));
+        loop.feed(run, new ModelReplied(waiting, LoopFixture.text("late"), StopReason.END_TURN, "m", null, null, null, null));
         assertSame(before, loop.state);
     }
 

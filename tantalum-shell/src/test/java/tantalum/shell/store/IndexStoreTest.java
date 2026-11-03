@@ -212,7 +212,7 @@ class IndexStoreTest {
             fixture.send(ALICE, S1, null, DAY1, new CompactRequested(new SubmissionId("x"), new RequestId("x"), null));
             IndexFixture.Pending pending = fixture.prompt(ALICE, S2, DAY1, "two");
             fixture.send(ALICE, S2, pending.run(), DAY1, new tantalum.value.event.ModelReplied(pending.command(),
-                    List.of(), tantalum.value.model.StopReason.TOOL_USE, "m", tokens(3)));
+                    List.of(), tantalum.value.model.StopReason.TOOL_USE, "m", tokens(3), null, null, null));
             assertEquals(3, new UsageLedger(index, writer).before(ALICE, Long.MAX_VALUE).get(LocalDate.parse("2026-11-01")).input());
             fixture.files.close();
         }

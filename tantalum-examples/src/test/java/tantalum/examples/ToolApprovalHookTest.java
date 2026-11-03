@@ -67,7 +67,7 @@ class ToolApprovalHookTest {
     }
 
     private static HookResult onWork(String type, Json result, boolean failed) {
-        return HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(new WorkDone(new CommandId("w"), type, result, failed, null)));
+        return HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(new WorkDone(new CommandId("w"), type, result, failed, null, null)));
     }
 
     private static HookResult beforeTool(String tool) {
@@ -170,7 +170,7 @@ class ToolApprovalHookTest {
             assertTrue(reason.endsWith(body.substring(0, 200)), reason);
             assertFalse(reason.contains(body.substring(0, 201)), reason);
             assertInstanceOf(Stop.class, HOOK.onWorkResult(KernelState.empty(),
-                    CONTEXT.withWork(new WorkDone(new CommandId("w"), ApprovalWork.TYPE, result, false, null))));
+                    CONTEXT.withWork(new WorkDone(new CommandId("w"), ApprovalWork.TYPE, result, false, null, null))));
         }
     }
 
@@ -195,7 +195,7 @@ class ToolApprovalHookTest {
     @Test
     void unreachableServiceFailsTheWorkAndTheHookBlocks() throws Exception {
         ApprovalWork work = new ApprovalWork(HttpStub.closedPort());
-        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofSeconds(5));
+        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofSeconds(5), java.time.Clock.systemUTC());
         WorkDone done = (WorkDone) handler.handle(new DoWork(new CommandId("w"), RUN, ApprovalWork.TYPE, request("write_file", 0)));
         assertTrue(done.failed());
         assertInstanceOf(Stop.class, HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(done)));

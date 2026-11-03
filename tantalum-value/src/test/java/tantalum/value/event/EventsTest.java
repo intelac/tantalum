@@ -32,12 +32,12 @@ class EventsTest {
                 new FollowUpSubmitted(SUB, REQ, "hi"),
                 new Cancel(REQ),
                 new ContextAssembled(CMD, "system", List.of(), null, List.of()),
-                new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null),
-                new ModelFailed(CMD, FailureReason.TIMEOUT, true, Duration.ZERO, "", ""),
-                new ModelInterrupted(CMD, "partial"),
-                new ToolFinished(CMD, "call", "out", false),
+                new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null, null, null, null),
+                new ModelFailed(CMD, FailureReason.TIMEOUT, true, Duration.ZERO, "", "", null, null, null),
+                new ModelInterrupted(CMD, "partial", null, null, null),
+                new ToolFinished(CMD, "call", "out", false, null),
                 new TimerFired(CMD),
-                new WorkDone(CMD, "citation", new Json.Null(), false, null));
+                new WorkDone(CMD, "citation", new Json.Null(), false, null, null));
 
         for (Event event : events) {
             assertEquals(event.getClass().getSimpleName(), event.type());

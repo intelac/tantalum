@@ -1,63 +1,35 @@
 package tantalum.shell.model;
 
 import com.anthropic.client.AnthropicClient;
-import com.anthropic.core.JsonValue;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
-import com.anthropic.models.messages.AssistantMessageParam;
-import com.anthropic.models.messages.CacheControlEphemeral;
-import com.anthropic.models.messages.ContentBlockParam;
-import com.anthropic.models.messages.MessageCreateParams;
-import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.RawContentBlockDelta;
 import com.anthropic.models.messages.RawContentBlockStartEvent;
 import com.anthropic.models.messages.RawMessageDeltaEvent;
 import com.anthropic.models.messages.RawMessageStartEvent;
 import com.anthropic.models.messages.RawMessageStreamEvent;
-import com.anthropic.models.messages.RedactedThinkingBlockParam;
-import com.anthropic.models.messages.TextBlockParam;
-import com.anthropic.models.messages.ThinkingBlockParam;
-import com.anthropic.models.messages.ThinkingConfigAdaptive;
-import com.anthropic.models.messages.Tool;
-import com.anthropic.models.messages.ToolChoiceNone;
-import com.anthropic.models.messages.ToolResultBlockParam;
-import com.anthropic.models.messages.ToolUseBlockParam;
-import com.anthropic.models.messages.UserMessageParam;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.TreeMap;
-import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
-import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
-import tantalum.value.model.Role;
+import tantalum.value.model.RequestOptions;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
-import tantalum.value.model.ToolCallBlock;
-import tantalum.value.model.ToolResultBlock;
-import tantalum.value.model.ToolSpec;
 
 /**
  * 用官方 SDK 调 Claude。SDK 必须关闭自动重试，由内核负责重试。
- * {@code thinking} 块连同签名原样保存和回传；历史只追加，否则签名失效。
+ * {@code thinking} 块连同签名原样保存和回传；历史只追加，否则签名失效。组请求在 {@link ClaudeRequest}。
  */
 public final class ClaudeClient implements ModelClient {
-
-    private static final String PROVIDER = "claude";
-    private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
-    private static final String BINDING_BETA = "thinking-binding-controls-2026-08-01";
-    /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
-    private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
 
     /** 正在累积的一个内容块。 */
     private static final class Pending {
@@ -74,14 +46,10 @@ public final class ClaudeClient implements ModelClient {
     }
 
     private final AnthropicClient client;
-    private final String model;
-    private final long maxTokens;
-    private final String effort;
-    private final boolean fallbacks;
+    private final ClaudeRequest request;
     private final Duration firstChunk;
     private final Duration betweenChunks;
     private final OverflowRules overflow;
-    private final boolean strictThinking;
 
     /**
      * 模型参数。{@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题，测试用。
@@ -91,14 +59,15 @@ public final class ClaudeClient implements ModelClient {
 
     public ClaudeClient(AnthropicClient client, Settings settings) {
         this.client = client;
-        this.model = settings.model();
-        this.maxTokens = settings.maxTokens();
-        this.effort = settings.effort();
-        this.fallbacks = settings.fallbacks();
+        this.request = new ClaudeRequest(settings);
         this.firstChunk = settings.firstChunk();
         this.betweenChunks = settings.betweenChunks();
         this.overflow = settings.overflow();
-        this.strictThinking = settings.strictThinking();
+    }
+
+    @Override
+    public RequestOptions options(Prompt prompt) {
+        return request.options(prompt);
     }
 
     @Override
@@ -109,7 +78,8 @@ public final class ClaudeClient implements ModelClient {
         StreamResponse<?>[] open = new StreamResponse<?>[1];
         try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks, () -> closeQuietly(open))) {
             try {
-                StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params(prompt));
+                StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(
+                        ClaudeRequest.params(prompt, options(prompt)));
                 open[0] = stream;
                 try (stream) {
                     stream.stream().forEach(event -> {
@@ -160,7 +130,13 @@ public final class ClaudeClient implements ModelClient {
     private void apply(RawMessageStreamEvent event, Map<Long, Pending> blocks, Reply reply, StringBuilder visible,
                        ChunkListener chunks) {
         event.messageStart().ifPresent(start -> onStart(start, reply));
-        event.contentBlockStart().ifPresent(start -> blocks.put(start.index(), pending(start)));
+        event.contentBlockStart().ifPresent(start -> {
+            Pending block = pending(start);
+            blocks.put(start.index(), block);
+            if (block.kind.equals("tool_use")) {
+                chunks.onToolInput("");
+            }
+        });
         // 没有 start 就来 delta 的块按文本块处理，不让一个异常分片把整次回复变成失败。
         event.contentBlockDelta().ifPresent(delta ->
                 onDelta(delta.delta(), blocks.computeIfAbsent(delta.index(), index -> new Pending("text")), visible, chunks));
@@ -209,7 +185,10 @@ public final class ClaudeClient implements ModelClient {
             chunks.onReasoning(piece.thinking());
         });
         delta.signature().ifPresent(piece -> block.signature.append(piece.signature()));
-        delta.inputJson().ifPresent(piece -> block.text.append(piece.partialJson()));
+        delta.inputJson().ifPresent(piece -> {
+            block.text.append(piece.partialJson());
+            chunks.onToolInput(piece.partialJson());
+        });
     }
 
     private static void onMessageDelta(RawMessageDeltaEvent event, Reply reply) {
@@ -260,13 +239,13 @@ public final class ClaudeClient implements ModelClient {
                 raw.put("type", new Json.Str("thinking"));
                 raw.put("thinking", new Json.Str(block.text.toString()));
                 raw.put("signature", new Json.Str(block.signature.toString()));
-                yield new ReasoningBlock(PROVIDER, new Json.Obj(raw));
+                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw));
             }
             case "redacted_thinking" -> {
                 Map<String, Json> raw = new LinkedHashMap<>();
                 raw.put("type", new Json.Str("redacted_thinking"));
                 raw.put("data", new Json.Str(block.data));
-                yield new ReasoningBlock(PROVIDER, new Json.Obj(raw));
+                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw));
             }
             case "tool_use" -> {
                 String raw = block.text.toString();
@@ -274,131 +253,5 @@ public final class ClaudeClient implements ModelClient {
             }
             default -> new TextBlock(block.text.toString());
         };
-    }
-
-    /**
-     * 组装请求并放 prompt caching 断点。缓存层级是固定的“工具 → system → 消息”，前缀逐字节相同才命中，所以断点放在
-     * 最后一个工具定义、system 块和最后一条消息的最后一个内容块上：工具和 system 在整个运行里不变，历史只追加，
-     * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
-     */
-    private MessageCreateParams params(Prompt prompt) {
-        Prompt.Output output = prompt.output();
-        MessageCreateParams.Builder params = MessageCreateParams.builder()
-                .model(model)
-                .maxTokens(output.maxTokens() > 0 ? output.maxTokens() : maxTokens)
-                .thinking(thinking())
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
-        if (!output.toolsAllowed()) {
-            params.toolChoice(ToolChoiceNone.builder().build());
-        }
-        if (!prompt.system().isBlank()) {
-            params.systemOfTextBlockParams(List.of(
-                    TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));
-        }
-        List<ToolSpec> tools = prompt.tools();
-        for (int i = 0; i < tools.size(); i++) {
-            params.addTool(tool(tools.get(i), i == tools.size() - 1));
-        }
-        List<Message> messages = prompt.messages();
-        for (int i = 0; i < messages.size(); i++) {
-            Message message = messages.get(i);
-            List<ContentBlockParam> blocks = new ArrayList<>(message.content().stream()
-                    .map(ClaudeClient::param).filter(Objects::nonNull).toList());
-            if (blocks.isEmpty()) {
-                continue;
-            }
-            if (i == messages.size() - 1) {
-                blocks.set(blocks.size() - 1, cached(blocks.getLast()));
-            }
-            if (message.role() == Role.USER) {
-                params.addMessage(UserMessageParam.builder().contentOfContentBlockParams(blocks).build());
-            } else {
-                params.addMessage(AssistantMessageParam.builder().contentOfContentBlockParams(blocks).build());
-            }
-        }
-        List<String> betas = new ArrayList<>();
-        if (fallbacks) {
-            betas.add(FALLBACK_BETA);
-        }
-        if (strictThinking) {
-            betas.add(BINDING_BETA);
-        }
-        if (!betas.isEmpty()) {
-            params.putAdditionalHeader("anthropic-beta", String.join(",", betas));
-        }
-        if (fallbacks) {
-            params.putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
-        }
-        return params.build();
-    }
-
-    private ThinkingConfigAdaptive thinking() {
-        ThinkingConfigAdaptive.Builder thinking = ThinkingConfigAdaptive.builder().display(ThinkingConfigAdaptive.Display.SUMMARIZED);
-        if (strictThinking) {
-            thinking.putAdditionalProperty("block_binding", JsonValue.from(Map.of("prefix_mismatch_behavior", "error")));
-        }
-        return thinking.build();
-    }
-
-    private static Tool tool(ToolSpec spec, boolean last) {
-        Tool.InputSchema.Builder schema = Tool.InputSchema.builder();
-        if (spec.schema() instanceof Json.Obj object) {
-            Map<String, JsonValue> fields = new HashMap<>();
-            object.fields().forEach((key, value) -> {
-                if (!key.equals("type")) {
-                    fields.put(key, JsonValue.from(JsonText.toPlain(value)));
-                }
-            });
-            schema.putAllAdditionalProperties(fields);
-        }
-        Tool.Builder tool = Tool.builder().name(spec.name()).description(spec.description())
-                .inputSchema(schema.build()).eagerInputStreaming(true);
-        if (last) {
-            tool.cacheControl(CACHE);
-        }
-        return tool.build();
-    }
-
-    /** 只有文本和工具结果块能带缓存标记；最后一条消息总是用户消息，所以这两种就够了。 */
-    private static ContentBlockParam cached(ContentBlockParam block) {
-        if (block.isText()) {
-            return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(CACHE).build());
-        }
-        if (block.isToolResult()) {
-            return ContentBlockParam.ofToolResult(block.asToolResult().toBuilder().cacheControl(CACHE).build());
-        }
-        return block;
-    }
-
-    /** 其他供应商的推理内容和空文本不发送。 */
-    private static ContentBlockParam param(ContentBlock block) {
-        return switch (block) {
-            case TextBlock text -> text.text().isEmpty() ? null : ContentBlockParam.ofText(
-                    TextBlockParam.builder().text(text.text()).build());
-            case ReasoningBlock reasoning -> reasoningParam(reasoning);
-            case ToolCallBlock call -> {
-                ToolUseBlockParam.Input.Builder input = ToolUseBlockParam.Input.builder();
-                if (call.arguments() instanceof Json.Obj object) {
-                    object.fields().forEach((key, value) -> input.putAdditionalProperty(key, JsonValue.from(JsonText.toPlain(value))));
-                }
-                yield ContentBlockParam.ofToolUse(ToolUseBlockParam.builder()
-                        .id(call.id()).name(call.name()).input(input.build()).build());
-            }
-            case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                    .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
-        };
-    }
-
-    private static ContentBlockParam reasoningParam(ReasoningBlock reasoning) {
-        if (!reasoning.provider().equals(PROVIDER) || !(reasoning.raw() instanceof Json.Obj raw)) {
-            return null;
-        }
-        if (raw.fields().get("type") instanceof Json.Str type && type.value().equals("redacted_thinking")) {
-            return ContentBlockParam.ofRedactedThinking(RedactedThinkingBlockParam.builder()
-                    .data(((Json.Str) raw.fields().get("data")).value()).build());
-        }
-        return ContentBlockParam.ofThinking(ThinkingBlockParam.builder()
-                .thinking(((Json.Str) raw.fields().get("thinking")).value())
-                .signature(((Json.Str) raw.fields().get("signature")).value()).build());
     }
 }

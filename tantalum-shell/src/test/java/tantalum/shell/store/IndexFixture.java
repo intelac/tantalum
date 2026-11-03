@@ -90,7 +90,7 @@ final class IndexFixture {
 
     void reply(Pending pending, Instant at, TokenUsage usage) throws Exception {
         send(pending.principal, pending.session, pending.run, at,
-                new ModelReplied(pending.command, List.of(new TextBlock("ok")), StopReason.END_TURN, "m", usage));
+                new ModelReplied(pending.command, List.of(new TextBlock("ok")), StopReason.END_TURN, "m", usage, null, null, null));
     }
 
     KernelState state() {

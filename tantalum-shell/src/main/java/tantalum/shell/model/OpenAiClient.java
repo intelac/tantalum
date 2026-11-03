@@ -22,6 +22,7 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
@@ -66,6 +67,16 @@ public final class OpenAiClient implements ModelClient {
         this.betweenChunks = betweenChunks;
         this.overflow = overflow;
         this.http = HttpClient.newBuilder().connectTimeout(firstChunk).build();
+    }
+
+    /** 地址不记：可能带凭据。{@code extra} 和请求体里的流式选项一致。 */
+    @Override
+    public RequestOptions options(Prompt prompt) {
+        Map<String, Json> extra = new LinkedHashMap<>();
+        extra.put("stream", new Json.Bool(true));
+        extra.put("stream_options", new Json.Obj(Map.of("include_usage", new Json.Bool(true))));
+        return new RequestOptions(PROVIDER, model, prompt.output().maxTokens() > 0 ? prompt.output().maxTokens() : maxTokens,
+                prompt.output().toolsAllowed(), new Json.Obj(extra));
     }
 
     @Override
@@ -183,9 +194,9 @@ public final class OpenAiClient implements ModelClient {
                 if (function.hasNonNull("name")) {
                     fragments.name = function.get("name").asString();
                 }
-                if (function.hasNonNull("arguments")) {
-                    fragments.arguments.append(function.get("arguments").asString());
-                }
+                String piece = function.hasNonNull("arguments") ? function.get("arguments").asString() : "";
+                fragments.arguments.append(piece);
+                chunks.onToolInput(piece);
             }
         }
         ModelOutcome cut = ModelFailures.afterStream(text.toString(), watchdog, finishReason != null);
@@ -225,12 +236,13 @@ public final class OpenAiClient implements ModelClient {
         return new TokenUsage(Math.max(0, usage.path("prompt_tokens").asLong() - cached), usage.path("completion_tokens").asLong(), cached, 0);
     }
 
+    /** 模型、输出上限和流式选项从 {@link #options} 读，记下的就是发出的。 */
     private Map<String, Object> body(Prompt prompt) {
+        RequestOptions options = options(prompt);
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", model);
-        body.put("stream", true);
-        body.put("stream_options", Map.of("include_usage", true));
-        body.put("max_tokens", prompt.output().maxTokens() > 0 ? prompt.output().maxTokens() : maxTokens);
+        body.put("model", options.model());
+        ((Json.Obj) options.extra()).fields().forEach((key, value) -> body.put(key, JsonText.toPlain(value)));
+        body.put("max_tokens", options.maxTokens());
         List<Object> messages = new ArrayList<>();
         Map<String, Object> system = new LinkedHashMap<>();
         system.put("role", "system");
@@ -240,7 +252,7 @@ public final class OpenAiClient implements ModelClient {
         body.put("messages", messages);
         if (!prompt.tools().isEmpty()) {
             body.put("tools", prompt.tools().stream().map(OpenAiClient::tool).toList());
-            if (!prompt.output().toolsAllowed()) {
+            if (!options.toolsAllowed()) {
                 body.put("tool_choice", "none");
             }
         }

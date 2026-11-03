@@ -103,12 +103,12 @@ class TranscriptTest {
         fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(block("a3"))));
         assertTrue(fx.status(run).isEnded());
         RunId again = nextRun(block("q4"));
-        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, null, "", "429"));
+        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, null, "", "429", null, null, null));
         assertNull(fx.status(again).failure(), "waiting to retry the summary is not a run failure");
         assertEquals("AwaitingSummaryRetry", fx.status(again).phase());
         assertEquals(1, fx.items(CompactionMark.class).size(), "no new mark while retrying");
         fx.feed(again, new tantalum.value.event.TimerFired(fx.lastCommands().getFirst().id()));
-        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.INVALID_REQUEST, false, null, "", "400"));
+        fx.feed(again, new ModelFailed(fx.callModel(), FailureReason.INVALID_REQUEST, false, null, "", "400", null, null, null));
         assertTrue(fx.items(CompactionMark.class).getLast().failure().contains("400"));
         assertNull(fx.status(again).failure());
     }
@@ -187,7 +187,7 @@ class TranscriptTest {
     void interruptedReplyIsMarked() {
         RunId run = fx.start("hi");
         fx.feed(run, new Cancel(new RequestId("x")));
-        fx.feed(run, new ModelInterrupted(fx.decisions.get(1).commands().getFirst().id(), "partial an"));
+        fx.feed(run, new ModelInterrupted(fx.decisions.get(1).commands().getFirst().id(), "partial an", null, null, null));
 
         Text partial = fx.items(Text.class).getFirst();
         assertTrue(partial.interrupted());
@@ -199,7 +199,7 @@ class TranscriptTest {
     void emptyInterruptionAddsNothing() {
         RunId run = fx.start("hi");
         fx.feed(run, new Cancel(new RequestId("x")));
-        fx.feed(run, new ModelInterrupted(fx.decisions.get(1).commands().getFirst().id(), ""));
+        fx.feed(run, new ModelInterrupted(fx.decisions.get(1).commands().getFirst().id(), "", null, null, null));
 
         assertTrue(fx.items(Text.class).isEmpty());
     }
@@ -240,7 +240,7 @@ class TranscriptTest {
         assertEquals("AwaitingModel", fx.status(run).phase());
 
         fx.tick(Duration.ofSeconds(30));
-        fx.feed(run, new ModelFailed(fx.callModel(), FailureReason.REFUSAL, false, null, "", "refused"));
+        fx.feed(run, new ModelFailed(fx.callModel(), FailureReason.REFUSAL, false, null, "", "refused", null, null, null));
 
         RunStatus status = fx.status(run);
         assertEquals(FailureReason.REFUSAL, status.failure());

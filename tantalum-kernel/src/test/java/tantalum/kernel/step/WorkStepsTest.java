@@ -57,13 +57,13 @@ class WorkStepsTest {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
-        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
         assertInstanceOf(DoWork.class, loop.onlyCommand());
         return loop;
     }
 
     private static WorkDone done(LoopFixture loop, String continueText) {
-        return new WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, continueText);
+        return new WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, continueText, null);
     }
 
     @Test
@@ -159,10 +159,10 @@ class WorkStepsTest {
         for (int step = 0; step < 40 && !loop.run().isEnded(); step++) {
             Command command = loop.onlyCommand();
             switch (command) {
-                case DoWork work -> loop.feed(loop.runId(), new WorkDone(work.id(), work.workType(), work.input(), false, continueText));
+                case DoWork work -> loop.feed(loop.runId(), new WorkDone(work.id(), work.workType(), work.input(), false, continueText, null));
                 case CallModel model -> loop.feed(loop.runId(), new ModelReplied(model.id(),
-                        scripted.isEmpty() ? text("done") : scripted.poll(), StopReason.END_TURN, "m", null));
-                case RunTool tool -> loop.feed(loop.runId(), new ToolFinished(tool.id(), tool.call().id(), "ok", false));
+                        scripted.isEmpty() ? text("done") : scripted.poll(), StopReason.END_TURN, "m", null, null, null, null));
+                case RunTool tool -> loop.feed(loop.runId(), new ToolFinished(tool.id(), tool.call().id(), "ok", false, null));
                 default -> fail("unexpected command " + command);
             }
         }
@@ -280,7 +280,7 @@ class WorkStepsTest {
             }
         };
         LoopFixture loop = started(status);
-        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, null, "", "503"));
+        loop.feed(loop.runId(), new ModelFailed(loop.onlyCommandId(), FailureReason.SERVER_ERROR, true, null, "", "503", null, null, null));
         drive(loop, null);
         assertGaveUp(loop, "status", HookPoint.ON_FAILURE);
     }
