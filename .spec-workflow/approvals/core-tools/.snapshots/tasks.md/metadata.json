@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/core-tools/tasks.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T14:31:36.138Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793716296136_oimogmox5",
+      "approvalTitle": "core-tools 任务"
+    }
+  ]
+}

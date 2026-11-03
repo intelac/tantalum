@@ -44,7 +44,7 @@ public final class WorkHandler implements Handler {
         if (type == null) {
             return failed(work, "unknown work type: " + work.workType(), null);
         }
-        ToolContext context = new ToolContext(work.run().principal(), workspaces.of(work.run().principal()));
+        ToolContext context = new ToolContext(work.run().principal(), work.run().session(), workspaces.of(work.run().principal()));
         // 工作没有名额，几乎等于发出时刻；记下它是为了和模型、工具的计时一致。
         Instant startedAt = clock.instant();
         try {

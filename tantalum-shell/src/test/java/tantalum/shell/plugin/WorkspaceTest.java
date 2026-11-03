@@ -69,4 +69,41 @@ class WorkspaceTest {
         assertEquals(missing.replace("../", ""), inside);
         org.junit.jupiter.api.Assertions.assertFalse(existing.contains(temp.toString()));
     }
+
+    @Test
+    void writeResolvesNewFilesAndNewDirectories() throws Exception {
+        Path real = root.toRealPath();
+        assertEquals(real.resolve("new.txt"), workspace.resolveForWrite("new.txt"));
+        assertEquals(real.resolve("a/b/c.txt"), workspace.resolveForWrite("a/b/c.txt"));
+        assertEquals(real.resolve("inside.txt"), workspace.resolveForWrite("./inside.txt"));
+    }
+
+    @Test
+    void writeRejectsEscapesAndTheRootItself() throws Exception {
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("../new.txt"));
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("a/../../new.txt"));
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite(temp.resolve("new.txt").toString()));
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("."));
+    }
+
+    @Test
+    void writeRejectsSymlinkedDirectoriesLeadingOutside() throws Exception {
+        Files.createSymbolicLink(root.resolve("out"), temp);
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("out/new.txt"));
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("out/deeper/new.txt"));
+        Files.createSymbolicLink(root.resolve("dangling"), temp.resolve("gone"));
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("dangling"));
+    }
+
+    @Test
+    void writeFollowsSymlinksThatStayInside() throws Exception {
+        Files.createDirectory(root.resolve("real"));
+        Files.createSymbolicLink(root.resolve("alias"), root.resolve("real"));
+        assertEquals(root.toRealPath().resolve("real/new.txt"), workspace.resolveForWrite("alias/new.txt"));
+    }
+
+    @Test
+    void writeRejectsAFileUsedAsADirectory() {
+        assertThrows(IllegalArgumentException.class, () -> workspace.resolveForWrite("inside.txt/new.txt"));
+    }
 }

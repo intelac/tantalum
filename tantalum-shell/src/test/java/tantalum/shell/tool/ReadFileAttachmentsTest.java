@@ -49,7 +49,7 @@ class ReadFileAttachmentsTest {
     }
 
     private ToolOutput run(Principal who, String path) throws Exception {
-        return read.run(new ToolContext(who, new Workspace(root)), new Json.Obj(Map.of("path", new Json.Str(path))));
+        return read.run(new ToolContext(who, new tantalum.value.id.SessionId("s"), new Workspace(root)), new Json.Obj(Map.of("path", new Json.Str(path))));
     }
 
     private AttachmentRef upload(Principal who, String name, byte[] bytes) throws Exception {
@@ -127,11 +127,12 @@ class ReadFileAttachmentsTest {
         assertEquals(List.of(), List.of(Files.list(root).toArray()));
     }
 
+    /** 没有附件目录时图片不交给模型；JPEG 里有空字节，按 core-tools C4 当二进制拒绝。 */
     @Test
     void withoutAStoreTheOldBehaviourStays() throws Exception {
         Files.write(root.resolve("photo.jpg"), sample("rotated.jpg"));
-        ToolOutput output = new ReadFileTool().run(new ToolContext(ALICE, new Workspace(root)), new Json.Obj(Map.of("path", new Json.Str("photo.jpg"))));
+        ToolOutput output = new ReadFileTool().run(new ToolContext(ALICE, new tantalum.value.id.SessionId("s"), new Workspace(root)), new Json.Obj(Map.of("path", new Json.Str("photo.jpg"))));
         assertTrue(output.error());
-        assertEquals("Not a UTF-8 text file: photo.jpg", output.text());
+        assertEquals("Binary file, not shown: photo.jpg", output.text());
     }
 }

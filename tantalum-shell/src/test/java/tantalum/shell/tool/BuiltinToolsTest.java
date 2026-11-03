@@ -34,7 +34,7 @@ class BuiltinToolsTest {
         Files.createDirectory(root.resolve("sub"));
         Files.writeString(root.resolve("sub/b.cbl"), "COMPUTE TAX\n; rm -rf /tmp/x\n");
         Files.writeString(temp.resolve("secret.txt"), "COMPUTE SECRET");
-        context = new ToolContext(new Principal("t"), new Workspace(root));
+        context = new ToolContext(new Principal("t"), new tantalum.value.id.SessionId("s"), new Workspace(root));
         read = new ReadFileTool();
         grep = new GrepTool();
     }
@@ -160,12 +160,13 @@ class BuiltinToolsTest {
         }
     }
 
+    /** 1 MB 的整文件上限去掉了（core-tools C4），改成 64 MB；空字节开头的文件按二进制拒绝。 */
     @Test
-    void readEnforcesTheSizeLimitWhileReading() throws Exception {
-        Files.write(root.resolve("big.bin"), new byte[ReadFileTool.MAX_BYTES + 1]);
+    void readRejectsBinaryFiles() throws Exception {
+        Files.write(root.resolve("big.bin"), new byte[1024 * 1024 + 1]);
         ToolOutput output = read.run(context, args("path", "big.bin"));
         assertTrue(output.error());
-        assertTrue(output.text().contains("larger than"));
+        assertTrue(output.text().contains("Binary file"));
     }
 
     @Test

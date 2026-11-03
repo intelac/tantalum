@@ -49,9 +49,13 @@ class CompactionStressTest {
     /** 250 次提问加 250 次回复。 */
     private static final int TURNS = 250;
     private static final int OTHER_TURNS = 20;
-    /** 窗口 4000、预留 500：阈值 3500；保留 600。 */
+    /**
+     * 窗口 5000、预留 500：阈值 4500；保留 600。工具说明也计入估算：core-tools 加了 4 个内置工具后窗口从 4000 加到 5000，
+     * 让另一个用户的短会话仍不触发压缩。
+     */
+    private static final int THRESHOLD = 4500;
     private static final String[] SETTINGS = {
-        "--tantalum.claude.context-window=4000",
+        "--tantalum.claude.context-window=5000",
         "--tantalum.claude.max-tokens=500",
         "--tantalum.compaction.reserve-tokens=500",
         "--tantalum.compaction.keep-recent-tokens=600",
@@ -181,7 +185,7 @@ class CompactionStressTest {
             } else {
                 maxMessages = Math.max(maxMessages, prompt.messages().size());
                 long size = TokenEstimate.ofMessages(prompt.messages());
-                assertTrue(size < 3500 + 200, "a normal call carried " + size + " estimated tokens");
+                assertTrue(size < THRESHOLD + 200, "a normal call carried " + size + " estimated tokens");
             }
         }
         assertEquals(compactions, summaryCalls);

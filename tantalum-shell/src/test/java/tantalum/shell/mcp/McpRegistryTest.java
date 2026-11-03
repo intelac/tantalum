@@ -87,7 +87,7 @@ class McpRegistryTest {
         assertEquals("mcp:s", search.server());
         assertEquals(2, search.serverConcurrency());
         assertTrue(search.schema() instanceof Json.Obj);
-        var context = new ToolContext(new Principal("u"), new tantalum.shell.plugin.Workspace(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))));
+        var context = new ToolContext(new Principal("u"), new tantalum.value.id.SessionId("s"), new tantalum.shell.plugin.Workspace(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))));
         assertEquals("found", search.run(context, new Json.Obj(java.util.Map.of())).text());
         assertEquals(List.of("search"), server.calls);
     }

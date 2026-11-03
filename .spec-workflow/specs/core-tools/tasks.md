@@ -13,55 +13,55 @@
 
 ## 阶段 1：文件工具
 
-- [ ] 1. `TextFiles`
+- [x] 1. `TextFiles`
   - File: shell/tool/TextFiles.java（新）
   - 前 8 KB 判断二进制；严格 UTF-8 逐行读（不整读）；去 `\r`；换行风格判断（前 4096 字符里 CRLF 多就算 CRLF）；BOM 识别；原子写（临时文件 600、`fsync`、改名，已有文件保留原权限）
   - 测试：二进制、非 UTF-8、多字节字符跨缓冲区边界、CRLF 和 LF 判断、BOM 往返、原子写后权限、写失败不留临时文件
   - _Requirements: C3, C4, C6, C7_
 
-- [ ] 2. `Workspace` 写路径校验
+- [x] 2. `Workspace` 写路径校验
   - File: shell/plugin/Workspace.java
   - 新方法：目标不存在时按“最近一个已存在的上级目录”校验在工作目录里；符号链接越界拒绝；`memory/` 下拒绝
   - 测试：新文件、新的多级目录、`..` 越界、指向外面的符号链接目录、`memory/x.md`
   - _Requirements: C11, 2.4_
 
-- [ ] 3. `read_file` 窗口读取
+- [x] 3. `read_file` 窗口读取
   - File: shell/tool/ReadFileTool.java
   - `offset`、`limit`；2000 行或 50 KB；长行截断说明；续读说明；64 MB 以上拒绝提示用 `grep`；`offset` 超出报错；附件路径照旧
   - 测试：需求 1 的每条验收标准；空文件；最后一行没有换行；刚好 2000 行
   - _Requirements: 1, C2, C3, C4_
 
-- [ ] 4. `Observations` 和 `ToolContext.session`
+- [x] 4. `Observations` 和 `ToolContext.session`
   - File: shell/tool/Observations.java（新）、shell/plugin/ToolContext.java、shell/handler/ToolHandler.java
   - 按 `(用户, 会话, 真实路径)` 记版本（大小、修改时间、文件键）；每文件锁；会话移出内存时清掉
   - 测试：没读过、读过后被改、自己写完接着改、两个线程同时改只有一个成功、不同用户的记录互不相干
   - _Requirements: C5, C8, 5_
 
-- [ ] 5. `write_file`
+- [x] 5. `write_file`
   - File: shell/tool/WriteFileTool.java（新）
   - 建上级目录（700）；10 MB 上限；覆盖已有文件要先读过；结果文字照设计第 3 节
   - 测试：需求 2 的每条验收标准；覆盖没读过的文件被拒；新文件权限 600
   - _Requirements: 2, C5, C6_
 
-- [ ] 6. `edit_file`
+- [x] 6. `edit_file`
   - File: shell/tool/EditFileTool.java（新）
   - 唯一匹配；`replace_all`；找不到、多次、空、相同各自报错；CRLF 和 BOM 保留；先读后写
   - 测试：需求 3 的每条验收标准；CRLF 文件改完仍是 CRLF；BOM 保留；参数里带 CRLF 也能匹配
   - _Requirements: 3, C5, C7_
 
-- [ ] 7. `list_dir`、`find_files`
+- [x] 7. `list_dir`、`find_files`
   - File: shell/tool/{ListDirTool,FindFilesTool}.java（新）
   - 照 C9、C10；跳过的目录；上限和总数说明；相对路径
   - 测试：需求 4 的每条验收标准；不带 `/` 的模式匹配任意深度；符号链接不跟出工作目录
   - _Requirements: 4, C9, C10_
 
-- [ ] 8. 注册和限制
+- [x] 8. 注册和限制
   - File: shell/boot/Engine.java、tantalum-examples/.../ReadOnlyHook.java
   - 共用工作目录模式不注册写工具；`ReadOnlyHook` 加上新的写工具名
   - 测试：共用模式下工具列表没有写工具；`PolicyHooksTest` 覆盖新名字
   - _Requirements: C11, 安全_
 
-- [ ] 9. 阶段 1 收尾
+- [x] 9. 阶段 1 收尾
   - 性能：64 MB 文件读一个窗口 1 秒内；一万个文件的目录树 `find_files` 1 秒内；全量回归；变异检查（去掉先读后写的版本检查；去掉 `memory/` 拒绝）；提交；汇报
   - _Requirements: 非功能“性能”_
 

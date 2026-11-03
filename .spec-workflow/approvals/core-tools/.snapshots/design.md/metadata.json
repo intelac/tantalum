@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/core-tools/design.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T14:25:34.905Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793715934902_2vhurcybc",
+      "approvalTitle": "core-tools 设计"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-03T14:30:19.892Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793715934902_2vhurcybc",
+      "approvalTitle": "core-tools 设计"
+    }
+  ]
+}

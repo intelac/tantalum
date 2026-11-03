@@ -112,23 +112,6 @@ class ClaudeScenarioTest {
         return copy;
     }
 
-    /** 一个会写文件的工具：只读策略应当拦住它，所以它一旦真的执行就是失败。 */
-    private static Tool writeFile(AtomicInteger executions) {
-        Map<String, Json> properties = new LinkedHashMap<>();
-        properties.put("path", new Json.Obj(Map.of("type", new Json.Str("string"))));
-        properties.put("content", new Json.Obj(Map.of("type", new Json.Str("string"))));
-        Json schema = new Json.Obj(Map.of("type", new Json.Str("object"), "properties", new Json.Obj(properties)));
-        return new Tool() {
-            @Override public String name() { return "write_file"; }
-            @Override public String description() { return "Write content to a file in the workspace. path is relative to the workspace."; }
-            @Override public Json schema() { return schema; }
-            @Override public ToolOutput run(ToolContext context, Json arguments) {
-                executions.incrementAndGet();
-                return ToolOutput.ok("written");
-            }
-        };
-    }
-
     private Path workspace(String user) throws Exception {
         Path workspace = temp.resolve("workspace");
         Files.createDirectories(workspace.resolve(user));
@@ -294,10 +277,8 @@ class ClaudeScenarioTest {
         Files.writeString(workspace.resolve("hooks/notes.txt"), "Monday: rain\nTuesday: wind\nWednesday: ZEBRA sighting at the river\nThursday: sun\nFriday: fog\n");
         Path data = temp.resolve("data-hooks");
         RecordingHook recording = new RecordingHook();
-        AtomicInteger writes = new AtomicInteger();
         // 记录钩子注册在最前面：链在第一个 Stop / NeedWork 处短路，否则它看不到被拦下的调用。
         Consumer<GenericApplicationContext> plugins = context -> {
-            context.registerBean("writeFile", Tool.class, () -> writeFile(writes));
             context.registerBean("recording", KernelHook.class, () -> recording);
             context.registerBean("readOnly", KernelHook.class, () -> new ReadOnlyHook(Set.of("read_file", "grep")));
             context.registerBean("citationCheck", KernelHook.class, CitationCheckHook::new);
@@ -331,7 +312,8 @@ class ClaudeScenarioTest {
         assertTrue(replies.stream().filter(reply -> reply.stop() == StopReason.TOOL_USE).count() >= 2,
                 "expected several tool rounds in one run");
 
-        assertEquals(0, writes.get(), "the read-only hook must stop write_file before it runs");
+        // 内置的 write_file 写新文件不用先读，钩子没拦住就会留下 summary.txt
+        assertFalse(Files.exists(workspace.resolve("hooks/summary.txt")), "the read-only hook must stop write_file before it runs");
         assertTrue(replies.stream().flatMap(reply -> reply.content().stream()).anyMatch(block ->
                 block instanceof ToolCallBlock call && call.name().equals("write_file")), "the model never tried write_file");
         assertTrue(turnBodies.stream().anyMatch(body -> body.contains("read-only policy blocks write_file")),
