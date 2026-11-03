@@ -38,7 +38,7 @@ class FollowUpTest {
         loop.feed(null, followUp("a"));
         loop.feed(null, followUp("b"));
         assertEquals(first, loop.runId());
-        assertEquals(List.of("a", "b"), loop.session().followUps());
+        assertEquals(List.of(Message.user("a"), Message.user("b")), loop.session().followUps());
 
         loop.feed(first, new ContextAssembled(pending, "s", List.of(), null, List.of()));
         loop.feed(first, new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
@@ -46,7 +46,7 @@ class FollowUpTest {
         assertNotEquals(first, loop.runId());
         assertEquals("AwaitingContext", loop.phase());
         assertInstanceOf(AssembleContext.class, loop.onlyCommand());
-        assertEquals(List.of("b"), loop.session().followUps());
+        assertEquals(List.of(Message.user("b")), loop.session().followUps());
         assertEquals(Message.user("a"), loop.session().messages().getLast());
     }
 

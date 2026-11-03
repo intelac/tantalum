@@ -5,8 +5,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import tantalum.shell.json.JsonText;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
@@ -23,6 +27,7 @@ import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.event.WorkDone;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
@@ -50,9 +55,29 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = TextBlock.class, name = "text"),
         @JsonSubTypes.Type(value = ReasoningBlock.class, name = "reasoning"),
         @JsonSubTypes.Type(value = ToolCallBlock.class, name = "toolCall"),
-        @JsonSubTypes.Type(value = ToolResultBlock.class, name = "toolResult")
+        @JsonSubTypes.Type(value = ToolResultBlock.class, name = "toolResult"),
+        @JsonSubTypes.Type(value = AttachmentBlock.class, name = "attachment")
     })
     private interface ContentBlockMixin {}
+
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = ImageRef.class, name = "image"),
+        @JsonSubTypes.Type(value = FileRef.class, name = "file")
+    })
+    private interface AttachmentRefMixin {}
+
+    /** 没有附件时不写出，和加字段之前的行逐字节相同；旧行读出来是空列表。 */
+    private interface AttachmentsMixin {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<AttachmentRef> attachments();
+    }
+
+    /** 同上，工具结果里的图片。 */
+    private interface ImagesMixin {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<ImageRef> images();
+    }
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
@@ -72,6 +97,12 @@ public final class EventCodec {
                 .addModule(module)
                 .addMixIn(ContentBlock.class, ContentBlockMixin.class)
                 .addMixIn(OwnerRef.class, OwnerRefMixin.class)
+                .addMixIn(AttachmentRef.class, AttachmentRefMixin.class)
+                .addMixIn(UserPrompt.class, AttachmentsMixin.class)
+                .addMixIn(SteerSubmitted.class, AttachmentsMixin.class)
+                .addMixIn(FollowUpSubmitted.class, AttachmentsMixin.class)
+                .addMixIn(ToolFinished.class, ImagesMixin.class)
+                .addMixIn(ToolResultBlock.class, ImagesMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))

@@ -25,22 +25,23 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), event.text());
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments()));
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
-        return submit(context, new OwnerRef.OfSession(context.envelope().session()), event.text());
+        return submit(context, new OwnerRef.OfSession(context.envelope().session()),
+                Message.user(event.text(), event.attachments()));
     }
 
-    private static Decision submit(StepContext context, OwnerRef owner, String text) {
+    private static Decision submit(StepContext context, OwnerRef owner, Message message) {
         Outcome out = new Outcome(context);
         if (context.run() == null || context.run().isEnded()) {
-            startRun(out, owner, text);
+            startRun(out, owner, message);
         } else {
             SessionState session = out.session(context.run().ref());
-            List<String> queued = new ArrayList<>(session.followUps());
-            queued.add(text);
+            List<Message> queued = new ArrayList<>(session.followUps());
+            queued.add(message);
             out.put(session.withFollowUps(queued));
         }
         return out.decision();
@@ -50,24 +51,25 @@ public final class SubmitSteps {
         SteerSubmitted event = (SteerSubmitted) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
+        Message message = Message.user(event.text(), event.attachments());
         if (run == null || run.isEnded()) {
-            startRun(out, new OwnerRef.OfSession(context.envelope().session()), event.text());
+            startRun(out, new OwnerRef.OfSession(context.envelope().session()), message);
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());
-            steers.add(Message.user(event.text()));
+            steers.add(message);
             out.put(run.withPendingSteers(steers));
         }
         return out.decision();
     }
 
     /** 新运行：追加用户消息，请求组装上下文。 */
-    static void startRun(Outcome out, OwnerRef owner, String text) {
+    static void startRun(Outcome out, OwnerRef owner, Message message) {
         EventEnvelope envelope = out.envelope;
         SessionState session = out.state().sessions().get(envelope.session());
         if (session == null) {
             session = SessionState.start(envelope.session(), envelope.principal());
         }
-        RunState run = newRun(out, session.append(Message.user(text)), owner);
+        RunState run = newRun(out, session.append(message), owner);
         CommandId id = out.nextCommandId();
         out.emit(new AssembleContext(id, run.ref()));
         out.await(run, ContextSteps.AWAITING_CONTEXT, Set.of(id));

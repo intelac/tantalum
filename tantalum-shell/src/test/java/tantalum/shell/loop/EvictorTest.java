@@ -17,6 +17,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.Message;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
 
@@ -104,7 +105,7 @@ class EvictorTest {
     @Test
     void aSessionWithAnActiveRunOrQueuedSubmissionStays() {
         Evictor evictor = evictor(NONE, 1000);
-        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).withFollowUps(List.of("next")));
+        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).withFollowUps(List.of(Message.user("next"))));
         touch(evictor, A);
         touch(evictor, B);
         KernelState after = evictor.sweep(state);

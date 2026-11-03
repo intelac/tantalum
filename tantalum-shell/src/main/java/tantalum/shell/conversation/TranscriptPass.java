@@ -13,6 +13,7 @@ import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.shell.model.Reasoning;
 import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
@@ -29,6 +30,7 @@ import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
@@ -68,9 +70,9 @@ final class TranscriptPass {
     void run() {
         Event event = envelope.event();
         switch (event) {
-            case UserPrompt prompt -> submission(prompt.text(), false);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), false);
-            case SteerSubmitted steer -> submission(steer.text(), true);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), false);
+            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), false);
+            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), true);
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -129,17 +131,17 @@ final class TranscriptPass {
     }
 
     /** 用户提交：直接开始运行、插进当前运行，或排队。 */
-    private void submission(String text, boolean steer) {
+    private void submission(String text, List<AttachmentRef> attachments, boolean steer) {
         String id = TranscriptItem.id(envelope.seq(), 0);
         RunId fresh = RunId.of(session, envelope.seq());
         SessionState current = state.sessions().get(session);
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
-            put(new UserMessage(id, session, fresh, at, text, false));
+            put(new UserMessage(id, session, fresh, at, text, attachments, false));
         } else if (steer) {
-            put(new UserMessage(id, session, current == null ? null : current.activeRun(), at, text, false));
+            put(new UserMessage(id, session, current == null ? null : current.activeRun(), at, text, attachments, false));
         } else {
-            put(new UserMessage(id, session, null, at, text, true));
+            put(new UserMessage(id, session, null, at, text, attachments, true));
             conversation.queued.addLast(id);
         }
     }
@@ -161,6 +163,7 @@ final class TranscriptPass {
                     conversation.stepByCall.put(call.id(), id);
                 }
                 case ToolResultBlock ignored -> { }
+                case AttachmentBlock ignored -> { } // 模型的回复里没有附件，附件只在用户消息里
             }
         }
     }

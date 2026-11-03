@@ -1,0 +1,236 @@
+# items
+{"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"what is this?","attachments":[{"kind":"image","id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"photo.jpg","mediaType":"image/jpeg","bytes":1500000,"width":2048,"height":1536,"sourceWidth":4000,"sourceHeight":3000},{"kind":"file","id":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"report.pdf","mediaType":"application/pdf","bytes":90000,"pages":3}],"queued":false}
+{"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:05Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"user","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"also this","attachments":[{"kind":"file","id":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","name":"notes.txt","mediaType":"text/plain","bytes":12}],"queued":false}
+{"kind":"user","id":"3.0","session":"s","run":"s_5","at":"2026-10-31T00:00:03Z","text":"","attachments":[{"kind":"image","id":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","name":"sketch.png","mediaType":"image/png","bytes":2000,"width":40,"height":30}],"queued":false}
+{"kind":"text","id":"4.0","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"a photo and a report","interrupted":false,"truncated":false}
+{"kind":"text","id":"5.0","session":"s","run":"s_0","at":"2026-10-31T00:00:05Z","text":"and the notes","interrupted":false,"truncated":false}
+{"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"text","id":"7.0","session":"s","run":"s_5","at":"2026-10-31T00:00:07Z","text":"a sketch","interrupted":false,"truncated":false}
+# item pushes
+0.0 item {"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"what is this?","attachments":[{"kind":"image","id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"photo.jpg","mediaType":"image/jpeg","bytes":1500000,"width":2048,"height":1536,"sourceWidth":4000,"sourceHeight":3000},{"kind":"file","id":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"report.pdf","mediaType":"application/pdf","bytes":90000,"pages":3}],"queued":false}
+0.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:00Z","phase":"AwaitingContext"}
+1.0 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:01Z","phase":"AwaitingModel"}
+2.0 item {"kind":"user","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"also this","attachments":[{"kind":"file","id":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","name":"notes.txt","mediaType":"text/plain","bytes":12}],"queued":false}
+3.0 item {"kind":"user","id":"3.0","session":"s","at":"2026-10-31T00:00:03Z","text":"","attachments":[{"kind":"image","id":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","name":"sketch.png","mediaType":"image/png","bytes":2000,"width":40,"height":30}],"queued":true}
+4.0 item {"kind":"text","id":"4.0","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"a photo and a report","interrupted":false,"truncated":false}
+5.0 item {"kind":"text","id":"5.0","session":"s","run":"s_0","at":"2026-10-31T00:00:05Z","text":"and the notes","interrupted":false,"truncated":false}
+5.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:05Z","phase":"Ended","endReason":"COMPLETED"}
+5.2 item {"kind":"user","id":"3.0","session":"s","run":"s_5","at":"2026-10-31T00:00:03Z","text":"","attachments":[{"kind":"image","id":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","name":"sketch.png","mediaType":"image/png","bytes":2000,"width":40,"height":30}],"queued":false}
+5.3 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:05Z","phase":"AwaitingContext"}
+6.0 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:06Z","phase":"AwaitingModel"}
+7.0 item {"kind":"text","id":"7.0","session":"s","run":"s_5","at":"2026-10-31T00:00:07Z","text":"a sketch","interrupted":false,"truncated":false}
+7.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+# trace
+{
+  "seq" : 7,
+  "records" : [ {
+    "kind" : "run",
+    "id" : "run:s_0",
+    "pos" : "0.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:05Z",
+    "trigger" : "PROMPT",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:0",
+    "pos" : "0.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:00Z",
+    "mode" : "PROMPT",
+    "text" : "what is this?",
+    "source" : {
+      "type" : "user"
+    },
+    "attachments" : [ {
+      "kind" : "image",
+      "id" : "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "name" : "photo.jpg",
+      "mediaType" : "image/jpeg",
+      "bytes" : 1500000,
+      "width" : 2048,
+      "height" : 1536,
+      "sourceWidth" : 4000,
+      "sourceHeight" : 3000
+    }, {
+      "kind" : "file",
+      "id" : "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "name" : "report.pdf",
+      "mediaType" : "application/pdf",
+      "bytes" : 90000,
+      "pages" : 3
+    } ]
+  }, {
+    "kind" : "system",
+    "id" : "s:1",
+    "pos" : "1.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:01Z",
+    "initial" : true,
+    "systemChars" : 3,
+    "segments" : [ {
+      "chars" : 3,
+      "source" : {
+        "type" : "context"
+      }
+    } ],
+    "added" : [ "read_file" ],
+    "removed" : [ ],
+    "toolCount" : 1,
+    "call" : "s_1-0"
+  }, {
+    "kind" : "request",
+    "id" : "r:s_1-0",
+    "pos" : "1.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:04Z",
+    "number" : 1,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_1-0",
+      "issuedAt" : "2026-10-31T00:00:01Z",
+      "endedAt" : "2026-10-31T00:00:04Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "a photo and a report"
+  }, {
+    "kind" : "user",
+    "id" : "u:2",
+    "pos" : "2.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 2,
+    "at" : "2026-10-31T00:00:02Z",
+    "end" : "2026-10-31T00:00:02Z",
+    "mode" : "STEER",
+    "text" : "also this",
+    "source" : {
+      "type" : "user"
+    },
+    "attachments" : [ {
+      "kind" : "file",
+      "id" : "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "name" : "notes.txt",
+      "mediaType" : "text/plain",
+      "bytes" : 12
+    } ]
+  }, {
+    "kind" : "request",
+    "id" : "r:s_4-0",
+    "pos" : "4.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 2,
+    "at" : "2026-10-31T00:00:04Z",
+    "end" : "2026-10-31T00:00:05Z",
+    "number" : 2,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_4-0",
+      "issuedAt" : "2026-10-31T00:00:04Z",
+      "endedAt" : "2026-10-31T00:00:05Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "and the notes"
+  }, {
+    "kind" : "run",
+    "id" : "run:s_5",
+    "pos" : "5.0",
+    "run" : "s_5",
+    "turn" : 2,
+    "at" : "2026-10-31T00:00:05Z",
+    "end" : "2026-10-31T00:00:07Z",
+    "trigger" : "FOLLOW_UP",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:3",
+    "pos" : "5.1",
+    "run" : "s_5",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:03Z",
+    "end" : "2026-10-31T00:00:03Z",
+    "mode" : "FOLLOW_UP",
+    "text" : "",
+    "source" : {
+      "type" : "user"
+    },
+    "attachments" : [ {
+      "kind" : "image",
+      "id" : "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "name" : "sketch.png",
+      "mediaType" : "image/png",
+      "bytes" : 2000,
+      "width" : 40,
+      "height" : 30
+    } ]
+  }, {
+    "kind" : "request",
+    "id" : "r:s_6-0",
+    "pos" : "6.0",
+    "run" : "s_5",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:06Z",
+    "end" : "2026-10-31T00:00:07Z",
+    "number" : 3,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_6-0",
+      "issuedAt" : "2026-10-31T00:00:06Z",
+      "endedAt" : "2026-10-31T00:00:07Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "a sketch"
+  } ],
+  "before" : 0,
+  "hasMore" : false
+}

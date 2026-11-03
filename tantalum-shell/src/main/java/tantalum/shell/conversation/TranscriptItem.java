@@ -1,10 +1,13 @@
 package tantalum.shell.conversation;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
@@ -44,8 +47,12 @@ public sealed interface TranscriptItem {
         return seq + "." + index;
     }
 
-    /** 用户的提交。运行中提交的 {@code follow-up} 先排队，运行开始后 {@code queued} 变为 false。 */
-    record UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued)
+    /**
+     * 用户的提交。运行中提交的 {@code follow-up} 先排队，运行开始后 {@code queued} 变为 false。
+     * {@code attachments} 按上传顺序；没有时不写出，接口和推送的格式和以前相同。
+     */
+    record UserMessage(String id, SessionId session, RunId run, Instant at, String text,
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued)
             implements TranscriptItem {
 
         public UserMessage {
@@ -53,10 +60,15 @@ public sealed interface TranscriptItem {
             Objects.requireNonNull(session, "session");
             Objects.requireNonNull(at, "at");
             Objects.requireNonNull(text, "text");
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+
+        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued) {
+            this(id, session, run, at, text, List.of(), queued);
         }
 
         public UserMessage started(RunId startedRun) {
-            return new UserMessage(id, session, startedRun, at, text, false);
+            return new UserMessage(id, session, startedRun, at, text, attachments, false);
         }
     }
 

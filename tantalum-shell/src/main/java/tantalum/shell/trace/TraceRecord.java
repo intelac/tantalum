@@ -1,11 +1,13 @@
 package tantalum.shell.trace;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
@@ -102,12 +104,22 @@ public sealed interface TraceRecord {
     }
 
     /** 用户输入或插件续写。 */
-    record UserInput(Head head, Mode mode, String text, Source source) implements TraceRecord {
+    /** {@code attachments} 按上传顺序；没有时不写出。 */
+    record UserInput(Head head, Mode mode, String text, Source source,
+                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments) implements TraceRecord {
         public enum Mode { PROMPT, FOLLOW_UP, STEER, CONTINUE }
+
+        public UserInput {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+
+        public UserInput(Head head, Mode mode, String text, Source source) {
+            this(head, mode, text, source, List.of());
+        }
 
         @Override
         public UserInput withHead(Head newHead) {
-            return new UserInput(newHead, mode, text, source);
+            return new UserInput(newHead, mode, text, source, attachments);
         }
     }
 
@@ -142,8 +154,14 @@ public sealed interface TraceRecord {
      */
     record ModelRequest(Head head, int number, Purpose purpose, Status status, List<Attempt> attempts, int maxAttempts,
                         String provider, String actualModel, StopReason stop, int toolCalls, TokenUsage usage, TokenUsage total,
-                        String text, String thinking, String partial, RequestOptions options, String failure) implements TraceRecord {
+                        String text, String thinking, String partial, RequestOptions options, String failure,
+                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> omittedImages) implements TraceRecord {
         public enum Purpose { NORMAL, SUMMARY }
+
+        /** {@code omittedImages}：这次请求里因超出图片预算省略的附件 ID（需求 5.7），没有时不写出。 */
+        public ModelRequest {
+            omittedImages = omittedImages == null ? List.of() : List.copyOf(omittedImages);
+        }
 
         /** 等待中含流式和重试等待；中断显示为失败，部分文字可看。 */
         public enum Status { WAITING, DONE, FAILED, INTERRUPTED }
@@ -151,7 +169,7 @@ public sealed interface TraceRecord {
         @Override
         public ModelRequest withHead(Head newHead) {
             return new ModelRequest(newHead, number, purpose, status, attempts, maxAttempts, provider, actualModel, stop, toolCalls,
-                    usage, total, text, thinking, partial, options, failure);
+                    usage, total, text, thinking, partial, options, failure, omittedImages);
         }
 
         public Attempt last() {

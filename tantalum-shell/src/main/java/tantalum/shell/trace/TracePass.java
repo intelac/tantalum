@@ -14,6 +14,7 @@ import tantalum.shell.trace.TraceRecord.RunHead.Trigger;
 import tantalum.shell.trace.TraceRecord.Source;
 import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.shell.trace.TraceRecord.UserInput.Mode;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
@@ -88,9 +89,9 @@ final class TracePass {
 
     void run() {
         switch (envelope.event()) {
-            case UserPrompt prompt -> submission(prompt.text(), Mode.PROMPT);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), Mode.FOLLOW_UP);
-            case SteerSubmitted steer -> submission(steer.text(), Mode.STEER);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), Mode.PROMPT);
+            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), Mode.FOLLOW_UP);
+            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), Mode.STEER);
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);
@@ -213,7 +214,7 @@ final class TracePass {
             Queued queued = book.queued.pollFirst();
             Place first = pending(run);
             add(new UserInput(head("u:" + queued.seq(), run, first, queued.at()).ended(queued.at()), queued.mode(), queued.text(),
-                    Source.USER), first, false);
+                    Source.USER, queued.attachments()), first, false);
         }
         return track;
     }
@@ -276,23 +277,23 @@ final class TracePass {
     // ---- 用户 ----
 
     /** 用户提交：直接开始运行、插进当前运行，或排队到运行开始时再记。 */
-    private void submission(String text, Mode mode) {
+    private void submission(String text, List<AttachmentRef> attachments, Mode mode) {
         RunId fresh = RunId.of(session, seq);
         SessionState earlier = before.sessions().get(session);
         SessionState after = state.sessions().get(session);
         if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
             track(fresh);
-            user(fresh, mode, text, Source.USER);
+            user(fresh, mode, text, Source.USER, attachments);
         } else if (mode == Mode.STEER && activeRun() != null) {
-            user(activeRun(), mode, text, Source.USER);
+            user(activeRun(), mode, text, Source.USER, attachments);
         } else if (after != null && after.followUps().size() > (earlier == null ? 0 : earlier.followUps().size())) {
-            book.queued.addLast(new Queued(seq, at, text, mode));
+            book.queued.addLast(new Queued(seq, at, text, mode, attachments));
         }
     }
 
-    void user(RunId run, Mode mode, String text, Source source) {
+    void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments) {
         Place place = pending(run);
-        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source), place, false);
+        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments), place, false);
     }
 
     /** 运行标题的 ID，和对话页运行状态条目的 ID 相同。 */

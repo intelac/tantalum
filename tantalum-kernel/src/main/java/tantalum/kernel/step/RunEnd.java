@@ -69,7 +69,7 @@ public final class RunEnd {
         SessionState session = out.session(run.ref()).endRun();
         out.put(session);
         if (!session.followUps().isEmpty()) {
-            String next = session.followUps().getFirst();
+            Message next = session.followUps().getFirst();
             out.put(session.withFollowUps(session.followUps().subList(1, session.followUps().size())));
             SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next);
         }

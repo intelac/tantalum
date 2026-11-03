@@ -91,7 +91,7 @@ final class TraceRequests {
         } else {
             String id = "r:" + call.id().value();
             pass.add(new ModelRequest(pass.head(id, run, place, pass.at), ++pass.book.requests, purpose, Status.WAITING,
-                    List.of(attempt), 1 + RetrySteps.MAX_RETRIES, null, null, null, 0, null, null, null, null, null, null, null),
+                    List.of(attempt), 1 + RetrySteps.MAX_RETRIES, null, null, null, 0, null, null, null, null, null, null, null, List.of()),
                     place, true);
             track.lastRequest = id;
             track.lastPurpose = purpose;
@@ -148,7 +148,7 @@ final class TraceRequests {
         // 重试成功后请求是完成：之前失败的原因和部分文字只留在各次尝试里，不改变请求现在的状态。
         ModelRequest done = new ModelRequest(request.head().ended(pass.at), request.number(), request.purpose(), Status.DONE,
                 replaced(request, attempt), request.maxAttempts(), options == null ? null : options.provider(), reply.actualModel(),
-                reply.stop(), calls, reply.usage(), pass.book.total, text, thinking, null, options, null);
+                reply.stop(), calls, reply.usage(), pass.book.total, text, thinking, null, options, null, request.omittedImages());
         pass.put(done, false);
         if (request.purpose() == Purpose.NORMAL) {
             pass.tools.created(reply, done);
@@ -265,6 +265,6 @@ final class TraceRequests {
         RequestOptions kept = options == null ? request.options() : options;
         return new ModelRequest(request.head(), request.number(), request.purpose(), status, List.copyOf(attempts), request.maxAttempts(),
                 kept == null ? null : kept.provider(), request.actualModel(), request.stop(), request.toolCalls(), request.usage(),
-                request.total(), request.text(), request.thinking(), partial, kept, failure);
+                request.total(), request.text(), request.thinking(), partial, kept, failure, request.omittedImages());
     }
 }

@@ -35,6 +35,11 @@ import tantalum.shell.store.UsageLedger;
 import tantalum.shell.trace.Trace;
 import tantalum.shell.trace.TraceJson;
 import tantalum.shell.trace.TraceRecord;
+import tantalum.value.state.OwnerRef;
+import tantalum.value.event.UserPrompt;
+import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.attachment.ImageRef;
+import tantalum.value.attachment.FileRef;
 import tantalum.value.command.DoWork;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
@@ -337,6 +342,81 @@ class WireFormatTest {
             assertTrue(coldLoadAt > 0 && merged.values().stream().anyMatch(record -> record.id().startsWith("u:")
                     && record.head().step() != null && record.head().step() == 1 && record instanceof TraceRecord.UserInput user
                     && user.mode() == TraceRecord.UserInput.Mode.STEER), "the steer moved to the retried step across the cold load");
+            return null;
+        });
+    }
+
+    // ---- 附件（attachments 任务 11）：attachments.txt，另查“实时 = 回放” ----
+
+    private static final ImageRef PHOTO = new ImageRef("sha256:" + "a".repeat(64), "photo.jpg", "image/jpeg", 1_500_000, 2048, 1536, 4000, 3000);
+    private static final FileRef REPORT = new FileRef("sha256:" + "b".repeat(64), "report.pdf", "application/pdf", 90_000, 3);
+    private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);
+    private static final ImageRef SKETCH = new ImageRef("sha256:" + "d".repeat(64), "sketch.png", "image/png", 2_000, 40, 30);
+
+    /** 不压缩：图片和 PDF 的估算远超上面那组设置的窗口。 */
+    private static void assembledWithoutCompaction(TranscriptFixture fx, RunId run) {
+        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(READ), null, List.of()));
+    }
+
+    /** 提问带图片和 PDF；运行中插话带文件；排队的提交只有图片、没有文字，运行结束后开下一轮。 */
+    private TranscriptFixture attachmentScenario() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of());
+        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
+                "what is this?", List.of(PHOTO, REPORT)));
+        RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWithoutCompaction(fx, first);
+        fx.feed(first, new SteerSubmitted(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
+        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
+        fx.feed(first, fx.reply(text("a photo and a report")));
+        fx.feed(first, fx.reply(text("and the notes"))); // 插话让运行多调一次模型，这次才结束
+        RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWithoutCompaction(fx, second);
+        fx.feed(second, fx.reply(text("a sketch")));
+        return fx;
+    }
+
+    @Test
+    void attachmentsInItemsPushesAndTrace(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = attachmentScenario();
+        StringBuilder out = new StringBuilder("# items\n");
+        for (TranscriptItem item : fx.items()) {
+            out.append(codec.mapper().writeValueAsString(ItemJson.toMap(codec.mapper(), item))).append('\n');
+        }
+        out.append("# item pushes\n");
+        for (TranscriptFixture.Change change : fx.changes) {
+            SseMessage message = SseHub.itemMessage(codec.mapper(), change.seq(), change.index(), change.item());
+            out.append(message.id()).append(' ').append(message.event()).append(' ').append(message.data()).append('\n');
+        }
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+                .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
+        out.append("# trace\n").append(pageJson(page));
+        check("attachments.txt", out.toString());
+    }
+
+    @Test
+    void attachmentRecordsPushedLiveEqualTheReplayedPage(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = attachmentScenario();
+        Map<String, String> pushed = new java.util.LinkedHashMap<>();
+        Map<String, TraceRecord> merged = new java.util.LinkedHashMap<>();
+        for (SseMessage message : livePushes(fx)) {
+            JsonNode data = codec.mapper().readTree(message.data());
+            pushed.put(data.get("id").asString(), message.data());
+        }
+        Trace live = new Trace();
+        for (int i = 0; i < fx.envelopes.size(); i++) {
+            for (TraceRecord record : live.apply(fx.envelopes.get(i), fx.befores.get(i), fx.decisions.get(i))) {
+                merged.put(record.id(), record);
+            }
+        }
+        withJournal(fx, dir, (replay, paths) -> {
+            TracePage page = new TraceQuery(paths, replay).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
+            List<String> fromReplay = page.records().stream()
+                    .map(record -> codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record))).toList();
+            List<String> fromPushes = TracePage.of(fx.lastSeq(), merged.values(), null).records().stream()
+                    .map(record -> pushed.get(record.id())).toList();
+            assertEquals(String.join("\n", fromReplay), String.join("\n", fromPushes));
+            assertEquals(3, page.records().stream().filter(record -> record instanceof TraceRecord.UserInput user
+                    && !user.attachments().isEmpty()).count());
             return null;
         });
     }

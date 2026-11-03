@@ -1,6 +1,8 @@
 package tantalum.shell.web;
 
+import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +29,8 @@ import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.store.SessionQueries;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
@@ -128,11 +132,52 @@ public class ApiController {
         if (mode == null || !MODES.contains(mode)) {
             return json.error(400, "mode must be one of " + MODES);
         }
-        if (WebJson.blank(content)) {
+        Principal user = WebJson.currentUser();
+        List<AttachmentRef> attachments;
+        try {
+            attachments = attachments(user, request.get().get("attachments"));
+        } catch (IllegalArgumentException invalid) {
+            return json.error(400, invalid.getMessage());
+        } catch (IOException failure) {
+            LOG.warn("attachment lookup failed: {}", failure.toString());
+            return json.error(500, "附件读取失败");
+        }
+        if (WebJson.blank(content) && attachments.isEmpty()) {
             return json.error(400, "missing text");
         }
-        Intake.Submission result = engine.intake().submit(WebJson.currentUser(), id.get(), new RequestId(requestId), mode, content);
+        Optional<String> violation = properties.attachmentLimits().violation(attachments);
+        if (violation.isPresent()) {
+            return json.error(400, violation.get());
+        }
+        if (!properties.vision() && attachments.stream().anyMatch(ImageRef.class::isInstance)) {
+            return json.error(400, "当前模型不支持图片");
+        }
+        Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
+                content == null ? "" : content, attachments);
         return result.status() == 200 ? accepted(result) : json.error(result.status(), "submission rejected");
+    }
+
+    /**
+     * 请求体里的 {@code attachments: [{id, name}]}。每个都在本人目录里查元数据组成引用，客户端报的尺寸和大小一概不用（设计第 2 节）。
+     * 查不到的和别人的一样：400“附件不存在或不属于你”。
+     */
+    private List<AttachmentRef> attachments(Principal user, JsonNode field) throws IOException {
+        if (field == null || field.isNull()) {
+            return List.of();
+        }
+        if (!field.isArray()) {
+            throw new IllegalArgumentException("attachments must be an array");
+        }
+        List<AttachmentRef> refs = new ArrayList<>();
+        for (JsonNode item : field) {
+            String attachment = item.isObject() ? WebJson.text(item, "id") : null;
+            if (attachment == null) {
+                throw new IllegalArgumentException("each attachment needs an id");
+            }
+            refs.add(engine.attachments().ref(user, attachment, WebJson.text(item, "name"))
+                    .orElseThrow(() -> new IllegalArgumentException("附件不存在或不属于你")));
+        }
+        return refs;
     }
 
     /** 手动压缩。body 可为空或 {@code {"requestId": "...", "instructions": "..."}}；没给 requestId 时每次都是新请求。 */

@@ -148,7 +148,7 @@ class TantalumPropertiesTest {
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 4, claudeWindow),
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
-                        java.time.Duration.ofSeconds(1), 1, openAiWindow),
+                        java.time.Duration.ofSeconds(1), 1, openAiWindow, false),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
                 Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8), null);
     }

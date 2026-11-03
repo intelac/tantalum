@@ -118,9 +118,9 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     public record Claude(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunkTimeout,
                          Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
 
-    /** OpenAI 兼容服务的设置。 */
+    /** OpenAI 兼容服务的设置。{@code vision} 表示模型收图片（A7），本地模型多数不收，默认关。 */
     public record OpenAi(String baseUrl, String model, int maxTokens, Duration firstChunkTimeout,
-                         Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
+                         Duration betweenChunkTimeout, int concurrency, long contextWindow, boolean vision) {}
 
     private boolean usesClaude() {
         return "claude".equals(provider);
@@ -134,6 +134,11 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /** 当前供应商的模型名。 */
     public String model() {
         return usesClaude() ? claude.model() : openai.model();
+    }
+
+    /** 当前模型收不收图片：Claude 都收；OpenAI 兼容看配置（A7）。 */
+    public boolean vision() {
+        return usesClaude() || openai.vision();
     }
 
     /** 当前供应商的上下文窗口；0 表示未知：不压缩，控制台不显示占比。 */

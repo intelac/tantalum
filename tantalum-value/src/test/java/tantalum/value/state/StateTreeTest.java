@@ -54,12 +54,12 @@ class StateTreeTest {
         SessionState session = SessionState.start(SESSION, USER);
         SessionState changed = session.append(Message.user("a"))
                 .startRun(REF.run())
-                .withFollowUps(List.of("next"));
+                .withFollowUps(List.of(Message.user("next")));
 
         assertEquals(0, session.messages().size());
         assertEquals(1, changed.messages().size());
         assertEquals(REF.run(), changed.activeRun());
-        assertEquals(List.of("next"), changed.followUps());
+        assertEquals(List.of(Message.user("next")), changed.followUps());
         assertThrows(NullPointerException.class, () -> SessionState.start(null, USER));
         assertThrows(NullPointerException.class, () -> SessionState.start(SESSION, null));
     }
