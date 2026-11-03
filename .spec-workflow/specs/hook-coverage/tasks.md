@@ -52,12 +52,12 @@
 
 ## 阶段 2：示例插件
 
-- [ ] 6. `HookMessages.isUserText`
+- [x] 6. `HookMessages.isUserText`
   - File: kernel/hook/HookMessages.java（新），转调 kernel/compaction/Compactor.java 的规则
   - 验证：内核子包无循环的 ArchUnit 规则通过；单元测试覆盖用户文字、工具结果、上下文更新、摘要四种消息
   - _Requirements: 1.3_
 
-- [ ] 7. `ProviderBackoffHook` + `ProviderStatusWork`
+- [x] 7. `ProviderBackoffHook` + `ProviderStatusWork`
   - File: examples/{ProviderBackoffHook,ProviderStatusWork}.java；测试 examples-test/ProviderBackoffHookTest.java
   - 三种结果各自的单元测试：
     - 限流且要等太久 → 拦截；
@@ -67,7 +67,7 @@
   - 类注释写明用了哪种能力、参照了什么、产生哪几种结果
   - _Requirements: 1.1, 1.4_
 
-- [ ] 8. `ToolApprovalHook` + `ApprovalWork`
+- [x] 8. `ToolApprovalHook` + `ApprovalWork`
   - File: examples/{ToolApprovalHook,ApprovalWork}.java；测试 examples-test/ToolApprovalHookTest.java
   - 单元测试覆盖：
     - 列表里的工具要求审批，列表外的放行；
@@ -79,7 +79,7 @@
   - `ApprovalWork` 用本地桩测试，服务返回无法识别的内容时按拒绝处理
   - _Requirements: 1.2, 1.4_
 
-- [ ] 9. `PinnedContextHook`
+- [x] 9. `PinnedContextHook`
   - File: examples/PinnedContextHook.java；测试 examples-test/PinnedContextHookTest.java
   - 单元测试：
     - 头部有钉住的消息且触发方式是自动 → 拦截；手动 → 拦截；超长恢复 → 放行；
@@ -87,12 +87,12 @@
     - 标记只出现在摘要或工具结果里 → 放行
   - _Requirements: 1.3, 1.4_
 
-- [ ] 10. 文档
+- [x] 10. 文档
   - File: kernel/hook/KernelHook.java（类注释）、README.md“写插件”
   - 7 个钩子各写明：能返回什么、补丁是否生效、对应哪个示例插件。另写明需求 5.4 的五点
   - _Requirements: 1.5, 5.4_
 
-- [ ] 11. 阶段 2 收尾
+- [x] 11. 阶段 2 收尾
   - 全量回归。变异检查：让 `PinnedContextHook` 也拒绝超长恢复，任务 9 的测试必须失败
   - 提交，写实现日志，汇报
   - _Requirements: 非功能“测试”_

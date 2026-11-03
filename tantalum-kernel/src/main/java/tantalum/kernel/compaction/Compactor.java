@@ -171,7 +171,8 @@ public final class Compactor {
         return null;
     }
 
-    static boolean isUserText(Message message) {
+    /** 用户亲笔的文字消息：全是文字块，不是上下文更新，也不是摘要。插件经 {@code HookMessages} 用同一条规则。 */
+    public static boolean isUserText(Message message) {
         if (message.role() != Role.USER || message.content().isEmpty()) {
             return false;
         }

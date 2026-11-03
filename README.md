@@ -223,6 +223,25 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 
 注册成 Spring bean 即可。
 
+七个钩子（前 6 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略。
+
+| 钩子 | 能返回 | 结果怎么生效 | 补丁 | 示例插件 |
+|---|---|---|---|---|
+| `beforeModelCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束运行；工作做完后再问一次 | 生效 | `DailyQuotaHook` |
+| `beforeToolCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 只拦这个调用，模型收到“被拦下”；工作做完后由 `onWorkResult` 决定，不再问这里 | 忽略 | `ReadOnlyHook`、`ToolApprovalHook` |
+| `onFailure` | `Allow`、`Stop`、`NeedWork` | 放行交给内核（超长恢复、退避重试）；`Stop` 运行失败；工作做完后重试一次，占用重试次数 | 忽略 | `ProviderBackoffHook` |
+| `beforeRunEnd` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook` |
+| `onWorkResult` | `Allow`、`Stop`、`NeedWork` | 放行回到原处；`Stop` 在工具调用前只拦那个调用，其余位置结束运行；`NeedWork` 再要一轮，记在原等待点 | 忽略 | `ToolApprovalHook` |
+| `beforeCompact` | `Allow`、`Stop`（`NeedWork` 当作拒绝） | 拒绝自动压缩：本运行不再自动压缩；拒绝手动压缩：以原因失败；拒绝超长恢复：运行失败 | 忽略 | `PinnedContextHook` |
+| `afterToolExecution`（`AfterToolHook`） | 一个 `ToolOutput` | 返回新的就替换结果，原样返回就不变；抛异常时记日志，结果保持上一个 | — | `TruncateOutputHook` |
+
+写钩子时要注意五点：
+1. **I/O 只能经 `NeedWork`。** 钩子是纯函数，不读文件、不联网、不取时钟（时间用 `context.at()`）；要做 I/O 就返回 `NeedWork`，由有超时的 `WorkType` 去做。
+2. **`onWorkResult` 对所有工作都会调用。** 包括别的插件要的工作，钩子要先按 `work.workType()` 过滤（示例 `ToolApprovalHook`）。
+3. **失败的工作结果里没有原来的输入。** 超时、抛异常、连不上时，结果只有错误说明；下一轮要用的信息要由工作在成功结果里带回（示例 `ApprovalWork` 带回工具、参数和次数）。
+4. **`onFailure` 要求工作会跳过内置的超长恢复。** 所以上下文超长（`CONTEXT_OVERFLOW`）要放行（示例 `ProviderBackoffHook`）。
+5. **工作轮数有上限。** 一个等待点连续要求工作最多 `tantalum.hooks.max-work-rounds` 轮（默认 8，小于 1 拒绝启动），超过时运行以失败结束，原因写明钩子、位置和轮数。`onWorkResult` 接着要的工作记在原来的等待点上；`beforeRunEnd` 的轮数整个运行累计，不清零。插件自己的次数（如审批查询次数）要小于这个上限。
+
 **钩子只能看当前用户的当前会话。** `KernelHook` 拿到的是整个 `KernelState`，但只能读当前运行、当前会话和当前用户的用量（`state.principals()` 里这个用户的那一项）。别的会话可能不在内存里，回放一个会话时也不会有，读它们会让钩子在线上和回放时给出不同的结果。接口拦不住，靠这条约定；示例钩子都符合。
 
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数（回放接口会让内核重跑 journal，钩子会被再次调用）。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
