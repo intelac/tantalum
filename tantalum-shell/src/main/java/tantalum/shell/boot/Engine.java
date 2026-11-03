@@ -263,13 +263,13 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("close storage", storage)));
     }
 
-    /** 到时中断；被中断的 Handler 产生的结果还会经过排空的环落盘。不响应中断的再等一小会儿就不管了。 */
+    /** 到时中断；被中断的 Handler 的结果不写回，重启时按 H9 收尾。不响应中断的再等一小会儿就不管了。 */
     private void awaitHandlers() throws InterruptedException {
         if (inFlight.awaitEmpty(shutdownWait)) {
             return;
         }
         LOG.warn("{} handlers still running after {}; interrupting them", inFlight.size(), shutdownWait);
-        inFlight.abortAll();
+        inFlight.abortForShutdown();
         if (!inFlight.awaitEmpty(INTERRUPT_GRACE)) {
             LOG.warn("{} handlers ignored the interrupt; closing without them", inFlight.size());
         }
