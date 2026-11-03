@@ -44,6 +44,11 @@ public final class ApprovalWork implements WorkType {
     }
 
     @Override
+    public String plugin() {
+        return "toolApproval";
+    }
+
+    @Override
     public WorkResult run(ToolContext context, Json input) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(service)
                 .header("Content-Type", "application/json")

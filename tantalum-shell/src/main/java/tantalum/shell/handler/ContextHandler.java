@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import tantalum.shell.access.PluginGate;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryStores;
@@ -18,6 +19,7 @@ import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
+import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
@@ -40,6 +42,7 @@ public final class ContextHandler implements Handler {
     private final Workspaces workspaces;
     private final String basePrompt;
     private final ToolCatalog catalog;
+    private final PluginGate gate;
     private final MemoryStores memories;
     private final KnowledgeBase knowledge;
     private final String fixedNote;
@@ -49,8 +52,9 @@ public final class ContextHandler implements Handler {
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
      * {@code compaction} 是当前的压缩设置，随事件写进 journal，会话第一次组装时冻结；null 表示不压缩。
      */
-    public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, MemoryStores memories,
+    public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
                           KnowledgeBase knowledge, String fixedNote, CompactionSettings compaction) {
+        this.gate = gate;
         this.fixedNote = fixedNote;
         this.compaction = compaction;
         this.workspaces = workspaces;
@@ -84,7 +88,10 @@ public final class ContextHandler implements Handler {
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction, sections);
+        // 只给这个用户开着的工具（core-tools C16 的“加载”一半）
+        List<String> enabled = gate.enabledTools(principal);
+        List<ToolSpec> tools = catalog.specs().stream().filter(spec -> enabled.contains(spec.name())).toList();
+        return new ContextAssembled(command.id(), system.toString(), tools, compaction, sections);
     }
 
     /** 让正文里的闭合标签跳不出包裹。这只降低注入风险，不是保证。 */

@@ -15,6 +15,8 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
+import tantalum.shell.access.PluginGate;
+import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.attachment.RequestImages;
 import tantalum.shell.attachment.StoredMedia;
@@ -93,6 +95,8 @@ public final class Engine implements AutoCloseable {
     private final SseHub hub;
     private final MemoryStores memories;
     private final McpRegistry mcp;
+    private final PluginSwitches switches;
+    private final PluginGate gate;
     private final InputRing input;
     private final LaneDispatcher lanes;
     private final CleanroomRing cleanroomRing;
@@ -127,8 +131,12 @@ public final class Engine implements AutoCloseable {
             memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
             MemoryTools.all(memories).forEach(catalog::register);
             tools.forEach(catalog::register);
-            mcp = new McpRegistry(McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv));
+            McpSettings mcpSettings = McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv);
+            mcp = new McpRegistry(mcpSettings);
             catalog.setSource(mcp);
+            switches = openSwitches(properties.dataDir(), clock);
+            gate = new PluginGate(catalog, switches, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
+                    hooks, afterHooks, workTypes);
 
             RequestImages requestImages = new RequestImages(storage.attachments);
             TransitionTable table = new TransitionTable();
@@ -154,13 +162,13 @@ public final class Engine implements AutoCloseable {
             input = new InputRing(loop.inputRingSize());
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
-                    AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories,
+                    AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, gate, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
                             properties.compactionSettings()),
                     CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
                             run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
-                    RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout(), clock),
-                    DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout(), clock),
+                    RunTool.class, new ToolHandler(catalog, workspaces, gate, properties.toolTimeout(), clock),
+                    DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock),
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
@@ -212,6 +220,15 @@ public final class Engine implements AutoCloseable {
 
     public SseHub hub() {
         return hub;
+    }
+
+    /** 插件开关和唯一的调用入口，插件页接口用它。 */
+    public PluginGate plugins() {
+        return gate;
+    }
+
+    public McpRegistry mcp() {
+        return mcp;
     }
 
     /** 每用户的长期记忆，接口和工具共用同一份实例。 */
@@ -275,7 +292,16 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
                 new Shutdown.Step("close mcp", mcp),
+                new Shutdown.Step("close plugin settings", switches),
                 new Shutdown.Step("close storage", storage)));
+    }
+
+    private static PluginSwitches openSwitches(java.nio.file.Path dataDir, Clock clock) throws IOException {
+        try {
+            return PluginSwitches.open(dataDir, clock);
+        } catch (java.sql.SQLException failure) {
+            throw new IOException("cannot open plugin settings in " + dataDir, failure);
+        }
     }
 
     /** 到时中断；被中断的 Handler 的结果不写回，重启时按 H9 收尾。不响应中断的再等一小会儿就不管了。 */

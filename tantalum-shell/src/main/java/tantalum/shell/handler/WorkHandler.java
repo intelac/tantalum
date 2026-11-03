@@ -4,10 +4,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import tantalum.shell.access.PluginGate;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.WorkType;
@@ -23,14 +23,17 @@ public final class WorkHandler implements Handler {
 
     private final Map<String, WorkType> types = new HashMap<>();
     private final Workspaces workspaces;
+    private final PluginGate gate;
     private final Duration timeout;
     private final Clock clock;
 
-    public WorkHandler(Workspaces workspaces, List<WorkType> workTypes, Duration timeout, Clock clock) {
+    /** 工作类型取自 {@code gate}：插件页上列出的和这里能执行的是同一份。 */
+    public WorkHandler(Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock) {
         this.workspaces = workspaces;
+        this.gate = gate;
         this.timeout = timeout;
         this.clock = clock;
-        for (WorkType type : workTypes) {
+        for (WorkType type : gate.workTypes()) {
             if (types.putIfAbsent(type.name(), type) != null) {
                 throw new IllegalStateException("work type already registered: " + type.name());
             }
@@ -48,7 +51,7 @@ public final class WorkHandler implements Handler {
         // 工作没有名额，几乎等于发出时刻；记下它是为了和模型、工具的计时一致。
         Instant startedAt = clock.instant();
         try {
-            WorkResult done = Deadline.call(() -> type.run(context, work.input()), timeout);
+            WorkResult done = Deadline.call(() -> gate.runWork(context, type, work.input()), timeout);
             return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText(), startedAt);
         } catch (TimeoutException late) {
             return failed(work, "work timed out after " + timeout, startedAt);

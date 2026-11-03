@@ -4,7 +4,11 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.properties.HasName;
+import com.tngtech.archunit.core.domain.properties.HasOwner;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -12,6 +16,10 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.WorkType;
 
 @AnalyzeClasses(packages = "tantalum", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
@@ -80,6 +88,30 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.shell..")
             .and().resideOutsideOfPackages("tantalum.shell.boot..", "tantalum.shell.web..", "tantalum.shell.auth..")
             .should().dependOnClassesThat().resideInAPackage("org.springframework..");
+
+    /**
+     * 插件的唯一入口（core-tools C16）：工具、工具后处理、插件工作只能经 {@code PluginGate} 调用，它在调用前按用户的开关过滤。
+     * 谁绕过它直接调用，关掉的插件就会照样执行。
+     */
+    @ArchTest
+    static final ArchRule onlyTheGateRunsPlugins = noClasses()
+            .that().doNotHaveFullyQualifiedName("tantalum.shell.access.PluginGate")
+            .should().callMethodWhere(pluginCall(Tool.class, "run"))
+            .orShould().callMethodWhere(pluginCall(WorkType.class, "run"))
+            .orShould().callMethodWhere(pluginCall(AfterToolHook.class, "afterToolExecution"));
+
+    /** 内核钩子只由 {@code HookChain} 调用，它按会话记下的插件名单过滤。 */
+    @ArchTest
+    static final ArchRule onlyTheHookChainRunsHooks = noClasses()
+            .that().doNotHaveFullyQualifiedName("tantalum.kernel.hook.HookChain")
+            .should().callMethodWhere(pluginCall(KernelHook.class,
+                    "beforeModelCall|beforeToolCall|onFailure|beforeRunEnd|onWorkResult|beforeCompact"));
+
+    private static DescribedPredicate<JavaCall<?>> pluginCall(Class<?> type, String names) {
+        return JavaCall.Predicates.target(HasName.Predicates.nameMatching(names))
+                .and(JavaCall.Predicates.target(HasOwner.Predicates.With.owner(JavaClass.Predicates.assignableTo(type))))
+                .as("a call to " + type.getSimpleName() + "." + names);
+    }
 
     /** 包之间单向依赖：原始记录 ← 缓存，管线 ← 组装。循环会让包名不再说明里面是什么。 */
     @ArchTest

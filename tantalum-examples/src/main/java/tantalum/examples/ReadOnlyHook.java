@@ -23,6 +23,11 @@ public final class ReadOnlyHook implements KernelHook {
     }
 
     @Override
+    public String description() {
+        return "只放行名单里的工具，其余调用一律拦下。";
+    }
+
+    @Override
     public boolean mandatory() {
         return true;
     }

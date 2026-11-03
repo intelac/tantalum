@@ -3,15 +3,12 @@ package tantalum.shell.handler;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.access.PluginGate;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
@@ -26,11 +23,9 @@ import tantalum.value.json.Json;
 /** 执行工具调用。失败和超时都变成错误结果交给模型；结果不明的调用不自动重试。 */
 public final class ToolHandler implements Handler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ToolHandler.class);
-
     private final ToolCatalog catalog;
     private final Workspaces workspaces;
-    private final List<AfterToolHook> afterHooks;
+    private final PluginGate gate;
     private final Duration timeout;
     /** 每个服务端一份名额，同一服务端的工具共用。 */
     private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
@@ -39,10 +34,10 @@ public final class ToolHandler implements Handler {
     /** 执行的结果和真正开始的时刻；没拿到名额时开始时刻为 null。 */
     private record Ran(ToolOutput output, Instant startedAt) {}
 
-    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, List<AfterToolHook> afterHooks, Duration timeout, Clock clock) {
+    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock) {
         this.catalog = catalog;
         this.workspaces = workspaces;
-        this.afterHooks = List.copyOf(afterHooks);
+        this.gate = gate;
         this.timeout = timeout;
         this.clock = clock;
     }
@@ -61,7 +56,7 @@ public final class ToolHandler implements Handler {
             return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()), null);
         }
         Ran ran = execute(tool.get(), context, run.call().arguments());
-        return finished(run, applyHooks(tool.get(), context, run.call().arguments(), ran.output()), ran.startedAt());
+        return finished(run, gate.afterTool(context, tool.get(), run.call().arguments(), ran.output()), ran.startedAt());
     }
 
     CallLimiter limiterFor(Tool tool) {
@@ -83,7 +78,7 @@ public final class ToolHandler implements Handler {
         try {
             return new Ran(Deadline.call(() -> {
                 try (permit) {
-                    return tool.run(context, arguments);
+                    return gate.runTool(context, tool, arguments);
                 }
             }, Duration.ofNanos(deadline - System.nanoTime())), startedAt);
         } catch (TimeoutException late) {
@@ -91,18 +86,6 @@ public final class ToolHandler implements Handler {
         } catch (ExecutionException failure) {
             return new Ran(ToolOutput.error("Tool failed: " + failure.getCause()), startedAt);
         }
-    }
-
-    private ToolOutput applyHooks(Tool tool, ToolContext context, Json arguments, ToolOutput first) {
-        ToolOutput output = first;
-        for (AfterToolHook hook : afterHooks) {
-            try {
-                output = hook.afterToolExecution(context, tool.name(), arguments, output);
-            } catch (Exception failure) {
-                LOG.error("afterToolExecution hook failed for tool {}", tool.name(), failure);
-            }
-        }
-        return output;
     }
 
     private static ToolFinished finished(RunTool run, ToolOutput output, Instant startedAt) {

@@ -38,7 +38,7 @@ class WorkHandlerTest {
 
     @Test
     void dispatchesByType() throws Exception {
-        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(type("a", new WorkResult(new Json.Str("done"), "continue"))), TIMEOUT, java.time.Clock.systemUTC());
+        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(type("a", new WorkResult(new Json.Str("done"), "continue")))), TIMEOUT, java.time.Clock.systemUTC());
         WorkDone done = assertInstanceOf(WorkDone.class, handler.handle(work("a")));
         assertEquals(new Json.Str("done"), done.result());
         assertEquals("continue", done.continueText());
@@ -48,14 +48,14 @@ class WorkHandlerTest {
 
     @Test
     void unknownTypeFails() throws Exception {
-        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT, java.time.Clock.systemUTC()).handle(work("nope")));
+        WorkDone done = assertInstanceOf(WorkDone.class, new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of()), TIMEOUT, java.time.Clock.systemUTC()).handle(work("nope")));
         assertTrue(done.failed());
     }
 
     @Test
     void failureBecomesAFailedResult() {
         WorkDone done = assertInstanceOf(WorkDone.class,
-                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), TIMEOUT, java.time.Clock.systemUTC()).failed(work("a"), new IllegalStateException("boom")));
+                new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of()), TIMEOUT, java.time.Clock.systemUTC()).failed(work("a"), new IllegalStateException("boom")));
         assertTrue(done.failed());
         assertEquals(new Json.Str("java.lang.IllegalStateException: boom"), done.result());
     }
@@ -63,12 +63,11 @@ class WorkHandlerTest {
     @Test
     void duplicateTypeFails() {
         WorkType a = type("a", new WorkResult(new Json.Null(), null));
-        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(a, a), TIMEOUT, java.time.Clock.systemUTC()));
+        assertThrows(IllegalStateException.class, () -> new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(a, a)), TIMEOUT, java.time.Clock.systemUTC()));
     }
 
     private static WorkHandler handler(WorkType... types) {
-        return new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
-                List.of(types), java.time.Duration.ofMillis(200), java.time.Clock.systemUTC());
+        return new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(types)), java.time.Duration.ofMillis(200), java.time.Clock.systemUTC());
     }
 
     /** 阻塞的插件不能永久占住命令：超时变成失败结果，插件线程被中断。 */
@@ -124,8 +123,7 @@ class WorkHandlerTest {
                 throw new IllegalStateException("boom");
             }
         };
-        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
-                List.of(slow, broken), TIMEOUT, clock);
+        WorkHandler handler = new WorkHandler(tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(slow, broken)), TIMEOUT, clock);
 
         assertEquals(t0, assertInstanceOf(WorkDone.class, handler.handle(work("slow"))).startedAt());
         WorkDone failed = assertInstanceOf(WorkDone.class, handler.handle(work("broken")));

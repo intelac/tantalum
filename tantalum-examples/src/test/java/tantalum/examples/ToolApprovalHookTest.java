@@ -195,7 +195,7 @@ class ToolApprovalHookTest {
     @Test
     void unreachableServiceFailsTheWorkAndTheHookBlocks() throws Exception {
         ApprovalWork work = new ApprovalWork(HttpStub.closedPort());
-        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofSeconds(5), java.time.Clock.systemUTC());
+        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(work)), Duration.ofSeconds(5), java.time.Clock.systemUTC());
         WorkDone done = (WorkDone) handler.handle(new DoWork(new CommandId("w"), RUN, ApprovalWork.TYPE, request("write_file", 0)));
         assertTrue(done.failed());
         assertInstanceOf(Stop.class, HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(done)));

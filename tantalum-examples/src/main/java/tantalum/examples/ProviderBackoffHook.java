@@ -37,6 +37,11 @@ public final class ProviderBackoffHook implements KernelHook {
     }
 
     @Override
+    public String description() {
+        return "模型服务出错时先查服务状态，再决定等待重试还是结束。";
+    }
+
+    @Override
     public HookResult onFailure(KernelState state, HookContext context) {
         ModelFailed failure = context.failure();
         if (failure == null) {

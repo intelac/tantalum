@@ -32,6 +32,11 @@ public final class CitationWork implements WorkType {
     }
 
     @Override
+    public String plugin() {
+        return "citationCheck";
+    }
+
+    @Override
     public WorkResult run(ToolContext context, Json input) throws IOException {
         String answer = input instanceof Json.Str text ? text.value() : "";
         List<String> wrong = new ArrayList<>();
