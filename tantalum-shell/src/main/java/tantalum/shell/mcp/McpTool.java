@@ -34,6 +34,9 @@ final class McpTool implements Tool {
     @Override public String description() { return description; }
     @Override public Json schema() { return schema; }
     @Override public String server() { return "mcp:" + server.name(); }
+
+    /** 配置里的服务器名，插件页按它开关。 */
+    String serverName() { return server.name(); }
     @Override public int serverConcurrency() { return server.concurrency(); }
 
     @SuppressWarnings("unchecked")

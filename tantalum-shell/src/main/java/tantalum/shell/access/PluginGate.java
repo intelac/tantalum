@@ -70,7 +70,7 @@ public final class PluginGate {
         if (!switches.enabled(user, Kind.TOOL, tool.name())) {
             return false;
         }
-        return catalog.isRegistered(tool.name()) || switches.enabled(user, Kind.MCP, tool.server());
+        return catalog.isRegistered(tool.name()) || switches.enabled(user, Kind.MCP, catalog.serverName(tool));
     }
 
     /** 这个用户现在开着的工具名，按名称排序（同 {@link ToolCatalog#specs()}）。 */
@@ -117,7 +117,7 @@ public final class PluginGate {
             if (catalog.isRegistered(tool.name())) {
                 builtins.add(view);
             } else {
-                byServer.computeIfAbsent(tool.server(), ignored -> new ArrayList<>()).add(view);
+                byServer.computeIfAbsent(catalog.serverName(tool), ignored -> new ArrayList<>()).add(view);
             }
         }
         List<ServerView> servers = byServer.entrySet().stream()

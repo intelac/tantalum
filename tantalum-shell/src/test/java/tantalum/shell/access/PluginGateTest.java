@@ -100,9 +100,11 @@ class PluginGateTest {
         catalog = new ToolCatalog();
         catalog.register(tool("read_file", "workspace"));
         catalog.register(tool("write_file", "workspace"));
-        Tool snapshot = tool("browser__snapshot", "browser");
+        // 和 McpTool 一样：server() 带前缀（并发名额的命名空间），开关按配置里的服务器名
+        Tool snapshot = tool("browser__snapshot", "mcp:browser");
         catalog.setSource(new ToolCatalog.ToolSource() {
             @Override public List<Tool> tools() { return List.of(snapshot); }
+            @Override public String serverName(Tool tool) { return "browser"; }
             @Override public Optional<Tool> find(String name) { return name.equals(snapshot.name()) ? Optional.of(snapshot) : Optional.empty(); }
         });
         switches = PluginSwitches.inMemory(Clock.systemUTC());
@@ -118,6 +120,14 @@ class PluginGateTest {
     void everythingIsEnabledByDefault() {
         assertEquals(List.of("browser__snapshot", "read_file", "write_file"), gate.enabledTools(ALICE));
         assertEquals(List.of("citations", "quota"), gate.enabledPlugins(ALICE));
+    }
+
+    @Test
+    void mcpToolsAreListedUnderTheirConfiguredServer() {
+        PluginGate.Overview overview = gate.overview(ALICE);
+        assertEquals(List.of("browser", "search"), overview.mcp().stream().map(PluginGate.ServerView::name).toList());
+        assertEquals(List.of("browser__snapshot"), overview.mcp().get(0).tools().stream().map(PluginGate.ToolView::name).toList());
+        assertEquals(List.of("read_file", "write_file"), overview.tools().stream().map(PluginGate.ToolView::name).toList());
     }
 
     @Test
