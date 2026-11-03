@@ -9,6 +9,7 @@ import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
@@ -31,6 +32,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
  *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
+ *   <li>带附件的提问：回答“看到了附件：名字、名字。”（附件页的端到端测试）；</li>
  *   <li>其它：一句思考，然后复述用户的话。</li>
  * </ul>
  */
@@ -85,6 +87,10 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("remember")) {
                 return remember(results, chunks);
+            }
+            List<String> attached = attachmentNames(prompt.messages().get(lastUser));
+            if (!attached.isEmpty()) {
+                return answer(chunks, "看到了附件：" + String.join("、", attached) + "。");
             }
             return echo(text, chunks);
         } catch (InterruptedException cancelled) {
@@ -233,13 +239,23 @@ public final class E2eModel implements ModelClient {
         return new TokenUsage(Math.max(0, promptSize - 300), output, Math.min(300, promptSize), 0);
     }
 
+    /** 最后一条有文字或附件的用户消息（工具结果也是用户消息，但两样都没有）。 */
     private static int lastUserText(List<Message> messages) {
         for (int i = messages.size() - 1; i >= 0; i--) {
-            if (!userText(messages.get(i)).isEmpty()) {
+            if (!userText(messages.get(i)).isEmpty() || !attachmentNames(messages.get(i)).isEmpty()) {
                 return i;
             }
         }
         return -1;
+    }
+
+    /** 用户消息里附件的名字，按顺序。 */
+    private static List<String> attachmentNames(Message message) {
+        if (message.role() != Role.USER) {
+            return List.of();
+        }
+        return message.content().stream().filter(AttachmentBlock.class::isInstance)
+                .map(block -> ((AttachmentBlock) block).ref().name()).toList();
     }
 
     private static String userText(Message message) {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createMemory, deleteMemory, getMemory, listMemories, listSessions, login, me, onUnauthorized, submit } from "./client";
+import { ApiError, attachmentUrl, createMemory, deleteMemory, getMemory, listMemories, listSessions, login, me, onUnauthorized, submit } from "./client";
 
 function reply(status: number, body: string) {
   return { ok: status >= 200 && status < 300, status, text: () => Promise.resolve(body) };
@@ -74,5 +74,22 @@ describe("client", () => {
       status: 400,
       message: "name must match [a-z0-9-]{1,64}",
     });
+  });
+
+  it("submits attachments as id and name only; the server knows the rest", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply(200, '{"submissionId":"x","duplicate":false}'));
+    vi.stubGlobal("fetch", fetchMock);
+    await submit("s", "prompt", "", "r1", [
+      { kind: "image", id: "sha256:a", name: "cat.png", mediaType: "image/png", bytes: 9, width: 4, height: 3 },
+    ]);
+    await submit("s", "prompt", "hi", "r2");
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string) as Record<string, unknown>);
+    expect(bodies[0]).toEqual({ requestId: "r1", mode: "prompt", text: "", attachments: [{ id: "sha256:a", name: "cat.png" }] });
+    expect(bodies[1]).toEqual({ requestId: "r2", mode: "prompt", text: "hi" });
+  });
+
+  it("builds attachment addresses with the download name", () => {
+    expect(attachmentUrl({ id: "sha256:ab", name: "季度 报告.pdf" })).toBe("/api/attachments/sha256%3Aab?name=%E5%AD%A3%E5%BA%A6+%E6%8A%A5%E5%91%8A.pdf");
+    expect(attachmentUrl({ id: "sha256:ab", name: "a.png" }, true)).toBe("/api/attachments/sha256%3Aab?name=a.png&download=1");
   });
 });

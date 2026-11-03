@@ -120,31 +120,31 @@
 
 ## 阶段 4：控制台
 
-- [ ] 19. 接口和上传队列
+- [x] 19. 接口和上传队列
   - File: console/api/{types,client}.ts、console/attachment/{uploads,limits,drafts}.ts（新）；后端 `/api/config` 加限制和 `vision`
   - 最多同时 2 个、进度、重试、移除即取消；前端先查限制；每个会话的草稿
   - 测试（vitest）：并发上限、进度、重试、取消、限制提示、草稿切换会话后还在
   - _Requirements: 1.6, 1.7, 1.9, 2.1_
 
-- [ ] 20. 输入框：附件条、拖放、粘贴
+- [x] 20. 输入框：附件条、拖放、粘贴
   - File: console/attachment/{DropZone,AttachmentTray}.tsx（新）、console/composer/ComposerDock.tsx
   - 附件按钮多选；整页放置提示和限制说明；文件夹拒绝；粘贴；对话里的图片拖回输入框不重新上传；发送等上传完；被拒绝时保留草稿和附件；排队和插话可用
   - 测试（vitest）：三种添加方式走同一路径；文件夹提示；发送等待；拒绝后保留
   - _Requirements: 1.1–1.8_
 
-- [ ] 21. 显示和灯箱
+- [x] 21. 显示和灯箱
   - File: console/attachment/{AttachmentView,Lightbox}.tsx（新）、console/conversation/UserBubble.tsx
   - 单图长边 240、宽高比 1:4 到 4:1；多个时 64 px 方块和 240×64 文件卡片；灯箱（Esc、遮罩、关闭、缩放、下载、焦点锁定）；文件卡片下载；发送中用本地预览
   - 测试（vitest）：尺寸规则；灯箱键盘和焦点；本地预览换成服务器地址
   - _Requirements: 5.1–5.4, 5.6_
 
-- [ ] 22. 轨迹页显示
+- [x] 22. 轨迹页显示
   - File: console/trace/LedgerRow.tsx、trace/inspector/{RecordTabs,RequestTabs}.tsx、text/zh.ts
   - 用户记录“图片 ×n · 文件 ×m”；检查器 48 px 缩略图和附件列表、原始引用；请求记录的省略说明
   - 测试（vitest）：读带附件的期望文件，显示正确
   - _Requirements: 5.5, 5.7_
 
-- [ ] 23. 端到端、文档和收尾
+- [x] 23. 端到端、文档和收尾
   - File: console/e2e/attachments.spec.ts（新）、E2eModel（看到图片引用时回答图片名）、README、tech.md、BACKLOG、架构页
   - Playwright 覆盖选择、拖放、粘贴、拖回、进度和移除、发送、刷新后仍在、灯箱、下载、轨迹页、手机宽度；最终全量回归；变异检查（灯箱 Esc 不关；上传并发不限）；提交；汇报
   - _Requirements: 非功能“测试”, 设计“阶段”_

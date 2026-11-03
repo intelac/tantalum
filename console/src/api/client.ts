@@ -3,6 +3,7 @@
 import { zh } from "../text/zh";
 import { reportHalted } from "./connection";
 import type {
+  AttachmentRef,
   Config,
   MemoryEntry,
   MemoryList,
@@ -106,12 +107,57 @@ export async function listMessages(session: string, before?: number): Promise<Me
   }
 }
 
-/** `requestId` 由调用方保存，重试时用同一个，后端据此去重。 */
-export function submit(session: string, mode: SubmitMode, text: string, requestId: string): Promise<{ submissionId: string; duplicate: boolean }> {
-  return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, {
-    method: "POST",
-    body: JSON.stringify({ requestId, mode, text }),
+/** `requestId` 由调用方保存，重试时用同一个，后端据此去重。附件只传 ID 和名字，尺寸和大小以服务器的为准。 */
+export function submit(
+  session: string,
+  mode: SubmitMode,
+  text: string,
+  requestId: string,
+  attachments: readonly AttachmentRef[] = [],
+): Promise<{ submissionId: string; duplicate: boolean }> {
+  const body: Record<string, unknown> = { requestId, mode, text };
+  if (attachments.length > 0) body.attachments = attachments.map(({ id, name }) => ({ id, name }));
+  return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, { method: "POST", body: JSON.stringify(body) });
+}
+
+/** 上传进度：已发送的字节数和总字节数。 */
+export type UploadProgress = (sent: number, total: number) => void;
+
+/**
+ * 上传一个附件：请求体是原始字节（设计第 2 节）。用 XMLHttpRequest 是因为 fetch 报不了上传进度。`signal` 取消时以 AbortError 结束。
+ * 被拒绝时抛 ApiError，消息是服务器给的原因。
+ */
+export function uploadAttachment(session: string, file: File, onProgress: UploadProgress, signal?: AbortSignal): Promise<AttachmentRef> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const query = new URLSearchParams({ name: file.name });
+    if (file.type !== "") query.set("type", file.type);
+    request.open("POST", `/api/sessions/${encodeURIComponent(session)}/attachments?${query.toString()}`);
+    request.withCredentials = true;
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.upload.onprogress = (event) => onProgress(event.loaded, event.lengthComputable ? event.total : file.size);
+    request.onload = () => {
+      if (request.status === 401) unauthorized();
+      if (request.status === 503) reportHalted();
+      if (request.status >= 200 && request.status < 300) resolve(JSON.parse(request.responseText) as AttachmentRef);
+      else reject(new ApiError(request.status, messageOf(request.status, request.responseText)));
+    };
+    request.onerror = () => reject(new ApiError(0, zh.attachment.networkError));
+    request.onabort = () => reject(new DOMException("upload cancelled", "AbortError"));
+    signal?.addEventListener("abort", () => request.abort(), { once: true });
+    if (signal?.aborted) {
+      request.abort();
+      return;
+    }
+    request.send(file);
   });
+}
+
+/** 附件的地址。`download` 时作为下载；`name` 是下载用的文件名。地址由内容决定，浏览器只取一次。 */
+export function attachmentUrl(ref: Pick<AttachmentRef, "id" | "name">, download = false): string {
+  const query = new URLSearchParams({ name: ref.name });
+  if (download) query.set("download", "1");
+  return `/api/attachments/${encodeURIComponent(ref.id)}?${query.toString()}`;
 }
 
 /** 手动压缩空闲会话；运行中或没有可压缩的内容时后端返回 409。 */

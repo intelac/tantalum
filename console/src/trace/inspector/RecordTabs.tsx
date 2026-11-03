@@ -1,6 +1,9 @@
 // 其余记录的页签：运行、用户、上下文、已压缩、插件工作、钩子决定。钩子和它要的工作、被拦的工具可以互相跳转。
 
-import type { Compacted, ContextChange, HookDecision, PluginWork, RunHead, TraceRecord, UserInput } from "../../api/types";
+import { FileText } from "lucide-react";
+import { attachmentUrl } from "../../api/client";
+import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, RunHead, TraceRecord, UserInput } from "../../api/types";
+import { formatBytes } from "../../attachment/limits";
 import { Markdown } from "../../markdown/Markdown";
 import { zh } from "../../text/zh";
 import { between, formatMs, formatTokens } from "../format";
@@ -47,6 +50,7 @@ function RunPages(run: RunHead) {
 }
 
 function UserPages(user: UserInput) {
+  const attachments = user.attachments ?? [];
   return [
     {
       id: "summary",
@@ -55,11 +59,51 @@ function UserPages(user: UserInput) {
         <>
           <Fields rows={[[t.details.mode, t.userMode[user.mode]]]} />
           <Markdown text={user.text} />
+          {attachments.length > 0 && <AttachmentList attachments={attachments} />}
         </>
       ),
     },
     { id: "source", label: t.tab.source, render: () => <Fields rows={[[t.tab.source, sourceText(user.source)]]} /> },
+    ...(attachments.length > 0 ? [{ id: "raw", label: t.tab.raw, render: () => <JsonTree value={attachments} /> }] : []),
   ];
+}
+
+/** 检查器里的附件：图片 48 px 缩略图，每个附件一行名字、大小、类型和尺寸（需求 5.5）。 */
+function AttachmentList({ attachments }: { attachments: readonly AttachmentRef[] }) {
+  return (
+    <Section title={zh.attachment.list}>
+      <ul className="flex flex-col gap-2 text-xs">
+        {attachments.map((ref, index) => (
+          <li key={`${ref.id}-${index}`} className="flex items-center gap-2">
+            {ref.kind === "image" ? (
+              <img src={attachmentUrl(ref)} alt={ref.name} className="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
+            ) : (
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-line bg-muted text-fg-faint">
+                <FileText size={18} aria-hidden="true" />
+              </span>
+            )}
+            <span className="min-w-0">
+              <a href={attachmentUrl(ref, true)} download={ref.name} className="block truncate text-fg hover:underline">
+                {ref.name}
+              </a>
+              <span className="block text-fg-faint">{attachmentDetail(ref)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+function attachmentDetail(ref: AttachmentRef): string {
+  const parts = [formatBytes(ref.bytes), ref.mediaType];
+  if (ref.kind === "image") {
+    parts.push(zh.attachment.imageSize(ref.width, ref.height));
+    if (ref.sourceWidth !== undefined && ref.sourceHeight !== undefined) parts.push(zh.attachment.downscaled(ref.sourceWidth, ref.sourceHeight));
+  } else if (ref.pages !== undefined) {
+    parts.push(zh.attachment.pages(ref.pages));
+  }
+  return parts.join(" · ");
 }
 
 function ContextPages(context: ContextChange) {

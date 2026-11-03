@@ -103,6 +103,7 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 | `users.db` | 账号 |
 | `store.lock` | 进程独占锁：一份数据目录同时只能被一个进程使用 |
 | `memory/<用户>/` | 只在 `workspace-mode=shared` 时使用的记忆目录；默认每个用户的记忆在自己工作目录的 `memory/` 下 |
+| `attachments/<用户>/` | 附件：`objects/<哈希>` 是内容（图片是规范化后的），旁边的 `.json` 是元数据；`requests/` 是请求用的图片版本，可以删，删了重新生成 |
 
 用户名和会话 ID 里不能直接做文件名的字符会被编码，太长的名字截短后加哈希。只有会话文件是事实来源，索引落后或丢失时，启动时从会话文件补齐。旧版本留下的 `snapshots/` 目录不再使用，可以删除。
 
@@ -189,6 +190,18 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
 - **边界和删除**：知识、`AGENTS.md`、索引用标签包裹并转义闭合标签，这只降低注入风险，不是保证。记忆变化时只追加变化的部分。删除记忆不会清除 journal 和历史消息里的内容，同一会话的 system 也要到压缩或新会话才更新。
 - **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
+
+## 附件
+
+提问时可以带图片和文件（`attachments` spec）。控制台里用回形针按钮、拖到页面上或直接粘贴；对话里的图片可以拖回输入框再发一次，不用重新上传。
+
+- **存储**：每个用户自己的 `attachments/<用户>/`，按内容的 SHA-256 存，同样的内容只存一份；别人的附件和不存在一样。图片上传时统一规范化：按照片方向转正、去掉 GPS 等元数据、GIF 只取第一帧，超过 2048×2048 就缩小；已经干净的图片原样保存。只收 PNG、JPEG、WebP、GIF 四种图片，SVG 当普通文件。
+- **限制**（都可配置，`tantalum.attachments.*`）：每条消息最多 20 张图片、合计 200 MB；每张最多 50 MB、6400 万像素、单边 65535 px；每条消息最多 20 个文件，每个 50 MB；每个用户合计 5 GB。前端先查一遍，服务器再查一遍。
+- **给模型的样子**：图片前面一行说明（名字、哈希、尺寸、只读路径），再是图片本身；文件只给说明和只读路径 `/attachments/sha256-<哈希>`，模型要看时用 `read_file` 读；PDF 在 Claude 上另作为文档整份发出（32 MB、100 页以内）。一次请求里图片合计超过 20 MB（base64）时，从最早的开始换成省略说明，省略过的一直省略，prompt 缓存不会反复失效。
+- **模型不收图片时**：OpenAI 兼容的模型默认当作只收文字（`tantalum.openai.vision=false`），带图片的提交返回 400；`read_file` 读到的图片换成占位文字。
+- **`read_file`**：能读本人附件的只读路径；读到图片（工作区里的也算）时规范化、存进附件目录，把图片交给模型；读到 PDF 时不把二进制当文字返回。
+- **接口**：`POST /api/sessions/{id}/attachments?name=…`（请求体是原始字节）、`GET /api/attachments/{附件 ID}[?download=1]`；提交接口的请求体加 `attachments: [{id, name}]`，尺寸和大小以服务器存的为准。下载一律 `nosniff` 加沙箱 CSP，非图片一律作为下载，HTML、SVG 不会在页面里执行。
+- **没做的**：没有引用的附件怎么清理，等以后做会话删除时一起做（A9）。
 
 ## 上下文压缩
 
@@ -313,6 +326,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec | 自定义摘要钩子待定 |
 | 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
+| 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |
 | MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
 | 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**，内置工具只有读文件、搜索文件和记忆 | 待开 spec |
 | 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
@@ -100,7 +101,10 @@ public class ApiController {
         return json.error(500, "session unreadable");
     }
 
-    /** 供应商、模型名、是否云端、上下文窗口（不知道时省略，前端就不显示占比）。Key 只在环境变量里，这里碰不到。 */
+    /**
+     * 供应商、模型名、是否云端、上下文窗口（不知道时省略，前端就不显示占比）、是否收图片和附件的各项上限（前端先查，服务器再查）。
+     * Key 只在环境变量里，这里碰不到。
+     */
     @GetMapping("/api/config")
     ResponseEntity<String> config() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -110,6 +114,15 @@ public class ApiController {
         if (properties.contextWindow() > 0) {
             response.put("contextWindow", properties.contextWindow());
         }
+        response.put("vision", properties.vision());
+        AttachmentLimits limits = properties.attachmentLimits();
+        Map<String, Object> attachments = new LinkedHashMap<>();
+        attachments.put("maxImagesPerMessage", limits.maxImagesPerMessage());
+        attachments.put("maxImageBytesPerMessage", limits.maxImageBytesPerMessage());
+        attachments.put("maxImageBytes", limits.maxImageBytes());
+        attachments.put("maxFilesPerMessage", limits.maxFilesPerMessage());
+        attachments.put("maxFileBytes", limits.maxFileBytes());
+        response.put("attachments", attachments);
         return json.json(200, response);
     }
 

@@ -36,6 +36,7 @@ function Summary({ request }: { request: ModelRequest }) {
           [t.details.attempts, request.attempts.length > 1 ? t.retryProgress(request.attempts.length, request.maxAttempts) : undefined],
           [t.details.error, request.status === "FAILED" || request.status === "INTERRUPTED" ? failureText(request.failure) : undefined],
           [t.details.lastAttemptError, request.status === "DONE" && failed.length > 0 ? (failed.at(-1)?.reason ?? "") : undefined],
+          [t.details.images, (request.omittedImages?.length ?? 0) > 0 ? zh.attachment.omitted(request.omittedImages?.length ?? 0) : undefined],
         ]}
       />
       {request.attempts.length > 1 && (

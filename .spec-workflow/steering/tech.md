@@ -339,6 +339,15 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **前端：** 记录表虚拟滚动；检查器按记录类型分页签，请求详情按需取 `/trace/calls/{命令}`；时间概览四条道（多一道“插件”），两种画法；统计页签和轨迹共用一个 `TraceStore` 和一个去重的“加载更早”。旧的 `/api/runs/{run}/trace` 已删。
 - **和设计的出入：** 纯函数文件叫 `rows.ts`、`segments.ts`，不叫设计里的 `ledger.ts`、`timeline.ts`：macOS 文件系统不分大小写，和组件 `Ledger.tsx`、`Timeline.tsx` 冲突。轨迹页按会话用 `key` 重建，不在 effect 里清状态（开发模式下挂载 effect 跑两遍，会把地址定位的选中清掉）。DSH 统计页的事件行没有做。
 
+### attachments（2026-11-03）
+
+- **新依赖：** TwelveMonkeys ImageIO 3.15.3（`imageio-webp`、`imageio-jpeg`、`imageio-metadata`）读 WebP 和 EXIF 方向；Apache PDFBox 3.0.8 数 PDF 页数。打包后的 jar 在临时端口上验证过能读 WebP（插件在嵌套 jar 里，`ImageNormalizer` 构造时 `ImageIO.scanForPlugins()`）。
+- **规范化：** 不解码先走文件结构（`ImageScan`：方向、元数据块、多帧）、按头里的尺寸查上限；大图隔行隔列解码再逐次减半双三次缩小；结果确定，同一张图重新上传哈希相同。`UploadBench`：23.4 MB 照片上传加规范化中位数 491 ms（预算 2 s）。
+- **数据：** 三种提交事件加 `attachments`，`ToolFinished` 和 `ToolResultBlock` 加 `images`，为空时不写出，旧行逐字节不变；`SessionState.followUps` 从文字改成用户消息，`omittedImages` 只增不减；`CallModel` 带这次省略的图片 ID 给轨迹用。省略是纯内核规则（`ImageBudget`），回放得到同样的 prompt。
+- **客户端：** prompt 里只有引用，客户端组请求时经 `AttachmentMedia` 取内容（进程内第一次用到时核对哈希）；取不到时这次调用以 `INVALID_REQUEST` 失败、不重试、写明附件 ID，请求不发出。新期望文件 `claude-attachment-requests.txt`、`openai-attachment-requests.txt`、`wire/attachments.txt`，原有期望文件不变。
+- **真实 Claude：** 图片里的随机词、PDF 里的随机词、`read_file` 读附件路径里的随机词，三项都通过，4 次调用约 0.02 美元。
+- **和设计的出入：** 上传多收一个可选的 `type`（浏览器报的类型，只供文件显示），读取多收一个 `name`（下载文件名；名字记在每次出现的引用上，不在存储里）；动图 WebP、PNG 和 GIF 一样只取第一帧；配额已满时同内容的重复上传也会被先拒（收完内容之前不知道是不是重复的）；`fit()` 达不到字节目标时缩到 1×1 就报错，不再无限缩小（任务 13 发现的问题）。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。
