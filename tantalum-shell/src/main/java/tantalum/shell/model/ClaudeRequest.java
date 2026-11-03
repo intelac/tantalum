@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
@@ -198,6 +199,8 @@ final class ClaudeRequest {
             }
             case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
                     .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
+            case AttachmentBlock attachment -> ContentBlockParam.ofText(
+                    TextBlockParam.builder().text(AttachmentPlaceholder.text(attachment.ref())).build());
         };
     }
 

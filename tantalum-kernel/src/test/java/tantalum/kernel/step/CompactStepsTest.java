@@ -520,7 +520,7 @@ class CompactStepsTest {
 
         // 压缩期间的提交排队，压缩结束后开始。
         loop.feed(null, new tantalum.value.event.FollowUpSubmitted(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
-        assertEquals(List.of("q3"), loop.session().followUps());
+        assertEquals(List.of(Message.user("q3")), loop.session().followUps());
 
         loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0), null, null, null));
         Ended ended = assertInstanceOf(Ended.class, loop.state.runs().get(run.ref().run()).phase());

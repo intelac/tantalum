@@ -2,7 +2,12 @@ package tantalum.kernel.compaction;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
@@ -13,6 +18,8 @@ import tantalum.value.model.ToolSpec;
 
 /** 规则 1 的估算：UTF-8 字节数除以 3 向上取整，所有模型相同，宁可高估。 */
 public final class TokenEstimate {
+
+    static final long PDF_PAGE_TOKENS = 3000;
 
     private TokenEstimate() {}
 
@@ -52,7 +59,21 @@ public final class TokenEstimate {
             case TextBlock text -> ofText(text.text());
             case ReasoningBlock reasoning -> ofJson(reasoning.raw());
             case ToolCallBlock call -> ofText(call.name()) + ofText(call.rawArguments());
-            case ToolResultBlock result -> ofText(result.text());
+            case ToolResultBlock result -> ofText(result.text()) + result.images().stream().mapToLong(TokenEstimate::ofImage).sum();
+            case AttachmentBlock attachment -> ofAttachment(attachment.ref());
+        };
+    }
+
+    /** 图片按像素算（A11）：{@code ceil(宽 × 高 / 750)}，加上前面那行说明。 */
+    public static long ofImage(ImageRef image) {
+        return ((long) image.width() * image.height() + 749) / 750 + ofText(AttachmentText.image(image));
+    }
+
+    /** 文件只发说明文字；PDF 另按每页 3000 token 算文档块（Anthropic 文档写的每页 1500–3000，取上限）。 */
+    private static long ofAttachment(AttachmentRef ref) {
+        return switch (ref) {
+            case ImageRef image -> ofImage(image);
+            case FileRef file -> ofText(AttachmentText.file(file)) + (file.pdf() ? file.pages() * PDF_PAGE_TOKENS : 0);
         };
     }
 

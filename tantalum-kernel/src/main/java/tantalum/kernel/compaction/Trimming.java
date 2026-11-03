@@ -64,7 +64,8 @@ public final class Trimming {
         String head = new String(bytes, 0, headEnd, StandardCharsets.UTF_8);
         String tail = new String(bytes, tailStart, bytes.length - tailStart, StandardCharsets.UTF_8);
         long omitted = original - headEnd - (bytes.length - tailStart);
-        return new ToolResultBlock(result.toolCallId(), head + marker(omitted, original) + tail, result.error(), result.code());
+        return new ToolResultBlock(result.toolCallId(), head + marker(omitted, original) + tail, result.error(), result.code(),
+                result.images());
     }
 
     private static String marker(long omitted, long original) {

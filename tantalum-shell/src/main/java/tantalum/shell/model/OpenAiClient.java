@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
@@ -281,6 +282,7 @@ public final class OpenAiClient implements ModelClient {
                         reasoning.append(value.value());
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
+                case AttachmentBlock attachment -> text.append(AttachmentPlaceholder.text(attachment.ref()));
                 case ToolResultBlock result -> {
                     Map<String, Object> tool = new LinkedHashMap<>();
                     tool.put("role", "tool");

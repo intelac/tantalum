@@ -10,9 +10,10 @@ import tantalum.value.model.Message;
 
 /** 一个会话。{@code messages} 是完整历史，只追加；模型看到的是 {@link #view()}。{@code activeRun} 没有运行时为空；
  * {@code lastRun} 是最近一次开始的运行，运行结束后仍保留，用来判断迟到的结果是否还能进历史。
+ * {@code followUps} 是排队的用户消息（文字和附件），运行结束后依次开新运行。
  * {@code compaction} 是最近一次压缩的替换段，{@code anchor} 是上次回复的实测用量，两者都可为空。 */
 public record SessionState(SessionId id, Principal principal, List<Message> messages,
-                           RunId activeRun, RunId lastRun, List<String> followUps, SessionContext context,
+                           RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
                            Compaction compaction, UsageAnchor anchor) {
 
     public SessionState {
@@ -56,7 +57,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor);
     }
 
-    public SessionState withFollowUps(List<String> newFollowUps) {
+    public SessionState withFollowUps(List<Message> newFollowUps) {
         return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor);
     }
 

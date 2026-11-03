@@ -12,6 +12,7 @@ import tantalum.shell.trace.TraceRecord.ModelRequest.Purpose;
 import tantalum.shell.trace.TraceRecord.Segment;
 import tantalum.shell.trace.TraceRecord.Source;
 import tantalum.shell.trace.TraceRecord.UserInput.Mode;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.RunId;
@@ -36,7 +37,7 @@ public final class Trace {
     }
 
     /** 排队中的提交，运行开始时变成用户记录。 */
-    public record Queued(long seq, Instant at, String text, Mode mode) {}
+    public record Queued(long seq, Instant at, String text, Mode mode, List<AttachmentRef> attachments) {}
 
     /** 一个会话的状态。 */
     static final class Book {

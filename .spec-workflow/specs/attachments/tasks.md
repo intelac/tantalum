@@ -54,31 +54,31 @@
 
 ## 阶段 2：进入对话
 
-- [ ] 8. 事件和内容块
+- [x] 8. 事件和内容块
   - File: value/event/{UserPrompt,SteerSubmitted,FollowUpSubmitted,ToolFinished}.java、value/model/{AttachmentBlock,ToolResultBlock,ContentBlock}.java、value/decision/ImagesOmitted.java（新）、journal/EventCodec
   - 新字段为空时不写出
   - 测试（EventCodecTest）：带附件的往返；旧行读成空列表；为空时写出的行和改动前逐字节相同
   - _Requirements: A2, 4.3, 设计第 1 节_
 
-- [ ] 9. 内核：带附件的消息、排队、插话
+- [x] 9. 内核：带附件的消息、排队、插话
   - File: kernel/step/SubmitSteps.java、value/state/SessionState.java（`followUps` 带附件）；所有 `switch (ContentBlock)`
   - 用户消息内容顺序：文字，再附件；只有附件时文字为空串
   - 测试：提问、排队、插话三种都进消息；排队提交在运行开始时带着附件；没有附件的会话决策和现在相同（现有内核测试全部不改）
   - _Requirements: 1.8, 4.3_
 
-- [ ] 10. 提交检查
+- [x] 10. 提交检查
   - File: loop/Intake.java、web/ApiController.java、boot/TantalumProperties（`openai.vision`）
   - 请求体 `attachments`；按本人目录查元数据组成引用；每条消息的数量和合计大小；模型不支持图片时拒绝带图片的提交
   - 测试：引用不存在或不是本人的 400；超数量、超合计 400 并说明哪条；不支持图片 400；正常提交的事件里是服务器的元数据，不是客户端报的
   - _Requirements: 2.1, 2.4, A7_
 
-- [ ] 11. 对话条目和轨迹字段
+- [x] 11. 对话条目和轨迹字段
   - File: conversation/{TranscriptItem,TranscriptPass}.java、trace/{TraceRecord,TracePass,TraceRequests}.java
   - 用户条目、轨迹用户记录加 `attachments`；请求记录加 `omittedImages`（第 3 阶段填）
   - 测试：`WireFormatTest` 加一个带附件的场景和新的期望文件；现有期望文件不变；实时等于回放
   - _Requirements: 4.1, 4.3, 5.5, 设计第 7 节_
 
-- [ ] 12. 阶段 2 收尾
+- [x] 12. 阶段 2 收尾
   - 全量回归；变异检查（排队提交丢掉附件；提交时用客户端报的尺寸）；提交；汇报
   - _Requirements: 设计“阶段”_
 

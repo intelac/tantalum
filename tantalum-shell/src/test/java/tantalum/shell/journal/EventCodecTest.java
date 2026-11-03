@@ -12,6 +12,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
@@ -29,6 +32,7 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.ReasoningBlock;
@@ -164,6 +168,57 @@ class EventCodecTest {
         for (int i = 0; i < old.size(); i++) {
             assertEquals(expected.get(i), codec.decode(expected.get(i).type(), 1, old.get(i)), old.get(i));
         }
+    }
+
+    // ---- 附件（attachments 任务 8）----
+
+    private static final String HASH = "0123456789abcdef".repeat(4);
+    private static final ImageRef IMAGE = new ImageRef("sha256:" + HASH, "cat.png", "image/png", 1234, 2048, 1024, 4096, 2048);
+    private static final FileRef PDF = new FileRef("sha256:" + "f".repeat(64), "report.pdf", "application/pdf", 99, 3);
+    private static final FileRef TEXT = new FileRef("sha256:" + "e".repeat(64), "notes.txt", "text/plain", 5, null);
+
+    @Test
+    void attachmentsSurviveARoundTrip() {
+        List<AttachmentRef> refs = List.of(IMAGE, PDF, TEXT);
+        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "", refs));
+        assertRoundTrip(new SteerSubmitted(SUB, REQ, "look", refs));
+        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "later", refs));
+        assertRoundTrip(new ToolFinished(CMD, "c", "Image ...", false, null, List.of(IMAGE)));
+        assertRoundTrip(new ModelReplied(CMD, List.of(new TextBlock("x"), new AttachmentBlock(IMAGE), new AttachmentBlock(PDF),
+                new ToolResultBlock("c", "out", false, null, List.of(IMAGE))), StopReason.END_TURN, "m", null, null, null, null));
+    }
+
+    /** {@code kind} 在前，没有值的字段不写：没缩小过的图片没有 source*，不是 PDF 的文件没有 pages。 */
+    @Test
+    void attachmentRefsHaveKindFirstAndOmitEmptyFields() {
+        String line = codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(new ImageRef(IMAGE.id(), "a.png", "image/png", 1, 2, 3), TEXT)));
+        assertTrue(line.contains("\"attachments\":[{\"kind\":\"image\",\"id\":\"sha256:" + HASH + "\",\"name\":\"a.png\","
+                + "\"mediaType\":\"image/png\",\"bytes\":1,\"width\":2,\"height\":3},{\"kind\":\"file\","), line);
+        assertTrue(line.endsWith("\"mediaType\":\"text/plain\",\"bytes\":5}]}"), line);
+    }
+
+    /** 没有附件时写出的行和加字段之前逐字节相同；旧行读出来是空列表。 */
+    @Test
+    void noAttachmentsWriteTheSameBytesAsBefore() {
+        String prompt = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"owner\":{\"kind\":\"session\","
+                + "\"session\":{\"value\":\"s\"}},\"text\":\"hi\"}";
+        String steer = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\"}";
+        String replied = "{\"command\":{\"value\":\"1-0\"},\"content\":[{\"kind\":\"toolResult\",\"toolCallId\":\"c\","
+                + "\"text\":\"out\",\"error\":false}],\"stop\":\"END_TURN\",\"actualModel\":\"m\"}";
+        UserPrompt userPrompt = new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi");
+        ModelReplied reply = new ModelReplied(CMD, List.of(new ToolResultBlock("c", "out", false, null)), StopReason.END_TURN, "m",
+                null, null, null, null);
+        assertEquals(prompt, codec.encode(userPrompt));
+        assertEquals(steer, codec.encode(new SteerSubmitted(SUB, REQ, "x")));
+        assertEquals(steer, codec.encode(new FollowUpSubmitted(SUB, REQ, "x")));
+        assertEquals(OLD_TOOL, codec.encode(new ToolFinished(CMD, "c", "out", true, null)));
+        assertEquals(replied, codec.encode(reply));
+
+        assertEquals(List.of(), ((UserPrompt) codec.decode(UserPrompt.TYPE, 1, prompt)).attachments());
+        assertEquals(List.of(), ((SteerSubmitted) codec.decode(SteerSubmitted.TYPE, 1, steer)).attachments());
+        assertEquals(List.of(), ((FollowUpSubmitted) codec.decode(FollowUpSubmitted.TYPE, 1, steer)).attachments());
+        assertEquals(List.of(), ((ToolFinished) codec.decode(ToolFinished.TYPE, 1, OLD_TOOL)).images());
+        assertEquals(reply, codec.decode(ModelReplied.TYPE, 1, replied));
     }
 
     /** 旧程序读新行时忽略不认识的字段，不会把会话当成损坏。用一个现在也不认识的字段钉住这个默认行为。 */

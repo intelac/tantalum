@@ -112,7 +112,8 @@ final class TraceHooks {
         pass.put(with(work, done.failed() ? Status.FAILED : Status.DONE, done.result(), done.continueText(),
                 ended ? After.END : After.CONTINUE, done.startedAt()).withHead(work.head().ended(pass.at)), false);
         if (done.continueText() != null && pass.appended().contains(Message.user(done.continueText()))) {
-            pass.user(run, Mode.CONTINUE, done.continueText(), work.hook() == null ? Source.UNKNOWN : Source.plugin(work.hook()));
+            pass.user(run, Mode.CONTINUE, done.continueText(), work.hook() == null ? Source.UNKNOWN : Source.plugin(work.hook()),
+                    List.of());
         }
     }
 

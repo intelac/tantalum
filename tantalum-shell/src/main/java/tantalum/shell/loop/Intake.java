@@ -1,12 +1,14 @@
 package tantalum.shell.loop;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import tantalum.kernel.compaction.Compactor;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
@@ -88,6 +90,12 @@ public final class Intake {
 
     /** {@code mode} 是 prompt、follow-up 或 steer。载入失败的会话到重启前都返回 500。 */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text) {
+        return submit(principal, session, request, mode, text, List.of());
+    }
+
+    /** 带附件的提交。附件引用已由调用方按本人目录里的元数据组成并查过限制。 */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -103,9 +111,9 @@ public final class Intake {
         }
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
-            case "steer" -> new SteerSubmitted(submission, request, text);
-            case "follow-up" -> new FollowUpSubmitted(submission, request, text);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text);
+            case "steer" -> new SteerSubmitted(submission, request, text, attachments);
+            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments);
         });
     }
 
