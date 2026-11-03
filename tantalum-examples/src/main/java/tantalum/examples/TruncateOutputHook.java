@@ -17,6 +17,16 @@ public final class TruncateOutputHook implements AfterToolHook {
         this.maxChars = maxChars;
     }
 
+    @Override
+    public String plugin() {
+        return "truncateOutput";
+    }
+
+    @Override
+    public String description() {
+        return "工具结果超过上限时截断，并注明截掉了多少字符。";
+    }
+
     /** 不在代理对中间切开，否则截断处是一个坏字符。 */
     @Override
     public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {

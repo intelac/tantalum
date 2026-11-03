@@ -37,6 +37,11 @@ public final class PinnedContextHook implements KernelHook {
     }
 
     @Override
+    public String description() {
+        return "消息里带标记的内容不被自动或手动压缩总结掉。";
+    }
+
+    @Override
     public HookResult beforeCompact(KernelState state, HookContext context) {
         if (context.plan() == null || context.trigger() == Compacting.Trigger.OVERFLOW) {
             return Allow.PLAIN;

@@ -73,7 +73,7 @@ class ToolHandlerTest {
     private static ToolHandler handler(Tool tool, Duration timeout, AfterToolHook... hooks) {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool);
-        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(hooks), timeout, java.time.Clock.systemUTC());
+        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(catalog, List.of(), List.of(hooks), List.of()), timeout, java.time.Clock.systemUTC());
     }
 
     private static ToolFinished result(ToolHandler handler, String name) throws Exception {
@@ -163,7 +163,7 @@ class ToolHandlerTest {
             return ToolOutput.ok("");
         });
         catalog.register(stubborn);
-        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), List.of(), Duration.ofMillis(30), java.time.Clock.systemUTC());
+        ToolHandler handler = new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(catalog, List.of(), List.of(), List.of()), Duration.ofMillis(30), java.time.Clock.systemUTC());
 
         assertTrue(result(handler, "t").text().contains("timed out"));
         assertEquals(0, handler.limiterFor(stubborn).available());
@@ -222,8 +222,7 @@ class ToolHandlerTest {
     private static ToolHandler timed(Tool tool, Duration timeout, ManualClock clock) {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool);
-        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))),
-                List.of(), timeout, clock);
+        return new ToolHandler(catalog, tantalum.shell.tool.Workspaces.shared(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"))), tantalum.shell.access.PluginGate.allOn(catalog, List.of(), List.of(), List.of()), timeout, clock);
     }
 
     /** 同一服务端只有一个名额：第二个调用排队，开始时刻是它拿到名额的时刻，不是命令到达的时刻。 */

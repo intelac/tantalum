@@ -29,6 +29,11 @@ public final class DailyQuotaHook implements KernelHook {
     }
 
     @Override
+    public String description() {
+        return "每个用户每天的 token 用量上限，超过就停止。";
+    }
+
+    @Override
     public boolean mandatory() {
         return true;
     }

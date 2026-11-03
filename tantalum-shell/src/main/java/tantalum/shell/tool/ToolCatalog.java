@@ -59,10 +59,23 @@ public final class ToolCatalog {
 
     /** 按名称排序，工具顺序不随注册或连接的先后变化，缓存前缀才稳定。 */
     public List<ToolSpec> specs() {
-        return Stream.concat(tools.values().stream(),
-                        source.tools().stream().filter(tool -> !tools.containsKey(tool.name())))
-                .sorted(Comparator.comparing(Tool::name))
-                .map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
+        return tools().stream().map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
+    }
+
+    /** 已注册的和动态来源的全部工具，按名称排序（同 {@link #specs()}）。 */
+    public List<Tool> tools() {
+        return Stream.concat(tools.values().stream(), dynamic().stream())
+                .sorted(Comparator.comparing(Tool::name)).toList();
+    }
+
+    /** 动态来源（MCP）里的工具，和已注册的同名的不算。 */
+    public List<Tool> dynamic() {
+        return source.tools().stream().filter(tool -> !tools.containsKey(tool.name())).toList();
+    }
+
+    /** 内置和 Spring 注册的工具；不是的就来自动态来源。 */
+    public boolean isRegistered(String name) {
+        return tools.containsKey(name);
     }
 
     /** 给内核用的判断。未注册的工具按独占处理；工具抛的异常由内核按独占处理。 */

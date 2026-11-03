@@ -25,6 +25,11 @@ public final class CitationCheckHook implements KernelHook {
         return "citationCheck";
     }
 
+    @Override
+    public String description() {
+        return "回答里引用的 文件:行号 必须真实存在，否则让模型改正。";
+    }
+
     /** 核对本身失败（读不了文件、工作超时）不放行：一个“检查”钩子不能在检查没做成时当作通过。 */
     @Override
     public HookResult beforeRunEnd(KernelState state, HookContext context) {

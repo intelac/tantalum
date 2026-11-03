@@ -163,7 +163,7 @@ class ProviderBackoffHookTest {
     }
 
     private WorkDone runThroughHandler(ProviderStatusWork work) throws Exception {
-        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), List.of(work), Duration.ofMillis(300), java.time.Clock.systemUTC());
+        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(work)), Duration.ofMillis(300), java.time.Clock.systemUTC());
         return (WorkDone) handler.handle(new DoWork(new CommandId("w"), RUN, ProviderStatusWork.TYPE, new Json.Null()));
     }
 }

@@ -42,6 +42,11 @@ public final class ToolApprovalHook implements KernelHook {
     }
 
     @Override
+    public String description() {
+        return "调用列出的工具前先问审批服务，没有批准就不执行。";
+    }
+
+    @Override
     public boolean mandatory() {
         return true;
     }

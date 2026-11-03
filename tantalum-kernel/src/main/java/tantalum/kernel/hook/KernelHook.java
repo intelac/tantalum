@@ -21,6 +21,19 @@ public interface KernelHook {
 
     String name();
 
+    /**
+     * 所属插件，插件页按它分组、按它开关（core-tools C13）。同一个插件的钩子、工作类型和工具后处理要返回同一个名字，默认是
+     * {@link #name()}。{@link #mandatory()} 的钩子所在的插件不能被用户关掉。
+     */
+    default String plugin() {
+        return name();
+    }
+
+    /** 插件页上的一句说明，可以为空。 */
+    default String description() {
+        return "";
+    }
+
     /** 强制钩子抛异常时按 {@code Stop} 处理；非强制的跳过并上报（{@code beforeToolCall} 例外，抛异常一律拦截）。 */
     default boolean mandatory() {
         return false;

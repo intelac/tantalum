@@ -67,32 +67,32 @@
 
 ## 阶段 2：开关和过滤入口
 
-- [ ] 10. 插件 SDK 的 `plugin()` 和 `description()`
+- [x] 10. 插件 SDK 的 `plugin()` 和 `description()`
   - File: kernel/hook/KernelHook.java、shell/plugin/{WorkType,AfterToolHook}.java
   - 默认方法 `plugin()` 返回 `name()`，`description()` 默认空
   - 测试：现有示例插件的默认值；同一插件三种接口返回同一名字时归为一项
   - _Requirements: C13_
 
-- [ ] 11. `PluginSwitches`
+- [x] 11. `PluginSwitches`
   - File: shell/plugin/PluginSwitches.java（新）、shell/auth/UserStore.java（新表）
   - `plugin_settings(user, kind, name, enabled, updated_at)`；只存关掉的；按用户缓存
   - 测试：默认全开；关掉再打开；两个用户互不影响；重启后保留
   - _Requirements: C12, C15, 7.6_
 
-- [ ] 12. `PluginGate` 和 ArchUnit 规则
+- [x] 12. `PluginGate` 和 ArchUnit 规则
   - File: shell/plugin/PluginGate.java（新）、shell/handler/{ToolHandler,WorkHandler,ContextHandler}.java、tantalum-shell/src/test/java/tantalum/shell/ArchitectureTest.java
   - 名单；`runTool`、`afterTool`、`runWork`；关掉的工具返回设计里的“不可用”文字；必须开启的插件不能关
   - 规则：除 `PluginGate` 外不得调用 `Tool.run`、`AfterToolHook.afterToolExecution`、`WorkType.run`；内核里除 `HookChain` 外不得调用 `KernelHook` 的钩子方法
   - 测试：关掉的工具、插件工作、工具后处理都不执行；规则对一个故意绕过的测试类报错
   - _Requirements: C16, 8.3_
 
-- [ ] 13. 插件接口
+- [x] 13. 插件接口
   - File: shell/web/PluginController.java（新）
   - `GET /api/plugins`、`PUT /api/plugins/<kind>/<name>`；字段照设计第 2 节
   - 测试（Web 测试）：两个账号各自开关互不影响；必须开启的 400；不存在的 404；没登录 401
   - _Requirements: 7, 7.6_
 
-- [ ] 14. 阶段 2 收尾
+- [x] 14. 阶段 2 收尾
   - 全量回归；变异检查（`ToolHandler` 直接调 `Tool.run`；开关不按用户分）；提交；汇报
   - _Requirements: C16_
 

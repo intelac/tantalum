@@ -40,6 +40,11 @@ public final class ProviderStatusWork implements WorkType {
         return TYPE;
     }
 
+    @Override
+    public String plugin() {
+        return "providerBackoff";
+    }
+
     /** 被中断（超时、取消运行）时 {@code send} 和 {@code sleep} 抛 {@link InterruptedException}，循环随之结束。 */
     @Override
     public WorkResult run(ToolContext context, Json input) throws InterruptedException {

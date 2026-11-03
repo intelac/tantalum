@@ -108,6 +108,14 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
         return Optional.ofNullable(visible.get(name));
     }
 
+    /** 一个配置了的 MCP 服务器：名字和连接状态（READY、RECONNECTING、FAILED 等），给插件页看。 */
+    public record ServerStatus(String name, String state) {}
+
+    /** 按配置的顺序，没连上的也列出。 */
+    public List<ServerStatus> servers() {
+        return settings.servers().stream().map(server -> new ServerStatus(server.name(), state(server.name()).name())).toList();
+    }
+
     /** 给测试和运维看。 */
     McpConnection.State state(String server) {
         return connections.get(server).state();
