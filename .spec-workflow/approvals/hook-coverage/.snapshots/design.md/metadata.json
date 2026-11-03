@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/hook-coverage/design.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T00:44:01.072Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793666641070_vw6ubwkad",
+      "approvalTitle": "hook-coverage design: work-round counters and Limits, compaction trigger in HookContext, three example plugins, pipeline test matrix, pure-hook ArchUnit rule"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-03T00:59:56.636Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793666641070_vw6ubwkad",
+      "approvalTitle": "hook-coverage design: work-round counters and Limits, compaction trigger in HookContext, three example plugins, pipeline test matrix, pure-hook ArchUnit rule"
+    }
+  ]
+}

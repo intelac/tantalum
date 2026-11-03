@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/hook-coverage/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T00:39:15.894Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793666355892_o8h61oxwl",
+      "approvalTitle": "hook-coverage requirements: an implementation for every hook, work-round cap, compaction trigger, real-pipeline test matrix, no-I/O rule"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-03T00:41:30.464Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793666355892_o8h61oxwl",
+      "approvalTitle": "hook-coverage requirements: an implementation for every hook, work-round cap, compaction trigger, real-pipeline test matrix, no-I/O rule"
+    }
+  ]
+}

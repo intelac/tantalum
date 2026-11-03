@@ -1,6 +1,6 @@
 {
   "filePath": ".spec-workflow/specs/ops-hardening/requirements.md",
-  "currentVersion": 3,
+  "currentVersion": 4,
   "snapshots": [
     {
       "version": 1,
@@ -25,6 +25,14 @@
       "trigger": "approved",
       "approvalId": "approval_1793535732690_y4zrdvwup",
       "approvalTitle": "ops-hardening spec：需求文档（改为每会话一个 journal）"
+    },
+    {
+      "version": 4,
+      "filename": "snapshot-004.json",
+      "timestamp": "2026-11-01T23:47:07.909Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793569572673_3n3fo4ozy",
+      "approvalTitle": "ops-hardening 需求修订：每会话快照 H13、序号约定 H14"
     }
   ]
 }

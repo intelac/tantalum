@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/trace-view/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-02T23:40:10.860Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793662810857_y5ur856f0",
+      "approvalTitle": "trace-view requirements: show tools, plugin work and hook decisions in the trace page"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-02T23:51:44.466Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793662810857_y5ur856f0",
+      "approvalTitle": "trace-view requirements: show tools, plugin work and hook decisions in the trace page"
+    }
+  ]
+}

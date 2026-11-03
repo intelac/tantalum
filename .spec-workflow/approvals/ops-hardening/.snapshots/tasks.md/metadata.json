@@ -1,0 +1,30 @@
+{
+  "filePath": ".spec-workflow/specs/ops-hardening/tasks.md",
+  "currentVersion": 3,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-01T14:50:32.679Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793544632673_kz6pfi319",
+      "approvalTitle": "ops-hardening spec：任务清单"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-01T15:00:02.313Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793544632673_kz6pfi319",
+      "approvalTitle": "ops-hardening spec：任务清单"
+    },
+    {
+      "version": 3,
+      "filename": "snapshot-003.json",
+      "timestamp": "2026-11-01T23:47:10.992Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793569576012_10vgqif4x",
+      "approvalTitle": "ops-hardening 任务修订：新增任务 45–49，任务 5 完成"
+    }
+  ]
+}

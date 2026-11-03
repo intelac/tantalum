@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/hook-coverage/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T01:01:29.160Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793667689157_ccov6hr4g",
+      "approvalTitle": "hook-coverage tasks: 19 tasks in 3 phases"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-03T01:01:38.315Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793667689157_ccov6hr4g",
+      "approvalTitle": "hook-coverage tasks: 19 tasks in 3 phases"
+    }
+  ]
+}

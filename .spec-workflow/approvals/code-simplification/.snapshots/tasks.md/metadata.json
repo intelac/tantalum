@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/code-simplification/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-02T15:52:38.487Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793634758484_6g0quvcv8",
+      "approvalTitle": "code-simplification 任务：6 个阶段 39 个任务"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-02T15:56:17.704Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793634758484_6g0quvcv8",
+      "approvalTitle": "code-simplification 任务：6 个阶段 39 个任务"
+    }
+  ]
+}

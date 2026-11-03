@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/trace-view/design.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T00:14:25.023Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793664865019_ewpptknph",
+      "approvalTitle": "trace-view design: HookDecided fact, model timing and options, trace projection with live push, DSH-style ledger, timeline and stats"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-03T01:00:04.971Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793664865019_ewpptknph",
+      "approvalTitle": "trace-view design: HookDecided fact, model timing and options, trace projection with live push, DSH-style ledger, timeline and stats"
+    }
+  ]
+}

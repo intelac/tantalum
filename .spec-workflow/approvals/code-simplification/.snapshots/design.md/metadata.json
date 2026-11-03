@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/code-simplification/design.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-02T15:47:08.372Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793634428370_g481vwvcd",
+      "approvalTitle": "code-simplification 设计：6 个阶段的目标结构"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-11-02T15:51:17.418Z",
+      "trigger": "approved",
+      "approvalId": "approval_1793634428370_g481vwvcd",
+      "approvalTitle": "code-simplification 设计：6 个阶段的目标结构"
+    }
+  ]
+}
