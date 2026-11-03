@@ -10,6 +10,7 @@
 | `trace-view` | 23/23，2026-11-03 完成（结果见 tech.md）。轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做；DSH 统计页的“事件行”（请求头、系统提示词、工具集变更单独成行）没有做，轨迹页已经能看到这些 | `specs/trace-view/tasks.md` |
 | `hook-coverage` | 19/19，2026-11-03 完成（结果见 tech.md）。每个钩子都有示例插件；工作轮数上限；真实管线上的钩子矩阵 86 个测试；钩子不做 I/O 的 ArchUnit 规则。顺带修了两个缺陷：同一步开始又结束的运行在对话里没有结束原因；关服务时被打断的处理器结果被当成正常结果落盘（违反 ops-hardening H8） | `specs/hook-coverage/tasks.md` |
 | `attachments` | 完成（2026-11-03，23 个任务，4 个阶段）。提问时附图片和文件，每用户独立存储，发给模型，对话页和轨迹页显示。没有引用的附件怎么清理，等以后做会话删除时一起做（A9） | `specs/attachments/requirements.md` |
+| `core-tools` | 需求待批（2026-11-03）。`read_file` 按行窗口读取和续读，新增 `write_file`、`edit_file`、`list_dir`、`find_files`，先读后写的规则，控制台显示改动差异 | `specs/core-tools/requirements.md` |
 
 `ops-hardening` 50/50 已完成（2026-11-02）。
 
@@ -25,7 +26,8 @@
 | 多实例 | Yi 决定这次不做。每个用户同一时刻归一个实例，网关按用户路由，实例挂了由别的实例接管。需要共享存储（网络盘的 fsync 和锁要实测）、索引库换 Postgres、共享工作区和登录会话、租约防脑裂、SSE 路由。序号和 ID 已留好（`ops-hardening` H14） | 开 spec；和沙箱、子 agent 的先后未定 |
 | MCP 后续 | 每用户令牌、OAuth、stdio、人工审批 | Yi 决定要不要做、做哪几项 |
 | 联网：`web_search`、`web_fetch`（2026-11-03 Yi 发现 agent 不能访问网页） | 现在内置工具只有 `grep`、`read_file` 和三个记忆工具，没有任何联网能力，也没有 `bash`。DSH 的做法（`.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md`）：模型看到的两个工具名和参数固定，由 `dsh-tool-web` 定义；搜索后端可换（Exa、Perplexity、DeepSeek），只注册能力不注册工具；抓取是单独的 HTTP 后端，管跳转、解码、大小上限，并有出站代理策略（`2026-08-27-outbound-proxy-policy.md`）。pi 没有联网工具，靠 `bash` 跑 curl。我们这边要定：搜索用哪家（要密钥，按管理员配置），抓取防内网访问（SSRF：拒绝回环、私网、云元数据地址，跳转后重新检查），结果大小上限和截断，结果进 journal 以便回放，用户能否关掉。Claude 自带的服务端搜索工具只对 Claude 有效，换本地模型就没了，不作为唯一方案。2026-11-03 临时方案：本机用 `@playwright/mcp@0.0.83`（HTTP，`localhost:8931`，无头、内存里的浏览器配置）经现有 MCP 客户端接上，放行导航、点击、输入、`evaluate`，禁止上传文件和 `run_code_unsafe`；实测能打开维基百科并读出内容，`--blocked-origins` 拦住了本机服务。临时方案的缺口：所有用户共用一个浏览器；只拦列出的地址，不是完整的内网防护；没有搜索接口。2026-11-03 实测“DeepSeek super agent 论文深度调查”两次都答“没找到”：Google 对无头浏览器返回限流页，模型没换 Bing（Bing 实测可用），只查了 arXiv 和 Hugging Face；实际是 DeepSeek 2026-10-31 发表的文章 *Exploring Super-agent Design* 和 GitHub 仓库 `deepseek-ai/dsh-superagent-prototype`，不在 arXiv。说明只有浏览器不够，搜索工具是必需的 | 开 spec；和 `read_file` 截断一起做，先后由 Yi 定 |
-| `read_file` 没有大小和行数控制（2026-11-03 发现） | 上限 1 MB、整文件返回，没有 offset/limit。上面那次调查里模型读了两个 132 KB、342 KB 的页面快照，一次塞进十几万 token，运行中途被迫压缩。pi 的 `read` 默认 2000 行或 50 KB 截断，带 offset/limit 续读（`packages/coding-agent/src/core/tools/read.ts`、`truncate.ts`）；DSH 大结果落文件留续读入口（`2026-07-08-tool-output-spill-files.md`） | 和联网一起开 spec，或单独小改；由 Yi 决定 |
+| 服务器装在 Windows 上（2026-11-03 Yi 问） | 现在跑不起来：数据目录的文件和目录创建时就设 POSIX 权限（600/700），Windows 的 NTFS 不支持，Java 直接报错（pi 在 Windows 上能用，是因为 Node 静默忽略 `mode`，`core/auth-storage.ts:37,71`）。要改：不支持 POSIX 权限时照常创建并靠用户目录的 ACL；检查路径拼接、文件锁、换行 | Yi 定：单独开 spec，排在 `core-tools` 之后；要在一台 Windows 机器上跑一遍测试才算完成 |
+| `read_file` 没有大小和行数控制（2026-11-03 发现） | 上限 1 MB、整文件返回，没有 offset/limit。上面那次调查里模型读了两个 132 KB、342 KB 的页面快照，一次塞进十几万 token，运行中途被迫压缩。pi 的 `read` 默认 2000 行或 50 KB 截断，带 offset/limit 续读（`packages/coding-agent/src/core/tools/read.ts`、`truncate.ts`）；DSH 大结果落文件留续读入口（`2026-07-08-tool-output-spill-files.md`） | 2026-11-03 Yi 定：并进 `core-tools` spec（`read_file` 截断和 offset/limit 续读、`write`、`edit`、`ls`、`find`，内置工具），先做；联网另开 `web-tools`，排在它后面。`bash` 等沙箱 spec，在用户本机执行（Windows 上照 pi 找 Git Bash，另有 `pwsh`） |
 
 ## 3. 等 Yi 决定
 
