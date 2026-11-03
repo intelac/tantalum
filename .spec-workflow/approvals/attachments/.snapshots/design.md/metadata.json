@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/attachments/design.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-11-03T07:12:45.229Z",
+      "trigger": "initial",
+      "approvalId": "approval_1793689965220_3sdfdu9lf",
+      "approvalTitle": "附件设计：存储和上传、规范化、发给模型、省略和估算、控制台"
+    }
+  ]
+}
