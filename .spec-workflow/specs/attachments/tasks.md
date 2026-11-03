@@ -12,43 +12,43 @@
 
 ## 阶段 1：存储和上传
 
-- [ ] 1. 依赖
+- [x] 1. 依赖
   - File: tantalum-shell/pom.xml、THIRD_PARTY_NOTICES.md
   - TwelveMonkeys `imageio-webp`、`imageio-jpeg`、`imageio-metadata`，Apache PDFBox；版本固定，发布至少两周
   - 测试：读一个 WebP、读一个带 EXIF 方向的 JPEG、数一个 PDF 的页数
   - _Requirements: 设计“需要 Yi 确认”第 1、2 条_
 
-- [ ] 2. 引用类型和给模型看的文字
+- [x] 2. 引用类型和给模型看的文字
   - File: value/attachment/{AttachmentRef,ImageRef,FileRef,AttachmentText}.java（新）
   - `id` 格式校验（`sha256:` 加 64 位小写十六进制）；四种说明文字（图片、文件、省略、不支持图片）
   - 测试：格式校验；文字和设计第 4 节逐字相同
   - _Requirements: A2, A6, A7, A10, 设计第 1、4 节_
 
-- [ ] 3. 文件名清洗和限制
+- [x] 3. 文件名清洗和限制
   - File: shell/attachment/{FileNames,AttachmentLimits}.java（新）、TantalumProperties
   - 清洗规则照设计第 2 节；限制的默认值照 A4、A5、配额 5 GiB，都可配置
   - 测试：清洗表（路径、反斜杠、控制字符、Windows 字符、首尾句点、多字节截断、清完为空）
   - _Requirements: 2.5, 2.7, A4, A5_
 
-- [ ] 4. 图片规范化
+- [x] 4. 图片规范化
   - File: shell/attachment/ImageNormalizer.java（新）；测试资源 attachments/*（小样例图）
   - 先查头再解码；判断干净；转正、缩小、去元数据、编码选择、质量序列；GIF 只取第一帧；并发上限 2
   - 测试：每种格式的干净样例原样保存；EXIF 方向转正；元数据去掉；超大缩小并记原尺寸；透明出 PNG、不透明出 JPEG；同一输入两次输出逐字节相同；头里写超大尺寸在解码前拒绝；坏文件拒绝；声称是图片但不是
   - _Requirements: 2.2, 2.3, A4_
 
-- [ ] 5. `AttachmentStore`
+- [x] 5. `AttachmentStore`
   - File: shell/attachment/AttachmentStore.java（新）、boot/Storage
   - 目录布局、权限；边读边写临时文件、超限即停；去重；元数据；配额（第一次用到时扫目录）；只读本人目录；PDF 页数；启动清理临时文件；完整性检查（进程内第一次用到时核对哈希）
   - 测试：去重、配额、跨用户 404、并发上传同一内容、临时文件清理、哈希不符时报错
   - _Requirements: A1, A2, A5, 2.7, 4.2_
 
-- [ ] 6. 上传和读取接口
+- [x] 6. 上传和读取接口
   - File: shell/web/AttachmentController.java（新）、SecurityConfig（如需）
   - `POST /api/sessions/<会话>/attachments`、`GET /api/attachments/<id>`（`?download=1`）；响应头照设计第 2 节；错误码照“Error Handling”
   - 测试（Web 测试）：上传后读回同样字节；415、400、404、413、422 各一例；两个账号互查 404；下载头；图片 inline、文件 attachment
   - _Requirements: 2.1–2.7, 5.3, 安全_
 
-- [ ] 7. 阶段 1 收尾
+- [x] 7. 阶段 1 收尾
   - 性能：20 MB 照片上传加规范化 2 秒内；全量回归；变异检查（去掉“先查头”；读取不按用户隔离）；提交；汇报
   - _Requirements: 非功能“性能”“安全”_
 

@@ -15,6 +15,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
+import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.handler.CallLimiter;
@@ -109,7 +110,7 @@ public final class Engine implements AutoCloseable {
         this.clock = clock;
         this.codec = codec;
         this.shutdownWait = properties.shutdownWait();
-        this.storage = Storage.open(properties.dataDir(), codec, properties.index());
+        this.storage = Storage.open(properties.dataDir(), codec, properties.index(), properties.attachmentLimits());
         Loop loop = properties.loop();
         List<SessionIndex.Session> unfinished;
         try {
@@ -193,6 +194,11 @@ public final class Engine implements AutoCloseable {
     /** 提问、排队、插话、手动压缩和取消。 */
     public Intake intake() {
         return intake;
+    }
+
+    /** 每个用户的附件目录。 */
+    public AttachmentStore attachments() {
+        return storage.attachments;
     }
 
     /** 会话、运行和回放的读取。 */

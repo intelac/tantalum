@@ -71,6 +71,21 @@ public final class Intake {
         this.clock = clock;
     }
 
+    /**
+     * 往会话里上传附件前的归属检查，规则同提交：别人的会话返回 404；新会话 ID 第一次出现时认领，归本人。
+     * 返回 HTTP 状态。
+     */
+    public int access(Principal principal, SessionId session) {
+        if (residency.failure(session) != null) {
+            return 500;
+        }
+        SessionState existing = view.current().sessions().get(session);
+        if (existing != null) {
+            return existing.principal().equals(principal) ? 200 : 404;
+        }
+        return claims.claim(principal, session);
+    }
+
     /** {@code mode} 是 prompt、follow-up 或 steer。载入失败的会话到重启前都返回 500。 */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text) {
         if (residency.failure(session) != null) {

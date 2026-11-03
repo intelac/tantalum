@@ -10,6 +10,9 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
+import tantalum.shell.attachment.AttachmentLimits;
+import tantalum.shell.attachment.AttachmentStore;
+import tantalum.shell.attachment.ImageNormalizer;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionFiles;
@@ -30,7 +33,7 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.state.PrincipalState;
 
 /**
- * 数据目录：锁、格式、会话文件和索引，以及读它们共用的对象。
+ * 数据目录：锁、格式、会话文件、索引和附件，以及读它们共用的对象。
  * 按顺序打开，中途失败时关掉已打开的，免得嵌入方重试时一直撞上“store is locked”；关闭顺序和打开相反。
  */
 final class Storage implements AutoCloseable {
@@ -45,8 +48,10 @@ final class Storage implements AutoCloseable {
     final IndexWriter indexWriter;
     final UsageLedger usage;
     final SessionFiles files;
+    final AttachmentStore attachments;
 
-    private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, Deque<AutoCloseable> opened) throws IOException {
+    private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits,
+                    Deque<AutoCloseable> opened) throws IOException {
         paths = new SessionPaths(dataDir);
         reader = new SessionFileReader(codec);
         lock = StoreLock.acquire(dataDir);
@@ -63,12 +68,14 @@ final class Storage implements AutoCloseable {
         usage = new UsageLedger(index, indexWriter);
         files = new SessionFiles(paths, codec, MAX_OPEN_FILES, indexWriter::onDurable);
         opened.push(files);
+        attachments = new AttachmentStore(dataDir, attachmentLimits, new ImageNormalizer(attachmentLimits));
     }
 
-    static Storage open(Path dataDir, EventCodec codec, TantalumProperties.Index throttle) throws IOException {
+    static Storage open(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits)
+            throws IOException {
         Deque<AutoCloseable> opened = new ArrayDeque<>();
         try {
-            return new Storage(dataDir, codec, throttle, opened);
+            return new Storage(dataDir, codec, throttle, attachmentLimits, opened);
         } catch (IOException | RuntimeException failure) {
             opened.forEach(Storage::closeQuietly);
             throw failure;
