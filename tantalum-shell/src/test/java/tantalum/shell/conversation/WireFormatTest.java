@@ -348,7 +348,8 @@ class WireFormatTest {
 
     // ---- 附件（attachments 任务 11）：attachments.txt，另查“实时 = 回放” ----
 
-    private static final ImageRef PHOTO = new ImageRef("sha256:" + "a".repeat(64), "photo.jpg", "image/jpeg", 1_500_000, 2048, 1536, 4000, 3000);
+    /** 字节数故意大到单独就超出 20 MiB 的图片预算（base64 后；真实的存储版本不超过 4 MiB），每个请求都省略它，请求记录据此带 omittedImages。 */
+    private static final ImageRef PHOTO = new ImageRef("sha256:" + "a".repeat(64), "photo.jpg", "image/jpeg", 16_000_000, 2048, 1536, 4000, 3000);
     private static final FileRef REPORT = new FileRef("sha256:" + "b".repeat(64), "report.pdf", "application/pdf", 90_000, 3);
     private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);
     private static final ImageRef SKETCH = new ImageRef("sha256:" + "d".repeat(64), "sketch.png", "image/png", 2_000, 40, 30);

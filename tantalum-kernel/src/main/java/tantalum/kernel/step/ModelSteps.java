@@ -1,12 +1,15 @@
 package tantalum.kernel.step;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import tantalum.kernel.attachment.ImageBudget;
 import tantalum.kernel.hook.HookOutcome;
 import tantalum.kernel.projection.PromptProjection;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.decision.Decision;
+import tantalum.value.decision.ImagesOmitted;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.WorkDone;
@@ -15,6 +18,7 @@ import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
+import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
@@ -68,11 +72,29 @@ public final class ModelSteps {
                     run = out.run(run.ref());
                 }
                 Prompt prompt = PromptProjection.project(out.session(run.ref()), allow.patch());
-                CommandId id = out.nextCommandId();
-                out.emit(new CallModel(id, run.ref(), prompt));
+                CommandId id = emitCall(out, run.ref(), prompt);
                 out.await(run, AWAITING_MODEL, Set.of(id));
             }
         }
+    }
+
+    /**
+     * 按图片预算省略后发出模型调用（A10），普通调用和摘要调用都走这里。新省略的图片记进会话（只增不减），报一条
+     * {@link ImagesOmitted}；回放时重新算出同样的省略。
+     */
+    static CommandId emitCall(Outcome out, RunRef run, Prompt prompt) {
+        SessionState session = out.session(run);
+        ImageBudget.Applied applied = ImageBudget.apply(prompt.messages(), session.omittedImages());
+        if (!applied.newlyOmitted().isEmpty()) {
+            List<String> all = new ArrayList<>(session.omittedImages());
+            all.addAll(applied.newlyOmitted());
+            out.put(session.withOmittedImages(all));
+            out.report(List.of(new ImagesOmitted(run, applied.newlyOmitted())));
+        }
+        CommandId id = out.nextCommandId();
+        out.emit(new CallModel(id, run, new Prompt(prompt.system(), prompt.tools(), applied.messages(), prompt.output()),
+                applied.omitted()));
+        return id;
     }
 
     public static Decision modelReplied(StepContext context) {

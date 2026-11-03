@@ -94,7 +94,7 @@ public class TantalumApplication {
             case "openai" -> {
                 TantalumProperties.OpenAi openai = properties.openai();
                 return new OpenAiClient(openai.baseUrl(), openai.model(), System.getenv("OPENAI_API_KEY"),
-                        openai.maxTokens(), openai.firstChunkTimeout(), openai.betweenChunkTimeout(), rules);
+                        openai.maxTokens(), openai.firstChunkTimeout(), openai.betweenChunkTimeout(), rules, openai.vision());
             }
             default -> throw new IllegalStateException("unknown tantalum.provider: " + properties.provider()
                     + "; expected claude or openai");

@@ -95,7 +95,7 @@ public final class ToolSteps {
         for (int i = 0; i < round.slots().size(); i++) {
             ToolSlot slot = round.slots().get(i);
             if (event.command().equals(slot.command())) {
-                ToolResultBlock result = new ToolResultBlock(event.toolCallId(), event.text(), event.error(), null);
+                ToolResultBlock result = new ToolResultBlock(event.toolCallId(), event.text(), event.error(), null, event.images());
                 round = round.withSlot(i, slot.done(result));
             }
         }

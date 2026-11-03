@@ -106,7 +106,7 @@ public final class ToolHandler implements Handler {
     }
 
     private static ToolFinished finished(RunTool run, ToolOutput output, Instant startedAt) {
-        return new ToolFinished(run.id(), run.call().id(), output.text(), output.error(), startedAt);
+        return new ToolFinished(run.id(), run.call().id(), output.text(), output.error(), startedAt, output.images());
     }
 
     @Override

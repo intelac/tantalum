@@ -2,8 +2,12 @@ package tantalum.shell.model;
 
 import com.anthropic.core.JsonValue;
 import com.anthropic.models.messages.AssistantMessageParam;
+import com.anthropic.models.messages.Base64ImageSource;
+import com.anthropic.models.messages.Base64PdfSource;
 import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.DocumentBlockParam;
+import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.RedactedThinkingBlockParam;
@@ -16,12 +20,16 @@ import com.anthropic.models.messages.ToolResultBlockParam;
 import com.anthropic.models.messages.ToolUseBlockParam;
 import com.anthropic.models.messages.UserMessageParam;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import tantalum.shell.json.JsonText;
+import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.FileRef;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
@@ -46,6 +54,12 @@ final class ClaudeRequest {
     private static final String BINDING_BETA = "thinking-binding-controls-2026-08-01";
     /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
     private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
+    /** 只有附件、没有文字的用户消息补的文字，Claude 不收空文字块。 */
+    static final String SEE_ATTACHED = "(see attached)";
+    /** Claude 的 PDF 上限：超过时不发文档块，只给只读路径。 */
+    static final long MAX_PDF_BYTES = 32L * 1024 * 1024;
+    static final int MAX_PDF_PAGES = 100;
+    private static final Base64.Encoder BASE64 = Base64.getEncoder();
 
     private final String model;
     private final long maxTokens;
@@ -96,6 +110,11 @@ final class ClaudeRequest {
      * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
      */
     static MessageCreateParams params(Prompt prompt, RequestOptions options) {
+        return params(prompt, options, AttachmentMedia.NONE);
+    }
+
+    /** 同上，附件内容从 {@code media} 取。 */
+    static MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media) {
         Map<String, Json> extra = ((Json.Obj) options.extra()).fields();
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(options.model())
@@ -116,8 +135,7 @@ final class ClaudeRequest {
         List<Message> messages = prompt.messages();
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
-            List<ContentBlockParam> blocks = new ArrayList<>(message.content().stream()
-                    .map(ClaudeRequest::param).filter(Objects::nonNull).toList());
+            List<ContentBlockParam> blocks = blocks(message, media);
             if (blocks.isEmpty()) {
                 continue;
             }
@@ -172,7 +190,7 @@ final class ClaudeRequest {
         return tool.build();
     }
 
-    /** 只有文本和工具结果块能带缓存标记；最后一条消息总是用户消息，所以这两种就够了。 */
+    /** 最后一条消息总是用户消息：文本、工具结果、图片和文档块都可能在最后，都能带缓存标记。 */
     private static ContentBlockParam cached(ContentBlockParam block) {
         if (block.isText()) {
             return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(CACHE).build());
@@ -180,7 +198,84 @@ final class ClaudeRequest {
         if (block.isToolResult()) {
             return ContentBlockParam.ofToolResult(block.asToolResult().toBuilder().cacheControl(CACHE).build());
         }
+        if (block.isImage()) {
+            return ContentBlockParam.ofImage(block.asImage().toBuilder().cacheControl(CACHE).build());
+        }
+        if (block.isDocument()) {
+            return ContentBlockParam.ofDocument(block.asDocument().toBuilder().cacheControl(CACHE).build());
+        }
         return block;
+    }
+
+    /**
+     * 一条消息的块。附件展开成说明文字加图片或文档块；只有附件没有文字的用户消息在最前面补 {@code (see attached)}
+     * （pi {@code anthropic-messages.ts:184-191}）；出错的工具结果里的图片放在结果之后（pi {@code :1334-1341}）。
+     */
+    private static List<ContentBlockParam> blocks(Message message, AttachmentMedia media) {
+        List<ContentBlockParam> blocks = new ArrayList<>();
+        boolean attachments = message.content().stream().anyMatch(AttachmentBlock.class::isInstance);
+        boolean text = message.content().stream().anyMatch(block -> block instanceof TextBlock plain && !plain.text().isBlank());
+        if (message.role() == Role.USER && attachments && !text) {
+            blocks.add(ContentBlockParam.ofText(TextBlockParam.builder().text(SEE_ATTACHED).build()));
+        }
+        List<ContentBlockParam> afterResults = new ArrayList<>();
+        for (ContentBlock block : message.content()) {
+            switch (block) {
+                case AttachmentBlock attachment -> blocks.addAll(attachment(attachment.ref(), media));
+                case ToolResultBlock result when !result.images().isEmpty() && result.error() -> {
+                    blocks.add(param(result));
+                    result.images().forEach(image -> afterResults.add(ContentBlockParam.ofImage(imageParam(image, media))));
+                }
+                case ToolResultBlock result when !result.images().isEmpty() -> blocks.add(toolResultWithImages(result, media));
+                default -> {
+                    ContentBlockParam param = param(block);
+                    if (param != null) {
+                        blocks.add(param);
+                    }
+                }
+            }
+        }
+        blocks.addAll(afterResults);
+        return blocks;
+    }
+
+    private static List<ContentBlockParam> attachment(AttachmentRef ref, AttachmentMedia media) {
+        return switch (ref) {
+            case ImageRef image -> image(image, media);
+            case FileRef file -> {
+                List<ContentBlockParam> blocks = new ArrayList<>();
+                blocks.add(ContentBlockParam.ofText(TextBlockParam.builder().text(AttachmentText.file(file)).build()));
+                if (file.pdf() && file.bytes() <= MAX_PDF_BYTES && file.pages() <= MAX_PDF_PAGES) {
+                    blocks.add(ContentBlockParam.ofDocument(DocumentBlockParam.builder()
+                            .source(Base64PdfSource.builder().data(BASE64.encodeToString(media.file(file))).build()).build()));
+                }
+                yield blocks;
+            }
+        };
+    }
+
+    /** 图片前面一行说明，再是图片本身（需求 3.3）。 */
+    private static List<ContentBlockParam> image(ImageRef ref, AttachmentMedia media) {
+        return List.of(ContentBlockParam.ofText(TextBlockParam.builder().text(AttachmentText.image(ref)).build()),
+                ContentBlockParam.ofImage(imageParam(ref, media)));
+    }
+
+    private static ImageBlockParam imageParam(ImageRef ref, AttachmentMedia media) {
+        AttachmentMedia.Image image = media.image(ref);
+        return ImageBlockParam.builder().source(Base64ImageSource.builder()
+                .mediaType(Base64ImageSource.MediaType.of(image.mediaType()))
+                .data(BASE64.encodeToString(image.bytes())).build()).build();
+    }
+
+    /** 没出错的工具结果：文字和图片都在结果里（需求 3.7）。图片的说明行已经在工具输出的文字里，不再重复。 */
+    private static ContentBlockParam toolResultWithImages(ToolResultBlock result, AttachmentMedia media) {
+        List<ToolResultBlockParam.Content.Block> content = new ArrayList<>();
+        content.add(ToolResultBlockParam.Content.Block.ofText(TextBlockParam.builder().text(result.text()).build()));
+        for (ImageRef image : result.images()) {
+            content.add(ToolResultBlockParam.Content.Block.ofImage(imageParam(image, media)));
+        }
+        return ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
+                .toolUseId(result.toolCallId()).contentOfBlocks(content).isError(false).build());
     }
 
     /** 其他供应商的推理内容和空文本不发送。 */
@@ -199,8 +294,7 @@ final class ClaudeRequest {
             }
             case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
                     .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
-            case AttachmentBlock attachment -> ContentBlockParam.ofText(
-                    TextBlockParam.builder().text(AttachmentPlaceholder.text(attachment.ref())).build());
+            case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
         };
     }
 

@@ -16,6 +16,8 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.attachment.AttachmentStore;
+import tantalum.shell.attachment.RequestImages;
+import tantalum.shell.attachment.StoredMedia;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.handler.CallLimiter;
@@ -120,7 +122,7 @@ public final class Engine implements AutoCloseable {
             if (workspaces.isShared()) {
                 LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
             }
-            catalog.register(new ReadFileTool());
+            catalog.register(new ReadFileTool(storage.attachments));
             catalog.register(new GrepTool());
             memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
             MemoryTools.all(memories).forEach(catalog::register);
@@ -128,6 +130,7 @@ public final class Engine implements AutoCloseable {
             mcp = new McpRegistry(McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv));
             catalog.setSource(mcp);
 
+            RequestImages requestImages = new RequestImages(storage.attachments);
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
             Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(),
@@ -154,7 +157,8 @@ public final class Engine implements AutoCloseable {
                     AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
                             properties.compactionSettings()),
-                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock),
+                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
+                            run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
                     RunTool.class, new ToolHandler(catalog, workspaces, afterHooks, properties.toolTimeout(), clock),
                     DoWork.class, new WorkHandler(workspaces, workTypes, properties.toolTimeout(), clock),
                     StartTimer.class, new TimerHandler());

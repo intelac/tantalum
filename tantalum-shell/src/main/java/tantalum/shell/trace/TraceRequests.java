@@ -91,7 +91,8 @@ final class TraceRequests {
         } else {
             String id = "r:" + call.id().value();
             pass.add(new ModelRequest(pass.head(id, run, place, pass.at), ++pass.book.requests, purpose, Status.WAITING,
-                    List.of(attempt), 1 + RetrySteps.MAX_RETRIES, null, null, null, 0, null, null, null, null, null, null, null, List.of()),
+                    List.of(attempt), 1 + RetrySteps.MAX_RETRIES, null, null, null, 0, null, null, null, null, null, null, null,
+                    call.omittedImages()),
                     place, true);
             track.lastRequest = id;
             track.lastPurpose = purpose;

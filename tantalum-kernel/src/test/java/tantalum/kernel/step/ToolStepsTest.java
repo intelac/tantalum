@@ -153,4 +153,27 @@ class ToolStepsTest {
         loop.feed(loop.runId(), finished(sent, "again", false));
         assertEquals(before, loop.state);
     }
+
+    /** attachments 任务 17：工具交给模型的图片进工具结果，下一次请求带着它；回放得到同样的请求。 */
+    @Test
+    void toolImagesReachTheNextRequestAndReplayTheSame() {
+        tantalum.value.attachment.ImageRef shot = new tantalum.value.attachment.ImageRef("sha256:" + "a".repeat(64), "shot.png",
+                "image/png", 10, 4, 3);
+        LoopFixture loop = new LoopFixture();
+        reply(loop, call("a", "safe1"));
+        RunTool run = (RunTool) loop.onlyCommand();
+        loop.feed(loop.runId(), new ToolFinished(run.id(), run.call().id(), "Image ...", false, null, List.of(shot)));
+        CallModel model = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals(List.of(new ToolResultBlock("a", "Image ...", false, null, List.of(shot))), model.prompt().messages().getLast().content());
+
+        LoopFixture replayed = new LoopFixture();
+        tantalum.value.state.KernelState state = tantalum.value.state.KernelState.empty();
+        tantalum.value.decision.Decision last = null;
+        for (tantalum.value.event.EventEnvelope envelope : loop.journal) {
+            last = replayed.kernel.step(state, envelope);
+            state = last.newState();
+        }
+        assertEquals(loop.last.commands(), last.commands());
+        assertEquals(loop.state, state);
+    }
 }

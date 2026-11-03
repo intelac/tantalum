@@ -151,7 +151,8 @@ public final class ImageNormalizer {
 
     /**
      * 转正、缩到目标以内、编码。{@code width}、{@code height} 是转正后的原尺寸（解码时可能隔行隔列取过）。
-     * 有透明通道的编码成 PNG，没有的编码成 JPEG；超过字节上限时按 0.75 倍再缩。请求版本（{@code RequestImages}）也走这里。
+     * 有透明通道的编码成 PNG，没有的编码成 JPEG；超过字节上限时按 0.75 倍再缩，缩到 1×1 还放不下就报错。
+     * 请求版本（{@code RequestImages}）也走这里。
      */
     static Normalized fit(BufferedImage decoded, int orientation, int width, int height, Target target) throws IOException {
         boolean alpha = decoded.getColorModel().hasAlpha();
@@ -166,6 +167,9 @@ public final class ImageNormalizer {
                 boolean resized = w != width || h != height;
                 return new Normalized(encoded, alpha ? "image/png" : "image/jpeg", w, h,
                         resized ? width : null, resized ? height : null);
+            }
+            if (w == 1 && h == 1) {
+                throw new IOException("image does not fit in " + target.maxBytes() + " bytes even at 1x1");
             }
             scale *= SHRINK;
         }
