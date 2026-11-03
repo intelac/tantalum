@@ -321,6 +321,16 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **没达到的：** `SessionIndex`（343 行，一个连接一把锁的 SQLite 表）、`McpConnection`（354 行，一个服务器连接的状态机）仍超过 300 行，拆开会让两个类共用锁或内部状态，反而难读，保留并说明；模型客户端按协议解析例外（`ClaudeClient` 404、`OpenAiClient` 306）。
 - **真实 Claude：** 阶段 4 冒烟 5 项和思考签名多轮一项；阶段 5 记忆中途变化、压缩保留全部暗号和规则、两次压缩后约束仍在三项，修掉测试竞争后记忆变化和工具中途崩溃两项重跑通过。
 
+### hook-coverage（2026-11-03）
+
+- **每个钩子都有实现**：新增 `ProviderBackoffHook`（失败后）、`ToolApprovalHook` + `ApprovalWork`（调工具前 + 工作结果后）、`PinnedContextHook`（压缩前），加上原有的 4 个，7 个钩子各有示例插件。`kernel.hook.HookMessages.isUserText` 让插件和压缩用同一条“用户亲笔”规则。
+- **工作轮数上限**：`Limits(maxParallelTools, maxWorkRounds)`，`tantalum.hooks.max-work-rounds` 默认 8。同一等待点连续最多 8 轮（模型回复后、换下一个工具时清零），结束前按整个运行累计；超过时运行 FAILED 并报 `HookReported`。`beforeCompact` 的上下文带上触发方式。
+- **真实管线测试矩阵**（`tantalum-examples/.../hooks/`，86 个测试，约 21 秒）：6 个位置 × 每种结果 55 格；5 个会要求工作的位置各测工作中途取消和重启；轮数上限；三个新插件。ArchUnit 规则保证钩子只依赖 value、`kernel.hook` 和不做 I/O 的 JDK，不取时间、不开线程。
+- **矩阵找出并修复的两个缺陷**：
+  - 同一步里开始又结束的运行（例如被拒绝的手动压缩）在对话条目里没有结束原因，控制台一直显示运行中。`TranscriptPass.phaseChanged` 修复。
+  - 关服务时被中断的处理器，结果被当成正常结果落盘，钩子据此当作真的失败处理（如引用核对以“核对失败”结束），违反 ops-hardening H8“到时中断，重启后按 H9 收尾”。现在关服务中断的结果不写回（`InFlightCommands.abortForShutdown`），用户取消的照旧写回并被内核忽略。等审批时被重启的工具因此补“没有执行”而不是“结果未知”，和事实一致。
+- **注释改正**：`application.properties` 说上下文窗口“不参与截断”，实际决定压缩阈值，已改正。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。

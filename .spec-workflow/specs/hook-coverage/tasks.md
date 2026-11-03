@@ -99,47 +99,47 @@
 
 ## 阶段 3：测试矩阵
 
-- [ ] 12. 测试用的钩子和工作
+- [x] 12. 测试用的钩子和工作
   - File: examples-test/hooks/{MatrixHook,MatrixWork,MatrixFixture}.java
   - `MatrixHook(point, result, mandatory)`；`MatrixWork` 支持成功、失败、超时、卡在 latch 上四种模式。`MatrixFixture` 负责起 `TestServer`、驱动 `ScriptedModelClient`、读 journal、做“重启后视图逐字节相同”的比较
   - 验证：一个最小场景（模型调用前 + 放行）跑通
   - _Requirements: 4.1, 4.5_
 
-- [ ] 13. 内核钩子矩阵
+- [x] 13. 内核钩子矩阵
   - File: examples-test/hooks/HookMatrixTest.java
   - 6 个位置 × 适用的结果（放行、带补丁放行、拦截、要求工作后成功 / 失败 / 超时、抛异常时分强制和非强制、返回 null），表驱动
   - 每格检查：运行结果、journal 事件序列、对话条目、发给模型的 prompt；最后检查重启后视图逐字节相同
   - _Requirements: 4.1, 4.5_
 
-- [ ] 14. 处理器钩子
+- [x] 14. 处理器钩子
   - File: examples-test/hooks/HookMatrixTest.java（另一张表）
   - `afterToolExecution` 三种情况：修改结果、原样返回、抛异常
   - _Requirements: 4.3_
 
-- [ ] 15. 工作中途取消和重启
+- [x] 15. 工作中途取消和重启
   - File: examples-test/hooks/HookWorkInterruptTest.java
   - 会要求工作的 5 个位置，每个位置测两件事：
     - 取消：运行 CANCELLED，迟到的结果被丢弃；
     - 重启：用很短的 `shutdown-wait` 关服务，再用同一个数据目录重开，运行按“被重启中断”收尾，工作只执行过 1 次
   - _Requirements: 4.2_
 
-- [ ] 16. 工作轮数上限走真实管线
+- [x] 16. 工作轮数上限走真实管线
   - File: examples-test/hooks/WorkRoundLimitTest.java
   - 四个等待点各验证一次“到上限就失败”；引用核对插件和审批插件的正常场景不受影响
   - _Requirements: 4.4_
 
-- [ ] 17. 三个新示例插件走真实管线
+- [x] 17. 三个新示例插件走真实管线
   - File: examples-test/hooks/ExampleHooksPipelineTest.java
   - 每个插件的每种结果各跑一次（共约 9 个场景），外部服务用本地桩
   - _Requirements: 4.6_
 
-- [ ] 18. 钩子不做 I/O 的 ArchUnit 规则
+- [x] 18. 钩子不做 I/O 的 ArchUnit 规则
   - File: examples-test/PluginBoundaryTest.java
   - 实现 `KernelHook` 的类只依赖 value、`kernel.hook`、`java.lang`、`java.util`、`java.time`。另写一条规则禁止取当前时间、`Thread`、`ProcessBuilder`、`Runtime`、`System.getenv`。范围包括 examples 的主代码和测试代码
   - 变异检查：让 `DailyQuotaHook` 读一个文件，规则必须失败
   - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 19. 阶段 3 收尾和端到端
+- [x] 19. 阶段 3 收尾和端到端
   - 全量端到端：`mvn -o clean verify`（含 `JarCrashIT`）、跳号回归（任务 12–17 也要过）、vitest、Playwright。这组测试的耗时目标是 2 分钟以内，超了就按设计改成共用服务
   - 变异检查：回到 `BEFORE_TOOL_CALL` 时忽略 `onWorkResult` 的拦截，矩阵必须失败
   - 更新 BACKLOG 和 tech.md，提交，写实现日志，汇报

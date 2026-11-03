@@ -55,7 +55,10 @@ public final class HandlerDispatcher implements EventHandler<OutputRing.Slot> {
     private void run(Handler handler, Command command) {
         try {
             Event result = execute(handler, command);
-            if (result != null) {
+            if (inFlight.isShutdownAbort(command.id())) {
+                LOG.info("not recording the result of {} interrupted by shutdown; restart closes run {}",
+                        command.getClass().getSimpleName(), command.run().run().value());
+            } else if (result != null) {
                 results.publish(command, result);
             }
         } catch (Throwable failure) {

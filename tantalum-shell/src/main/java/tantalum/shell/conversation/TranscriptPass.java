@@ -201,16 +201,16 @@ final class TranscriptPass {
     }
 
     private void phaseChanged(RunId run, String phase) {
-        RunStatus status = get(RunStatus.idOf(run)) instanceof RunStatus existing ? existing : null;
-        if (status == null) {
-            status = RunStatus.started(session, run, at, phase);
-            if (!run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
-                UserMessage queued = (UserMessage) get(conversation.queued.pollFirst());
-                put(queued.started(run));
-            }
-        } else if (state.runs().get(run) instanceof RunState current && current.phase() instanceof Ended ended) {
+        RunStatus existing = get(RunStatus.idOf(run)) instanceof RunStatus found ? found : null;
+        RunStatus status = existing != null ? existing : RunStatus.started(session, run, at, phase);
+        if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
+            UserMessage queued = (UserMessage) get(conversation.queued.pollFirst());
+            put(queued.started(run));
+        }
+        // 同一步里开始又结束的运行（如被拒绝的手动压缩）也要带上结束原因，否则控制台一直显示运行中。
+        if (state.runs().get(run) instanceof RunState current && current.phase() instanceof Ended ended) {
             status = status.ended(ended.reason(), ended.detail(), at);
-        } else {
+        } else if (existing != null) {
             status = status.inPhase(phase, at);
         }
         put(status);

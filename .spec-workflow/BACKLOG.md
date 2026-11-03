@@ -8,7 +8,7 @@
 |---|---|---|
 | `code-simplification` | 39/39，2026-11-03 完成（结果见 tech.md）。`SessionIndex`、`McpConnection` 仍超过 300 行，理由见 tech.md | `specs/code-simplification/tasks.md` |
 | `trace-view` | 需求已批，设计待批，2026-11-03 开始。轨迹页和 DSH 功能对等，另加钩子决定；嵌套子工具和 `run_code` 源码视图等 sandbox 之后再做 | `specs/trace-view/requirements.md` |
-| `hook-coverage` | 需求待批（2026-11-03）。每个钩子都有一个实现（缺 `onFailure`、`onWorkResult`、`beforeCompact`）；插件工作的轮数上限（现在一个钩子一直要工作会无限转圈）；每个钩子在真实管线上测每种结果；钩子不能直接做 I/O 的 ArchUnit 规则。当前唯一在做的事项，trace-view、attachments 等它做完 | `specs/hook-coverage/requirements.md` |
+| `hook-coverage` | 19/19，2026-11-03 完成（结果见 tech.md）。每个钩子都有示例插件；工作轮数上限；真实管线上的钩子矩阵 86 个测试；钩子不做 I/O 的 ArchUnit 规则。顺带修了两个缺陷：同一步开始又结束的运行在对话里没有结束原因；关服务时被打断的处理器结果被当成正常结果落盘（违反 ops-hardening H8） | `specs/hook-coverage/tasks.md` |
 | `attachments` | 需求待批，2026-11-03 开始。提问时附图片和文件，每用户独立存储，发给模型，对话页和轨迹页显示。没有引用的附件怎么清理，等以后做会话删除时一起做（A9） | `specs/attachments/requirements.md` |
 
 `ops-hardening` 50/50 已完成（2026-11-02）。
@@ -21,6 +21,7 @@
 |---|---|---|
 | 沙箱 | 基于开源项目，不自己写；候选要实测对比。2026-11-03 Yi 提出“反向沙箱”：agent 在服务器，工具在用户本机（先 macOS、Windows）执行，本机装连接程序主动连服务器。可参考 OpenClaw 的 node、MCP 隧道、DSH `sandbox-local`、Codex 的 Windows 沙箱 | 开 spec；排在 trace-view、attachments 之后 |
 | 子 agent | 已确认要做，排在沙箱附近 | 开 spec；和沙箱的先后未定 |
+| DeepSeek Super-agent 调研的候选（2026-11-03） | 按优先级：① 内核加可持久等人的等待状态（问题进 journal，用户回答作为事件回来，不占工作轮数）；② 异步工具 / 后台任务（立即返回“已开始”，完成是事件，回放不重跑），排在反向沙箱之前；③ 反向沙箱按文章 §5.2、§8.4 设计，服务器被攻破不能等于控制所有设备；④ 子 agent 拆成独立会话、固定的汇报状态、给人的消息预留名额；⑤ 大结果存到外面留续读入口，对象之间用 ID 互相引用；⑥ 运维状态接口和确定性的卡住检测。不适合多用户的：全局 Router、能改规则的 LLM 看门狗、对没人点名的消息主动出手、共用 agent 身份 | 等 Yi 决定做哪些、先后顺序 |
 | 多实例 | Yi 决定这次不做。每个用户同一时刻归一个实例，网关按用户路由，实例挂了由别的实例接管。需要共享存储（网络盘的 fsync 和锁要实测）、索引库换 Postgres、共享工作区和登录会话、租约防脑裂、SSE 路由。序号和 ID 已留好（`ops-hardening` H14） | 开 spec；和沙箱、子 agent 的先后未定 |
 | MCP 后续 | 每用户令牌、OAuth、stdio、人工审批 | Yi 决定要不要做、做哪几项 |
 
