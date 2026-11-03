@@ -18,6 +18,8 @@ import { zh } from "../text/zh";
 import { TracePage } from "../trace/TracePage";
 import { Tabs } from "../ui/Tabs";
 import { useEventStream } from "../store/events";
+import { fetchOlderTrace } from "../trace/hooks";
+import { TraceStore } from "../trace/TraceStore";
 import { loginPath, navigate, sessionPath, tracePath, useRoute, type Route } from "./router";
 
 const TABS = [
@@ -62,7 +64,8 @@ interface WorkspaceProps {
 function Workspace({ route, username, onLogout }: WorkspaceProps) {
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
-  useEventStream(store, queries);
+  const [trace] = useState(() => new TraceStore(fetchOlderTrace));
+  useEventStream(store, queries, trace);
   const sessions = useSessions();
   const config = useConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -119,7 +122,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
         />
         <div className="min-h-0 flex-1">
           {route.page === "trace" ? (
-            <TracePage store={store} session={route.session} run={route.run} />
+            <TracePage key={route.session} store={trace} session={route.session} run={route.run} record={route.record} />
           ) : (
             <div className="flex h-full min-h-0 flex-col">
               <ConversationPage store={store} session={route.session} />

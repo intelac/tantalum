@@ -30,7 +30,10 @@ test.describe("上下文压缩", () => {
 
     await page.getByRole("tab", { name: "轨迹" }).click();
     await expect(page).toHaveURL(new RegExp(`/s/${session}/trace`));
-    await expect(page.getByText(/^压缩 .* → .*$/).first()).toBeVisible({ timeout: 15_000 });
+    // 自动压缩在轨迹里是一个压缩组：摘要请求加一条“已压缩”记录，带前后估算。
+    const compacted = page.locator("[role=table] [role=row][data-record^='k:']").first();
+    await expect(compacted).toContainText(/上下文已压缩 · .+ → .+/, { timeout: 15_000 });
+    await expect(page.locator("[role=table] [role=row]", { hasText: /请求 #\d+ · 压缩/ }).first()).toBeVisible();
   });
 
   test("回复被截断有提示", async ({ page }) => {

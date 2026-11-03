@@ -52,34 +52,6 @@ class TraceApiTest {
         return body.substring(start, body.indexOf('"', start));
     }
 
-    @Test
-    void traceHasEventsWithPhasesAndHandlerSegments() throws Exception {
-        String run = finishedRun();
-        HttpResponse<String> response = server.get("alice", "/api/runs/" + run + "/trace");
-        assertEquals(200, response.statusCode());
-        JsonNode trace = JSON.readTree(response.body());
-
-        JsonNode events = trace.get("events");
-        assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied"),
-                events.valueStream().map(event -> event.get("type").asString()).toList());
-        assertEquals(List.of("AwaitingContext", "AwaitingModel", "Ended"),
-                events.valueStream().map(event -> event.get("phase").asString()).toList());
-        assertEquals(1, events.get(1).get("turn").asInt());
-        assertTrue(events.get(0).get("at").asString().endsWith("Z"), events.toString());
-
-        JsonNode segments = trace.get("segments");
-        assertEquals(List.of("ContextHandler", "ModelHandler"),
-                segments.valueStream().map(segment -> segment.get("handler").asString()).toList());
-        assertTrue(segments.get(1).has("to"), segments.toString());
-    }
-
-    @Test
-    void traceIsVisibleOnlyToItsOwner() throws Exception {
-        String run = finishedRun();
-        assertEquals(404, server.get("bob", "/api/runs/" + run + "/trace").statusCode());
-        assertEquals(404, server.get("alice", "/api/runs/nope/trace").statusCode());
-    }
-
     /** 提交并等这个会话里第 {@code count} 个运行结束，返回所有运行 ID（旧的在前）。 */
     private List<String> runs(String session, int count) throws Exception {
         server.post("alice", "/api/sessions/" + session + "/submissions",

@@ -29,6 +29,8 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code fail}：供应商出错；</li>
  *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
+ *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
+ *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
  *   <li>其它：一句思考，然后复述用户的话。</li>
  * </ul>
  */
@@ -39,6 +41,8 @@ public final class E2eModel implements ModelClient {
     static final int SLOW_STEPS = 40;
 
     private final AtomicInteger callIds = new AtomicInteger();
+    /** 已经故意失败过一次的 {@code trace:} 提问，重试时成功。 */
+    private final java.util.Set<String> rateLimited = java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** 当前这次调用的 prompt 估算；openai 供应商并发为 1，调用是串行的。 */
     private static volatile long promptSize;
 
@@ -58,6 +62,9 @@ public final class E2eModel implements ModelClient {
             if (text.contains("truncate")) {
                 stream(chunks, "这段回复会被截");
                 return new ModelOutcome.Replied(List.of(new TextBlock("这段回复会被截")), StopReason.MAX_TOKENS, MODEL, usage(prompt));
+            }
+            if (text.contains(E2eTraceHook.KEYWORD)) {
+                return traceScenario(text, results, chunks);
             }
             if (text.contains("tools")) {
                 return toolChain(results, chunks);
@@ -95,6 +102,19 @@ public final class E2eModel implements ModelClient {
                     call("read_file", Map.of("path", "notes/world.md")));
             default -> answer(chunks, "两个文件都读到了：\n\n- `notes/hello.md` 里是问候\n- `notes/world.md` 里是回应\n\n```text\nhello e2e\n```");
         };
+    }
+
+    private ModelOutcome traceScenario(String text, int results, ChunkListener chunks) throws InterruptedException {
+        if (results == 0 && rateLimited.add(text)) {
+            return new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, Duration.ofMillis(300), "", "HTTP 429: slow down");
+        }
+        if (results == 0) {
+            return reply(think(chunks, "并行读两个文件，再查一下外部系统。"),
+                    call("read_file", Map.of("path", "notes/hello.md")),
+                    call("read_file", Map.of("path", "notes/secret.md")),
+                    call("mcp__demo__lookup", Map.of()));
+        }
+        return answer(chunks, "问候在 notes/hello.md:3，工单 42 归 e2e-owner。");
     }
 
     private ModelOutcome remember(int results, ChunkListener chunks) throws InterruptedException {

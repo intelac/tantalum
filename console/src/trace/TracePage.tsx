@@ -1,92 +1,184 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { getTrace, listRuns } from "../api/client";
-import { navigate, tracePath } from "../app/router";
-import { useNow } from "../ui/useNow";
-import type { ConversationStore } from "../store/ConversationStore";
-import { useRunStatus, useRunVersion } from "../store/hooks";
+// 轨迹页：工具栏、记录表、检查器。页面只有界面状态（收起的轮和调用、搜索词、选中、定位），记录在 TraceStore。
+// 换会话时由调用方用 `key` 重建，界面状态随之清空。
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zh } from "../text/zh";
-import { EventList } from "./EventList";
-import { ModelCallDetail } from "./ModelCallDetail";
-import { TimeBars } from "./TimeBars";
+import { useLatestTrace, useTracePaging, useTraceRecords } from "./hooks";
+import { buildLedger, expansionFor } from "./rows";
+import { Inspector } from "./inspector/Inspector";
+import { Ledger } from "./Ledger";
+import { matchRecords } from "./search";
+import { Toolbar } from "./Toolbar";
+import type { TraceStore } from "./TraceStore";
 
 interface Props {
-  store: ConversationStore;
+  store: TraceStore;
   session: string;
-  /** 地址栏里的运行；没有时用最近的一次。 */
+  /** 地址里的运行：一次取到包含它的页，滚到那一轮的标题。 */
   run?: string;
+  /** 地址里的记录：展开所在的轮和调用，滚到并选中。 */
+  record?: string;
 }
 
-/** 轨迹页：工具条选运行，三行时间条，事件列表；选中模型调用后在下方看完整输入输出。地址栏能定位到运行。 */
-export function TracePage({ store, session, run }: Props) {
-  const runs = useQuery({ queryKey: ["runs", session], queryFn: () => listRuns(session), select: (data) => data.runs });
-  const list = runs.data ?? [];
-  const current = run ?? list[list.length - 1]?.run;
-  const status = useRunStatus(store, current ?? null);
-  const version = useRunVersion(store, current ?? null);
-  // 不在 store 里的运行（比如别的会话打开前就结束了）按接口列出的状态判断。
-  const ended = status !== undefined ? status.endReason !== undefined : list.find((entry) => entry.run === current)?.endReason != null;
-  const now = useNow(!ended);
-  const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
+const NONE: ReadonlySet<string> = new Set();
+/** 比这窄时检查器盖在记录表上（手机 390 px）。 */
+const OVERLAY_WIDTH_PX = 640;
+
+function without(set: ReadonlySet<string>, remove: ReadonlySet<string>): ReadonlySet<string> {
+  if (![...remove].some((id) => set.has(id))) return set;
+  return new Set([...set].filter((id) => !remove.has(id)));
+}
+
+function toggled(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(set);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
+export function TracePage({ store, session, run, record }: Props) {
+  const records = useTraceRecords(store, session);
+  const paging = useTracePaging(store, session);
+  const error = useLatestTrace(store, session, run);
+  const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<string>>(NONE);
+  const [collapsedCalls, setCollapsedCalls] = useState<ReadonlySet<string>>(NONE);
+  const [query, setQuery] = useState("");
+  const [matchIndex, setMatchIndex] = useState(-1);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [scrollTo, setScrollTo] = useState<{ key: string; nonce: number } | null>(null);
+  const nonce = useRef(0);
+  const page = useRef<HTMLDivElement>(null);
+  const [pageWidth, setPageWidth] = useState(1280);
 
   useEffect(() => {
-    setSelectedTurn(null);
-  }, [current]);
+    const element = page.current;
+    if (element === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setPageWidth(entry?.contentRect.width ?? 1280));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [paging.loaded]);
 
-  const trace = useQuery({
-    queryKey: ["trace", current, version],
-    // 运行状态变化换了缓存键时沿用上一份数据，不闪成空白。
-    placeholderData: keepPreviousData,
-    enabled: current !== undefined,
-    queryFn: () => getTrace(current as string),
-  });
+  const rows = useMemo(() => buildLedger(records, collapsedTurns, collapsedCalls), [records, collapsedTurns, collapsedCalls]);
+  const matches = useMemo(() => matchRecords(records, query), [records, query]);
+  // 匹配按页面上的先后排（不收起时的顺序），跳转时依次经过。
+  const ordered = useMemo(() => {
+    if (matches.size === 0) return [];
+    return buildLedger(records, NONE, NONE).flatMap((row) => (row.type === "record" && matches.has(row.record.id) ? [row.record.id] : []));
+  }, [records, matches]);
 
-  if (runs.isPending) return <p className="p-4 text-sm text-fg-faint">{zh.common.loading}</p>;
-  if (current === undefined) {
+  const reveal = useCallback(
+    (id: string, key = id) => {
+      const expand = expansionFor(records, [id]);
+      setCollapsedTurns((current) => without(current, expand.turns));
+      setCollapsedCalls((current) => without(current, expand.calls));
+      setScrollTo({ key, nonce: ++nonce.current });
+    },
+    [records],
+  );
+
+  // 地址定位：记录到了就展开、选中、滚过去；只有运行时滚到那一轮的标题。各做一次。
+  const located = useRef<string | null>(null);
+  useEffect(() => {
+    const target = record ?? (run === undefined ? undefined : `turn:${run}`);
+    if (target === undefined || located.current === target) return;
+    if (record !== undefined && records.some((candidate) => candidate.id === record)) {
+      located.current = target;
+      setSelected(record);
+      reveal(record);
+    } else if (record === undefined && run !== undefined && records.some((candidate) => candidate.run === run)) {
+      located.current = target;
+      setCollapsedTurns((current) => without(current, new Set([run])));
+      setScrollTo({ key: target, nonce: ++nonce.current });
+    }
+  }, [record, run, records, reveal]);
+
+  const jump = useCallback(
+    (step: 1 | -1) => {
+      if (ordered.length === 0) return;
+      const next = (matchIndex + step + ordered.length) % ordered.length;
+      setMatchIndex(next);
+      const id = ordered[next] as string;
+      setSelected(id);
+      reveal(id);
+    },
+    [ordered, matchIndex, reveal],
+  );
+
+  const runs = useMemo(() => [...new Set(records.map((entry) => entry.run))], [records]);
+  const requestsWithCalls = useMemo(
+    () => [...new Set(records.flatMap((entry) => (entry.kind === "tool" && entry.request !== undefined ? [entry.request] : [])))],
+    [records],
+  );
+  const turnsCollapsed = runs.length > 0 && runs.every((id) => collapsedTurns.has(id));
+  const callsCollapsed = requestsWithCalls.length > 0 && requestsWithCalls.every((id) => collapsedCalls.has(id));
+
+  const selectedRecord = selected === null ? undefined : records.find((entry) => entry.id === selected);
+  const closeInspector = useCallback(() => setSelected(null), []);
+  const openRecord = useCallback(
+    (id: string) => {
+      setSelected(id);
+      reveal(id);
+    },
+    [reveal],
+  );
+
+  const loadOlder = useCallback(() => {
+    void store.loadOlder(session).catch(() => {
+      // 失败时翻页位置不变，滚动或点击加载行可以再试。
+    });
+  }, [store, session]);
+
+  if (error !== null && !paging.loaded) {
     return (
-      <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{zh.trace.empty}</div>
+      <p role="alert" className="p-4 text-sm text-danger">
+        {error}
+      </p>
     );
+  }
+  if (paging.loaded && records.length === 0) {
+    return <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{zh.trace.empty}</div>;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-line px-3 text-xs">
-        <label className="flex items-center gap-1.5 text-fg-muted">
-          {zh.trace.run}
-          <select
-            value={current}
-            onChange={(event) => navigate(tracePath(session, event.target.value))}
-            className="h-7 rounded-sm border border-line bg-raised px-1.5 font-mono text-xs text-fg"
-          >
-            {list.map((entry) => (
-              <option key={entry.run} value={entry.run}>
-                {entry.run}
-                {entry.endReason === undefined ? ` · ${zh.trace.ongoing}` : ""}
-              </option>
-            ))}
-            {!list.some((entry) => entry.run === current) && <option value={current}>{current}</option>}
-          </select>
-        </label>
-        <span className="hidden text-fg-faint sm:inline">{zh.trace.selectHint}</span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="px-3">
-          {trace.isError && (
-            <p role="alert" className="py-2 text-sm text-danger">
-              {trace.error.message}
-            </p>
-          )}
-          {trace.data !== undefined && (
-            <>
-              <TimeBars trace={trace.data} now={now} />
-              <EventList trace={trace.data} selectedTurn={selectedTurn} onSelectTurn={setSelectedTurn} />
-            </>
-          )}
+      <Toolbar
+        turnsCollapsed={turnsCollapsed}
+        callsCollapsed={callsCollapsed}
+        onTurns={(collapse) => setCollapsedTurns(collapse ? new Set(runs) : NONE)}
+        onCalls={(collapse) => setCollapsedCalls(collapse ? new Set(requestsWithCalls) : NONE)}
+        query={query}
+        onQuery={(next) => {
+          setQuery(next);
+          setMatchIndex(-1);
+        }}
+        current={matchIndex < 0 ? 0 : matchIndex + 1}
+        total={ordered.length}
+        onJump={jump}
+      />
+      <div ref={page} className="relative flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1">
+          <Ledger
+            rows={rows}
+            paging={paging}
+            selected={selected}
+            matches={matches}
+            scrollTo={scrollTo}
+            onLoadOlder={loadOlder}
+            onSelect={setSelected}
+            onToggleTurn={(id) => setCollapsedTurns((current) => toggled(current, id))}
+            onToggleCalls={(id) => setCollapsedCalls((current) => toggled(current, id))}
+          />
         </div>
-        {selectedTurn !== null && (
-          <div className="mt-2 border-t border-line">
-            <ModelCallDetail run={current} turn={selectedTurn} version={version} />
-          </div>
+        {selectedRecord !== undefined && (
+          <Inspector
+            session={session}
+            record={selectedRecord}
+            lookup={(id) => store.getRecord(session, id)}
+            containerWidth={pageWidth}
+            overlay={pageWidth < OVERLAY_WIDTH_PX}
+            onClose={closeInspector}
+            onOpen={openRecord}
+          />
         )}
       </div>
     </div>

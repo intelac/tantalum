@@ -6,7 +6,7 @@ export type Route =
   | { page: "home" }
   | { page: "login"; next?: string }
   | { page: "session"; session: string }
-  | { page: "trace"; session: string; run?: string }
+  | { page: "trace"; session: string; run?: string; record?: string }
   | { page: "notFound"; path: string };
 
 export function parseRoute(pathname: string, search = ""): Route {
@@ -20,7 +20,10 @@ export function parseRoute(pathname: string, search = ""): Route {
     const session = decode(parts[1]);
     if (session === null) return { page: "notFound", path: pathname };
     if (parts.length === 2) return { page: "session", session };
-    if (parts.length === 3 && parts[2] === "trace") return { page: "trace", session };
+    if (parts.length === 3 && parts[2] === "trace") {
+      const record = new URLSearchParams(search).get("record");
+      return record !== null && record !== "" ? { page: "trace", session, record } : { page: "trace", session };
+    }
     if (parts.length === 4 && parts[2] === "trace" && parts[3] !== undefined) {
       const run = decode(parts[3]);
       if (run !== null) return { page: "trace", session, run };
@@ -47,10 +50,15 @@ export function sessionPath(session: string): string {
   return `/s/${encodeURIComponent(session)}`;
 }
 
-/** 不带运行时打开轨迹页，页面自己选最近的运行。 */
+/** 轨迹页：不带参数时停在末尾；带运行时定位到那一轮（旧链接也是这个形式）。 */
 export function tracePath(session: string, run?: string): string {
   const base = `${sessionPath(session)}/trace`;
   return run === undefined ? base : `${base}/${encodeURIComponent(run)}`;
+}
+
+/** 轨迹页上的一条记录：展开所在的轮和调用、滚到并选中。 */
+export function traceRecordPath(session: string, record: string): string {
+  return `${sessionPath(session)}/trace?record=${encodeURIComponent(record)}`;
 }
 
 export function loginPath(next?: string): string {

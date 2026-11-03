@@ -2,6 +2,8 @@ import { AlertCircle, Ban, OctagonX } from "lucide-react";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useRunStatus } from "../store/hooks";
 import { runOutcome } from "./runOutcome";
+import { navigate, tracePath } from "../app/router";
+import { zh } from "../text/zh";
 
 interface Props {
   store: ConversationStore;
@@ -29,6 +31,16 @@ export function RunStatusRow({ store, run }: Props) {
         {danger && item.detail !== undefined && item.detail !== "" && text !== item.detail && (
           <p className="mt-1 font-mono text-xs break-all opacity-80">{item.detail}</p>
         )}
+        <a
+          href={tracePath(item.session, run)}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate(tracePath(item.session, run));
+          }}
+          className="mt-1 inline-block text-xs text-accent hover:underline"
+        >
+          {zh.conversation.viewInTrace}
+        </a>
       </div>
     </div>
   );

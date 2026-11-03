@@ -13,7 +13,7 @@ import tantalum.shell.store.TurnQuery;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 
-/** 回放 journal 得到的视图：每次模型调用的完整输入输出，以及运行的时间线。只读，只能看自己的运行。 */
+/** 回放 journal 得到的视图：每次模型调用的完整输入输出。只读，只能看自己的运行。轨迹在 {@link TraceController}。 */
 @RestController
 public class RunTraceController {
 
@@ -23,15 +23,6 @@ public class RunTraceController {
     public RunTraceController(Engine engine, WebJson json) {
         this.engine = engine;
         this.json = json;
-    }
-
-    @GetMapping("/api/runs/{run}/trace")
-    ResponseEntity<String> trace(@PathVariable String run) {
-        Principal user = WebJson.currentUser();
-        if (!owns(user, run)) {
-            return json.error(404, "no such run");
-        }
-        return json.json(200, engine.queries().turns().trace(user, new RunId(run)));
     }
 
     @GetMapping("/api/runs/{run}/turns")

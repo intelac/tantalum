@@ -147,34 +147,207 @@ export interface RunView {
   detail?: string;
 }
 
-export interface TraceCompaction {
-  trigger: string;
-  ok: boolean;
+// ---- 轨迹记录（`/api/sessions/{s}/trace`），和 `tantalum.shell.trace.TraceRecord` 一一对应。 ----
+
+export type HookPoint = "BEFORE_MODEL_CALL" | "BEFORE_TOOL_CALL" | "ON_FAILURE" | "BEFORE_RUN_END" | "ON_WORK_RESULT" | "BEFORE_COMPACT";
+export type StopReason = "END_TURN" | "TOOL_USE" | "MAX_TOKENS" | "OTHER";
+
+/** 所有记录共有的字段。`pos` 是创建它的事件“序号.下标”，按它排序；`end` 为空表示还在进行。 */
+export interface TraceHead {
+  id: string;
+  pos: string;
+  run: string;
+  /** 手动压缩的运行没有轮号，显示在“轮次之间”。 */
+  turn?: number;
+  step?: number;
+  /** 自动压缩组的名字；和 `step` 二选一。 */
+  compaction?: string;
+  at: string;
+  end?: string;
+}
+
+/** `user` 用户、`context` 上下文组装、`plugin` 插件（`name` 是钩子名）、`unknown` 未记录来源。 */
+export interface TraceSource {
+  type: "user" | "context" | "plugin" | "unknown";
+  name?: string;
+}
+
+export interface TraceSegment {
+  chars: number;
+  source: TraceSource;
+}
+
+export interface RunHead extends TraceHead {
+  kind: "run";
+  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION";
+  phase: string;
+  endReason?: EndReason;
+  endDetail?: string;
+}
+
+export interface SystemPrompt extends TraceHead {
+  kind: "system";
+  initial: boolean;
+  systemChars: number;
+  segments: TraceSegment[];
+  added: string[];
+  removed: string[];
+  toolCount: number;
+  /** 这次尝试的命令 ID，原文从 `/trace/calls/{call}` 取。 */
+  call: string;
+}
+
+export interface UserInput extends TraceHead {
+  kind: "user";
+  mode: "PROMPT" | "FOLLOW_UP" | "STEER" | "CONTINUE";
+  text: string;
+  source: TraceSource;
+}
+
+export interface ContextSection {
+  name: string;
+  before?: string;
+  after?: string;
+}
+
+export interface ContextChange extends TraceHead {
+  kind: "context";
+  sections: ContextSection[];
+}
+
+export interface Compacted extends TraceHead {
+  kind: "compacted";
+  trigger: "AUTO" | "OVERFLOW" | "MANUAL";
+  adopted: boolean;
+  trimOnly: boolean;
   estimateBefore: number;
   estimateAfter: number;
   usage?: TokenUsage;
   reason?: string;
+  summary?: string;
 }
 
-export interface TraceEntry {
+export interface RequestOptions {
+  provider: string;
+  model: string;
+  maxTokens: number;
+  toolsAllowed: boolean;
+  extra?: unknown;
+}
+
+export interface Attempt {
+  call: string;
+  issuedAt: string;
+  startedAt?: string;
+  firstTokenAt?: string;
+  endedAt?: string;
+  outcome: "PENDING" | "REPLIED" | "FAILED" | "INTERRUPTED";
+  reason?: FailureReason;
+  /** 供应商的原始错误；认证失败时不给。 */
+  detail?: string;
+  /** ISO-8601 时长，例如 `PT2S`：失败后等了多久再试。 */
+  retryAfter?: string;
+}
+
+export interface ModelRequest extends TraceHead {
+  kind: "request";
+  number: number;
+  purpose: "NORMAL" | "SUMMARY";
+  status: "WAITING" | "DONE" | "FAILED" | "INTERRUPTED";
+  attempts: Attempt[];
+  maxAttempts: number;
+  provider?: string;
+  actualModel?: string;
+  stop?: StopReason;
+  toolCalls: number;
+  usage?: TokenUsage;
+  total?: TokenUsage;
+  text?: string;
+  thinking?: string;
+  partial?: string;
+  options?: RequestOptions;
+  /** 最后一次失败的原因名；认证失败只给 `auth`。 */
+  failure?: string;
+}
+
+export interface ToolCall extends TraceHead {
+  kind: "tool";
+  call: string;
+  name: string;
+  server?: string;
+  rawArguments: string;
+  arguments?: unknown;
+  status: "WAITING" | "RUNNING" | "DONE" | "ERROR" | "BLOCKED" | "NOT_SENT" | "UNKNOWN";
+  result?: string;
+  code?: string;
+  reason?: string;
+  /** 发出它的事件；同组即并行。 */
+  group: string;
+  issuedAt: string;
+  startedAt?: string;
+  request?: string;
+}
+
+export interface PluginWork extends TraceHead {
+  kind: "work";
+  command: string;
+  workType: string;
+  hook: string;
+  point?: HookPoint;
+  /** 要求这轮工作的钩子记录 ID。 */
+  decision?: string;
+  resumeAt?: HookPoint;
+  input?: unknown;
+  status: "RUNNING" | "DONE" | "FAILED" | "INTERRUPTED";
+  result?: unknown;
+  continueText?: string;
+  after?: "CONTINUE" | "END";
+  startedAt?: string;
+}
+
+export interface HookDecision extends TraceHead {
+  kind: "hook";
+  hook: string;
+  /** 钩子抛异常时可能不知道位置。 */
+  point?: HookPoint;
+  result: "STOP" | "NEED_WORK" | "PATCH" | "ERROR";
+  reason?: string;
+  systemChars: number;
+  tools: string[];
+  workType?: string;
+  applied?: "APPLIED" | "NOT_ADOPTED" | "INEFFECTIVE";
+  /** 关联的工具记录 ID。 */
+  tool?: string;
+  /** 关联的工作记录 ID。 */
+  work?: string;
+}
+
+export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision;
+export type TraceKind = TraceRecord["kind"];
+
+/** 一页记录：按运行从新到旧切。`seq` 是重放到的最后序号；`before` 是下一页的游标。 */
+export interface TracePage {
   seq: number;
-  at: string;
-  type: string;
-  phase: string;
-  turn?: number;
-  /** 这个事件带来的压缩结果。 */
-  compaction?: TraceCompaction;
+  records: TraceRecord[];
+  before?: number;
+  hasMore: boolean;
 }
 
-export interface TraceSegment {
-  handler: string;
-  from: string;
-  to?: string;
+export interface ToolSpec {
+  name: string;
+  description: string;
+  schema: unknown;
 }
 
-export interface Trace {
-  events: TraceEntry[];
+/** 一次尝试的完整输入。`previous` 是上一次请求的 system 和工具，会话第一次请求时为空。 */
+export interface TraceCall {
+  call: string;
+  system: string;
   segments: TraceSegment[];
+  tools: { spec: ToolSpec; source: TraceSource }[];
+  messages: Message[];
+  output: { toolsAllowed: boolean; maxTokens: number };
+  previous?: { system: string; tools: ToolSpec[] };
 }
 
 export interface TurnSummary {

@@ -108,7 +108,7 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 
 ## 用 journal 查看一个运行
 
-**控制台：** 选中运行，再选一次模型调用，就能看到回放得出的完整 prompt 和回复。
+**控制台：** 打开会话的“轨迹”页签。记录按轮和步排列，每一行都能点开：请求看回放得出的完整 system、工具、消息、选项、用量和计时，工具看参数、结果和 Schema，钩子和插件工作可以互相跳转。对话页的工具调用和运行状态行有“在轨迹中查看”。地址 `/s/<会话>/trace/<运行>` 定位到那一轮，`/s/<会话>/trace?record=<记录>` 定位到那条记录。
 
 **接口：** 先登录拿到 Cookie，再带着它调用。
 
@@ -118,7 +118,6 @@ curl -c cookie -H 'content-type: application/json' \
 curl -b cookie http://127.0.0.1:8080/api/sessions/<session>/runs
 curl -b cookie http://127.0.0.1:8080/api/runs/<run>/turns
 curl -b cookie http://127.0.0.1:8080/api/runs/<run>/turns/1
-curl -b cookie http://127.0.0.1:8080/api/runs/<run>/trace      # 事件、处理方和时间段（旧接口，轨迹页换新后删除）
 curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace'              # 轨迹记录：最新一页
 curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?before=<seq>' # 更早的一页
 curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?run=<run>'    # 从最新一直到这个运行

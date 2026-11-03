@@ -3,7 +3,6 @@ package tantalum.shell.store;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -16,12 +15,10 @@ import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.loop.Projections;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
+import tantalum.shell.trace.Trace;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
-import tantalum.value.decision.CompactionFailed;
-import tantalum.value.decision.ContextCompacted;
-import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
@@ -29,12 +26,10 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.model.Prompt;
-import tantalum.value.model.TokenUsage;
-import tantalum.value.state.RunState;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 重放会话文件回答历史问题。{@code /turns}、{@code /trace} 只读运行所在的那一个会话文件；SSE 补读只读该用户
+ * 重放会话文件回答历史问题。{@code /turns} 只读运行所在的那一个会话文件；SSE 补读只读该用户
  * 末尾序号比位置新的文件。路径由用户名决定，所以别人的运行读不到，和不存在一样。
  */
 public final class TurnQuery {
@@ -49,20 +44,6 @@ public final class TurnQuery {
         Turn withFailure(ModelFailed modelFailure) {
             return new Turn(number, command, prompt, reply, modelFailure);
         }
-    }
-
-    /** 一次运行的轨迹：事件列表和两事件之间由哪个 Handler 在干活的时间段。 */
-    public record Trace(List<Entry> events, List<Segment> segments) {
-
-        /** {@code phase} 是事件处理后的状态名；{@code turn} 是这个事件发出的模型调用序号，没有则为空；
-         * {@code compaction} 是这个事件带来的压缩结果，没有则为空。 */
-        public record Entry(long seq, Instant at, String type, String phase, Integer turn, Compaction compaction) {}
-
-        /** 一次压缩的结果：成功时带前后估算和摘要调用用量，失败时带原因。 */
-        public record Compaction(String trigger, boolean ok, long estimateBefore, long estimateAfter, TokenUsage usage, String reason) {}
-
-        /** 还在等待时 {@code to} 为空。 */
-        public record Segment(String handler, Instant from, Instant to) {}
     }
 
     /** 一条补读消息和它的位置，用来把各会话的结果按（序号，下标）合并。 */
@@ -115,62 +96,6 @@ public final class TurnQuery {
         return new ArrayList<>(turns.values());
     }
 
-    /** 运行的轨迹。不属于该用户或不存在时事件为空。 */
-    public Trace trace(Principal principal, RunId run) {
-        List<Trace.Entry> entries = new ArrayList<>();
-        int[] turns = {0};
-        eachOfRun(principal, run, (envelope, before, decision) -> {
-            boolean existed = before.runs().containsKey(run);
-            RunState current = decision.newState().runs().get(run);
-            boolean belongs = envelope.run() != null ? envelope.run().equals(run) : !existed && current != null;
-            if (!belongs || current == null) {
-                return;
-            }
-            Integer turn = null;
-            for (Command command : decision.commands()) {
-                if (command instanceof CallModel call && call.run().run().equals(run)) {
-                    turn = ++turns[0];
-                }
-            }
-            entries.add(new Trace.Entry(envelope.seq(), envelope.at(), envelope.event().type(), current.phase().name(), turn,
-                    compactionOf(decision, run)));
-        });
-        List<Trace.Segment> segments = new ArrayList<>();
-        for (int i = 0; i < entries.size(); i++) {
-            Trace.Entry entry = entries.get(i);
-            if (entry.phase().equals("Ended")) {
-                break;
-            }
-            Instant to = i + 1 < entries.size() ? entries.get(i + 1).at() : null;
-            segments.add(new Trace.Segment(handlerOf(entry.phase()), entry.at(), to));
-        }
-        return new Trace(entries, segments);
-    }
-
-    private static Trace.Compaction compactionOf(Decision decision, RunId run) {
-        for (Fact fact : decision.facts()) {
-            if (fact instanceof ContextCompacted ok && ok.run().run().equals(run)) {
-                return new Trace.Compaction(ok.trigger().name(), true, ok.estimateBefore(), ok.estimateAfter(), ok.usage(), null);
-            }
-            if (fact instanceof CompactionFailed failed && failed.run().run().equals(run)) {
-                return new Trace.Compaction(failed.trigger().name(), false, 0, 0, null, failed.reason());
-            }
-        }
-        return null;
-    }
-
-    /** 等待状态名到负责它的 Handler。 */
-    static String handlerOf(String phase) {
-        return switch (phase) {
-            case "AwaitingContext" -> "ContextHandler";
-            case "AwaitingModel", "AwaitingSummary" -> "ModelHandler";
-            case "AwaitingTools" -> "ToolHandler";
-            case "AwaitingWork" -> "WorkHandler";
-            case "AwaitingRetry", "AwaitingSummaryRetry" -> "TimerHandler";
-            default -> phase;
-        };
-    }
-
     /**
      * SSE 补读：某用户在某位置之后的事实、条目和轨迹记录的变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实，再条目，再轨迹记录。
      * 只完整重放末尾序号不早于位置的文件，其余文件只读末尾一行；不依赖可能落后的索引。
@@ -188,8 +113,7 @@ public final class TurnQuery {
             } catch (IOException failure) {
                 throw new IllegalStateException("cannot read " + file, failure);
             }
-            // 全名：本类的 Trace 是旧轨迹页的视图，阶段 2 删掉。
-            Projections projections = new Projections(new Transcript(), new tantalum.shell.trace.Trace());
+            Projections projections = new Projections(new Transcript(), new Trace());
             each(principal, file, (envelope, before, decision) -> {
                 int index = 0;
                 for (Fact fact : decision.facts()) {

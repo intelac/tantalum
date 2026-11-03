@@ -67,43 +67,43 @@
 
 ## 阶段 2：记录表和检查器
 
-- [ ] 11. 依赖和接口类型
+- [x] 11. 依赖和接口类型
   - File: console/package.json（`@tanstack/react-virtual`、`diff`，固定版本）、THIRD_PARTY_NOTICES.md、console/api/{types,client}.ts
   - 检查加上依赖后，gzip 后的总大小不超过 300 KB
   - _Requirements: 设计第 7 节_
 
-- [ ] 12. `TraceStore` 和推送合并
+- [x] 12. `TraceStore` 和推送合并
   - File: console/trace/{TraceStore,hooks}.ts（新）、console/store/events.ts
   - 记录按 ID 保存、按版本合并，旧版本的推送丢掉；翻页状态；轨迹和统计共用一个去重的“加载更早”
   - 测试：直接读后端的期望文件，页面从中间切开，再按顺序套上推送，结果等于完整页面
   - _Requirements: 1.5, 1.6, 8.4, 9.1_
 
-- [ ] 13. 分组、搜索、格式化
+- [x] 13. 分组、搜索、格式化
   - File: console/trace/{ledger,search,format}.ts（新）
   - 记录分到轮、步、行；收起后的摘要；搜索覆盖收起的内容；时刻在本地时间和 Unix 时间戳之间切换
   - _Requirements: 1.1–1.4, 1.7, 1.8, 2.6_
 
-- [ ] 14. 记录表和工具栏
+- [x] 14. 记录表和工具栏
   - File: console/trace/{TracePage,Toolbar,Ledger,LedgerRow}.tsx
   - 虚拟滚动、跟随末尾、滚到顶部加载更早的轮、一键展开收起、搜索、窄屏换行；列和阈值照设计第 7 节
   - _Requirements: 1.1–1.9_
 
-- [ ] 15. 检查器
+- [x] 15. 检查器
   - File: console/trace/inspector/{Inspector,RequestTabs,ToolTabs,SystemTabs,RecordTabs,JsonTree,LongText,LineDiff}.tsx
   - 各类记录的页签、可拖宽度（双击恢复、键盘每次 16 px、记住宽度）、Esc 关闭、JSON 树和复制、换行开关、按行显示差异、来源标注；请求详情按需加载
   - _Requirements: 2.1–2.7, 3.1–3.8, 4.1–4.6, 5.1–5.6, 7.1–7.3_
 
-- [ ] 16. 路由、跳转、替换旧页
+- [x] 16. 路由、跳转、替换旧页
   - File: console/app/{router.ts,App.tsx}、console/process/ToolRow.tsx、console/conversation/RunStatusRow.tsx、console/text/zh.ts；后端删 `/api/runs/{run}/trace` 和 `TurnQuery.Trace`
   - 旧链接定位到那个运行；对话页可以跳到轨迹里对应的记录；390 px 宽时检查器盖在记录表上，页面不出现横向滚动
   - _Requirements: 1.10, 9.5_
 
-- [ ] 17. 端到端测试和截图
+- [x] 17. 端到端测试和截图
   - File: console/e2e/trace.spec.ts（新）、E2eServer（注册示例插件和一个加补丁的测试钩子）、E2eModel（加一次 429 后成功、一批并行工具加一个 MCP 调用）
   - 每类记录都能从记录表打开；钩子行和工作行互相跳转；刷新后页面相同；手机宽度。在 1280 px 和 390 px、深浅色下截图，和 DSH 对照后发给 Yi
   - _Requirements: 非功能“外观”“测试”_
 
-- [ ] 18. 阶段 2 收尾
+- [x] 18. 阶段 2 收尾
   - 全量回归；变异检查（让分组把请求前的记录归到当前步；让 `TraceStore` 接受旧版本的推送）；提交；汇报
   - _Requirements: 设计“阶段”_
 

@@ -48,7 +48,7 @@ export function Tabs({ tabs, selected, onSelect, label, className }: Props) {
             tabIndex={active ? 0 : -1}
             onClick={() => onSelect(tab.id)}
             className={cx(
-              "-mb-px border-b-2 px-1 py-2 text-sm transition-colors duration-[var(--duration-fast)]",
+              "-mb-px shrink-0 border-b-2 px-1 py-2 text-sm whitespace-nowrap transition-colors duration-[var(--duration-fast)]",
               active ? "border-fg font-medium text-fg" : "border-transparent text-fg-muted hover:text-fg",
             )}
           >
