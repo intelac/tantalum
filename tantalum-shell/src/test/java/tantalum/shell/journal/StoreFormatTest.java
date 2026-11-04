@@ -22,8 +22,8 @@ class StoreFormatTest {
 
     @Test
     void newDirectoryGetsCurrentVersions() throws Exception {
-        assertEquals(new StoreFormat(StoreFormat.STORAGE, StoreFormat.SEMANTICS), StoreFormat.check(dir));
-        assertEquals("{\"storage\":2,\"semantics\":" + StoreFormat.SEMANTICS + "}\n", Files.readString(file()));
+        assertEquals(new StoreFormat(StoreFormat.STORAGE), StoreFormat.check(dir));
+        assertEquals("{\"storage\":2}\n", Files.readString(file()));
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
         assertEquals(1, Files.list(dir).count());
     }
@@ -46,11 +46,12 @@ class StoreFormatTest {
         assertEquals(1, Files.list(dir).count());
     }
 
+    /** 以前的 {@code semantics} 字段读到也忽略，文件不改。 */
     @Test
-    void semanticsChangeStartsAndIsRecorded() throws Exception {
+    void anOldSemanticsFieldIsIgnored() throws Exception {
         Files.writeString(file(), "{\"storage\":2,\"semantics\":0}\n");
-        assertEquals(StoreFormat.SEMANTICS, StoreFormat.check(dir).semantics());
-        assertEquals("{\"storage\":2,\"semantics\":" + StoreFormat.SEMANTICS + "}\n", Files.readString(file()));
+        assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
+        assertEquals("{\"storage\":2,\"semantics\":0}\n", Files.readString(file()));
     }
 
     /** record-results 需求 8.1：旧格式的会话文件不迁移，拒绝启动，什么都不改。 */
@@ -79,7 +80,7 @@ class StoreFormatTest {
 
         assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
 
-        assertEquals("{\"storage\":2,\"semantics\":" + StoreFormat.SEMANTICS + "}\n", Files.readString(file()));
+        assertEquals("{\"storage\":2}\n", Files.readString(file()));
         assertEquals("users", Files.readString(dir.resolve("users.db")));
     }
 

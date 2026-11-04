@@ -60,7 +60,6 @@ import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.ColdReads;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
-import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.TurnQuery;
 import tantalum.shell.tool.BuiltinTools;
@@ -153,7 +152,6 @@ public final class Engine implements AutoCloseable {
 
             RequestImages requestImages = new RequestImages(storage.attachments);
             Kernel kernel = KernelFactory.kernel(properties, catalog.safety(), hooks);
-            SessionReplay replay = storage.replay(kernel);
             unfinished = storage.catchUp(kernel);
 
             Residency residency = new Residency();
@@ -164,11 +162,11 @@ public final class Engine implements AutoCloseable {
             hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
             queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths,
                     storage.records::read),
-                    turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)), storage.compare::mismatched);
+                    turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)));
 
             cleanroomRing = new CleanroomRing(loop.inputRingSize());
             lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
-                    storage.files::appendLines, cleanroomRing::tryPublish, storage.loader(replay, properties.compareReplay()), residency);
+                    storage.files::appendLines, cleanroomRing::tryPublish, storage.loader(), residency);
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());

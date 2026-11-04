@@ -20,15 +20,12 @@ import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.journal.StoreFormat;
 import tantalum.shell.journal.StoreLock;
 import tantalum.shell.loop.CleanroomRing;
-import tantalum.shell.loop.SessionSlice;
 import tantalum.shell.loop.UserLane;
 import tantalum.shell.store.Backfill;
 import tantalum.shell.store.IndexCatchUp;
 import tantalum.shell.store.RecordReplay;
-import tantalum.shell.store.ReplayCompare;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
-import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.UsageLedger;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -54,8 +51,6 @@ final class Storage implements AutoCloseable {
     final SessionFiles files;
     final AttachmentStore attachments;
     final RecordReplay records;
-    /** 第 1 步：冷载入时比较两种恢复方式（record-results 需求 9.1）。 */
-    final ReplayCompare compare = new ReplayCompare();
 
     private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits,
                     Deque<AutoCloseable> opened) throws IOException {
@@ -90,10 +85,6 @@ final class Storage implements AutoCloseable {
         }
     }
 
-    SessionReplay replay(Kernel kernel) {
-        return new SessionReplay(paths, reader, usage, kernel);
-    }
-
     /**
      * 先补写上次崩溃留下的、没有结果行的事件（record-results R5），再让索引追上会话文件，返回有未结束运行的会话。
      * 补不上就不知道哪些运行要收尾，拒绝启动；索引可以删掉重建。
@@ -110,23 +101,15 @@ final class Storage implements AutoCloseable {
     }
 
     /**
-     * 用户通道载入冷会话和用户用量的来源：按结果行折叠，不调内核（record-results 第 2 步）。读完文件的 memo 交给写入方，
-     * 之后的结果行能引用文件里已有的内容。{@code compareReplay} 时另用内核重放一遍比较，不一致时标出会话，恢复仍用结果行。
+     * 用户通道载入冷会话和用户用量的来源：按结果行折叠，不调内核（record-results）。读完文件的 memo 交给写入方，
+     * 之后的结果行能引用文件里已有的内容。
      */
-    UserLane.Loader loader(SessionReplay replay, boolean compareReplay) {
+    UserLane.Loader loader() {
         return new UserLane.Loader() {
             @Override
             public Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
                 Optional<RecordReplay.Loaded> folded = records.load(principal, session, beforeSeq);
                 folded.ifPresent(loaded -> files.adopt(principal, session, loaded.memo()));
-                if (compareReplay) {
-                    try {
-                        compare.check(principal, session, paths.sessionFile(principal, session), beforeSeq,
-                                replay.load(principal, session, beforeSeq), folded.map(RecordReplay.Loaded::slice), replay, records);
-                    } catch (IOException | SQLException | RuntimeException failure) {
-                        compare.unreadable(principal, session, failure);
-                    }
-                }
                 return folded.map(loaded -> new CleanroomRing.Loaded(loaded.slice()));
             }
 

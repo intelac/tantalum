@@ -121,17 +121,17 @@
 
 ## 阶段 3：清理和端到端
 
-- [ ] 19. 删掉按重放恢复的路径
+- [x] 19. 删掉按重放恢复的路径
   - File: shell/store/SessionReplay.java（只留给检查工具和测试）、shell/journal/StoreFormat.java（删 `semantics`）、shell/boot/Storage.java
   - 测试：ArchitectureTest 加一条：`shell/store` 的查询类不依赖 `Kernel`（检查工具除外）
   - _Requirements: R11, 需求 9.3_
 
-- [ ] 20. 端到端
+- [x] 20. 端到端
   - File: console/e2e/record-results.spec.ts、tantalum-examples 的 `E2eServer`/`E2eController`（重启、换钩子配置）
   - 改了访问范围的钩子规则后重启，旧对话和执行轨迹不变；执行工具时重启，工具显示“结果未知”、这一轮“因重启中断”；重启前后执行轨迹页一致
   - _Requirements: 需求 11.4_
 
-- [ ] 21. 文档
+- [x] 21. 文档
   - File: README.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md、架构页
   - 会话文件格式、恢复方式、检查工具用法、三步实测结果
   - _Requirements: 全部_

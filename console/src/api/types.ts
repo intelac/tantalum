@@ -62,8 +62,6 @@ export interface SessionSummary {
   lastActivity: string;
   /** `idle` 或内核状态名，如 `AwaitingModel`。 */
   runStatus: string;
-  /** 载入时内核重放和结果行不一致（record-results 第 1 步）；一致时不出现。 */
-  replayMismatch?: boolean;
 }
 
 export interface TextBlock {

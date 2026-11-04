@@ -36,16 +36,4 @@ describe("SessionRow", () => {
     expect(running?.getAttribute("aria-current")).toBe("page");
     expect(untitled?.textContent).toContain("新会话");
   });
-
-  it("marks a session whose replay did not match its results", () => {
-    render(
-      <ul>
-        <SessionRow session={{ ...base, replayMismatch: true }} selected={false} onSelect={vi.fn()} now={now} />
-        <SessionRow session={{ ...base, id: "s2" }} selected={false} onSelect={vi.fn()} now={now} />
-      </ul>,
-    );
-    const marks = screen.getAllByRole("img", { name: "恢复比对不一致，见服务器日志" });
-    expect(marks).toHaveLength(1);
-    expect(marks[0]?.getAttribute("title")).toBe("恢复比对不一致，见服务器日志");
-  });
 });

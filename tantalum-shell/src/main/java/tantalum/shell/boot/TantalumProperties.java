@@ -16,13 +16,7 @@ import tantalum.value.state.CompactionSettings;
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments, Journal journal) {
-
-    /**
-     * 会话文件。{@code compareReplay} 为 true 时冷载入除了按结果行折叠，还用内核重放一遍比较，不一致时标出会话
-     * （record-results 第 1 步的检查，第 2 步起默认关）。
-     */
-    public record Journal(boolean compareReplay) {}
+                                 AttachmentLimits attachments) {
 
     /** 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。 */
     public record Hooks(int maxWorkRounds) {
@@ -153,11 +147,6 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
 
     private boolean usesClaude() {
         return "claude".equals(provider);
-    }
-
-    /** 冷载入时要不要和内核重放比较；没有配置时不比较。 */
-    public boolean compareReplay() {
-        return journal != null && journal.compareReplay();
     }
 
     /** 附件上限；没有配置时用默认值。 */

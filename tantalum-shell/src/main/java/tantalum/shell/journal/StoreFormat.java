@@ -17,13 +17,13 @@ import tantalum.value.json.Json;
 
 /**
  * 数据目录的 {@code format.json}。{@code storage} 是文件格式，比程序新就拒绝启动，不改动数据。
- * {@code semantics} 是内核语义，变化只记警告：旧程序已经不在了，无法精确重放，journal 原文不受影响。
+ * 以前还有 {@code semantics}（内核语义）：重放旧会话可能和当时不同时记警告。record-results 之后恢复只读结果行，不再重放，
+ * 这个字段不再写，读到也忽略。
  */
-public record StoreFormat(int storage, int semantics) {
+public record StoreFormat(int storage) {
 
     /** 2：会话文件里夹着结果行（record-results）。1 的会话文件不再读，见 {@link #check}。 */
     public static final int STORAGE = 2;
-    public static final int SEMANTICS = 2;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);
     private static final String FILE = "format.json";
@@ -32,7 +32,7 @@ public record StoreFormat(int storage, int semantics) {
     /** 校验数据目录并写入当前版本。拒绝时抛 {@link IllegalStateException}，消息说明原因。 */
     public static StoreFormat check(Path dataDir) throws IOException {
         Path file = dataDir.resolve(FILE);
-        StoreFormat current = new StoreFormat(STORAGE, SEMANTICS);
+        StoreFormat current = new StoreFormat(STORAGE);
         if (!Files.exists(file)) {
             if (Files.exists(dataDir.resolve(LEGACY_JOURNAL))) {
                 throw new IllegalStateException(dataDir + " holds an old " + LEGACY_JOURNAL
@@ -54,13 +54,8 @@ public record StoreFormat(int storage, int semantics) {
                         + " out of the data directory and start again; users, plugin switches and settings stay.");
             }
             LOG.info("upgrading {} from storage version {} to {}: it holds no session files", dataDir, found.storage, STORAGE);
-            write(dataDir, new StoreFormat(STORAGE, SEMANTICS));
+            write(dataDir, new StoreFormat(STORAGE));
             return current;
-        }
-        if (found.semantics != SEMANTICS) {
-            LOG.warn("kernel semantics changed from {} to {}: replaying old sessions may not match the original prompts byte for byte",
-                    found.semantics, SEMANTICS);
-            write(dataDir, new StoreFormat(found.storage, SEMANTICS));
         }
         return current;
     }
@@ -77,9 +72,8 @@ public record StoreFormat(int storage, int semantics) {
     private static StoreFormat read(Path file) throws IOException {
         Json parsed = JsonText.parseOrNull(Files.readString(file, StandardCharsets.UTF_8));
         if (parsed instanceof Json.Obj format
-                && format.fields().get("storage") instanceof Json.Num storage
-                && format.fields().get("semantics") instanceof Json.Num semantics) {
-            return new StoreFormat(storage.value().intValue(), semantics.value().intValue());
+                && format.fields().get("storage") instanceof Json.Num storage) {
+            return new StoreFormat(storage.value().intValue());
         }
         throw new IllegalStateException(file + " is not a valid format file; refusing to start");
     }
@@ -89,7 +83,6 @@ public record StoreFormat(int storage, int semantics) {
         Files.createDirectories(dataDir);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("storage", format.storage);
-        fields.put("semantics", format.semantics);
         Path temp = Files.createTempFile(dataDir, FILE, ".tmp",
                 PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         try {
