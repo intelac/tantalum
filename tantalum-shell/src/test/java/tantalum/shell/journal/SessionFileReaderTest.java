@@ -151,7 +151,7 @@ class SessionFileReaderTest {
     void newerFileFormatIsRejected() throws Exception {
         Path path = threeEvents(sample());
         List<String> lines = new ArrayList<>(Files.readAllLines(path));
-        lines.set(0, "{\"format\":2,\"session\":\"s-1\",\"principal\":\"alice\"}");
+        lines.set(0, "{\"format\":3,\"session\":\"s-1\",\"principal\":\"alice\"}");
         Files.write(path, lines);
         assertThrows(SessionCorruptException.class, () -> reader.readAll(path));
     }
@@ -165,7 +165,7 @@ class SessionFileReaderTest {
         try (SessionFile file = SessionFile.open(paths, ALICE, other, codec)) {
             file.append(List.of(event));
         }
-        Files.writeString(path, "{\"format\":1,\"session\":\"s-1\",\"principal\":\"alice\"}\n{bad\n{\"seq\":1}\n");
+        Files.writeString(path, "{\"format\":2,\"session\":\"s-1\",\"principal\":\"alice\"}\n{bad\n{\"seq\":1}\n");
         assertThrows(SessionCorruptException.class, () -> reader.readAll(path));
         assertEquals(List.of(event), reader.readAll(paths.sessionFile(ALICE, other)));
     }

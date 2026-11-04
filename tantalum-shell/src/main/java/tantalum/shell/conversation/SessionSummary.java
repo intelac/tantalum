@@ -7,8 +7,20 @@ import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.RunState;
 
-/** 侧栏里的一行：标题取第一条提问的开头，最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}。 */
-public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus) {
+/**
+ * 侧栏里的一行：标题取第一条提问的开头，最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}。
+ * {@code replayMismatch} 为 true 时载入这个会话发现内核重放和结果行不一致（record-results 第 1 步）。
+ */
+public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus,
+                             boolean replayMismatch) {
+
+    public SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus) {
+        this(id, title, lastActivity, runStatus, false);
+    }
+
+    public SessionSummary withReplayMismatch(boolean mismatch) {
+        return new SessionSummary(id, title, lastActivity, runStatus, mismatch);
+    }
 
     public static final String IDLE = "idle";
     static final int TITLE_LENGTH = 40;

@@ -170,11 +170,11 @@ public final class Engine implements AutoCloseable {
             TurnQuery turns = new TurnQuery(storage.paths, replay, codec.mapper());
             hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
             queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths, replay), turns,
-                    new TraceQuery(storage.paths, replay));
+                    new TraceQuery(storage.paths, replay), storage.compare::mismatched);
 
             cleanroomRing = new CleanroomRing(loop.inputRingSize());
             lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
-                    storage.files::append, cleanroomRing::tryPublish, storage.loader(replay), residency);
+                    storage.files::appendLines, cleanroomRing::tryPublish, storage.loader(replay), residency);
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
@@ -190,9 +190,13 @@ public final class Engine implements AutoCloseable {
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
-            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock, observations::forget);
+            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock, session -> {
+                observations.forget(session);
+                storage.files.forget(session);
+            });
+            // 结果行由用户通道落盘后才放行命令和推送；那之后才归还外部名额和放行名额（record-results R3）
             cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, projections, hub, view, results,
-                    storage.indexWriter::onStep, evictor);
+                    storage.indexWriter::onStep, evictor, lanes, this::processed);
 
             // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
             BooleanSupplier halted = () -> closing.get() || lanes.halted() || cleanroom.broken() || input.broken()
@@ -203,12 +207,7 @@ public final class Engine implements AutoCloseable {
             intake = new Intake(input, gate, ledger, view, residency, storage::claim,
                     (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock);
             input.connect(lanes);
-            cleanroomRing.connect((slot, sequence, endOfBatch) -> {
-                EventEnvelope envelope = slot.envelope;
-                cleanroom.onEvent(slot, sequence, endOfBatch);
-                intake.processed(envelope);
-                lanes.released();
-            });
+            cleanroomRing.connect(cleanroom);
         } catch (RuntimeException failure) {
             Storage.closeQuietly(storage);
             throw failure;
@@ -219,6 +218,12 @@ public final class Engine implements AutoCloseable {
         interrupt(unfinished);
         LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
                 properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
+    }
+
+    /** 一个事件走完全程：归还外部名额和放行名额。 */
+    private void processed(EventEnvelope envelope) {
+        intake.processed(envelope);
+        lanes.released();
     }
 
     /** 提问、排队、插话、手动压缩和取消。 */

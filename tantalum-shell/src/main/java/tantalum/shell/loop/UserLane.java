@@ -18,6 +18,8 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.journal.Sequence;
+import tantalum.shell.journal.Line;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
@@ -26,16 +28,21 @@ import tantalum.value.state.PrincipalState;
 /**
  * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部事件，按到达顺序取号，
  * 每个会话并行写文件，全部落盘后按序号放行。所以同一用户内严格按序，不同用户互不等待。
+ * cleanroom 处理完的一步也排进这个队列（{@link Released}）：它的结果行和事件同批写、同一次 fsync，落盘后才放行命令和推送
+ * （record-results R3）。一个用户的文件只有这个通道在写。
  */
 public final class UserLane {
 
     private static final Logger LOG = LoggerFactory.getLogger(UserLane.class);
 
-    /** 把一个会话的事件写到它的文件，返回时已落盘。 */
+    /** 把一个会话的事件和结果按顺序写到它的文件，返回时已落盘。 */
     @FunctionalInterface
     public interface Writer {
-        void append(Principal principal, SessionId session, List<EventEnvelope> events) throws IOException;
+        void append(Principal principal, SessionId session, List<Line> lines) throws IOException;
     }
+
+    /** cleanroom 处理完的一步，见 {@link Release}。 */
+    record Released(EventEnvelope envelope, StepRecord record, Runnable afterDurable, Runnable done) {}
 
     /** 重放一个冷会话里序号小于 {@code beforeSeq} 的事件。没有这样的事件（全新会话）时为空。 */
     public interface Loader {
@@ -64,7 +71,8 @@ public final class UserLane {
     private final Exit exit;
     private final Loader loader;
     private final Residency residency;
-    private final Queue<EventEnvelope> queue = new ArrayDeque<>();
+    /** {@link EventEnvelope} 或 {@link Released}，按到达顺序。 */
+    private final Queue<Object> queue = new ArrayDeque<>();
     private boolean running;
     /** 只有通道线程访问。用户的用量在本进程只载入一次，跟着他的第一个事件。 */
     private boolean usageLoaded;
@@ -78,9 +86,17 @@ public final class UserLane {
         this.exit = exit;
     }
 
+    void offer(EventEnvelope envelope) {
+        enqueue(envelope);
+    }
+
+    void offer(Released released) {
+        enqueue(released);
+    }
+
     /** 放入和判断是否要启动线程在同一把锁下，线程退出时也一样，所以不会有事件留在没人取的队列里。 */
-    synchronized void offer(EventEnvelope envelope) {
-        queue.add(envelope);
+    private synchronized void enqueue(Object item) {
+        queue.add(item);
         if (!running) {
             running = true;
             Thread.ofVirtual().name("lane-" + principal.value()).start(this::drain);
@@ -89,7 +105,7 @@ public final class UserLane {
 
     private void drain() {
         while (true) {
-            List<EventEnvelope> batch = take();
+            List<Object> batch = take();
             if (batch.isEmpty()) {
                 return;
             }
@@ -97,16 +113,26 @@ public final class UserLane {
         }
     }
 
-    private synchronized List<EventEnvelope> take() {
-        List<EventEnvelope> batch = new ArrayList<>(queue);
+    private synchronized List<Object> take() {
+        List<Object> batch = new ArrayList<>(queue);
         queue.clear();
         running = !batch.isEmpty();
         return batch;
     }
 
-    private void process(List<EventEnvelope> batch) {
+    private void process(List<Object> items) {
+        List<EventEnvelope> batch = new ArrayList<>();
+        List<Released> released = new ArrayList<>();
+        for (Object item : items) {
+            if (item instanceof Released step) {
+                released.add(step);
+            } else {
+                batch.add((EventEnvelope) item);
+            }
+        }
         if (exit.halted()) {
             exit.discarded(batch.size());
+            released.forEach(step -> step.done().run());
             return;
         }
         Map<SessionId, Residency.State> states = new HashMap<>();
@@ -116,10 +142,17 @@ public final class UserLane {
         }
         List<EventEnvelope> numbered = new ArrayList<>(batch.size());
         try {
-            for (EventEnvelope envelope : batch) {
-                numbered.add(envelope.withSeq(sequence.next(principal)));
+            List<Object> lines = new ArrayList<>(items.size());
+            for (Object item : items) {
+                if (item instanceof EventEnvelope envelope) {
+                    EventEnvelope withSeq = envelope.withSeq(sequence.next(principal));
+                    numbered.add(withSeq);
+                    lines.add(withSeq);
+                } else {
+                    lines.add(item);
+                }
             }
-            write(numbered);
+            write(lines);
         } catch (Exception | Error failure) {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -127,6 +160,19 @@ public final class UserLane {
             exit.failed(failure);
             batch.forEach(envelope -> residency.unpin(envelope.session()));
             exit.discarded(batch.size());
+            released.forEach(step -> step.done().run());
+            return;
+        }
+        for (Released step : released) {
+            try {
+                step.afterDurable().run();
+            } catch (RuntimeException failure) {
+                LOG.error("releasing the step of seq {} failed", step.envelope().seq(), failure);
+            } finally {
+                step.done().run();
+            }
+        }
+        if (numbered.isEmpty()) {
             return;
         }
         Map<SessionId, CleanroomRing.Load> loads = load(numbered, states);
@@ -199,10 +245,12 @@ public final class UserLane {
         }
     }
 
-    private void write(List<EventEnvelope> numbered) throws IOException, InterruptedException, ExecutionException {
-        Map<SessionId, List<EventEnvelope>> bySession = new LinkedHashMap<>();
-        for (EventEnvelope envelope : numbered) {
-            bySession.computeIfAbsent(envelope.session(), ignored -> new ArrayList<>()).add(envelope);
+    private void write(List<Object> items) throws IOException, InterruptedException, ExecutionException {
+        Map<SessionId, List<Line>> bySession = new LinkedHashMap<>();
+        for (Object item : items) {
+            Line line = item instanceof Released step ? new Line.Result(step.record()) : new Line.Event((EventEnvelope) item);
+            SessionId session = item instanceof Released step ? step.envelope().session() : ((EventEnvelope) item).session();
+            bySession.computeIfAbsent(session, ignored -> new ArrayList<>()).add(line);
         }
         if (bySession.size() == 1) {
             var only = bySession.entrySet().iterator().next();
@@ -212,8 +260,8 @@ public final class UserLane {
         // close 等全部写完，所以失败时也不会有写入还在进行。
         try (ExecutorService writers = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> running = new ArrayList<>();
-            bySession.forEach((session, events) -> running.add(writers.submit(() -> {
-                writer.append(principal, session, events);
+            bySession.forEach((session, lines) -> running.add(writers.submit(() -> {
+                writer.append(principal, session, lines);
                 return null;
             })));
             for (Future<?> write : running) {

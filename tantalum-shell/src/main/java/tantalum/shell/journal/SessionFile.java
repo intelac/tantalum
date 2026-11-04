@@ -20,10 +20,14 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
-/** 一个会话的只追加文件。第一行是头部，之后每行一个事件。{@link #append} 返回才算落盘。调用方保证同一文件同时只有一个写入者。 */
+/**
+ * 一个会话的只追加文件。第一行是头部，之后每行一个事件或一个结果（record-results）。{@link #append} 返回才算落盘。
+ * 调用方保证同一文件同时只有一个写入者。
+ */
 public final class SessionFile implements AutoCloseable {
 
-    public static final int FORMAT = 1;
+    /** 2：事件行之间夹着结果行。1 是 record-results 之前的格式，不再读（需求 8）。 */
+    public static final int FORMAT = 2;
 
     private static final String DIR_MODE = "rwx------";
     private static final String FILE_MODE = "rw-------";
@@ -108,15 +112,29 @@ public final class SessionFile implements AutoCloseable {
 
     /** 一批事件写完后 fsync 一次，返回落盘后的文件大小。失败时文件尾部可能残缺，由下次 {@link #open} 截掉。 */
     public long append(List<EventEnvelope> events) throws IOException {
-        StringBuilder lines = new StringBuilder();
+        List<String> lines = new ArrayList<>(events.size());
         for (EventEnvelope envelope : events) {
-            if (!envelope.principal().equals(principal) || !envelope.session().equals(session)) {
-                throw new IllegalArgumentException("event of " + envelope.principal().value() + "/" + envelope.session().value()
-                        + " does not belong to file of " + principal.value() + "/" + session.value());
-            }
-            lines.append(line(envelope)).append('\n');
+            lines.add(line(envelope, payload(envelope)));
         }
-        writeFully(channel, ByteBuffer.wrap(lines.toString().getBytes(StandardCharsets.UTF_8)));
+        return appendLines(lines);
+    }
+
+    /** 事件的 payload JSON；写结果行的人要先从里面收录长字符串。 */
+    String payload(EventEnvelope envelope) {
+        if (!envelope.principal().equals(principal) || !envelope.session().equals(session)) {
+            throw new IllegalArgumentException("event of " + envelope.principal().value() + "/" + envelope.session().value()
+                    + " does not belong to file of " + principal.value() + "/" + session.value());
+        }
+        return codec.encode(envelope.event());
+    }
+
+    /** 已经编码好的行（不含换行符），一次写完、一次 fsync。 */
+    long appendLines(List<String> lines) throws IOException {
+        StringBuilder text = new StringBuilder();
+        for (String line : lines) {
+            text.append(line).append('\n');
+        }
+        writeFully(channel, ByteBuffer.wrap(text.toString().getBytes(StandardCharsets.UTF_8)));
         channel.force(true);
         if (!unsyncedDirs.isEmpty()) {
             for (Path dir : unsyncedDirs) {
@@ -127,7 +145,7 @@ public final class SessionFile implements AutoCloseable {
         return channel.size();
     }
 
-    private String line(EventEnvelope envelope) {
+    static String line(EventEnvelope envelope, String payload) {
         Event event = envelope.event();
         // payload 已经是 JSON 文本，直接拼接，不解析第二次。
         return "{\"seq\":" + envelope.seq()
@@ -135,7 +153,7 @@ public final class SessionFile implements AutoCloseable {
                 + "\",\"type\":" + JsonText.quote(event.type())
                 + ",\"version\":" + event.version()
                 + ",\"run\":" + (envelope.run() == null ? "null" : JsonText.quote(envelope.run().value()))
-                + ",\"payload\":" + codec.encode(event) + "}";
+                + ",\"payload\":" + payload + "}";
     }
 
     private static void writeFully(FileChannel channel, ByteBuffer bytes) throws IOException {

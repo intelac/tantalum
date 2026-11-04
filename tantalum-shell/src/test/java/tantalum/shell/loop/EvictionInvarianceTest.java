@@ -143,7 +143,7 @@ class EvictionInvarianceTest {
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
-            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
+            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::appendLines, ring::tryPublish,
                     LoopFixtures.loader((principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq)), residency);
             FactListener facts = new FactListener() {
                 @Override
@@ -165,12 +165,10 @@ class EvictionInvarianceTest {
                 log.add("command " + command);
                 pending.add(command);
                 return true;
-            }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor);
+            }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor,
+                    dispatcher, envelope -> dispatcher.released());
             input.connect(dispatcher);
-            ring.connect((slot, sequence, endOfBatch) -> {
-                cleanroom.onEvent(slot, sequence, endOfBatch);
-                dispatcher.released();
-            });
+            ring.connect(cleanroom);
             ring.start();
             input.start();
         }

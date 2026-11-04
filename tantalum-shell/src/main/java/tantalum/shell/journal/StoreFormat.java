@@ -21,7 +21,8 @@ import tantalum.value.json.Json;
  */
 public record StoreFormat(int storage, int semantics) {
 
-    public static final int STORAGE = 1;
+    /** 2：会话文件里夹着结果行（record-results）。1 的会话文件不再读，见 {@link #check}。 */
+    public static final int STORAGE = 2;
     public static final int SEMANTICS = 2;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);
@@ -45,12 +46,32 @@ public record StoreFormat(int storage, int semantics) {
             throw new IllegalStateException(file + " has storage version " + found.storage
                     + " but this program supports up to " + STORAGE + ". Upgrade tantalum.");
         }
+        if (found.storage < STORAGE) {
+            Path sessions = dataDir.resolve("sessions");
+            if (hasSessionFiles(sessions)) {
+                throw new IllegalStateException(dataDir + " holds session files of storage version " + found.storage
+                        + ", which this version no longer reads. Move " + sessions + " and " + dataDir.resolve("index.db")
+                        + " out of the data directory and start again; users, plugin switches and settings stay.");
+            }
+            LOG.info("upgrading {} from storage version {} to {}: it holds no session files", dataDir, found.storage, STORAGE);
+            write(dataDir, new StoreFormat(STORAGE, SEMANTICS));
+            return current;
+        }
         if (found.semantics != SEMANTICS) {
             LOG.warn("kernel semantics changed from {} to {}: replaying old sessions may not match the original prompts byte for byte",
                     found.semantics, SEMANTICS);
             write(dataDir, new StoreFormat(found.storage, SEMANTICS));
         }
         return current;
+    }
+
+    private static boolean hasSessionFiles(Path sessions) throws IOException {
+        if (!Files.isDirectory(sessions)) {
+            return false;
+        }
+        try (var files = Files.walk(sessions)) {
+            return files.anyMatch(file -> file.getFileName().toString().endsWith(".jsonl"));
+        }
     }
 
     private static StoreFormat read(Path file) throws IOException {

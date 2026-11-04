@@ -61,7 +61,7 @@ class SessionFileTest {
         }
         List<String> lines = Files.readAllLines(paths.sessionFile(ALICE, S1));
         assertEquals(2, lines.size());
-        assertEquals("{\"format\":1,\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
+        assertEquals("{\"format\":2,\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
         assertTrue(lines.get(1).startsWith("{\"seq\":1,\"at\":\"2026-11-02T00:00:00.123456Z\",\"type\":\"UserPrompt\",\"version\":1,\"run\":\"s-1_1\",\"payload\":{"), lines.get(1));
     }
 

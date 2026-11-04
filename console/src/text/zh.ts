@@ -27,6 +27,7 @@ export const zh = {
     logout: "退出登录",
     running: "运行中",
     untitled: "新会话",
+    replayMismatch: "恢复比对不一致，见服务器日志",
   },
   tabs: {
     conversation: "对话",

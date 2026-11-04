@@ -13,7 +13,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import tantalum.shell.journal.Line;
 import tantalum.shell.journal.Sequence;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -169,7 +171,7 @@ class UserLaneTest {
         List<EventEnvelope> written = Collections.synchronizedList(new ArrayList<>());
         UserLane lane = new UserLane(ALICE, principal -> {
             throw new IllegalStateException("exceeded");
-        }, (p, s, events) -> written.addAll(events), exit, LoopFixtures.NO_LOADER, new Residency());
+        }, (p, s, lines) -> lines.forEach(line -> written.add(((Line.Event) line).envelope())), exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -201,5 +203,86 @@ class UserLaneTest {
         for (int i = 0; i < total; i++) {
             assertEquals("r" + i, request(exit.published.get(i)));
         }
+    }
+
+    private static UserLane.Released step(String session, long seq, List<String> log) {
+        EventEnvelope envelope = event(session, "r" + seq).withSeq(seq);
+        StepRecord record = new StepRecord(seq, null, List.of(), List.of(), null, null, List.of(), List.of());
+        return new UserLane.Released(envelope, record, () -> log.add("released " + seq), () -> log.add("done " + seq));
+    }
+
+    /** record-results 需求 2.1：结果行落盘之前不放行命令和推送。 */
+    @Test
+    void aStepIsReleasedOnlyAfterItsResultIsWritten() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
+        CountDownLatch writing = new CountDownLatch(1);
+        CountDownLatch durable = new CountDownLatch(1);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+            log.add("write " + lines.stream().map(line -> line.getClass().getSimpleName() + " " + line.seq()).toList());
+            writing.countDown();
+            try {
+                durable.await();
+            } catch (InterruptedException stop) {
+                throw new IOException(stop);
+            }
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
+
+        lane.offer(step("a", 7, log));
+        assertTrue(writing.await(5, TimeUnit.SECONDS));
+        Thread.sleep(50);
+        assertEquals(List.of("write [Result 7]"), log, "nothing is released while the write is in progress");
+
+        durable.countDown();
+        for (int i = 0; i < 1000 && log.size() < 3; i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(List.of("write [Result 7]", "released 7", "done 7"), log);
+    }
+
+    /** 需求 2.2：写不进去就不放行，只归还名额；进程照事件写入失败的规则停下。 */
+    @Test
+    void aFailedWriteReleasesNothing() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+            throw new IOException("disk full");
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
+
+        lane.offer(step("a", 3, log));
+        for (int i = 0; i < 1000 && log.isEmpty(); i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(List.of("done 3"), log);
+        assertEquals(1, exit.failures.size());
+    }
+
+    /** 事件和结果按到达顺序进同一次写入。 */
+    @Test
+    void eventsAndResultsOfOneSessionAreWrittenInArrivalOrder() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
+        List<String> written = new CopyOnWriteArrayList<>();
+        CountDownLatch hold = new CountDownLatch(1);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+            if (s.value().equals("first")) {
+                try {
+                    hold.await();
+                } catch (InterruptedException stop) {
+                    throw new IOException(stop);
+                }
+                return;
+            }
+            lines.forEach(line -> written.add(line.getClass().getSimpleName()));
+        }, exit, LoopFixtures.NO_LOADER, new Residency());
+        lane.offer(event("first", "hold"));
+        Thread.sleep(20);
+        lane.offer(step("a", 0, log));
+        lane.offer(event("a", "steer"));
+        lane.offer(step("a", 1, log));
+        hold.countDown();
+        exit.await(2);
+        for (int i = 0; i < 1000 && log.size() < 4; i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(List.of("Result", "Event", "Result"), written);
+        assertEquals(List.of("released 0", "done 0", "released 1", "done 1"), log);
     }
 }

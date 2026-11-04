@@ -37,43 +37,43 @@
   - 测试：连续三次请求还原出完整 `Prompt`，指纹与 `EventCodec` 编码的 SHA-256 一致；压缩后前缀变短；不知道上一次时 `keep` 为 0
   - _Requirements: R2, R7, 需求 4.1, 4.3_
 
-- [ ] 5. 文件格式 2
+- [x] 5. 文件格式 2
   - File: shell/journal/SessionFile.java、shell/journal/SessionFileReader.java、shell/journal/StoreFormat.java、shell/journal/TailSequence.java
   - 头部 `format: 2`；`append` 接受事件行和结果行混合一批、一次 fsync；`forEach(file, Consumer<Line>)` 读两种行，结果行序号递增且对应已读到的事件；`TailSequence` 跳过结果行；`StoreFormat` 的 `storage = 2`，`storage = 1` 且有会话文件时拒绝启动，没有时升级
   - 测试：交错读写；结果行序号不对、在事件之前时报错；`format: 1` 文件拒绝；旧目录有、无会话文件两种情况，用户库不变
   - _Requirements: R10, R9, 需求 8_
 
-- [ ] 6. 通道：落盘后放行
+- [x] 6. 通道：落盘后放行
   - File: shell/loop/UserLane.java、shell/loop/LaneDispatcher.java、shell/loop/ResultPublisher.java（如需要）
   - 新工作项 `Released(record, commands, notifications)`：和事件同批写进对应会话文件，fsync 后放行命令到输出环、按 (seq, index) 推送；输出环满时照旧 `reportDropped`；写入失败照旧 `Exit.failed` 且不放行
   - 测试：fsync 前不放行（测试用写入器卡住时输出环为空）；写入失败不放行；推送编号和现在相同
   - _Requirements: R3, 需求 2.1–2.3_
 
-- [ ] 7. Cleanroom 算出结果行
+- [x] 7. Cleanroom 算出结果行
   - File: shell/loop/Cleanroom.java、shell/loop/Evictor.java、shell/boot/Engine.java（接线）
   - `step` 里算 `StepRecord`，命令和推送交给通道；内存视图和条目照旧立即更新；会话回收时丢掉它的 `RecordMemo`
   - 测试：现有 `RingIntegrationTest`、`MultiUserTest` 等照旧通过；每个事件后文件里都有结果行
   - _Requirements: R1, R3_
 
-- [ ] 8. `RecordReplay` 折叠
+- [x] 8. `RecordReplay` 折叠
   - File: shell/store/RecordReplay.java、shell/store/SessionReplay.java（抽出“怎么算一步”）
   - 和 `SessionReplay` 同样的 `load`/`each`/`until`；冷载入时顺便建好 `RecordMemo`
   - 测试：同一个场景文件，两种算法给出的切片和每一步的 `Decision` 相同
   - _Requirements: R4, 需求 3.1, 3.2_
 
-- [ ] 9. 启动时补写尾部
+- [x] 9. 启动时补写尾部
   - File: shell/store/Backfill.java、shell/boot/Storage.java、shell/boot/Engine.java
   - 大小不符的文件里没有结果行的事件，按用户合并排序，用结果行折叠出的状态加累计用量交给内核，命令不执行，结果行追加到各自文件
   - 测试：结果行落盘前崩溃（测试写入器在第二次 fsync 前抛出），重启后用户提交的消息在对话里、运行收尾为“因重启中断”；补写中途崩溃再启动，结果和一次补完相同
   - _Requirements: R5, R6, 需求 5, 6, 11.3_
 
-- [ ] 10. 冷载入比较（第 1 步）
+- [x] 10. 冷载入比较（第 1 步）
   - File: shell/store/ReplayCompare.java、shell/boot/Storage.java（加载器）、shell/web 会话列表接口
   - 加载器两种都算，比较不一致时记错误日志（会话、序号、字段）并记下这个会话；恢复用重放的结果；会话列表接口多一个 `replayMismatch` 字段
   - 测试：手工改坏一行结果行时日志和接口里都标出；一致时不标
   - _Requirements: R11, 需求 9.1_
 
-- [ ] 11. 控制台标出不一致的会话
+- [x] 11. 控制台标出不一致的会话
   - File: console/api/types.ts、会话列表组件、console/i18n/zh.ts
   - `replayMismatch` 为真时显示警告标记，悬停提示“恢复比对不一致，见服务器日志”
   - 测试：vitest 组件测试

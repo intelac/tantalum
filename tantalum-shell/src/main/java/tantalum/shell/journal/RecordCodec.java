@@ -224,6 +224,11 @@ public final class RecordCodec {
         }
     }
 
+    /** 收录一行事件 payload 里的长字符串。 */
+    public void see(String eventPayload, RecordMemo memo) {
+        memo.see(mapper.readTree(eventPayload));
+    }
+
     /** 请求的指纹：用 journal 和接口的同一个 mapper 编码后取 SHA-256，只覆盖 {@link Prompt}，不含请求头和凭据。 */
     public String fingerprint(Prompt prompt) {
         return RecordMemo.hash(new String(events.writeValueAsBytes(prompt), StandardCharsets.UTF_8));
