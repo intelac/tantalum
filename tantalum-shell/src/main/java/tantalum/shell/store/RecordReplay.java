@@ -19,6 +19,7 @@ import tantalum.shell.loop.SessionSlice;
 import tantalum.shell.trace.Trace;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
@@ -30,6 +31,12 @@ import tantalum.value.state.KernelState;
  * 冷载入时不该有（会话只在全部结果落盘后才离开内存，崩溃留下的由启动时的补写处理），有就拒绝载入。
  */
 public final class RecordReplay {
+
+    /** 和 {@link SessionReplay.Step} 相同，另带这一步每次模型调用当时记下的请求指纹（请求详情页核对用）。 */
+    @FunctionalInterface
+    public interface RecordedStep {
+        void accept(EventEnvelope envelope, KernelState before, Decision decision, Map<CommandId, String> fingerprints);
+    }
 
     /** 冷载入的结果，附带读完整个文件后的 memo，交给写入方接着写结果行。 */
     public record Loaded(SessionSlice slice, RecordMemo memo) {}
@@ -45,8 +52,17 @@ public final class RecordReplay {
         this.reader = reader;
     }
 
-    /** 折叠序号小于 {@code beforeSeq} 的步骤；没有这样的事件时为空。memo 总是读完整个文件。 */
+    /** 冷载入：折叠序号小于 {@code beforeSeq} 的步骤；没有这样的事件时为空。memo 总是读完整个文件。 */
     public Optional<Loaded> load(Principal principal, SessionId session, long beforeSeq) throws IOException {
+        return fold(principal, session, beforeSeq, true);
+    }
+
+    /** 不在内存的会话的查询：和 {@link #load} 相同，但文件末尾正在处理、还没有结果行的事件跳过，不报错。 */
+    public Optional<SessionSlice> read(Principal principal, SessionId session) throws IOException {
+        return fold(principal, session, Long.MAX_VALUE, false).map(Loaded::slice);
+    }
+
+    private Optional<Loaded> fold(Principal principal, SessionId session, long beforeSeq, boolean strict) throws IOException {
         Path file = paths.sessionFile(principal, session);
         if (!Files.exists(file)) {
             return Optional.empty();
@@ -54,9 +70,11 @@ public final class RecordReplay {
         Transcript transcript = new Transcript();
         Trace trace = new Trace();
         Projections projections = new Projections(transcript, trace);
-        Fold fold = new Fold(file, beforeSeq, projections::apply);
+        Fold fold = new Fold(file, beforeSeq, (envelope, before, decision, fingerprints) -> projections.apply(envelope, before, decision));
         RecordMemo memo = reader.forEachLine(file, fold::accept).toWriter();
-        fold.requireAnswered();
+        if (strict) {
+            fold.requireAnswered();
+        }
         if (fold.seq < 0 || fold.state.sessions().get(session) == null) {
             return Optional.empty();
         }
@@ -66,7 +84,7 @@ public final class RecordReplay {
 
     /** 折叠整个文件，留下末尾没有结果行的事件给启动时的补写。 */
     Folded fold(Path file) throws IOException {
-        Fold fold = new Fold(file, Long.MAX_VALUE, (envelope, before, decision) -> { });
+        Fold fold = new Fold(file, Long.MAX_VALUE, (envelope, before, decision, fingerprints) -> { });
         RecordMemo memo = reader.forEachLine(file, fold::accept).toWriter();
         return new Folded(fold.state, List.copyOf(fold.waiting.values()), memo);
     }
@@ -78,6 +96,11 @@ public final class RecordReplay {
 
     /** 同 {@link #each}，只到序号小于 {@code beforeSeq} 的步骤。 */
     public void until(Principal principal, Path file, long beforeSeq, SessionReplay.Step step) throws IOException {
+        until(principal, file, beforeSeq, (RecordedStep) (envelope, before, decision, fingerprints) -> step.accept(envelope, before, decision));
+    }
+
+    /** 同上，另带记下的请求指纹。 */
+    public void until(Principal principal, Path file, long beforeSeq, RecordedStep step) throws IOException {
         reader.forEachLine(file, new Fold(file, beforeSeq, step)::accept);
     }
 
@@ -85,12 +108,12 @@ public final class RecordReplay {
     private static final class Fold {
         private final Path file;
         private final long beforeSeq;
-        private final SessionReplay.Step step;
+        private final RecordedStep step;
         private final Map<Long, EventEnvelope> waiting = new LinkedHashMap<>();
         KernelState state = KernelState.empty();
         long seq = -1;
 
-        Fold(Path file, long beforeSeq, SessionReplay.Step step) {
+        Fold(Path file, long beforeSeq, RecordedStep step) {
             this.file = file;
             this.beforeSeq = beforeSeq;
             this.step = step;
@@ -111,7 +134,7 @@ public final class RecordReplay {
                     EventEnvelope envelope = waiting.remove(oldest);
                     KernelState before = state;
                     Decision decision = result.record().apply(envelope, before);
-                    step.accept(envelope, before, decision);
+                    step.accept(envelope, before, decision, result.fingerprints());
                     state = decision.newState();
                     seq = result.seq();
                 }

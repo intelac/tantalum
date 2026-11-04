@@ -78,12 +78,23 @@ function Summary({ request }: { request: ModelRequest }) {
   );
 }
 
+/** 还原的请求和当时记下的指纹对不上时，在请求详情的每个页签顶部提示。 */
+function Restored({ mismatch }: { mismatch: boolean | undefined }) {
+  if (mismatch !== true) return null;
+  return (
+    <p role="alert" className="mb-2 rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-xs text-danger">
+      {t.details.fingerprintMismatch}
+    </p>
+  );
+}
+
 function CallSystem({ session, call }: { session: string; call: string }) {
   const detail = useTraceCall(session, call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   const { system, segments } = detail.data;
   return (
     <>
+      <Restored mismatch={detail.data.fingerprintMismatch} />
       {segments.length > 0 && (
         <Section title={t.details.segments}>
           <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
@@ -105,6 +116,8 @@ export function CallTools({ session, call }: { session: string; call: string }) 
   if (detail.data === undefined) return <Loading error={detail.error} />;
   if (detail.data.tools.length === 0) return <p className="text-xs text-fg-faint">{t.record.toolsMissing}</p>;
   return (
+    <>
+    <Restored mismatch={detail.data.fingerprintMismatch} />
     <ul className="flex flex-col gap-3">
       {detail.data.tools.map(({ spec, source }) => (
         <li key={spec.name} className="flex flex-col gap-1">
@@ -116,6 +129,7 @@ export function CallTools({ session, call }: { session: string; call: string }) 
         </li>
       ))}
     </ul>
+    </>
   );
 }
 
@@ -125,6 +139,7 @@ function CallMessages({ session, call }: { session: string; call: string }) {
   const { messages, output } = detail.data;
   return (
     <>
+      <Restored mismatch={detail.data.fingerprintMismatch} />
       <Fields
         rows={[[t.details.outputLimits, `${output.maxTokens > 0 ? t.details.maxTokens(output.maxTokens) : ""} ${output.toolsAllowed ? t.details.toolsAllowed : t.details.toolsNotAllowed}`.trim()]]}
       />

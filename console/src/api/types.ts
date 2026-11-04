@@ -401,6 +401,8 @@ export interface TraceCall {
   messages: Message[];
   output: { toolsAllowed: boolean; maxTokens: number };
   previous?: { system: string; tools: ToolSpec[] };
+  /** 按结果行还原的请求和当时记下的指纹不一致（record-results 需求 4.2）；一致时不出现。 */
+  fingerprintMismatch?: boolean;
 }
 
 export interface TurnSummary {

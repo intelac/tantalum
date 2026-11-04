@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -9,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import tantalum.shell.journal.RecordCodec;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.store.SessionQueries.SessionUnreadable;
 import tantalum.shell.trace.Trace;
@@ -37,19 +39,26 @@ public final class TraceQuery {
     /** 上一次请求的 system 和工具，“差异”页签用。 */
     public record Previous(String system, List<ToolSpec> tools) {}
 
-    /** 一次尝试的完整输入：有效 system 和分段来源、工具、消息、输出约束，以及上一次请求的 system 和工具（第一次请求时为空）。 */
+    /**
+     * 一次尝试的完整输入：有效 system 和分段来源、工具、消息、输出约束，以及上一次请求的 system 和工具（第一次请求时为空）。
+     * {@code fingerprintMismatch} 为 true 时按结果行还原的请求和当时记下的指纹不一致（record-results 需求 4.2），false 不写出。
+     */
     public record Call(String call, String system, List<Segment> segments, List<SourcedTool> tools, List<Message> messages,
-                       Prompt.Output output, Previous previous) {}
+                       Prompt.Output output, Previous previous,
+                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean fingerprintMismatch) {}
 
     /** 命令 ID 是 {@code <会话>_<序号>-<下标>}（{@code CommandIds}）。 */
     private static final Pattern COMMAND_TAIL = Pattern.compile("(\\d{1,18})-\\d{1,9}");
 
     private final SessionPaths paths;
-    private final SessionReplay replay;
+    private final RecordReplay replay;
+    private final RecordCodec codec;
 
-    public TraceQuery(SessionPaths paths, SessionReplay replay) {
+    /** 按结果行折叠，不调内核（record-results 第 2 步）。{@code codec} 用来核对请求指纹。 */
+    public TraceQuery(SessionPaths paths, RecordReplay replay, RecordCodec codec) {
         this.paths = paths;
         this.replay = replay;
+        this.codec = codec;
     }
 
     /** 重放整个会话的结果：每条记录的最终版本和重放到的序号。 */
@@ -92,14 +101,15 @@ public final class TraceQuery {
         Trace trace = new Trace();
         List<Prompt> previous = new ArrayList<>();
         List<Call> found = new ArrayList<>();
-        read(session, () -> replay.until(principal, file, seq + 1, (envelope, before, decision) -> {
+        read(session, () -> replay.until(principal, file, seq + 1, (RecordReplay.RecordedStep) (envelope, before, decision, fingerprints) -> {
             trace.apply(envelope, before, decision);
             for (Command sent : decision.commands()) {
                 if (!(sent instanceof CallModel call) || !call.run().session().equals(session)) {
                     continue;
                 }
                 if (call.id().equals(command)) {
-                    found.add(describe(call, trace.lastSplit(session, call.run().run()), previous.isEmpty() ? null : previous.getLast()));
+                    boolean mismatch = !codec.fingerprint(call.prompt()).equals(fingerprints.get(call.id()));
+                    found.add(describe(call, trace.lastSplit(session, call.run().run()), previous.isEmpty() ? null : previous.getLast(), mismatch));
                 } else {
                     previous.add(call.prompt());
                 }
@@ -108,7 +118,7 @@ public final class TraceQuery {
         return found.stream().findFirst();
     }
 
-    private static Call describe(CallModel call, Trace.Split split, Prompt previous) {
+    private static Call describe(CallModel call, Trace.Split split, Prompt previous, boolean mismatch) {
         Prompt prompt = call.prompt();
         List<SourcedTool> tools = new ArrayList<>();
         for (int i = 0; i < prompt.tools().size(); i++) {
@@ -117,7 +127,7 @@ public final class TraceQuery {
         }
         List<Segment> segments = split == null ? List.of(new Segment(prompt.system().length(), Source.UNKNOWN)) : split.system();
         return new Call(call.id().value(), prompt.system(), segments, tools, prompt.messages(), prompt.output(),
-                previous == null ? null : new Previous(previous.system(), previous.tools()));
+                previous == null ? null : new Previous(previous.system(), previous.tools()), mismatch);
     }
 
     @FunctionalInterface

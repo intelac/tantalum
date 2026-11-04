@@ -19,7 +19,10 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 
-/** record-results 任务 10（需求 9.1）：第 1 步冷载入时比较内核重放和结果行，不一致的会话在列表上标出。 */
+/**
+ * record-results 任务 10、15（需求 9.1、9.2）：打开 {@code tantalum.journal.compare-replay} 时，冷载入比较内核重放和结果行，
+ * 不一致的会话在列表上标出；恢复以结果行为准。默认不比较。
+ */
 class ReplayMismatchTest {
 
     private static final String REPLY = "the reply as the model wrote it";
@@ -33,9 +36,9 @@ class ReplayMismatchTest {
         return new ModelOutcome.Replied(List.of(new TextBlock(REPLY)), StopReason.END_TURN, "m", null);
     };
 
-    private TestServer server() throws Exception {
+    private TestServer server(String... extra) throws Exception {
         Files.createDirectories(temp.resolve("workspace"));
-        return new TestServer(temp.resolve("data"), temp.resolve("workspace"), model);
+        return new TestServer(temp.resolve("data"), temp.resolve("workspace"), model, extra);
     }
 
     private Path file() {
@@ -52,8 +55,8 @@ class ReplayMismatchTest {
     }
 
     /** 重启后第二次提问让会话冷载入，比较在那时发生。 */
-    private String sessionsAfterReload() throws Exception {
-        try (TestServer server = server()) {
+    private String sessionsAfterReload(String... extra) throws Exception {
+        try (TestServer server = server(extra)) {
             ask(server, "r2", 1);
             return server.get("alice", "/api/sessions").body();
         }
@@ -65,7 +68,7 @@ class ReplayMismatchTest {
             ask(server, "r1", 1);
         }
         prompts.clear();
-        String sessions = sessionsAfterReload();
+        String sessions = sessionsAfterReload("--tantalum.journal.compare-replay=true");
         assertFalse(sessions.contains("replayMismatch"), sessions);
     }
 
@@ -82,10 +85,25 @@ class ReplayMismatchTest {
         Files.write(file(), lines);
         prompts.clear();
 
-        String sessions = sessionsAfterReload();
+        String sessions = sessionsAfterReload("--tantalum.journal.compare-replay=true");
 
         assertTrue(sessions.contains("\"replayMismatch\":true"), sessions);
-        assertEquals(REPLY, ((TextBlock) prompts.getFirst().messages().get(1).content().getFirst()).text(),
-                "step 1 still restores by replaying the kernel");
+        assertEquals("a reply edited later", ((TextBlock) prompts.getFirst().messages().get(1).content().getFirst()).text(),
+                "the result lines are what is restored; the kernel replay is only compared");
+    }
+
+    @Test
+    void withoutTheSwitchNothingIsCompared() throws Exception {
+        try (TestServer server = server()) {
+            ask(server, "r1", 1);
+        }
+        String content = Files.readString(file());
+        Files.write(file(), content.lines().map(line -> line.startsWith("{\"result\"")
+                ? line.replace("\"fromEvent\":true", "\"content\":[{\"kind\":\"text\",\"text\":\"a reply edited later\"}]") : line).toList());
+        prompts.clear();
+
+        String sessions = sessionsAfterReload();
+
+        assertFalse(sessions.contains("replayMismatch"), sessions);
     }
 }

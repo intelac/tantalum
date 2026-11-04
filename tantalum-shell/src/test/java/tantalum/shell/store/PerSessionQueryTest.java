@@ -103,7 +103,7 @@ class PerSessionQueryTest {
         paths = new SessionPaths(dir);
         fixture = new IndexFixture(paths, writer::onDurable, writer::onStep, kernel);
         SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
-        query = new TurnQuery(paths, replay, EventCodec.withBuiltins().mapper());
+        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins())), EventCodec.withBuiltins().mapper());
     }
 
     @AfterEach

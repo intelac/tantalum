@@ -97,24 +97,24 @@
 
 ## 阶段 2：改用结果行
 
-- [ ] 15. 冷载入和 `ColdReads` 改用折叠
+- [x] 15. 冷载入和 `ColdReads` 改用折叠
   - File: shell/boot/Storage.java、shell/store/ColdReads.java、shell/boot/TantalumProperties.java
   - 加载器、`ColdReads` 用 `RecordReplay`；比较改成 `tantalum.journal.compare-replay`，默认关
   - 测试：开关开、关两种；冷载入不调内核（测试用内核调用计数为 0）
   - _Requirements: R4, 需求 3.1, 9.2_
 
-- [ ] 16. 轨迹、`/turns`、断线补读改用折叠
+- [x] 16. 轨迹、`/turns`、断线补读改用折叠
   - File: shell/store/TraceQuery.java、shell/store/TurnQuery.java
   - 测试：`WireFormatTest`、`PerSessionQueryTest` 照旧通过；不调内核
   - _Requirements: R4, 需求 3.1_
 
-- [ ] 17. 索引追赶改用折叠
+- [x] 17. 索引追赶改用折叠
   - File: shell/store/IndexCatchUp.java
   - 用量来自结果行的差值，不再按用户合并重放
   - 测试：删掉索引库重建，结果和实时写入的相同
   - _Requirements: R4, 需求 3.5_
 
-- [ ] 18. 请求指纹提示
+- [x] 18. 请求指纹提示
   - File: shell/store/TraceQuery.java（`Call` 加 `fingerprintMatches`）、shell/web 对应接口、console 请求详情组件、console/i18n/zh.ts
   - 测试：指纹相同、不同两种；vitest 组件测试
   - _Requirements: R7, 需求 4.2_

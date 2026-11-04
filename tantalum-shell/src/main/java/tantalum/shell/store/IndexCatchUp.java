@@ -23,86 +23,55 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 
 /**
- * 启动时让索引追上会话文件。只比较文件大小，不读内容；大小不符的文件整个重放，
- * 因为用量要比较内核状态才知道。写入都可以重复，所以重放和已有内容重叠没有关系。
+ * 启动时让索引追上会话文件。只比较文件大小，不读内容；大小不符的文件按结果行折叠一遍，不调内核（record-results 第 2 步）：
+ * 用量就是结果行里记的差值，所以也不用按用户合并。写入都可以重复，所以和已有内容重叠没有关系。
+ * 没有结果行的尾部由之前运行的 {@link Backfill} 补齐。
  */
 public final class IndexCatchUp {
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexCatchUp.class);
 
-    private record Lagging(Path file, long size, SessionIndex.Session known) {}
-
     private IndexCatchUp() {}
 
     /** 单个文件读不了时跳过，索引保持落后，下次启动再试。 */
-    public static void run(SessionIndex index, SessionPaths paths, SessionFileReader reader, Kernel kernel) throws IOException, SQLException {
+    public static void run(SessionIndex index, SessionPaths paths, SessionFileReader reader) throws IOException, SQLException {
         Map<Path, SessionIndex.Session> known = new HashMap<>();
         for (SessionIndex.Session session : index.sessions()) {
             known.put(paths.sessionFile(session.principal(), session.session()), session);
         }
-        int replayed = 0;
+        RecordReplay records = new RecordReplay(paths, reader);
+        int caughtUp = 0;
         for (Path dir : paths.users()) {
-            List<Lagging> lagging = new ArrayList<>();
             for (Path file : paths.sessionFiles(dir)) {
                 long size = Files.size(file);
                 SessionIndex.Session session = known.get(file);
-                if (session == null || session.fileOffset() != size) {
-                    lagging.add(new Lagging(file, size, session));
+                if (session != null && session.fileOffset() == size) {
+                    continue;
                 }
-            }
-            if (!lagging.isEmpty()) {
-                replayUser(index, reader, kernel, lagging);
-                replayed += lagging.size();
-            }
-        }
-        if (replayed > 0) {
-            LOG.info("index caught up with {} session files", replayed);
-        }
-    }
-
-    /** 同一用户的文件按序号合并后一起重放，用量才和当时相同。 */
-    private static void replayUser(SessionIndex index, SessionFileReader reader, Kernel kernel, List<Lagging> lagging) throws IOException, SQLException {
-        List<EventEnvelope> events = new ArrayList<>();
-        Map<Lagging, EventEnvelope> first = new LinkedHashMap<>();
-        for (Lagging file : lagging) {
-            try {
-                List<EventEnvelope> read = reader.readAll(file.file());
-                events.addAll(read);
-                if (!read.isEmpty()) {
-                    first.put(file, read.getFirst());
-                } else if (file.known() != null) {
-                    index.setOffset(file.known().session(), file.known().principal(), file.size());
+                IndexBatch batch = new IndexBatch();
+                EventEnvelope[] first = new EventEnvelope[1];
+                try {
+                    records.each(null, file, (envelope, before, decision) -> {
+                        if (first[0] == null) {
+                            first[0] = envelope;
+                        }
+                        batch.add(IndexChange.of(envelope, before, decision.newState()));
+                    });
+                } catch (SessionCorruptException corrupt) {
+                    LOG.warn("index skips a corrupt session file: {}", corrupt.getMessage());
+                    continue;
                 }
-            } catch (SessionCorruptException corrupt) {
-                LOG.warn("index skips a corrupt session file: {}", corrupt.getMessage());
+                index.write(batch);
+                if (first[0] != null) {
+                    index.setOffset(first[0].session(), first[0].principal(), size);
+                } else if (session != null) {
+                    index.setOffset(session.session(), session.principal(), size);
+                }
+                caughtUp++;
             }
         }
-        if (events.isEmpty()) {
-            return;
+        if (caughtUp > 0) {
+            LOG.info("index caught up with {} session files", caughtUp);
         }
-        events.sort(Comparator.comparingLong(EventEnvelope::seq));
-        index.write(replay(events, index.usage(events.getFirst().principal()), kernel));
-        for (Map.Entry<Lagging, EventEnvelope> file : first.entrySet()) {
-            index.setOffset(file.getValue().session(), file.getValue().principal(), file.getKey().size());
-        }
-    }
-
-    /** 每个事件前把用量设为“截至这个序号的累计”：已有的记录加上这次重放算出来的，同一序号只算一次。 */
-    private static IndexBatch replay(List<EventEnvelope> events, List<IndexChange.Usage> stored, Kernel kernel) {
-        Set<Long> storedSeqs = new HashSet<>();
-        stored.forEach(row -> storedSeqs.add(row.seq()));
-        UsageLedger.Cursor usage = new UsageLedger.Cursor(PrincipalState.start(events.getFirst().principal()), stored);
-        KernelState state = KernelState.empty();
-        IndexBatch batch = new IndexBatch();
-        for (EventEnvelope envelope : events) {
-            KernelState before = state.with(usage.before(envelope.seq()));
-            state = kernel.step(before, envelope).newState();
-            IndexChange change = IndexChange.of(envelope, before, state);
-            batch.add(change);
-            if (change.usage() != null && !storedSeqs.contains(envelope.seq())) {
-                usage.add(change.usage());
-            }
-        }
-        return batch;
     }
 }
