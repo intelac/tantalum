@@ -29,6 +29,7 @@ import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
+import tantalum.shell.model.ContextWindow;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
@@ -102,7 +103,7 @@ public class ApiController {
     }
 
     /**
-     * 供应商、模型名、是否云端、上下文窗口（不知道时省略，前端就不显示占比）、是否收图片和附件的各项上限（前端先查，服务器再查）。
+     * 供应商、模型名、是否云端、上下文窗口和它从哪来（模型报告或配置；不知道时省略，前端就不显示占比）、是否收图片和附件的各项上限（前端先查，服务器再查）。
      * Key 只在环境变量里，这里碰不到。
      */
     @GetMapping("/api/config")
@@ -111,8 +112,10 @@ public class ApiController {
         response.put("provider", properties.provider());
         response.put("model", properties.model());
         response.put("cloud", properties.provider().equals("claude"));
-        if (properties.contextWindow() > 0) {
-            response.put("contextWindow", properties.contextWindow());
+        ContextWindow.Reading window = engine.compaction().window();
+        if (window.tokens() > 0) {
+            response.put("contextWindow", window.tokens());
+            response.put("windowSource", window.source() == ContextWindow.Source.MODEL ? "model" : "config");
         }
         response.put("vision", properties.vision());
         AttachmentLimits limits = properties.attachmentLimits();

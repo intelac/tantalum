@@ -12,6 +12,7 @@ import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.plugin.Workspace;
+import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.value.command.Command;
@@ -19,7 +20,6 @@ import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
-import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
 /**
@@ -45,14 +45,14 @@ public final class ContextHandler implements Handler {
     private final MemoryStores memories;
     private final KnowledgeBase knowledge;
     private final String fixedNote;
-    private final CompactionSettings compaction;
+    private final CompactionPolicy compaction;
 
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
-     * {@code compaction} 是当前的压缩设置，随事件写进 journal，会话第一次组装时冻结；null 表示不压缩。
+     * {@code compaction} 每次按这个用户当前选的压缩点和当前窗口算出压缩设置，随事件写进 journal（compaction-threshold T6）。
      */
     public ContextHandler(Workspaces workspaces, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
-                          KnowledgeBase knowledge, String fixedNote, CompactionSettings compaction) {
+                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction) {
         this.gate = gate;
         this.fixedNote = fixedNote;
         this.compaction = compaction;
@@ -88,7 +88,7 @@ public final class ContextHandler implements Handler {
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
         // 全部工具加上这个用户现在开着的名单（core-tools C14、C16）：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction, sections,
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction.settings(principal), sections,
                 gate.enabledTools(principal), gate.enabledPlugins(principal));
     }
 

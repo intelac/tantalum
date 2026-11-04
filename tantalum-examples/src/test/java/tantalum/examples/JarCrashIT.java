@@ -97,6 +97,12 @@ class JarCrashIT {
         }
 
         private void handle(HttpExchange exchange) throws IOException {
+            // 启动时和每 10 分钟服务器会 GET /v1/models 读窗口（compaction-threshold）；这个替身不报窗口，服务器用配置值
+            if (!exchange.getRequestMethod().equals("POST")) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
             JsonNode body = JSON.readTree(exchange.getRequestBody().readAllBytes());
             JsonNode messages = body.get("messages");
             checkPairs(messages);

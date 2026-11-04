@@ -51,10 +51,13 @@ import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
+import tantalum.shell.model.ContextWindow;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.settings.CompactionPolicy;
+import tantalum.shell.settings.UserSettings;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.ColdReads;
 import tantalum.shell.store.SessionIndex;
@@ -84,6 +87,9 @@ public final class Engine implements AutoCloseable {
     private static final Duration DRAIN = Duration.ofSeconds(5);
     private static final Duration INTERRUPT_RETRY = Duration.ofMillis(10);
     private static final Duration INTERRUPT_GRACE = Duration.ofSeconds(2);
+    /** 读窗口：启动时最多等 5 秒，之后每 10 分钟（compaction-threshold T2，同 DSH {@code listing-config.ts:7,9}）。 */
+    private static final Duration WINDOW_STARTUP_WAIT = Duration.ofSeconds(5);
+    private static final Duration WINDOW_REFRESH = Duration.ofMinutes(10);
     /** 只供跳号回归：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
 
@@ -96,6 +102,9 @@ public final class Engine implements AutoCloseable {
     private final MemoryStores memories;
     private final McpRegistry mcp;
     private final PluginSwitches switches;
+    private final UserSettings userSettings;
+    private final ContextWindow window;
+    private final CompactionPolicy compaction;
     private final PluginGate gate;
     private final InputRing input;
     private final LaneDispatcher lanes;
@@ -135,6 +144,13 @@ public final class Engine implements AutoCloseable {
             mcp = new McpRegistry(mcpSettings);
             catalog.setSource(mcp);
             switches = openSwitches(properties.dataDir(), clock);
+            userSettings = openUserSettings(properties.dataDir(), clock);
+            // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
+            properties.compactionSettings();
+            CompactionPolicy.Limits limits = properties.compactionLimits();
+            window = new ContextWindow(model.window(), properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
+                    .start(WINDOW_STARTUP_WAIT);
+            compaction = new CompactionPolicy(window, userSettings, limits);
             gate = new PluginGate(catalog, switches, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                     hooks, afterHooks, workTypes);
 
@@ -164,9 +180,10 @@ public final class Engine implements AutoCloseable {
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
                     AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, gate, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
-                            properties.compactionSettings()),
+                            compaction),
                     CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
-                            run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
+                            run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
+                            window::refreshSoon),
                     RunTool.class, new ToolHandler(catalog, workspaces, gate, properties.toolTimeout(), clock),
                     DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock),
                     StartTimer.class, new TimerHandler());
@@ -225,6 +242,15 @@ public final class Engine implements AutoCloseable {
     /** 插件开关和唯一的调用入口，插件页接口用它。 */
     public PluginGate plugins() {
         return gate;
+    }
+
+    /** 窗口和每个用户选的压缩点，设置接口和 {@code /api/config} 用它（compaction-threshold）。 */
+    public CompactionPolicy compaction() {
+        return compaction;
+    }
+
+    public UserSettings userSettings() {
+        return userSettings;
     }
 
     public McpRegistry mcp() {
@@ -293,7 +319,17 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
                 new Shutdown.Step("close mcp", mcp),
                 new Shutdown.Step("close plugin settings", switches),
+                new Shutdown.Step("close user settings", userSettings),
+                new Shutdown.Step("stop reading the context window", window),
                 new Shutdown.Step("close storage", storage)));
+    }
+
+    private static UserSettings openUserSettings(java.nio.file.Path dataDir, Clock clock) throws IOException {
+        try {
+            return UserSettings.open(dataDir, clock);
+        } catch (java.sql.SQLException failure) {
+            throw new IOException("cannot open user settings in " + dataDir, failure);
+        }
     }
 
     private static PluginSwitches openSwitches(java.nio.file.Path dataDir, Clock clock) throws IOException {

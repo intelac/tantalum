@@ -64,6 +64,7 @@ public final class OpenAiClient implements ModelClient {
     private final HttpClient http;
     /** 模型收不收图片（A7）。不收时图片只发占位文字。 */
     private final boolean vision;
+    private final WindowSource window;
 
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
                         Duration betweenChunks, OverflowRules overflow) {
@@ -82,6 +83,12 @@ public final class OpenAiClient implements ModelClient {
         this.overflow = overflow;
         this.http = HttpClient.newBuilder().connectTimeout(firstChunk).build();
         this.vision = vision;
+        this.window = new OpenAiWindow(baseUrl, model, apiKey, ClaudeClient.WINDOW_TIMEOUT);
+    }
+
+    @Override
+    public WindowSource window() {
+        return window;
     }
 
     /** 地址不记：可能带凭据。{@code extra} 和请求体里的流式选项一致。 */

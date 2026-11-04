@@ -63,6 +63,12 @@ class CrashRestartTest {
         fakeModel.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         fakeModel.createContext("/", exchange -> {
             exchange.getRequestBody().readAllBytes();
+            // 启动时服务器会 GET /v1/models 读窗口（compaction-threshold），那不是模型调用
+            if (!exchange.getRequestMethod().equals("POST")) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
             if (modelCalls.incrementAndGet() > 1) {
                 secondCall.countDown();
                 try {

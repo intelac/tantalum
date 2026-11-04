@@ -17,6 +17,7 @@ import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.memory.MemoryLimits;
+import tantalum.shell.settings.CompactionPolicy;
 
 class TantalumPropertiesTest {
 
@@ -146,9 +147,9 @@ class TantalumPropertiesTest {
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
         return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
-                        java.time.Duration.ofSeconds(1), 4, claudeWindow),
+                        java.time.Duration.ofSeconds(1), 4, claudeWindow, 1.5),
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
-                        java.time.Duration.ofSeconds(1), 1, openAiWindow, false),
+                        java.time.Duration.ofSeconds(1), 1, openAiWindow, false, 2.0),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
                 Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8), null);
     }
@@ -172,6 +173,25 @@ class TantalumPropertiesTest {
         assertEquals(136_000, properties("claude", 200_000, 0, null).compactionSettings().threshold(), "missing section means defaults");
         assertThrows(IllegalArgumentException.class, () -> properties("openai", 200_000, 16_000, TantalumProperties.Compaction.defaults()).compactionSettings(),
                 "a window no larger than the reserve is a configuration error");
+    }
+
+    /** compaction-threshold T7：估算系数按供应商，非正数启动失败；预留同压缩设置。 */
+    @Test
+    void compactionLimitsCarryTheProvidersCoefficient() throws Exception {
+        checkLimits(bind().compactionLimits(), 64_000, 1.5);
+        checkLimits(bind("tantalum.provider", "openai").compactionLimits(), 16_384, 2.0);
+        assertEquals(1.25, bind("tantalum.claude.bytes-per-token", "1.25").compactionLimits().bytesPerToken());
+        assertThrows(BindException.class, () -> bind("tantalum.claude.bytes-per-token", "0"));
+        assertThrows(BindException.class, () -> bind("tantalum.openai.bytes-per-token", "-1"));
+    }
+
+    private static void checkLimits(CompactionPolicy.Limits limits, long reserve, double bytesPerToken) {
+        assertEquals(reserve, limits.reserve());
+        assertEquals(20_000, limits.keepRecent());
+        assertEquals(32_768, limits.maxKeptResultBytes());
+        assertEquals(4_096, limits.maxSummarizedResultBytes());
+        assertEquals(8_192, limits.summaryMaxTokens());
+        assertEquals(bytesPerToken, limits.bytesPerToken());
     }
 
     @Test

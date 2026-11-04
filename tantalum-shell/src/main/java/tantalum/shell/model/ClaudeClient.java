@@ -50,11 +50,15 @@ public final class ClaudeClient implements ModelClient {
         }
     }
 
+    /** 读窗口的单次请求最多等多久（compaction-threshold T2，同 DSH {@code listing-config.ts:9}）。 */
+    static final Duration WINDOW_TIMEOUT = Duration.ofSeconds(5);
+
     private final AnthropicClient client;
     private final ClaudeRequest request;
     private final Duration firstChunk;
     private final Duration betweenChunks;
     private final OverflowRules overflow;
+    private final WindowSource window;
 
     /**
      * 模型参数。{@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题，测试用。
@@ -68,6 +72,12 @@ public final class ClaudeClient implements ModelClient {
         this.firstChunk = settings.firstChunk();
         this.betweenChunks = settings.betweenChunks();
         this.overflow = settings.overflow();
+        this.window = new ClaudeWindow(client, settings.model(), settings.fallbacks(), WINDOW_TIMEOUT);
+    }
+
+    @Override
+    public WindowSource window() {
+        return window;
     }
 
     @Override

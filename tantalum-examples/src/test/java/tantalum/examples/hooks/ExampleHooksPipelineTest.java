@@ -37,7 +37,7 @@ class ExampleHooksPipelineTest {
     private static final String PINNED = "a message pinned with " + PIN + " would be summarized away";
     /** 窗口 4000、预留 500：阈值 3500，和 CompactApiTest 相同。 */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
-        "--tantalum.claude.context-window=4000", "--tantalum.claude.max-tokens=500",
+        "--tantalum.claude.context-window=4000", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600"};
     private static final Pattern CELL = Pattern.compile("\"cell\":\"([^\"]+)\"");
 

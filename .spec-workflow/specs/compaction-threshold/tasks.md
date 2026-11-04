@@ -40,43 +40,43 @@
 
 ## 阶段 2：shell
 
-- [ ] 6. `WindowSource`：`ClaudeWindow`、`OpenAiWindow`
+- [x] 6. `WindowSource`：`ClaudeWindow`、`OpenAiWindow`
   - File: shell/model/WindowSource.java、ClaudeWindow.java、OpenAiWindow.java（新）
   - Claude：`models().retrieve` 的 `maxInputTokens`；开着备用模型时 beta 接口取 `allowed_fallback_models`，各取窗口取最小，失败只用主模型。OpenAI：`/models` 里同名模型的 `meta.n_ctx`、`max_model_len`、`context_length`
   - 测试（`HttpStub`）：各字段、顺序、名字对不上、缺字段、非 JSON、HTTP 错误；备用模型最小值和备用失败
   - _Requirements: T1, T3, 需求 1.1, 1.2, 1.6_
 
-- [ ] 7. `ContextWindow`
+- [x] 7. `ContextWindow`
   - File: shell/model/ContextWindow.java（新）
   - 启动最多等 5 秒；每 10 分钟后台读；失败保留；≤ R 当失败；`refreshSoon` 合并；日志不含响应体和请求头
   - 测试（假的 `WindowSource`、可控时钟）：上面每条
   - _Requirements: T2, 需求 1.3–1.5, 1.7_
 
-- [ ] 8. `UserSettings`
+- [x] 8. `UserSettings`
   - File: shell/settings/UserSettings.java（新）
   - `users.db` 表 `user_settings`；默认 100；四个值之外拒绝；内存缓存
   - 测试：默认、保存后重开、两个用户互不影响、非法值、和 `plugin_settings` 同库共存
   - _Requirements: T5, 需求 2.3, 2.4_
 
-- [ ] 9. `CompactionPolicy`
+- [x] 9. `CompactionPolicy`
   - File: shell/settings/CompactionPolicy.java（新），shell/boot/TantalumProperties.java（`bytes-per-token`）
   - `settings(principal)`、`points()`；R 的算法从 `TantalumProperties.compactionSettings()` 搬过来
   - 测试：需求 T4 的两组例子；W 未知；W ≤ R；系数按供应商
   - _Requirements: T4, T7, 需求 4.2_
 
-- [ ] 10. 接线
+- [x] 10. 接线
   - File: shell/boot/Engine.java、shell/handler/ContextHandler.java、shell/handler/ModelHandler.java、shell/web/ApiController.java
   - `ContextHandler` 每次按用户算设置；超长时 `refreshSoon()`；`/api/config` 的 `contextWindow`、`windowSource`
   - 测试：同一会话改了设置后下一次 `ContextAssembled` 带新设置；`/api/config` 的来源
   - _Requirements: 需求 1.8, 3.1_
 
-- [ ] 11. `SettingsController`
+- [x] 11. `SettingsController`
   - File: shell/web/SettingsController.java（新）
   - `GET /api/settings`、`PUT /api/settings/compaction`
   - 测试 `SettingsApiTest`：默认、保存、400、401、两个用户
   - _Requirements: 需求 2.2–2.5_
 
-- [ ] 12. 阶段 2 收尾：全量回归、变异检查、提交、部署（确认 8091 上 `/api/config` 是 1000000、来源 model）、汇报
+- [x] 12. 阶段 2 收尾：全量回归、变异检查、提交、部署（确认 8091 上 `/api/config` 是 1000000、来源 model）、汇报
 
 ## 阶段 3：控制台
 

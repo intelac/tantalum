@@ -17,6 +17,11 @@ public interface ModelClient {
         return call(prompt, chunks);
     }
 
+    /** 从哪读这个模型的上下文窗口（compaction-threshold T1）；默认读不到，用配置的值。 */
+    default WindowSource window() {
+        return WindowSource.NONE;
+    }
+
     /** 这个 prompt 会发出的请求选项，记进结算事件供轨迹显示。必须是纯函数，不含密钥和地址；默认 null，显示为“未记录”。 */
     default RequestOptions options(Prompt prompt) {
         return null;
