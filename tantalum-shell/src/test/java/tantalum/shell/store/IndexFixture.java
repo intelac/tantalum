@@ -11,11 +11,13 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.Line;
 import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.decision.Decision;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
@@ -73,6 +75,8 @@ final class IndexFixture {
         events.add(envelope);
         KernelState before = state;
         Decision decision = kernel.step(before, envelope);
+        // 和线上一样，结果行在处理之后、命令放行之前落盘（record-results R3）
+        files.appendLines(principal, session, List.of(new Line.Result(StepRecord.of(envelope, before, decision))));
         state = decision.newState();
         steps.add(new Stepped(envelope, before, decision));
         listener.onStep(envelope, before, state);

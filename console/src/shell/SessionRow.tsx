@@ -15,7 +15,7 @@ export function sessionTitle(session: SessionSummary | undefined): string {
   return session === undefined || session.title === "" ? zh.sidebar.untitled : session.title;
 }
 
-/** 一行会话：标题，右侧相对时间；运行中显示跳动的点。 */
+/** 一行会话：标题，右侧相对时间；运行中显示跳动的点。恢复比对不一致时标题前有警告标记。 */
 export function SessionRow({ session, selected, onSelect, now }: Props) {
   const running = session.runStatus !== "idle";
   const title = sessionTitle(session);
@@ -31,6 +31,12 @@ export function SessionRow({ session, selected, onSelect, now }: Props) {
           selected ? "bg-active text-fg" : "text-fg hover:bg-hover",
         )}
       >
+        {session.replayMismatch === true && (
+          <span className="shrink-0 text-xs text-danger" role="img" aria-label={zh.sidebar.replayMismatch}
+            title={zh.sidebar.replayMismatch}>
+            !
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate">{title}</span>
         {running && (
           <span className="flex shrink-0 items-center gap-1 text-xs text-accent" aria-label={zh.sidebar.running}>

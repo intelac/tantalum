@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.StateView;
@@ -35,8 +36,16 @@ public final class SessionQueries {
     private final ColdReads cold;
     private final TurnQuery turns;
     private final TraceQuery trace;
+    private final Predicate<SessionId> mismatched;
 
     public SessionQueries(StateView view, Transcript transcript, SessionIndex index, ColdReads cold, TurnQuery turns, TraceQuery trace) {
+        this(view, transcript, index, cold, turns, trace, session -> false);
+    }
+
+    /** {@code mismatched}：载入时内核重放和结果行不一致的会话（record-results 第 1 步）。 */
+    public SessionQueries(StateView view, Transcript transcript, SessionIndex index, ColdReads cold, TurnQuery turns, TraceQuery trace,
+                          Predicate<SessionId> mismatched) {
+        this.mismatched = mismatched;
         this.view = view;
         this.transcript = transcript;
         this.index = index;
@@ -101,6 +110,7 @@ public final class SessionQueries {
                         session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id())));
             }
         }
-        return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
+        return summaries.values().stream().map(summary -> summary.withReplayMismatch(mismatched.test(summary.id())))
+                .sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
 }

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import tantalum.value.id.RunId;
+import tantalum.value.json.Json;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.state.RunState;
@@ -77,6 +78,16 @@ public final class RecordMemo {
         }
         for (JsonNode child : node) {
             see(child);
+        }
+    }
+
+    /** 同上，读文件时事件行已经解析成 {@link Json}。 */
+    public void seeJson(Json node) {
+        switch (node) {
+            case Json.Str str -> remember(str.value());
+            case Json.Arr arr -> arr.items().forEach(this::seeJson);
+            case Json.Obj obj -> obj.fields().values().forEach(this::seeJson);
+            default -> { }
         }
     }
 

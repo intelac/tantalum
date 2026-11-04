@@ -87,7 +87,7 @@ class RingIntegrationTest {
                             StopReason.END_TURN, "m", null, null, null, null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
-            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null, null));
+            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::appendLines, envelope -> ring.tryPublish(envelope, null, null));
             List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
             Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
                     (seq, index, fact) -> { }, view, publisher);
