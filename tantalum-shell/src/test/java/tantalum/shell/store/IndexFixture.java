@@ -43,6 +43,8 @@ final class IndexFixture {
     final SessionFiles files;
     final Kernel kernel;
     final List<EventEnvelope> events = new ArrayList<>();
+    /** 每一步处理前的状态和内核的决定，按处理顺序。 */
+    final List<Stepped> steps = new ArrayList<>();
     private final Step listener;
     private final Map<Principal, Long> sequences = new HashMap<>();
     private KernelState state = KernelState.empty();
@@ -72,6 +74,7 @@ final class IndexFixture {
         KernelState before = state;
         Decision decision = kernel.step(before, envelope);
         state = decision.newState();
+        steps.add(new Stepped(envelope, before, decision));
         listener.onStep(envelope, before, state);
         return decision;
     }
@@ -96,6 +99,8 @@ final class IndexFixture {
     KernelState state() {
         return state;
     }
+
+    record Stepped(EventEnvelope envelope, KernelState before, Decision decision) {}
 
     record Pending(Principal principal, SessionId session, RunId run, CommandId command) {}
 }

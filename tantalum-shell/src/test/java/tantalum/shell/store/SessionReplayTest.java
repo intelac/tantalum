@@ -66,122 +66,37 @@ import tantalum.value.state.RunState;
 /** 任务 25：单个会话重放和全量回放相同。 */
 class SessionReplayTest {
 
-    private static final Principal ALICE = new Principal("alice");
-    private static final Principal BOB = new Principal("bob");
-    private static final SessionId TOOLS = new SessionId("tools");
-    private static final SessionId COMPACTED = new SessionId("compacted");
-    private static final SessionId STOPPED = new SessionId("stopped");
-    private static final SessionId BOBS = new SessionId("bobs");
-    private static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
-    private static final Instant AT = Instant.parse("2026-11-02T01:00:00Z");
-    private static final long QUOTA = 3000;
-
-    /** 额度用完就停。它读该用户所有会话的累计，所以不注入用量时 {@code stopped} 会话的结果不同。 */
-    private static final KernelHook QUOTA_HOOK = new KernelHook() {
-        @Override public String name() { return "quota"; }
-        @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-            var principal = state.principals().get(context.run().principal());
-            if (principal == null) {
-                return Allow.PLAIN;
-            }
-            TokenUsage today = principal.usageOn(LocalDate.ofInstant(context.at(), ZoneOffset.UTC));
-            return today.promptTotal() + today.output() >= QUOTA ? new Stop("quota") : Allow.PLAIN;
-        }
-    };
+    private static final Principal ALICE = ReplayScenario.ALICE;
+    private static final Principal BOB = ReplayScenario.BOB;
+    private static final SessionId TOOLS = ReplayScenario.TOOLS;
+    private static final SessionId COMPACTED = ReplayScenario.COMPACTED;
+    private static final SessionId STOPPED = ReplayScenario.STOPPED;
+    private static final SessionId BOBS = ReplayScenario.BOBS;
 
     @TempDir
     Path dir;
 
-    private SessionIndex index;
-    private IndexWriter writer;
+    private ReplayScenario scenario;
     private IndexFixture fixture;
-    private SessionPaths paths;
     private SessionReplay replay;
     private Kernel kernel;
 
-    /** 待处理的命令，所有会话共用一个队列，所以不同会话和用户的事件交错。 */
-    private record Pending(Principal principal, SessionId session, Command command) {}
-
-    private final Deque<Pending> pending = new ArrayDeque<>();
-    private final Deque<List<ContentBlock>> scripted = new ArrayDeque<>();
-    private int requests;
-    private int dynamic;
-
     @BeforeEach
     void start() throws Exception {
-        TransitionTable table = new TransitionTable();
-        BuiltinSteps.register(table);
-        kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> tool.startsWith("safe"), Limits.DEFAULT);
-        index = SessionIndex.open(dir);
-        writer = new IndexWriter(index, 100, Duration.ofHours(1));
-        paths = new SessionPaths(dir);
-        fixture = new IndexFixture(paths, writer::onDurable, writer::onStep, kernel);
-        replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
+        scenario = new ReplayScenario(dir);
+        fixture = scenario.fixture;
+        kernel = scenario.kernel;
+        replay = new SessionReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
+                new UsageLedger(scenario.index, scenario.writer), kernel);
     }
 
     @AfterEach
     void stop() throws Exception {
-        fixture.files.close();
-        writer.close();
-        index.close();
+        scenario.close();
     }
 
-    private void track(Principal principal, SessionId session, Decision decision) {
-        decision.commands().forEach(command -> pending.add(new Pending(principal, session, command)));
-    }
-
-    private void prompt(Principal principal, SessionId session, String text) throws Exception {
-        String request = "req-" + requests++;
-        track(principal, session, fixture.send(principal, session, null, AT,
-                new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text)));
-    }
-
-    private static ToolCallBlock call(String id) {
-        return new ToolCallBlock(id, "safe_read", "{\"p\":1}", new Json.Obj(java.util.Map.of("p", new Json.Num(java.math.BigDecimal.ONE))));
-    }
-
-    /** 走完一条命令。每次组装的动态内容都不同，相当于记忆变了。摘要调用不用脚本，脚本用完就直接回复。 */
-    private void step() throws Exception {
-        Pending next = pending.poll();
-        var run = next.command().run().run();
-        switch (next.command()) {
-            case AssembleContext assemble -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ContextAssembled(assemble.id(), "system", List.of(), SETTINGS,
-                    List.of(new tantalum.value.state.ContextSection("memory-index", "memory-" + dynamic++, true)))));
-            case CallModel model -> {
-                boolean summary = !model.prompt().output().toolsAllowed();
-                List<ContentBlock> content = summary ? List.of(new TextBlock("the summary of everything so far"))
-                        : scripted.isEmpty() ? List.of(new TextBlock("done " + "x".repeat(90))) : scripted.poll();
-                StopReason stop = content.stream().anyMatch(ToolCallBlock.class::isInstance) ? StopReason.TOOL_USE : StopReason.END_TURN;
-                track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                        new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0), null, null, null)));
-            }
-            case RunTool tool -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null)));
-            default -> { }
-        }
-    }
-
-    private void drain() throws Exception {
-        while (!pending.isEmpty()) {
-            step();
-        }
-    }
-
-    /** 工具轮和 thinking、压缩、其他用户、额度用完，全部交错。 */
     private void scenario() throws Exception {
-        scripted.add(List.of(new ReasoningBlock("claude", new Json.Str("hmm")), new TextBlock("calling"), call("t1"), call("t2")));
-        prompt(ALICE, TOOLS, "read two files " + "q".repeat(90));
-        prompt(BOB, BOBS, "bob asks " + "q".repeat(90));
-        prompt(ALICE, COMPACTED, "first " + "q".repeat(90));
-        drain();
-        prompt(ALICE, COMPACTED, "second, over the threshold " + "q".repeat(90));
-        prompt(BOB, BOBS, "bob again");
-        drain();
-        prompt(ALICE, TOOLS, "third");
-        drain();
-        prompt(ALICE, STOPPED, "too late, the quota is used up");
-        drain();
+        scenario.run();
     }
 
     private record Full(KernelState state, Transcript transcript) {}
