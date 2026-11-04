@@ -239,12 +239,23 @@ final class CompactionScenario {
                 + "Last line: " + HUGE_TAIL + "\n");
     }
 
-    /** 跑一轮提问到结束，返回最后的回答。 */
+    /**
+     * 跑一轮提问到结束，返回最后的回答。先记下已有几次运行，等到多出一次且它结束：提交是异步处理的，刚提交时“最新的运行”可能还是
+     * 上一次，直接等它会立刻返回，调用方以为这一轮已经做完。
+     */
     static String ask(TestServer server, String user, String session, String text) throws Exception {
+        int before = runs(server, user, session).size();
         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
                 "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text) + "}");
         assertEquals(200, response.statusCode(), response.body());
-        JsonNode runBefore = JSON.readTree(server.get(user, "/api/sessions/" + session + "/runs").body()).get("runs");
+        JsonNode runBefore = runs(server, user, session);
+        Instant deadline = Instant.now().plus(Duration.ofMinutes(25));
+        while (runs(server, user, session).size() <= before) {
+            if (Instant.now().isAfter(deadline)) {
+                throw new AssertionError("no new run started for " + session);
+            }
+            Thread.sleep(50);
+        }
         JsonNode run = waitForLatestRun(server, user, session, Duration.ofMinutes(25));
         assertEquals("COMPLETED", run.path("endReason").asString(), run + " " + runBefore);
         StringBuilder last = new StringBuilder();
@@ -254,6 +265,12 @@ final class CompactionScenario {
             }
         }
         return last.toString();
+    }
+
+    private static JsonNode runs(TestServer server, String user, String session) throws Exception {
+        HttpResponse<String> response = server.get(user, "/api/sessions/" + session + "/runs");
+        JsonNode runs = response.statusCode() == 200 ? JSON.readTree(response.body()).get("runs") : null;
+        return runs == null ? JSON.createArrayNode() : runs;
     }
 
     /** 这个会话成功压缩了几次，只裁剪的算在内。 */

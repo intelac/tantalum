@@ -116,9 +116,10 @@ class PluginApiTest {
 
         ask("alice", "a1");
         ask("bob", "b1");
-        assertFalse(toolsSeenBy("alice").contains("write_file"));
-        assertTrue(toolsSeenBy("alice").contains("read_file"));
-        assertTrue(toolsSeenBy("bob").contains("write_file"));
+        // 工具列表是全集（会话中途换工具时它不能变，core-tools C14）；alice 关掉的 write_file 标 deferred，模型看不见
+        assertTrue(spec("alice", "write_file").deferred());
+        assertFalse(spec("alice", "read_file").deferred());
+        assertFalse(spec("bob", "write_file").deferred());
     }
 
     @Test
@@ -151,8 +152,8 @@ class PluginApiTest {
         throw new AssertionError("run of " + session + " did not finish");
     }
 
-    private List<String> toolsSeenBy(String user) {
+    private ToolSpec spec(String user, String tool) {
         return prompts.stream().filter(prompt -> prompt.messages().toString().contains("hello from " + user))
-                .findFirst().orElseThrow().tools().stream().map(ToolSpec::name).toList();
+                .findFirst().orElseThrow().tools().stream().filter(spec -> spec.name().equals(tool)).findFirst().orElseThrow();
     }
 }

@@ -1,5 +1,6 @@
 package tantalum.shell.model;
 
+import com.anthropic.core.JsonField;
 import com.anthropic.core.JsonValue;
 import com.anthropic.models.messages.AssistantMessageParam;
 import com.anthropic.models.messages.Base64ImageSource;
@@ -11,6 +12,7 @@ import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.RedactedThinkingBlockParam;
+import com.anthropic.models.messages.SystemMessageParam;
 import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ThinkingBlockParam;
 import com.anthropic.models.messages.ThinkingConfigAdaptive;
@@ -25,6 +27,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import tantalum.shell.json.JsonText;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.AttachmentText;
@@ -40,6 +43,7 @@ import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 
@@ -52,6 +56,14 @@ final class ClaudeRequest {
     static final String PROVIDER = "claude";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
     private static final String BINDING_BETA = "thinking-binding-controls-2026-08-01";
+    /** 会话中途增减工具（core-tools C14）：工具列表不改，用追加的系统消息 {@code tool_addition}、{@code tool_removal}。 */
+    static final String TOOL_CHANGE_BETA = "mid-conversation-tool-changes-2026-07-01";
+    /**
+     * 支持会话中途工具变化的模型（官方文档 platform-availability，2026-11 核对；Claude Sonnet 5 不支持）。不在名单里的模型不发
+     * 工具变化：会话开始时没开的工具不发，中途打开的要等新会话；中途关掉的照样在执行前拒绝。
+     */
+    static final Set<String> TOOL_CHANGE_MODELS = Set.of("claude-opus-5", "claude-opus-5-5", "claude-opus-4-8", "claude-fable-5",
+            "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1", "claude-sonnet-5-5");
     /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
     private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
     /** 只有附件、没有文字的用户消息补的文字，Claude 不收空文字块。 */
@@ -86,9 +98,15 @@ final class ClaudeRequest {
         Map<String, Json> extra = new LinkedHashMap<>();
         extra.put("thinking", new Json.Obj(thinking));
         extra.put("output_config", new Json.Obj(Map.of("effort", new Json.Str(effort))));
+        // 备用模型不一定认工具变化：出现过工具变化的会话不带备用模型（设计“风险”）
+        boolean toolChanges = TOOL_CHANGE_MODELS.contains(model) && ToolChanges.present(prompt);
+        boolean withFallbacks = fallbacks && !toolChanges;
         List<Json> betas = new ArrayList<>();
-        if (fallbacks) {
+        if (withFallbacks) {
             betas.add(new Json.Str(FALLBACK_BETA));
+        }
+        if (toolChanges) {
+            betas.add(new Json.Str(TOOL_CHANGE_BETA));
         }
         if (strictThinking) {
             betas.add(new Json.Str(BINDING_BETA));
@@ -96,7 +114,7 @@ final class ClaudeRequest {
         if (!betas.isEmpty()) {
             extra.put("betas", new Json.Arr(betas));
         }
-        if (fallbacks) {
+        if (withFallbacks) {
             extra.put("fallbacks", new Json.Str("default"));
         }
         Prompt.Output output = prompt.output();
@@ -128,18 +146,26 @@ final class ClaudeRequest {
             params.systemOfTextBlockParams(List.of(
                     TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));
         }
-        List<ToolSpec> tools = prompt.tools();
+        boolean toolChanges = extra.get("betas") instanceof Json.Arr list && list.items().contains(new Json.Str(TOOL_CHANGE_BETA));
+        // 不发工具变化时：会话开始时没开的工具不发，历史里的变化也不发
+        List<ToolSpec> tools = toolChanges ? prompt.tools() : prompt.tools().stream().filter(tool -> !tool.deferred()).toList();
+        int cachedTool = lastIndexOf(tools, tool -> !tool.deferred());
         for (int i = 0; i < tools.size(); i++) {
-            params.addTool(tool(tools.get(i), i == tools.size() - 1));
+            params.addTool(tool(tools.get(i), i == cachedTool));
         }
-        List<Message> messages = prompt.messages();
+        List<Message> messages = prompt.messages().stream().filter(message -> toolChanges || message.role() != Role.SYSTEM).toList();
+        int cachedMessage = lastIndexOf(messages, message -> message.role() != Role.SYSTEM);
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
+            if (message.role() == Role.SYSTEM) {
+                params.addMessage(systemMessage(message));
+                continue;
+            }
             List<ContentBlockParam> blocks = blocks(message, media);
             if (blocks.isEmpty()) {
                 continue;
             }
-            if (i == messages.size() - 1) {
+            if (i == cachedMessage) {
                 blocks.set(blocks.size() - 1, cached(blocks.getLast()));
             }
             if (message.role() == Role.USER) {
@@ -171,6 +197,42 @@ final class ClaudeRequest {
         return thinking.build();
     }
 
+    /**
+     * 一条工具变化的系统消息：每个新增、移除的工具一个块，按名字引用（工具定义已在列表里，标了 defer_loading）。SDK 的系统消息
+     * 只有文字内容，块用它留给任意 JSON 的口子写。
+     */
+    @SuppressWarnings("unchecked")
+    private static SystemMessageParam systemMessage(Message message) {
+        List<Object> content = new ArrayList<>();
+        for (ContentBlock block : message.content()) {
+            ToolChangeBlock change = (ToolChangeBlock) block;
+            change.added().forEach(name -> content.add(toolReference("tool_addition", name)));
+            change.removed().forEach(name -> content.add(toolReference("tool_removal", name)));
+        }
+        JsonField<?> raw = JsonValue.from(content);
+        return SystemMessageParam.builder().content((JsonField<SystemMessageParam.Content>) raw).build();
+    }
+
+    private static Map<String, Object> toolReference(String type, String name) {
+        Map<String, Object> block = new LinkedHashMap<>();
+        block.put("type", type);
+        // 键的顺序要固定：请求逐字节相同，缓存才命中（Map.of 的顺序每次启动都可能不同）
+        Map<String, Object> tool = new LinkedHashMap<>();
+        tool.put("type", "tool_reference");
+        tool.put("name", name);
+        block.put("tool", tool);
+        return block;
+    }
+
+    private static <T> int lastIndexOf(List<T> items, java.util.function.Predicate<T> test) {
+        for (int i = items.size() - 1; i >= 0; i--) {
+            if (test.test(items.get(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private static Tool tool(ToolSpec spec, boolean last) {
         Tool.InputSchema.Builder schema = Tool.InputSchema.builder();
         if (spec.schema() instanceof Json.Obj object) {
@@ -184,6 +246,9 @@ final class ClaudeRequest {
         }
         Tool.Builder tool = Tool.builder().name(spec.name()).description(spec.description())
                 .inputSchema(schema.build()).eagerInputStreaming(true);
+        if (spec.deferred()) {
+            tool.putAdditionalProperty("defer_loading", JsonValue.from(true));
+        }
         if (last) {
             tool.cacheControl(CACHE);
         }
@@ -295,6 +360,7 @@ final class ClaudeRequest {
             case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
                     .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
+            case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
         };
     }
 

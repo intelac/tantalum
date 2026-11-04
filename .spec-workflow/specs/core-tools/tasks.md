@@ -98,54 +98,54 @@
 
 ## 阶段 3：会话中途换工具
 
-- [ ] 15. 值类型
+- [x] 15. 值类型
   - File: value/model/{Role,ToolChangeBlock,ToolSpec}.java、value/event/ContextAssembled.java、value/state/SessionContext.java、journal/EventCodec
   - `Role.SYSTEM`；`ToolChangeBlock(added, removed)`；`ToolSpec.deferred`；`enabledTools`、`enabledPlugins`；新字段为空或默认时不写出
   - 测试（EventCodecTest）：往返；旧行读成“全部开着”；写出的旧形状行和改动前逐字节相同
   - _Requirements: C15, 8.6_
 
-- [ ] 16. 内核换名单
+- [x] 16. 内核换名单
   - File: kernel/step/ContextSteps.java、shell/handler/ContextHandler.java
   - 第一次组装记全集和初始名单；之后每次运行开始比名单，有变化追加 `Role.SYSTEM` 消息；插件名单只更新不发消息；运行中途不换；不在全集里的工具忽略
   - 测试：打开、关掉、同时；没变化不追加；运行中途改开关不影响本次运行；回放和当时相同
   - _Requirements: C14, 8.1, 8.2, 8.4_
 
-- [ ] 17. 钩子按会话名单过滤
+- [x] 17. 钩子按会话名单过滤
   - File: kernel/hook/HookChain.java
   - 只跑 `activePlugins` 里的；名单为空（旧会话）时全跑
   - 测试：关掉的钩子插件不跑；运行中途关掉的本次运行照跑；旧会话全跑
   - _Requirements: 8.5, 8.6_
 
-- [ ] 18. 请求投影
+- [x] 18. 请求投影
   - File: kernel/projection/PromptProjection.java、kernel/compaction/Trimming.java
   - 初始没开的工具标延后加载；后面没有助手回复的工具变化合并进下一条；压缩时保留段里的工具变化消息去掉
   - 测试：合并规则（含连续三次没有回复）；压缩后不剩工具变化消息；没有任何变化的会话投影结果和改动前相同
   - _Requirements: C14, 设计第 1 节_
 
-- [ ] 19. Claude 请求格式
+- [x] 19. Claude 请求格式
   - File: shell/model/ClaudeRequest.java、ClaudeClient.java
   - `defer_loading`；系统消息 `tool_addition`、`tool_removal`；beta 头；支持模型名单，不在名单时不发并退回“新会话生效”；出现过工具变化的会话不带 `fallbacks`
   - 测试：新期望文件 `claude-tool-change-requests.txt` 逐字节钉住；不在名单的模型不出现系统消息；`fallbacks` 规则；现有 `claude-requests.txt` 不变
   - _Requirements: C14, 设计第 1 节“两种模型的翻法”_
 
-- [ ] 20. OpenAI 请求格式
+- [x] 20. OpenAI 请求格式
   - File: shell/model/OpenAiClient.java
   - `tools` 发当前开着的；工具变化翻成文字系统消息
   - 测试：新期望文件 `openai-tool-change-requests.txt`；现有期望文件不变
   - _Requirements: C14_
 
-- [ ] 21. 线路场景
+- [x] 21. 线路场景
   - File: tantalum-shell 的 `WireFormatTest`、期望文件 `wire/tool-change.txt`（新）
   - 一个会话：第一问没有 `write_file`；改开关；第二问出现工具变化消息、模型调用 `write_file`
   - _Requirements: 8_
 
-- [ ] 22. 真实 Claude 测试
+- [x] 22. 真实 Claude 测试
   - File: tantalum-examples/.../ClaudeSmokeTest.java 或新的 `CoreToolsClaudeTest.java`
   - 三项，判定标准照设计“真实模型”：长文件窗口找词；先读后改函数、改完测试通过；中途打开 `write_file`、带思考历史、严格校验模式不报错
   - 跑完报用量
   - _Requirements: 非功能“真实模型”_
 
-- [ ] 23. 阶段 3 收尾
+- [x] 23. 阶段 3 收尾
   - 全量回归；变异检查（工具变化不合并；直接改 `tools` 而不用延后加载，严格模式真实测试应失败）；提交；汇报
   - _Requirements: C14_
 

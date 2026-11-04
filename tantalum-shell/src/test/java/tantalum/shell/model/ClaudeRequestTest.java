@@ -53,6 +53,7 @@ import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tools.jackson.databind.JsonNode;
@@ -246,6 +247,67 @@ class ClaudeRequestTest {
     }
 
     // ---- 附件（attachments 任务 15）：claude-attachment-requests.txt ----
+
+    // ---- 会话中途换工具（core-tools 任务 19）----
+
+    private static final Path TOOL_CHANGE_EXPECTED = Path.of("src/test/resources/model/claude-tool-change-requests.txt");
+
+    private static ClaudeClient.Settings model(String model, boolean fallbacks) {
+        return new ClaudeClient.Settings(model, 8192, "medium", fallbacks, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults(), true);
+    }
+
+    /** 会话开始时 write_file 没开（deferred），第二次提问时打开、grep 关掉。 */
+    private static Prompt switched() {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        List<ToolSpec> tools = List.of(new ToolSpec("grep", "search", schema), new ToolSpec("read_file", "read", schema),
+                new ToolSpec("write_file", "write", schema, true));
+        return new Prompt("sys", tools, List.of(
+                Message.user("q1"),
+                new Message(Role.ASSISTANT, List.of(new TextBlock("a1")), false),
+                Message.user("q2"),
+                new Message(Role.SYSTEM, List.of(new ToolChangeBlock(List.of("write_file"), List.of("grep"))), false)));
+    }
+
+    /** 只有 deferred 的工具、还没有任何变化：照样带 beta，备用模型照样不带。 */
+    private static Prompt deferredOnly() {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        return new Prompt("sys", List.of(new ToolSpec("read_file", "read", schema), new ToolSpec("write_file", "write", schema, true)),
+                List.of(Message.user("q1")));
+    }
+
+    private static List<Sample> toolChangeSamples() {
+        return List.of(
+                new Sample("mid-session change on a model that supports it; fallbacks dropped", model("claude-sonnet-5-5", true), switched()),
+                new Sample("deferred tool, no change yet; cache mark skips the deferred tool", model("claude-sonnet-5-5", false), deferredOnly()),
+                new Sample("model without mid-session changes: deferred tool and the change are left out", model("claude-sonnet-5", true),
+                        switched()));
+    }
+
+    @Test
+    void toolChangeRequestBodies() throws IOException {
+        StringBuilder actual = new StringBuilder();
+        for (Sample sample : toolChangeSamples()) {
+            actual.append(sent(sample));
+        }
+        if (Boolean.getBoolean("claude.record")) {
+            Files.writeString(TOOL_CHANGE_EXPECTED, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(TOOL_CHANGE_EXPECTED, StandardCharsets.UTF_8), actual.toString(), "request changed; see the class comment");
+    }
+
+    @Test
+    void toolChangesFollowTheModelAndDropFallbacks() {
+        RequestOptions supported = new ClaudeRequest(model("claude-sonnet-5-5", true)).options(switched());
+        String extra = supported.extra().toString();
+        assertTrue(extra.contains(ClaudeRequest.TOOL_CHANGE_BETA), extra);
+        assertFalse(extra.contains("fallback"), extra);
+        RequestOptions unsupported = new ClaudeRequest(model("claude-sonnet-5", true)).options(switched());
+        assertFalse(unsupported.extra().toString().contains(ClaudeRequest.TOOL_CHANGE_BETA));
+        assertTrue(unsupported.extra().toString().contains("fallback"));
+        RequestOptions plain = new ClaudeRequest(model("claude-sonnet-5-5", true)).options(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
+        assertFalse(plain.extra().toString().contains(ClaudeRequest.TOOL_CHANGE_BETA), "sessions without changes are unchanged");
+    }
 
     private static final Path ATTACHMENT_EXPECTED = Path.of("src/test/resources/model/claude-attachment-requests.txt");
     private static final ImageRef PNG = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);

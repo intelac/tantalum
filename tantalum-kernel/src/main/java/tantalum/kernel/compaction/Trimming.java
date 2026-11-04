@@ -8,11 +8,12 @@ import java.util.regex.Pattern;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 
 /**
- * 规则 5 对保留段、规则 6 对头部的处理：去掉全部推理块（不看供应商），过长的工具结果截断并注明原长度，
- * 处理后内容为空的消息丢弃（返回 null）。文本和工具调用逐字不动。
+ * 规则 5 对保留段、规则 6 对头部的处理：去掉全部推理块（不看供应商）和工具变化（压缩后重新组装，新的工具名单从现在的开关算起，
+ * core-tools C14），过长的工具结果截断并注明原长度，处理后内容为空的消息丢弃（返回 null）。文本和工具调用逐字不动。
  * 截断保留开头和结尾各一半：文件的暗号、日志的结论、测试的结果往往在末尾，只留开头会把它们丢掉。
  */
 public final class Trimming {
@@ -26,6 +27,7 @@ public final class Trimming {
         for (ContentBlock block : message.content()) {
             switch (block) {
                 case ReasoningBlock ignored -> { }
+                case ToolChangeBlock ignored -> { }
                 case ToolResultBlock result -> kept.add(truncate(result, maxResultBytes));
                 default -> kept.add(block);
             }

@@ -84,7 +84,7 @@ public final class ModelSteps {
      */
     static CommandId emitCall(Outcome out, RunRef run, Prompt prompt) {
         SessionState session = out.session(run);
-        ImageBudget.Applied applied = ImageBudget.apply(prompt.messages(), session.omittedImages());
+        ImageBudget.Applied applied = ImageBudget.apply(PromptProjection.placeToolChanges(prompt.messages()), session.omittedImages());
         if (!applied.newlyOmitted().isEmpty()) {
             List<String> all = new ArrayList<>(session.omittedImages());
             all.addAll(applied.newlyOmitted());

@@ -1,0 +1,211 @@
+# items
+{"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"summarise a.txt","queued":false}
+{"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:02Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"text","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"it says hello","interrupted":false,"truncated":false}
+{"kind":"user","id":"3.0","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","text":"now write that to b.txt","queued":false}
+{"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"tool","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","call":{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"DONE","group":"g5","startedAt":"2026-10-31T00:00:05Z","endedAt":"2026-10-31T00:00:06Z","result":{"kind":"toolResult","toolCallId":"w1","text":"Created b.txt (5 bytes).","error":false}}
+{"kind":"text","id":"7.0","session":"s","run":"s_3","at":"2026-10-31T00:00:07Z","text":"done","interrupted":false,"truncated":false}
+# item pushes
+0.0 item {"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"summarise a.txt","queued":false}
+0.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:00Z","phase":"AwaitingContext"}
+1.0 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:01Z","phase":"AwaitingModel"}
+2.0 item {"kind":"text","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"it says hello","interrupted":false,"truncated":false}
+2.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:02Z","phase":"Ended","endReason":"COMPLETED"}
+3.0 item {"kind":"user","id":"3.0","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","text":"now write that to b.txt","queued":false}
+3.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:03Z","phase":"AwaitingContext"}
+4.0 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:04Z","phase":"AwaitingModel"}
+5.0 item {"kind":"tool","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","call":{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"RUNNING","group":"g5","startedAt":"2026-10-31T00:00:05Z"}
+5.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:05Z","phase":"AwaitingTools"}
+6.0 item {"kind":"tool","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","call":{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"DONE","group":"g5","startedAt":"2026-10-31T00:00:05Z","endedAt":"2026-10-31T00:00:06Z","result":{"kind":"toolResult","toolCallId":"w1","text":"Created b.txt (5 bytes).","error":false}}
+6.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:06Z","phase":"AwaitingModel"}
+7.0 item {"kind":"text","id":"7.0","session":"s","run":"s_3","at":"2026-10-31T00:00:07Z","text":"done","interrupted":false,"truncated":false}
+7.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+# prompts
+{"system":"sys","tools":[{"name":"read_file","description":"Read a file","schema":{}},{"name":"write_file","description":"Write a file","schema":{},"deferred":true}],"messages":[{"role":"USER","content":[{"kind":"text","text":"summarise a.txt"}],"interrupted":false}],"output":{"toolsAllowed":true,"maxTokens":0}}
+{"system":"sys","tools":[{"name":"read_file","description":"Read a file","schema":{}},{"name":"write_file","description":"Write a file","schema":{},"deferred":true}],"messages":[{"role":"USER","content":[{"kind":"text","text":"summarise a.txt"}],"interrupted":false},{"role":"ASSISTANT","content":[{"kind":"text","text":"it says hello"}],"interrupted":false},{"role":"USER","content":[{"kind":"text","text":"now write that to b.txt"}],"interrupted":false},{"role":"SYSTEM","content":[{"kind":"toolChange","added":["write_file"],"removed":[]}],"interrupted":false}],"output":{"toolsAllowed":true,"maxTokens":0}}
+{"system":"sys","tools":[{"name":"read_file","description":"Read a file","schema":{}},{"name":"write_file","description":"Write a file","schema":{},"deferred":true}],"messages":[{"role":"USER","content":[{"kind":"text","text":"summarise a.txt"}],"interrupted":false},{"role":"ASSISTANT","content":[{"kind":"text","text":"it says hello"}],"interrupted":false},{"role":"USER","content":[{"kind":"text","text":"now write that to b.txt"}],"interrupted":false},{"role":"SYSTEM","content":[{"kind":"toolChange","added":["write_file"],"removed":[]}],"interrupted":false},{"role":"ASSISTANT","content":[{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}}],"interrupted":false},{"role":"USER","content":[{"kind":"toolResult","toolCallId":"w1","text":"Created b.txt (5 bytes).","error":false}],"interrupted":false}],"output":{"toolsAllowed":true,"maxTokens":0}}
+# trace
+{
+  "seq" : 7,
+  "records" : [ {
+    "kind" : "run",
+    "id" : "run:s_0",
+    "pos" : "0.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:02Z",
+    "trigger" : "PROMPT",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:0",
+    "pos" : "0.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:00Z",
+    "mode" : "PROMPT",
+    "text" : "summarise a.txt",
+    "source" : {
+      "type" : "user"
+    }
+  }, {
+    "kind" : "system",
+    "id" : "s:1",
+    "pos" : "1.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:01Z",
+    "initial" : true,
+    "systemChars" : 3,
+    "segments" : [ {
+      "chars" : 3,
+      "source" : {
+        "type" : "context"
+      }
+    } ],
+    "added" : [ "read_file", "write_file" ],
+    "removed" : [ ],
+    "toolCount" : 2,
+    "call" : "s_1-0"
+  }, {
+    "kind" : "request",
+    "id" : "r:s_1-0",
+    "pos" : "1.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:02Z",
+    "number" : 1,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_1-0",
+      "issuedAt" : "2026-10-31T00:00:01Z",
+      "endedAt" : "2026-10-31T00:00:02Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "it says hello"
+  }, {
+    "kind" : "run",
+    "id" : "run:s_3",
+    "pos" : "3.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "at" : "2026-10-31T00:00:03Z",
+    "end" : "2026-10-31T00:00:07Z",
+    "trigger" : "PROMPT",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:3",
+    "pos" : "3.1",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:03Z",
+    "end" : "2026-10-31T00:00:03Z",
+    "mode" : "PROMPT",
+    "text" : "now write that to b.txt",
+    "source" : {
+      "type" : "user"
+    }
+  }, {
+    "kind" : "request",
+    "id" : "r:s_4-0",
+    "pos" : "4.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:04Z",
+    "end" : "2026-10-31T00:00:05Z",
+    "number" : 2,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_4-0",
+      "issuedAt" : "2026-10-31T00:00:04Z",
+      "endedAt" : "2026-10-31T00:00:05Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "TOOL_USE",
+    "toolCalls" : 1,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    }
+  }, {
+    "kind" : "tool",
+    "id" : "t:5.0",
+    "pos" : "5.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:05Z",
+    "end" : "2026-10-31T00:00:06Z",
+    "call" : "w1",
+    "name" : "write_file",
+    "rawArguments" : "{\"path\":\"a\"}",
+    "arguments" : {
+      "path" : "a"
+    },
+    "status" : "DONE",
+    "result" : "Created b.txt (5 bytes).",
+    "group" : "g5",
+    "issuedAt" : "2026-10-31T00:00:05Z",
+    "request" : "r:s_4-0"
+  }, {
+    "kind" : "request",
+    "id" : "r:s_6-0",
+    "pos" : "6.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 2,
+    "at" : "2026-10-31T00:00:06Z",
+    "end" : "2026-10-31T00:00:07Z",
+    "number" : 3,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_6-0",
+      "issuedAt" : "2026-10-31T00:00:06Z",
+      "endedAt" : "2026-10-31T00:00:07Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "done"
+  } ],
+  "before" : 0,
+  "hasMore" : false
+}
