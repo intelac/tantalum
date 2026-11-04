@@ -116,7 +116,7 @@ public final class SessionFile implements AutoCloseable {
         for (EventEnvelope envelope : events) {
             lines.add(line(envelope, payload(envelope)));
         }
-        return appendLines(lines);
+        return appendLines(lines, true);
     }
 
     /** 事件的 payload JSON；写结果行的人要先从里面收录长字符串。 */
@@ -128,13 +128,19 @@ public final class SessionFile implements AutoCloseable {
         return codec.encode(envelope.event());
     }
 
-    /** 已经编码好的行（不含换行符），一次写完、一次 fsync。 */
-    long appendLines(List<String> lines) throws IOException {
+    /**
+     * 已经编码好的行（不含换行符），一次写完。{@code force} 时 fsync 一次（连同之前没 fsync 的行）：只有事件的一批不必，
+     * 它们和自己的结果行一起落盘，在那之前不会有任何效果（record-results R3）。
+     */
+    long appendLines(List<String> lines, boolean force) throws IOException {
         StringBuilder text = new StringBuilder();
         for (String line : lines) {
             text.append(line).append('\n');
         }
         writeFully(channel, ByteBuffer.wrap(text.toString().getBytes(StandardCharsets.UTF_8)));
+        if (!force) {
+            return channel.size();
+        }
         channel.force(true);
         if (!unsyncedDirs.isEmpty()) {
             for (Path dir : unsyncedDirs) {

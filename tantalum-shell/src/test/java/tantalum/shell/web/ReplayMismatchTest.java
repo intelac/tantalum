@@ -75,8 +75,9 @@ class ReplayMismatchTest {
             ask(server, "r1", 1);
         }
         String content = Files.readString(file());
-        List<String> lines = content.lines().map(line -> line.startsWith("{\"result\"") ? line.replace(REPLY, "a reply edited later") : line)
-                .toList();
+        // 模型回复在结果行里只写“来自事件”：换成另一段内容，就像结果行被人改过
+        List<String> lines = content.lines().map(line -> line.startsWith("{\"result\"")
+                ? line.replace("\"fromEvent\":true", "\"content\":[{\"kind\":\"text\",\"text\":\"a reply edited later\"}]") : line).toList();
         assertTrue(lines.stream().anyMatch(line -> line.contains("a reply edited later")), content);
         Files.write(file(), lines);
         prompts.clear();

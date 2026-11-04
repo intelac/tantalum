@@ -17,17 +17,21 @@ import tantalum.shell.journal.TailSequence;
 import tantalum.shell.loop.InputRing;
 import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.LoopFixtures;
+import tantalum.value.decision.SessionChange;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.model.Message;
 import tantalum.value.state.OwnerRef;
 
 /**
  * 写路径预算（非功能需求）：走真实的写入分发、用户通道和每会话文件（每批 fsync），
- * 100 个会话分属 10 个用户，每会话每秒 1 个事件，量从进入输入环到进入 Cleanroom Ring 的耗时。
+ * 100 个会话分属 10 个用户，每会话每秒 1 个事件，量从进入输入环到命令放行的耗时：事件落盘、交给 cleanroom，
+ * 结果行再由同一个通道落盘后才放行（record-results 需求 2.4）。这里的 cleanroom 不调内核，交回一份同等大小的结果。
  * {@code mvn -P bench -pl tantalum-examples -am -DskipTests test-compile -Dbench.main=tantalum.examples.bench.LaneBench}
  */
 public final class LaneBench {
@@ -49,15 +53,21 @@ public final class LaneBench {
         SessionPaths paths = new SessionPaths(dir);
         try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256, (principal, session, seq, offset) -> { })) {
             LaneDispatcher[] holder = new LaneDispatcher[1];
-            holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> {
-                long now = System.nanoTime();
-                String request = ((UserPrompt) envelope.event()).request().value();
-                Long start = sent.remove(request);
-                latencies.add(TimeUnit.NANOSECONDS.toMicros(now - start));
-                if (request.startsWith("0-")) {
-                    firstSecond.add(TimeUnit.NANOSECONDS.toMicros(now - start));
-                }
-                holder[0].released();
+            holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::appendLines, envelope -> {
+                UserPrompt prompt = (UserPrompt) envelope.event();
+                String request = prompt.request().value();
+                // 结果行里有这次追加的用户消息，和真实的第一步一样大
+                StepRecord record = new StepRecord(envelope.seq(), new SessionChange(envelope.session(), envelope.principal(), false,
+                        List.of(Message.user(prompt.text())), null, null, null, null, null, null, null), List.of(), List.of(), null, null,
+                        List.of(), List.of());
+                holder[0].release(envelope, record, () -> {
+                    long now = System.nanoTime();
+                    Long start = sent.remove(request);
+                    latencies.add(TimeUnit.NANOSECONDS.toMicros(now - start));
+                    if (request.startsWith("0-")) {
+                        firstSecond.add(TimeUnit.NANOSECONDS.toMicros(now - start));
+                    }
+                }, holder[0]::released);
                 return true;
             });
             InputRing input = LoopFixtures.inputRing(1024, holder[0]);

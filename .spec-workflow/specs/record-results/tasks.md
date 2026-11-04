@@ -79,13 +79,13 @@
   - 测试：vitest 组件测试
   - _Requirements: 需求 9.1_
 
-- [ ] 12. 检查工具
+- [x] 12. 检查工具
   - File: shell/boot/KernelFactory.java、shell/boot/RecordCheck.java、`TantalumApplication`（`check` 参数）
   - 从 `Engine` 抽出建内核；`java -jar tantalum.jar check` 非 Web 模式启动，逐个会话比较，输出第一处差异，退出码 0/1，只读
   - 测试：一致和改坏两个数据目录；目录里的文件不变
   - _Requirements: R12, 需求 10_
 
-- [ ] 13. 每一步崩溃、插件规则改了
+- [x] 13. 每一步崩溃、插件规则改了
   - File: tantalum-shell/src/test/.../loop/EvictionInvarianceTest.java、新测试 `PluginChangeTest`、测试用检查器挂进 `RingIntegrationTest`、`CompactionStressTest`
   - 每一步之后只用结果行恢复，和内存逐字节相同；同一文件两套只读钩子规则恢复结果相同；每一步 `record.apply(before)` 等于实时的 `Decision`
   - _Requirements: 需求 3.2, 3.3, 11.1, 11.2_

@@ -1,9 +1,9 @@
 # Tantalum
 
-生产级、通用的 Agent 运行时底座：事件先落盘、内核是纯函数、可以从 journal 精确重放，插件不用改内核。
+生产级、通用的 Agent 运行时底座：内核是纯函数，每一步的结果写进 journal、落盘之后才有效果，恢复时照结果行还原、不重算，插件不用改内核。
 
 ```
-输入环 → 写 journal → Kernel.step → 输出环 → Handler → 结果事件回到输入环
+输入环 → 写事件 → Kernel.step → 写结果行并落盘 → 输出环 → Handler → 结果事件回到输入环
 ```
 
 代码分三层，依赖方向 `value ← kernel ← shell`，由 ArchUnit 守护：
@@ -21,8 +21,8 @@
 | 包 | 内容 |
 |---|---|
 | `boot` | 组装、启动、关闭：`Engine`、`Storage`（打开和关闭数据目录）、配置。只有它和 `web` 读全局配置 |
-| `loop` | 管线：输入环 → 用户通道（落盘、载入冷会话）→ cleanroom（`Kernel.step`）→ 输出环 → Handler；`Intake` 接收提交，`Evictor` 回收空闲会话 |
-| `journal` | 原始记录：每会话一个只追加的文件、事件编解码、格式版本、锁、序号 |
+| `loop` | 管线：输入环 → 用户通道（写事件、载入冷会话）→ cleanroom（`Kernel.step`，算出结果行）→ 用户通道（结果行落盘）→ 输出环 → Handler；`Intake` 接收提交，`Evictor` 回收空闲会话 |
+| `journal` | 原始记录：每会话一个只追加的文件（事件行和结果行）、编解码、格式版本、锁、序号 |
 | `store` | 能从原始记录重建的东西：索引、回放查询，以及读会话的 `SessionQueries` |
 | `conversation` | 控制台看到的对话条目，是事件的展示投影 |
 | `handler` | 执行命令：组装上下文、调模型、跑工具和插件工作 |

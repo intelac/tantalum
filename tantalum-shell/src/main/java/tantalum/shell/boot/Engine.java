@@ -10,11 +10,7 @@ import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
-import tantalum.kernel.Limits;
-import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.kernel.step.BuiltinSteps;
-import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.attachment.AttachmentStore;
@@ -131,8 +127,7 @@ public final class Engine implements AutoCloseable {
         List<SessionIndex.Session> unfinished;
         try {
             ToolCatalog catalog = new ToolCatalog();
-            Workspaces workspaces = properties.workspaceMode().equals("shared")
-                    ? Workspaces.shared(properties.workspace()) : Workspaces.perUser(properties.workspace());
+            Workspaces workspaces = KernelFactory.workspaces(properties);
             if (workspaces.isShared()) {
                 LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
             }
@@ -156,10 +151,7 @@ public final class Engine implements AutoCloseable {
                     hooks, afterHooks, workTypes);
 
             RequestImages requestImages = new RequestImages(storage.attachments);
-            TransitionTable table = new TransitionTable();
-            BuiltinSteps.register(table);
-            Kernel kernel = new Kernel(table, new HookChain(hooks), catalog.safety(),
-                    new Limits(loop.maxParallelTools(), properties.hooks().maxWorkRounds()));
+            Kernel kernel = KernelFactory.kernel(properties, catalog.safety(), hooks);
             SessionReplay replay = storage.replay(kernel);
             unfinished = storage.catchUp(kernel);
 

@@ -37,8 +37,10 @@ public final class ReadBench {
                 System.out.printf("generated %d in %d s%n", events, TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start));
             }
             Corpus.Manifest manifest = Corpus.readManifest(data);
-            System.out.printf("%n== %d events, %d sessions, journal %d MB%n", manifest.events(), manifest.sessions(),
-                    directorySize(data.resolve("sessions")) / (1 << 20));
+            long[] split = lineSplit(data.resolve("sessions"));
+            System.out.printf("%n== %d events, %d sessions, journal %d MB (event lines %d KB, result lines %d KB, +%.1f%%)%n",
+                    manifest.events(), manifest.sessions(), directorySize(data.resolve("sessions")) / (1 << 20),
+                    split[0] / 1024, split[1] / 1024, 100.0 * split[1] / split[0]);
             if (!Files.exists(data.resolve("index.db"))) {
                 sample(data, root.resolve("warmup-" + events + ".log"), "warmup")
                         .forEach((name, value) -> System.out.printf("%-22s %8d   (one-off: the corpus has no index yet)%n", name, value));
@@ -65,6 +67,20 @@ public final class ReadBench {
             }
         }
         budgets.exitIfOver();
+    }
+
+    /** 会话文件里事件行和结果行各占多少字节（record-results 需求 1.8）。 */
+    private static long[] lineSplit(Path sessions) throws IOException {
+        long[] bytes = new long[2];
+        try (var files = Files.walk(sessions)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".jsonl")).toList()) {
+                try (var lines = Files.lines(file)) {
+                    lines.skip(1).forEach(line -> bytes[line.startsWith("{\"result\"") ? 1 : 0]
+                            += line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 1);
+                }
+            }
+        }
+        return bytes;
     }
 
     private static Map<String, Long> sample(Path data, Path log) throws IOException, InterruptedException {

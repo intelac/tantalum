@@ -59,8 +59,9 @@ public final class SessionFiles implements AutoCloseable {
     }
 
     /**
-     * 同一会话的事件和结果按顺序追加，一次 fsync。返回时已落盘。写失败时丢掉这个会话的 memo：
-     * 它可能记下了没落盘的内容，之后的结果行不能引用它们。
+     * 同一会话的事件和结果按顺序追加。有结果行时 fsync 一次，返回时这一批和之前没 fsync 的行都已落盘，然后通知监听器；
+     * 只有事件时只写不 fsync：事件和它的结果行一起落盘，在那之前不放行任何效果（record-results R3）。
+     * 写失败时丢掉这个会话的 memo：它可能记下了没落盘的内容，之后的结果行不能引用它们。
      */
     public void appendLines(Principal principal, SessionId session, List<Line> lines) throws IOException {
         Key key = new Key(principal, session);
@@ -74,7 +75,8 @@ public final class SessionFiles implements AutoCloseable {
                 RecordMemo memo = memos.get(key);
                 if (memo == null) {
                     Path file = paths.sessionFile(principal, session);
-                    memo = Files.exists(file) && Files.size(file) > 0 ? RecordMemo.blind() : RecordMemo.writer();
+                    memo = Files.exists(file) && Files.size(file) > 0 ? RecordMemo.blind(principal, session)
+                            : RecordMemo.writer(principal, session);
                     memos.put(key, memo);
                 }
                 if (handle.file == null) {
@@ -88,14 +90,18 @@ public final class SessionFiles implements AutoCloseable {
                             case Line.Event event -> {
                                 String payload = handle.file.payload(event.envelope());
                                 records.see(payload, memo);
+                                memo.seeEvent(event.envelope());
                                 encoded.add(SessionFile.line(event.envelope(), payload));
                             }
                             case Line.Result result -> encoded.add(records.encode(result.record(), memo));
                         }
                         seq = Math.max(seq, line.seq());
                     }
-                    long offset = handle.file.appendLines(encoded);
-                    listener.onDurable(principal, session, seq, offset);
+                    boolean force = lines.stream().anyMatch(Line.Result.class::isInstance);
+                    long offset = handle.file.appendLines(encoded, force);
+                    if (force) {
+                        listener.onDurable(principal, session, seq, offset);
+                    }
                 } catch (IOException | RuntimeException failure) {
                     memos.remove(key);
                     throw failure;

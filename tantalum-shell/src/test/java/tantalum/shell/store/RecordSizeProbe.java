@@ -33,10 +33,10 @@ class RecordSizeProbe {
             for (Path file : files.filter(f -> f.toString().endsWith(".jsonl")).toList()) {
                 List<EventEnvelope> read = new SessionFileReader(events).readAll(file);
                 KernelState state = KernelState.empty();
-                RecordMemo memo = RecordMemo.writer();
+                RecordMemo memo = read.isEmpty() ? RecordMemo.writer() : RecordMemo.writer(read.getFirst().principal(), read.getFirst().session());
                 long recordBytes = 0;
                 for (EventEnvelope envelope : read) {
-                    memo.see(events.mapper().valueToTree(envelope.event()));
+                    codec.see(events.encode(envelope.event()), memo);
                     Decision decision = kernel.step(state, envelope);
                     String line = codec.encode(StepRecord.of(envelope, state, decision), memo);
                     recordBytes += line.getBytes(StandardCharsets.UTF_8).length + 1;

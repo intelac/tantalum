@@ -1,7 +1,5 @@
 package tantalum.shell.journal;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -72,23 +70,35 @@ public final class SessionFileReader {
         if (!Files.exists(file)) {
             return memo;
         }
-        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
-            byte[] current = readLine(in);
+        try (Lines in = new Lines(Files.newInputStream(file))) {
+            byte[] current = in.next();
             if (current == null) {
                 return memo;
             }
-            byte[] next = readLine(in);
+            byte[] next = in.next();
             Identity identity = parseHeader(file, current, next == null);
             if (identity == null) {
                 return memo;
             }
+            memo = RecordMemo.reader(identity.principal(), identity.session());
             long lineNumber = 2;
             long lastSeq = Long.MIN_VALUE;
             long lastResult = Long.MIN_VALUE;
             Set<Long> unanswered = new HashSet<>();
             current = next;
             while (current != null) {
-                next = readLine(in);
+                next = in.next();
+                long skipped = results ? -1 : resultSeq(current);
+                if (skipped >= 0) {
+                    // 只读事件时不解析结果行：序号在行首，照样检查配对
+                    if (skipped <= lastResult || !unanswered.remove(skipped)) {
+                        throw corrupt(file, lineNumber, "result for seq " + skipped + " has no earlier event without a result", null);
+                    }
+                    lastResult = skipped;
+                    current = next;
+                    lineNumber++;
+                    continue;
+                }
                 String text = text(current);
                 Json parsed = text == null ? null : JsonText.parseOrNull(text);
                 if (!(parsed instanceof Json.Obj record)) {
@@ -107,7 +117,7 @@ public final class SessionFileReader {
                     if (results) {
                         try {
                             RecordCodec.Decoded decoded = records.decode(text, memo);
-                            consumer.accept(new Line.Result(decoded.record(), decoded.fingerprintMismatches()));
+                            consumer.accept(new Line.Result(decoded.record(), decoded.fingerprints()));
                         } catch (IllegalArgumentException failure) {
                             throw corrupt(file, lineNumber, failure.getMessage(), failure);
                         }
@@ -121,6 +131,7 @@ public final class SessionFileReader {
                     unanswered.add(lastSeq);
                     if (results) {
                         memo.seeJson(record.fields().get("payload"));
+                        memo.seeEvent(envelope);
                     }
                     consumer.accept(new Line.Event(envelope));
                 }
@@ -131,6 +142,23 @@ public final class SessionFileReader {
         return memo;
     }
 
+    private static final byte[] RESULT_PREFIX = "{\"result\":".getBytes(StandardCharsets.US_ASCII);
+
+    /** 结果行（{@code RecordCodec} 写的，序号总在行首）的序号；不是结果行时为 -1。 */
+    private static long resultSeq(byte[] line) {
+        if (line.length <= RESULT_PREFIX.length || !java.util.Arrays.equals(line, 0, RESULT_PREFIX.length, RESULT_PREFIX, 0, RESULT_PREFIX.length)) {
+            return -1;
+        }
+        long seq = 0;
+        int i = RESULT_PREFIX.length;
+        int digits = 0;
+        while (i < line.length && line[i] >= '0' && line[i] <= '9' && digits < 18) {
+            seq = seq * 10 + (line[i++] - '0');
+            digits++;
+        }
+        return digits > 0 && i < line.length && (line[i] == ',' || line[i] == '}') ? seq : -1;
+    }
+
     private static long exactSeq(Path file, long lineNumber, Json.Num seq) {
         try {
             return seq.value().longValueExact();
@@ -139,17 +167,54 @@ public final class SessionFileReader {
         }
     }
 
-    /** 读一行，不含换行符。没有换行符的尾部不是完整的记录，当作不存在。 */
-    private static byte[] readLine(InputStream in) throws IOException {
-        ByteArrayOutputStream line = new ByteArrayOutputStream();
-        int b;
-        while ((b = in.read()) != -1) {
-            if (b == '\n') {
-                return line.toByteArray();
-            }
-            line.write(b);
+    /** 按块读、找换行符：比逐字节读快得多（长会话的结果行几十 KB）。没有换行符的尾部不是完整的记录，当作不存在。 */
+    private static final class Lines implements AutoCloseable {
+        private final InputStream in;
+        private byte[] buffer = new byte[64 * 1024];
+        private int start;
+        private int end;
+        private boolean eof;
+
+        Lines(InputStream in) {
+            this.in = in;
         }
-        return null;
+
+        /** 下一行，不含换行符；没有完整的行时为 null。 */
+        byte[] next() throws IOException {
+            int scanned = start;
+            while (true) {
+                for (int i = scanned; i < end; i++) {
+                    if (buffer[i] == '\n') {
+                        byte[] line = java.util.Arrays.copyOfRange(buffer, start, i);
+                        start = i + 1;
+                        return line;
+                    }
+                }
+                if (eof) {
+                    return null;
+                }
+                scanned = end - start;
+                if (start > 0) {
+                    System.arraycopy(buffer, start, buffer, 0, end - start);
+                    end -= start;
+                    start = 0;
+                }
+                if (end == buffer.length) {
+                    buffer = java.util.Arrays.copyOf(buffer, buffer.length * 2);
+                }
+                int read = in.read(buffer, end, buffer.length - end);
+                if (read < 0) {
+                    eof = true;
+                } else {
+                    end += read;
+                }
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            in.close();
+        }
     }
 
     private record Identity(Principal principal, SessionId session) {}
