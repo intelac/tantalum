@@ -226,9 +226,11 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 
 长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
 
-- **规则**：阈值 = 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`)；保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
+- **窗口**：每个模型用它自己的窗口。启动时和每 10 分钟从模型那边读：Claude 读 Models 接口的 `max_input_tokens`（开着备用模型时取主模型和备用模型中最小的），本地服务读 `/v1/models` 里的 `meta.n_ctx`、`max_model_len` 或 `context_length`；模型报上下文超长时再读一次。读不到才用配置的 `context-window`。设置页“模型”一栏写明窗口从哪来。
+- **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`))。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。
+- **规则**：保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
 - **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
-- **配置**：`tantalum.<provider>.context-window`（为 0 时不压缩）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置在会话第一次运行时冻结，改配置只影响新会话。
+- **配置**：`tantalum.<provider>.context-window`（读不到模型的窗口时用，为 0 时不压缩）；`tantalum.<provider>.bytes-per-token`（估算系数，宁可多算：Claude 1.5、本地 1.75，按实测定）；`tantalum.compaction.window-from-model`（默认 true，测试用小窗口时关掉）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置每次提问时按当时的窗口和用户的选择重算，记进 journal，回放用记下的那份。
 - **手动**：状态栏的压缩按钮，或 `POST /api/sessions/{id}/compact`（可带 `instructions`）；会话运行中或没有可压缩的内容时返回 409。
 - **回复被截断**：回复因输出上限结束时运行照常完成，对话页提示“回复被截断”；不自动续写。
 
@@ -342,7 +344,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 多用户、登录、每用户目录、入口限额 | 无 | 无 | 有 | |
 | 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有：轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作两类记录，`trace-view` spec | 嵌套子工具、`run_code` 源码视图等 sandbox 之后 |
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
-| 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec | 自定义摘要钩子待定 |
+| 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec；窗口从模型读，压缩点每个用户在设置页选（pi 和 DSH 画面上都没有），`compaction-threshold` spec | 自定义摘要钩子待定 |
 | 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |

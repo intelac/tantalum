@@ -107,18 +107,18 @@
 
 ## 阶段 4：真实模型、文档、收尾
 
-- [ ] 18. 估算样本
+- [x] 18. 估算样本
   - File: tantalum-kernel/src/test/resources/estimate-samples.txt（新）、对应测试
   - 用 `count_tokens` 和 qwen 的 `prompt_tokens` 测 Java、中文、英文、JSON 样本；断言新估算不小于真实值
   - _Requirements: 需求 4.4_
 
-- [ ] 19. 真实模型测试
+- [x] 19. 真实模型测试
   - File: tantalum-examples/src/test/java/tantalum/examples/WindowCompactionTest.java（新）
   - Claude 窗口 1M；Claude 50% 下 16 个十六进制文件分两次读的压缩；qwen 同样流程。判定和花费记进实现日志
   - _Requirements: 测试（真实模型）_
 
-- [ ] 20. 文档
+- [x] 20. 文档
   - File: README.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md、context-compaction 需求的术语更正说明
   - _Requirements: 全部_
 
-- [ ] 21. 收尾：全量回归、提交、部署、架构页更新、汇报（含用量）
+- [x] 21. 收尾：全量回归、提交、部署、架构页更新、汇报（含用量）

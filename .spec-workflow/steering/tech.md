@@ -358,6 +358,20 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **回归里抓到的：** `tool_reference` 用 `Map.of` 时键序每次启动不同，请求字节不稳定（缓存会失效），改成有序；测试辅助方法 `CompactionScenario.ask` 刚提交时可能等到上一次运行就返回，改为先记运行数。
 - **token 估算：** 用 `count_tokens` 实测发现“字节数 ÷ 3”对 Sonnet 5.5 是少算的（每 token 字节数：base64 1.05、id 1.48、sha256 1.52、JSON 1.80、英文 1.82、中文 2.25、Java 2.67），默认窗口 200000 也小于 Sonnet 5.5 的 1M。Yi 2026-11-04 定开 `compaction-threshold` spec（BACKLOG）。
 
+### compaction-threshold（2026-11-04）
+
+- **窗口从模型读：** `shell/model/ContextWindow` 启动时读一次（最多等 5 秒）、之后每 10 分钟、模型报超长后各读一次，失败保留上次的值，从没读到时用配置值；不大于预留的值不要。Claude 用 SDK 的 beta `models.retrieve`，带 `server-side-fallback-2026-06-01` 头时多返回 `allowedFallbackModels`，各读一次取最小（实测 `claude-sonnet-5-5` 的备用是 `claude-sonnet-5`，都是 1M）；本地服务读 `/v1/models` 的 `meta.n_ctx` → `max_model_len` → `context_length`（实测 llama.cpp 报 131072）。`tantalum.compaction.window-from-model=false` 时只用配置，测试要小窗口时用。
+- **每次提问重算压缩设置：** `CompactionSettings` 加 `point`、`bytesPerToken`，旧事件里没有（解码为 0，写出时也省略，旧行逐字节不变），按旧规则算。`shell/settings/CompactionPolicy` 每次组装上下文时按用户选的百分比（`users.db` 新表 `user_settings`）和当前窗口算；内核 `ContextSteps.freezeContext` 只对带 `point` 的新事件换上新设置，不追加消息，所以请求前缀、缓存和思考签名都不受影响，旧 journal 回放走当时的路。摘要调用的头部改按 `W − R` 截，不按用户选的压缩点。
+- **估算系数：** `TokenEstimate` 改成带系数的记录，默认 Claude 1.5、本地 1.75。`EstimateSamplesTest` 用仓库里的 Java、中文、英文、带 id 的 JSON 四个样本钉住“不小于实测”（实测值在 `estimate/counts.txt`）：Claude 3686、4190、1627、4458；qwen 2282、2453、1033、4225。qwen 原定 2.0 在 JSON 样本上少算（每 token 1.89 字节），改成 1.75。
+- **真实模型（`WindowCompactionTest`，选 50%，每个文件是一行行 sha256，两次提问各读一半）：**
+
+| 模型 | 窗口（来源） | 压缩点 | 第一次提问 | 第二次提问 | 超长 | 花费 |
+|---|---|---|---|---|---|---|
+| `claude-sonnet-5-5` | 1000000（模型） | 500000 | 8 个 48 KB 文件，prompt 26.0 万，不压缩 | 读完后估算越过 50 万，压缩 1 次；摘要调用 2.5 万（头部的工具结果截到 4 KB）；压缩后 17.7 万（保留段的结果截到 32 KB，首尾各半，暗号在尾部还在）；8 个暗号全对 | 0 | 约 1.2 美元（缓存写 45.8 万、读 26.7 万、输出 1781） |
+| 本地 qwen | 131072（模型） | 65536 | 3 个 16 KB 文件，不压缩 | 压缩 1 次，3 个暗号全对 | 0 | 0 |
+
+- **回归里抓到的：** 两个测试的假模型把启动时的 `GET /v1/models` 当成了模型调用（`CrashRestartTest`、`JarCrashIT`）；窗口 4000 的两个测试在新系数下 system 和工具定义就占满，摘要放不下，固定旧系数 3；读窗口失败的日志写了异常类名，碰上 `JarCrashIT` 的“日志里不能有 Exception”，改为我们自己写的说明（如 HTTP 404）只写说明。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。

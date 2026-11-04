@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -111,12 +112,12 @@ class TantalumPropertiesTest {
         assertEquals(4096, compaction.maxSummarizedToolResultBytes());
         assertEquals(8192, compaction.summaryMaxTokens());
         String message = assertThrows(IllegalArgumentException.class,
-                () -> new TantalumProperties.Compaction(0, 1, 1, 1, 1)).getMessage();
+                () -> new TantalumProperties.Compaction(0, 1, 1, 1, 1, true)).getMessage();
         assertTrue(message.contains("reserveTokens"), message);
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, -1, 1, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, -1, 1, 1, 1, true));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1, true));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1, true));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0, true));
     }
 
     /** 工作轮数默认 8，和内核的 {@code Limits.DEFAULT} 一致；小于 1 时绑定失败，启动随之失败。 */
@@ -179,10 +180,12 @@ class TantalumPropertiesTest {
     @Test
     void compactionLimitsCarryTheProvidersCoefficient() throws Exception {
         checkLimits(bind().compactionLimits(), 64_000, 1.5);
-        checkLimits(bind("tantalum.provider", "openai").compactionLimits(), 16_384, 2.0);
+        checkLimits(bind("tantalum.provider", "openai").compactionLimits(), 16_384, 1.75);
         assertEquals(1.25, bind("tantalum.claude.bytes-per-token", "1.25").compactionLimits().bytesPerToken());
         assertThrows(BindException.class, () -> bind("tantalum.claude.bytes-per-token", "0"));
         assertThrows(BindException.class, () -> bind("tantalum.openai.bytes-per-token", "-1"));
+        assertTrue(bind().windowFromModel());
+        assertFalse(bind("tantalum.compaction.window-from-model", "false").windowFromModel());
     }
 
     private static void checkLimits(CompactionPolicy.Limits limits, long reserve, double bytesPerToken) {

@@ -53,6 +53,7 @@ import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.model.ContextWindow;
 import tantalum.shell.model.ModelClient;
+import tantalum.shell.model.WindowSource;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
@@ -148,7 +149,7 @@ public final class Engine implements AutoCloseable {
             // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
             properties.compactionSettings();
             CompactionPolicy.Limits limits = properties.compactionLimits();
-            window = new ContextWindow(model.window(), properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
+            window = new ContextWindow(properties.windowFromModel() ? model.window() : WindowSource.NONE, properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
                     .start(WINDOW_STARTUP_WAIT);
             compaction = new CompactionPolicy(window, userSettings, limits);
             gate = new PluginGate(catalog, switches, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
