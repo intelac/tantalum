@@ -1,6 +1,6 @@
 package tantalum.shell.journal;
 
-import java.util.Set;
+import java.util.Map;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.CommandId;
@@ -17,15 +17,15 @@ public sealed interface Line {
         }
     }
 
-    /** {@code fingerprintMismatches} 只在读出时有值：还原的请求和当时记下的指纹不一致的模型调用。 */
-    record Result(StepRecord record, Set<CommandId> fingerprintMismatches) implements Line {
+    /** {@code fingerprints} 只在读出时有值：这一步每次模型调用当时记下的请求指纹，请求详情页用来核对（需求 4.2）。 */
+    record Result(StepRecord record, Map<CommandId, String> fingerprints) implements Line {
 
         public Result {
-            fingerprintMismatches = Set.copyOf(fingerprintMismatches);
+            fingerprints = Map.copyOf(fingerprints);
         }
 
         public Result(StepRecord record) {
-            this(record, Set.of());
+            this(record, Map.of());
         }
 
         @Override

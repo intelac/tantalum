@@ -52,8 +52,10 @@ class RecordRoundTripTest {
             RecordMemo writer = writers.computeIfAbsent(session, ignored -> RecordMemo.writer());
             RecordMemo reader = readers.computeIfAbsent(session, ignored -> RecordMemo.reader());
             // 文件里事件行在前：两边都先收录它的长字符串
-            writer.see(events.mapper().valueToTree(step.envelope().event()));
-            reader.see(events.mapper().valueToTree(step.envelope().event()));
+            codec.see(events.encode(step.envelope().event()), writer);
+            writer.seeEvent(step.envelope());
+            codec.see(events.encode(step.envelope().event()), reader);
+            reader.seeEvent(step.envelope());
 
             StepRecord record = StepRecord.of(step.envelope(), step.before(), step.decision());
             String line = codec.encode(record, writer);
@@ -61,7 +63,11 @@ class RecordRoundTripTest {
 
             assertEquals(record, decoded.record(), "seq " + record.seq());
             assertEquals(step.decision(), decoded.record().apply(step.envelope(), step.before()), "seq " + record.seq());
-            assertTrue(decoded.fingerprintMismatches().isEmpty());
+            for (var command : decoded.record().commands()) {
+                if (command instanceof CallModel call) {
+                    assertEquals(codec.fingerprint(call.prompt()), decoded.fingerprints().get(call.id()), "the rebuilt request matches");
+                }
+            }
             calls += (int) record.commands().stream().filter(CallModel.class::isInstance).count();
         }
         assertTrue(calls > 5, "the scenario calls the model many times");
@@ -73,7 +79,8 @@ class RecordRoundTripTest {
         int calls = 0;
         for (IndexFixture.Stepped step : scenario.fixture.steps) {
             RecordMemo writer = writers.computeIfAbsent(step.envelope().session(), ignored -> RecordMemo.writer());
-            writer.see(events.mapper().valueToTree(step.envelope().event()));
+            codec.see(events.encode(step.envelope().event()), writer);
+            writer.seeEvent(step.envelope());
             JsonNode line = events.mapper().readTree(codec.encode(StepRecord.of(step.envelope(), step.before(), step.decision()), writer));
             for (JsonNode command : line.path("commands")) {
                 if (!command.path("type").asString().equals("CallModel")) {

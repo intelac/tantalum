@@ -4,7 +4,7 @@ import com.lmax.disruptor.dsl.ProducerType;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.state.PrincipalState;
 
-/** 已落盘事件进入内核的环。各用户通道是生产者，唯一消费者是 cleanroom。放行名额保证它不会满。 */
+/** 已写入会话文件的事件进入内核的环（落盘随结果行一起，见 {@link UserLane}）。各用户通道是生产者，唯一消费者是 cleanroom。放行名额保证它不会满。 */
 public final class CleanroomRing extends Ring<CleanroomRing.Slot> {
 
     /** 环上的一格。cleanroom 处理事件前先并入 {@code usage} 和 {@code load}。 */

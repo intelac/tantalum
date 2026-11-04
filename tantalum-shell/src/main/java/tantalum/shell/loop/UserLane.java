@@ -27,15 +27,16 @@ import tantalum.value.state.PrincipalState;
 
 /**
  * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部事件，按到达顺序取号，
- * 每个会话并行写文件，全部落盘后按序号放行。所以同一用户内严格按序，不同用户互不等待。
- * cleanroom 处理完的一步也排进这个队列（{@link Released}）：它的结果行和事件同批写、同一次 fsync，落盘后才放行命令和推送
- * （record-results R3）。一个用户的文件只有这个通道在写。
+ * 每个会话并行写文件，全部写完后按序号放行给 cleanroom。所以同一用户内严格按序，不同用户互不等待。
+ * cleanroom 处理完的一步也排进这个队列（{@link Released}）：写它的结果行时 fsync，连同之前只写未 fsync 的事件一起落盘，
+ * 然后才放行命令、推送和索引（record-results R3）。事件不单独 fsync：在它的结果行落盘前不会有任何效果，崩溃丢了也没关系，
+ * 这样每一步只 fsync 一次。一个用户的文件只有这个通道在写。
  */
 public final class UserLane {
 
     private static final Logger LOG = LoggerFactory.getLogger(UserLane.class);
 
-    /** 把一个会话的事件和结果按顺序写到它的文件，返回时已落盘。 */
+    /** 把一个会话的事件和结果按顺序写到它的文件。有结果行时返回时已落盘（连同之前只写未落盘的事件）。 */
     @FunctionalInterface
     public interface Writer {
         void append(Principal principal, SessionId session, List<Line> lines) throws IOException;
@@ -193,7 +194,7 @@ public final class UserLane {
         }
     }
 
-    /** 事件已落盘，序号小于它的才算历史。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
+    /** 事件已写入，序号小于它的才算历史。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
     private Map<SessionId, CleanroomRing.Load> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
         Map<SessionId, CleanroomRing.Load> loads = new HashMap<>();
         Set<SessionId> visited = new HashSet<>();

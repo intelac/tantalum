@@ -3,6 +3,7 @@ package tantalum.shell.journal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,7 +73,7 @@ class RecordCodecTest {
 
     @Test
     void textsThatLookLikeReferencesSurvive() {
-        String fake = "\u0000#" + "0".repeat(64);
+        String fake = "\u0000#" + "0".repeat(32);
         for (String text : List.of(fake, "\u0000", "\u0000\u0000x", "\u0000" + LONG)) {
             RecordMemo writer = RecordMemo.writer();
             String line = codec.encode(appending(1, text), writer);
@@ -116,25 +117,49 @@ class RecordCodecTest {
         codec.decode(one, reader);
         RecordCodec.Decoded decoded = codec.decode(two, reader);
         assertEquals(calling(2, second), decoded.record());
-        assertTrue(decoded.fingerprintMismatches().isEmpty());
+        assertEquals(codec.fingerprint(second), decoded.fingerprints().get(new CommandId("s_2-0")), "the rebuilt request matches what was sent");
     }
 
     @Test
     void theFingerprintIsTheHashOfTheRequestAsTheApiWritesIt() throws Exception {
         Prompt prompt = new Prompt("system", List.of(), List.of(Message.user("q")));
         byte[] json = events.mapper().writeValueAsBytes(prompt);
-        String expected = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json));
+        String expected = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json)).substring(0, 32);
 
         assertEquals(expected, codec.fingerprint(prompt));
         assertTrue(codec.encode(calling(1, prompt), RecordMemo.writer()).contains(expected));
     }
 
     @Test
-    void aChangedRequestIsReportedAsAMismatch() {
+    void theRecordedFingerprintIsKeptForTheRequestDetail() {
         Prompt prompt = new Prompt("system", List.of(), List.of(Message.user("q")));
-        String line = codec.encode(calling(1, prompt), RecordMemo.writer()).replace(codec.fingerprint(prompt), "0".repeat(64));
+        String line = codec.encode(calling(1, prompt), RecordMemo.writer()).replace(codec.fingerprint(prompt), "0".repeat(32));
 
-        assertEquals(java.util.Set.of(new CommandId("s_1-0")), codec.decode(line, RecordMemo.reader()).fingerprintMismatches());
+        RecordCodec.Decoded decoded = codec.decode(line, RecordMemo.reader());
+        assertEquals("0".repeat(32), decoded.fingerprints().get(new CommandId("s_1-0")));
+        assertNotEquals(codec.fingerprint(((CallModel) decoded.record().commands().getFirst()).prompt()),
+                decoded.fingerprints().get(new CommandId("s_1-0")));
+    }
+
+    /** 这一步追加的助手消息就是事件里的模型回复：结果行只写“来自事件”，不再写内容。 */
+    @Test
+    void theReplyOfThisStepIsTakenFromItsEvent() {
+        List<tantalum.value.model.ContentBlock> content = List.of(new TextBlock("x".repeat(300)), new TextBlock("short"));
+        tantalum.value.event.EventEnvelope event = new tantalum.value.event.EventEnvelope(4, java.time.Instant.EPOCH, USER, SESSION,
+                RUN.run(), new tantalum.value.event.ModelReplied(new CommandId("s_3-0"), content,
+                tantalum.value.model.StopReason.END_TURN, "m", null, null, null, null));
+        Message reply = new Message(Role.ASSISTANT, content, false);
+        StepRecord record = new StepRecord(4, new SessionChange(SESSION, USER, false, List.of(reply), null, null, null, null, null, null, null),
+                List.of(), List.of(), null, null, List.of(), List.of());
+        RecordMemo writer = RecordMemo.writer();
+        writer.seeEvent(event);
+        String line = codec.encode(record, writer);
+
+        assertTrue(line.contains("\"fromEvent\":true") && !line.contains("short"), line);
+        RecordMemo reader = RecordMemo.reader();
+        reader.seeEvent(event);
+        assertEquals(record, codec.decode(line, reader).record());
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(line, RecordMemo.reader()), "the event is needed");
     }
 
     @Test
@@ -159,5 +184,50 @@ class RecordCodecTest {
                 () -> codec.decode(line.replace("AssembleContext", "Teleport"), RecordMemo.reader()));
         assertThrows(IllegalArgumentException.class,
                 () -> codec.decode(line.replace("\"run\":{", "\"surprise\":1,\"run\":{"), RecordMemo.reader()));
+    }
+
+    /** 工具参数里的数字原样保留（块的哈希要求读出来再写一遍逐字节相同）。 */
+    @Test
+    void numbersInToolArgumentsSurviveExactly() {
+        tantalum.value.json.Json arguments = new tantalum.value.json.Json.Obj(java.util.Map.of(
+                "price", new tantalum.value.json.Json.Num(new java.math.BigDecimal("1.50")),
+                "big", new tantalum.value.json.Json.Num(new java.math.BigDecimal("12345678901234567890")),
+                "small", new tantalum.value.json.Json.Num(new java.math.BigDecimal("1E-7"))));
+        Message call = new Message(Role.ASSISTANT, List.of(new tantalum.value.model.ToolCallBlock("c1", "tool", "{}", arguments),
+                new TextBlock("x".repeat(200))), false);
+        SessionChange change = new SessionChange(SESSION, USER, false, List.of(call, call), null, null, null, null, null, null, null);
+        StepRecord record = new StepRecord(1, change, List.of(), List.of(), null, null, List.of(), List.of());
+        RecordMemo writer = RecordMemo.writer();
+        String line = codec.encode(record, writer);
+
+        assertTrue(line.contains("\u0000@") || line.contains("\\u0000@"), "the second copy of the message's blocks is a reference: " + line);
+        assertEquals(record, codec.decode(line, RecordMemo.reader()).record());
+    }
+
+    /** 压缩时裁剪过的工具结果是原文的开头加结尾：写成原文的切片，读出来逐字相同。 */
+    @Test
+    void aTrimmedTextIsWrittenAsASliceOfItsOriginal() {
+        String original = "line of output 🙂 ".repeat(200);
+        String trimmed = original.substring(0, 500) + "\n… [2000 bytes omitted] …\n" + original.substring(original.length() - 300);
+        RecordMemo writer = RecordMemo.writer();
+        String first = codec.encode(appending(1, original), writer);
+        String second = codec.encode(appending(2, trimmed), writer);
+
+        assertTrue(second.length() < 500, second);
+        RecordMemo reader = RecordMemo.reader();
+        codec.decode(first, reader);
+        assertEquals(appending(2, trimmed), codec.decode(second, reader).record());
+    }
+
+    /** 同一步的运行、命令和判断指向同一个运行：只写一次。 */
+    @Test
+    void theRunOfAStepIsWrittenOnce() {
+        StepRecord record = new StepRecord(1, null, List.of(), List.of(), null, null,
+                List.of(new tantalum.value.command.AssembleContext(new CommandId("c"), RUN)),
+                List.of(new PhaseChanged(RUN, "AwaitingContext"), new HookReported(RUN, "h", "d")));
+        String line = codec.encode(record, RecordMemo.writer());
+
+        assertEquals(1, line.split("\"principal\"", -1).length - 1, line);
+        assertEquals(record, codec.decode(line, RecordMemo.reader()).record());
     }
 }

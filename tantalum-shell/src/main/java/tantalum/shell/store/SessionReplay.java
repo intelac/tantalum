@@ -31,12 +31,22 @@ public final class SessionReplay {
         void accept(EventEnvelope envelope, KernelState before, Decision decision);
     }
 
+    /** 某个用户截至某个序号的累计用量从哪来：服务器读索引库，检查工具从结果行算。 */
+    @FunctionalInterface
+    public interface Usage {
+        UsageLedger.Cursor cursor(Principal principal, long seq) throws SQLException, InterruptedException;
+    }
+
     private final SessionPaths paths;
     private final SessionFileReader reader;
-    private final UsageLedger usage;
+    private final Usage usage;
     private final Kernel kernel;
 
     public SessionReplay(SessionPaths paths, SessionFileReader reader, UsageLedger usage, Kernel kernel) {
+        this(paths, reader, (Usage) usage::cursor, kernel);
+    }
+
+    public SessionReplay(SessionPaths paths, SessionFileReader reader, Usage usage, Kernel kernel) {
         this.paths = paths;
         this.reader = reader;
         this.usage = usage;

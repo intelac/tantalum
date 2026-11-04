@@ -21,7 +21,8 @@ import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.Line;
+import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.journal.StoreFormat;
 import tantalum.value.command.AssembleContext;
@@ -29,6 +30,7 @@ import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.Decision;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
@@ -85,7 +87,9 @@ public final class Corpus {
     private final Kernel kernel;
     private final SessionPaths paths;
     private final EventCodec codec = EventCodec.withBuiltins();
-    private final java.util.Map<SessionId, List<EventEnvelope>> buffered = new java.util.LinkedHashMap<>();
+    /** 事件行和它的结果行（record-results），按会话攒着。 */
+    private final java.util.Map<SessionId, List<Line>> buffered = new java.util.LinkedHashMap<>();
+    private SessionFiles files;
     private int bufferedEvents;
     private KernelState state = KernelState.empty();
     private final List<Pending> pending = new ArrayList<>();
@@ -118,7 +122,12 @@ public final class Corpus {
 
     /** 写到一个空目录。事件数略超 {@code targetEvents}：到数后不再开新轮，把进行中的走完，并走完长会话。 */
     public static Manifest generate(Path dataDir, int targetEvents, long seed) throws IOException, SQLException {
-        Manifest manifest = new Corpus(new SessionPaths(dataDir), seed).run(targetEvents);
+        Manifest manifest;
+        Corpus corpus = new Corpus(new SessionPaths(dataDir), seed);
+        try (SessionFiles files = new SessionFiles(corpus.paths, corpus.codec, 64, (principal, session, seq, offset) -> { })) {
+            corpus.files = files;
+            manifest = corpus.run(targetEvents);
+        }
         StoreFormat.check(dataDir);
         writeManifest(dataDir, manifest);
         try (UserStore users = UserStore.open(dataDir)) {
@@ -187,6 +196,7 @@ public final class Corpus {
             active--;
             // 结束的会话不会再被用到；留在状态里会让每一步复制的 Map 越来越大，生成耗时随规模平方增长。
             state = state.without(session);
+            forgetAfterFlush.add(session);
         }
     }
 
@@ -198,26 +208,30 @@ public final class Corpus {
     }
 
     /** 攒一批再写：每事件 fsync 时，生成几十万事件要几十分钟。 */
+    private final List<SessionId> forgetAfterFlush = new ArrayList<>();
+
     private void flush() throws IOException {
-        for (List<EventEnvelope> events : buffered.values()) {
-            EventEnvelope first = events.getFirst();
-            try (SessionFile file = SessionFile.open(paths, first.principal(), first.session(), codec)) {
-                file.append(events);
-            }
+        for (List<Line> lines : buffered.values()) {
+            EventEnvelope first = ((Line.Event) lines.getFirst()).envelope();
+            files.appendLines(first.principal(), first.session(), lines);
         }
         buffered.clear();
         bufferedEvents = 0;
+        forgetAfterFlush.forEach(files::forget);
+        forgetAfterFlush.clear();
     }
 
     private void feed(Pending next) throws IOException {
         EventEnvelope envelope = new EventEnvelope(seq, START.plusSeconds(seq * 3), next.principal(), next.session(), next.run(), next.event());
         seq++;
-        buffered.computeIfAbsent(next.session(), ignored -> new ArrayList<>()).add(envelope);
+        Decision decision = kernel.step(state, envelope);
+        List<Line> lines = buffered.computeIfAbsent(next.session(), ignored -> new ArrayList<>());
+        lines.add(new Line.Event(envelope));
+        lines.add(new Line.Result(StepRecord.of(envelope, state, decision)));
+        state = decision.newState();
         if (++bufferedEvents >= FLUSH_EVENTS) {
             flush();
         }
-        Decision decision = kernel.step(state, envelope);
-        state = decision.newState();
         for (Command command : decision.commands()) {
             pending.add(new Pending(next.session(), next.principal(), command.run().run(), resultOf(command)));
         }

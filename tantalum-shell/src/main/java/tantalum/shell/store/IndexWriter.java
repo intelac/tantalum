@@ -64,7 +64,7 @@ public final class IndexWriter implements AutoCloseable {
         this.thread = Thread.ofPlatform().daemon().name("index-writer").start(this::run);
     }
 
-    /** cleanroom 调用。不做 I/O，不等待。 */
+    /** 一步落盘后由写入通道调用，各用户的通道并发调用。不做 I/O，不等待。 */
     public void onStep(EventEnvelope envelope, KernelState before, KernelState after) {
         if (!abandoned) {
             queue.add(IndexChange.of(envelope, before, after));

@@ -25,6 +25,7 @@ import tantalum.shell.journal.EventCodec;
 import tantalum.shell.model.ChunkListener;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
+import tantalum.shell.store.RecordCheck;
 import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.command.CallModel;
@@ -219,6 +220,11 @@ class CompactionStressTest {
         assertEquals(live.stream().filter(prompt -> CountingModel.lastUser(prompt).contains("alice")).toList(),
                 replayed.stream().filter(prompt -> CountingModel.lastUser(prompt).contains("alice")).toList(), "alice's prompts differ on replay");
         assertEquals(bob, replayed.stream().filter(prompt -> CountingModel.lastUser(prompt).contains("bob")).toList());
+
+        // 3b. 结果行（record-results）：每个会话按结果行折叠的每一步，和内核重放的决定相同。
+        RecordCheck.Report check = RecordCheck.run(data, kernel);
+        assertEquals(List.of(), check.problems());
+        assertEquals(2, check.sessions());
 
         // 4. 重启：视图逐字节相同，模型没被调用。
         CountingModel mustNotRun = new CountingModel();

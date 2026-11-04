@@ -34,6 +34,7 @@ import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.journal.TailSequence;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
+import tantalum.shell.store.RecordReplay;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.UsageLedger;
 import tantalum.shell.trace.Trace;
@@ -71,6 +72,7 @@ import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
+import tantalum.value.state.SessionState;
 
 /**
  * 任务 29（需求 9.1）：同一组输入在“从不回收”“每个事件后回收”下，
@@ -116,7 +118,13 @@ class EvictionInvarianceTest {
         /** 场景结束时每个会话完整的对话视图：在内存的直接导出，不在的按线上冷查询的方式重放会话文件。 */
         final Map<SessionId, Transcript.Saved> views = new java.util.TreeMap<>(java.util.Comparator.comparing(SessionId::value));
         private final Transcript transcript;
+        private final Trace trace = new Trace();
         private final SessionReplay replay;
+        private final RecordReplay records;
+        /** record-results 需求 11.1：每个事件之后都假装崩溃，只用结果行恢复每个常驻会话，和内存里的比较。 */
+        private final boolean restoreEveryStep;
+        final List<String> restoreDifferences = new ArrayList<>();
+        int restores;
         private final SessionIndex index;
         private final IndexWriter writer;
         private final SessionFiles files;
@@ -125,6 +133,11 @@ class EvictionInvarianceTest {
         private final LaneDispatcher dispatcher;
 
         Pipeline(Path dir, Mode mode) throws Exception {
+            this(dir, mode, false);
+        }
+
+        Pipeline(Path dir, Mode mode, boolean restoreEveryStep) throws Exception {
+            this.restoreEveryStep = restoreEveryStep;
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
             Kernel kernel = new Kernel(table, new HookChain(List.of(QUOTA_HOOK)), (tool, args) -> tool.startsWith("safe"), Limits.DEFAULT);
@@ -135,9 +148,10 @@ class EvictionInvarianceTest {
             files = new SessionFiles(paths, codec, 16, writer::onDurable);
             SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
             this.replay = replay;
+            this.records = new RecordReplay(paths, new SessionFileReader(codec));
             Residency residency = new Residency();
             transcript = new Transcript();
-            Projections projections = new Projections(transcript, new Trace());
+            Projections projections = new Projections(transcript, trace);
             Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, projections, Clock.systemUTC())
                     : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO), residency, projections, Clock.systemUTC());
 
@@ -185,6 +199,35 @@ class EvictionInvarianceTest {
             assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, AT, principal, session, run, event)));
             assertTrue(input.awaitDrained(WAIT));
             assertTrue(dispatcher.awaitIdle(WAIT));
+            if (restoreEveryStep) {
+                restoreAndCompare();
+            }
+        }
+
+        /** 只读文件里的结果行，不调内核：得到的必须和崩溃前内存里的逐字节相同。 */
+        private void restoreAndCompare() throws Exception {
+            KernelState memory = view.current();
+            for (SessionState session : memory.sessions().values()) {
+                SessionSlice restored = records.load(session.principal(), session.id(), Long.MAX_VALUE).orElseThrow().slice();
+                List<RunState> runs = memory.runs().values().stream().filter(run -> run.ref().session().equals(session.id()))
+                        .sorted(java.util.Comparator.comparing(run -> run.ref().run().value())).toList();
+                List<RunState> restoredRuns = restored.runs().stream()
+                        .sorted(java.util.Comparator.comparing(run -> run.ref().run().value())).toList();
+                String where = "seq " + restored.seq() + " " + session.id().value();
+                if (!session.equals(restored.session())) {
+                    restoreDifferences.add(where + " session");
+                }
+                if (!runs.equals(restoredRuns)) {
+                    restoreDifferences.add(where + " runs");
+                }
+                if (!transcript.export(session.id()).equals(restored.transcript())) {
+                    restoreDifferences.add(where + " transcript");
+                }
+                if (!trace.export(session.id()).equals(restored.trace())) {
+                    restoreDifferences.add(where + " trace");
+                }
+                restores++;
+            }
         }
 
         void captureViews(Map<SessionId, Principal> sessions) throws Exception {
@@ -273,8 +316,12 @@ class EvictionInvarianceTest {
     }
 
     private Pipeline run(Mode mode) throws Exception {
-        Path dir = java.nio.file.Files.createDirectories(temp.resolve(mode.name()));
-        Pipeline pipeline = new Pipeline(dir, mode);
+        return run(mode, false);
+    }
+
+    private Pipeline run(Mode mode, boolean restoreEveryStep) throws Exception {
+        Path dir = java.nio.file.Files.createDirectories(temp.resolve(mode.name() + (restoreEveryStep ? "-restore" : "")));
+        Pipeline pipeline = new Pipeline(dir, mode, restoreEveryStep);
         try {
             new Scenario(pipeline).run();
             pipeline.captureViews(Map.of(TOOLS, ALICE, COMPACTED, ALICE, STOPPED, ALICE, BOBS, BOB));
@@ -304,5 +351,14 @@ class EvictionInvarianceTest {
         assertEquals(never.log, every.log);
         assertEquals(never.views, every.views);
         assertTrue(every.view.current().sessions().isEmpty(), "everything idle has left memory");
+    }
+
+    /** record-results 需求 11.1、3.2：每一步之后只用结果行恢复，会话、运行、对话条目、轨迹都和崩溃前内存里的相同。 */
+    @Test
+    void restoringFromResultsAfterEveryStepGivesWhatWasInMemory() throws Exception {
+        Pipeline restored = run(Mode.NEVER, true);
+        assertEquals(List.of(), restored.restoreDifferences);
+        assertTrue(restored.restores > 100, "restored " + restored.restores + " times");
+        assertEquals(run(Mode.NEVER).log, restored.log, "checking does not change what the pipeline does");
     }
 }

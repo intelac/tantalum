@@ -45,6 +45,9 @@ public class TantalumApplication {
             System.exit(UserCommand.run(command, dataDirFromEnvironment(),
                     new BufferedReader(new InputStreamReader(System.in)), System.out));
         }
+        if (args.length > 0 && args[0].equals("check")) {
+            System.exit(RecordCheckCommand.run(Arrays.copyOfRange(args, 1, args.length), System.out));
+        }
         SpringApplication.run(TantalumApplication.class, args);
     }
 

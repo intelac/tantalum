@@ -16,7 +16,7 @@ import tantalum.value.state.PrincipalState;
 
 /**
  * 输入环的唯一消费者：取一个放行名额，把事件放进该用户的通道。名额总数等于 Cleanroom Ring 的大小，
- * 所以那个环不会满，已落盘的事件不会丢。名额用完时这里等待，输入环随之填满，入口返回 429。
+ * 所以那个环不会满，已写入的事件不会丢。名额用完时这里等待，输入环随之填满，入口返回 429。
  */
 public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserLane.Exit, Release {
 

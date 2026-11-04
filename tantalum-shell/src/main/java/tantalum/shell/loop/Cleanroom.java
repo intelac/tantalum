@@ -123,7 +123,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         return handed;
     }
 
-    /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已落盘，下次启动时以“因重启中断”收尾。 */
+    /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已写入、没有结果行，下次启动时和崩溃留下的尾部一样处理。 */
     private void rejected(EventEnvelope envelope, String reason) {
         LOG.warn("dropping seq {} for session {}: {}", envelope.seq(), envelope.session().value(), reason);
         if (envelope.run() == null) {
@@ -159,10 +159,12 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         StepRecord record = StepRecord.of(envelope, before, decision);
         state = decision.newState();
         view.publish(state);
-        notifyListener(envelope, before);
+        KernelState after = state;
         Projections.Output projected = projections.apply(envelope, before, decision);
         evictor.used(envelope.session());
         release.release(envelope, record, () -> {
+            // 索引也等落盘之后：事件只写了没 fsync，崩溃会丢，索引不能比文件超前（比如提交去重）
+            notifyListener(envelope, before, after);
             for (Command command : decision.commands()) {
                 if (!output.test(command)) {
                     results.reportDropped(command, "output ring full");
@@ -182,9 +184,9 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         return true;
     }
 
-    private void notifyListener(EventEnvelope envelope, KernelState before) {
+    private void notifyListener(EventEnvelope envelope, KernelState before, KernelState after) {
         try {
-            steps.onStep(envelope, before, state);
+            steps.onStep(envelope, before, after);
         } catch (RuntimeException failure) {
             LOG.error("step listener failed at seq {}", envelope.seq(), failure);
         }
