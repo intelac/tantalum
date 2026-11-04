@@ -31,6 +31,11 @@ import tantalum.value.model.TokenUsage;
  */
 public final class ClaudeClient implements ModelClient {
 
+    /** 这个模型能不能在会话中途增减工具（core-tools C14）；不能的话，中途打开的工具要等新会话。 */
+    public static boolean supportsToolChanges(String model) {
+        return ClaudeRequest.TOOL_CHANGE_MODELS.contains(model);
+    }
+
     /** 正在累积的一个内容块。 */
     private static final class Pending {
         final String kind;

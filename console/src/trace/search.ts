@@ -18,7 +18,8 @@ function fields(record: TraceRecord): (string | undefined)[] {
     case "user":
       return [record.text, record.source.name];
     case "context":
-      return record.sections.flatMap((section) => [section.name, section.before, section.after]);
+      return [...record.sections.flatMap((section) => [section.name, section.before, section.after]), ...(record.toolsAdded ?? []),
+        ...(record.toolsRemoved ?? [])];
     case "compacted":
       return [record.trigger, record.reason, record.summary];
     case "request":

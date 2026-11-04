@@ -126,10 +126,18 @@ public sealed interface TraceRecord {
     /** 一段可变上下文的变化；新增时 {@code before} 为空，移除时 {@code after} 为空。 */
     record Section(String name, String before, String after) {}
 
-    record ContextChange(Head head, List<Section> sections) implements TraceRecord {
+    /** {@code toolsAdded}、{@code toolsRemoved} 是这次组装时用户开关带来的工具变化（core-tools C14），没有时不写出。 */
+    record ContextChange(Head head, List<Section> sections,
+                         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsAdded,
+                         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsRemoved) implements TraceRecord {
+
+        public ContextChange(Head head, List<Section> sections) {
+            this(head, sections, List.of(), List.of());
+        }
+
         @Override
         public ContextChange withHead(Head newHead) {
-            return new ContextChange(newHead, sections);
+            return new ContextChange(newHead, sections, toolsAdded, toolsRemoved);
         }
     }
 

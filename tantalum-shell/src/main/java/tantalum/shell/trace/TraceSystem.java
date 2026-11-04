@@ -105,14 +105,22 @@ final class TraceSystem {
         return new Split(segments, sources);
     }
 
-    /** 已冻结上下文后再组装：可变的段有变化时内核追加了一条更新消息，记下变了哪几段、之前和之后。 */
+    /**
+     * 已冻结上下文后再组装：可变的段有变化时内核追加了一条更新消息，记下变了哪几段、之前和之后；用户开着的工具变了时内核追加了
+     * 一条工具变化，记下新增和移除了哪些（算法同 {@code ContextSteps}）。
+     */
     void contextAssembled(ContextAssembled assembled) {
         SessionState earlier = pass.before.sessions().get(pass.session);
         if (!pass.awaited(assembled) || earlier == null || earlier.context() == null) {
             return;
         }
         List<ContextSection> old = earlier.context().sections();
-        if (ContextDiff.of(old, assembled.sections()).isEmpty()) {
+        SessionContext frozen = earlier.context();
+        List<String> all = frozen.tools().stream().map(ToolSpec::name).toList();
+        List<String> active = assembled.enabledTools() == null ? all : all.stream().filter(assembled.enabledTools()::contains).toList();
+        List<String> added = active.stream().filter(name -> !frozen.toolActive(name)).toList();
+        List<String> removed = all.stream().filter(name -> frozen.toolActive(name) && !active.contains(name)).toList();
+        if (ContextDiff.of(old, assembled.sections()).isEmpty() && added.isEmpty() && removed.isEmpty()) {
             return;
         }
         List<Section> sections = new ArrayList<>();
@@ -129,6 +137,6 @@ final class TraceSystem {
         }
         RunId run = pass.envelope.run();
         Place place = pass.pending(run);
-        pass.add(new ContextChange(pass.head("c:" + pass.seq, run, place, pass.at).ended(pass.at), sections), place, false);
+        pass.add(new ContextChange(pass.head("c:" + pass.seq, run, place, pass.at).ended(pass.at), sections, added, removed), place, false);
     }
 }

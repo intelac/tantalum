@@ -38,12 +38,17 @@ export function chainOf(steps: readonly ToolStepItem[]): ToolStepItem[][] {
 }
 
 /** 参数摘要：只有一个字符串参数就显示它，否则显示紧凑 JSON，最多 {@code max} 个字符。 */
+const WRITES = new Set(["write_file", "edit_file"]);
+
 export function summarizeArguments(step: ToolStepItem, max = 60): string {
   const args = step.call.arguments;
   let text: string;
   if (args !== undefined && args !== null && typeof args === "object" && !Array.isArray(args)) {
     const values = Object.values(args as Record<string, unknown>);
-    text = values.length === 1 && typeof values[0] === "string" ? values[0] : JSON.stringify(args);
+    const path = (args as Record<string, unknown>).path;
+    // 写和改的其余参数是大段正文，摘要只看路径；正文在展开后的差异和预览里
+    if (WRITES.has(step.call.name) && typeof path === "string") text = path;
+    else text = values.length === 1 && typeof values[0] === "string" ? values[0] : JSON.stringify(args);
   } else if (args === undefined) {
     text = step.call.rawArguments;
   } else {

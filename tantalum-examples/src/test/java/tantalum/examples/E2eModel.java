@@ -20,6 +20,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 
 /**
@@ -30,6 +31,8 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code fail}：供应商出错；</li>
  *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
+ *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
+ *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
  *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
  *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
  *   <li>带附件的提问：回答“看到了附件：名字、名字。”（附件页的端到端测试）；</li>
@@ -88,6 +91,15 @@ public final class E2eModel implements ModelClient {
             if (text.contains("remember")) {
                 return remember(results, chunks);
             }
+            if (text.contains("forcewrite:")) {
+                return write(word(text, "forcewrite:"), true, prompt, results, chunks);
+            }
+            if (text.contains("write:")) {
+                return write(word(text, "write:"), false, prompt, results, chunks);
+            }
+            if (text.contains("edit:")) {
+                return edit(results, prompt, chunks);
+            }
             List<String> attached = attachmentNames(prompt.messages().get(lastUser));
             if (!attached.isEmpty()) {
                 return answer(chunks, "看到了附件：" + String.join("、", attached) + "。");
@@ -133,6 +145,59 @@ public final class E2eModel implements ModelClient {
             return reply(think(chunks, "用户让我记住，写进记忆。"), call("memory_write", arguments));
         }
         return answer(chunks, "已记住。");
+    }
+
+    /** 关键词后面的第一个词。 */
+    private static String word(String text, String keyword) {
+        String rest = text.substring(text.indexOf(keyword) + keyword.length()).strip();
+        return rest.isEmpty() ? "out" : rest.split("\\s+")[0];
+    }
+
+    /**
+     * 现在能用的工具：会话开始时没有 deferred 的，加上历史里工具变化的净结果（同 shell 的 {@code ToolChanges.active}，
+     * 那边是包内的）。
+     */
+    static java.util.Set<String> activeTools(Prompt prompt) {
+        java.util.Set<String> active = new java.util.LinkedHashSet<>();
+        prompt.tools().stream().filter(tool -> !tool.deferred()).forEach(tool -> active.add(tool.name()));
+        for (Message message : prompt.messages()) {
+            for (ContentBlock block : message.content()) {
+                if (block instanceof ToolChangeBlock change) {
+                    active.addAll(change.added());
+                    change.removed().forEach(active::remove);
+                }
+            }
+        }
+        return active;
+    }
+
+    private ModelOutcome write(String name, boolean force, Prompt prompt, int results, ChunkListener chunks) throws InterruptedException {
+        if (results == 0) {
+            if (!force && !activeTools(prompt).contains("write_file")) {
+                return answer(chunks, "我现在没有写文件的工具。");
+            }
+            String content = String.join("\n", java.util.stream.IntStream.rangeClosed(1, 25).mapToObj(i -> "第 " + i + " 行：" + name).toList()) + "\n";
+            return reply(think(chunks, "把内容写进文件。"), call("write_file", Map.of("path", "e2e/" + name + ".txt", "content", content)));
+        }
+        return answer(chunks, "写入结果：" + lastResult(prompt));
+    }
+
+    private ModelOutcome edit(int results, Prompt prompt, ChunkListener chunks) throws InterruptedException {
+        return switch (results) {
+            case 0 -> reply(think(chunks, "先写一个文件。"), call("write_file", Map.of("path", "e2e/edit.txt", "content", "alpha\nbeta\ngamma\n")));
+            case 1 -> reply(think(chunks, "把 beta 改成 delta。"),
+                    call("edit_file", Map.of("path", "e2e/edit.txt", "old_string", "beta", "new_string", "delta")));
+            default -> answer(chunks, "改好了：" + lastResult(prompt));
+        };
+    }
+
+    private static String lastResult(Prompt prompt) {
+        for (ContentBlock block : prompt.messages().getLast().content()) {
+            if (block instanceof ToolResultBlock result) {
+                return result.text();
+            }
+        }
+        return "";
     }
 
     /** 摘要调用：工具被禁用。摘要很短，所以总比它替代的头部小。 */

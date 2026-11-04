@@ -30,6 +30,8 @@ public final class E2eServer {
 
     public static final String USER = "e2e";
     public static final String PASSWORD = "e2e-password";
+    /** 第二个账号：插件开关每人各管各的。 */
+    public static final String OTHER_USER = "e2e2";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -73,6 +75,7 @@ public final class E2eServer {
     private static void seed(Path data, Path workspace) throws Exception {
         try (UserStore store = UserStore.open(data)) {
             store.add(USER, PASSWORD);
+            store.add(OTHER_USER, PASSWORD);
         }
         Path notes = Files.createDirectories(workspace.resolve(USER).resolve("notes"));
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");

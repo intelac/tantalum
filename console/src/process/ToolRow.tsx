@@ -6,6 +6,7 @@ import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 import { navigate, traceRecordPath } from "../app/router";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
+import { FileChange, hasFileView, readRange } from "./FileChange";
 import { useNow } from "../ui/useNow";
 
 interface Props {
@@ -42,6 +43,7 @@ export function ToolRow({ step }: Props) {
   const elapsed = elapsedMs(step, now);
   const failed = step.status === "FAILED" || step.status === "BLOCKED";
   const synthesized = step.result?.code !== undefined;
+  const range = readRange(step);
 
   return (
     <div className="text-sm">
@@ -57,7 +59,10 @@ export function ToolRow({ step }: Props) {
         <StatusIcon status={step.status} />
         <Wrench size={13} className="shrink-0 text-fg-faint" aria-hidden="true" />
         <span className="shrink-0 font-medium text-fg">{step.call.name}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs">{summarizeArguments(step)}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">
+          {summarizeArguments(step)}
+          {range !== null && <span className="ml-2 font-sans text-fg-faint">{range}</span>}
+        </span>
         <span className={cx("shrink-0 text-xs", failed ? (step.status === "BLOCKED" ? "text-warning" : "text-danger") : "")}>
           {STATUS_TEXT[step.status]}
         </span>
@@ -76,10 +81,14 @@ export function ToolRow({ step }: Props) {
           >
             {zh.conversation.viewInTrace}
           </a>
-          <section>
-            <h4 className="mb-1 text-xs font-medium text-fg-muted">{zh.process.arguments}</h4>
-            <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>
-          </section>
+          {hasFileView(step) ? (
+            <FileChange step={step} />
+          ) : (
+            <section>
+              <h4 className="mb-1 text-xs font-medium text-fg-muted">{zh.process.arguments}</h4>
+              <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>
+            </section>
+          )}
           {step.result !== undefined && (
             <section>
               <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">

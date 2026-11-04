@@ -348,6 +348,16 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **真实 Claude：** 图片里的随机词、PDF 里的随机词、`read_file` 读附件路径里的随机词，三项都通过，4 次调用约 0.02 美元。
 - **和设计的出入：** 上传多收一个可选的 `type`（浏览器报的类型，只供文件显示），读取多收一个 `name`（下载文件名；名字记在每次出现的引用上，不在存储里）；动图 WebP、PNG 和 GIF 一样只取第一帧；配额已满时同内容的重复上传也会被先拒（收完内容之前不知道是不是重复的）；`fit()` 达不到字节目标时缩到 1×1 就报错，不再无限缩小（任务 13 发现的问题）。
 
+### core-tools（2026-11-04）
+
+- **文件工具：** `TextFiles` 逐行严格 UTF-8 读（去 CR、BOM，长行截断不劈代理对），前 8 KB 有空字节算二进制；原子写是同目录临时文件、`fsync`、改名。`FileToolsBench`：64 MB、71 万行的日志从中间读 100 行 316 ms（要数完全部行数，预算 1 s）；一万个文件里 `find_files` 64 ms（预算 1 s）。
+- **先读后写：** `Observations` 按（用户、会话、真实路径）记大小、修改时间和 inode；读之前和读之后版本一致才记；“检查—写—记新版本”在 64 把分段锁里，两个运行同时改只有一个成功。会话移出内存时 `Evictor` 回调清掉。
+- **插件开关：** `users.db` 新表 `plugin_settings`，只存关掉的项；`PluginGate`（新包 `shell.access`，放进 `shell.plugin` 会成包循环）是 `Tool.run`、`WorkType.run`、`afterToolExecution` 唯一的调用者，`HookChain` 是内核钩子唯一的调用者，两条 ArchUnit 规则钉住（变异：两处绕过都被抓到）。MCP 工具按配置里的服务器名开关（`McpTool.server()` 是并发名额的命名空间 `mcp:<名字>`，部署后线上核对时发现过它们被归到一个不存在的服务器下）。
+- **会话中途换工具：** `ContextAssembled` 带 `enabledTools`、`enabledPlugins`（旧事件里没有，读成全部开着）；`SessionContext` 记全集、会话开始时和现在开着的。工具变化是 `Role.SYSTEM` 消息里的 `ToolChangeBlock`；`PromptProjection.placeToolChanges` 在 `ModelSteps.emitCall` 统一处理没有回复跟着的变化（挪到下一处合法位置、合成净变化）；压缩时和推理块一起去掉。Claude 用 SDK 的 `SystemMessageParam`，内容经 `JsonField` 写原始 JSON；OpenAI 兼容路线按用户消息发文字说明（本地模型的对话模板不一定认开头以外的 system）。
+- **实测（2026-11-03，claude-sonnet-5-5，严格思考校验）：** 直接改 `tools` 的第二次请求 400（“The `tools` list differs from the one this block was created with”）；`defer_loading` 加 `tool_addition`、`tool_removal` 都是 200，历史里的思考通过校验。真实 Claude 三项（`CoreToolsClaudeTest`）：窗口读找暗号、读后改函数测试通过、`write_file` 关→开→关，全部通过，第三项连跑三次；把请求改回直接改 `tools` 时第三项 400。这一阶段真实 Claude 约 30 次调用、约 1 美元。
+- **回归里抓到的：** `tool_reference` 用 `Map.of` 时键序每次启动不同，请求字节不稳定（缓存会失效），改成有序；测试辅助方法 `CompactionScenario.ask` 刚提交时可能等到上一次运行就返回，改为先记运行数。
+- **token 估算：** 用 `count_tokens` 实测发现“字节数 ÷ 3”对 Sonnet 5.5 是少算的（每 token 字节数：base64 1.05、id 1.48、sha256 1.52、JSON 1.80、英文 1.82、中文 2.25、Java 2.67），默认窗口 200000 也小于 Sonnet 5.5 的 1M。Yi 2026-11-04 定开 `compaction-threshold` spec（BACKLOG）。
+
 ### strata 实测（2026-10-31）
 
 服务地址 `127.0.0.1:8090`，`n_ctx` 为 131072。

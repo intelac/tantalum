@@ -1,9 +1,10 @@
-// 工具调用的页签：概述、参数、结果、Schema、计时。参数可在树形和原始 JSON（保留空白）之间切换。
+// 工具调用的页签：概述、参数、结果、Schema、计时，edit_file 另有差异。参数可在树形和原始 JSON（保留空白）之间切换。
 
 import { useState } from "react";
 import type { ToolCall, TraceRecord } from "../../api/types";
 import { zh } from "../../text/zh";
 import { cx } from "../../ui/cx";
+import { LineDiff } from "../../ui/LineDiff";
 import { between, formatMs } from "../format";
 import { useTraceCall } from "../hooks";
 import { toolLabel } from "../rows";
@@ -60,7 +61,17 @@ function Schema({ session, tool, request }: { session: string; tool: ToolCall; r
   );
 }
 
+/** edit_file 的原文和新文字（core-tools 需求 6 第 4 条）；参数不全或不是 edit_file 时为 undefined。 */
+function editOf(tool: ToolCall): { before: string; after: string } | undefined {
+  if (tool.name !== "edit_file") return undefined;
+  const args = tool.arguments ?? parseJsonContainer(tool.rawArguments);
+  if (args === null || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const { old_string: before, new_string: after } = args as Record<string, unknown>;
+  return typeof before === "string" && typeof after === "string" ? { before, after } : undefined;
+}
+
 export function ToolTabs({ session, tool, request }: { session: string; tool: ToolCall; request: TraceRecord | undefined }) {
+  const edit = editOf(tool);
   const queued = between(tool.issuedAt, tool.startedAt);
   const ran = between(tool.startedAt, tool.end);
   return (
@@ -85,6 +96,9 @@ export function ToolTabs({ session, tool, request }: { session: string; tool: To
             </>
           ),
         },
+        ...(edit === undefined
+          ? []
+          : [{ id: "diff", label: t.tab.diff, render: () => <LineDiff before={edit.before} after={edit.after} hunkHeaders={false} /> }]),
         { id: "payload", label: t.tab.payload, render: () => <Payload tool={tool} /> },
         { id: "result", label: t.tab.result, render: () => <Result tool={tool} /> },
         { id: "schema", label: t.tab.schema, render: () => <Schema session={session} tool={tool} request={request} /> },

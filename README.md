@@ -30,6 +30,7 @@
 | `tool`、`mcp`、`memory` | 内置工具、MCP 客户端、每用户记忆 |
 | `sse`、`web`、`auth` | 推送、HTTP 接口、登录 |
 | `plugin` | 插件 SDK |
+| `access` | 每个用户的插件开关，以及插件唯一的调用入口 `PluginGate` |
 | `json`、`net` | JSON 文本、主机名判断 |
 
 设计文档在 `.spec-workflow/`。
@@ -203,6 +204,24 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 - **接口**：`POST /api/sessions/{id}/attachments?name=…`（请求体是原始字节）、`GET /api/attachments/{附件 ID}[?download=1]`；提交接口的请求体加 `attachments: [{id, name}]`，尺寸和大小以服务器存的为准。下载一律 `nosniff` 加沙箱 CSP，非图片一律作为下载，HTML、SVG 不会在页面里执行。
 - **没做的**：没有引用的附件怎么清理，等以后做会话删除时一起做（A9）。
 
+## 文件工具和插件页
+
+内置工具（`core-tools` spec）：`read_file`、`write_file`、`edit_file`、`list_dir`、`find_files`、`grep`，加上三个记忆工具。路径都相对于本人的工作目录，越出工作目录和不存在用同一句话拒绝。
+
+- **`read_file`**：按行窗口读，`offset`（从 1 开始）和 `limit`；默认最多 2000 行或 50 KB，没读完时结尾写明下一次从哪一行接着读；超过 2000 字符的行截断并注明。边读边数，64 MB 以内的文件不会整个进内存，超过 64 MB 拒绝并提示先用 `grep` 找位置；二进制和不是 UTF-8 的文件拒绝。
+- **`write_file`、`edit_file`**：先读后写。覆盖或修改已有文件前，这个会话必须用 `read_file` 读过它，而且之后没被改过（别的运行、别的工具或你自己改过都算）；自己刚写完、刚改完的接着改不用重读。“读过”记在内存里，服务重启或会话移出内存后要重读。写法是先写临时文件再改名，保留原来的权限、CRLF 换行和 BOM；新文件 600、新目录 700，单次最多 10 MB。`edit_file` 逐字匹配，默认必须正好出现一次，多处时用 `replace_all`。
+- **不能写的地方**：`memory/` 只能用记忆工具改；共用工作目录模式（`tantalum.workspace-mode=shared`）不提供写工具。
+- **`list_dir`、`find_files`**：列一层（最多 500 项），按 glob 找文件（最多 1000 个，跳过 `.git`、`.svn`、`.hg`、`node_modules`，不跟符号链接）。
+- **显示**：对话页上 `edit_file` 显示改动前后的差异，`write_file` 显示字节数和前 20 行（可展开），`read_file` 显示读了哪几行；轨迹页检查器里 `edit_file` 有“差异”页签。发给模型的只是简短的结果文字。
+
+插件页在侧栏“更多 › 插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认全开。
+
+- **能开关的**：每个内置工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。策略类插件（钩子声明了 `mandatory()`，如额度）显示为“必须开启”，不能关。
+- **什么时候生效**：打开的工具从下一次提问开始可用，在同一个会话里也是；关掉的立即不能再调用，模型这时再调会收到“已在插件页关闭”。运行进行中不换名单。钩子插件同样从下一次提问起按新名单运行。
+- **怎么做到不破坏思考签名**：Claude 把历史里的思考内容和当时的工具列表绑定，直接改工具列表会让新账号收到 400。所以会话的工具列表从一开始就是全集，没开的工具标为延后加载（模型看不见）；开关变了，就在下一次提问后追加一条系统消息写明新增和移除了哪些（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。出现过这种变化的会话不再带服务端备用模型。支持的 Claude 模型见 `ClaudeRequest.TOOL_CHANGE_MODELS`；不支持的模型（如 Sonnet 5）打开的工具要等新会话，插件页会写明。OpenAI 兼容的模型直接发现在开着的工具，变化另写一段文字说明。
+- **过滤只有一个入口**：工具、工具后处理、插件工作只经 `PluginGate` 调用，它在调用前按当前用户的开关查一次；内核钩子只经 `HookChain`，按会话记下的名单过滤。两条 ArchUnit 规则钉住，绕过的代码构建失败。
+- **接口**：`GET /api/plugins`、`PUT /api/plugins/{tool|mcp|plugin}/{名字}`（请求体 `{"enabled": true}`），只操作当前登录用户的开关。
+
 ## 上下文压缩
 
 长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
@@ -252,7 +271,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 | 增加工具 | `Tool`，声明服务端和并发上限；未声明时上限为 1 |
 | 修改工具输出 | `AfterToolHook` |
 
-注册成 Spring bean 即可。
+注册成 Spring bean 即可。同一个插件的钩子、工作类型和工具后处理要让 `plugin()` 返回同一个名字（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
 
 七个钩子（前 6 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略。
 
@@ -277,7 +296,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数（回放接口会让内核重跑 journal，钩子会被再次调用）。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
 
-超时与失败：`Tool.run` 和 `WorkType.run` 都受 `tantalum.tool-timeout` 约束，到时线程被中断、结果按失败交回；撤销运行也会中断它们，所以阻塞操作要能响应中断。钩子返回 null 按 `Stop` 处理。按名单放行的策略钩子（如示例 `ReadOnlyHook`）要把 `memory_write`、`memory_read`、`memory_delete` 加进名单，否则记忆工具会被拦下；记忆目录是用户自己的，不算对工作目录的写操作。做“检查”的钩子在 `onWorkResult`/`beforeRunEnd` 里看到 `work.failed()` 时不要放行（示例 `CitationCheckHook` 会 `Stop`），否则检查没做成就等于通过。从 `onFailure` 申请的工作完成后再调模型会占用重试次数，失败持续时最多重试 3 次。
+超时与失败：`Tool.run` 和 `WorkType.run` 都受 `tantalum.tool-timeout` 约束，到时线程被中断、结果按失败交回；撤销运行也会中断它们，所以阻塞操作要能响应中断。钩子返回 null 按 `Stop` 处理。按名单放行的策略钩子（如示例 `ReadOnlyHook`）要把只读的 `list_dir`、`find_files` 和三个记忆工具加进名单，否则它们会被拦下；`write_file`、`edit_file` 不在名单里就会被拦，正是只读策略要的；记忆目录是用户自己的，不算对工作目录的写操作。做“检查”的钩子在 `onWorkResult`/`beforeRunEnd` 里看到 `work.failed()` 时不要放行（示例 `CitationCheckHook` 会 `Stop`），否则检查没做成就等于通过。从 `onFailure` 申请的工作完成后再调模型会占用重试次数，失败持续时最多重试 3 次。
 
 ## 测试
 
@@ -328,7 +347,9 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |
 | MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
-| 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**，内置工具只有读文件、搜索文件和记忆 | 待开 spec |
+| 文件读写（窗口读、写、改、列目录、找文件） | 有（`read`、`write`、`edit`、`ls`、`find`） | 有（读、写、改、glob，先读后写） | 有：窗口读取和续读、先读后写、原子写、保留换行和 BOM、对话页差异，`core-tools` spec | `bash` 等沙箱 |
+| 插件页、每个用户开关工具和插件 | 无 | 有（插件页） | 有：内置工具、MCP 服务器和工具、钩子插件，每人自己的开关；会话中途开关从下一次提问生效，不破坏思考签名 | |
+| 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**，内置工具有文件读写、目录、搜索和记忆，没有联网 | `web-tools` spec |
 | 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |

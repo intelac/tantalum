@@ -151,25 +151,25 @@
 
 ## 阶段 4：控制台
 
-- [ ] 24. 插件页
+- [x] 24. 插件页
   - File: console/plugins/{PluginsPage.tsx,usePlugins.ts,plugins.test.tsx}（新）、console/shell/Sidebar.tsx、console/app/router.ts、console/text/zh.ts
   - 三块列表；MCP 服务器可展开、显示连接状态；必须开启的禁用并说明；页头生效说明（两种文字）；手机宽度
   - 测试（vitest）：开关调用接口；失败时恢复原状并提示；必须开启的不能点
   - _Requirements: 7, C13_
 
-- [ ] 25. 对话页显示
+- [x] 25. 对话页显示
   - File: console/conversation/{EditDiff.tsx,WriteFilePreview.tsx}（新）、ToolStep 相关
   - `edit_file` 差异；`write_file` 前 20 行可展开；`read_file` 窗口行号范围
   - 测试（vitest）：差异内容；预览折叠；没有窗口参数时不显示范围
   - _Requirements: 6_
 
-- [ ] 26. 轨迹页显示
+- [x] 26. 轨迹页显示
   - File: console/trace/inspector/{ToolTabs,RecordTabs}.tsx
   - `edit_file` 的“差异”页签；上下文记录显示工具变化
   - 测试（vitest）
   - _Requirements: 6_
 
-- [ ] 27. 端到端
+- [x] 27. 端到端
   - File: console/e2e/{plugins,file-tools}.spec.ts（新）
   - 插件页开关；关掉 `write_file` 后当前会话调用被拒；下一问模型拿不到、再打开后下一问能用；差异和写入预览；两个用户各自的开关；手机宽度
   - _Requirements: 7, 8, 非功能“端到端”_

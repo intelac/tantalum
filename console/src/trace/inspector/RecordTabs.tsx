@@ -8,7 +8,7 @@ import { Markdown } from "../../markdown/Markdown";
 import { zh } from "../../text/zh";
 import { between, formatMs, formatTokens } from "../format";
 import { JsonTree } from "./JsonTree";
-import { LineDiff } from "./LineDiff";
+import { LineDiff } from "../../ui/LineDiff";
 import { LongText } from "./LongText";
 import { Fields, Section, sourceText, TabbedBody, Timestamp } from "./parts";
 
@@ -107,17 +107,41 @@ function attachmentDetail(ref: AttachmentRef): string {
 }
 
 function ContextPages(context: ContextChange) {
+  const added = context.toolsAdded ?? [];
+  const removed = context.toolsRemoved ?? [];
+  const tools = added.length > 0 || removed.length > 0;
   return [
-    {
-      id: "sections",
-      label: t.tab.sections,
-      render: () =>
-        context.sections.map((section) => (
-          <Section key={section.name} title={section.name}>
-            <LineDiff before={section.before ?? ""} after={section.after ?? ""} />
-          </Section>
-        )),
-    },
+    ...(context.sections.length > 0
+      ? [
+          {
+            id: "sections",
+            label: t.tab.sections,
+            render: () =>
+              context.sections.map((section) => (
+                <Section key={section.name} title={section.name}>
+                  <LineDiff before={section.before ?? ""} after={section.after ?? ""} />
+                </Section>
+              )),
+          },
+        ]
+      : []),
+    // 用户在插件页改了开关：工具列表本身不变，变化追加在这次提问之后（core-tools C14）
+    ...(tools
+      ? [
+          {
+            id: "tools",
+            label: t.tab.tools,
+            render: () => (
+              <Fields
+                rows={[
+                  [t.details.toolsAdded, added.length > 0 ? <span className="font-mono">{added.join(", ")}</span> : undefined],
+                  [t.details.toolsRemoved, removed.length > 0 ? <span className="font-mono">{removed.join(", ")}</span> : undefined],
+                ]}
+              />
+            ),
+          },
+        ]
+      : []),
     { id: "source", label: t.tab.source, render: () => <Fields rows={[[t.tab.source, t.source.context]]} /> },
   ];
 }

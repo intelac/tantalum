@@ -257,6 +257,9 @@ export interface ContextSection {
 export interface ContextChange extends TraceHead {
   kind: "context";
   sections: ContextSection[];
+  /** 用户在插件页改了开关，这次提问起新增和移除的工具；没有时不出现。 */
+  toolsAdded?: string[];
+  toolsRemoved?: string[];
 }
 
 export interface Compacted extends TraceHead {
@@ -459,4 +462,38 @@ export interface MemoryList {
   entries: MemorySummary[];
   used: number;
   max: number;
+}
+
+/** 插件页（core-tools 需求 7）：当前用户自己的开关。 */
+export type PluginKind = "tool" | "mcp" | "plugin";
+
+export interface PluginTool {
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface McpServerView {
+  name: string;
+  /** READY、CONNECTING、RECONNECTING、UNAUTHORIZED、FAILED、CLOSED，未知时 UNKNOWN。 */
+  state: string;
+  enabled: boolean;
+  tools: PluginTool[];
+}
+
+export interface HookPlugin {
+  name: string;
+  description: string;
+  /** 挂在哪些位置：钩子方法名、afterToolExecution、work:<工作类型>。 */
+  points: string[];
+  mandatory: boolean;
+  enabled: boolean;
+}
+
+export interface Plugins {
+  /** 打开的工具能否在同一个会话的下一次提问就用上；不能时要等新会话。 */
+  midSessionChanges: boolean;
+  tools: PluginTool[];
+  mcp: McpServerView[];
+  plugins: HookPlugin[];
 }

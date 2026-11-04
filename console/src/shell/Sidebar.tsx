@@ -1,4 +1,4 @@
-import { LogOut, MoreHorizontal, PanelLeftClose, Settings, SquarePen } from "lucide-react";
+import { LogOut, MoreHorizontal, PanelLeftClose, Puzzle, Settings, SquarePen } from "lucide-react";
 import type { SessionSummary } from "../api/types";
 import { zh } from "../text/zh";
 import { Button } from "../ui/Button";
@@ -17,6 +17,7 @@ interface Props {
   onNewSession: () => void;
   onSelectSession: (id: string) => void;
   onSettings: () => void;
+  onPlugins: () => void;
   onLogout: () => void;
   username: string;
 }
@@ -32,12 +33,14 @@ export function Sidebar({
   onNewSession,
   onSelectSession,
   onSettings,
+  onPlugins,
   onLogout,
   username,
 }: Props) {
   // 刚新建、还没提交过的会话不在列表里，先放一行占位。
   const unsaved = currentSession !== null && !sessions.some((session) => session.id === currentSession);
   const menuItems = [
+    { id: "plugins", label: zh.sidebar.plugins, icon: <Puzzle size={16} />, onSelect: onPlugins },
     { id: "settings", label: zh.sidebar.settings, icon: <Settings size={16} />, onSelect: onSettings },
     { id: "logout", label: zh.sidebar.logout, icon: <LogOut size={16} />, danger: true, onSelect: onLogout },
   ];
