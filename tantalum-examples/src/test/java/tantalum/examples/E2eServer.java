@@ -13,12 +13,20 @@ import tantalum.shell.journal.SessionFile;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
+import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.event.ModelReplied;
 import tantalum.value.event.UserPrompt;
+import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.json.Json;
+import tantalum.value.model.StopReason;
+import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolSpec;
 import tantalum.value.state.OwnerRef;
 
 /**
@@ -35,6 +43,8 @@ public final class E2eServer {
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
+    /** 同上，进程死在工具执行途中：文件停在模型要调工具之后，没有结果行（record-results 需求 11.4）。 */
+    public static final String CRASHED_TOOL_SESSION = "s-c0ffee01";
 
     private E2eServer() {}
 
@@ -56,6 +66,7 @@ public final class E2eServer {
                     // 轨迹页的端到端测试：示例插件的引用核对工作，加一个只对 trace: 提问起作用的钩子。
                     generic.registerBean(CitationWork.class);
                     generic.registerBean(E2eTraceHook.class);
+                    generic.registerBean(E2eScopeHook.class);
                 })
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,
@@ -85,6 +96,23 @@ public final class E2eServer {
             file.append(List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER), new SessionId(CRASHED_SESSION), null,
                     new UserPrompt(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
                             new OwnerRef.OfSession(new SessionId(CRASHED_SESSION)), "hello 崩溃前"))));
+        }
+        // 上次进程在执行工具时被杀：模型要读一个文件，命令已经发出，结果没有回来。只有事件行，像结果行还没落盘就崩溃了。
+        Principal user = new Principal(USER);
+        SessionId tool = new SessionId(CRASHED_TOOL_SESSION);
+        RunId run = RunId.of(tool, 1);
+        Instant at = Instant.parse("2026-11-01T09:05:00Z");
+        ToolSpec readFile = new ToolSpec("read_file", "Read a file.", new Json.Obj(java.util.Map.of("type", new Json.Str("object"))), false);
+        try (SessionFile file = SessionFile.open(new SessionPaths(data), user, tool, EventCodec.withBuiltins())) {
+            file.append(List.of(
+                    new EventEnvelope(1, at, user, tool, null, new UserPrompt(new SubmissionId("crashed-tool-submission"),
+                            new RequestId("crashed-tool-request"), new OwnerRef.OfSession(tool), "读一下 notes/hello.md")),
+                    new EventEnvelope(2, at, user, tool, run, new ContextAssembled(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
+                            List.of(readFile), null, List.of())),
+                    new EventEnvelope(3, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_2-0"),
+                            List.of(new ToolCallBlock("crashed-call", "read_file", "{\"path\":\"notes/hello.md\"}",
+                                    new Json.Obj(java.util.Map.of("path", new Json.Str("notes/hello.md"))))),
+                            StopReason.TOOL_USE, E2eModel.MODEL, null, null, null, null))));
         }
     }
 }

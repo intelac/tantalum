@@ -279,9 +279,6 @@ public class ApiController {
         view.put("title", summary.title());
         view.put("lastActivity", summary.lastActivity().toString());
         view.put("runStatus", summary.runStatus());
-        if (summary.replayMismatch()) {
-            view.put("replayMismatch", true);
-        }
         return view;
     }
 

@@ -18,7 +18,7 @@ public final class ColdReads {
 
     public static final int CAPACITY = 16;
 
-    /** 重放一个会话的全部事件，没有事件时为空。 */
+    /** 读出一个会话（按结果行折叠，见 {@link RecordReplay#read}），没有事件时为空。 */
     @FunctionalInterface
     public interface Reader {
         Optional<SessionSlice> read(Principal principal, SessionId session) throws Exception;
@@ -40,10 +40,6 @@ public final class ColdReads {
     public ColdReads(SessionPaths paths, Reader reader) {
         this.paths = paths;
         this.reader = reader;
-    }
-
-    public ColdReads(SessionPaths paths, SessionReplay replay) {
-        this(paths, (principal, session) -> replay.load(principal, session, Long.MAX_VALUE));
     }
 
     /** 文件不存在时为空，不重放。 */

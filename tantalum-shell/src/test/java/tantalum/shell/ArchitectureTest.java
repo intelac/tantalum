@@ -83,6 +83,22 @@ class ArchitectureTest {
             .or().haveFullyQualifiedName("tantalum.shell.loop.Residency")
             .should().dependOnClassesThat().resideInAnyPackage("java.io..", "java.sql..", "java.nio.file..", "tantalum.shell.store..");
 
+    /**
+     * 恢复和查询只读结果行（record-results 需求 9.3）：它们不依赖内核，内核以后怎么改都不会改变旧会话。
+     * 用内核的只有重放比较（{@code SessionReplay}、{@code ReplayCompare}、{@code RecordCheck}，检查工具用）和启动时的 {@code Backfill}
+     * （它给崩溃留下的事件第一次处理）。
+     */
+    @ArchTest
+    static final ArchRule restoringDoesNotRunTheKernel = noClasses()
+            .that().haveFullyQualifiedName("tantalum.shell.store.RecordReplay")
+            .or().haveFullyQualifiedName("tantalum.shell.store.ColdReads")
+            .or().haveFullyQualifiedName("tantalum.shell.store.TraceQuery")
+            .or().haveFullyQualifiedName("tantalum.shell.store.TurnQuery")
+            .or().haveFullyQualifiedName("tantalum.shell.store.IndexCatchUp")
+            .or().haveFullyQualifiedName("tantalum.shell.store.SessionQueries")
+            .should().dependOnClassesThat().haveFullyQualifiedName("tantalum.kernel.Kernel")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("tantalum.shell.store.SessionReplay");
+
     @ArchTest
     static final ArchRule springStaysAtTheEdge = noClasses()
             .that().resideInAPackage("tantalum.shell..")

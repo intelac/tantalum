@@ -8,7 +8,7 @@ import tantalum.shell.boot.Engine;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
-/** 只在端到端测试服务里注册：让测试能从服务端断开 e2e 用户的 SSE 连接，模拟断线；能看一个会话是否还在内存里。 */
+/** 只在端到端测试服务里注册：让测试能从服务端断开 e2e 用户的 SSE 连接，模拟断线；能看一个会话是否还在内存里；能换访问范围规则。 */
 @RestController
 final class E2eController {
 
@@ -22,6 +22,13 @@ final class E2eController {
     String disconnect() {
         engine.hub().closeAll(new Principal(E2eServer.USER));
         return "{\"disconnected\":true}";
+    }
+
+    /** 换访问范围规则（{@link E2eScopeHook}）：相当于部署了一条新规则，之后的步骤按它来。 */
+    @PostMapping("/api/e2e/scope/{blocking}")
+    String scope(@PathVariable boolean blocking) {
+        E2eScopeHook.BLOCKING.set(blocking);
+        return "{\"blocking\":" + blocking + "}";
     }
 
     @GetMapping("/api/e2e/resident/{session}")
