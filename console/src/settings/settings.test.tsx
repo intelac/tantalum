@@ -1,4 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render as renderPlain, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readTheme } from "../theme/theme";
@@ -7,7 +9,14 @@ import { SettingsDialog } from "./SettingsDialog";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
+
+/** 模型页里的压缩点要查 /api/settings：给一个查询客户端，接口不通（这几项测试不看它）。 */
+function render(ui: ReactElement) {
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve("") })));
+  return renderPlain(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
+}
 
 const config = { provider: "claude", model: "claude-sonnet-5-5", cloud: true, contextWindow: 200000 };
 

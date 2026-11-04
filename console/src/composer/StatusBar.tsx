@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Minimize2 } from "lucide-react";
 import { compactSession, getTurn, listTurns } from "../api/client";
+import { compactionPoint, useSettings } from "../settings/useCompaction";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
-import { statusParts } from "./status";
+import { statusParts, WARN_PERCENT } from "./status";
 
 interface Props {
   session: string;
@@ -18,7 +19,7 @@ interface Props {
 
 /**
  * 输入栏下方：轮数、token、上下文占比，右侧是手动压缩按钮。数据来自 journal 回放的模型调用，运行结束后才有最后一次的用量。
- * 占比到 80% 变色提示。窄屏只留占比。
+ * 到用户选的自动压缩点的 90% 时变色提示（还没读到设置时按窗口的 80%）。窄屏只留占比。
  */
 export function StatusBar({ session, run, running, version, contextWindow }: Props) {
   const turns = useQuery({
@@ -32,8 +33,9 @@ export function StatusBar({ session, run, running, version, contextWindow }: Pro
     },
   });
   const compact = useMutation({ mutationFn: () => compactSession(session) });
+  const settings = useSettings(contextWindow !== undefined);
 
-  const parts = statusParts(turns.data?.count ?? 0, turns.data?.usage, contextWindow);
+  const parts = statusParts(turns.data?.count ?? 0, turns.data?.usage, contextWindow, compactionPoint(settings.data));
   const segments = [
     { key: "turns", text: parts.turns, narrow: false },
     { key: "tokens", text: parts.tokens, narrow: false },
@@ -49,7 +51,7 @@ export function StatusBar({ session, run, running, version, contextWindow }: Pro
         <span
           key={segment.key}
           className={cx(segment.narrow ? "" : "hidden sm:inline", segment.key === "context" && parts.warn ? "font-medium text-danger" : "")}
-          title={segment.key === "context" && parts.warn ? zh.status.contextHigh : undefined}
+          title={segment.key === "context" && parts.warn ? zh.status.contextHigh(parts.pointPercent ?? WARN_PERCENT) : undefined}
         >
           {index > 0 && <span className="mr-3 hidden sm:inline">·</span>}
           {segment.text}
