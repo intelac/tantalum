@@ -35,6 +35,7 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.OwnerRef;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonGenerator;
@@ -67,6 +68,15 @@ public final class EventCodec {
     private interface ToolSpecMixin {
         @JsonInclude(JsonInclude.Include.NON_DEFAULT)
         boolean deferred();
+    }
+
+    /** 旧规则的设置（没有压缩点和系数）不写出这两个字段，和加字段之前的行逐字节相同；旧行读出来是 0（compaction-threshold）。 */
+    private interface CompactionSettingsMixin {
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+        long point();
+
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+        double bytesPerToken();
     }
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
@@ -113,6 +123,7 @@ public final class EventCodec {
                 .addMixIn(ToolFinished.class, ImagesMixin.class)
                 .addMixIn(ToolResultBlock.class, ImagesMixin.class)
                 .addMixIn(ToolSpec.class, ToolSpecMixin.class)
+                .addMixIn(CompactionSettings.class, CompactionSettingsMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))

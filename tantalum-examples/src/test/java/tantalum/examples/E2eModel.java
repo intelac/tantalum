@@ -216,7 +216,7 @@ public final class E2eModel implements ModelClient {
         stream(chunks, head + tail);
         String answer = head + filler + tail;
         return new ModelOutcome.Replied(List.of(new TextBlock(answer)), StopReason.END_TURN, MODEL,
-                usage(promptSize(prompt), tantalum.kernel.compaction.TokenEstimate.ofText(answer)));
+                usage(promptSize(prompt), tantalum.kernel.compaction.TokenEstimate.LEGACY.ofText(answer)));
     }
 
     private ModelOutcome slow(ChunkListener chunks) throws InterruptedException {
@@ -241,7 +241,7 @@ public final class E2eModel implements ModelClient {
         List<ContentBlock> content = new ArrayList<>(thinking);
         content.add(new TextBlock(answer));
         return new ModelOutcome.Replied(content, StopReason.END_TURN, MODEL,
-                usage(promptSize, tantalum.kernel.compaction.TokenEstimate.ofText(answer)));
+                usage(promptSize, tantalum.kernel.compaction.TokenEstimate.LEGACY.ofText(answer)));
     }
 
     private ModelOutcome answer(ChunkListener chunks, String text) throws InterruptedException {
@@ -269,7 +269,7 @@ public final class E2eModel implements ModelClient {
         long output = 0;
         for (ContentBlock block : content) {
             if (block instanceof TextBlock text) {
-                output += tantalum.kernel.compaction.TokenEstimate.ofText(text.text());
+                output += tantalum.kernel.compaction.TokenEstimate.LEGACY.ofText(text.text());
             }
         }
         return new ModelOutcome.Replied(content, tools ? StopReason.TOOL_USE : StopReason.END_TURN, MODEL, usage(promptSize, Math.max(output, 20)));
@@ -295,9 +295,9 @@ public final class E2eModel implements ModelClient {
     }
 
     private static long promptSize(Prompt prompt) {
-        return tantalum.kernel.compaction.TokenEstimate.ofText(prompt.system())
-                + tantalum.kernel.compaction.TokenEstimate.ofTools(prompt.tools())
-                + tantalum.kernel.compaction.TokenEstimate.ofMessages(prompt.messages());
+        return tantalum.kernel.compaction.TokenEstimate.LEGACY.ofText(prompt.system())
+                + tantalum.kernel.compaction.TokenEstimate.LEGACY.ofTools(prompt.tools())
+                + tantalum.kernel.compaction.TokenEstimate.LEGACY.ofMessages(prompt.messages());
     }
 
     private static TokenUsage usage(long promptSize, long output) {

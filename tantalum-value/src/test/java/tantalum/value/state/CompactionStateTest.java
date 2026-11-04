@@ -38,6 +38,34 @@ class CompactionStateTest {
     }
 
     @Test
+    void aChosenPointReplacesWindowMinusReserve() {
+        CompactionSettings chosen = new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 500_000, 1.5);
+        assertEquals(500_000, chosen.threshold());
+        assertEquals(936_000, chosen.capacity(), "the summary call may still use everything the model takes");
+        assertEquals(20_000, chosen.keepBudget());
+        assertEquals(1.5, chosen.bytesPerToken());
+        CompactionSettings full = new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 936_000, 1.5);
+        assertEquals(936_000, full.threshold());
+    }
+
+    @Test
+    void settingsWithoutAPointAreTheOldRule() {
+        assertEquals(0, SETTINGS.point(), "events written before compaction-threshold have no point");
+        assertEquals(0, SETTINGS.bytesPerToken());
+        assertEquals(3, SETTINGS.bytesPerTokenOrLegacy());
+        assertEquals(136_000, SETTINGS.threshold());
+    }
+
+    @Test
+    void pointMustFitBeforeTheReserveAndBytesPerTokenMustBePositive() {
+        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(1_000, 100, 1, 1, 1, 1, 901, 1.5));
+        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(1_000, 100, 1, 1, 1, 1, -1, 1.5));
+        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(1_000, 100, 1, 1, 1, 1, 500, -1));
+        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(1_000, 100, 1, 1, 1, 1, 500, Double.NaN));
+        assertEquals(900, new CompactionSettings(1_000, 100, 1, 1, 1, 1, 900, 2).threshold());
+    }
+
+    @Test
     void viewIsTheHistoryUntilCompacted() {
         SessionState session = SessionState.start(SESSION, USER).append(Message.user("a")).append(Message.user("b"));
         assertSame(session.messages(), session.view());

@@ -98,7 +98,8 @@ public final class CompactSteps {
         Prompt base = PromptProjection.project(session, compacting.patch());
         String instructions = compacting.cause() instanceof Compacting.Manual manual ? manual.instructions() : null;
         Message instruction = SummaryPrompt.instruction(false, instructions);
-        long fixed = TokenEstimate.ofText(base.system()) + TokenEstimate.ofTools(base.tools()) + TokenEstimate.ofMessage(instruction);
+        TokenEstimate estimate = TokenEstimate.of(settings);
+        long fixed = estimate.ofText(base.system()) + estimate.ofTools(base.tools()) + estimate.ofMessage(instruction);
         Compactor.Head head = Compactor.headForSummary(compacting.plan(), session.view(), settings, fixed);
         if (head.nothingToSummarize()) {
             return false;
@@ -139,8 +140,9 @@ public final class CompactSteps {
         out.addUsage(run.ref(), event.usage());
 
         Plan plan = compacting.plan();
-        long request = plan.request() == null ? 0 : TokenEstimate.ofMessage(plan.request());
-        String reason = SummaryPrompt.validate(event.content(), event.stop(), plan.headEstimate(), request);
+        TokenEstimate estimate = TokenEstimate.of(out.session(run.ref()).context().compaction());
+        long request = plan.request() == null ? 0 : estimate.ofMessage(plan.request());
+        String reason = SummaryPrompt.validate(event.content(), event.stop(), plan.headEstimate(), request, estimate);
         if (reason != null) {
             notAdopted(out, run, compacting, reason, Stage.NOT_ADOPTED);
             return out.decision();
@@ -157,10 +159,11 @@ public final class CompactSteps {
     private static void adopt(Outcome out, RunState run, Compacting compacting, List<Message> replacement, int headUnits, int keptUnits,
                               TokenUsage usage, boolean trimOnly) {
         SessionState session = out.session(run.ref());
-        long before = TokenEstimate.ofMessages(session.view());
+        TokenEstimate estimate = TokenEstimate.of(session.context().compaction());
+        long before = estimate.ofMessages(session.view());
         out.put(session.compacted(new Compaction(replacement, session.messages().size())).withContext(null));
         out.report(List.of(new ContextCompacted(run.ref(), compacting.trigger(), headUnits, keptUnits, before,
-                TokenEstimate.ofMessages(replacement), usage, trimOnly)));
+                estimate.ofMessages(replacement), usage, trimOnly)));
         RunState resumed = run.withCompacting(null).withRetries(0);
         out.put(resumed);
         if (compacting.cause() instanceof Compacting.Manual) {

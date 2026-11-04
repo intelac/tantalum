@@ -197,6 +197,26 @@ class EventCodecTest {
         assertEquals(null, decoded.enabledPlugins());
     }
 
+    /** compaction-threshold：旧设置不写出压缩点和系数，和加字段之前逐字节相同；旧行读出来是 0，按旧规则算。 */
+    @Test
+    void compactionSettingsWithoutAPointWriteTheSameBytesAsBefore() {
+        CompactionSettings legacy = new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
+        ContextAssembled old = new ContextAssembled(CMD, "sys", List.of(), legacy, List.of());
+        String line = codec.encode(old);
+        assertEquals("{\"command\":{\"value\":\"1-0\"},\"system\":\"sys\",\"tools\":[],\"compaction\":{\"window\":200000,"
+                + "\"reserve\":64000,\"keepRecent\":20000,\"maxKeptResultBytes\":32768,\"maxSummarizedResultBytes\":4096,"
+                + "\"summaryMaxTokens\":8192},\"sections\":[]}", line);
+        CompactionSettings decoded = ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, line)).compaction();
+        assertEquals(legacy, decoded);
+        assertEquals(136_000, decoded.threshold());
+        assertEquals(3, decoded.bytesPerTokenOrLegacy());
+
+        CompactionSettings chosen = new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 500_000, 1.5);
+        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(), chosen, List.of()));
+        assertTrue(codec.encode(new ContextAssembled(CMD, "sys", List.of(), chosen, List.of()))
+                .contains("\"point\":500000,\"bytesPerToken\":1.5"));
+    }
+
     @Test
     void anEmptyEnabledListIsNotTheSameAsNoList() {
         String none = codec.encode(new ContextAssembled(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));

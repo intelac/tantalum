@@ -234,8 +234,8 @@ public final class Corpus {
 
     private ModelReplied reply(CallModel call) {
         // 压缩阈值以上报的用量为准，所以按 prompt 的实际大小上报，和真实服务一样。
-        long prompt = TokenEstimate.ofText(call.prompt().system()) + TokenEstimate.ofTools(call.prompt().tools())
-                + TokenEstimate.ofMessages(call.prompt().messages());
+        long prompt = TokenEstimate.LEGACY.ofText(call.prompt().system()) + TokenEstimate.LEGACY.ofTools(call.prompt().tools())
+                + TokenEstimate.LEGACY.ofMessages(call.prompt().messages());
         TokenUsage usage = new TokenUsage(prompt, 50 + random.nextInt(500), 0, 0);
         List<ContentBlock> content = new ArrayList<>();
         content.add(new ReasoningBlock("anthropic", new Json.Obj(Map.of("type", new Json.Str("thinking"),

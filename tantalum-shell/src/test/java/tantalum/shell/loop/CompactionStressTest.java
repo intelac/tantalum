@@ -73,8 +73,8 @@ class CompactionStressTest {
         @Override
         public ModelOutcome call(Prompt prompt, ChunkListener chunks) {
             prompts.add(prompt);
-            long size = TokenEstimate.ofText(prompt.system()) + TokenEstimate.ofTools(prompt.tools())
-                    + TokenEstimate.ofMessages(prompt.messages());
+            long size = TokenEstimate.LEGACY.ofText(prompt.system()) + TokenEstimate.LEGACY.ofTools(prompt.tools())
+                    + TokenEstimate.LEGACY.ofMessages(prompt.messages());
             String text;
             if (!prompt.output().toolsAllowed()) {
                 text = "## Goal\nKeep counting for " + lastUser(prompt) + ".\n## Key context\n" + lastUser(prompt);
@@ -184,7 +184,7 @@ class CompactionStressTest {
                 assertTrue(((TextBlock) prompt.messages().getLast().content().getFirst()).text().contains("## Goal"));
             } else {
                 maxMessages = Math.max(maxMessages, prompt.messages().size());
-                long size = TokenEstimate.ofMessages(prompt.messages());
+                long size = TokenEstimate.LEGACY.ofMessages(prompt.messages());
                 assertTrue(size < THRESHOLD + 200, "a normal call carried " + size + " estimated tokens");
             }
         }
