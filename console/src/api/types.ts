@@ -12,6 +12,8 @@ export interface Config {
   cloud: boolean;
   /** 不知道时省略，状态行就不显示占比。 */
   contextWindow?: number;
+  /** 窗口大小从哪来：模型报告的，或者服务器配置的（读不到模型时）。 */
+  windowSource?: "model" | "config";
   /** 当前模型收不收图片。旧服务没有这个字段，当作收。 */
   vision?: boolean;
   /** 附件的各项上限，前端先查一遍；服务器还会再查。 */
@@ -496,4 +498,18 @@ export interface Plugins {
   tools: PluginTool[];
   mcp: McpServerView[];
   plugins: HookPlugin[];
+}
+
+/** 设置页“模型”一栏的压缩点：一个百分比和它对应的 token 数，由服务器按当前窗口算好。 */
+export interface CompactionPoint {
+  percent: number;
+  tokens: number;
+}
+
+/** 当前登录用户自己的设置。窗口未知时 `points` 为空。 */
+export interface UserSettingsView {
+  compaction: {
+    percent: number;
+    points: CompactionPoint[];
+  };
 }

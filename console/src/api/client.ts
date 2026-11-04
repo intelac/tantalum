@@ -19,6 +19,7 @@ import type {
   Turn,
   TurnSummary,
   User,
+  UserSettingsView,
 } from "./types";
 
 export class ApiError extends Error {
@@ -235,4 +236,13 @@ export function listPlugins(): Promise<Plugins> {
 /** 只改当前登录用户的开关。400 时的 ApiError.message 是拒绝原因（如必须开启的插件）。 */
 export function setPlugin(kind: PluginKind, name: string, enabled: boolean): Promise<unknown> {
   return call(`/api/plugins/${kind}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+export function getSettings(): Promise<UserSettingsView> {
+  return call("/api/settings");
+}
+
+/** 只改当前登录用户的压缩点：50、70、85 或 100（用满），返回保存后的设置。 */
+export function setCompactionPercent(percent: number): Promise<UserSettingsView> {
+  return call("/api/settings/compaction", { method: "PUT", body: JSON.stringify({ percent }) });
 }

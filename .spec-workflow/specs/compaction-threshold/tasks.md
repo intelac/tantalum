@@ -80,30 +80,30 @@
 
 ## 阶段 3：控制台
 
-- [ ] 13. 接口和查询
+- [x] 13. 接口和查询
   - File: console/api/types.ts、console/api/client.ts、console/settings/useCompaction.ts（新）
   - 乐观更新、失败回滚、成功后让设置查询失效
   - 测试：保存失败回滚、服务连不上也回滚
   - _Requirements: 需求 2.2_
 
-- [ ] 14. 设置页“模型”一栏
+- [x] 14. 设置页“模型”一栏
   - File: console/settings/ModelPane.tsx、console/text/zh.ts
   - 来源、四个选项和 token 数、生效说明、窗口未知时不可选
   - 测试：显示、选择、未知窗口
   - _Requirements: T8, 需求 2.1, 2.5_
 
-- [ ] 15. 状态栏
+- [x] 15. 状态栏
   - File: console/composer/status.ts、console/composer/StatusBar.tsx
   - 按压缩点的 90% 提醒；悬停说明“到 X% 时自动压缩”
   - 测试：`statusParts` 边界；改设置后不刷新就变
   - _Requirements: T9, 需求 5_
 
-- [ ] 16. e2e `compaction-settings.spec.ts`
+- [x] 16. e2e `compaction-settings.spec.ts`
   - File: console/e2e/compaction-settings.spec.ts（新）
   - 设计里的 4 项；用 `e2e2`，结束时恢复
   - _Requirements: 需求 2, 3, 5_
 
-- [ ] 17. 阶段 3 收尾：全量回归、变异检查、提交、部署、汇报
+- [x] 17. 阶段 3 收尾：全量回归、变异检查、提交、部署、汇报
 
 ## 阶段 4：真实模型、文档、收尾
 
