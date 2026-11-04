@@ -13,25 +13,25 @@
 
 ## 阶段 1：只写不用
 
-- [ ] 1. `StepRecord`、`SessionChange`
+- [x] 1. `StepRecord`、`SessionChange`
   - File: value/state/StepRecord.java、value/state/SessionChange.java
   - `of(before, decision)`：比较会话表、运行表、事件用户的用量；消息必须只追加、只能改事件所在的会话，否则抛 `IllegalStateException`。`apply(before)` 返回 `Decision`
   - 测试：新建会话、追加消息、压缩、排队消息、运行开始和结束、用量差值，`apply(before)` 等于 `newState`；违反两条约定时抛出
   - _Requirements: R1, 需求 1.1–1.7_
 
-- [ ] 2. `RecordCodec` 基本编码
+- [x] 2. `RecordCodec` 基本编码
   - File: shell/journal/RecordCodec.java、shell/journal/EventCodec.java（复用 mapper 和多态登记）
   - 一行结果的 JSON（`"result": seq`），没变的字段不写，`null` 照写；命令、判断沿用现有类型名。不认识的判断类型解码为 `UnknownFact(type, Json)`，不认识的命令或状态字段抛 `SessionCorruptException`
   - 测试：往返相等；未知判断保留原文；未知命令拒绝
   - _Requirements: R1, R8, 需求 7.2, 7.3_
 
-- [ ] 3. 长字符串引用
+- [x] 3. 长字符串引用
   - File: shell/journal/RecordCodec.java、shell/journal/RecordMemo.java
   - ≥ 256 字节且文件里已出现过的字符串写成 `"\u0000#"+SHA-256`；字面以 `\u0000` 开头的加一个 `\u0000`；读取方的字符串表收录事件行和结果行里的长字符串
   - 测试：第二次出现写成引用、能解开；转义往返；memo 为空时按原样写；引用了没见过的哈希时报错
   - _Requirements: R2, 需求 1.3_
 
-- [ ] 4. 请求的相对编码和指纹
+- [x] 4. 请求的相对编码和指纹
   - File: shell/journal/RecordCodec.java、shell/journal/RecordMemo.java
   - `CallModel` 写 `system`/`tools` 的 `same`、`keep`/`add`、`fingerprint`；上一次请求按会话跟踪
   - 测试：连续三次请求还原出完整 `Prompt`，指纹与 `EventCodec` 编码的 SHA-256 一致；压缩后前缀变短；不知道上一次时 `keep` 为 0
