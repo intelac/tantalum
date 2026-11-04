@@ -1,0 +1,5 @@
+# 样本  claude-sonnet-5-5  本地 qwen（2026-11-04 实测：Claude 用 count_tokens，qwen 用 prompt_tokens，都减去只发一个字符时的固定开销）
+java 3686 2282
+chinese 4190 2453
+english 1627 1033
+json 4458 4225

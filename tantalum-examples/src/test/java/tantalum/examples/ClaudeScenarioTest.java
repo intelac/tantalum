@@ -876,7 +876,7 @@ class ClaudeScenarioTest {
             on = CompactionScenario.run(server, "cost", "on", temp.resolve("data-cost-on"), "claude cost on");
         }
         try (TestServer server = new TestServer(temp.resolve("data-cost-off"), workspace, strict("medium"),
-                "--tantalum.claude.context-window=200000", "--tantalum.claude.max-tokens=8192")) {
+                "--tantalum.claude.context-window=200000", "--tantalum.claude.max-tokens=8192", "--tantalum.compaction.window-from-model=false")) {
             off = CompactionScenario.run(server, "cost", "off", temp.resolve("data-cost-off"), "claude cost off");
         }
         System.out.println("[claude cost] ON : calls=" + on.modelCalls() + " promptTokens=" + on.promptTokens() + " output=" + on.outputTokens()

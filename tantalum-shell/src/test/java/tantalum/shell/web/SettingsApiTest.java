@@ -6,12 +6,14 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
+import tantalum.shell.model.WindowSource;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tools.jackson.databind.JsonNode;
@@ -81,6 +83,35 @@ class SettingsApiTest {
     void signedOutGetsNothing() throws Exception {
         assertEquals(401, server.get(null, "/api/settings").statusCode());
         assertEquals(401, put(null, "{\"percent\":50}").statusCode());
+    }
+
+    /** 模型报告的窗口盖过配置；关掉 window-from-model 时只用配置（测试要小窗口）。 */
+    @Test
+    void aReportedWindowWinsUnlessReadingIsTurnedOff() throws Exception {
+        ModelClient reporting = new ModelClient() {
+            @Override
+            public ModelOutcome call(tantalum.value.model.Prompt prompt, tantalum.shell.model.ChunkListener chunks) {
+                return new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null);
+            }
+
+            @Override
+            public WindowSource window() {
+                return () -> OptionalLong.of(1_000_000);
+            }
+        };
+        try (TestServer reported = new TestServer(temp.resolve("data-reported"), temp.resolve("ws-reported"), reporting)) {
+            JsonNode config = JSON.readTree(reported.get("alice", "/api/config").body());
+            assertEquals(1_000_000, config.get("contextWindow").asLong());
+            assertEquals("model", config.get("windowSource").asString());
+            assertEquals(936_000, JSON.readTree(reported.get("alice", "/api/settings").body()).get("compaction").get("points").get(3)
+                    .get("tokens").asLong());
+        }
+        try (TestServer configured = new TestServer(temp.resolve("data-configured"), temp.resolve("ws-configured"), reporting,
+                "--tantalum.compaction.window-from-model=false")) {
+            JsonNode config = JSON.readTree(configured.get("alice", "/api/config").body());
+            assertEquals(200_000, config.get("contextWindow").asLong());
+            assertEquals("config", config.get("windowSource").asString());
+        }
     }
 
     @Test

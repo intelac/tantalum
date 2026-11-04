@@ -34,8 +34,11 @@ import tools.jackson.databind.json.JsonMapper;
 final class CompactionScenario {
 
     static final int FILES = 10;
-    static final String[] SETTINGS_CLAUDE = {"--tantalum.claude.context-window=32000", "--tantalum.claude.max-tokens=8192"};
-    static final String[] SETTINGS_OPENAI = {"--tantalum.provider=openai", "--tantalum.openai.context-window=32000"};
+    // 窗口要小，压缩才会尽快发生：不向模型读窗口，用配置的 32000（compaction-threshold）
+    static final String[] SETTINGS_CLAUDE = {"--tantalum.claude.context-window=32000", "--tantalum.claude.max-tokens=8192",
+        "--tantalum.compaction.window-from-model=false"};
+    static final String[] SETTINGS_OPENAI = {"--tantalum.provider=openai", "--tantalum.openai.context-window=32000",
+        "--tantalum.compaction.window-from-model=false"};
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String[] WORDS = ("the project ships a kernel that folds events into state and a shell that owns threads journal "
             + "disruptor rings handlers plugins tools model client prompt cache reply thinking signature session run command fact "

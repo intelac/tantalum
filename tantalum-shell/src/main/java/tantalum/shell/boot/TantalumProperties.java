@@ -39,9 +39,12 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    /** 上下文压缩。窗口在各供应商下配置；这里是预留、保留量、工具结果上限和摘要长度。 */
+    /**
+     * 上下文压缩。窗口在各供应商下配置；这里是预留、保留量、工具结果上限和摘要长度。{@code windowFromModel} 为 false 时不向模型
+     * 读窗口，只用配置的值：测试要用小窗口让压缩尽快发生（compaction-threshold）。
+     */
     public record Compaction(long reserveTokens, long keepRecentTokens, int maxKeptToolResultBytes,
-                             int maxSummarizedToolResultBytes, long summaryMaxTokens) {
+                             int maxSummarizedToolResultBytes, long summaryMaxTokens, boolean windowFromModel) {
 
         public Compaction {
             requirePositive("reserveTokens", reserveTokens);
@@ -52,7 +55,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
 
         public static Compaction defaults() {
-            return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192);
+            return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192, true);
         }
     }
 
@@ -164,6 +167,11 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /** 当前供应商的上下文窗口；0 表示未知：不压缩，控制台不显示占比。 */
     public long contextWindow() {
         return usesClaude() ? claude.contextWindow() : openai.contextWindow();
+    }
+
+    /** 向模型读窗口吗；没有压缩配置段时读。 */
+    public boolean windowFromModel() {
+        return compaction == null || compaction.windowFromModel();
     }
 
     /** 当前供应商的压缩参数，和窗口、用户选的压缩点一起由 {@code CompactionPolicy} 合成每次提问的设置。 */
