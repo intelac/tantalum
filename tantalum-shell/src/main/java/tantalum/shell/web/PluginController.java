@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.boot.Engine;
+import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.mcp.McpRegistry;
+import tantalum.shell.model.ClaudeClient;
 import tantalum.value.id.Principal;
 import tools.jackson.databind.JsonNode;
 
@@ -22,10 +24,12 @@ import tools.jackson.databind.JsonNode;
 public class PluginController {
 
     private final Engine engine;
+    private final TantalumProperties properties;
     private final WebJson json;
 
-    public PluginController(Engine engine, WebJson json) {
+    public PluginController(Engine engine, TantalumProperties properties, WebJson json) {
         this.engine = engine;
+        this.properties = properties;
         this.json = json;
     }
 
@@ -36,6 +40,8 @@ public class PluginController {
         Map<String, String> states = engine.mcp().servers().stream()
                 .collect(Collectors.toMap(McpRegistry.ServerStatus::name, McpRegistry.ServerStatus::state));
         Map<String, Object> response = new LinkedHashMap<>();
+        // 打开的工具能不能在同一个会话的下一次提问就用上；OpenAI 兼容的路线直接换工具列表，总是可以
+        response.put("midSessionChanges", !properties.provider().equals("claude") || ClaudeClient.supportsToolChanges(properties.model()));
         response.put("tools", overview.tools().stream().map(PluginController::tool).toList());
         response.put("mcp", overview.mcp().stream().map(server -> {
             Map<String, Object> view = new LinkedHashMap<>();

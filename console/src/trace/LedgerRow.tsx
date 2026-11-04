@@ -71,8 +71,14 @@ export function contentOf(record: TraceRecord): string {
       const text = line(record.text);
       return `${prefix}${origin}${[text, counts].filter((part) => part !== "").join(" · ")}`;
     }
-    case "context":
-      return t.layout.contextChanged(record.sections.map((section) => section.name).join(", "));
+    case "context": {
+      const parts = [
+        record.sections.length > 0 ? t.layout.contextChanged(record.sections.map((section) => section.name).join(", ")) : "",
+        (record.toolsAdded ?? []).length > 0 ? t.layout.toolsAdded((record.toolsAdded ?? []).join(", ")) : "",
+        (record.toolsRemoved ?? []).length > 0 ? t.layout.toolsRemoved((record.toolsRemoved ?? []).join(", ")) : "",
+      ].filter(Boolean);
+      return parts.length > 0 && record.sections.length === 0 ? `${t.layout.toolsUpdated} · ${parts.join(" · ")}` : parts.join(" · ");
+    }
     case "compacted":
       if (!record.adopted) return `${t.layout.compactionFailed}${record.reason === undefined ? "" : ` · ${line(record.reason)}`}`;
       return `${record.trimOnly ? t.layout.trimmed : t.layout.compacted} · ${formatTokens(record.estimateBefore)} → ${formatTokens(record.estimateAfter)}`;

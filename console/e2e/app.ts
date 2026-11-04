@@ -4,19 +4,21 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 export const USER = "e2e";
 export const PASSWORD = "e2e-password";
+/** 第二个账号（E2eServer.OTHER_USER）：插件开关按用户持久保存，会改开关的用例用它，不影响别的用例。 */
+export const OTHER_USER = "e2e2";
 
 /** 直接调接口登录，Cookie 落到浏览器上下文里；之后打开首页就进入新会话。 */
-export async function login(page: Page): Promise<void> {
+export async function login(page: Page, username = USER): Promise<void> {
   const response = await page.request.post("/api/auth/login", {
-    data: { username: USER, password: PASSWORD },
+    data: { username, password: PASSWORD },
     headers: { origin: page.url().startsWith("http") ? new URL(page.url()).origin : "http://localhost:5174" },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 /** 登录并打开一个新会话，返回会话 ID。 */
-export async function openNewSession(page: Page): Promise<string> {
-  await login(page);
+export async function openNewSession(page: Page, username = USER): Promise<string> {
+  await login(page, username);
   await page.goto("/");
   await expect(page).toHaveURL(/\/s\/s-[0-9a-f]{8}$/);
   return new URL(page.url()).pathname.split("/")[2] ?? "";

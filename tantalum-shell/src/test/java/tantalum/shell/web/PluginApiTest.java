@@ -97,6 +97,7 @@ class PluginApiTest {
             assertTrue(named(body.get("tools"), tool).get("enabled").asBoolean(), tool);
         }
         assertEquals(0, body.get("mcp").size());
+        assertTrue(body.get("midSessionChanges").isBoolean());
         JsonNode quota = named(body.get("plugins"), "dailyQuota");
         assertTrue(quota.get("mandatory").asBoolean());
         assertEquals("daily limit", quota.get("description").asString());

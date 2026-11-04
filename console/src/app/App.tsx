@@ -6,6 +6,7 @@ import { LoginPage } from "../auth/LoginPage";
 import { useCurrentUser } from "../auth/useCurrentUser";
 import { ComposerDock } from "../composer/ComposerDock";
 import { ConversationPage } from "../conversation/ConversationPage";
+import { PluginsDialog } from "../plugins/PluginsDialog";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { AppFrame } from "../shell/AppFrame";
 import { ConnectionBanner } from "../shell/ConnectionBanner";
@@ -78,6 +79,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
   const sessions = useSessions();
   const config = useConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
   const list = sessions.data ?? [];
   const summary = list.find((session) => session.id === route.session);
   const title = sessionTitle(summary);
@@ -116,6 +118,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
             if (id !== route.session) navigate(sessionPath(id));
           }}
           onSettings={() => setSettingsOpen(true)}
+          onPlugins={() => setPluginsOpen(true)}
           onLogout={onLogout}
         />
       )}
@@ -129,6 +132,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
           username={username}
           onLogout={onLogout}
         />
+        <PluginsDialog open={pluginsOpen} onClose={() => setPluginsOpen(false)} />
         <div className="min-h-0 flex-1">
           {route.page === "trace" ? (
             <TracePage key={route.session} store={trace} session={route.session} run={route.run} record={route.record} />

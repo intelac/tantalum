@@ -3,7 +3,7 @@
 import type { SystemPrompt } from "../../api/types";
 import { zh } from "../../text/zh";
 import { useTraceCall } from "../hooks";
-import { LineDiff } from "./LineDiff";
+import { LineDiff } from "../../ui/LineDiff";
 import { Fields, Loading, Section, sourceText, TabbedBody } from "./parts";
 import { CallTools } from "./RequestTabs";
 import { LongText } from "./LongText";

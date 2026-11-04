@@ -9,6 +9,8 @@ import type {
   MemoryList,
   MemoryType,
   Messages,
+  PluginKind,
+  Plugins,
   RunView,
   SessionSummary,
   SubmitMode,
@@ -224,4 +226,13 @@ export function createMemory(entry: NewMemory): Promise<MemoryEntry> {
 
 export function deleteMemory(name: string): Promise<void> {
   return call(`/api/memory/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+export function listPlugins(): Promise<Plugins> {
+  return call("/api/plugins");
+}
+
+/** 只改当前登录用户的开关。400 时的 ApiError.message 是拒绝原因（如必须开启的插件）。 */
+export function setPlugin(kind: PluginKind, name: string, enabled: boolean): Promise<unknown> {
+  return call(`/api/plugins/${kind}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ enabled }) });
 }
