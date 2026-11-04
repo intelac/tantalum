@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.journal.EventCodec;
+import tantalum.shell.journal.RecordCodec;
+import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
@@ -27,6 +29,7 @@ import tantalum.shell.loop.SessionSlice;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
 import tantalum.shell.store.IndexWriter;
+import tantalum.shell.store.RecordReplay;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionReplay;
 import tantalum.shell.store.TracePage;
@@ -265,27 +268,20 @@ class WireFormatTest {
         return pushes;
     }
 
-    /** 把场景写成真实的会话文件，用服务里的 {@link SessionReplay} 和 {@link TraceQuery} 读。 */
+    /** 把场景像线上一样写成会话文件（事件行加结果行），用服务里的 {@link RecordReplay} 和 {@link TraceQuery} 读。 */
     private <T> T withJournal(TranscriptFixture fx, Path dir, JournalUse<T> use) throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        SessionFiles files = new SessionFiles(paths, codec, 4, (principal, session, seq, offset) -> { });
-        for (EventEnvelope envelope : fx.envelopes) {
-            files.append(TranscriptFixture.USER, TranscriptFixture.SESSION, List.of(envelope));
+        try (ResultWriter journal = new ResultWriter(paths, codec, fx.kernel())) {
+            for (EventEnvelope envelope : fx.envelopes) {
+                journal.write(envelope);
+            }
         }
-        files.close();
-        SessionIndex index = SessionIndex.open(dir);
-        IndexWriter writer = new IndexWriter(index, 100, Duration.ofHours(1));
-        try {
-            return use.apply(new SessionReplay(paths, new SessionFileReader(codec), new UsageLedger(index, writer), fx.kernel()), paths);
-        } finally {
-            writer.close();
-            index.close();
-        }
+        return use.apply(new RecordReplay(paths, new SessionFileReader(codec)), paths);
     }
 
     @FunctionalInterface
     private interface JournalUse<T> {
-        T apply(SessionReplay replay, SessionPaths paths) throws Exception;
+        T apply(RecordReplay replay, SessionPaths paths) throws Exception;
     }
 
     private String pageJson(TracePage page) {
@@ -295,7 +291,7 @@ class WireFormatTest {
     @Test
     void traceAsTheTraceApiReturnsIt(@TempDir Path dir) throws Exception {
         TranscriptFixture fx = traceScenario();
-        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay, new RecordCodec(codec))
                 .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
         assertEquals(java.util.Set.of("run", "system", "user", "context", "compacted", "request", "tool", "work", "hook"),
                 page.records().stream().map(record -> TraceJson.toMap(codec.mapper(), record).get("kind")).collect(java.util.stream.Collectors.toSet()));
@@ -324,7 +320,7 @@ class WireFormatTest {
             Trace live = new Trace();
             for (int i = 0; i < fx.envelopes.size(); i++) {
                 if (i == coldLoadAt) {
-                    SessionSlice slice = replay.load(TranscriptFixture.USER, TranscriptFixture.SESSION, fx.envelopes.get(i).seq()).orElseThrow();
+                    SessionSlice slice = replay.load(TranscriptFixture.USER, TranscriptFixture.SESSION, fx.envelopes.get(i).seq()).orElseThrow().slice();
                     live = new Trace();
                     live.restore(TranscriptFixture.SESSION, slice.trace());
                 }
@@ -333,7 +329,7 @@ class WireFormatTest {
                     pushed.put(record.id(), codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record)));
                 }
             }
-            TracePage page = new TraceQuery(paths, replay).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
+            TracePage page = new TraceQuery(paths, replay, new RecordCodec(codec)).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
             List<String> fromPushes = TracePage.of(fx.lastSeq(), merged.values(), null).records().stream().map(record -> pushed.get(record.id())).toList();
             List<String> fromReplay = page.records().stream()
                     .map(record -> codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record))).toList();
@@ -395,7 +391,7 @@ class WireFormatTest {
                 }
             }
         }
-        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay, new RecordCodec(codec))
                 .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
         out.append("# trace\n").append(pageJson(page));
         check("tool-change.txt", out.toString());
@@ -440,7 +436,7 @@ class WireFormatTest {
             SseMessage message = SseHub.itemMessage(codec.mapper(), change.seq(), change.index(), change.item());
             out.append(message.id()).append(' ').append(message.event()).append(' ').append(message.data()).append('\n');
         }
-        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay, new RecordCodec(codec))
                 .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
         out.append("# trace\n").append(pageJson(page));
         check("attachments.txt", out.toString());
@@ -462,7 +458,7 @@ class WireFormatTest {
             }
         }
         withJournal(fx, dir, (replay, paths) -> {
-            TracePage page = new TraceQuery(paths, replay).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
+            TracePage page = new TraceQuery(paths, replay, new RecordCodec(codec)).page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow();
             List<String> fromReplay = page.records().stream()
                     .map(record -> codec.mapper().writeValueAsString(TraceJson.toMap(codec.mapper(), record))).toList();
             List<String> fromPushes = TracePage.of(fx.lastSeq(), merged.values(), null).records().stream()

@@ -110,6 +110,8 @@ class RecordReplayTest {
                 seen.size(), "the step still in flight is not shown yet");
 
         assertThrows(SessionCorruptException.class, () -> records.load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE));
+        assertEquals(seen.getLast(), records.read(ReplayScenario.ALICE, ReplayScenario.TOOLS).orElseThrow().seq(),
+                "a cold query shows the session up to the step still in flight");
     }
 
     @Test
@@ -124,6 +126,27 @@ class RecordReplayTest {
 
         assertThrows(SessionCorruptException.class,
                 () -> records.each(ReplayScenario.ALICE, file, (envelope, before, decision) -> { }));
+    }
+
+    /** 需求 4.2：请求详情按结果行还原请求，和当时记下的指纹比较，不一致时标出。 */
+    @Test
+    void theRequestDetailReportsARebuiltRequestThatDoesNotMatchItsFingerprint() throws Exception {
+        TraceQuery trace = new TraceQuery(scenario.paths, records, new tantalum.shell.journal.RecordCodec(EventCodec.withBuiltins()));
+        tantalum.value.command.CallModel first = scenario.fixture.steps.stream()
+                .filter(step -> step.envelope().session().equals(ReplayScenario.TOOLS))
+                .flatMap(step -> step.decision().commands().stream())
+                .filter(tantalum.value.command.CallModel.class::isInstance).map(tantalum.value.command.CallModel.class::cast)
+                .findFirst().orElseThrow();
+
+        assertTrue(!trace.call(ReplayScenario.ALICE, ReplayScenario.TOOLS, first.id()).orElseThrow().fingerprintMismatch());
+
+        Path file = scenario.paths.sessionFile(ReplayScenario.ALICE, ReplayScenario.TOOLS);
+        String content = Files.readString(file);
+        Files.writeString(file, content.replaceFirst("\"fingerprint\":\"[0-9a-f]{32}\"", "\"fingerprint\":\"" + "0".repeat(32) + "\""));
+
+        TraceQuery.Call call = trace.call(ReplayScenario.ALICE, ReplayScenario.TOOLS, first.id()).orElseThrow();
+        assertTrue(call.fingerprintMismatch());
+        assertEquals(first.prompt().messages(), call.messages(), "the rebuilt request is still shown");
     }
 
     private static int indexOfResult(List<String> lines, int from) {

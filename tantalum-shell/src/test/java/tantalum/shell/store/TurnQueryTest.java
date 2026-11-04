@@ -17,7 +17,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.store.IndexWriter;
@@ -53,6 +53,7 @@ class TurnQueryTest {
     Path dir;
 
     private TurnQuery query;
+    private ResultWriter journal;
     private SessionIndex index;
     private IndexWriter writer;
     private long seq;
@@ -65,20 +66,19 @@ class TurnQueryTest {
         index = SessionIndex.open(dir);
         writer = new IndexWriter(index, 100, java.time.Duration.ofHours(1));
         SessionPaths paths = new SessionPaths(dir);
-        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
-        query = new TurnQuery(paths, replay, EventCodec.withBuiltins().mapper());
+        journal = new ResultWriter(paths, EventCodec.withBuiltins(), kernel);
+        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins())), EventCodec.withBuiltins().mapper());
     }
 
     @AfterEach
     void tearDown() throws Exception {
+        journal.close();
         writer.close();
         index.close();
     }
 
     private void write(RunId run, Event event) throws Exception {
-        try (SessionFile file = SessionFile.open(new SessionPaths(dir), USER, SESSION, EventCodec.withBuiltins())) {
-            file.append(List.of(new EventEnvelope(seq++, Instant.EPOCH, USER, SESSION, run, event)));
-        }
+        journal.write(new EventEnvelope(seq++, Instant.EPOCH, USER, SESSION, run, event));
     }
 
     private void writeScript() throws Exception {

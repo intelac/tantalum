@@ -299,6 +299,7 @@ export const zh = {
     },
     details: {
       event: "事件详情",
+      fingerprintMismatch: "与当时发出的请求不完全一致：这里显示的是按会话文件还原的内容。",
       toolsAdded: "新增工具",
       toolsRemoved: "移除工具",
       resize: "调整事件详情宽度",

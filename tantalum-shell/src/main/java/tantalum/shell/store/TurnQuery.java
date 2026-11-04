@@ -2,7 +2,6 @@ package tantalum.shell.store;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -50,10 +49,11 @@ public final class TurnQuery {
     private record Positioned(long seq, int index, SseMessage message) {}
 
     private final SessionPaths paths;
-    private final SessionReplay replay;
+    private final RecordReplay replay;
     private final JsonMapper mapper;
 
-    public TurnQuery(SessionPaths paths, SessionReplay replay, JsonMapper mapper) {
+    /** 按结果行折叠，不调内核（record-results 第 2 步）。还没写结果行的最后一步不出现，它也还没推送过。 */
+    public TurnQuery(SessionPaths paths, RecordReplay replay, JsonMapper mapper) {
         this.paths = paths;
         this.replay = replay;
         this.mapper = mapper;
@@ -70,10 +70,7 @@ public final class TurnQuery {
     private void each(Principal principal, Path file, SessionReplay.Step step) {
         try {
             replay.each(principal, file, step);
-        } catch (InterruptedException stopping) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while reading " + file, stopping);
-        } catch (IOException | SQLException failure) {
+        } catch (IOException failure) {
             throw new IllegalStateException("cannot read " + file, failure);
         }
     }

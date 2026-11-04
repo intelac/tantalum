@@ -29,13 +29,13 @@ const CALL: TraceCall = {
   previous: { system: "sys", tools: [] },
 };
 
-function stubCalls() {
+function stubCalls(call: object = CALL) {
   const paths: string[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((input: string) => {
       paths.push(input);
-      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(CALL)) });
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(call)) });
     }),
   );
   return paths;
@@ -101,6 +101,19 @@ describe("检查器的页签", () => {
     expect(await screen.findByText(/style: be brief/)).toBeTruthy();
     expect(screen.getByText("插件 · style · 15 字")).toBeTruthy();
     expect(paths).toEqual(["/api/sessions/s/trace/calls/s_5-0"]);
+  });
+
+  it("还原的请求和当时的指纹对不上时，请求详情顶部提示", async () => {
+    stubCalls({ ...CALL, fingerprintMismatch: true });
+    open(byId("r:s_2-0"));
+    await userEvent.click(screen.getByRole("tab", { name: "消息" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("与当时发出的请求不完全一致");
+    cleanup();
+    stubCalls();
+    open(byId("r:s_2-0"));
+    await userEvent.click(screen.getByRole("tab", { name: "消息" }));
+    await screen.findByText(/输出/);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("system 的差异页签按行比较上一次请求", async () => {

@@ -198,8 +198,15 @@ class RestartInterruptTest {
         try (var index = tantalum.shell.store.SessionIndex.open(data())) {
             tantalum.kernel.table.TransitionTable table = new tantalum.kernel.table.TransitionTable();
             tantalum.kernel.step.BuiltinSteps.register(table);
-            tantalum.shell.store.IndexCatchUp.run(index, new SessionPaths(data()), new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins()),
-                    new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()), (tool, args) -> false, tantalum.kernel.Limits.DEFAULT));
+            tantalum.kernel.Kernel kernel = new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()),
+                    (tool, args) -> false, tantalum.kernel.Limits.DEFAULT);
+            SessionPaths paths = new SessionPaths(data());
+            var reader = new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins());
+            // 和启动时一样：先给没有结果行的事件补写结果行，再补齐索引
+            try (var files = new tantalum.shell.journal.SessionFiles(paths, EventCodec.withBuiltins(), 4, (p, s, seq, offset) -> { })) {
+                tantalum.shell.store.Backfill.run(index, paths, new tantalum.shell.store.RecordReplay(paths, reader), files, kernel);
+            }
+            tantalum.shell.store.IndexCatchUp.run(index, paths, reader);
             assertEquals(2, index.unfinished().size());
         }
         List<String> broken = Files.readAllLines(s1);

@@ -101,7 +101,7 @@ final class Storage implements AutoCloseable {
     List<SessionIndex.Session> catchUp(Kernel kernel) {
         try {
             Backfill.run(index, paths, records, files, kernel);
-            IndexCatchUp.run(index, paths, reader, kernel);
+            IndexCatchUp.run(index, paths, reader);
             return index.unfinished();
         } catch (IOException | SQLException failure) {
             throw new IllegalStateException("the index cannot catch up with the session files (" + failure
@@ -110,23 +110,24 @@ final class Storage implements AutoCloseable {
     }
 
     /**
-     * 用户通道载入冷会话和用户用量的来源。第 1 步“只写不用”：照旧用内核重放恢复，同时用结果行折叠一次，比较两边；
-     * 读完文件的 memo 交给写入方，之后的结果行能引用文件里已有的内容。
+     * 用户通道载入冷会话和用户用量的来源：按结果行折叠，不调内核（record-results 第 2 步）。读完文件的 memo 交给写入方，
+     * 之后的结果行能引用文件里已有的内容。{@code compareReplay} 时另用内核重放一遍比较，不一致时标出会话，恢复仍用结果行。
      */
-    UserLane.Loader loader(SessionReplay replay) {
+    UserLane.Loader loader(SessionReplay replay, boolean compareReplay) {
         return new UserLane.Loader() {
             @Override
             public Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
-                Optional<SessionSlice> kernel = replay.load(principal, session, beforeSeq);
-                try {
-                    Optional<RecordReplay.Loaded> folded = records.load(principal, session, beforeSeq);
-                    compare.check(principal, session, paths.sessionFile(principal, session), beforeSeq, kernel,
-                            folded.map(RecordReplay.Loaded::slice), replay, records);
-                    folded.ifPresent(loaded -> files.adopt(principal, session, loaded.memo()));
-                } catch (IOException | RuntimeException failure) {
-                    compare.unreadable(principal, session, failure);
+                Optional<RecordReplay.Loaded> folded = records.load(principal, session, beforeSeq);
+                folded.ifPresent(loaded -> files.adopt(principal, session, loaded.memo()));
+                if (compareReplay) {
+                    try {
+                        compare.check(principal, session, paths.sessionFile(principal, session), beforeSeq,
+                                replay.load(principal, session, beforeSeq), folded.map(RecordReplay.Loaded::slice), replay, records);
+                    } catch (IOException | SQLException | RuntimeException failure) {
+                        compare.unreadable(principal, session, failure);
+                    }
                 }
-                return kernel.map(CleanroomRing.Loaded::new);
+                return folded.map(loaded -> new CleanroomRing.Loaded(loaded.slice()));
             }
 
             @Override
