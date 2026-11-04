@@ -291,3 +291,5 @@ Playwright `compaction-settings.spec.ts`（用 `e2e2` 账号，结束时恢复�
 
 - 需求 1 第 4 条写的是“每 10 分钟再读”，这里同样适用于启动时已经读到的情况（本地服务可能换配置重启），和 T2 一致。
 - 新设置为 null（窗口变成未知）时保留会话原来的设置，需求里没写，自定。
+- （实现时补充）摘要调用的头部原来按阈值 T 截，现在 T 是用户选的压缩点，选 50% 时会把摘要能收的量也减半。改成按 `capacity() = W − R` 截：压缩点只决定什么时候压缩，摘要调用能收多少由模型定。旧事件 T 就是 W − R，回放不变。
+- （实现时）新字段放在记录的最后（`…, summaryMaxTokens, point, bytesPerToken`），保留旧的 6 个参数的构造器，少改调用处；`estimate()` 不放在 value 层的 `CompactionSettings` 上（value 不能依赖 kernel），改成 `TokenEstimate.of(settings)`。

@@ -13,24 +13,24 @@
 
 ## 阶段 1：值和内核
 
-- [ ] 1. `CompactionSettings` 加 `point`、`bytesPerToken`
+- [x] 1. `CompactionSettings` 加 `point`、`bytesPerToken`
   - File: value/state/CompactionSettings.java
   - `threshold()`：`point > 0` 用 `point`，否则 `window − reserve`；校验 `point` 为 0 或在 `(0, window − reserve]`，`bytesPerToken` 为 0 或正数；`estimate()`
   - 测试：新旧两种 `threshold()`；非法值拒绝
   - _Requirements: T4, T7, 需求 3.4_
 
-- [ ] 2. `TokenEstimate` 按系数算
+- [x] 2. `TokenEstimate` 按系数算
   - File: kernel/compaction/TokenEstimate.java，及 `Compactor`、`CompactSteps`、`SummaryPrompt` 的调用处
   - 记录 `(double bytesPerToken)`，实例方法；`LEGACY`（3）；系数 0 按 3 算；图片、PDF 不受系数影响
   - 测试：1.5、2.0、LEGACY 的文字估算；图片和 PDF 不变；已有压缩测试不改断言
   - _Requirements: T7, 需求 4.1_
 
-- [ ] 3. `EventCodec` 兼容旧事件
+- [x] 3. `EventCodec` 兼容旧事件
   - File: shell/journal/EventCodec.java（如需要）
   - 测试：没有新字段的旧 `ContextAssembled` JSON 解码为 `point = 0`、`bytesPerToken = 0`，`threshold()` 等于旧值；新字段往返
   - _Requirements: 需求 3.4_
 
-- [ ] 4. 内核每次提问换上新设置
+- [x] 4. 内核每次提问换上新设置
   - File: kernel/step/ContextSteps.java、value/state/SessionContext.java
   - `point > 0` 且和会话里的不同时换上；不追加消息；新设置 null 不换；旧事件不换
   - 测试 `CompactionSwitchTest`：换设置后请求前缀不变；旧事件不换；null 不换；改小后下一次调用前压缩；运行中途不换（同一运行的第二次调用仍用原设置）

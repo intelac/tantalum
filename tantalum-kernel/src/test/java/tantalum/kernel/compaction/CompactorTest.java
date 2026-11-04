@@ -60,7 +60,7 @@ class CompactorTest {
     @Test
     void sizeUsesTheAnchorWhenPresentAndEstimatesOtherwise() {
         SessionState session = session(SETTINGS, user(1), assistant(1), user(2));
-        assertEquals(TokenEstimate.ofText("sys") + 90, Compactor.size(session, "sys", NO_TOOLS));
+        assertEquals(TokenEstimate.LEGACY.ofText("sys") + 90, Compactor.size(session, "sys", NO_TOOLS));
         SessionState anchored = session.withAnchor(new UsageAnchor(700, 2));
         assertEquals(730, Compactor.size(anchored, "sys", NO_TOOLS), "anchor plus the one message added since");
     }
@@ -118,7 +118,7 @@ class CompactorTest {
         Message summary = SummaryPrompt.summaryMessage("constraint: never touch A");
         List<Message> view = List.of(summary, user(1), assistant(1), user(2));
         Plan plan = new Plan(3, 3, 1, 90, null);
-        long fixed = SETTINGS.threshold() - TokenEstimate.ofMessage(summary) - 5;
+        long fixed = SETTINGS.threshold() - TokenEstimate.LEGACY.ofMessage(summary) - 5;
         Compactor.Head head = Compactor.headForSummary(plan, view, SETTINGS, fixed);
         assertTrue(head.dropped());
         assertEquals(List.of(summary), head.messages());
@@ -230,6 +230,17 @@ class CompactorTest {
         Compactor.Head partial = Compactor.headForSummary(plan, view, SETTINGS, 770);
         assertTrue(partial.dropped());
         assertEquals(2, partial.messages().size(), "the first unit went, the assistant unit (about 20 tokens) stays");
+    }
+
+    /** compaction-threshold：用户选的压缩点只决定什么时候压缩；摘要调用能收多少按窗口减预留算。 */
+    @Test
+    void theSummaryHeadIsBoundByWhatTheModelTakesNotByTheChosenPoint() {
+        Message big = new Message(Role.USER, List.of(new ToolResultBlock("t", "y".repeat(200), false, null)), false);
+        List<Message> view = List.of(user(1), assistant(1), big, user(2), assistant(2));
+        Plan plan = new Plan(3, 2, 2, 0, user(1));
+        CompactionSettings half = new CompactionSettings(1000, 200, 100, 60, 30, 500, 400, 3);
+        assertFalse(Compactor.headForSummary(plan, view, half, 700).dropped(), "700 + the head is above 400 but below 800");
+        assertTrue(Compactor.headForSummary(plan, view, half, 795).dropped());
     }
 
     @Test

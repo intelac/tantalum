@@ -51,11 +51,12 @@ public final class Compactor {
         if (units.size() < 2) {
             return Optional.empty();
         }
+        TokenEstimate estimate = TokenEstimate.of(settings);
         long budget = trigger == Trigger.AUTO ? settings.keepBudget() : 0;
         int firstKept = units.size() - 1;
-        long kept = estimate(view, units.get(firstKept));
+        long kept = estimate(estimate, view, units.get(firstKept));
         while (firstKept > 0) {
-            long next = estimate(view, units.get(firstKept - 1));
+            long next = estimate(estimate, view, units.get(firstKept - 1));
             if (kept + next > budget) {
                 break;
             }
@@ -69,7 +70,7 @@ public final class Compactor {
         List<Message> head = view.subList(0, headMessages);
         // 规则 5：当前请求是视图里最新的用户亲笔消息；保留段里已有更新的，头部的旧消息就只进摘要。
         boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isUserText);
-        return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, TokenEstimate.ofMessages(head),
+        return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, estimate.ofMessages(head),
                 requestKept ? null : request(head)));
     }
 
@@ -80,7 +81,7 @@ public final class Compactor {
 
     /** 摘要最多能省下头部除去重复请求的部分；太少就不值得调模型。 */
     public static boolean summaryCanHelp(Plan plan, CompactionSettings settings) {
-        long request = plan.request() == null ? 0 : TokenEstimate.ofMessage(plan.request());
+        long request = plan.request() == null ? 0 : TokenEstimate.of(settings).ofMessage(plan.request());
         return plan.headEstimate() - request >= minGain(settings);
     }
 
@@ -91,7 +92,8 @@ public final class Compactor {
 
     /** 裁剪能带来明显进展吗。去掉一点推理块不算，否则每次失败都会白白丢掉 thinking。 */
     public static boolean trimHelps(List<Message> view, CompactionSettings settings) {
-        return TokenEstimate.ofMessages(view) - TokenEstimate.ofMessages(trimmed(view, settings)) >= minGain(settings);
+        TokenEstimate estimate = TokenEstimate.of(settings);
+        return estimate.ofMessages(view) - estimate.ofMessages(trimmed(view, settings)) >= minGain(settings);
     }
 
     /** 手动压缩有没有可做的。 */
@@ -103,14 +105,16 @@ public final class Compactor {
 
     /** 规则 1：有锚点用实测加新增估算，否则全部估算。省略过的图片按省略说明算，和实际发送的一致（A11）。 */
     public static long size(SessionState session, String system, List<ToolSpec> tools) {
+        CompactionSettings settings = session.context() == null ? null : session.context().compaction();
+        TokenEstimate estimate = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
         if (session.anchor() != null) {
             List<Message> messages = session.messages();
             int from = Math.min(session.anchor().messageCount(), messages.size());
             return session.anchor().tokens()
-                    + TokenEstimate.ofMessages(ImageBudget.omit(messages.subList(from, messages.size()), session.omittedImages()));
+                    + estimate.ofMessages(ImageBudget.omit(messages.subList(from, messages.size()), session.omittedImages()));
         }
-        return TokenEstimate.ofText(system) + TokenEstimate.ofTools(tools)
-                + TokenEstimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
+        return estimate.ofText(system) + estimate.ofTools(tools)
+                + estimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
     }
 
     /** 规则 5：摘要、当前请求原文、处理过的保留段。 */
@@ -125,7 +129,8 @@ public final class Compactor {
     }
 
     /**
-     * 规则 6.2、6.3：头部去推理块、截工具结果；连同 system、工具和指令仍超过阈值时从最早的单元丢起。
+     * 规则 6.2、6.3：头部去推理块、截工具结果；连同 system、工具和指令仍超过模型能收的量（窗口减预留）时从最早的单元丢起。
+     * 用的不是用户选的压缩点：压缩点只决定什么时候压缩，摘要调用能收多少由模型定（compaction-threshold）。
      * {@code fixedEstimate} 是 system、工具和指令的估算。
      */
     public static Head headForSummary(Plan plan, List<Message> view, CompactionSettings settings, long fixedEstimate) {
@@ -133,7 +138,8 @@ public final class Compactor {
         boolean dropped = false;
         boolean hasSummary = !head.isEmpty() && SummaryPrompt.isSummary(head.getFirst());
         int floor = hasSummary ? 1 : 0;
-        while (head.size() > floor && fixedEstimate + TokenEstimate.ofMessages(head) > settings.threshold()) {
+        TokenEstimate estimate = TokenEstimate.of(settings);
+        while (head.size() > floor && fixedEstimate + estimate.ofMessages(head) > settings.capacity()) {
             List<Unit> units = Units.split(head);
             Unit victim = units.get(floor);
             List<Message> rest = new ArrayList<>(head.subList(0, victim.from()));
@@ -159,8 +165,8 @@ public final class Compactor {
         return SummaryPrompt.capFiles(new ArrayList<>(files));
     }
 
-    private static long estimate(List<Message> view, Unit unit) {
-        return TokenEstimate.ofMessages(view.subList(unit.from(), unit.to()));
+    private static long estimate(TokenEstimate estimate, List<Message> view, Unit unit) {
+        return estimate.ofMessages(view.subList(unit.from(), unit.to()));
     }
 
     /** 头部里最新一条用户亲笔的文字消息：不是工具结果、不是上下文更新、不是摘要。 */
