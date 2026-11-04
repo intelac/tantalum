@@ -349,6 +349,58 @@ class WireFormatTest {
     // ---- 附件（attachments 任务 11）：attachments.txt，另查“实时 = 回放” ----
 
     /** 字节数故意大到单独就超出 20 MiB 的图片预算（base64 后；真实的存储版本不超过 4 MiB），每个请求都省略它，请求记录据此带 omittedImages。 */
+    // ---- 会话中途换工具（core-tools 任务 21）：wire/tool-change.txt ----
+
+    private static final ToolSpec WRITE = new ToolSpec("write_file", "Write a file", new Json.Obj(Map.of()));
+
+    /** 用户开着的工具名单随组装一起记下；全集不变。 */
+    private static void assembledWith(TranscriptFixture fx, RunId run, List<String> enabled) {
+        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(READ, WRITE), null, List.of(), enabled,
+                List.of()));
+    }
+
+    /** 第一问 write_file 没开；用户在插件页打开它；第二问开头追加工具变化，模型调用 write_file。 */
+    private TranscriptFixture toolChangeScenario() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of());
+        fx.feed(null, fx.prompt("summarise a.txt"));
+        RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWith(fx, first, List.of("read_file"));
+        fx.feed(first, fx.reply(text("it says hello")));
+        fx.feed(null, fx.prompt("now write that to b.txt"));
+        RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWith(fx, second, List.of("read_file", "write_file"));
+        fx.feed(second, fx.reply(TranscriptFixture.call("w1", "write_file")));
+        fx.feed(second, fx.finished(second, "w1", "Created b.txt (5 bytes).", false));
+        fx.feed(second, fx.reply(text("done")));
+        return fx;
+    }
+
+    @Test
+    void toolChangesInItemsPushesTraceAndPrompts(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = toolChangeScenario();
+        StringBuilder out = new StringBuilder("# items\n");
+        for (TranscriptItem item : fx.items()) {
+            out.append(codec.mapper().writeValueAsString(ItemJson.toMap(codec.mapper(), item))).append('\n');
+        }
+        out.append("# item pushes\n");
+        for (TranscriptFixture.Change change : fx.changes) {
+            SseMessage message = SseHub.itemMessage(codec.mapper(), change.seq(), change.index(), change.item());
+            out.append(message.id()).append(' ').append(message.event()).append(' ').append(message.data()).append('\n');
+        }
+        out.append("# prompts\n");
+        for (var decision : fx.decisions) {
+            for (var command : decision.commands()) {
+                if (command instanceof tantalum.value.command.CallModel call) {
+                    out.append(codec.mapper().writeValueAsString(call.prompt())).append('\n');
+                }
+            }
+        }
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay)
+                .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
+        out.append("# trace\n").append(pageJson(page));
+        check("tool-change.txt", out.toString());
+    }
+
     private static final ImageRef PHOTO = new ImageRef("sha256:" + "a".repeat(64), "photo.jpg", "image/jpeg", 16_000_000, 2048, 1536, 4000, 3000);
     private static final FileRef REPORT = new FileRef("sha256:" + "b".repeat(64), "report.pdf", "application/pdf", 90_000, 3);
     private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);

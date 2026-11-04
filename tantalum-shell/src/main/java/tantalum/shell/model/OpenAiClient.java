@@ -32,6 +32,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tools.jackson.core.JacksonException;
@@ -269,8 +270,10 @@ public final class OpenAiClient implements ModelClient {
         messages.add(system);
         prompt.messages().forEach(message -> addMessage(messages, message, media));
         body.put("messages", messages);
-        if (!prompt.tools().isEmpty()) {
-            body.put("tools", prompt.tools().stream().map(OpenAiClient::tool).toList());
+        // 这边没有追加式的工具变化：直接发现在开着的工具，变化在历史里另有文字说明
+        List<ToolSpec> tools = ToolChanges.active(prompt);
+        if (!tools.isEmpty()) {
+            body.put("tools", tools.stream().map(OpenAiClient::tool).toList());
             if (!options.toolsAllowed()) {
                 body.put("tool_choice", "none");
             }
@@ -307,6 +310,7 @@ public final class OpenAiClient implements ModelClient {
                         reasoning.append(value.value());
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
+                case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);
                     parts.add(textPart(AttachmentText.image(image)));
@@ -343,7 +347,8 @@ public final class OpenAiClient implements ModelClient {
             return;
         }
         Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("role", message.role() == Role.USER ? "user" : "assistant");
+        // 会话中途的系统消息按用户消息发：本地模型的对话模板不一定认开头以外的 system
+        entry.put("role", message.role() == Role.ASSISTANT ? "assistant" : "user");
         if (parts.isEmpty()) {
             entry.put("content", text.toString());
         } else {

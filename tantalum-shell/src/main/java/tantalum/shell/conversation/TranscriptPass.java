@@ -38,6 +38,7 @@ import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
@@ -164,6 +165,7 @@ final class TranscriptPass {
                 }
                 case ToolResultBlock ignored -> { }
                 case AttachmentBlock ignored -> { } // 模型的回复里没有附件，附件只在用户消息里
+                case ToolChangeBlock ignored -> { } // 工具变化只在系统消息里
             }
         }
     }

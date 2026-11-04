@@ -19,7 +19,6 @@ import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
-import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
@@ -88,10 +87,9 @@ public final class ContextHandler implements Handler {
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
-        // 只给这个用户开着的工具（core-tools C16 的“加载”一半）
-        List<String> enabled = gate.enabledTools(principal);
-        List<ToolSpec> tools = catalog.specs().stream().filter(spec -> enabled.contains(spec.name())).toList();
-        return new ContextAssembled(command.id(), system.toString(), tools, compaction, sections);
+        // 全部工具加上这个用户现在开着的名单（core-tools C14、C16）：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction, sections,
+                gate.enabledTools(principal), gate.enabledPlugins(principal));
     }
 
     /** 让正文里的闭合标签跳不出包裹。这只降低注入风险，不是保证。 */

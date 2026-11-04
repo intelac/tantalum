@@ -32,7 +32,9 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.model.ToolSpec;
 import tantalum.value.state.OwnerRef;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonGenerator;
@@ -56,9 +58,16 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = ReasoningBlock.class, name = "reasoning"),
         @JsonSubTypes.Type(value = ToolCallBlock.class, name = "toolCall"),
         @JsonSubTypes.Type(value = ToolResultBlock.class, name = "toolResult"),
-        @JsonSubTypes.Type(value = AttachmentBlock.class, name = "attachment")
+        @JsonSubTypes.Type(value = AttachmentBlock.class, name = "attachment"),
+        @JsonSubTypes.Type(value = ToolChangeBlock.class, name = "toolChange")
     })
     private interface ContentBlockMixin {}
+
+    /** 投影才有 deferred 的工具，journal 里的都不是：false 不写出，和加字段之前的行逐字节相同。 */
+    private interface ToolSpecMixin {
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+        boolean deferred();
+    }
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
@@ -103,6 +112,7 @@ public final class EventCodec {
                 .addMixIn(FollowUpSubmitted.class, AttachmentsMixin.class)
                 .addMixIn(ToolFinished.class, ImagesMixin.class)
                 .addMixIn(ToolResultBlock.class, ImagesMixin.class)
+                .addMixIn(ToolSpec.class, ToolSpecMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))

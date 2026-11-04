@@ -14,6 +14,8 @@ import tantalum.value.hook.PromptPatch;
 import tantalum.value.hook.Stop;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
+import tantalum.value.state.SessionContext;
+import tantalum.value.state.SessionState;
 
 /** 按注册顺序遍历钩子，并执行异常规则：强制钩子和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
  * 返回 null 违反契约，一律按 {@code Stop} 处理。每个钩子的决定报一条 {@link HookDecided}，只放行、没有补丁的不报。 */
@@ -30,7 +32,11 @@ public final class HookChain {
         List<ToolSpec> tools = new ArrayList<>();
         List<Fact> facts = new ArrayList<>();
 
+        SessionContext session = sessionContext(state, context);
         for (KernelHook hook : hooks) {
+            if (session != null && !session.pluginActive(hook.plugin())) {
+                continue;
+            }
             HookResult result;
             try {
                 result = call(hook, point, state, context);
@@ -56,6 +62,15 @@ public final class HookChain {
             tools.addAll(allow.patch().addTools());
         }
         return new HookOutcome(new Allow(new PromptPatch(system.toString(), tools)), facts, null);
+    }
+
+    /**
+     * 只跑这个会话开着的插件（core-tools C16）。名单是运行开始组装上下文时记下的，运行中途不变：中途关掉的插件本次运行照跑
+     * （需求 8 第 5 条）。会话还没组装过上下文、或是加名单之前的会话，名单为空，全部照跑。
+     */
+    private static SessionContext sessionContext(KernelState state, HookContext context) {
+        SessionState session = context.run() == null ? null : state.sessions().get(context.run().session());
+        return session == null ? null : session.context();
     }
 
     /** 钩子出错让链拦截时，在 HookReported 之后再报一条 STOP：记录表要能看出这一步是被谁拦下的。 */

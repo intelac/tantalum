@@ -28,6 +28,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 
@@ -397,5 +398,32 @@ class OpenAiClientTest {
             java.nio.file.Files.writeString(ATTACHMENT_EXPECTED, actual);
         }
         assertEquals(java.nio.file.Files.readString(ATTACHMENT_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
+    }
+
+    // ---- 会话中途换工具（core-tools 任务 20）：工具只发现在开着的，变化写成一段说明 ----
+
+    private static final java.nio.file.Path TOOL_CHANGE_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-tool-change-requests.txt");
+
+    @Test
+    void toolChangeRequestBodies() throws Exception {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        List<ToolSpec> tools = List.of(new ToolSpec("grep", "search", schema), new ToolSpec("read_file", "read", schema),
+                new ToolSpec("write_file", "write", schema, true));
+        Prompt before = new Prompt("sys", tools, List.of(Message.user("q1")));
+        Prompt after = new Prompt("sys", tools, List.of(Message.user("q1"), new Message(Role.ASSISTANT, List.of(new TextBlock("a1")), false),
+                Message.user("q2"), new Message(Role.SYSTEM, List.of(new ToolChangeBlock(List.of("write_file"), List.of("grep"))), false)));
+        OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults(), false);
+        StringBuilder actual = new StringBuilder();
+        for (Prompt prompt : List.of(before, after)) {
+            server.body = finish("stop");
+            client.call(prompt, AttachmentMedia.NONE, listener);
+            actual.append("== ").append(prompt == before ? "before the change" : "after the change").append('\n')
+                    .append(server.requests.getLast()).append('\n');
+        }
+        if (Boolean.getBoolean("openai.record")) {
+            java.nio.file.Files.writeString(TOOL_CHANGE_EXPECTED, actual);
+        }
+        assertEquals(java.nio.file.Files.readString(TOOL_CHANGE_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
     }
 }

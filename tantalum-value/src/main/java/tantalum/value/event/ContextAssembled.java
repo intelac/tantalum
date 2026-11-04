@@ -10,9 +10,12 @@ import tantalum.value.state.ContextSection;
 /**
  * 提示词组装完成：完整的 system prompt 和工具列表。{@code sections} 是 system 里会变的几段（共享知识、AGENTS.md、记忆索引），
  * 会话已冻结 system 时内核只把它们的变化追加给模型。{@code compaction} 是这次组装时的压缩设置，没配窗口时为 null，表示不压缩。
+ * {@code tools} 是服务器上的全部工具；{@code enabledTools}、{@code enabledPlugins} 是这个用户当时开着的工具和钩子插件
+ * （core-tools C15）。加这两个字段之前的事件里没有它们，读出来是 null，表示全部开着。
  */
 public record ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
-                               List<ContextSection> sections) implements ResultEvent {
+                               List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins)
+        implements ResultEvent {
 
     public static final String TYPE = "ContextAssembled";
 
@@ -20,6 +23,14 @@ public record ContextAssembled(CommandId command, String system, List<ToolSpec> 
         Objects.requireNonNull(system, "system");
         tools = List.copyOf(tools);
         sections = List.copyOf(sections);
+        enabledTools = enabledTools == null ? null : List.copyOf(enabledTools);
+        enabledPlugins = enabledPlugins == null ? null : List.copyOf(enabledPlugins);
+    }
+
+    /** 不区分用户开关时（全部开着）。 */
+    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
+                            List<ContextSection> sections) {
+        this(command, system, tools, compaction, sections, null, null);
     }
 
     @Override

@@ -41,6 +41,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
@@ -168,6 +169,39 @@ class EventCodecTest {
         for (int i = 0; i < old.size(); i++) {
             assertEquals(expected.get(i), codec.decode(expected.get(i).type(), 1, old.get(i)), old.get(i));
         }
+    }
+
+    // ---- 插件开关和中途换工具（core-tools 任务 15）----
+
+    private static final String OLD_ASSEMBLED = "{\"command\":{\"value\":\"1-0\"},\"system\":\"sys\",\"tools\":[{\"name\":\"read_file\","
+            + "\"description\":\"read\",\"schema\":{}}],\"sections\":[]}";
+
+    @Test
+    void enabledListsAndToolChangesSurviveARoundTrip() {
+        ToolSpec read = new ToolSpec("read_file", "read", new Json.Obj(Map.of()));
+        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of("quota")));
+        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of(), List.of()));
+        assertRoundTrip(new ModelReplied(CMD, List.of(new ToolChangeBlock(List.of("write_file"), List.of("grep"))), StopReason.END_TURN,
+                "m", null, null, null, null));
+    }
+
+    /** 不带名单时写出的行和加字段之前逐字节相同；旧行读出来名单是 null，表示全部开着。deferred 为 false 时不写出。 */
+    @Test
+    void contextWithoutListsWritesTheSameBytesAsBefore() {
+        ContextAssembled old = new ContextAssembled(CMD, "sys", List.of(new ToolSpec("read_file", "read", new Json.Obj(Map.of()))), null,
+                List.of());
+        assertEquals(OLD_ASSEMBLED, codec.encode(old));
+        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, OLD_ASSEMBLED);
+        assertEquals(old, decoded);
+        assertEquals(null, decoded.enabledTools());
+        assertEquals(null, decoded.enabledPlugins());
+    }
+
+    @Test
+    void anEmptyEnabledListIsNotTheSameAsNoList() {
+        String none = codec.encode(new ContextAssembled(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
+        assertTrue(none.contains("\"enabledTools\":[]"), none);
+        assertEquals(List.of(), ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, none)).enabledTools());
     }
 
     // ---- 附件（attachments 任务 8）----

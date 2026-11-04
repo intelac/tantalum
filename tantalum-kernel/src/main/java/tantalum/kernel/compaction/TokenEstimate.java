@@ -13,6 +13,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 
@@ -61,6 +62,8 @@ public final class TokenEstimate {
             case ToolCallBlock call -> ofText(call.name()) + ofText(call.rawArguments());
             case ToolResultBlock result -> ofText(result.text()) + result.images().stream().mapToLong(TokenEstimate::ofImage).sum();
             case AttachmentBlock attachment -> ofAttachment(attachment.ref());
+            // 按 OpenAI 那边的文字说明算，比 Claude 的 tool_reference 块长，宁可高估
+            case ToolChangeBlock change -> ofText("Tools changed: added " + change.added() + "; removed " + change.removed() + ".");
         };
     }
 
