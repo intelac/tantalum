@@ -90,7 +90,7 @@
   - 每一步之后只用结果行恢复，和内存逐字节相同；同一文件两套只读钩子规则恢复结果相同；每一步 `record.apply(before)` 等于实时的 `Decision`
   - _Requirements: 需求 3.2, 3.3, 11.1, 11.2_
 
-- [ ] 14. 实测
+- [x] 14. 实测
   - File: tantalum-examples/src/test/.../bench（`LaneBench`、`ReadBench`，加文件大小统计）、.spec-workflow/steering/tech.md
   - 写路径 P99、冷载入、启动、文件大小增幅，和预算比较
   - _Requirements: 需求 1.8, 2.4, 3.6, 11.5_
