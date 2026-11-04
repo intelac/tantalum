@@ -8,6 +8,7 @@ import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.mcp.McpProperties;
 import tantalum.shell.memory.MemoryLimits;
+import tantalum.shell.settings.CompactionPolicy;
 import tantalum.value.state.CompactionSettings;
 
 /** 全部配置，默认值在 {@code application.properties}。 */
@@ -71,6 +72,12 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
+    private static void requirePositive(String name, double value) {
+        if (!(value > 0) || Double.isInfinite(value)) {
+            throw new IllegalArgumentException(name + " must be positive but was " + value);
+        }
+    }
+
     private static void requirePositive(String name, long value) {
         if (value <= 0) {
             throw new IllegalArgumentException(name + " must be positive but was " + value);
@@ -114,13 +121,26 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    /** Claude 设置。API Key 只从环境变量读取，不在这里。{@code contextWindow} 为 0 表示未知：不压缩，控制台不显示占比。 */
+    /**
+     * Claude 设置。API Key 只从环境变量读取，不在这里。{@code contextWindow} 是从 Models 接口读不到窗口时用的值，0 表示
+     * 未知：不压缩，控制台不显示占比（compaction-threshold T1）。{@code bytesPerToken} 是估算系数（T7）。
+     */
     public record Claude(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunkTimeout,
-                         Duration betweenChunkTimeout, int concurrency, long contextWindow) {}
+                         Duration betweenChunkTimeout, int concurrency, long contextWindow, double bytesPerToken) {
 
-    /** OpenAI 兼容服务的设置。{@code vision} 表示模型收图片（A7），本地模型多数不收，默认关。 */
+        public Claude {
+            requirePositive("bytesPerToken", bytesPerToken);
+        }
+    }
+
+    /** OpenAI 兼容服务的设置。{@code vision} 表示模型收图片（A7），本地模型多数不收，默认关。其余同 {@link Claude}。 */
     public record OpenAi(String baseUrl, String model, int maxTokens, Duration firstChunkTimeout,
-                         Duration betweenChunkTimeout, int concurrency, long contextWindow, boolean vision) {}
+                         Duration betweenChunkTimeout, int concurrency, long contextWindow, boolean vision, double bytesPerToken) {
+
+        public OpenAi {
+            requirePositive("bytesPerToken", bytesPerToken);
+        }
+    }
 
     private boolean usesClaude() {
         return "claude".equals(provider);
@@ -146,7 +166,15 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         return usesClaude() ? claude.contextWindow() : openai.contextWindow();
     }
 
-    /** 当前供应商的压缩设置快照；窗口未知时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
+    /** 当前供应商的压缩参数，和窗口、用户选的压缩点一起由 {@code CompactionPolicy} 合成每次提问的设置。 */
+    public CompactionPolicy.Limits compactionLimits() {
+        long maxTokens = usesClaude() ? claude.maxTokens() : openai.maxTokens();
+        Compaction c = compaction == null ? Compaction.defaults() : compaction;
+        return new CompactionPolicy.Limits(Math.max(c.reserveTokens(), maxTokens), c.keepRecentTokens(), c.maxKeptToolResultBytes(),
+                c.maxSummarizedToolResultBytes(), c.summaryMaxTokens(), usesClaude() ? claude.bytesPerToken() : openai.bytesPerToken());
+    }
+
+    /** 按配置的窗口算的压缩设置，启动时用它检查配置（窗口不大于预留时抛出）；窗口未知时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
     public CompactionSettings compactionSettings() {
         long window = contextWindow();
         long maxTokens = usesClaude() ? claude.maxTokens() : openai.maxTokens();

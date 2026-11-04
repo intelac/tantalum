@@ -37,6 +37,7 @@ class ConfigApiTest {
             assertEquals("claude-sonnet-5-5", body.get("model").asString());
             assertEquals(true, body.get("cloud").asBoolean());
             assertEquals(200000, body.get("contextWindow").asLong());
+            assertEquals("config", body.get("windowSource").asString(), "the test model cannot tell its window");
             assertEquals(true, body.get("vision").asBoolean());
             JsonNode attachments = body.get("attachments");
             assertEquals(20, attachments.get("maxImagesPerMessage").asInt());
@@ -44,7 +45,7 @@ class ConfigApiTest {
             assertEquals(50L * 1024 * 1024, attachments.get("maxImageBytes").asLong());
             assertEquals(20, attachments.get("maxFilesPerMessage").asInt());
             assertEquals(50L * 1024 * 1024, attachments.get("maxFileBytes").asLong());
-            assertEquals(6, body.size());
+            assertEquals(7, body.size());
             assertFalse(response.body().toLowerCase(Locale.ROOT).contains("key"), response.body());
             assertFalse(response.body().contains("sk-"), response.body());
             assertEquals(401, server.get(null, "/api/config").statusCode());

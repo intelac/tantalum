@@ -53,6 +53,21 @@ class ModelHandlerTest {
         return new ModelHandler(client, limiter, wait, this::listener, clock);
     }
 
+    /** compaction-threshold T2：上下文超长时通知再读窗口，别的失败不通知。 */
+    @Test
+    void anOverflowAsksForTheWindowAgain() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
+        ModelClient overflow = (prompt, chunks) -> new ModelOutcome.Failed(FailureReason.CONTEXT_OVERFLOW, false, null, "", "prompt is too long");
+        ModelClient limited = (prompt, chunks) -> new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, null, "", "429");
+        new ModelHandler(limited, new CallLimiter(1), Duration.ofSeconds(1), this::listener, clock, run -> tantalum.shell.model.AttachmentMedia.NONE,
+                asked::incrementAndGet).handle(COMMAND);
+        assertEquals(0, asked.get());
+        ModelFailed failed = assertInstanceOf(ModelFailed.class, new ModelHandler(overflow, new CallLimiter(1), Duration.ofSeconds(1),
+                this::listener, clock, run -> tantalum.shell.model.AttachmentMedia.NONE, asked::incrementAndGet).handle(COMMAND));
+        assertEquals(FailureReason.CONTEXT_OVERFLOW, failed.reason());
+        assertEquals(1, asked.get());
+    }
+
     @Test
     void replyBecomesAnEventAndChunksOnlyGoToProgress() throws Exception {
         ModelClient client = (prompt, chunks) -> {

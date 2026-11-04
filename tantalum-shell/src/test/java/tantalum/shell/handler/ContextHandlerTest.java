@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -18,8 +19,12 @@ import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.model.ContextWindow;
+import tantalum.shell.model.WindowSource;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolOutput;
+import tantalum.shell.settings.CompactionPolicy;
+import tantalum.shell.settings.UserSettings;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.value.command.AssembleContext;
@@ -33,6 +38,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Prompt;
+import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
@@ -65,7 +71,7 @@ class ContextHandlerTest {
     }
 
     private ContextHandler handler(Workspaces workspaces, KnowledgeBase knowledge) {
-        return new ContextHandler(workspaces, "Base prompt.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(workspaces), knowledge, "", null);
+        return new ContextHandler(workspaces, "Base prompt.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(workspaces), knowledge, "", noCompaction());
     }
 
     private ContextHandler shared() {
@@ -76,12 +82,31 @@ class ContextHandlerTest {
         return assertInstanceOf(ContextAssembled.class, handler.handle(command));
     }
 
-    /** 压缩设置随事件写进 journal，会话据此冻结；没配时为 null，内核就不压缩。 */
+    private static final CompactionPolicy.Limits LIMITS = new CompactionPolicy.Limits(64_000, 20_000, 32_768, 4_096, 8_192, 1.5);
+
+    private static CompactionPolicy policy(long window, UserSettings users) {
+        return new CompactionPolicy(new ContextWindow(WindowSource.NONE, window, LIMITS.reserve(), Duration.ofHours(1)), users, LIMITS);
+    }
+
+    private static CompactionPolicy noCompaction() {
+        try {
+            return policy(0, UserSettings.inMemory(Clock.systemUTC()));
+        } catch (java.sql.SQLException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
+    /**
+     * 压缩设置随事件写进 journal，按这个用户现在选的压缩点算，改了下一次组装就是新的（compaction-threshold T6）；
+     * 窗口未知时为 null，内核就不压缩。
+     */
     @Test
-    void compactionSettingsRideAlongWithTheEvent() throws Exception {
-        tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
-        ContextHandler handler = new ContextHandler(Workspaces.shared(dir), "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", settings);
-        assertEquals(settings, assembled(handler, COMMAND).compaction());
+    void compactionSettingsFollowTheUsersChoiceOnEveryAssembly() throws Exception {
+        UserSettings users = UserSettings.inMemory(Clock.systemUTC());
+        ContextHandler handler = new ContextHandler(Workspaces.shared(dir), "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", policy(1_000_000, users));
+        assertEquals(new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 936_000, 1.5), assembled(handler, COMMAND).compaction());
+        users.setCompactionPercent(COMMAND.run().principal(), 50);
+        assertEquals(500_000, assembled(handler, COMMAND).compaction().threshold());
         assertNull(assembled(shared(), COMMAND).compaction());
     }
 
@@ -127,7 +152,7 @@ class ContextHandlerTest {
         MemoryStores memories = memories(workspaces);
         Files.writeString(workspaces.of(ALICE).root().resolve("AGENTS.md"), "Agents rules.");
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", null);
+        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction());
 
         String system = assembled(handler, command(ALICE)).system();
 
@@ -146,7 +171,7 @@ class ContextHandlerTest {
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("alice-fact", "user", "alice likes tabs", "x");
         memories.of(BOB).write("bob-fact", "user", "bob likes spaces", "x");
-        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", null);
+        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction());
 
         String alice = assembled(handler, command(ALICE)).system();
         String bob = assembled(handler, command(BOB)).system();
@@ -160,7 +185,7 @@ class ContextHandlerTest {
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", null);
+        ContextHandler handler = new ContextHandler(workspaces, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction());
         ContextAssembled event = assembled(handler, command(ALICE));
 
         SessionState session = SessionState.start(new SessionId("s"), ALICE)

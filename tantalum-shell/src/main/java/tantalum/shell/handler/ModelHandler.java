@@ -39,6 +39,8 @@ public final class ModelHandler implements Handler {
     private final Clock clock;
     /** 每个运行从谁的附件目录取内容。 */
     private final Function<RunRef, AttachmentMedia> media;
+    /** 模型报上下文超长时调用：窗口可能变小了，再读一次（compaction-threshold T2）。 */
+    private final Runnable onOverflow;
 
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock) {
@@ -47,12 +49,18 @@ public final class ModelHandler implements Handler {
 
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock, Function<RunRef, AttachmentMedia> media) {
+        this(client, limiter, waitTimeout, listeners, clock, media, () -> {});
+    }
+
+    public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
+                        Clock clock, Function<RunRef, AttachmentMedia> media, Runnable onOverflow) {
         this.client = client;
         this.limiter = limiter;
         this.waitTimeout = waitTimeout;
         this.listeners = listeners;
         this.clock = clock;
         this.media = media;
+        this.onOverflow = onOverflow;
     }
 
     @Override
@@ -73,6 +81,9 @@ public final class ModelHandler implements Handler {
                     LOG.warn("model call {} failed: {}", call.id().value(), missing.getMessage());
                     return new ModelFailed(call.id(), FailureReason.INVALID_REQUEST, false, null, "", missing.getMessage(),
                             startedAt, null, options);
+                }
+                if (outcome instanceof ModelOutcome.Failed failed && failed.reason() == FailureReason.CONTEXT_OVERFLOW) {
+                    onOverflow.run();
                 }
                 return toEvent(call, outcome, new Timing(startedAt, firstToken.get(), options));
             } finally {
