@@ -49,8 +49,10 @@ class MatchedCodecTest {
     private final EventCodec codec = EventCodec.withBuiltins();
     private long seq;
 
+    /** 参数定义里有整数和小数：冷载入后从文件读出的节点类型和从对象转出的不同，比较时不能当成变了。 */
     private static ToolSpec tool(String name, String description) {
-        return new ToolSpec(name, description, new Json.Obj(Map.of("type", new Json.Str("object"))));
+        return new ToolSpec(name, description, new Json.Obj(Map.of("type", new Json.Str("object"),
+                "maxItems", new Json.Num(new java.math.BigDecimal("20")), "weight", new Json.Num(new java.math.BigDecimal("0.5")))));
     }
 
     private static ContextAssembled assembled(String system, List<ToolSpec> tools, List<String> enabled, List<ContextSection> sections) {
@@ -160,7 +162,10 @@ class MatchedCodecTest {
             files.append(USER, SESSION, List.of(next));
         }
         List<String> lines = Files.readAllLines(file);
-        assertTrue(JSON.readTree(lines.getLast()).get("payload").has("diff"));
+        JsonNode payload = JSON.readTree(lines.getLast()).get("payload");
+        assertTrue(payload.has("diff"));
+        assertEquals(List.of("write_file"), payload.get("toolSpecs").valueStream().map(spec -> spec.get("name").asString()).toList(),
+                "grep did not change, even though it was read back from the file");
         List<Line> read = new ArrayList<>();
         new SessionFileReader(codec).forEachLine(file, read::add);
         assertEquals(next.envelope(), read.getLast().envelope());

@@ -219,6 +219,14 @@ class EventCodecTest {
                 .contains("\"point\":500000,\"bytesPerToken\":1.5"));
     }
 
+    /** 第 1 版的组装上下文（one-line-journal 第 1 步写的）照样能读，工具来源是空表。 */
+    @Test
+    void aFirstVersionContextReadsWithoutToolSources() {
+        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, OLD_ASSEMBLED);
+        assertEquals(Map.of(), decoded.toolSources());
+        assertEquals("sys", decoded.system());
+    }
+
     @Test
     void anEmptyEnabledListIsNotTheSameAsNoList() {
         String none = codec.encode(new ContextAssembled(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
