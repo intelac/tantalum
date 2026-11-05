@@ -110,7 +110,7 @@ flowchart LR
 ### 一次调用
 
 1. 模型回复里有 `read_file`。内核发出 `RunTool`，`ToolHandler` 在虚拟线程上调 `LocalTool.run`。
-2. `LocalTool` 先看路径：以 `/attachments/sha256-` 开头的直接在服务器读附件（旧会话里模型习惯这样读，见 L7）。其余的交给 `LocalLinks.call(principal, session, tool, args, timeout)`。
+2. `LocalTool` 把调用原样交给 `LocalLinks.call(principal, session, tool, args, timeout)`，自己不读写任何文件。服务器上唯一读文件的是 `read_attachment`，只读本人上传的附件（Yi 2026-11-06 定）；其他任何文件读写都只在电脑上发生。
 3. 这个用户没有连接时，立即返回错误 “The local workspace is not connected.”。有连接时：
    - 在这条连接上占一个名额（每条连接最多 4 个，L11）；
    - 发 `call`，等对应的 `result`。
@@ -259,7 +259,7 @@ flowchart LR
 
 **`LocalTool`（服务器端，实现 `plugin/Tool`）**
 - 包一个 `tantalum.local.tool.LocalTool` 的定义。
-- `run` 走上面“一次调用”的第 2、3、5 步。
+- `run` 走上面“一次调用”的第 2、3、5 步，不认 `/attachments/` 路径（不为旧会话做兼容，Yi 2026-11-06 定）。
 - `server()` 是 `local-workspace`，`serverConcurrency()` 是 64。用户之间不共用名额，每个用户的上限由 `LocalLinks` 管。
 - `timeout` 取工具自己声明的。
 
@@ -274,7 +274,7 @@ flowchart LR
 - 参数 `path`（`/attachments/sha256-…`）、`offset`、`limit`。
 - 读附件的代码从 `ReadFileTool` 原样拆出来。
 - 服务器内置工具，不受本机工作区开关影响。
-- `AttachmentText`、`ImageBudget` 里的提示改成用 `read_attachment`（只影响新写的文字，旧会话照文件还原）。
+- `AttachmentText`、`ImageBudget` 里的提示改成用 `read_attachment`。
 
 ### 改动的已有代码
 
@@ -378,7 +378,8 @@ local_tokens
   - 连不上本机服务器端口；
   - 超时和取消后没有残留进程；
   - 环境变量里没有 `TANTALUM_TOKEN` 和含 `KEY` 的变量。
-- **内核链路**（`E2eServer` 加假的连接）：电脑连上 → 下一次提问出现 `toolChange` 新增；断开 → 下一次提问出现不再可用；旧会话（服务器上执行过 `read_file`）照文件还原。
+- **内核链路**（`E2eServer` 加假的连接）：电脑连上 → 下一次提问出现 `toolChange` 新增；断开 → 下一次提问出现不再可用。
+- **服务器上没有文件工具**：测试启动完整的服务器，列出注册的全部工具，逐个确认只有三类：转发到电脑的 `LocalTool`、`read_attachment`、记忆和待办这类只碰服务器自己数据的工具。ArchitectureTest 加规则：`tantalum.shell.local` 不引用 `java.nio.file.Files`（转发工具自己不碰文件）。
 
 ### End-to-End Testing
 - Playwright：
