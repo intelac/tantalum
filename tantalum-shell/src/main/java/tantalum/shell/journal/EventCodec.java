@@ -99,6 +99,12 @@ public final class EventCodec {
         List<ImageRef> images();
     }
 
+    /** 不记工具来源的事件（测试造的）不写出这个字段；读出来是空表。 */
+    private interface ToolSourcesMixin {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        Map<String, String> toolSources();
+    }
+
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
         @JsonSubTypes.Type(value = OwnerRef.OfSession.class, name = "session"),
@@ -125,6 +131,7 @@ public final class EventCodec {
                 .addMixIn(ToolResultBlock.class, ImagesMixin.class)
                 .addMixIn(ToolSpec.class, ToolSpecMixin.class)
                 .addMixIn(CompactionSettings.class, CompactionSettingsMixin.class)
+                .addMixIn(ContextAssembled.class, ToolSourcesMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))
@@ -140,7 +147,7 @@ public final class EventCodec {
         codec.register(SteerSubmitted.TYPE, 1, SteerSubmitted.class);
         codec.register(FollowUpSubmitted.TYPE, 1, FollowUpSubmitted.class);
         codec.register(Cancel.TYPE, 1, Cancel.class);
-        codec.register(ContextAssembled.TYPE, 1, ContextAssembled.class);
+        codec.register(ContextAssembled.TYPE, 2, ContextAssembled.class);
         codec.register(ModelReplied.TYPE, 1, ModelReplied.class);
         codec.register(ModelFailed.TYPE, 1, ModelFailed.class);
         codec.register(ModelInterrupted.TYPE, 1, ModelInterrupted.class);

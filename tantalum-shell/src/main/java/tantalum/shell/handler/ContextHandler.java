@@ -6,11 +6,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.Workspace;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.tool.ToolCatalog;
@@ -89,7 +92,16 @@ public final class ContextHandler implements Handler {
         sections.forEach(section -> append(system, section.tagged()));
         // 全部工具加上这个用户现在开着的名单（core-tools C14、C16）：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction.settings(principal), sections,
-                gate.enabledTools(principal), gate.enabledPlugins(principal));
+                gate.enabledTools(principal), gate.enabledPlugins(principal), sources());
+    }
+
+    /** 每个工具从哪来（one-line-journal J5）：内置的写 {@code builtin}，MCP 的写配置里的服务器名，不写地址和令牌。 */
+    private Map<String, String> sources() {
+        Map<String, String> sources = new LinkedHashMap<>();
+        for (Tool tool : catalog.tools()) {
+            sources.put(tool.name(), catalog.isRegistered(tool.name()) ? "builtin" : "mcp:" + catalog.serverName(tool));
+        }
+        return sources;
     }
 
     /** 让正文里的闭合标签跳不出包裹。这只降低注入风险，不是保证。 */

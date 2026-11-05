@@ -41,7 +41,8 @@ class EventsTest {
 
         for (Event event : events) {
             assertEquals(event.getClass().getSimpleName(), event.type());
-            assertEquals(1, event.version());
+            // 组装上下文第 2 版加了工具来源（one-line-journal J5），其余都是第 1 版
+            assertEquals(event instanceof ContextAssembled ? 2 : 1, event.version(), event.type());
         }
     }
 

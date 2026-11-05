@@ -181,6 +181,8 @@ class EventCodecTest {
         ToolSpec read = new ToolSpec("read_file", "read", new Json.Obj(Map.of()));
         assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of("quota")));
         assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of(), List.of()));
+        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of(),
+                Map.of("read_file", "builtin", "browser_navigate", "mcp:browser")));
         assertRoundTrip(new ModelReplied(CMD, List.of(new ToolChangeBlock(List.of("write_file"), List.of("grep"))), StopReason.END_TURN,
                 "m", null, null, null, null));
     }
@@ -191,7 +193,7 @@ class EventCodecTest {
         ContextAssembled old = new ContextAssembled(CMD, "sys", List.of(new ToolSpec("read_file", "read", new Json.Obj(Map.of()))), null,
                 List.of());
         assertEquals(OLD_ASSEMBLED, codec.encode(old));
-        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, OLD_ASSEMBLED);
+        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 2, OLD_ASSEMBLED);
         assertEquals(old, decoded);
         assertEquals(null, decoded.enabledTools());
         assertEquals(null, decoded.enabledPlugins());
@@ -206,7 +208,7 @@ class EventCodecTest {
         assertEquals("{\"command\":{\"value\":\"1-0\"},\"system\":\"sys\",\"tools\":[],\"compaction\":{\"window\":200000,"
                 + "\"reserve\":64000,\"keepRecent\":20000,\"maxKeptResultBytes\":32768,\"maxSummarizedResultBytes\":4096,"
                 + "\"summaryMaxTokens\":8192},\"sections\":[]}", line);
-        CompactionSettings decoded = ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, line)).compaction();
+        CompactionSettings decoded = ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 2, line)).compaction();
         assertEquals(legacy, decoded);
         assertEquals(136_000, decoded.threshold());
         assertEquals(3, decoded.bytesPerTokenOrLegacy());
@@ -221,7 +223,7 @@ class EventCodecTest {
     void anEmptyEnabledListIsNotTheSameAsNoList() {
         String none = codec.encode(new ContextAssembled(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
         assertTrue(none.contains("\"enabledTools\":[]"), none);
-        assertEquals(List.of(), ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, none)).enabledTools());
+        assertEquals(List.of(), ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 2, none)).enabledTools());
     }
 
     // ---- 附件（attachments 任务 8）----
