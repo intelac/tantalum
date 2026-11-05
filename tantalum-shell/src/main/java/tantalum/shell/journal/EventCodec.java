@@ -147,6 +147,8 @@ public final class EventCodec {
         codec.register(SteerSubmitted.TYPE, 1, SteerSubmitted.class);
         codec.register(FollowUpSubmitted.TYPE, 1, FollowUpSubmitted.class);
         codec.register(Cancel.TYPE, 1, Cancel.class);
+        // 第 1 版没有工具来源，读出来是空表：one-line-journal 第 1 步写的会话还要能读
+        codec.register(ContextAssembled.TYPE, 1, ContextAssembled.class);
         codec.register(ContextAssembled.TYPE, 2, ContextAssembled.class);
         codec.register(ModelReplied.TYPE, 1, ModelReplied.class);
         codec.register(ModelFailed.TYPE, 1, ModelFailed.class);

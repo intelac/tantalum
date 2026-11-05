@@ -44,7 +44,7 @@ final class MatchedCodec {
             String name = field.getKey();
             if (name.equals(TOOLS)) {
                 tools(field.getValue(), last.path(TOOLS), diff);
-            } else if (ALWAYS.contains(name) || !field.getValue().equals(last.get(name))) {
+            } else if (ALWAYS.contains(name) || !same(field.getValue(), last.get(name))) {
                 diff.set(name, field.getValue());
             }
         }
@@ -90,7 +90,7 @@ final class MatchedCodec {
 
     /** 工具名单或某个工具的定义变了才写：新的名单和变了的定义。 */
     private void tools(JsonNode now, JsonNode before, ObjectNode diff) {
-        if (now.equals(before)) {
+        if (same(now, before)) {
             return;
         }
         Map<String, JsonNode> earlier = byName(before);
@@ -99,13 +99,24 @@ final class MatchedCodec {
         for (JsonNode tool : now) {
             String name = tool.path("name").asString();
             names.add(name);
-            if (!tool.equals(earlier.get(name))) {
+            if (!same(tool, earlier.get(name))) {
                 specs.add(tool);
             }
         }
         if (!specs.isEmpty()) {
             diff.set(TOOL_SPECS, specs);
         }
+    }
+
+    /**
+     * 按写出来的文字比较：冷载入后上一次的全文是从文件解析的（数字是 {@code BigDecimal} 或整数节点），这一次是从对象转的，
+     * 同一个数在两边的节点类型可能不同，{@code equals} 会把没变的当成变了。
+     */
+    private boolean same(JsonNode a, JsonNode b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        return a.equals(b) || mapper.writeValueAsString(a).equals(mapper.writeValueAsString(b));
     }
 
     private ArrayNode tools(JsonNode names, JsonNode specs, JsonNode before) {
