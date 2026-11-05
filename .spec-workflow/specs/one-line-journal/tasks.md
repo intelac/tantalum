@@ -78,7 +78,8 @@
   - _Requirements: J3, 需求 9.2_
   - _Prompt: Role: 测试开发 | Task: 加崩溃场景 | Restrictions: 用真实 jar | Success: JarCrashIT 通过_
 
-- [-] 9. 阶段 1 收尾
+- [x] 9. 阶段 1 收尾
+  - 2026-11-06 完成：`LaneBench` P99 27.2 ms；全量回归通过（vitest 330、Playwright 44、JarCrashIT）；8091 旧会话 `s-recordsmoke` 和 `index.db` 已移到 `~/.local/share/tantalum-sessions-backup-2026-11-06/`；8091 实测一问一答 3 行、提交 0.1 s 回 200
   - `LaneBench`：命令放行和提交回应 P99 ≤ 50 ms，写进 `tech.md`；全量回归；先把 8091 的 `s-recordsmoke` 和 `index.db` 移到 `~/.local/share/tantalum-sessions-backup-2026-11-06/` 并告诉 Yi；提交、更新 8091、汇报
   - _Requirements: 需求 1.7, 2.5, 9.7_
   - _Prompt: Role: 发布负责人 | Task: 阶段 1 收尾 | Restrictions: 移数据前先告诉 Yi；提交前扫描密钥 | Success: 回归全过，8091 能登录、能聊天_
