@@ -400,6 +400,13 @@ class JarCrashIT {
             assertEquals(137, first.exitValue(), "SIGKILL ends the JVM with 128 + 9");
 
             Map<String, List<String>> beforeRestart = journal(data);
+            // 回过“已接受”的提交被杀之后都在文件里（one-line-journal 需求 2.1）
+            Map<String, String> accepted = Map.of("s-done", "r1", "s-model", "r2", "s-tool", "r3");
+            for (Map.Entry<String, String> submission : accepted.entrySet()) {
+                String user = submission.getKey().equals("s-tool") ? "bob" : "alice";
+                Path file = data.resolve("sessions").resolve(user).resolve(submission.getKey() + ".jsonl");
+                assertTrue(Files.readString(file).contains("\"request\":{\"value\":\"" + submission.getValue() + "\"}"), submission.toString());
+            }
             Map<String, Integer> callsAtCrash = model.counts();
             List<String> toolsAtCrash = List.copyOf(mcp.calls);
             assertEquals(Map.of("[done]", 2, "[hang-model]", 1, "[hang-tool]", 1), callsAtCrash);

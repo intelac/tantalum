@@ -92,7 +92,7 @@ class RecordCheckTest {
     void aResultLineEditedByHandIsReported() throws Exception {
         Path file = scenario.paths.sessionFile(ReplayScenario.BOB, ReplayScenario.BOBS);
         String content = Files.readString(file);
-        Files.writeString(file, content.replaceFirst("(\\{\"result\"[^\\n]*?)\"bob again\"", "$1\"bob, later\""));
+        Files.writeString(file, content.replaceFirst("(\"result\":\\{[^\\n]*?)\"bob again\"", "$1\"bob, later\""));
 
         RecordCheck.Report report = RecordCheck.run(dir, scenario.kernel);
 

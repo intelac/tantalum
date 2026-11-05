@@ -23,9 +23,8 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 
 /**
- * 启动时让索引追上会话文件。只比较文件大小，不读内容；大小不符的文件按结果行折叠一遍，不调内核（record-results 第 2 步）：
- * 用量就是结果行里记的差值，所以也不用按用户合并。写入都可以重复，所以和已有内容重叠没有关系。
- * 没有结果行的尾部由之前运行的 {@link Backfill} 补齐。
+ * 启动时让索引追上会话文件。只比较文件大小，不读内容；大小不符的文件按记下的结果折叠一遍，不调内核（record-results 第 2 步）：
+ * 用量就是每一行记的差值，所以也不用按用户合并。写入都可以重复，所以和已有内容重叠没有关系。
  */
 public final class IndexCatchUp {
 

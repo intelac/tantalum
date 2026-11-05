@@ -33,6 +33,11 @@ public final class ExternalGate {
     }
 
     /** {@code needsNewRun} 为 true 时还要检查活跃运行数。 */
+    /** 进程已停止处理事件：重复提交也不能回“已接受”，原提交可能没写进去。 */
+    public boolean halted() {
+        return halted.getAsBoolean();
+    }
+
     public synchronized Verdict admit(Principal principal, boolean needsNewRun) {
         if (halted.getAsBoolean()) {
             return Verdict.HALTED;

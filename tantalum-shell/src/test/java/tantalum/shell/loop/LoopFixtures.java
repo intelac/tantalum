@@ -64,7 +64,7 @@ public final class LoopFixtures {
         return never(new Projections(projection, new Trace()));
     }
 
-    private static Evictor never(Projections projections) {
+    static Evictor never(Projections projections) {
         return new Evictor(NEVER, new Residency(), projections, Clock.systemUTC());
     }
 

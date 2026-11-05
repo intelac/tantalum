@@ -12,7 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
@@ -30,8 +30,9 @@ class SequenceTest {
 
     private void write(Principal principal, String session, long seq) throws Exception {
         SessionId id = new SessionId(session);
-        try (SessionFile file = SessionFile.open(new SessionPaths(dir), principal, id, EventCodec.withBuiltins())) {
-            file.append(List.of(new EventEnvelope(seq, Instant.EPOCH, principal, id, null, new Cancel(new RequestId("r")))));
+        try (SessionFiles files = new SessionFiles(new SessionPaths(dir), EventCodec.withBuiltins(), 4, (p, s, last, offset) -> { })) {
+            files.append(principal, id, List.of(ResultWriter.noEffect(
+                    new EventEnvelope(seq, Instant.EPOCH, principal, id, null, new Cancel(new RequestId("r"))))));
         }
     }
 

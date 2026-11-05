@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.journal.Sequence;
 import tantalum.value.event.Cancel;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -79,12 +80,21 @@ class LaneDispatcherTest {
         InputRing.Slot slot = new InputRing.Slot();
         slot.envelope = event("u", 0);
         dispatcher.onEvent(slot, 0, true);
+        awaitReached(1);
+        EventEnvelope processed = reached.getFirst();
+        List<String> log = new java.util.concurrent.CopyOnWriteArrayList<>();
+        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+                () -> log.add("released"), () -> {
+                    log.add("done");
+                    dispatcher.released();
+                });
         for (int i = 0; i < 1000 && !dispatcher.halted(); i++) {
             Thread.sleep(5);
         }
         assertTrue(dispatcher.halted());
         assertTrue(dispatcher.awaitIdle(Duration.ofSeconds(1)));
-        assertTrue(reached.isEmpty());
+        assertEquals(List.of("done"), log, "the step's commands are not released");
+        reached.clear();
         // 停止之后分发线程不再等名额，也不再放行。
         InputRing.Slot later = new InputRing.Slot();
         later.envelope = event("u", 1);

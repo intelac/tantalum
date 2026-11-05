@@ -212,8 +212,8 @@ public final class Corpus {
 
     private void flush() throws IOException {
         for (List<Line> lines : buffered.values()) {
-            EventEnvelope first = ((Line.Event) lines.getFirst()).envelope();
-            files.appendLines(first.principal(), first.session(), lines);
+            EventEnvelope first = lines.getFirst().envelope();
+            files.append(first.principal(), first.session(), lines);
         }
         buffered.clear();
         bufferedEvents = 0;
@@ -226,8 +226,7 @@ public final class Corpus {
         seq++;
         Decision decision = kernel.step(state, envelope);
         List<Line> lines = buffered.computeIfAbsent(next.session(), ignored -> new ArrayList<>());
-        lines.add(new Line.Event(envelope));
-        lines.add(new Line.Result(StepRecord.of(envelope, state, decision)));
+        lines.add(new Line(envelope, StepRecord.of(envelope, state, decision)));
         state = decision.newState();
         if (++bufferedEvents >= FLUSH_EVENTS) {
             flush();

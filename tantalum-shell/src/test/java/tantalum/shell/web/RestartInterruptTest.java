@@ -12,7 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
@@ -79,9 +79,7 @@ class RestartInterruptTest {
         for (Event event : more) {
             events.add(event(seq++, RUN, event));
         }
-        try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, S1, EventCodec.withBuiltins())) {
-            file.append(events);
-        }
+        ResultWriter.write(new SessionPaths(data()), events);
     }
 
     private List<Event> journal() {
@@ -97,10 +95,8 @@ class RestartInterruptTest {
     void onlyTheUnfinishedSessionIsLoadedAtStartup() throws Exception {
         diedDuringTool();
         SessionId idle = new SessionId("s2");
-        try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, idle, EventCodec.withBuiltins())) {
-            file.append(List.of(new EventEnvelope(10, AT, ALICE, idle, null,
-                    new tantalum.value.event.Cancel(new RequestId("nothing to cancel")))));
-        }
+        ResultWriter.write(new SessionPaths(data()), List.of(new EventEnvelope(10, AT, ALICE, idle, null,
+                new tantalum.value.event.Cancel(new RequestId("nothing to cancel")))));
         try (TestServer server = server()) {
             var engine = server.context.getBean(tantalum.shell.boot.Engine.class);
             assertEquals(java.util.Set.of(S1), engine.state().sessions().keySet());
@@ -188,24 +184,14 @@ class RestartInterruptTest {
         diedDuringTool();
         SessionId other = new SessionId("s3");
         RunId otherRun = RunId.of(other, 20);
-        try (SessionFile file = SessionFile.open(new SessionPaths(data()), ALICE, other, EventCodec.withBuiltins())) {
-            file.append(List.of(
-                    new EventEnvelope(20, AT, ALICE, other, null, new UserPrompt(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
-                    new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
-        }
+        ResultWriter.write(new SessionPaths(data()), List.of(
+                new EventEnvelope(20, AT, ALICE, other, null, new UserPrompt(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
+                new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
         // 先让索引记下两个未结束的运行，再把 s1 的中间一行改坏：启动时索引仍说它没结束，载入时才发现坏了。
         Path s1 = new SessionPaths(data()).sessionFile(ALICE, S1);
         try (var index = tantalum.shell.store.SessionIndex.open(data())) {
-            tantalum.kernel.table.TransitionTable table = new tantalum.kernel.table.TransitionTable();
-            tantalum.kernel.step.BuiltinSteps.register(table);
-            tantalum.kernel.Kernel kernel = new tantalum.kernel.Kernel(table, new tantalum.kernel.hook.HookChain(List.of()),
-                    (tool, args) -> false, tantalum.kernel.Limits.DEFAULT);
             SessionPaths paths = new SessionPaths(data());
             var reader = new tantalum.shell.journal.SessionFileReader(EventCodec.withBuiltins());
-            // 和启动时一样：先给没有结果行的事件补写结果行，再补齐索引
-            try (var files = new tantalum.shell.journal.SessionFiles(paths, EventCodec.withBuiltins(), 4, (p, s, seq, offset) -> { })) {
-                tantalum.shell.store.Backfill.run(index, paths, new tantalum.shell.store.RecordReplay(paths, reader), files, kernel);
-            }
             tantalum.shell.store.IndexCatchUp.run(index, paths, reader);
             assertEquals(2, index.unfinished().size());
         }

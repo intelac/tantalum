@@ -160,10 +160,37 @@ public final class RecordCodec {
                 .build();
     }
 
-    /** 编码一行，并把这一行写过的长字符串和请求记进 {@code memo}。 */
+    /** 单独编码一步的结果：{@code {"result": 序号, ...}}。会话文件里结果是一行的 {@code result} 字段，见 {@link #encodeTree}。 */
     public String encode(StepRecord record, RecordMemo memo) {
         ObjectNode root = mapper.createObjectNode();
         root.put("result", record.seq());
+        root.setAll(encodeTree(record, memo));
+        return mapper.writeValueAsString(root);
+    }
+
+    /** {@link #encode} 的反向。 */
+    public Decoded decode(String line, RecordMemo memo) {
+        JsonNode root;
+        try {
+            root = mapper.readTree(line);
+        } catch (JacksonException failure) {
+            throw new IllegalArgumentException("corrupt result line: " + failure.getMessage(), failure);
+        }
+        if (!(root instanceof ObjectNode object) || !object.path("result").canConvertToLong()) {
+            throw new IllegalArgumentException("corrupt result line: no result seq");
+        }
+        long seq = object.remove("result").asLong();
+        return decode(object, seq, memo);
+    }
+
+    /** 解析一行会话文件用的 mapper：浮点数按 {@code BigDecimal} 读，事件和结果读出来都和文本逐字节相同。 */
+    public JsonNode parse(String line) {
+        return mapper.readTree(line);
+    }
+
+    /** 编码一步的结果（不含序号，序号在这一行的事件里），并把写过的长字符串和请求记进 {@code memo}。 */
+    public ObjectNode encodeTree(StepRecord record, RecordMemo memo) {
+        ObjectNode root = mapper.createObjectNode();
         if (record.session() != null) {
             root.set("session", session(record.session(), record.seq(), memo));
         }
@@ -198,16 +225,17 @@ public final class RecordCodec {
         shrink(root, memo);
         sameRun(root, memo);
         memo.answered(record.seq());
-        return mapper.writeValueAsString(root);
+        return root;
     }
 
-    /** 解一行。{@code memo} 是 {@link RecordMemo#reader()}，按文件顺序收录过前面的事件行和结果行。 */
-    public Decoded decode(String line, RecordMemo memo) {
+    /**
+     * 解第 {@code seq} 步的结果。{@code root} 会被改写（解开引用）。{@code memo} 是 {@link RecordMemo#reader()}，
+     * 按文件顺序收录过前面的行和这一行的事件。
+     */
+    public Decoded decode(JsonNode root, long seq, RecordMemo memo) {
         try {
-            JsonNode root = mapper.readTree(line);
             restoreRun(root, memo);
             expand(root, memo);
-            long seq = root.required("result").asLong();
             SessionChange session = root.has("session") ? session(root.get("session"), seq, memo) : null;
             List<RunState> runs = new ArrayList<>();
             for (JsonNode node : root.path("runs")) {

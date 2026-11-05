@@ -1,7 +1,6 @@
 package tantalum.shell.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -15,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionCorruptException;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.loop.SessionSlice;
 import tantalum.value.id.Principal;
@@ -96,36 +94,18 @@ class RecordReplayTest {
         assertEquals(seqs.get(3), slice.seq());
     }
 
+    /** one-line-journal J3：崩溃在写一行之前，这一步不在文件里；会话停在上一步，载入和查询都照常。 */
     @Test
-    void anEventWithoutAResultIsSkippedByQueriesButRefusedByLoading() throws Exception {
+    void aStepLostBeforeItsLineWasWrittenLeavesTheSessionAtThePreviousStep() throws Exception {
         Path file = scenario.paths.sessionFile(ReplayScenario.ALICE, ReplayScenario.TOOLS);
         List<String> lines = new ArrayList<>(Files.readAllLines(file));
-        String last = lines.removeLast();
-        assertTrue(last.startsWith("{\"result\""), last);
+        lines.removeLast();
         Files.write(file, lines);
+        List<Long> seqs = scenario.fixture.events.stream()
+                .filter(event -> event.session().equals(ReplayScenario.TOOLS)).map(event -> event.seq()).toList();
 
-        List<Long> seen = new ArrayList<>();
-        records.each(ReplayScenario.ALICE, file, (envelope, before, decision) -> seen.add(envelope.seq()));
-        assertEquals(scenario.fixture.events.stream().filter(event -> event.session().equals(ReplayScenario.TOOLS)).count() - 1,
-                seen.size(), "the step still in flight is not shown yet");
-
-        assertThrows(SessionCorruptException.class, () -> records.load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE));
-        assertEquals(seen.getLast(), records.read(ReplayScenario.ALICE, ReplayScenario.TOOLS).orElseThrow().seq(),
-                "a cold query shows the session up to the step still in flight");
-    }
-
-    @Test
-    void aResultThatSkipsAnEventIsCorrupt() throws Exception {
-        Path file = scenario.paths.sessionFile(ReplayScenario.ALICE, ReplayScenario.TOOLS);
-        List<String> lines = new ArrayList<>(Files.readAllLines(file));
-        // 第一个事件的结果行挪到第二个事件的结果行之后：第二个结果回答的不是最早的那个事件
-        int first = indexOfResult(lines, 0);
-        int second = indexOfResult(lines, first + 1);
-        lines.add(second, lines.remove(first));
-        Files.write(file, lines);
-
-        assertThrows(SessionCorruptException.class,
-                () -> records.each(ReplayScenario.ALICE, file, (envelope, before, decision) -> { }));
+        assertEquals(seqs.get(seqs.size() - 2), records.load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE).orElseThrow().slice().seq());
+        assertEquals(seqs.get(seqs.size() - 2), records.read(ReplayScenario.ALICE, ReplayScenario.TOOLS).orElseThrow().seq());
     }
 
     /** 需求 4.2：请求详情按结果行还原请求，和当时记下的指纹比较，不一致时标出。 */
@@ -147,14 +127,5 @@ class RecordReplayTest {
         TraceQuery.Call call = trace.call(ReplayScenario.ALICE, ReplayScenario.TOOLS, first.id()).orElseThrow();
         assertTrue(call.fingerprintMismatch());
         assertEquals(first.prompt().messages(), call.messages(), "the rebuilt request is still shown");
-    }
-
-    private static int indexOfResult(List<String> lines, int from) {
-        for (int i = from; i < lines.size(); i++) {
-            if (lines.get(i).startsWith("{\"result\"")) {
-                return i;
-            }
-        }
-        throw new AssertionError("no result line after " + from);
     }
 }

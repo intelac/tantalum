@@ -26,17 +26,16 @@ import tantalum.value.id.SessionId;
 import tantalum.value.state.PrincipalState;
 
 /**
- * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部事件，按到达顺序取号，
- * 每个会话并行写文件，全部写完后按序号放行给 cleanroom。所以同一用户内严格按序，不同用户互不等待。
- * cleanroom 处理完的一步也排进这个队列（{@link Released}）：写它的结果行时 fsync，连同之前只写未 fsync 的事件一起落盘，
- * 然后才放行命令、推送和索引（record-results R3）。事件不单独 fsync：在它的结果行落盘前不会有任何效果，崩溃丢了也没关系，
- * 这样每一步只 fsync 一次。一个用户的文件只有这个通道在写。
+ * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部工作，事件按到达顺序取号后放行给 cleanroom，
+ * 不写文件；cleanroom 处理完的一步（{@link Released}）连同它的事件写成一行（one-line-journal J1、J2），
+ * 每个会话并行写、fsync 一次，全部落盘后才放行命令、推送和索引。所以同一用户内严格按序，不同用户互不等待；
+ * 没处理完的事件不在文件里，崩溃时它的命令也没执行过。一个用户的文件只有这个通道在写。
  */
 public final class UserLane {
 
     private static final Logger LOG = LoggerFactory.getLogger(UserLane.class);
 
-    /** 把一个会话的事件和结果按顺序写到它的文件。有结果行时返回时已落盘（连同之前只写未落盘的事件）。 */
+    /** 把一个会话处理完的几步按顺序写到它的文件，返回时已落盘。 */
     @FunctionalInterface
     public interface Writer {
         void append(Principal principal, SessionId session, List<Line> lines) throws IOException;
@@ -45,7 +44,7 @@ public final class UserLane {
     /** cleanroom 处理完的一步，见 {@link Release}。 */
     record Released(EventEnvelope envelope, StepRecord record, Runnable afterDurable, Runnable done) {}
 
-    /** 重放一个冷会话里序号小于 {@code beforeSeq} 的事件。没有这样的事件（全新会话）时为空。 */
+    /** 读一个冷会话里序号小于 {@code beforeSeq} 的步骤。没有这样的步骤（全新会话）时为空。 */
     public interface Loader {
         Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception;
 
@@ -141,19 +140,8 @@ public final class UserLane {
             Residency.State state = residency.pin(envelope.session());
             states.putIfAbsent(envelope.session(), state);
         }
-        List<EventEnvelope> numbered = new ArrayList<>(batch.size());
         try {
-            List<Object> lines = new ArrayList<>(items.size());
-            for (Object item : items) {
-                if (item instanceof EventEnvelope envelope) {
-                    EventEnvelope withSeq = envelope.withSeq(sequence.next(principal));
-                    numbered.add(withSeq);
-                    lines.add(withSeq);
-                } else {
-                    lines.add(item);
-                }
-            }
-            write(lines);
+            write(released);
         } catch (Exception | Error failure) {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -172,6 +160,17 @@ public final class UserLane {
             } finally {
                 step.done().run();
             }
+        }
+        List<EventEnvelope> numbered = new ArrayList<>(batch.size());
+        try {
+            for (EventEnvelope envelope : batch) {
+                numbered.add(envelope.withSeq(sequence.next(principal)));
+            }
+        } catch (RuntimeException failure) {
+            exit.failed(failure);
+            batch.forEach(envelope -> residency.unpin(envelope.session()));
+            exit.discarded(batch.size());
+            return;
         }
         if (numbered.isEmpty()) {
             return;
@@ -194,7 +193,7 @@ public final class UserLane {
         }
     }
 
-    /** 事件已写入，序号小于它的才算历史。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
+    /** 文件里只有处理完的步骤，序号都小于新事件。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
     private Map<SessionId, CleanroomRing.Load> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
         Map<SessionId, CleanroomRing.Load> loads = new HashMap<>();
         Set<SessionId> visited = new HashSet<>();
@@ -246,12 +245,13 @@ public final class UserLane {
         }
     }
 
-    private void write(List<Object> items) throws IOException, InterruptedException, ExecutionException {
+    private void write(List<Released> released) throws IOException, InterruptedException, ExecutionException {
         Map<SessionId, List<Line>> bySession = new LinkedHashMap<>();
-        for (Object item : items) {
-            Line line = item instanceof Released step ? new Line.Result(step.record()) : new Line.Event((EventEnvelope) item);
-            SessionId session = item instanceof Released step ? step.envelope().session() : ((EventEnvelope) item).session();
-            bySession.computeIfAbsent(session, ignored -> new ArrayList<>()).add(line);
+        for (Released step : released) {
+            bySession.computeIfAbsent(step.envelope().session(), ignored -> new ArrayList<>()).add(new Line(step.envelope(), step.record()));
+        }
+        if (bySession.isEmpty()) {
+            return;
         }
         if (bySession.size() == 1) {
             var only = bySession.entrySet().iterator().next();

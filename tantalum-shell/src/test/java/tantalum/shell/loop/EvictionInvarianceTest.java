@@ -157,7 +157,7 @@ class EvictionInvarianceTest {
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
-            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::appendLines, ring::tryPublish,
+            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
                     LoopFixtures.loader((principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq)), residency);
             FactListener facts = new FactListener() {
                 @Override
