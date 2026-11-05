@@ -86,7 +86,7 @@
 
 ## 阶段 2：配上了什么，只记变化
 
-- [ ] 10. 工具来源
+- [x] 10. 工具来源
   - File: value/event/ContextAssembled.java、shell/handler/ContextHandler.java、shell/tool/ToolCatalog.java、shell/access/PluginGate.java
   - 加 `toolSources`（`builtin`、`plugin:<名字>`、`mcp:<服务器名>`），`version` 2；不写地址和令牌
   - 测试：三种来源；内核行为不变
@@ -94,7 +94,7 @@
   - _Requirements: J5, 需求 3.1_
   - _Prompt: Role: Java 后端开发 | Task: ContextAssembled 记下每个工具的来源 | Restrictions: 内核不读这个字段 | Success: ContextHandlerTest、EventCodecTest 全过_
 
-- [ ] 11. `MatchedCodec`
+- [x] 11. `MatchedCodec`
   - File: shell/journal/MatchedCodec.java（新）、shell/journal/RecordMemo.java、shell/journal/LineCodec.java
   - 第一次、压缩后、不知道前文时写全文；其余写变化（system、sections、名单变了才写；工具按名字写增删改）；读取时套回完整事件；没有前文的“变化”拒绝
   - 测试：设计里列的六种情况；`CompactionStressTest` 逐步一致
@@ -102,19 +102,20 @@
   - _Requirements: J6, 需求 3.1–3.6_
   - _Prompt: Role: Java 后端开发 | Task: 配上的东西只记变化 | Restrictions: 解码后的 ContextAssembled 和原值逐字段相同 | Success: MatchedCodecTest、EvictionInvarianceTest 全过_
 
-- [ ] 12. 删插件后旧会话不变
+- [x] 12. 删插件后旧会话不变
   - File: tantalum-shell/src/test/java/tantalum/shell/loop/PluginRemovalTest.java（新）
   - 一个插件提供工具和钩子 → 用过 → 拿掉插件、重启 → 对话页、轨迹、请求详情不变；新一步不再配上它
   - _Requirements: 需求 3.4, 3.7, 9.3_
   - _Prompt: Role: 测试开发 | Task: 证明删插件不改变过去 | Restrictions: 用真实管线 | Success: 测试通过_
 
-- [ ] 13. 文件大小
+- [x] 13. 文件大小
+  - 2026-11-06：放在 `tantalum-shell/src/test/java/tantalum/shell/store/RealSizeProbe.java`（取代 `RecordSizeProbe`），4 个真实会话 748,822 → 777,035 字节（103.8%）。合成语料留到任务 22 和 `ReadBench` 一起量
   - File: examples/bench/RealSizeProbe.java（新，手动运行）
   - 只读备份目录的 4 个会话，用当前内核重放，按新格式编码，和原大小比较；合成语料的结果一并记进 `tech.md`
   - _Requirements: J10, 需求 7_
   - _Prompt: Role: 性能工程师 | Task: 按真实会话测文件大小 | Restrictions: 不改备份目录 | Success: 总大小 ≤ 原来的 110%，结果写进 tech.md_
 
-- [ ] 14. 阶段 2 收尾
+- [x] 14. 阶段 2 收尾
   - 全量回归、提交、更新 8091、汇报
   - _Requirements: 需求 9.7_
   - _Prompt: Role: 发布负责人 | Task: 阶段 2 收尾 | Restrictions: 提交前扫描密钥 | Success: 回归全过_

@@ -226,4 +226,30 @@ class ContextHandlerTest {
         assertTrue(event.system().length() < 70_000, event.system().length() + "");
         assertTrue(event.system().contains("truncated"));
     }
+
+    /** one-line-journal J5：每个工具记下来源，内置的写 builtin，MCP 的写配置里的服务器名。 */
+    @Test
+    void eachToolRecordsWhereItComesFrom() throws Exception {
+        ToolCatalog catalog = catalog();
+        Tool navigate = new Tool() {
+            @Override public String name() { return "browser_navigate"; }
+            @Override public String description() { return "d"; }
+            @Override public Json schema() { return new Json.Null(); }
+            @Override public String server() { return "mcp-browser"; }
+            @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) { return ToolOutput.ok(""); }
+        };
+        catalog.setSource(new ToolCatalog.ToolSource() {
+            @Override public List<Tool> tools() { return List.of(navigate); }
+            @Override public Optional<Tool> find(String name) { return name.equals("browser_navigate") ? Optional.of(navigate) : Optional.empty(); }
+            @Override public String serverName(Tool tool) { return "browser"; }
+        });
+        Workspaces workspaces = Workspaces.shared(dir);
+        ContextHandler handler = new ContextHandler(workspaces, "Base prompt.", catalog,
+                tantalum.shell.access.PluginGate.allOn(catalog, List.of(), List.of(), List.of()), memories(workspaces), KnowledgeBase.none(), "",
+                noCompaction());
+
+        ContextAssembled assembled = assertInstanceOf(ContextAssembled.class, handler.handle(COMMAND));
+
+        assertEquals(java.util.Map.of("grep", "builtin", "browser_navigate", "mcp:browser"), assembled.toolSources());
+    }
 }

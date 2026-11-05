@@ -60,6 +60,8 @@ public final class RecordMemo {
     private final Map<Long, List<ContentBlock>> replies = new HashMap<>();
     private SessionContext context;
     private Prompt lastPrompt;
+    /** 这个文件上一次组装上下文的完整载荷（{@link MatchedCodec}）；为 null 时下一次写全文。压缩后清空。 */
+    private JsonNode matched;
 
     private RecordMemo(boolean keepTexts, boolean complete) {
         this.reading = keepTexts;
@@ -126,6 +128,7 @@ public final class RecordMemo {
         writer.replies.putAll(replies);
         writer.context = context;
         writer.lastPrompt = lastPrompt;
+        writer.matched = matched;
         return writer;
     }
 
@@ -155,6 +158,15 @@ public final class RecordMemo {
         if (envelope.event() instanceof ModelReplied reply) {
             replies.put(envelope.seq(), reply.content());
         }
+    }
+
+    /** 上一次组装上下文的完整载荷；不知道（新文件、不知道前文、刚压缩过）时为 null。 */
+    JsonNode matched() {
+        return complete ? matched : null;
+    }
+
+    void matched(JsonNode payload) {
+        matched = payload;
     }
 
     List<ContentBlock> reply(long seq) {
