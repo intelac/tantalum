@@ -23,7 +23,7 @@ class StoreFormatTest {
     @Test
     void newDirectoryGetsCurrentVersions() throws Exception {
         assertEquals(new StoreFormat(StoreFormat.STORAGE), StoreFormat.check(dir));
-        assertEquals("{\"storage\":2}\n", Files.readString(file()));
+        assertEquals("{\"storage\":3}\n", Files.readString(file()));
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
         assertEquals(1, Files.list(dir).count());
     }
@@ -49,38 +49,38 @@ class StoreFormatTest {
     /** 以前的 {@code semantics} 字段读到也忽略，文件不改。 */
     @Test
     void anOldSemanticsFieldIsIgnored() throws Exception {
-        Files.writeString(file(), "{\"storage\":2,\"semantics\":0}\n");
+        Files.writeString(file(), "{\"storage\":3,\"semantics\":0}\n");
         assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
-        assertEquals("{\"storage\":2,\"semantics\":0}\n", Files.readString(file()));
+        assertEquals("{\"storage\":3,\"semantics\":0}\n", Files.readString(file()));
     }
 
-    /** record-results 需求 8.1：旧格式的会话文件不迁移，拒绝启动，什么都不改。 */
+    /** one-line-journal 需求 8.2：旧格式的会话文件不迁移，拒绝启动，什么都不改。 */
     @Test
-    void storageOneWithSessionFilesIsRefusedAndNothingChanges() throws Exception {
-        String old = "{\"storage\":1,\"semantics\":2}\n";
+    void storageTwoWithSessionFilesIsRefusedAndNothingChanges() throws Exception {
+        String old = "{\"storage\":2}\n";
         Files.writeString(file(), old);
         Path session = dir.resolve("sessions/yi/s-1.jsonl");
         Files.createDirectories(session.getParent());
-        Files.writeString(session, "{\"format\":1}\n");
+        Files.writeString(session, "{\"format\":2}\n");
         Files.writeString(dir.resolve("users.db"), "users");
 
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> StoreFormat.check(dir));
 
         assertTrue(failure.getMessage().contains("sessions") && failure.getMessage().contains("index.db"), failure.getMessage());
         assertEquals(old, Files.readString(file()));
-        assertEquals("{\"format\":1}\n", Files.readString(session));
+        assertEquals("{\"format\":2}\n", Files.readString(session));
     }
 
-    /** 需求 8.2：没有会话文件时直接升级，用户库不动。 */
+    /** 需求 8.3：没有会话文件时直接升级，用户库不动。 */
     @Test
-    void storageOneWithoutSessionFilesIsUpgraded() throws Exception {
-        Files.writeString(file(), "{\"storage\":1,\"semantics\":2}\n");
+    void storageTwoWithoutSessionFilesIsUpgraded() throws Exception {
+        Files.writeString(file(), "{\"storage\":2}\n");
         Files.createDirectories(dir.resolve("sessions/yi"));
         Files.writeString(dir.resolve("users.db"), "users");
 
         assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
 
-        assertEquals("{\"storage\":2}\n", Files.readString(file()));
+        assertEquals("{\"storage\":3}\n", Files.readString(file()));
         assertEquals("users", Files.readString(dir.resolve("users.db")));
     }
 

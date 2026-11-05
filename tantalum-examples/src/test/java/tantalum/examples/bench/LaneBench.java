@@ -53,7 +53,7 @@ public final class LaneBench {
         SessionPaths paths = new SessionPaths(dir);
         try (SessionFiles files = new SessionFiles(paths, EventCodec.withBuiltins(), 256, (principal, session, seq, offset) -> { })) {
             LaneDispatcher[] holder = new LaneDispatcher[1];
-            holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::appendLines, envelope -> {
+            holder[0] = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> {
                 UserPrompt prompt = (UserPrompt) envelope.event();
                 String request = prompt.request().value();
                 // 结果行里有这次追加的用户消息，和真实的第一步一样大

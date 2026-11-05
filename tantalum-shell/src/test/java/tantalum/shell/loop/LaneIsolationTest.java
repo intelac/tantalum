@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.journal.Sequence;
 import tantalum.value.event.Cancel;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
@@ -28,6 +29,7 @@ class LaneIsolationTest {
                 new Cancel(new RequestId(user + i)));
     }
 
+    /** 一个用户的磁盘卡住：他的步骤放不出去，别人的照常放行；卡住的用户恢复后按自己的顺序放行。 */
     @Test
     void stuckUserDoesNotHoldBackOthersAndKeepsItsOwnOrder() throws Exception {
         CountDownLatch unstick = new CountDownLatch(1);
@@ -44,8 +46,9 @@ class LaneIsolationTest {
                 }
             }
         }, envelope -> {
-            reached.add(envelope);
-            holder[0].released();
+            // 像 cleanroom 一样：处理完交回通道写成一行，落盘后才算放行
+            holder[0].release(envelope, new StepRecord(envelope.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+                    () -> reached.add(envelope), holder[0]::released);
             return true;
         });
         holder[0] = dispatcher;

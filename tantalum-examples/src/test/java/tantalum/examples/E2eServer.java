@@ -9,7 +9,7 @@ import org.springframework.context.support.GenericApplicationContext;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.TantalumApplication;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
@@ -92,27 +92,23 @@ public final class E2eServer {
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");
         Files.writeString(notes.resolve("world.md"), "# world\n\nhello back from world\n");
         // 上次进程在这个运行刚开始时被杀：会话文件停在用户提问之后。启动时它要收尾为“因重启中断”。
-        try (SessionFile file = SessionFile.open(new SessionPaths(data), new Principal(USER), new SessionId(CRASHED_SESSION), EventCodec.withBuiltins())) {
-            file.append(List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER), new SessionId(CRASHED_SESSION), null,
-                    new UserPrompt(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
-                            new OwnerRef.OfSession(new SessionId(CRASHED_SESSION)), "hello 崩溃前"))));
-        }
-        // 上次进程在执行工具时被杀：模型要读一个文件，命令已经发出，结果没有回来。只有事件行，像结果行还没落盘就崩溃了。
+        ResultWriter.write(new SessionPaths(data), List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER),
+                new SessionId(CRASHED_SESSION), null, new UserPrompt(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
+                        new OwnerRef.OfSession(new SessionId(CRASHED_SESSION)), "hello 崩溃前"))));
+        // 上次进程在执行工具时被杀：模型要读一个文件，命令已经发出，结果没有回来。
         Principal user = new Principal(USER);
         SessionId tool = new SessionId(CRASHED_TOOL_SESSION);
         RunId run = RunId.of(tool, 1);
         Instant at = Instant.parse("2026-11-01T09:05:00Z");
         ToolSpec readFile = new ToolSpec("read_file", "Read a file.", new Json.Obj(java.util.Map.of("type", new Json.Str("object"))), false);
-        try (SessionFile file = SessionFile.open(new SessionPaths(data), user, tool, EventCodec.withBuiltins())) {
-            file.append(List.of(
-                    new EventEnvelope(1, at, user, tool, null, new UserPrompt(new SubmissionId("crashed-tool-submission"),
-                            new RequestId("crashed-tool-request"), new OwnerRef.OfSession(tool), "读一下 notes/hello.md")),
-                    new EventEnvelope(2, at, user, tool, run, new ContextAssembled(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
-                            List.of(readFile), null, List.of())),
-                    new EventEnvelope(3, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_2-0"),
-                            List.of(new ToolCallBlock("crashed-call", "read_file", "{\"path\":\"notes/hello.md\"}",
-                                    new Json.Obj(java.util.Map.of("path", new Json.Str("notes/hello.md"))))),
-                            StopReason.TOOL_USE, E2eModel.MODEL, null, null, null, null))));
-        }
+        ResultWriter.write(new SessionPaths(data), List.of(
+                new EventEnvelope(1, at, user, tool, null, new UserPrompt(new SubmissionId("crashed-tool-submission"),
+                        new RequestId("crashed-tool-request"), new OwnerRef.OfSession(tool), "读一下 notes/hello.md")),
+                new EventEnvelope(2, at, user, tool, run, new ContextAssembled(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
+                        List.of(readFile), null, List.of())),
+                new EventEnvelope(3, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_2-0"),
+                        List.of(new ToolCallBlock("crashed-call", "read_file", "{\"path\":\"notes/hello.md\"}",
+                                new Json.Obj(java.util.Map.of("path", new Json.Str("notes/hello.md"))))),
+                        StopReason.TOOL_USE, E2eModel.MODEL, null, null, null, null))));
     }
 }

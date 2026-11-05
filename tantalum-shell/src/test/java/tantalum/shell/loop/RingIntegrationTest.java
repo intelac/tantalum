@@ -87,17 +87,17 @@ class RingIntegrationTest {
                             StopReason.END_TURN, "m", null, null, null, null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
             CleanroomRing ring = new CleanroomRing(1024);
-            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::appendLines, envelope -> ring.tryPublish(envelope, null, null));
-            List<String> notDurable = java.util.Collections.synchronizedList(new ArrayList<>());
-            Cleanroom cleanroom = LoopFixtures.cleanroom(kernel, journal::halted, output::tryPublish, LoopFixtures.NO_PROJECTION,
-                    (seq, index, fact) -> { }, view, publisher);
+            LaneDispatcher journal = LoopFixtures.dispatcher(1024, new TailSequence(paths, 1), files::append, envelope -> ring.tryPublish(envelope, null, null));
+            List<String> writtenEarly = java.util.Collections.synchronizedList(new ArrayList<>());
+            Projections projections = new Projections(LoopFixtures.NO_PROJECTION, new tantalum.shell.trace.Trace());
+            Cleanroom cleanroom = new Cleanroom(kernel, journal::halted, output::tryPublish, projections, (seq, index, fact) -> { },
+                    view, publisher, LoopFixtures.NO_STEPS, LoopFixtures.never(projections), journal, envelope -> journal.released());
             ring.connect((slot, seq, end) -> {
                 EventEnvelope envelope = slot.envelope;
-                if (reader.readAll(paths.sessionFile(envelope.principal(), envelope.session())).stream().noneMatch(envelope::equals)) {
-                    notDurable.add(envelope.toString());
+                if (reader.readAll(paths.sessionFile(envelope.principal(), envelope.session())).stream().anyMatch(envelope::equals)) {
+                    writtenEarly.add(envelope.toString());
                 }
                 cleanroom.onEvent(slot, seq, end);
-                journal.released();
             });
             input.connect(journal);
             ring.start();
@@ -123,8 +123,10 @@ class RingIntegrationTest {
             input.shutdown(Duration.ZERO);
             ring.shutdown(java.time.Duration.ofSeconds(5));
             output.shutdown(Duration.ZERO);
+            // 运行结束在内存里先可见，最后几步可能还在写：等通道把它们写完
+            assertTrue(journal.awaitIdle(Duration.ofSeconds(5)));
 
-            assertEquals(List.of(), notDurable, "events must be durable before the kernel sees them");
+            assertEquals(List.of(), writtenEarly, "a step is written after the kernel processed it, not before (one-line-journal 1.3)");
             List<EventEnvelope> events = new SessionStore(dir, EventCodec.withBuiltins()).readAll();
             assertEquals(sessions * 3, events.size());
             assertEquals(view.current().runs(), Replay.run(kernel, events).state().runs());

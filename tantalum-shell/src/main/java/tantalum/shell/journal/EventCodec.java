@@ -42,6 +42,7 @@ import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
 import tools.jackson.databind.DeserializationContext;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueDeserializer;
 import tools.jackson.databind.ValueSerializer;
@@ -168,15 +169,30 @@ public final class EventCodec {
     }
 
     public Event decode(String type, int version, String json) {
-        Class<? extends Event> eventClass = registry.get(new Key(type, version));
-        if (eventClass == null) {
-            throw new IllegalArgumentException("unregistered event: " + type + " v" + version);
-        }
+        Class<? extends Event> eventClass = eventClass(type, version);
         try {
             return mapper.readValue(json, eventClass);
         } catch (JacksonException failure) {
             throw new IllegalArgumentException("corrupt payload for " + type + " v" + version, failure);
         }
+    }
+
+    /** 同上，payload 已经解析成树（读会话文件时整行只解析一次）。浮点数要按 {@code BigDecimal} 解析，读出来才和文本相同。 */
+    public Event decode(String type, int version, JsonNode payload) {
+        Class<? extends Event> eventClass = eventClass(type, version);
+        try {
+            return mapper.treeToValue(payload, eventClass);
+        } catch (JacksonException failure) {
+            throw new IllegalArgumentException("corrupt payload for " + type + " v" + version, failure);
+        }
+    }
+
+    private Class<? extends Event> eventClass(String type, int version) {
+        Class<? extends Event> eventClass = registry.get(new Key(type, version));
+        if (eventClass == null) {
+            throw new IllegalArgumentException("unregistered event: " + type + " v" + version);
+        }
+        return eventClass;
     }
 
     private static final class JsonValueSerializer extends ValueSerializer<Json> {

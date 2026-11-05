@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import tantalum.kernel.compaction.Compactor;
@@ -28,15 +29,18 @@ import tantalum.value.state.SessionState;
 
 /**
  * 外部提交的入口：提问、排队、插话、手动压缩、取消。去重、占名额之后发布到输入环；发布不成就全部退回。
- * 事件处理完后由 {@link #processed} 归还名额。
+ * 提交带一张回执，那一步落盘后完成（{@link Receipts}）。事件处理完后由 {@link #processed} 归还名额。
  */
 public final class Intake {
 
-    /** 提交的结果。{@code status} 对应 HTTP 状态。 */
-    public record Submission(int status, SubmissionId submission, boolean duplicate) {
+    /**
+     * 提交的结果。{@code status} 对应 HTTP 状态。{@code saved} 在提交那一步落盘后完成（one-line-journal J4），
+     * 接口等它再回“已接受”；被拒绝的提交没有回执，为 null。
+     */
+    public record Submission(int status, SubmissionId submission, boolean duplicate, CompletableFuture<Void> saved) {
 
         static Submission rejected(int status) {
-            return new Submission(status, null, false);
+            return new Submission(status, null, false, null);
         }
     }
 
@@ -58,11 +62,13 @@ public final class Intake {
     private final Claims claims;
     private final Sessions sessions;
     private final Clock clock;
+    private final Receipts receipts;
     /** 需要开新运行、还没处理完的提交：处理完时多归还一个活跃运行名额。 */
     private final Set<SubmissionId> newRuns = ConcurrentHashMap.newKeySet();
 
     public Intake(InputRing input, ExternalGate gate, SubmissionLedger ledger, StateView view, Residency residency,
-                  Claims claims, Sessions sessions, Clock clock) {
+                  Claims claims, Sessions sessions, Clock clock, Receipts receipts) {
+        this.receipts = receipts;
         this.input = input;
         this.gate = gate;
         this.ledger = ledger;
@@ -160,7 +166,10 @@ public final class Intake {
                                Function<SubmissionId, Event> event) {
         SubmissionLedger.Claim claim = ledger.claim(principal, request);
         if (!claim.isNew()) {
-            return new Submission(200, claim.submission(), true);
+            if (gate.halted()) {
+                return Submission.rejected(503);
+            }
+            return new Submission(200, claim.submission(), true, receipts.of(claim.submission()));
         }
         ExternalGate.Verdict verdict = gate.admit(principal, needsNewRun);
         if (verdict != ExternalGate.Verdict.ADMITTED) {
@@ -170,12 +179,14 @@ public final class Intake {
         if (needsNewRun) {
             newRuns.add(claim.submission());
         }
+        CompletableFuture<Void> saved = receipts.expect(claim.submission());
         if (!input.tryPublish(envelope(principal, session, null, event.apply(claim.submission())))) {
+            receipts.forget(claim.submission());
             release(principal, claim.submission());
             ledger.release(principal, request);
             return Submission.rejected(429);
         }
-        return new Submission(200, claim.submission(), false);
+        return new Submission(200, claim.submission(), false, saved);
     }
 
     private void release(Principal principal, SubmissionId submission) {

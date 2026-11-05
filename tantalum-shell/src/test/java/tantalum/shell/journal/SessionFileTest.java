@@ -43,32 +43,43 @@ class SessionFileTest {
                 new UserPrompt(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(session), text));
     }
 
+    private SessionFiles files(SessionPaths paths) {
+        return new SessionFiles(paths, codec, 4, (principal, session, seq, offset) -> { });
+    }
+
+    /** 写下这些步骤，每步什么都没改变：这里只测文件本身。 */
+    private void write(SessionPaths paths, EventEnvelope... events) throws Exception {
+        try (SessionFiles files = files(paths)) {
+            files.append(ALICE, S1, lines(events));
+        }
+    }
+
+    private static List<Line> lines(EventEnvelope... events) {
+        return java.util.Arrays.stream(events).map(ResultWriter::noEffect).toList();
+    }
+
     @Test
     void writtenEventsReadBackEqual() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
         List<EventEnvelope> events = List.of(event(ALICE, S1, 3, "第一行\n第二行 \"引号\"   😀"), event(ALICE, S1, 7, "x"));
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(events);
-        }
+        write(paths, events.toArray(EventEnvelope[]::new));
         assertEquals(events, new SessionFileReader(codec).readAll(paths.sessionFile(ALICE, S1)));
     }
 
     @Test
-    void headerIsFirstLineAndEachEventIsOneLine() throws Exception {
+    void headerIsFirstLineAndEachStepIsOneLine() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(List.of(event(ALICE, S1, 1, "a\nb")));
-        }
+        write(paths, event(ALICE, S1, 1, "a\nb"));
         List<String> lines = Files.readAllLines(paths.sessionFile(ALICE, S1));
         assertEquals(2, lines.size());
-        assertEquals("{\"format\":2,\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
+        assertEquals("{\"format\":3,\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
         assertTrue(lines.get(1).startsWith("{\"seq\":1,\"at\":\"2026-11-02T00:00:00.123456Z\",\"type\":\"UserPrompt\",\"version\":1,\"run\":\"s-1_1\",\"payload\":{"), lines.get(1));
     }
 
     @Test
     void permissionsAreOwnerOnly() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        SessionFile.open(paths, ALICE, S1, codec).close();
+        SessionFile.open(paths, ALICE, S1).close();
         Path file = paths.sessionFile(ALICE, S1);
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file.getParent())));
@@ -78,12 +89,8 @@ class SessionFileTest {
     @Test
     void reopeningAppendsAndDoesNotRepeatHeader() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(List.of(event(ALICE, S1, 1, "a")));
-        }
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(List.of(event(ALICE, S1, 2, "b")));
-        }
+        write(paths, event(ALICE, S1, 1, "a"));
+        write(paths, event(ALICE, S1, 2, "b"));
         Path path = paths.sessionFile(ALICE, S1);
         assertEquals(3, Files.readAllLines(path).size());
         assertEquals(2, new SessionFileReader(codec).readAll(path).size());
@@ -92,9 +99,9 @@ class SessionFileTest {
     @Test
     void eventOfAnotherSessionOrUserIsRejected() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            assertThrows(IllegalArgumentException.class, () -> file.append(List.of(event(ALICE, new SessionId("other"), 1, "x"))));
-            assertThrows(IllegalArgumentException.class, () -> file.append(List.of(event(new Principal("bob"), S1, 1, "x"))));
+        try (SessionFiles files = files(paths)) {
+            assertThrows(IllegalArgumentException.class, () -> files.append(ALICE, S1, lines(event(ALICE, new SessionId("other"), 1, "x"))));
+            assertThrows(IllegalArgumentException.class, () -> files.append(ALICE, S1, lines(event(new Principal("bob"), S1, 1, "x"))));
         }
         assertEquals(1, Files.readAllLines(paths.sessionFile(ALICE, S1)).size());
     }
@@ -104,7 +111,7 @@ class SessionFileTest {
         SessionPaths paths = new SessionPaths(dir);
         try (SessionFiles files = new SessionFiles(paths, codec, 4, (principal, session, seq, offset) -> { })) {
             assertFalse(Files.exists(paths.sessionFile(ALICE, S1)));
-            files.append(ALICE, S1, List.of(event(ALICE, S1, 1, "x")));
+            files.append(ALICE, S1, lines(event(ALICE, S1, 1, "x")));
             assertTrue(Files.exists(paths.sessionFile(ALICE, S1)));
         }
     }
@@ -114,10 +121,10 @@ class SessionFileTest {
         SessionPaths paths = new SessionPaths(dir);
         SessionId s2 = new SessionId("s-2");
         try (SessionFiles files = new SessionFiles(paths, codec, 1, (principal, session, seq, offset) -> { })) {
-            files.append(ALICE, S1, List.of(event(ALICE, S1, 1, "a")));
-            files.append(ALICE, s2, List.of(event(ALICE, s2, 2, "b")));
+            files.append(ALICE, S1, lines(event(ALICE, S1, 1, "a")));
+            files.append(ALICE, s2, lines(event(ALICE, s2, 2, "b")));
             assertEquals(1, files.openCount());
-            files.append(ALICE, S1, List.of(event(ALICE, S1, 3, "c")));
+            files.append(ALICE, S1, lines(event(ALICE, S1, 3, "c")));
             assertEquals(1, files.openCount());
         }
         SessionFileReader reader = new SessionFileReader(codec);
@@ -137,7 +144,7 @@ class SessionFileTest {
                 SessionId id = new SessionId("s-" + s);
                 running.add(writers.submit(() -> {
                     for (int i = 0; i < perSession; i++) {
-                        files.append(ALICE, id, List.of(event(ALICE, id, i, "t" + i)));
+                        files.append(ALICE, id, lines(event(ALICE, id, i, "t" + i)));
                     }
                     return null;
                 }));
@@ -158,14 +165,10 @@ class SessionFileTest {
     @Test
     void openRepairsTailBeforeAppending() throws Exception {
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(List.of(event(ALICE, S1, 1, "a")));
-        }
+        write(paths, event(ALICE, S1, 1, "a"));
         Path path = paths.sessionFile(ALICE, S1);
         Files.write(path, "{\"seq\":2,\"at".getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(List.of(event(ALICE, S1, 3, "c")));
-        }
+        write(paths, event(ALICE, S1, 3, "c"));
         assertEquals(List.of(event(ALICE, S1, 1, "a"), event(ALICE, S1, 3, "c")), new SessionFileReader(codec).readAll(path));
     }
 }

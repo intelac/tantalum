@@ -71,12 +71,11 @@ final class IndexFixture {
     Decision send(Principal principal, SessionId session, RunId run, Instant at, Event event) throws Exception {
         long seq = sequences.merge(principal, 1L, Long::sum);
         EventEnvelope envelope = new EventEnvelope(seq, at, principal, session, run, event);
-        files.append(principal, session, List.of(envelope));
         events.add(envelope);
         KernelState before = state;
         Decision decision = kernel.step(before, envelope);
-        // 和线上一样，结果行在处理之后、命令放行之前落盘（record-results R3）
-        files.appendLines(principal, session, List.of(new Line.Result(StepRecord.of(envelope, before, decision))));
+        // 和线上一样，处理完才写成一行、在命令放行之前落盘（one-line-journal J2）
+        files.append(principal, session, List.of(new Line(envelope, StepRecord.of(envelope, before, decision))));
         state = decision.newState();
         steps.add(new Stepped(envelope, before, decision));
         listener.onStep(envelope, before, state);

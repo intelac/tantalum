@@ -2,6 +2,7 @@ package tantalum.shell.web;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -10,6 +11,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +50,8 @@ import tools.jackson.databind.JsonNode;
 public class ApiController {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApiController.class);
+    /** 提交最多等多久落盘。冷会话载入、磁盘慢时会接近它。 */
+    static final Duration SAVE_WAIT = Duration.ofSeconds(10);
 
     private static final Set<String> MODES = Set.of("prompt", "steer", "follow-up");
     private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
@@ -170,7 +176,7 @@ public class ApiController {
         }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
                 content == null ? "" : content, attachments);
-        return result.status() == 200 ? accepted(result) : json.error(result.status(), "submission rejected");
+        return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), "submission rejected");
     }
 
     /**
@@ -217,7 +223,7 @@ public class ApiController {
                 new RequestId(WebJson.blank(requestId) ? UUID.randomUUID().toString() : requestId),
                 WebJson.blank(instructions) ? null : instructions);
         return switch (result.status()) {
-            case 200 -> accepted(result);
+            case 200 -> accepted(result, SAVE_WAIT);
             case 404 -> json.error(404, "no such session");
             case 409 -> json.error(409, "session is running or has nothing to compact");
             default -> json.error(result.status(), "compaction rejected");
@@ -266,11 +272,39 @@ public class ApiController {
         return SESSION_ID.matcher(raw).matches() ? Optional.of(new SessionId(raw)) : Optional.empty();
     }
 
-    private ResponseEntity<String> accepted(Intake.Submission result) {
+    /**
+     * 等提交那一步落盘再回“已接受”（one-line-journal J4）：写不进去回 500，{@code wait} 内没写完回 504。
+     * 不用 503：控制台把 503 当作“服务已停止处理事件”。
+     * 超时之后如果还是写进去了，用同一个 requestId 重发会按重复提交处理，不会处理两次。
+     */
+    private ResponseEntity<String> accepted(Intake.Submission result, Duration wait) {
+        int saved = waitSaved(result, wait);
+        if (saved == 504) {
+            return json.error(504, "服务器忙，请重发");
+        }
+        if (saved == 500) {
+            return json.error(500, "保存失败，请重发");
+        }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("submissionId", result.submission().value());
         response.put("duplicate", result.duplicate());
         return json.json(200, response);
+    }
+
+    /** 200：已落盘；500：没写进去；504：{@code wait} 内没写完。 */
+    static int waitSaved(Intake.Submission result, Duration wait) {
+        try {
+            result.saved().get(wait.toMillis(), TimeUnit.MILLISECONDS);
+            return 200;
+        } catch (TimeoutException slow) {
+            return 504;
+        } catch (ExecutionException notSaved) {
+            LOG.warn("submission {} was not saved: {}", result.submission().value(), notSaved.getCause().toString());
+            return 500;
+        } catch (InterruptedException stop) {
+            Thread.currentThread().interrupt();
+            return 504;
+        }
     }
 
     private static Map<String, Object> describe(SessionSummary summary) {

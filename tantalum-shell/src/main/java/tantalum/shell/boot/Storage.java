@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.kernel.Kernel;
 import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.attachment.ImageNormalizer;
@@ -21,7 +20,6 @@ import tantalum.shell.journal.StoreFormat;
 import tantalum.shell.journal.StoreLock;
 import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.UserLane;
-import tantalum.shell.store.Backfill;
 import tantalum.shell.store.IndexCatchUp;
 import tantalum.shell.store.RecordReplay;
 import tantalum.shell.store.IndexWriter;
@@ -85,13 +83,9 @@ final class Storage implements AutoCloseable {
         }
     }
 
-    /**
-     * 先补写上次崩溃留下的、没有结果行的事件（record-results R5），再让索引追上会话文件，返回有未结束运行的会话。
-     * 补不上就不知道哪些运行要收尾，拒绝启动；索引可以删掉重建。
-     */
-    List<SessionIndex.Session> catchUp(Kernel kernel) {
+    /** 让索引追上会话文件，返回有未结束运行的会话。追不上就不知道哪些运行要收尾，拒绝启动；索引可以删掉重建。 */
+    List<SessionIndex.Session> catchUp() {
         try {
-            Backfill.run(index, paths, records, files, kernel);
             IndexCatchUp.run(index, paths, reader);
             return index.unfinished();
         } catch (IOException | SQLException failure) {

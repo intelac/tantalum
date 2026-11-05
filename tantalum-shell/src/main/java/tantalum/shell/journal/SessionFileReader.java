@@ -10,24 +10,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.DateTimeException;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.journal.EventCodec;
-import tantalum.shell.journal.SessionFile;
 import tantalum.shell.json.JsonText;
-import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
-import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 读会话文件。崩溃只会弄坏最后一行，所以尾部残缺不算错误：读取时忽略，打开写入前截掉。
@@ -38,12 +31,10 @@ public final class SessionFileReader {
     private static final Logger LOG = LoggerFactory.getLogger(SessionFileReader.class);
     private static final int TAIL_CHUNK = 64 * 1024;
 
-    private final EventCodec codec;
-    private final RecordCodec records;
+    private final LineCodec lines;
 
     public SessionFileReader(EventCodec codec) {
-        this.codec = codec;
-        this.records = new RecordCodec(codec);
+        this.lines = new LineCodec(codec);
     }
 
     public List<EventEnvelope> readAll(Path file) throws IOException {
@@ -52,20 +43,16 @@ public final class SessionFileReader {
         return events;
     }
 
-    /** 只读事件行，结果行跳过。不修改文件，可以和写入同时进行；正在写的尾部不会被读到。文件不存在时没有事件。 */
+    /** 只要事件（检查工具按事件重放）。不修改文件，可以和写入同时进行；正在写的尾部不会被读到。文件不存在时没有事件。 */
     public void forEach(Path file, Consumer<EventEnvelope> consumer) throws IOException {
-        read(file, false, line -> consumer.accept(((Line.Event) line).envelope()));
+        forEachLine(file, line -> consumer.accept(line.envelope()));
     }
 
     /**
-     * 按文件顺序读事件行和结果行，返回读完后的 memo（读取方，{@link RecordMemo#toWriter} 后交给写入方接着用）。
-     * 结果行的序号必须递增，并且对应一个前面读到、还没有结果的事件。
+     * 按文件顺序读每一行，返回读完后的 memo（读取方，{@link RecordMemo#toWriter} 后交给写入方接着用）。
+     * 每行只解析一次（one-line-journal J9），序号必须递增。
      */
     public RecordMemo forEachLine(Path file, Consumer<Line> consumer) throws IOException {
-        return read(file, true, consumer);
-    }
-
-    private RecordMemo read(Path file, boolean results, Consumer<Line> consumer) throws IOException {
         RecordMemo memo = RecordMemo.reader();
         if (!Files.exists(file)) {
             return memo;
@@ -83,58 +70,29 @@ public final class SessionFileReader {
             memo = RecordMemo.reader(identity.principal(), identity.session());
             long lineNumber = 2;
             long lastSeq = Long.MIN_VALUE;
-            long lastResult = Long.MIN_VALUE;
-            Set<Long> unanswered = new HashSet<>();
             current = next;
             while (current != null) {
                 next = in.next();
-                long skipped = results ? -1 : resultSeq(current);
-                if (skipped >= 0) {
-                    // 只读事件时不解析结果行：序号在行首，照样检查配对
-                    if (skipped <= lastResult || !unanswered.remove(skipped)) {
-                        throw corrupt(file, lineNumber, "result for seq " + skipped + " has no earlier event without a result", null);
-                    }
-                    lastResult = skipped;
-                    current = next;
-                    lineNumber++;
-                    continue;
-                }
                 String text = text(current);
-                Json parsed = text == null ? null : JsonText.parseOrNull(text);
-                if (!(parsed instanceof Json.Obj record)) {
+                JsonNode tree = text == null ? null : parseOrNull(text);
+                if (tree == null || !tree.isObject()) {
                     if (next == null) {
                         LOG.warn("ignoring incomplete last line {} of {}", lineNumber, file);
                         return memo;
                     }
                     throw corrupt(file, lineNumber, "not a JSON object", null);
                 }
-                if (record.fields().get("result") instanceof Json.Num result) {
-                    long seq = exactSeq(file, lineNumber, result);
-                    if (seq <= lastResult || !unanswered.remove(seq)) {
-                        throw corrupt(file, lineNumber, "result for seq " + seq + " has no earlier event without a result", null);
-                    }
-                    lastResult = seq;
-                    if (results) {
-                        try {
-                            RecordCodec.Decoded decoded = records.decode(text, memo);
-                            consumer.accept(new Line.Result(decoded.record(), decoded.fingerprints()));
-                        } catch (IllegalArgumentException failure) {
-                            throw corrupt(file, lineNumber, failure.getMessage(), failure);
-                        }
-                    }
-                } else {
-                    EventEnvelope envelope = parseEvent(file, lineNumber, record, identity);
-                    if (envelope.seq() <= lastSeq) {
-                        throw corrupt(file, lineNumber, "seq " + envelope.seq() + " is not after " + lastSeq, null);
-                    }
-                    lastSeq = envelope.seq();
-                    unanswered.add(lastSeq);
-                    if (results) {
-                        memo.seeJson(record.fields().get("payload"));
-                        memo.seeEvent(envelope);
-                    }
-                    consumer.accept(new Line.Event(envelope));
+                Line line;
+                try {
+                    line = lines.decode(tree, identity.principal(), identity.session(), memo);
+                } catch (IllegalArgumentException | ArithmeticException failure) {
+                    throw corrupt(file, lineNumber, failure.getMessage(), failure);
                 }
+                if (line.seq() <= lastSeq) {
+                    throw corrupt(file, lineNumber, "seq " + line.seq() + " is not after " + lastSeq, null);
+                }
+                lastSeq = line.seq();
+                consumer.accept(line);
                 current = next;
                 lineNumber++;
             }
@@ -142,28 +100,11 @@ public final class SessionFileReader {
         return memo;
     }
 
-    private static final byte[] RESULT_PREFIX = "{\"result\":".getBytes(StandardCharsets.US_ASCII);
-
-    /** 结果行（{@code RecordCodec} 写的，序号总在行首）的序号；不是结果行时为 -1。 */
-    private static long resultSeq(byte[] line) {
-        if (line.length <= RESULT_PREFIX.length || !java.util.Arrays.equals(line, 0, RESULT_PREFIX.length, RESULT_PREFIX, 0, RESULT_PREFIX.length)) {
-            return -1;
-        }
-        long seq = 0;
-        int i = RESULT_PREFIX.length;
-        int digits = 0;
-        while (i < line.length && line[i] >= '0' && line[i] <= '9' && digits < 18) {
-            seq = seq * 10 + (line[i++] - '0');
-            digits++;
-        }
-        return digits > 0 && i < line.length && (line[i] == ',' || line[i] == '}') ? seq : -1;
-    }
-
-    private static long exactSeq(Path file, long lineNumber, Json.Num seq) {
+    private JsonNode parseOrNull(String text) {
         try {
-            return seq.value().longValueExact();
-        } catch (ArithmeticException failure) {
-            throw corrupt(file, lineNumber, "seq is not an integer", failure);
+            return lines.parse(text);
+        } catch (IllegalArgumentException notJson) {
+            return null;
         }
     }
 
@@ -233,26 +174,9 @@ public final class SessionFileReader {
             throw corrupt(file, 1, "format " + format.value() + " is newer than this program supports", null);
         }
         if (format.value().intValue() < SessionFile.FORMAT) {
-            throw corrupt(file, 1, "format " + format.value() + " is from before result lines; this program no longer reads it", null);
+            throw corrupt(file, 1, "format " + format.value() + " is from before one line per step; this program no longer reads it", null);
         }
         return new Identity(new Principal(principal.value()), new SessionId(session.value()));
-    }
-
-    private EventEnvelope parseEvent(Path file, long lineNumber, Json.Obj record, Identity identity) {
-        if (!(record.fields().get("seq") instanceof Json.Num seq)
-                || !(record.fields().get("at") instanceof Json.Str at)
-                || !(record.fields().get("type") instanceof Json.Str type)
-                || !(record.fields().get("version") instanceof Json.Num version)
-                || !(record.fields().get("payload") instanceof Json payload)) {
-            throw corrupt(file, lineNumber, "not an event record", null);
-        }
-        try {
-            Event event = codec.decode(type.value(), version.value().intValueExact(), JsonText.toText(payload));
-            RunId run = record.fields().get("run") instanceof Json.Str value ? new RunId(value.value()) : null;
-            return new EventEnvelope(seq.value().longValueExact(), Instant.parse(at.value()), identity.principal(), identity.session(), run, event);
-        } catch (IllegalArgumentException | ArithmeticException | DateTimeException failure) {
-            throw corrupt(file, lineNumber, failure.getMessage(), failure);
-        }
     }
 
     private static SessionCorruptException corrupt(Path file, long lineNumber, String detail, Throwable cause) {

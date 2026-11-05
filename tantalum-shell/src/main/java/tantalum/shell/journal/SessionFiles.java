@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFile;
 import tantalum.shell.journal.SessionPaths;
-import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
@@ -37,33 +36,25 @@ public final class SessionFiles implements AutoCloseable {
     }
 
     private final SessionPaths paths;
-    private final EventCodec codec;
     private final int maxOpen;
     private final DurableListener listener;
     private final Object lock = new Object();
     private final LinkedHashMap<Key, Handle> handles = new LinkedHashMap<>(16, 0.75f, true);
-    private final RecordCodec records;
+    private final LineCodec codec;
     private final Map<Key, RecordMemo> memos = new ConcurrentHashMap<>();
 
-    public SessionFiles(SessionPaths paths, EventCodec codec, int maxOpen, DurableListener listener) {
+    public SessionFiles(SessionPaths paths, EventCodec events, int maxOpen, DurableListener listener) {
         this.listener = listener;
         this.paths = paths;
-        this.codec = codec;
-        this.records = new RecordCodec(codec);
+        this.codec = new LineCodec(events);
         this.maxOpen = maxOpen;
     }
 
-    /** 同一会话的事件追加到它的文件。返回时已落盘。 */
-    public void append(Principal principal, SessionId session, List<EventEnvelope> events) throws IOException {
-        appendLines(principal, session, events.stream().<Line>map(Line.Event::new).toList());
-    }
-
     /**
-     * 同一会话的事件和结果按顺序追加。有结果行时 fsync 一次，返回时这一批和之前没 fsync 的行都已落盘，然后通知监听器；
-     * 只有事件时只写不 fsync：事件和它的结果行一起落盘，在那之前不放行任何效果（record-results R3）。
-     * 写失败时丢掉这个会话的 memo：它可能记下了没落盘的内容，之后的结果行不能引用它们。
+     * 同一会话处理完的几步按顺序追加，fsync 一次，返回时已落盘，然后通知监听器（one-line-journal J2）。
+     * 写失败时丢掉这个会话的 memo：它可能记下了没落盘的内容，之后的行不能引用它们。
      */
-    public void appendLines(Principal principal, SessionId session, List<Line> lines) throws IOException {
+    public void append(Principal principal, SessionId session, List<Line> lines) throws IOException {
         Key key = new Key(principal, session);
         Handle handle;
         synchronized (lock) {
@@ -80,28 +71,18 @@ public final class SessionFiles implements AutoCloseable {
                     memos.put(key, memo);
                 }
                 if (handle.file == null) {
-                    handle.file = SessionFile.open(paths, principal, session, codec);
+                    handle.file = SessionFile.open(paths, principal, session);
                 }
                 List<String> encoded = new ArrayList<>(lines.size());
                 long seq = Long.MIN_VALUE;
                 try {
                     for (Line line : lines) {
-                        switch (line) {
-                            case Line.Event event -> {
-                                String payload = handle.file.payload(event.envelope());
-                                records.see(payload, memo);
-                                memo.seeEvent(event.envelope());
-                                encoded.add(SessionFile.line(event.envelope(), payload));
-                            }
-                            case Line.Result result -> encoded.add(records.encode(result.record(), memo));
-                        }
+                        handle.file.check(line.envelope());
+                        encoded.add(codec.encode(line, memo));
                         seq = Math.max(seq, line.seq());
                     }
-                    boolean force = lines.stream().anyMatch(Line.Result.class::isInstance);
-                    long offset = handle.file.appendLines(encoded, force);
-                    if (force) {
-                        listener.onDurable(principal, session, seq, offset);
-                    }
+                    long offset = handle.file.appendLines(encoded);
+                    listener.onDurable(principal, session, seq, offset);
                 } catch (IOException | RuntimeException failure) {
                     memos.remove(key);
                     throw failure;

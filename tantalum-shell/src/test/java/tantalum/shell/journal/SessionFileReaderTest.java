@@ -30,11 +30,15 @@ class SessionFileReaderTest {
     Path dir;
 
     private Path threeEvents(List<EventEnvelope> events) throws Exception {
-        SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, S1, codec)) {
-            file.append(events);
+        append(S1, events);
+        return new SessionPaths(dir).sessionFile(ALICE, S1);
+    }
+
+    /** 每个事件写成什么都没改变的一步：这里只测读文件。 */
+    private void append(SessionId session, List<EventEnvelope> events) throws Exception {
+        try (SessionFiles files = new SessionFiles(new SessionPaths(dir), codec, 4, (principal, id, seq, offset) -> { })) {
+            files.append(ALICE, session, events.stream().map(ResultWriter::noEffect).toList());
         }
-        return paths.sessionFile(ALICE, S1);
     }
 
     private static List<EventEnvelope> sample() {
@@ -68,9 +72,7 @@ class SessionFileReaderTest {
             assertTrue(kept == 0 || whole[kept - 1] == '\n', "repair stops at a line end, length " + length);
 
             EventEnvelope next = SessionFileTest.event(ALICE, S1, 9, "next");
-            try (SessionFile file = SessionFile.open(new SessionPaths(dir), ALICE, S1, codec)) {
-                file.append(List.of(next));
-            }
+            append(S1, List.of(next));
             List<EventEnvelope> continued = new ArrayList<>(expected);
             continued.add(next);
             assertEquals(continued, reader.readAll(path), "append at length " + length);
@@ -129,9 +131,7 @@ class SessionFileReaderTest {
     void seqMustIncreaseWithinAFileButMayJump() throws Exception {
         Path path = threeEvents(List.of(SessionFileTest.event(ALICE, S1, 2, "a"), SessionFileTest.event(ALICE, S1, 900_000, "b")));
         assertEquals(2, reader.readAll(path).size());
-        try (SessionFile file = SessionFile.open(new SessionPaths(dir), ALICE, S1, codec)) {
-            file.append(List.of(SessionFileTest.event(ALICE, S1, 5, "goes back"), SessionFileTest.event(ALICE, S1, 900_001, "c")));
-        }
+        append(S1, List.of(SessionFileTest.event(ALICE, S1, 5, "goes back"), SessionFileTest.event(ALICE, S1, 900_001, "c")));
         SessionCorruptException failure = assertThrows(SessionCorruptException.class, () -> reader.readAll(path));
         assertTrue(failure.getMessage().contains("line 4"), failure.getMessage());
     }
@@ -139,7 +139,7 @@ class SessionFileReaderTest {
     @Test
     void unknownEventTypeIsRejectedNotSkippedAndNotCutFromTail() throws Exception {
         Path path = threeEvents(sample());
-        String future = "{\"seq\":9,\"at\":\"2026-11-02T00:00:00Z\",\"type\":\"FromTheFuture\",\"version\":1,\"run\":null,\"payload\":{}}\n";
+        String future = "{\"seq\":9,\"at\":\"2026-11-02T00:00:00Z\",\"type\":\"FromTheFuture\",\"version\":1,\"run\":null,\"payload\":{},\"result\":{}}\n";
         Files.write(path, future.getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);
         long size = Files.size(path);
         SessionFileReader.repairTail(path);
@@ -151,7 +151,7 @@ class SessionFileReaderTest {
     void newerFileFormatIsRejected() throws Exception {
         Path path = threeEvents(sample());
         List<String> lines = new ArrayList<>(Files.readAllLines(path));
-        lines.set(0, "{\"format\":3,\"session\":\"s-1\",\"principal\":\"alice\"}");
+        lines.set(0, "{\"format\":4,\"session\":\"s-1\",\"principal\":\"alice\"}");
         Files.write(path, lines);
         assertThrows(SessionCorruptException.class, () -> reader.readAll(path));
     }
@@ -162,10 +162,8 @@ class SessionFileReaderTest {
         SessionId other = new SessionId("s-2");
         EventEnvelope event = SessionFileTest.event(ALICE, other, 1, "fine");
         SessionPaths paths = new SessionPaths(dir);
-        try (SessionFile file = SessionFile.open(paths, ALICE, other, codec)) {
-            file.append(List.of(event));
-        }
-        Files.writeString(path, "{\"format\":2,\"session\":\"s-1\",\"principal\":\"alice\"}\n{bad\n{\"seq\":1}\n");
+        append(other, List.of(event));
+        Files.writeString(path, "{\"format\":3,\"session\":\"s-1\",\"principal\":\"alice\"}\n{bad\n{\"seq\":1}\n");
         assertThrows(SessionCorruptException.class, () -> reader.readAll(path));
         assertEquals(List.of(event), reader.readAll(paths.sessionFile(ALICE, other)));
     }

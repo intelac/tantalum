@@ -14,7 +14,7 @@
 
 ## 阶段 1：一件事一行，存好才回“已接受”
 
-- [ ] 1. `Line` 和 `LineCodec`
+- [x] 1. `Line` 和 `LineCodec`
   - File: shell/journal/Line.java、shell/journal/LineCodec.java（新）、shell/journal/EventCodec.java、shell/journal/RecordCodec.java
   - `Line` 改成 `record Line(EventEnvelope envelope, StepRecord record, Map<CommandId, String> fingerprints)`，删掉 `Line.Event`、`Line.Result`。`LineCodec.encode` 写事件字段加 `result`；`decode(JsonNode, memo)` 从一棵树解出事件和决定。`EventCodec`、`RecordCodec` 各加一个从 `JsonNode` 解码的入口
   - 测试：每种事件一行往返相等；“来自本事件”引用同一行的正文；`result` 缺失或序号不对时 `SessionCorruptException`
@@ -22,7 +22,7 @@
   - _Requirements: J1, 需求 1.1_
   - _Prompt: Role: Java 后端开发 | Task: 按设计“一行的样子”实现 Line 和 LineCodec | Restrictions: 不改 RecordCodec 已有的去重规则；内核和 value 不知道文件格式 | Success: 往返测试全过，ArchitectureTest 通过_
 
-- [ ] 2. 读写一种行、格式 3
+- [x] 2. 读写一种行、格式 3
   - File: shell/journal/SessionFileReader.java、shell/journal/SessionFile.java、shell/journal/SessionFiles.java、shell/journal/TailSequence.java、shell/journal/StoreFormat.java
   - 读：每行只解析一次，交给 `LineCodec`；末尾半行照旧截断。写：`appendLines` 每批 fsync 一次；删掉只写事件、不 fsync 的分支。`FORMAT = 3`，`storage = 3`：`storage = 2` 且有会话文件时拒绝启动，没有时升级
   - 测试：读写往返；半行截断；`format: 2` 文件拒绝；旧目录有、无会话文件两种情况，用户库和设置不变
@@ -30,7 +30,7 @@
   - _Requirements: J9, J12, 需求 1.6, 6.2, 8_
   - _Prompt: Role: Java 后端开发 | Task: 让会话文件只有一种行，读的时候每行只解析一次，格式升到 3 | Restrictions: 不迁移旧数据；拒绝时不改任何文件 | Success: StoreFormatTest、SessionFileTest 全过_
 
-- [ ] 3. 通道只在处理完后写
+- [x] 3. 通道只在处理完后写
   - File: shell/loop/UserLane.java、shell/loop/LaneDispatcher.java
   - 收到事件只取序号、钉住会话、载入冷会话、发布；收到 `Released` 时按会话写一行，全部写完再运行 `afterDurable`、`done`。改类注释
   - 测试：事件进来后文件不变；fsync 前不放行（写入器卡住时输出环为空）；写失败只运行 `done` 并停止处理；多会话并行写
@@ -38,7 +38,7 @@
   - _Requirements: J2, 需求 1.2, 1.3_
   - _Prompt: Role: Java 并发开发 | Task: 把 UserLane 改成内核处理完才写一行 | Restrictions: 同一用户按序、不同用户互不等待不变；每批一次 fsync | Success: UserLaneTest、RingIntegrationTest、MultiUserTest 全过_
 
-- [ ] 4. 折叠不再配对，删掉补写
+- [x] 4. 折叠不再配对，删掉补写
   - File: shell/store/RecordReplay.java、shell/store/Backfill.java（删）、shell/boot/Storage.java、shell/store/IndexCatchUp.java、shell/store/TraceQuery.java、shell/store/TurnQuery.java、shell/store/UsageLedger.java 及其他 `forEachLine` 的使用者
   - 每行直接套用决定；删 `waiting`、`requireAnswered`、`Folded.unanswered`、`Backfill`、`BackfillTest`；`Storage.catchUp` 只剩索引追赶
   - 测试：`EvictionInvarianceTest` 每一步后崩溃恢复逐字节相同；查询、补读、轨迹照旧
@@ -46,7 +46,7 @@
   - _Requirements: J3, 需求 1.4, 1.5, 9.1_
   - _Prompt: Role: Java 后端开发 | Task: 删掉事件和结果的配对和启动补写 | Restrictions: 删干净，不留只为两种行存在的分支 | Success: shell 模块测试全过，grep 不到 Line.Event、Line.Result、Backfill_
 
-- [ ] 5. 检查工具读新格式
+- [x] 5. 检查工具读新格式
   - File: shell/store/RecordCheck.java、shell/store/ReplayCompare.java
   - 每行用当前内核重放这个事件，和行里的决定比较；输出和退出码不变
   - 测试：一致时退出 0；改一个钩子规则后报告第一处差异
@@ -54,7 +54,7 @@
   - _Requirements: J13, 需求 9.6_
   - _Prompt: Role: Java 后端开发 | Task: RecordCheck 读一种行 | Restrictions: 只读，不改数据目录 | Success: RecordCheckTest 全过_
 
-- [ ] 6. 提交的回执
+- [x] 6. 提交的回执
   - File: shell/loop/Receipts.java（新）、shell/loop/Intake.java、shell/boot/Engine.java
   - `Submission` 带 `durable`；`Engine` 包装 `afterDurable`、`done`：`Submitted` 事件落盘后 `durable`，只运行了 `done` 时 `failed`；重复提交在途时等同一个回执，已落盘时立即完成
   - 测试：落盘后完成；写失败、进程停止时失败；重复提交两种情况；完成后表里不留条目
@@ -62,22 +62,23 @@
   - _Requirements: J4, 需求 2.1, 2.4_
   - _Prompt: Role: Java 并发开发 | Task: 实现 Receipts 并接到 Intake 和 Engine | Restrictions: 取消不等回执；拒绝的提交立即返回 | Success: IntakeTest、ReceiptsTest 全过_
 
-- [ ] 7. 提交接口等落盘
+- [x] 7. 提交接口等落盘
   - File: shell/web/ApiController.java、shell/boot/TantalumProperties.java（`loop.ack-timeout`，默认 10 s）
-  - 提交和手动压缩等回执：完成 → 200；失败 → 500“保存失败，请重发”；超时 → 503“服务器忙，请重发”
+  - 提交和手动压缩等回执：完成 → 200；失败 → 500“保存失败，请重发”；超时 → 504“服务器忙，请重发”（实现时改用 504：控制台把所有 503 当作“服务已停止处理事件”；超时常量 10 s 写在 `ApiController.SAVE_WAIT`，不做配置项）
   - 测试：三种回应；控制台失败时保留文字和附件（现有 `Composer` 测试补一条 503）
   - _Leverage: ApiController.accepted_
   - _Requirements: J4, 需求 2.1–2.3_
   - _Prompt: Role: Java/React 全栈开发 | Task: 提交接口在落盘后才回 200 | Restrictions: 接口形状不变 | Success: ApiControllerTest、vitest 全过_
 
-- [ ] 8. 崩溃在写一行之前
+- [x] 8. 崩溃在写一行之前
+  - 实现时改了做法：用真实 jar 很难卡准“内核处理完、还没写这一行”的瞬间。改成在现有的 `kill -9` 场景里检查：回过 200 的三个提交被杀之后都在文件里；“写不进去就不回 200”由 `SaveBeforeAcceptTest` 覆盖（目录不可写 → 500，之后 503），“丢了最后一行，会话停在上一步”由 `RecordReplayTest` 覆盖
   - File: examples/JarCrashIT.java
   - 新场景：写入前杀掉进程，重启后这件事不在文件里、提交没有收到 200、运行照 H9 收尾，用同一 `requestId` 重发只处理一次
   - _Leverage: JarCrashIT 现有的杀进程场景_
   - _Requirements: J3, 需求 9.2_
   - _Prompt: Role: 测试开发 | Task: 加崩溃场景 | Restrictions: 用真实 jar | Success: JarCrashIT 通过_
 
-- [ ] 9. 阶段 1 收尾
+- [-] 9. 阶段 1 收尾
   - `LaneBench`：命令放行和提交回应 P99 ≤ 50 ms，写进 `tech.md`；全量回归；先把 8091 的 `s-recordsmoke` 和 `index.db` 移到 `~/.local/share/tantalum-sessions-backup-2026-11-06/` 并告诉 Yi；提交、更新 8091、汇报
   - _Requirements: 需求 1.7, 2.5, 9.7_
   - _Prompt: Role: 发布负责人 | Task: 阶段 1 收尾 | Restrictions: 移数据前先告诉 Yi；提交前扫描密钥 | Success: 回归全过，8091 能登录、能聊天_

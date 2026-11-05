@@ -89,81 +89,95 @@ class UserLaneTest {
         }
     }
 
-    /** 全部会话都写完才放行一批：不会有事件比同一批更早的事件先到内核。 */
+    /** 一批里几个会话的步骤并行写，全部写完才放行：不会有一步比同一批更早的步骤先放行命令。 */
     @Test
-    void nothingIsPublishedUntilEverySessionOfTheBatchIsWritten() throws Exception {
+    void nothingIsReleasedUntilEverySessionOfTheBatchIsWritten() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch slowWrite = new CountDownLatch(1);
         CountDownLatch writing = new CountDownLatch(2);
         CountDownLatch hold = new CountDownLatch(1);
-        // 先用一个事件占住通道，让后两个进同一批。
-        UserLane held = new UserLane(ALICE, sequence, (p, s, events) -> {
+        // 先用一步占住通道，让后两步进同一批。
+        UserLane held = new UserLane(ALICE, sequence, (p, s, lines) -> {
             if (s.value().equals("first")) {
-                try {
-                    hold.await();
-                } catch (InterruptedException stop) {
-                    throw new IOException(stop);
-                }
+                await(hold);
                 return;
             }
             writing.countDown();
             if (s.value().equals("slow")) {
-                try {
-                    slowWrite.await();
-                } catch (InterruptedException stop) {
-                    throw new IOException(stop);
-                }
+                await(slowWrite);
             }
         }, exit, LoopFixtures.NO_LOADER, new Residency());
-        held.offer(event("first", "r0"));
+        held.offer(step("first", 0, log));
         Thread.sleep(50);
-        held.offer(event("slow", "r1"));
-        held.offer(event("fast", "r2"));
+        held.offer(step("slow", 1, log));
+        held.offer(step("fast", 2, log));
         hold.countDown();
         assertTrue(writing.await(5, TimeUnit.SECONDS), "both sessions must write in parallel");
         Thread.sleep(50);
-        assertEquals(List.of("r0"), exit.published.stream().map(UserLaneTest::request).toList());
+        assertEquals(List.of("released 0", "done 0"), log);
         slowWrite.countDown();
-        exit.await(3);
-        assertEquals(List.of("r0", "r1", "r2"), exit.published.stream().map(UserLaneTest::request).toList());
+        for (int i = 0; i < 1000 && log.size() < 6; i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(List.of("released 0", "done 0", "released 1", "done 1", "released 2", "done 2"), log);
     }
 
+    /** 写失败就停下：同一批的事件不再交给内核，步骤只归还名额。 */
     @Test
-    void writeFailureHaltsAndNothingOfTheBatchIsPublished() throws Exception {
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> {
+    void writeFailureHaltsAndNothingOfTheBatchGoesOn() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
+        CountDownLatch hold = new CountDownLatch(1);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+            if (s.value().equals("first")) {
+                await(hold);
+                return;
+            }
             throw new IOException("disk full");
         }, exit, LoopFixtures.NO_LOADER, new Residency());
-        lane.offer(event("a", "r0"));
+        lane.offer(step("first", 0, log));
+        Thread.sleep(50);
+        lane.offer(step("a", 1, log));
+        lane.offer(event("b", "r1"));
+        hold.countDown();
         exit.await(1);
         assertTrue(exit.halted);
         assertEquals(1, exit.failures.size());
         assertTrue(exit.published.isEmpty());
-        lane.offer(event("a", "r1"));
+        assertEquals(List.of("released 0", "done 0", "done 1"), log);
+        lane.offer(event("a", "r2"));
         exit.await(2);
         assertEquals(1, exit.failures.size(), "later events are dropped without writing");
     }
 
     @Test
     void failureInOneOfSeveralSessionsStillFailsTheBatch() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch hold = new CountDownLatch(1);
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
             if (s.value().equals("first")) {
-                try {
-                    hold.await();
-                } catch (InterruptedException stop) {
-                    throw new IOException(stop);
-                }
+                await(hold);
             } else if (s.value().equals("bad")) {
                 throw new IOException("disk full");
             }
         }, exit, LoopFixtures.NO_LOADER, new Residency());
-        lane.offer(event("first", "r0"));
+        lane.offer(step("first", 0, log));
         Thread.sleep(50);
-        lane.offer(event("good", "r1"));
-        lane.offer(event("bad", "r2"));
+        lane.offer(step("good", 1, log));
+        lane.offer(step("bad", 2, log));
         hold.countDown();
-        exit.await(3);
+        for (int i = 0; i < 1000 && log.size() < 4; i++) {
+            Thread.sleep(5);
+        }
         assertTrue(exit.halted);
-        assertEquals(List.of("r0"), exit.published.stream().map(UserLaneTest::request).toList());
+        assertEquals(List.of("released 0", "done 0", "done 1", "done 2"), log, "the good session's step is not released either");
+    }
+
+    private static void await(CountDownLatch latch) throws IOException {
+        try {
+            latch.await();
+        } catch (InterruptedException stop) {
+            throw new IOException(stop);
+        }
     }
 
     @Test
@@ -171,7 +185,7 @@ class UserLaneTest {
         List<EventEnvelope> written = Collections.synchronizedList(new ArrayList<>());
         UserLane lane = new UserLane(ALICE, principal -> {
             throw new IllegalStateException("exceeded");
-        }, (p, s, lines) -> lines.forEach(line -> written.add(((Line.Event) line).envelope())), exit, LoopFixtures.NO_LOADER, new Residency());
+        }, (p, s, lines) -> lines.forEach(line -> written.add(line.envelope())), exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -211,14 +225,14 @@ class UserLaneTest {
         return new UserLane.Released(envelope, record, () -> log.add("released " + seq), () -> log.add("done " + seq));
     }
 
-    /** record-results 需求 2.1：结果行落盘之前不放行命令和推送。 */
+    /** one-line-journal 需求 1.2：这一行落盘之前不放行命令和推送。 */
     @Test
     void aStepIsReleasedOnlyAfterItsResultIsWritten() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch durable = new CountDownLatch(1);
         UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
-            log.add("write " + lines.stream().map(line -> line.getClass().getSimpleName() + " " + line.seq()).toList());
+            log.add("write " + lines.stream().map(Line::seq).toList());
             writing.countDown();
             try {
                 durable.await();
@@ -230,13 +244,13 @@ class UserLaneTest {
         lane.offer(step("a", 7, log));
         assertTrue(writing.await(5, TimeUnit.SECONDS));
         Thread.sleep(50);
-        assertEquals(List.of("write [Result 7]"), log, "nothing is released while the write is in progress");
+        assertEquals(List.of("write [7]"), log, "nothing is released while the write is in progress");
 
         durable.countDown();
         for (int i = 0; i < 1000 && log.size() < 3; i++) {
             Thread.sleep(5);
         }
-        assertEquals(List.of("write [Result 7]", "released 7", "done 7"), log);
+        assertEquals(List.of("write [7]", "released 7", "done 7"), log);
     }
 
     /** 需求 2.2：写不进去就不放行，只归还名额；进程照事件写入失败的规则停下。 */
@@ -255,34 +269,31 @@ class UserLaneTest {
         assertEquals(1, exit.failures.size());
     }
 
-    /** 事件和结果按到达顺序进同一次写入。 */
+    /** one-line-journal 需求 1.3：事件交给内核之前不写文件；只有处理完的步骤按顺序写。 */
     @Test
-    void eventsAndResultsOfOneSessionAreWrittenInArrivalOrder() throws Exception {
+    void onlyProcessedStepsAreWrittenInArrivalOrder() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
-        List<String> written = new CopyOnWriteArrayList<>();
+        List<Long> written = new CopyOnWriteArrayList<>();
         CountDownLatch hold = new CountDownLatch(1);
         UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
             if (s.value().equals("first")) {
-                try {
-                    hold.await();
-                } catch (InterruptedException stop) {
-                    throw new IOException(stop);
-                }
+                await(hold);
                 return;
             }
-            lines.forEach(line -> written.add(line.getClass().getSimpleName()));
+            lines.forEach(line -> written.add(line.seq()));
         }, exit, LoopFixtures.NO_LOADER, new Residency());
-        lane.offer(event("first", "hold"));
+        lane.offer(step("first", 10, log));
         Thread.sleep(20);
-        lane.offer(step("a", 0, log));
+        lane.offer(step("a", 11, log));
         lane.offer(event("a", "steer"));
-        lane.offer(step("a", 1, log));
+        lane.offer(step("a", 12, log));
         hold.countDown();
-        exit.await(2);
-        for (int i = 0; i < 1000 && log.size() < 4; i++) {
+        exit.await(1);
+        for (int i = 0; i < 1000 && log.size() < 6; i++) {
             Thread.sleep(5);
         }
-        assertEquals(List.of("Result", "Event", "Result"), written);
-        assertEquals(List.of("released 0", "done 0", "released 1", "done 1"), log);
+        assertEquals(List.of(11L, 12L), written, "the steer event is published, not written");
+        assertEquals(List.of("steer"), exit.published.stream().map(UserLaneTest::request).toList());
+        assertEquals(List.of("released 10", "done 10", "released 11", "done 11", "released 12", "done 12"), log);
     }
 }

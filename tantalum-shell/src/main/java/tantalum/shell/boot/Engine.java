@@ -39,6 +39,8 @@ import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.Projections;
+import tantalum.shell.loop.Receipts;
+import tantalum.shell.loop.Release;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.StateView;
@@ -105,6 +107,8 @@ public final class Engine implements AutoCloseable {
     private final PluginGate gate;
     private final InputRing input;
     private final LaneDispatcher lanes;
+    /** 提交的回执：那一步落盘后完成，接口才回“已接受”（one-line-journal J4）。 */
+    private final Receipts receipts = new Receipts();
     private final CleanroomRing cleanroomRing;
     private final Cleanroom cleanroom;
     private final OutputRing output;
@@ -152,7 +156,7 @@ public final class Engine implements AutoCloseable {
 
             RequestImages requestImages = new RequestImages(storage.attachments);
             Kernel kernel = KernelFactory.kernel(properties, catalog.safety(), hooks);
-            unfinished = storage.catchUp(kernel);
+            unfinished = storage.catchUp();
 
             Residency residency = new Residency();
             Transcript transcript = new Transcript();
@@ -166,7 +170,7 @@ public final class Engine implements AutoCloseable {
 
             cleanroomRing = new CleanroomRing(loop.inputRingSize());
             lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
-                    storage.files::appendLines, cleanroomRing::tryPublish, storage.loader(), residency);
+                    storage.files::append, cleanroomRing::tryPublish, storage.loader(), residency);
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
@@ -186,9 +190,14 @@ public final class Engine implements AutoCloseable {
                 observations.forget(session);
                 storage.files.forget(session);
             });
-            // 结果行由用户通道落盘后才放行命令和推送；那之后才归还外部名额和放行名额（record-results R3）
+            // 处理完的一步由用户通道写成一行、落盘后才放行命令和推送，提交的回执也在这时完成；
+            // 那之后才归还外部名额和放行名额（record-results R3、one-line-journal J2、J4）
+            Release saved = (envelope, record, afterDurable, done) -> lanes.release(envelope, record, () -> {
+                afterDurable.run();
+                receipts.durable(envelope);
+            }, done);
             cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, projections, hub, view, results,
-                    storage.indexWriter::onStep, evictor, lanes, this::processed);
+                    storage.indexWriter::onStep, evictor, saved, this::processed);
 
             // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
             BooleanSupplier halted = () -> closing.get() || lanes.halted() || cleanroom.broken() || input.broken()
@@ -197,7 +206,7 @@ public final class Engine implements AutoCloseable {
                     () -> (int) view.current().activeRunCount(), halted);
             SubmissionLedger ledger = new SubmissionLedger(storage::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
             intake = new Intake(input, gate, ledger, view, residency, storage::claim,
-                    (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock);
+                    (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
             input.connect(lanes);
             cleanroomRing.connect(cleanroom);
         } catch (RuntimeException failure) {
@@ -214,6 +223,7 @@ public final class Engine implements AutoCloseable {
 
     /** 一个事件走完全程：归还外部名额和放行名额。 */
     private void processed(EventEnvelope envelope) {
+        receipts.processed(envelope);
         intake.processed(envelope);
         lanes.released();
     }

@@ -28,7 +28,7 @@ import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ModelHandler;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.json.JsonText;
-import tantalum.shell.journal.SessionFile;
+import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.AttachmentText;
@@ -233,8 +233,9 @@ class ClaudeRequestTest {
 
         EventCodec codec = EventCodec.withBuiltins();
         String options = codec.mapper().writeValueAsString(reply.options());
-        try (SessionFile file = SessionFile.open(new SessionPaths(dir), run.principal(), run.session(), codec)) {
-            file.append(List.of(new EventEnvelope(1, Instant.parse("2026-11-03T00:00:00Z"), run.principal(), run.session(), run.run(), reply)));
+        try (SessionFiles files = new SessionFiles(new SessionPaths(dir), codec, 4, (p, s, seq, offset) -> { })) {
+            files.append(run.principal(), run.session(), List.of(tantalum.shell.journal.ResultWriter.noEffect(
+                    new EventEnvelope(1, Instant.parse("2026-11-03T00:00:00Z"), run.principal(), run.session(), run.run(), reply))));
         }
         String journal = Files.readString(new SessionPaths(dir).sessionFile(run.principal(), run.session()), StandardCharsets.UTF_8);
 

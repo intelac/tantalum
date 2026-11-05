@@ -44,8 +44,8 @@ public final class RecordCheck {
             for (Path file : files) {
                 try {
                     reader.forEachLine(file, line -> {
-                        if (line instanceof Line.Result result && result.record().usage() != null) {
-                            usage.add(new IndexChange.Usage(result.seq(), result.record().usageDay(), result.record().usage()));
+                        if (line.record().usage() != null) {
+                            usage.add(new IndexChange.Usage(line.seq(), line.record().usageDay(), line.record().usage()));
                         }
                     });
                 } catch (RuntimeException | IOException unreadable) {
