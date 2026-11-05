@@ -23,9 +23,10 @@ public final class TranscriptReplay {
             if (last != null && envelope.seq() <= last) {
                 throw new IllegalArgumentException("event out of order at seq " + envelope.seq());
             }
+            KernelState before = state;
             Decision decision = kernel.step(state, envelope);
             state = decision.newState();
-            transcript.apply(envelope, decision);
+            transcript.apply(envelope, before, decision);
         }
         return state;
     }

@@ -83,7 +83,8 @@ public record TokenEstimate(double bytesPerToken) {
             case ToolResultBlock result -> ofText(result.text()) + result.images().stream().mapToLong(this::ofImage).sum();
             case AttachmentBlock attachment -> ofAttachment(attachment.ref());
             // 按 OpenAI 那边的文字说明算，比 Claude 的 tool_reference 块长，宁可高估
-            case ToolChangeBlock change -> ofText("Tools changed: added " + change.added() + "; removed " + change.removed() + ".");
+            case ToolChangeBlock change -> ofText("Tools changed: added " + change.added() + "; removed " + change.removed()
+                    + (change.unavailable().isEmpty() ? "." : "; still unavailable " + change.unavailable() + "."));
         };
     }
 

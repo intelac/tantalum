@@ -122,14 +122,14 @@
 
 ## 阶段 3：工具没了，模型和用户都知道
 
-- [ ] 15. `toolsSeen` 和 `unavailable`
+- [x] 15. `toolsSeen` 和 `unavailable`
   - File: value/state/SessionState.java、value/model/ToolChangeBlock.java、shell/journal/RecordCodec.java、shell/journal/EventCodec.java
   - 两个新字段及编码；压缩不清空 `toolsSeen`
   - 测试：往返；压缩后仍在
   - _Requirements: J7, 需求 4.2, 4.3_
   - _Prompt: Role: Java 后端开发 | Task: 加两个值字段 | Restrictions: 只加字段 | Success: value、shell 编码测试全过_
 
-- [ ] 16. 内核的提示
+- [x] 16. 内核的提示
   - File: kernel/step/ContextSteps.java、shell/model/ToolChanges.java、shell/model/ClaudeRequest.java、shell/model/OpenAiClient.java、kernel/compaction/TokenEstimate.java
   - 压缩后重新组装时，`toolsSeen − 现在开着的` 不空就追加 `ContextUpdate` 提示；工具变化时带 `unavailable`；文字发法加 “Still unavailable: …”，Claude 发法不变
   - 测试：压缩前后提示；重申；请求指纹包含提示；调用已不可用的工具仍返回错误
@@ -137,20 +137,21 @@
   - _Requirements: J7, 需求 4.1–4.5_
   - _Prompt: Role: Java 后端开发 | Task: 压缩后仍告诉模型哪些工具不能用 | Restrictions: 内核只加这两处 | Success: ContextStepsTest、ToolSwitchStepsTest、ClaudeRequestTest、OpenAiClientTest 全过_
 
-- [ ] 17. 对话页的工具变化
+- [x] 17. 对话页的工具变化
   - File: shell/conversation/TranscriptPass.java、console/conversation/ToolChangeNotice.tsx（新）、console/text/zh.ts
   - 条目 `toolChange`：新增、不再可用的名字和原因（`disabled`、`gone`，从同一行的 `ContextAssembled` 判断）；控制台显示一行灰色小字
   - 测试：投影测试两种原因；vitest 渲染；打开旧会话仍在原位
   - _Requirements: J8, 需求 5_
   - _Prompt: Role: 全栈开发 | Task: 对话页显示工具变化 | Restrictions: 轨迹页现有显示不变；压缩后的提示不在画面重复 | Success: 测试全过_
 
-- [ ] 18. 端到端
+- [x] 18. 端到端
   - File: examples/E2eServer.java、console/e2e/one-line-journal.spec.ts（新）
   - E2eServer 加能拿掉的测试工具 `e2e_fetch`；用它 → 拿掉 → 移出内存后重新打开照原样 → 接着问显示“不再可用”
+  - 实现时改了做法：E2eServer 的内置工具启动时固定注册、测试 MCP 服务器不能中途删工具，所以端到端走“插件页关掉 grep”这条路（显示“已在插件页关闭”）；“服务器上已经没有”这条路由 `PluginRemovalTest`（真实管线、重启）、`TranscriptToolChangeTest` 和 vitest 覆盖，第 20 步在 8091 上停掉浏览器 MCP 实际演示
   - _Requirements: 需求 9.5_
   - _Prompt: Role: 测试开发 | Task: 写端到端场景 | Restrictions: record-results.spec.ts 照常通过 | Success: Playwright 全过_
 
-- [ ] 19. 真实模型一次
+- [x] 19. 真实模型一次
   - File: examples/ClaudeSmokeTest.java
   - `toolGoneAfterCompaction`：用一次工具 → 拿掉 → 压缩 → 问一个会用到它的问题，判定模型不调用它；结果和花费写进 `tech.md`
   - _Requirements: 需求 4.6_

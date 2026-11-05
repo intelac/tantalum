@@ -99,6 +99,12 @@ public final class EventCodec {
         List<ImageRef> images();
     }
 
+    /** 没有仍不可用的工具时不写出，和加字段之前的块逐字节相同（内容块的哈希不变）。 */
+    private interface ToolChangeMixin {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<String> unavailable();
+    }
+
     /** 不记工具来源的事件（测试造的）不写出这个字段；读出来是空表。 */
     private interface ToolSourcesMixin {
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
@@ -132,6 +138,7 @@ public final class EventCodec {
                 .addMixIn(ToolSpec.class, ToolSpecMixin.class)
                 .addMixIn(CompactionSettings.class, CompactionSettingsMixin.class)
                 .addMixIn(ContextAssembled.class, ToolSourcesMixin.class)
+                .addMixIn(ToolChangeBlock.class, ToolChangeMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))

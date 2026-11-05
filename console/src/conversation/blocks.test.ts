@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groupBlocks } from "./blocks";
 
-const shapes: Record<string, { kind: "user" | "run" | "thinking" | "tool" | "text" | "compaction"; run?: string }> = {
+const shapes: Record<string, { kind: "user" | "run" | "thinking" | "tool" | "text" | "compaction" | "toolChange"; run?: string }> = {
   "0.0": { kind: "user", run: "run-0" },
   "run:run-0": { kind: "run", run: "run-0" },
   "2.0": { kind: "thinking", run: "run-0" },
@@ -43,6 +43,12 @@ describe("groupBlocks", () => {
       { kind: "run", run: "run-0", process: ["2.0"], reply: ["4.1"] },
       { kind: "compaction", id: "3.0" },
     ]);
+  });
+
+  it("puts a tool change at the top of its run, not in the process", () => {
+    const withChange: typeof shapes = { ...shapes, "1.0": { kind: "toolChange", run: "run-0" } };
+    const blocks = groupBlocks(["0.0", "run:run-0", "1.0", "2.0", "4.1"], (id) => withChange[id]);
+    expect(blocks[1]).toEqual({ kind: "run", run: "run-0", process: ["2.0"], reply: ["4.1"], notices: ["1.0"] });
   });
 
   it("skips unknown ids", () => {

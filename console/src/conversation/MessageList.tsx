@@ -28,7 +28,7 @@ export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
             ) : block.kind === "compaction" ? (
               <CompactionMark key={block.id} store={store} id={block.id} />
             ) : (
-              <RunBlock key={block.run} store={store} run={block.run} process={block.process} reply={block.reply} />
+              <RunBlock key={block.run} store={store} run={block.run} process={block.process} reply={block.reply} notices={block.notices} />
             ),
           )}
         </div>

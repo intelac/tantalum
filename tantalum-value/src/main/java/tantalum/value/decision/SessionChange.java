@@ -19,7 +19,7 @@ import tantalum.value.state.UsageAnchor;
 public record SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
                             Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
                             Changed<SessionContext> context, Changed<Compaction> compaction,
-                            Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages) {
+                            Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen) {
 
     /** 一个变了的字段的新值。 */
     public record Changed<T>(T value) {}
@@ -28,6 +28,14 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(principal, "principal");
         appended = List.copyOf(appended);
+    }
+
+    /** 开着过的工具没变时（测试）。 */
+    public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
+                         Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
+                         Changed<SessionContext> context, Changed<Compaction> compaction,
+                         Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages) {
+        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null);
     }
 
     /** 比较同一个会话处理前后的状态。{@code before} 为 null 表示这一步新建了它。消息不是只追加时抛出。 */
@@ -45,7 +53,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 changed(base.activeRun(), after.activeRun()), changed(base.lastRun(), after.lastRun()),
                 changed(base.followUps(), after.followUps()), changed(base.context(), after.context()),
                 changed(base.compaction(), after.compaction()), changed(base.anchor(), after.anchor()),
-                changed(base.omittedImages(), after.omittedImages()));
+                changed(base.omittedImages(), after.omittedImages()), changed(base.toolsSeen(), after.toolsSeen()));
     }
 
     /** 套到处理前的状态上。{@code before} 为 null 时以新会话为底。 */
@@ -60,13 +68,13 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         return new SessionState(id, principal, messages,
                 pick(activeRun, base.activeRun()), pick(lastRun, base.lastRun()), pick(followUps, base.followUps()),
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
-                pick(omittedImages, base.omittedImages()));
+                pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()));
     }
 
     /** 没有任何变化：可以不写。 */
     public boolean isEmpty() {
         return !created && appended.isEmpty() && activeRun == null && lastRun == null && followUps == null
-                && context == null && compaction == null && anchor == null && omittedImages == null;
+                && context == null && compaction == null && anchor == null && omittedImages == null && toolsSeen == null;
     }
 
     /** 先比引用：内核追加时沿用原来的消息对象，长历史不用逐条深比较。 */

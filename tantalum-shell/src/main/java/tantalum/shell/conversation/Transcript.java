@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.KernelState;
 
 /**
  * 事件到对话条目的增量投影，按会话保存。输入是内核处理完一个事件后的 {@code (envelope, decision)}，
@@ -97,10 +98,16 @@ public final class Transcript implements Projection {
     /** 内核处理完一个事件后调用。返回这次变化的条目，按变化先后排列；同一条目改了几次只返回最终版本。 */
     @Override
     public List<TranscriptItem> apply(EventEnvelope envelope, Decision decision) {
+        return apply(envelope, null, decision);
+    }
+
+    /** 同上，{@code before} 是处理前的状态，用来找出这一步追加的工具变化；为 null 时不出工具变化条目。 */
+    @Override
+    public List<TranscriptItem> apply(EventEnvelope envelope, KernelState before, Decision decision) {
         Conversation conversation = sessions.computeIfAbsent(envelope.session(), key -> new Conversation());
         Map<String, TranscriptItem> changed = new LinkedHashMap<>();
         synchronized (conversation) {
-            new TranscriptPass(conversation, envelope, decision, changed).run();
+            new TranscriptPass(conversation, envelope, before, decision, changed).run();
             conversation.lastSeq = envelope.seq();
         }
         return List.copyOf(changed.values());

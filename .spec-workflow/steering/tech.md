@@ -484,3 +484,9 @@ macOS 的 `FileChannel.force` 每次刷整块磁盘的缓存，每秒 200 次就
 - **做法**：`ContextAssembled` 第 2 版加 `toolSources`（工具名 → `builtin` 或 `mcp:<服务器名>`，不写地址和令牌）。`MatchedCodec` 在会话第一次组装、压缩之后、写入方不知道前文时写全文；其余写 `{"diff": true}`，只带 `command`、`compaction` 和变了的字段，工具名单变了写 `toolNames` 和新增或改了定义的 `toolSpecs`。读的时候套回上一次的全文，得到完整的事件。
 - **真实会话**（`RealSizeProbe`，备份目录里 Yi 的 4 个会话，用当前内核重放后按新格式写）：748,822 → 777,035 字节，是只记事件时的 103.8%（预算 110%）。最短的会话（3 个事件）是 165%，最长的（58 万字节）是 101%。这几个会话每个只问一两次，“只记变化”省下的比按 10.7% 推算的少。
 - **删插件**（`PluginRemovalTest`）：插件的工具和钩子用过之后，去掉插件重启，旧对话和轨迹逐字节相同，钩子不再运行，下一次提问告诉模型 `fetch_page` 已移除。
+
+### one-line-journal 第 3 步（2026-11-06）：工具没了，模型和用户都知道
+
+- **模型**：用户关掉工具、插件删了，内核照旧追加工具变化消息（Claude 用 `tool_removal`，其他模型用文字），现在多带一栏 `unavailable`：之前就不能用、现在仍不能用的工具，文字发法写成 “Still unavailable: …”（同 pi，小模型会把最新一次说明当成完整名单）。会话状态多了 `toolsSeen`（开着过的工具，压缩不清空）。压缩后重新组装时，`toolsSeen` 里现在不能用的工具写成一条上下文更新：“These tools were available earlier in this conversation and are no longer available. Do not call them: …”。它在请求里，所以进指纹、请求详情看得到。
+- **画面**：对话页在这一轮上面显示一行灰色小字，“工具变化：新增 …；不再可用 …（已在插件页关闭）；不再可用 …（插件已删除或未加载）”，超过 5 个只列前 5 个。原因按这次组装的全集判断：名字还在就是用户关了，不在就是服务器上已经没有。
+- **真实模型**（`ClaudeSmokeTest.toolGoneAfterCompaction`，claude-sonnet-5-5，跑 1 次）：摘要里提到用过 `fetch_url`，用户要求再抓一次，请求末尾是上面那条更新、工具列表里没有 `fetch_url`。模型没有调用任何工具，回答“`fetch_url` 已经不能用了，没法再抓”，并提醒上次的结果可能过时。用量：输入 4 + 缓存写 541 + 输出 136 token。

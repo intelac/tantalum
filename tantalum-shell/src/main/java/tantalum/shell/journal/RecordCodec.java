@@ -326,6 +326,7 @@ public final class RecordCodec {
         changed(node, "compaction", change.compaction());
         changed(node, "anchor", change.anchor());
         changed(node, "omittedImages", change.omittedImages());
+        changed(node, "toolsSeen", change.toolsSeen());
         return node;
     }
 
@@ -355,7 +356,7 @@ public final class RecordCodec {
                 changedList(node, "followUps", MESSAGES),
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
-                changedList(node, "omittedImages", STRINGS));
+                changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS));
     }
 
     /** 上下文只在会话开始时带上 system 和全部工具，之后每次提问只换几个字段：知道上一份时只写变了的字段。 */
