@@ -157,7 +157,7 @@
   - _Requirements: 需求 4.6_
   - _Prompt: Role: 测试开发 | Task: 用 Claude 验证压缩后的提示 | Restrictions: 只跑这一个；key 只从环境读，不打印 | Success: 模型没有调用已不可用的工具_
 
-- [ ] 20. 阶段 3 收尾和演示
+- [x] 20. 阶段 3 收尾和演示
   - 全量回归、提交、更新 8091；在 8091 演示：装一个带工具的插件，聊几句，删插件，再接着聊，截图给 Yi
   - _Requirements: J14, 需求 9.7_
   - _Prompt: Role: 发布负责人 | Task: 阶段 3 收尾和演示 | Restrictions: 提交前扫描密钥 | Success: Yi 看到提示_
