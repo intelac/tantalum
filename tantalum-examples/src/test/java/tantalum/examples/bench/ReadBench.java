@@ -38,7 +38,7 @@ public final class ReadBench {
             }
             Corpus.Manifest manifest = Corpus.readManifest(data);
             long[] split = lineSplit(data.resolve("sessions"));
-            System.out.printf("%n== %d events, %d sessions, journal %d MB (event lines %d KB, result lines %d KB, +%.1f%%)%n",
+            System.out.printf("%n== %d events, %d sessions, journal %d MB (events %d KB, results %d KB, +%.1f%%)%n",
                     manifest.events(), manifest.sessions(), directorySize(data.resolve("sessions")) / (1 << 20),
                     split[0] / 1024, split[1] / 1024, 100.0 * split[1] / split[0]);
             if (!Files.exists(data.resolve("index.db"))) {
@@ -75,8 +75,15 @@ public final class ReadBench {
         try (var files = Files.walk(sessions)) {
             for (Path file : files.filter(f -> f.toString().endsWith(".jsonl")).toList()) {
                 try (var lines = Files.lines(file)) {
-                    lines.skip(1).forEach(line -> bytes[line.startsWith("{\"result\"") ? 1 : 0]
-                            += line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 1);
+                    // 一步一行（one-line-journal）：事件部分在前，",\"result\":" 之后是结果
+                    lines.skip(1).forEach(line -> {
+                        int cut = line.lastIndexOf(",\"result\":{");
+                        String event = cut < 0 ? line : line.substring(0, cut) + "}";
+                        long total = line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 1;
+                        long eventBytes = event.getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 1;
+                        bytes[0] += eventBytes;
+                        bytes[1] += total - eventBytes;
+                    });
                 }
             }
         }

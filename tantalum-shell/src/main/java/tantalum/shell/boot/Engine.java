@@ -217,6 +217,7 @@ public final class Engine implements AutoCloseable {
         cleanroomRing.start();
         input.start();
         interrupt(unfinished);
+        Warmup.start(codec);
         LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
                 properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
     }

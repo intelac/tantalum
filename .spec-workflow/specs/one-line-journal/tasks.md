@@ -164,19 +164,19 @@
 
 ## 阶段 4：打开要快
 
-- [ ] 21. 启动预热
+- [x] 21. 启动预热
   - File: shell/boot/Warmup.java（新）、tantalum-shell/src/main/resources/warmup/session.jsonl（生成）、tantalum-shell/src/test/java/tantalum/shell/boot/WarmupFileTest.java（新）
   - 启动后后台折叠内置小会话 5 遍，临时目录，失败只记 WARN
   - 测试：文件能读出来；预热不碰数据目录
   - _Requirements: J9, 需求 6.1_
   - _Prompt: Role: Java 后端开发 | Task: 启动预热 | Restrictions: 不占名额、不进索引 | Success: 测试通过，日志有 warmup done_
 
-- [ ] 22. 基线重测和 `tech.md`
+- [x] 22. 基线重测和 `tech.md`
   - 用 `git worktree` 检出 `766655f` 跑 `ReadBench`（1 万事件）作基线；当前版本再跑一次；改正 `tech.md` 里 194 ms 的说明，写入两组数据
   - _Requirements: J11, 需求 6.3, 6.4_
   - _Prompt: Role: 性能工程师 | Task: 重测冷载入 | Restrictions: 同一台机器、同一份语料 | Success: 第一次打开不比基线慢，启动 ≤ 5 s_
 
-- [ ] 23. 收尾
+- [x] 23. 收尾
   - README 里会话文件格式的说明、`BACKLOG.md`、实现日志；全量回归、提交、更新 8091、汇报，并报告 Claude 用量
   - _Requirements: 需求 9.7_
   - _Prompt: Role: 发布负责人 | Task: 全部收尾 | Restrictions: 提交前扫描密钥 | Success: 回归全过，文档和代码一致_
