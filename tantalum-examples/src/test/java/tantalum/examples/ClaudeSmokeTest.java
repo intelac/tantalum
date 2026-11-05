@@ -167,4 +167,30 @@ class ClaudeSmokeTest {
         assertEquals(FailureReason.CONTEXT_OVERFLOW, failed.reason(), failed.detail());
         assertTrue(!failed.retryable());
     }
+
+    /**
+     * one-line-journal 需求 4.6：用过 fetch_url，插件删了，又压缩过一次，摘要里还提到它。请求照内核组装的样子：
+     * 摘要、用户要求再抓一次那个网页、内核追加的“这些工具已不可用”说明，工具列表里没有 fetch_url。
+     * 判定：模型不调用 fetch_url，回复里说明现在抓不了。只跑这一次。
+     */
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.MINUTES)
+    void toolGoneAfterCompaction() {
+        ToolSpec read = new ToolSpec("read_file", "Read a file in the workspace.", new Json.Obj(Map.of("type", new Json.Str("object"),
+                "properties", new Json.Obj(Map.of("path", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
+        List<Message> messages = List.of(
+                tantalum.kernel.compaction.SummaryPrompt.summaryMessage("## Goal\nKeep an eye on https://example.com/status.\n\n"
+                        + "## Progress\nUsed fetch_url to read https://example.com/status; it said \"all systems normal\"."),
+                Message.user("Fetch that status page again and tell me whether it still says all systems normal."),
+                tantalum.kernel.projection.ContextUpdate.message(tantalum.kernel.projection.ToolsGone.text(List.of("fetch_url"))));
+        ModelOutcome outcome = client().call(new Prompt("You are a helpful agent.", List.of(read), messages), IGNORE);
+        ModelOutcome.Replied replied = assertInstanceOf(ModelOutcome.Replied.class, outcome, outcome instanceof ModelOutcome.Failed failed ? failed.detail() : "");
+        String text = SummaryModePrompt.text(replied);
+        System.out.println("[smoke claude] tool gone after compaction: usage=" + replied.usage() + " stop=" + replied.stop()
+                + " calls=" + replied.content().stream().filter(ToolCallBlock.class::isInstance).map(block -> ((ToolCallBlock) block).name()).toList()
+                + " text=" + text.replace('\n', ' '));
+        assertTrue(replied.content().stream().noneMatch(block -> block instanceof ToolCallBlock call && call.name().equals("fetch_url")));
+        assertTrue(text.toLowerCase(java.util.Locale.ROOT).contains("fetch_url") || text.toLowerCase(java.util.Locale.ROOT).contains("not available")
+                || text.toLowerCase(java.util.Locale.ROOT).contains("no longer"), text);
+    }
 }

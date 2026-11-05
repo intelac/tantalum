@@ -171,7 +171,18 @@ export interface CompactionItem extends ItemBase {
   failure?: string;
 }
 
-export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem;
+/**
+ * 会话中途工具变了：新增了哪些，哪些不能用了。disabled 是用户在插件页关了，gone 是服务器上已经没有（插件删了或没加载）。
+ */
+export interface ToolChangeItem extends ItemBase {
+  kind: "toolChange";
+  run: string;
+  added: string[];
+  disabled: string[];
+  gone: string[];
+}
+
+export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */

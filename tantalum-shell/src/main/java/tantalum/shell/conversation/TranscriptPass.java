@@ -8,6 +8,7 @@ import tantalum.shell.conversation.TranscriptItem.CompactionMark;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
+import tantalum.shell.conversation.TranscriptItem.ToolChange;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.shell.model.Reasoning;
@@ -19,6 +20,7 @@ import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
@@ -40,6 +42,7 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.model.ToolSpec;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
@@ -51,6 +54,8 @@ final class TranscriptPass {
     private final Transcript.Conversation conversation;
     private final EventEnvelope envelope;
     private final KernelState state;
+    /** 处理前的状态；为 null 时不出工具变化条目。 */
+    private final KernelState before;
     private final Decision decision;
     private final Map<String, TranscriptItem> changed;
     private final SessionId session;
@@ -58,7 +63,9 @@ final class TranscriptPass {
     /** 这次提交直接开始的运行；排队取出的运行不算。 */
     private RunId startedBySubmission;
 
-    TranscriptPass(Transcript.Conversation conversation, EventEnvelope envelope, Decision decision, Map<String, TranscriptItem> changed) {
+    TranscriptPass(Transcript.Conversation conversation, EventEnvelope envelope, KernelState before, Decision decision,
+                   Map<String, TranscriptItem> changed) {
+        this.before = before;
         this.conversation = conversation;
         this.envelope = envelope;
         this.state = decision.newState();
@@ -78,6 +85,7 @@ final class TranscriptPass {
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
             case ToolFinished finished -> toolFinished(finished);
+            case ContextAssembled assembled -> toolChanges(assembled);
             default -> { }
         }
         for (Command command : decision.commands()) {
@@ -93,6 +101,31 @@ final class TranscriptPass {
         compaction();
         blockedSlots();
         appendedResults();
+    }
+
+    /**
+     * 这一步追加的工具变化消息各出一个条目。移除的工具还在这次组装的全集里，就是用户关了；不在了，就是服务器上已经没有。
+     * 同一步不会有压缩条目（它在摘要回复那一步），所以下标从 0 起不会和它冲突。
+     */
+    private void toolChanges(ContextAssembled assembled) {
+        SessionState earlier = before == null ? null : before.sessions().get(session);
+        SessionState now = state.sessions().get(session);
+        RunId run = envelope.run();
+        if (earlier == null || now == null || run == null) {
+            return;
+        }
+        List<String> offered = assembled.tools().stream().map(ToolSpec::name).toList();
+        List<Message> appended = now.messages().subList(earlier.messages().size(), now.messages().size());
+        int index = 0;
+        for (Message message : appended) {
+            for (ContentBlock block : message.content()) {
+                if (block instanceof ToolChangeBlock change) {
+                    put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(),
+                            change.removed().stream().filter(offered::contains).toList(),
+                            change.removed().stream().filter(name -> !offered.contains(name)).toList()));
+                }
+            }
+        }
     }
 
     /** 这个决定里属于本会话的压缩事实，没有则为 null。 */

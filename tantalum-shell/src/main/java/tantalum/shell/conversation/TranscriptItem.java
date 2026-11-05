@@ -28,7 +28,8 @@ import tantalum.value.state.EndReason;
     @JsonSubTypes.Type(value = TranscriptItem.Thinking.class, name = "thinking"),
     @JsonSubTypes.Type(value = TranscriptItem.ToolStep.class, name = "tool"),
     @JsonSubTypes.Type(value = TranscriptItem.RunStatus.class, name = "run"),
-    @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction")
+    @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction"),
+    @JsonSubTypes.Type(value = TranscriptItem.ToolChange.class, name = "toolChange")
 })
 public sealed interface TranscriptItem {
 
@@ -174,6 +175,24 @@ public sealed interface TranscriptItem {
 
         public boolean failed() {
             return failure != null;
+        }
+    }
+
+    /**
+     * 会话中途工具变了（one-line-journal J8）：从这里起新增了哪些工具、哪些不能用了。不能用的分两种：{@code disabled} 是
+     * 服务器上还有、用户在插件页关了；{@code gone} 是服务器上已经没有（插件删了或没加载、MCP 服务器不在了）。
+     */
+    record ToolChange(String id, SessionId session, RunId run, Instant at, List<String> added, List<String> disabled,
+                      List<String> gone) implements TranscriptItem {
+
+        public ToolChange {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            added = List.copyOf(added);
+            disabled = List.copyOf(disabled);
+            gone = List.copyOf(gone);
         }
     }
 

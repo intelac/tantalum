@@ -76,12 +76,13 @@ final class TranscriptFixture {
         EventEnvelope envelope = new EventEnvelope(seq++, now, USER, SESSION, run, event);
         now = now.plusSeconds(1);
         befores.add(state);
+        KernelState before = state;
         Decision decision = kernel.step(state, envelope);
         state = decision.newState();
         envelopes.add(envelope);
         decisions.add(decision);
         int index = 0;
-        for (TranscriptItem item : transcript.apply(envelope, decision)) {
+        for (TranscriptItem item : transcript.apply(envelope, before, decision)) {
             changes.add(new Change(envelope.seq(), index++, item));
         }
         return decision;

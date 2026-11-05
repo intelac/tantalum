@@ -35,7 +35,7 @@ public final class Projections {
     public Output apply(EventEnvelope envelope, KernelState before, Decision decision) {
         List<TranscriptItem> items;
         try {
-            items = transcript.apply(envelope, decision);
+            items = transcript.apply(envelope, before, decision);
         } catch (RuntimeException failure) {
             LOG.error("transcript projection failed at seq {}", envelope.seq(), failure);
             items = List.of();

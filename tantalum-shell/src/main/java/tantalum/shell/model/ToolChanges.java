@@ -46,6 +46,9 @@ final class ToolChanges {
         if (!change.removed().isEmpty()) {
             text.append(" No longer available: ").append(String.join(", ", change.removed())).append('.');
         }
+        if (!change.unavailable().isEmpty()) {
+            text.append(" Still unavailable: ").append(String.join(", ", change.unavailable())).append('.');
+        }
         return text.toString();
     }
 }

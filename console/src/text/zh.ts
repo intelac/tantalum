@@ -49,6 +49,11 @@ export const zh = {
     summary: "摘要",
     queued: "排队中",
     jumpToBottom: "回到底部",
+    toolsChanged: "工具变化",
+    toolsAdded: (names: string) => `新增 ${names}`,
+    toolsDisabled: (names: string) => `不再可用 ${names}（已在插件页关闭）`,
+    toolsGone: (names: string) => `不再可用 ${names}（插件已删除或未加载）`,
+    toolsMore: (first: string, total: number) => `${first} 等 ${total} 个`,
   },
   process: {
     running: "正在处理…",

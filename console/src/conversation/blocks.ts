@@ -12,6 +12,8 @@ export type Block =
       process: string[];
       /** 结尾连续的文本段，是这轮的回复。 */
       reply: string[];
+      /** 这轮开始时的工具变化，显示在过程区上面；没有时不出现。 */
+      notices?: string[];
     };
 
 type Shape = Pick<Item, "kind" | "run">;
@@ -19,6 +21,7 @@ type Shape = Pick<Item, "kind" | "run">;
 export function groupBlocks(order: readonly string[], shapeOf: (id: string) => Shape | undefined): Block[] {
   const blocks: Block[] = [];
   const open = new Map<string, { id: string; text: boolean }[]>();
+  const runs = new Map<string, Extract<Block, { kind: "run" }>>();
 
   for (const id of order) {
     const shape = shapeOf(id);
@@ -35,7 +38,14 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
     if (entries === undefined) {
       entries = [];
       open.set(shape.run, entries);
-      blocks.push({ kind: "run", run: shape.run, process: [], reply: [] });
+      const block: Extract<Block, { kind: "run" }> = { kind: "run", run: shape.run, process: [], reply: [] };
+      runs.set(shape.run, block);
+      blocks.push(block);
+    }
+    if (shape.kind === "toolChange") {
+      const block = runs.get(shape.run);
+      if (block !== undefined) block.notices = [...(block.notices ?? []), id];
+      continue;
     }
     // 运行状态条目由 RunStatusRow 按运行 ID 自己取，不进过程区也不进回复。
     if (shape.kind !== "run") entries.push({ id, text: shape.kind === "text" });
