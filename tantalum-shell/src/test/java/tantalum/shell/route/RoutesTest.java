@@ -151,4 +151,26 @@ class RoutesTest {
             }
         }
     }
+
+    /** 任务 18（NFR Performance、需求 2.1）：三条路线，一条 8 秒才回，启动等不超过 5 秒，另两条照常可用。 */
+    @Test
+    void startupWaitsAtMostFiveSecondsForThreeRoutes() throws Exception {
+        ModelList slow = () -> {
+            Thread.sleep(8000);
+            return models("slow", "big").read();
+        };
+        try (Routes routes = Routes.create(List.of(RouteFixtures.claude(List.of()), RouteFixtures.openAi("fast", null, OpenAiThinking.NONE, 0),
+                RouteFixtures.openAi("slow", null, OpenAiThinking.NONE, 0)), "claude",
+                lists(Map.of("claude", models("claude", "claude-sonnet-5-5"), "fast", models("fast", "qwen"), "slow", slow)), null,
+                name -> "key", true, Clock.systemUTC())) {
+            long started = System.nanoTime();
+            routes.start(Duration.ofSeconds(5));
+            long waited = Duration.ofNanos(System.nanoTime() - started).toMillis();
+            System.out.printf("NFR startup with one route taking 8 s: waited %d ms%n", waited);
+            assertTrue(waited <= 5_200, "start waited " + waited + " ms");
+            assertEquals(Listing.Status.OK, routes.route("claude").orElseThrow().listing().status());
+            assertEquals(Listing.Status.OK, routes.route("fast").orElseThrow().listing().status());
+            assertEquals(Listing.Status.UNAVAILABLE, routes.route("slow").orElseThrow().listing().status());
+        }
+    }
 }

@@ -217,4 +217,62 @@ class ModelApiTest {
         assertEquals(401, server.get(null, "/api/models").statusCode());
         assertEquals(401, putChoice(null, "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"high\"}").statusCode());
     }
+
+    private static long p95(List<Long> nanos) {
+        List<Long> sorted = nanos.stream().sorted().toList();
+        return sorted.get((int) Math.ceil(sorted.size() * 0.95) - 1);
+    }
+
+    /**
+     * 任务 18（NFR Performance）：200 个模型时 {@code GET /api/models} 100 次的 P95 ≤ 50 ms（从内存返回；这里量的是含 HTTP 往返的
+     * 时间，比服务器处理时间长）；提交带不带 {@code model} 的 P95 差 ≤ 5 ms。结果打印出来，记进 tech.md。
+     */
+    @Test
+    void listingAndSubmittingStayFast() throws Exception {
+        StringBuilder allow = new StringBuilder("qwen3.8");
+        for (int i = 1; i < 200; i++) {
+            allow.append(",model-").append(i);
+        }
+        Map<String, ModelClient> clients = Map.of("claude", answering(claudeCalls), "local", answering(localCalls));
+        try (TestServer many = new TestServer(temp.resolve("data-many"), temp.resolve("ws-many"), answering(claudeCalls),
+                context -> context.registerBean(RouteClients.class, () -> new RouteClients(clients)),
+                "--tantalum.openai-routes.local.base-url=http://127.0.0.1:1/v1",
+                "--tantalum.openai-routes.local.model=qwen3.8",
+                "--tantalum.openai-routes.local.models=" + allow,
+                "--tantalum.openai-routes.local.context-window=131072")) {
+            assertEquals(200, JSON.readTree(many.get("alice", "/api/models").body()).path("routes").get(1).path("models").size());
+            for (int i = 0; i < 20; i++) {
+                many.get("alice", "/api/models");
+            }
+            List<Long> listing = new ArrayList<>();
+            for (int i = 0; i < 100; i++) {
+                long started = System.nanoTime();
+                assertEquals(200, many.get("alice", "/api/models").statusCode());
+                listing.add(System.nanoTime() - started);
+            }
+            List<Long> plain = new ArrayList<>();
+            List<Long> chosen = new ArrayList<>();
+            String qwen = "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":null}";
+            for (int i = 0; i < 120; i++) {
+                for (boolean withModel : new boolean[] {false, true}) {
+                    String body = "{\"requestId\":\"p" + i + withModel + "\",\"mode\":\"prompt\",\"text\":\"hi\""
+                            + (withModel ? ",\"model\":" + qwen : "") + "}";
+                    long started = System.nanoTime();
+                    HttpResponse<String> response = many.post("alice", "/api/sessions/perf-" + i + withModel + "/submissions", body);
+                    long took = System.nanoTime() - started;
+                    assertEquals(200, response.statusCode(), response.body());
+                    if (i >= 20) {
+                        (withModel ? chosen : plain).add(took);
+                    }
+                }
+            }
+            double listingMs = p95(listing) / 1e6;
+            double plainMs = p95(plain) / 1e6;
+            double chosenMs = p95(chosen) / 1e6;
+            System.out.printf("NFR /api/models with 200 models: P95 %.2f ms; submit P95 without model %.2f ms, with model %.2f ms%n",
+                    listingMs, plainMs, chosenMs);
+            assertTrue(listingMs <= 50, "GET /api/models P95 " + listingMs + " ms");
+            assertTrue(chosenMs - plainMs <= 5, "submitting with a model costs " + (chosenMs - plainMs) + " ms more at P95");
+        }
+    }
 }
