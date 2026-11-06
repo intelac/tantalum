@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -20,6 +19,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.Set;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 
@@ -88,7 +88,7 @@ public final class LocalTokens implements AutoCloseable {
         Files.createDirectories(dataDir);
         Path file = dataDir.resolve(UserStore.FILE);
         if (!Files.exists(file)) {
-            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            PrivateFiles.createFile(file);
         }
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
         try (Statement statement = connection.createStatement()) {

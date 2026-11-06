@@ -14,13 +14,9 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.FileAttribute;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Set;
 import java.util.UUID;
+import tantalum.local.fs.PrivateFiles;
 
 /**
  * 文件工具共用的文本处理：判断二进制、严格 UTF-8 逐行读、换行风格和 BOM、原子写（需求 C3、C4、C6、C7）。
@@ -34,10 +30,6 @@ final class TextFiles {
     static final int EOL_SAMPLE_CHARS = 4096;
     static final char BOM = '﻿';
 
-    private static final FileAttribute<Set<PosixFilePermission>> PRIVATE_FILE =
-            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"));
-    private static final FileAttribute<Set<PosixFilePermission>> PRIVATE_DIR =
-            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"));
     private static final String TEMP_SUFFIX = ".tantalum-tmp";
 
     private TextFiles() {}
@@ -187,7 +179,7 @@ final class TextFiles {
     static void createParents(Path file) throws IOException {
         Path parent = file.getParent();
         if (parent != null && !Files.isDirectory(parent)) {
-            Files.createDirectories(parent, PRIVATE_DIR);
+            PrivateFiles.createDirectories(parent);
         }
     }
 
@@ -196,12 +188,11 @@ final class TextFiles {
      * 临时文件和目标在同一个目录，改名不跨文件系统。
      */
     static void writeAtomically(Path target, byte[] bytes) throws IOException {
-        Set<PosixFilePermission> keep = Files.exists(target, LinkOption.NOFOLLOW_LINKS)
-                ? Files.getPosixFilePermissions(target, LinkOption.NOFOLLOW_LINKS) : null;
+        boolean existed = Files.exists(target, LinkOption.NOFOLLOW_LINKS);
         Path temp = target.resolveSibling("." + target.getFileName() + "." + UUID.randomUUID() + TEMP_SUFFIX);
         try {
             try {
-                Files.createFile(temp, PRIVATE_FILE);
+                PrivateFiles.createFile(temp);
             } catch (FileAlreadyExistsException impossible) {
                 throw new IOException("temporary file already exists", impossible);
             }
@@ -212,10 +203,10 @@ final class TextFiles {
                 }
                 channel.force(true);
             }
-            if (keep != null) {
-                Files.setPosixFilePermissions(temp, keep);
+            if (existed) {
+                PrivateFiles.copyPermissions(target, temp);
             }
-            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            PrivateFiles.replace(temp, target);
         } finally {
             Files.deleteIfExists(temp);
         }

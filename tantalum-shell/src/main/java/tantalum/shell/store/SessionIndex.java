@@ -3,7 +3,6 @@ package tantalum.shell.store;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -19,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
@@ -62,7 +62,7 @@ public final class SessionIndex implements AutoCloseable {
 
     private static SessionIndex openFile(Path file) throws IOException, SQLException {
         if (!Files.exists(file)) {
-            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            PrivateFiles.createFile(file);
         }
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
         try (Statement statement = connection.createStatement()) {

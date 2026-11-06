@@ -3,7 +3,6 @@ package tantalum.shell.auth;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -13,6 +12,7 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.util.Optional;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.value.id.Principal;
 
 /** 用户表。单独的 SQLite 文件，不进 journal；密码只存 Argon2id 哈希。 */
@@ -33,9 +33,9 @@ public final class UserStore implements AutoCloseable {
         Files.createDirectories(dir);
         Path file = dir.resolve(FILE);
         if (!Files.exists(file)) {
-            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            PrivateFiles.createFile(file);
         }
-        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+        PrivateFiles.restrict(file);
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
         try (Statement statement = connection.createStatement()) {
             statement.execute("""

@@ -47,6 +47,17 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell..", "tantalum.kernel..", "org.springframework..");
 
     /**
+     * POSIX 权限只经 {@code PrivateFiles}（windows-server N2、N14）：Windows 的文件系统不支持这些属性，直接用就抛
+     * {@code UnsupportedOperationException}。在 macOS 上就拦住新写的、到 Windows 才会崩的权限代码。
+     */
+    @ArchTest
+    static final ArchRule onlyPrivateFilesTouchesPosixPermissions = noClasses()
+            .that().doNotHaveFullyQualifiedName("tantalum.local.fs.PrivateFiles")
+            .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.attribute.PosixFilePermissions")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.attribute.PosixFilePermission")
+            .orShould().callMethodWhere(callTo(java.nio.file.Files.class, "setPosixFilePermissions|getPosixFilePermissions"));
+
+    /**
      * 服务器上不读写用户的文件（local-workspace L6）：转发工具、连接和本机工作区只把调用交给电脑，自己不碰文件。
      * {@code LocalTokens} 例外：它照 {@code PluginSwitches} 的做法在数据目录里打开 {@code users.db}，碰的是服务器自己的数据。
      */

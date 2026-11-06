@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+import tantalum.local.fs.PrivateFiles;
 
 /**
  * 用微软 MXC 的 {@code mxc-exec-mac} 在 macOS 自带的 Seatbelt 里跑命令（local-workspace 设计“Sandbox、Mxc”，L13、L14）。
@@ -145,7 +145,7 @@ public final class Mxc implements Sandbox {
         Path config = privateDir.resolve(temp.getFileName() + ".json");
         Process process = null;
         try {
-            Files.createFile(config, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            PrivateFiles.createFile(config);
             Files.writeString(config, policy.config(command, workdir, temp.toRealPath(), home.toRealPath(), timeout));
             List<String> line = new ArrayList<>();
             line.add(program.toString());
