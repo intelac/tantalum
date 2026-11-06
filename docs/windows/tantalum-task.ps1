@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   install    Register a task that starts at your logon, has no time limit, does not start a second copy while one runs,
-             restarts 1 minute after an abnormal exit (at most 10 times) and shows no console window (javaw.exe).
+             is started again within a minute whenever it is not running (after a crash or after the process was ended)
+             and shows no console window (javaw.exe). To stop it for good: Disable-ScheduledTask, then Stop-ScheduledTask.
              Logs go to <data directory>\logs\tantalum.log.
   status     Show the task state, the last result, whether the port answers and where the log is.
   uninstall  Stop and remove the task. The data directory and the logs stay.
@@ -38,8 +39,8 @@ $Texts = @{
     exists     = 'Task {0} already exists; run "uninstall" first.'
     nojar      = 'Give the jar with -Jar; not found: {0}'
     nojavaw    = 'javaw.exe not found. Install JDK 25 or set JAVA_HOME.'
-    installed  = 'Registered task {0}: starts at your logon, port {1}, log {2}'
-    startnow   = 'Start it now with: Start-ScheduledTask -TaskName {0}'
+    installed  = 'Registered task {0}: starts at your logon and again within a minute whenever it is not running; port {1}, log {2}'
+    startnow   = 'It starts within a minute; to start it now: Start-ScheduledTask -TaskName {0}. To stop it for good: Disable-ScheduledTask -TaskName {0}, then Stop-ScheduledTask -TaskName {0}'
     notask     = 'There is no task {0}.'
     state      = 'Task {0}: {1}; last run {2}, last result {3}'
     portup     = 'Port {0}: answering'
@@ -60,8 +61,8 @@ $Texts = @{
     exists     = '任务 {0} 已经存在；先运行 "uninstall"。'
     nojar      = '用 -Jar 给出 jar 文件；找不到：{0}'
     nojavaw    = '找不到 javaw.exe。请安装 JDK 25 或设置 JAVA_HOME。'
-    installed  = '已登记任务 {0}：登录后启动，端口 {1}，日志 {2}'
-    startnow   = '现在就启动：Start-ScheduledTask -TaskName {0}'
+    installed  = '已登记任务 {0}：登录后启动，没在运行时一分钟内再起来；端口 {1}，日志 {2}'
+    startnow   = '一分钟内会自己起来；现在就启动：Start-ScheduledTask -TaskName {0}。要让它一直停着：先 Disable-ScheduledTask -TaskName {0}，再 Stop-ScheduledTask -TaskName {0}'
     notask     = '没有任务 {0}。'
     state      = '任务 {0}：{1}；上次运行 {2}，结果 {3}'
     portup     = '端口 {0}：有响应'
@@ -82,8 +83,8 @@ $Texts = @{
     exists     = 'タスク {0} はすでにあります。先に "uninstall" を実行してください。'
     nojar      = '-Jar で jar ファイルを指定してください。見つかりません：{0}'
     nojavaw    = 'javaw.exe が見つかりません。JDK 25 をインストールするか JAVA_HOME を設定してください。'
-    installed  = 'タスク {0} を登録しました：サインイン時に起動、ポート {1}、ログ {2}'
-    startnow   = '今すぐ起動するには：Start-ScheduledTask -TaskName {0}'
+    installed  = 'タスク {0} を登録しました：サインイン時に起動し、動いていなければ 1 分以内に起動し直します。ポート {1}、ログ {2}'
+    startnow   = '1 分以内に起動します。今すぐ起動するには：Start-ScheduledTask -TaskName {0}。止めたままにするには：Disable-ScheduledTask -TaskName {0} のあと Stop-ScheduledTask -TaskName {0}'
     notask     = 'タスク {0} はありません。'
     state      = 'タスク {0}：{1}。前回の実行 {2}、結果 {3}'
     portup     = 'ポート {0}：応答あり'
@@ -141,7 +142,12 @@ function Install-Task([string]$dir, [string]$logonType) {
   if ($Arguments) { $line = "$line $Arguments" }
   $user = "$env:USERDOMAIN\$env:USERNAME"
   $taskAction = New-ScheduledTaskAction -Execute $javaw -Argument $line -WorkingDirectory (Split-Path $jarPath)
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+  # 计划任务的“失败后重启”只管启动失败，进程异常退出时不重启（windows-latest 实测）。所以另加一个每分钟触发一次的触发器：
+  # 服务器在跑时 IgnoreNew 不起第二个，崩溃或被结束后下一分钟再起来。只在用户登录着时运行（Interactive）。
+  $trigger = @(
+    (New-ScheduledTaskTrigger -AtLogOn -User $user),
+    (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1))
+  )
   $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType $logonType -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew `
     -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
@@ -163,6 +169,8 @@ function Show-Status {
 
 function Remove-Task {
   if (-not (Get-Task)) { Say notask $Name; return }
+  # 先停用：不然结束和删除之间，每分钟的触发器可能又起一个，删了任务进程还在
+  Disable-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue | Out-Null
   Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName $Name -Confirm:$false
   Say removed $Name
@@ -226,7 +234,7 @@ function Invoke-Selftest {
     Say ready $seconds
     "logon type: $logonType"
     Show-Status
-    # 异常退出（任务管理器结束进程、崩溃）：计划任务按 1 分钟的重启间隔把服务器再起来（需求 6.1）。
+    # 异常退出（任务管理器结束进程、崩溃）：每分钟的触发器把服务器再起来（需求 6.1）。
     Get-ServerProcess $dir | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     $killedAt = Get-Date
     Say killed
@@ -238,6 +246,8 @@ function Invoke-Selftest {
     }
     if (-not $restarted) { Show-Status; throw (Say norestart 120) }
     Say restarted ([math]::Round(((Get-Date) - $killedAt).TotalSeconds))
+    # 先停用再结束：不然下一分钟的触发器又把它起来
+    Disable-ScheduledTask -TaskName $Name | Out-Null
     Stop-ScheduledTask -TaskName $Name
     $deadline = (Get-Date).AddSeconds(15)
     while ((Get-ServerProcess $dir) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }

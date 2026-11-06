@@ -23,9 +23,10 @@ $keyless = @('--tantalum.provider=local', '--tantalum.openai-routes.local.base-u
 $password = '中文 密码 pw-1'
 $started = @()
 
+# 写到主机，不进函数的返回值（否则 Login 返回的就是 [字符串, 会话]）
 function Check([bool]$ok, [string]$what) {
   if (-not $ok) { throw "FAILED: $what" }
-  "ok: $what"
+  Write-Host "ok: $what"
 }
 
 function Free-Port {
