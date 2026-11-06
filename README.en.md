@@ -50,6 +50,16 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalu
 
 Open <http://127.0.0.1:8080>. The server binds to `127.0.0.1` by default.
 
+## Languages
+
+The console, the connector and the command line speak Chinese, English and Japanese.
+
+- The console follows the browser's language by default (Traditional Chinese browsers get Simplified Chinese; anything else gets English). Pick another under Settings › Language: it applies at once and is saved to your account, so other computers use it too. Choose "Use browser language" to go back. The sign-in page always follows the browser.
+- `tantalum-connect` and the `users`, `check` and `browser install` commands follow `LC_ALL`, `LC_MESSAGES`, `LANG`, then the system language, or take `--lang zh|en|ja`.
+- API errors carry a code and parameters (`{"error": …, "code": "attachment/image-too-large", "params": {"limit": 52428800}}`); the console words them in the viewer's language. The list is `console/src/api/errorCodes.json`.
+- Text for the model is never translated: the model receives the same request whatever the console language. Server logs stay in English.
+- Plugin authors can describe plugins and ask questions in several languages with `LocalText.en("…").zh("…").ja("…")`; a plain `LocalText.of("…")` is shown as written.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
