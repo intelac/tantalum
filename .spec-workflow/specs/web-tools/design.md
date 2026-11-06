@@ -218,7 +218,7 @@ flowchart LR
 5. 直连时，按 IPv4 优先依次连**这次解析出来的地址**，10 秒超时，不再查 DNS。走上游时，连上游代理：
    - CONNECT 请求原样转一个 `CONNECT host:port`，带 `Proxy-Authorization`（上游网址里有用户名密码的话）；
    - 明文请求把绝对网址形式的请求转给它。
-6. CONNECT 成功后回 `200`，两边互相转发，直到任一边关闭；连接 5 分钟没有数据就关。出口看不到 TLS 里面的内容。
+6. CONNECT 成功后回 `200`，两边互相转发，直到任一边关闭；连接 5 分钟没有数据就关；不论有没有数据，隧道最长 30 分钟（2026-11-06 实施时补，免得一直有数据的连接永远占着名额）。出口看不到 TLS 里面的内容。
 7. 明文 http **一条连接只转一个请求**（实测的漏洞）：
    - 改写请求头：直连时改成相对路径，加 `Connection: close`，去掉 `Proxy-Connection` 和 `Proxy-Authorization`；
    - 正文按 `Content-Length` 转发；分块编码的请求正文回 411（浏览器的明文请求很少这样）；
@@ -259,13 +259,14 @@ flowchart LR
   - “URLs with a user name or password are not allowed.”
   - “The URL is longer than 2048 characters.”
 - `web_fetch` 的每一跳、`browser_navigate` 都用它（W2）。浏览器因此打不开 `file:`、`data:`、`javascript:`、`chrome:`。
+- 国际化域名用 `java.net.IDN` 转成 `xn--` 写法，路径和查询里的非 ASCII 字符按 UTF-8 百分号编码；主机名带下划线的网址 JDK 的 `URI` 认不出主机、`HttpClient` 发不出，直接报 “host names with an underscore (_) cannot be opened.”（2026-11-06 实施时补）。
 
 **`AddressRules`**
 - 构造参数 `blockPrivateNetwork`，来自配置 `tantalum.web.block-private-network`，默认 `false`。
 - `ownPort(int)`：设置 Tantalum 服务器的端口。初值取 `server.port`，`WebServerInitializedEvent` 时改成实际端口。出口自己的端口也算进“自己的端口”。
 - `blocked(InetAddress address, int port)` 返回 `Optional<Reason>`：
   1. **不论开关（W6）：** `port` 是自己的端口，并且地址是本机的地址，就拦下，原因 `OWN_PORT`。本机的地址包括：回环、`0.0.0.0` 或 `::`、本机任一网卡上的地址（网卡地址缓存 60 秒）。服务器绑在 `0.0.0.0` 时，用局域网地址也绕不过去。
-  2. **开关打开时：** 回环 `127.0.0.0/8`、`::1`；私网 `10/8`、`172.16/12`、`192.168/16`、`fc00::/7`；链路本地 `169.254/16`（含 `169.254.169.254`）、`fe80::/10`；`0.0.0.0`、`::`，原因 `PRIVATE_NETWORK`。IPv4 映射的 IPv6（`::ffff:10.0.0.1`）先还原成 IPv4 再查，免得换个写法就绕过去。只拦 W6 列出的地址段，OpenClaw 多拦的段不拦。
+  2. **开关打开时：** 回环 `127.0.0.0/8`、`::1`；私网 `10/8`、`172.16/12`、`192.168/16`、`fc00::/7`；链路本地 `169.254/16`（含 `169.254.169.254`）、`fe80::/10`；`0.0.0.0`、`::`，原因 `PRIVATE_NETWORK`。IPv4 映射的 IPv6（`::ffff:10.0.0.1`）先还原成 IPv4 再查，免得换个写法就绕过去。2026-11-06 实施时补（主会话按 W6“拦云服务器元数据”的本意定）：运营商级 NAT `100.64.0.0/10`（阿里云元数据 `100.100.100.200` 在这一段）；内嵌 IPv4 的 IPv6（NAT64 `64:ff9b::/96`、6to4 `2002::/16`、IPv4 兼容 `::a.b.c.d`）取出 IPv4 按同样的规则查。OpenClaw 多拦的其他段不拦。
 - `describe(host, address, reason)` 生成给模型的话：
   - “Blocked: example.internal resolves to 10.0.0.5, a private network address, and this server does not allow private network access.”
   - “Blocked: 127.0.0.1:8091 is the Tantalum server itself.”

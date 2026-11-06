@@ -15,7 +15,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.plugin.ToolOutput;
+import tantalum.shell.attachment.AttachmentLimits;
 
 /**
  * 到一个服务器的连接。后台虚拟线程负责建立、探活和重连，每次重连都换新客户端（旧客户端在服务器重启后永久失效）。
@@ -37,6 +37,7 @@ final class McpConnection implements AutoCloseable {
     private static final Duration RETRY_WAIT = Duration.ofSeconds(5);
 
     private final McpSettings.Server server;
+    private final int maxImages;
     private final Policy policy;
     private final Consumer<List<McpSchema.Tool>> onTools;
     private final Object lock = new Object();
@@ -54,7 +55,13 @@ final class McpConnection implements AutoCloseable {
     private final CountDownLatch firstAttempt = new CountDownLatch(1);
 
     McpConnection(McpSettings.Server server, Policy policy, Consumer<List<McpSchema.Tool>> onTools) {
+        this(server, policy, onTools, AttachmentLimits.defaults().maxImagesPerMessage());
+    }
+
+    /** {@code maxImages}：一个结果最多收几张图片，多的换成一行说明（web-tools W8）。 */
+    McpConnection(McpSettings.Server server, Policy policy, Consumer<List<McpSchema.Tool>> onTools, int maxImages) {
         this.server = server;
+        this.maxImages = maxImages;
         this.policy = policy;
         this.onTools = onTools;
     }
@@ -265,13 +272,13 @@ final class McpConnection implements AutoCloseable {
      * 调用工具。失败都变成错误结果交给模型，只有中断原样抛出。
      * 只有确定没有执行的会话失效才重试一次，所以写工具也安全。其他失败不碰共享连接，下线由探活发现。
      */
-    ToolOutput call(String tool, Map<String, Object> arguments) throws InterruptedException {
-        ToolOutput first = attempt(tool, arguments, false);
+    McpResults.Result call(String tool, Map<String, Object> arguments) throws InterruptedException {
+        McpResults.Result first = attempt(tool, arguments, false);
         if (first != null) {
             return first;
         }
         waitForReconnect();
-        ToolOutput second = attempt(tool, arguments, true);
+        McpResults.Result second = attempt(tool, arguments, true);
         return second != null ? second : unavailable();
     }
 
@@ -281,7 +288,7 @@ final class McpConnection implements AutoCloseable {
     }
 
     /** 返回 null 表示这次没有执行，可以重试。 */
-    private ToolOutput attempt(String tool, Map<String, Object> arguments, boolean last) throws InterruptedException {
+    private McpResults.Result attempt(String tool, Map<String, Object> arguments, boolean last) throws InterruptedException {
         McpSyncClient current = client;
         if (current == null || state != State.READY) {
             return last ? unavailable() : null;
@@ -296,16 +303,16 @@ final class McpConnection implements AutoCloseable {
         }
         try {
             McpSchema.CallToolResult result = current.callTool(new McpSchema.CallToolRequest(tool, arguments));
-            return McpResults.toOutput(result, server.maxResultBytes());
+            return McpResults.toOutput(result, server.maxResultBytes(), maxImages);
         } catch (RuntimeException failure) {
             if (McpFailures.isInterrupt(failure)) {
                 throw new InterruptedException();
             }
             if (failure instanceof McpError protocol) {
-                return ToolOutput.error("MCP server " + server.name() + " rejected the call: " + protocol.getMessage());
+                return McpResults.Result.error("MCP server " + server.name() + " rejected the call: " + protocol.getMessage());
             }
             if (McpFailures.has(failure, TimeoutException.class)) {
-                return ToolOutput.error("MCP tool timed out after " + server.timeout() + ". Its outcome is unknown.");
+                return McpResults.Result.error("MCP tool timed out after " + server.timeout() + ". Its outcome is unknown.");
             }
             if (McpFailures.isSessionLost(failure)) {
                 rotate(current);
@@ -314,14 +321,14 @@ final class McpConnection implements AutoCloseable {
                 if (!call.overlapped) {
                     return last ? unavailable() : null;
                 }
-                return ToolOutput.error("MCP server " + server.name() + " lost the session during this call. Its outcome is unknown.");
+                return McpResults.Result.error("MCP server " + server.name() + " lost the session during this call. Its outcome is unknown.");
             }
             if (McpFailures.isUnauthorized(failure)) {
                 markBroken(current);
-                return ToolOutput.error("MCP server " + server.name() + " refused the configured credentials.");
+                return McpResults.Result.error("MCP server " + server.name() + " refused the configured credentials.");
             }
             LOG.warn("mcp server {}: call failed: {}", server.name(), McpFailures.category(failure));
-            return ToolOutput.error("MCP server " + server.name() + " failed this call. Its outcome is unknown.");
+            return McpResults.Result.error("MCP server " + server.name() + " failed this call. Its outcome is unknown.");
         } finally {
             synchronized (inFlight) {
                 inFlight.remove(call);
@@ -337,8 +344,8 @@ final class McpConnection implements AutoCloseable {
         }
     }
 
-    private ToolOutput unavailable() {
-        return ToolOutput.error("MCP server " + server.name() + " is unavailable.");
+    private McpResults.Result unavailable() {
+        return McpResults.Result.error("MCP server " + server.name() + " is unavailable.");
     }
 
 

@@ -89,7 +89,7 @@
 
 先把存图代码抽成 `ToolImages`，让 MCP 图片也能进附件（W8）；再做“联网”这一组开关，把 `web_fetch` 接进 `Engine`，插件页加“联网”一块。阶段结束时 8091 上能用 `web_fetch`（浏览器还没有）。
 
-- [ ] 8. `ToolImages`
+- [x] 8. `ToolImages`
   - File: shell/attachment/ToolImages.java（新）、shell/local/LocalTool.java（改），shelltest/attachment/ToolImagesTest.java（新）
   - 把 `LocalTool.java:64-91` 的存图代码搬成 `ToolImages(AttachmentStore)` 和 `output(Principal, text, error, List<Image>, name)`、`record Image(mediaType, bytes)`；每张图经 `AttachmentStore.upload` 得到 `ImageRef`，文字后加 `AttachmentText.image(ref)` 那一行；存不下时返回错误结果，沿用 `AttachmentRejected` 的消息。`LocalTool` 改用它
   - 测试：PNG 存进本人附件，结果里是 `ImageRef`；配额满时错误结果写明原因；`LocalToolTest` 照跑，断言不变
@@ -97,7 +97,7 @@
   - _Requirements: W8, 需求 3.1_
   - _Prompt: Role: Java 后端开发 | Task: 把工具结果的存图代码抽出来共用 | Restrictions: 本机工作区的行为不变；attachment 包不依赖 local、mcp、browser | Success: 新测试和 LocalToolTest 全过，shellPackagesHaveNoCycles 通过_
 
-- [ ] 9. MCP 工具返回的图片
+- [x] 9. MCP 工具返回的图片
   - File: shell/mcp/McpResults.java、McpConnection.java、McpTool.java、McpRegistry.java、shell/boot/Engine.java（改），shelltest/mcp/McpResultsTest.java（改），shelltest/model/OpenAiClientTest.java（改）
   - `McpResults.toOutput` 返回 `Result(text, error, images)`：PNG、JPEG、WebP、GIF 且 base64 是规范写法才收下；否则换成一行 “[`<类型>` image omitted: only PNG, JPEG, WebP and GIF images are kept]”；一个结果最多收 `tantalum.attachments.max-images-per-message` 张，多的换成一行；文字截断不算图片。`McpConnection.call` 返回 `Result`；`McpTool.run` 交给 `ToolImages.output`，名字 `<服务器>-<工具>.<扩展名>`；`McpRegistry` 构造参数加 `ToolImages`
   - 测试：PNG 收下；SVG 换成一行；不规范的 base64 换成一行；超过张数换成一行（3.2）；OpenAI 兼容路线 `vision=false` 时请求里是 `textOnly` 那一行，没有图片数据（3.3，补断言）；`McpIntegrationTest` 用 `TestMcpServer` 返回一张 PNG，存进本人附件
@@ -146,7 +146,7 @@
 
 做 Playwright 驱动的解压和 `browser install` 命令，再做每个用户的浏览器（启动、上限、空闲关闭、崩溃重开、关机），然后是 11 个浏览器工具，接进 `Engine`，最后用真实 Chromium 跑 `BrowsersIT`。阶段结束部署前，先在 8091 的机器上跑一次 `browser install`。
 
-- [ ] 15. `BrowserDriver` 和 `browser install`
+- [x] 15. `BrowserDriver` 和 `browser install`
   - File: shell/browser/BrowserDriver.java（新）、shell/boot/TantalumApplication.java（改），shelltest/browser/BrowserDriverTest.java（新）
   - `ensure()`：把 `driver/package/**` 和本平台的 `driver/<平台>/node`（加执行权限）解到 `<数据目录>/browser/driver-<版本>/`，先解到临时名字再改名，设 `playwright.cli.dir`，删掉别的版本的目录；`install(withDeps)`：先 `ensure()`，再调 `com.microsoft.playwright.CLI` 装 `chromium-headless-shell`，`--with-deps` 时加系统依赖。子命令 `browser install [--with-deps]` 不启动 Spring
   - 测试：解压后目录完整、`node` 可执行；中途失败不留半个目录（临时名字被清掉）；旧版本目录被删；重复 `ensure()` 不重新解压；`browser install` 参数解析，未知参数报错
@@ -154,21 +154,21 @@
   - _Requirements: 设计“`BrowserDriver`”“定下的两件事”1, 需求 6.2_
   - _Prompt: Role: Java 开发 | Task: 解压 Playwright 驱动并提供安装命令 | Restrictions: 只写数据目录下的 browser/ 和 Playwright 的浏览器目录；不写用户文件 | Success: 测试全过，本机装好 Chromium_
 
-- [ ] 16. `UserBrowser`
+- [x] 16. `UserBrowser`
   - File: shell/browser/UserBrowser.java（新）
   - 启动：`BrowserDriver.ensure()`，`Playwright.create()`（`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`）；`chromium().launch()`：headless、`chromiumSandbox=settings.sandbox`、代理是出口、`--force-webrtc-ip-handling-policy=disable_non_proxied_udp`；`newContext()`：`acceptDownloads=false`、`locale=zh-CN`、视口 1280×720。字段：每个会话的当前 `Page`、`ReentrantLock`、最后使用时间；最多 10 个标签页，再开新的关最久没用的；没装浏览器、沙箱起不来时的错误消息照设计“Error Handling”，日志 ERROR 带安装命令或 `sandbox=false` 的提示
   - 测试放在任务 20 的 `BrowsersIT`（要真实 Chromium）；本任务先写一个最小用例：起一个、打开本地页、关掉后没有子进程
   - _Requirements: W7, 需求 2.1, 2.3, NFR Security_
   - _Prompt: Role: Java 开发 | Task: 实现一个用户的浏览器环境 | Restrictions: 浏览器资料只在内存里；不允许下载；代理必须是 Egress | Success: 最小用例在装了 Chromium 的机器上通过，没装时跳过并写明原因_
 
-- [ ] 17. `Browsers`
+- [x] 17. `Browsers`
   - File: shell/browser/Browsers.java（新）
   - 构造参数 `Settings(maxOpen, idleClose, sandbox)`、`Egress`、`ToolImages`、`Clock`；`use(Principal, SessionId, Action)`：取得或启动、加锁执行、放锁；计数和占名额在同一把全局锁里，启动在锁外；到上限返回 “All browsers on this server are in use (N of N). Try again in a few minutes.”，不挤掉别人；后台虚拟线程每 30 秒关掉空闲超过 `idleClose` 且锁空着的；`PlaywrightException` 时看 `isConnected()`，断了就关掉这一组、删登记、返回崩溃那句话；调用被打断时锁在 `finally` 放掉；`close()` 关全部；`openCount()`
   - 测试放在任务 20 的 `BrowsersIT`；本任务的单元测试只测不需要 Chromium 的部分：并发 8 个用户、上限 2 时启动数不超过 2（启动换成包内可替换的工厂）
   - _Requirements: W7, 需求 2.4, 2.5, 2.8, NFR Reliability_
   - _Prompt: Role: Java 并发开发 | Task: 管理每个用户的浏览器和全局上限 | Restrictions: 不挤掉别人的浏览器；一个用户的崩溃不影响别人；Playwright 对象只在持锁时调用 | Success: 并发上限的单元测试全过_
 
-- [ ] 18. `PageText`、`BrowserTool` 和 11 个工具
+- [x] 18. `PageText`、`BrowserTool` 和 11 个工具
   - File: shell/browser/PageText.java、BrowserTool.java、BrowserTools.java（新），shelltest/browser/PageTextTest.java、BrowserToolsTest.java（新）
   - `PageText`：第一行 W9 那句话，Page、URL、Tab，AI 快照（`ariaSnapshot` 的 `AI` 模式），超过 50,000 字符截断并写明原长度；`BrowserTool`：`server()` `WebAccess.BROWSER`、`serverConcurrency()` 64、`isConcurrencySafe` 默认 `false`；错误只给第一行，超时、编号找不到、`ERR_TUNNEL_CONNECTION_FAILED`、下载那几句照设计原文；`browser_navigate` 先 `WebUrl.check` 和地址事先检查。`BrowserTools.all(Browsers)`：设计表里的 11 个工具和参数，`browser_navigate` 说明照原文（Bing 网址、Google 限流），用到编号的说明都写 “refs come from the latest browser_snapshot or action result”；截图经 `ToolImages` 存为 `screenshot-<主机>.png`，结果是 W9 那句话加图片说明行；`browser_evaluate` 结果转 JSON，最多 50,000 字符
   - 测试：正好 11 个工具、名字唯一、没有上传、下载、拖放、`run_code`（2.2）；`browser_navigate` 说明里有 Bing 的网址格式（2.6）；每个 schema 合法；`PageText` 第一行是 W9 那句话、截断和原长度（2.7）；`file:`、`data:`、`javascript:` 的网址被拒

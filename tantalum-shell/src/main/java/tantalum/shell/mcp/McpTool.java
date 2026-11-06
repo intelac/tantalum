@@ -1,6 +1,8 @@
 package tantalum.shell.mcp;
 
+import java.io.IOException;
 import java.util.Map;
+import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.json.JsonText;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
@@ -19,15 +21,18 @@ final class McpTool implements Tool {
     private final String remoteName;
     private final String description;
     private final Json schema;
+    private final ToolImages images;
 
+    /** {@code images} 为 null 时（还没接上附件的旧装配）图片换成一行说明，不交给模型。 */
     McpTool(McpSettings.Server server, McpConnection connection, String publicName, String remoteName, String description,
-            Json schema) {
+            Json schema, ToolImages images) {
         this.server = server;
         this.connection = connection;
         this.publicName = publicName;
         this.remoteName = remoteName;
         this.description = description;
         this.schema = schema;
+        this.images = images;
     }
 
     @Override public String name() { return publicName; }
@@ -41,9 +46,31 @@ final class McpTool implements Tool {
 
     @SuppressWarnings("unchecked")
     @Override
-    public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException {
+    public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException, IOException {
         Object plain = arguments == null ? Map.of() : JsonText.toPlain(arguments);
         Map<String, Object> map = plain instanceof Map<?, ?> given ? (Map<String, Object>) given : Map.of();
-        return connection.call(remoteName, map);
+        McpResults.Result result = connection.call(remoteName, map);
+        if (result.images().isEmpty()) {
+            return new ToolOutput(result.text(), result.error());
+        }
+        if (images == null) {
+            StringBuilder text = new StringBuilder(result.text());
+            for (ToolImages.Image image : result.images()) {
+                text.append(text.isEmpty() ? "" : "\n").append("[").append(image.mediaType()).append(" image omitted]");
+            }
+            return new ToolOutput(text.toString(), result.error());
+        }
+        // 图片存进调用者本人的附件（W8），名字 <服务器>-<工具>.<扩展名>
+        String name = server.name() + "-" + remoteName + extension(result.images().getFirst().mediaType());
+        return images.output(context.principal(), result.text(), result.error(), result.images(), name);
+    }
+
+    private static String extension(String mediaType) {
+        return switch (mediaType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> ".png";
+        };
     }
 }

@@ -18,7 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import tantalum.shell.mcp.TestMcpServer.Definition;
-import tantalum.shell.plugin.ToolOutput;
 
 @Timeout(60)
 class McpConnectionTest {
@@ -101,11 +100,11 @@ class McpConnectionTest {
     @Test
     void callsToolsAndMapsErrors() throws Exception {
         McpConnection opened = ready();
-        ToolOutput read = opened.call("read", Map.of("x", "1"));
+        McpResults.Result read = opened.call("read", Map.of("x", "1"));
         assertFalse(read.error());
         assertEquals("read 1", read.text());
         assertTrue(opened.call("bad", Map.of()).error());
-        ToolOutput unknown = opened.call("nope", Map.of());
+        McpResults.Result unknown = opened.call("nope", Map.of());
         assertTrue(unknown.error());
         assertEquals(McpConnection.State.READY, opened.state(), "a protocol error is not a broken connection");
     }
@@ -146,7 +145,7 @@ class McpConnectionTest {
     void timeoutSaysTheOutcomeIsUnknownAndKeepsTheConnection() throws Exception {
         McpConnection opened = connect(server.url(), null, Duration.ofMillis(300));
         await(() -> opened.state() == McpConnection.State.READY);
-        ToolOutput output = opened.call("slow", Map.of());
+        McpResults.Result output = opened.call("slow", Map.of());
         assertTrue(output.error());
         assertTrue(output.text().contains("outcome is unknown"), output.text());
         assertEquals(McpConnection.State.READY, opened.state());
@@ -158,7 +157,7 @@ class McpConnectionTest {
         server.stop();
         await(() -> opened.state() != McpConnection.State.READY);
         assertFalse(opened.tools().isEmpty(), "tools stay registered during an outage");
-        ToolOutput down = opened.call("read", Map.of());
+        McpResults.Result down = opened.call("read", Map.of());
         assertTrue(down.error());
         server.start();
         await(() -> opened.state() == McpConnection.State.READY);
@@ -179,7 +178,7 @@ class McpConnectionTest {
     @Test
     void aFailedCallLeavesTheSharedConnectionAndOtherCallsAlone() throws Exception {
         McpConnection opened = readyWithoutPing();
-        ToolOutput[] other = new ToolOutput[1];
+        McpResults.Result[] other = new McpResults.Result[1];
         Thread inFlight = Thread.ofVirtual().start(() -> {
             try {
                 other[0] = opened.call("medium", Map.of());
@@ -189,7 +188,7 @@ class McpConnectionTest {
         });
         await(() -> slowStarted.get() == 1);
         server.failNextPosts.set(1);
-        ToolOutput failed = opened.call("read", Map.of());
+        McpResults.Result failed = opened.call("read", Map.of());
         assertTrue(failed.error(), failed.text());
         assertEquals(McpConnection.State.READY, opened.state());
         inFlight.join(10_000);
@@ -204,7 +203,7 @@ class McpConnectionTest {
         server.stop();
         server.start();
         server.calls.clear();
-        ToolOutput write = opened.call("write", Map.of());
+        McpResults.Result write = opened.call("write", Map.of());
         assertFalse(write.error(), write.text());
         assertEquals(List.of("write"), server.calls);
     }
@@ -213,7 +212,7 @@ class McpConnectionTest {
     @Test
     void callsOverlappingAnExpiredSessionAreNotRetried() throws Exception {
         McpConnection opened = readyWithoutPing();
-        ToolOutput[] other = new ToolOutput[1];
+        McpResults.Result[] other = new McpResults.Result[1];
         Thread inFlight = Thread.ofVirtual().start(() -> {
             try {
                 other[0] = opened.call("medium", Map.of());
@@ -225,7 +224,7 @@ class McpConnectionTest {
         server.stop();
         server.start();
         server.calls.clear();
-        ToolOutput write = opened.call("write", Map.of());
+        McpResults.Result write = opened.call("write", Map.of());
         inFlight.join(10_000);
         assertTrue(write.error(), write.text());
         assertTrue(write.text().contains("outcome is unknown"), write.text());

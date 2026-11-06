@@ -400,6 +400,19 @@ class OpenAiClientTest {
         assertEquals(java.nio.file.Files.readString(ATTACHMENT_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
     }
 
+    /** web-tools 需求 3.3：模型不收图片时，工具结果（截图、MCP 图片）里的图片只剩 textOnly 那一行，请求里没有图片数据。 */
+    @Test
+    void toolResultImagesBecomeOneLineWhenTheModelTakesTextOnly() throws Exception {
+        OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults(), false);
+        server.body = finish("stop");
+        client.call(attachmentPrompts().get(2), MEDIA, listener);
+        String body = server.requests.getLast();
+        assertTrue(body.contains(AttachmentText.textOnly(PNG).replace("\"", "\\\"")), body);
+        assertFalse(body.contains("image_url"), body);
+        assertFalse(body.contains(java.util.Base64.getEncoder().encodeToString("IMG".getBytes(java.nio.charset.StandardCharsets.US_ASCII))), body);
+    }
+
     // ---- 会话中途换工具（core-tools 任务 20）：工具只发现在开着的，变化写成一段说明 ----
 
     private static final java.nio.file.Path TOOL_CHANGE_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-tool-change-requests.txt");
