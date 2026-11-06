@@ -12,12 +12,15 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 交给 MXC 的规则（L13、L14、需求 4.2、4.5）：读写和只读目录按 {@code --allow-write} 分、禁止的目录、网络、环境变量。 */
+@DisabledOnOs(value = OS.WINDOWS, disabledReason = "MXC 是 macOS 连接程序的沙箱（/bin/sh、/bin/bash、macOS 的目录）；Windows 连接程序另开 spec")
 class MxcPolicyTest {
 
     @TempDir

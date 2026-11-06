@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
@@ -163,6 +165,7 @@ class IndexStoreTest {
     void indexFilesArePrivate() throws Exception {
         try (SessionIndex index = SessionIndex.open(dir)) {
             index.claim(S1, ALICE);
+            assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
             for (String name : List.of(SessionIndex.FILE, SessionIndex.FILE + "-wal")) {
                 assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(dir.resolve(name))), name);
             }

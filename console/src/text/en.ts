@@ -569,6 +569,7 @@ export const en: Text = {
     "plugin/required": (name) => `${name} is required by the administrator and cannot be turned off`,
     "memory/not-found": "This memory does not exist",
     "memory/invalid-name": "Names can use lowercase letters, digits and hyphens, up to 64",
+    "memory/reserved-name": "This name is reserved by Windows (such as con, nul, com1). Choose another",
     "memory/invalid": (field) => `This field is not valid: ${field}`,
     "memory/too-long": (limit) => `The content can be at most ${limit}`,
     "memory/full": (max) => `Memory is full (at most ${max}). Delete some first`,

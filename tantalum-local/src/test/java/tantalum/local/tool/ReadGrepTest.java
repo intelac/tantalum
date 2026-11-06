@@ -3,6 +3,7 @@ package tantalum.local.tool;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,12 +12,18 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.value.json.Json;
 
 /** 从服务器上的 {@code BuiltinToolsTest} 搬来：read_file 和 grep 的基本行为，断言不变。 */
 class ReadGrepTest {
+
+    /** 只在 Windows 上跳过的原因。 */
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上显示的路径用 \\ 分隔，怎么显示归 Windows 连接程序 spec";
 
     @TempDir
     Path temp;
@@ -124,10 +131,22 @@ class ReadGrepTest {
     }
 
     @Test
-    void grepTruncatesLongLinesAndSkipsUnreadableFiles() throws Exception {
+    void grepTruncatesLongLines() throws Exception {
+        Files.writeString(root.resolve("minified.js"), "COMPUTE" + "x".repeat(5000) + "\n");
+        LocalResult output = grep.run(context, args("pattern", "COMPUTE"));
+        assertFalse(output.error(), output.text());
+        assertTrue(output.text().contains("a.cbl:1:COMPUTE INTEREST"), output.text());
+        for (String line : output.text().split("\n")) {
+            assertTrue(line.length() <= Grep.MAX_LINE_CHARS + 40, "line too long: " + line.length());
+        }
+    }
+
+    @Test
+    void grepSkipsUnreadableFiles() throws Exception {
         Files.writeString(root.resolve("minified.js"), "COMPUTE" + "x".repeat(5000) + "\n");
         Path locked = root.resolve("locked.cbl");
         Files.writeString(locked, "COMPUTE LOCKED\n");
+        assumeTrue(PrivateFiles.posix(locked), "读不了的文件用 POSIX 权限造；Windows 上没有这个办法，读失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
         try {
             LocalResult output = grep.run(context, args("pattern", "COMPUTE"));
@@ -145,15 +164,16 @@ class ReadGrepTest {
     /** 错误信息不能带电脑上的绝对路径。 */
     @Test
     void errorsDoNotRevealAbsolutePaths() throws Exception {
+        LocalResult outside = read.run(context, args("path", "../secret.txt"));
+        assertFalse(outside.text().contains(temp.toString()), outside.text());
         Path locked = root.resolve("locked.cbl");
         Files.writeString(locked, "x");
+        assumeTrue(PrivateFiles.posix(locked), "读不了的文件用 POSIX 权限造；Windows 上没有这个办法，读失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
         try {
             LocalResult output = read.run(context, args("path", "locked.cbl"));
             assertTrue(output.error());
             assertFalse(output.text().contains(root.toString()), output.text());
-            LocalResult outside = read.run(context, args("path", "../secret.txt"));
-            assertFalse(outside.text().contains(temp.toString()), outside.text());
         } finally {
             Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
         }
@@ -176,6 +196,7 @@ class ReadGrepTest {
 
     /** 其他允许目录里的匹配写绝对路径，能原样交给 read_file；主目录里的照旧写相对路径。 */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void grepInAnotherAllowedDirectoryShowsAbsolutePaths() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other")).toRealPath();
         Files.writeString(other.resolve("c.cbl"), "COMPUTE OTHER\n");

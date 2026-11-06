@@ -37,7 +37,7 @@ public final class MemoryStore {
     }
 
     /** 拒绝的种类（console-i18n I9）。 */
-    public enum Problem { INVALID_NAME, INVALID, TOO_LONG, FULL, INDEX_FULL, CREDENTIAL }
+    public enum Problem { INVALID_NAME, RESERVED_NAME, INVALID, TOO_LONG, FULL, INDEX_FULL, CREDENTIAL }
 
     private final Path dir;
     private final MemoryLimits limits;

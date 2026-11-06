@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import tantalum.value.id.Principal;
+import tantalum.value.id.ReservedName;
 import tantalum.value.id.SessionId;
 
 /**
@@ -70,7 +71,12 @@ public final class SessionPaths {
         }
     }
 
-    /** 不同输入得到不同名字。超长时截短并加 SHA-256；{@code ~} 不在编码字符内，所以不会和未截短的名字相同。 */
+    /**
+     * 不同输入得到不同名字。超长时截短并加 SHA-256；{@code ~} 不在编码字符内，所以不会和未截短的名字相同。
+     * 编码结果是 Windows 的设备名（{@code nul}、{@code con}，{@link ReservedName}）时把第一个字符也写成 {@code %xx}：
+     * {@code nul} → {@code %6eul}，否则 {@code nul.jsonl} 写进空设备，数据悄悄丢失（windows-server N5）。输入里的 {@code %}
+     * 编码成 {@code %25}，所以开头的 {@code %6e} 只能来自这一步，不会撞名；编码后没有句点，整个名字就是要比的部分。
+     */
     static String encode(String value) {
         StringBuilder name = new StringBuilder();
         for (byte b : value.getBytes(StandardCharsets.UTF_8)) {
@@ -79,6 +85,9 @@ public final class SessionPaths {
             } else {
                 name.append('%').append(HEX.toHexDigits(b));
             }
+        }
+        if (ReservedName.matches(name.toString())) {
+            name.replace(0, 1, "%" + HEX.toHexDigits((byte) name.charAt(0)));
         }
         if (name.length() <= MAX_NAME_BYTES) {
             return name.toString();

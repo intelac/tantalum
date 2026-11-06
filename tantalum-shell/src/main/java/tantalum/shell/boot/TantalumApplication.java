@@ -7,8 +7,11 @@ import jakarta.servlet.ServletContextListener;
 import jakarta.websocket.DeploymentException;
 import jakarta.websocket.server.ServerContainer;
 import java.io.BufferedReader;
+import java.io.Console;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -79,12 +82,30 @@ public class TantalumApplication {
         }
         String[] command = parsed.get().args();
         CliText text = parsed.get().text();
+        if (args[0].equals("check")) {
+            // check 读和服务器相同的配置，数据目录在 Spring 里才知道，在那里检查
+            return RecordCheckCommand.run(command, System.out, text);
+        }
+        Path dataDir = dataDirFromEnvironment();
+        if (!DataDirCheck.forCommand(dataDir, System.out, text)) {
+            return 1;
+        }
         return switch (args[0]) {
-            case "users" -> UserCommand.run(command, dataDirFromEnvironment(), new BufferedReader(new InputStreamReader(System.in)),
-                    System.out, text);
-            case "check" -> RecordCheckCommand.run(command, System.out, text);
-            default -> BrowserCommand.run(command, dataDirFromEnvironment(), System.out, text);
+            case "users" -> UserCommand.run(command, dataDir, passwordInput(), System.out, text);
+            default -> BrowserCommand.run(command, dataDir, System.out, text);
         };
+    }
+
+    /**
+     * Windows 上在终端里输入时按控制台的编码读（windows-server N12）：中文 Windows 的控制台是 GBK（代码页 936），按 UTF-8 读会把
+     * 中文密码读错，和浏览器登录时的 UTF-8 对不上。管道和重定向时照旧 UTF-8；macOS、Linux 照旧 UTF-8（{@code LANG=C} 的终端报的是
+     * US-ASCII，改成按控制台读反而把原来能用的中文密码读坏）。
+     */
+    private static BufferedReader passwordInput() {
+        Console console = System.console();
+        boolean windowsTerminal = System.getProperty("os.name", "").startsWith("Windows") && console != null && console.isTerminal();
+        Charset charset = windowsTerminal ? console.charset() : StandardCharsets.UTF_8;
+        return new BufferedReader(new InputStreamReader(System.in, charset));
     }
 
     /** 命令行工具不启动 Spring，所以和服务共用同一个环境变量。 */
@@ -94,8 +115,10 @@ public class TantalumApplication {
                 : Path.of(System.getProperty("user.home"), ".local", "share", "tantalum");
     }
 
+    /** 第一个打开数据目录的地方：先检查数据目录的位置（windows-server N3、N4，只在 Windows 上查）。 */
     @Bean(destroyMethod = "close")
     UserStore userStore(TantalumProperties properties) throws IOException, SQLException {
+        DataDirCheck.atStartup(properties.dataDir());
         UserStore store = UserStore.open(properties.dataDir());
         AdminBootstrap.ensure(store, System.getenv());
         return store;

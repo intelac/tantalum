@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 
 class UserStoreTest {
 
@@ -53,6 +55,7 @@ class UserStoreTest {
         try (UserStore store = UserStore.open(dir)) {
             store.add("alice", "pw");
         }
+        assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(dir.resolve(UserStore.FILE))));
     }
 
@@ -63,6 +66,20 @@ class UserStoreTest {
                 assertThrows(IllegalArgumentException.class, () -> store.add(name, "pw"), name);
             }
             assertEquals(0, store.count());
+        }
+    }
+
+    /** windows-server 需求 3.1：Windows 设备名不能注册，所有平台一样，消息写明原因；只是像的名字照常。 */
+    @Test
+    void windowsDeviceNamesCannotBeUserNames() throws Exception {
+        try (UserStore store = UserStore.open(dir)) {
+            for (String name : new String[] {"con", "nul", "aux", "prn", "com1", "lpt9"}) {
+                UserStore.Refused refused = assertThrows(UserStore.Refused.class, () -> store.add(name, "pw"), name);
+                assertEquals(UserStore.Refused.Kind.RESERVED_NAME, refused.kind());
+                assertEquals(name + " is reserved by Windows and cannot be a user name.", refused.getMessage());
+            }
+            store.add("console", "pw");
+            assertEquals(1, store.count());
         }
     }
 

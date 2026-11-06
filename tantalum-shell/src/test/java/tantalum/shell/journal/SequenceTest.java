@@ -2,6 +2,7 @@ package tantalum.shell.journal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
@@ -81,6 +83,7 @@ class SequenceTest {
         Path bob = new SessionPaths(dir).sessionFile(BOB, new SessionId("s2"));
         Files.createDirectories(bob.getParent());
         Files.writeString(bob, "garbage\n");
+        assumeTrue(PrivateFiles.posix(bob), "读不了、写不进的文件用 POSIX 权限造；Windows 上没有这个办法，读写失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(bob, java.util.Set.of());
         assertEquals(5, sequence().next(ALICE));
     }

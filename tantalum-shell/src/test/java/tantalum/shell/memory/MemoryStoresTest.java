@@ -5,12 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.plugin.Workspace;
 import tantalum.shell.tool.Workspaces;
 import tantalum.value.id.Principal;
@@ -34,6 +36,7 @@ class MemoryStoresTest {
         // 自己的工具能读到自己的记忆文件，别人的到不了。
         assertEquals(alice.dir().resolve("a.md"), workspaces.of(ALICE).resolve("memory/a.md"));
         assertThrows(IllegalArgumentException.class, () -> workspaces.of(BOB).resolve("../alice/memory/a.md"));
+        assumeTrue(PrivateFiles.posix(alice.dir()), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(alice.dir())));
     }
 

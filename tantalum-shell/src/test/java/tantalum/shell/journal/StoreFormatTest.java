@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 
 class StoreFormatTest {
 
@@ -24,8 +26,9 @@ class StoreFormatTest {
     void newDirectoryGetsCurrentVersions() throws Exception {
         assertEquals(new StoreFormat(StoreFormat.STORAGE), StoreFormat.check(dir));
         assertEquals("{\"storage\":3}\n", Files.readString(file()));
-        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
         assertEquals(1, Files.list(dir).count());
+        assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
+        assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
     }
 
     @Test

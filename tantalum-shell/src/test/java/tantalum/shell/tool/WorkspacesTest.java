@@ -5,12 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.plugin.Workspace;
 import tantalum.value.id.Principal;
 
@@ -25,9 +27,10 @@ class WorkspacesTest {
         Path alice = workspaces.of(new Principal("alice")).root();
         assertEquals(root.toRealPath().resolve("alice"), alice);
         assertEquals(root.toRealPath().resolve("bob"), workspaces.of(new Principal("bob")).root());
-        assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(alice)));
         assertSame(workspaces.of(new Principal("alice")), workspaces.of(new Principal("alice")));
         assertFalse(workspaces.isShared());
+        assumeTrue(PrivateFiles.posix(alice), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
+        assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(alice)));
     }
 
     @Test

@@ -216,7 +216,12 @@ class BrowsersIT {
     // ---- 子进程 ----
 
     private static boolean isBrowserProcess(ProcessHandle process) {
-        return process.info().command().map(command -> command.contains("chrome") || command.endsWith("node")).orElse(false);
+        return process.info().command().map(command -> command.contains("chrome") || isNode(command)).orElse(false);
+    }
+
+    /** 驱动的 Node：Windows 上是 {@code node.exe}。 */
+    private static boolean isNode(String command) {
+        return command.endsWith("node") || command.endsWith("node.exe");
     }
 
     private static Set<Long> browserProcesses() {
@@ -237,7 +242,7 @@ class BrowsersIT {
     private static ProcessHandle chromiumMain(Set<Long> group) {
         return group.stream().map(ProcessHandle::of).flatMap(java.util.Optional::stream)
                 .filter(process -> process.info().command().map(command -> command.contains("chrome")).orElse(false))
-                .filter(process -> process.parent().flatMap(parent -> parent.info().command()).map(command -> command.endsWith("node"))
+                .filter(process -> process.parent().flatMap(parent -> parent.info().command()).map(BrowsersIT::isNode)
                         .orElse(false))
                 .findFirst().orElseThrow(() -> new AssertionError("no Chromium main process in " + group));
     }

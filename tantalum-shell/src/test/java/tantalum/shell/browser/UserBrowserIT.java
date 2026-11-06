@@ -37,7 +37,8 @@ class UserBrowserIT {
 
     private static List<ProcessHandle> browserProcesses() {
         return ProcessHandle.current().descendants()
-                .filter(process -> process.info().command().map(command -> command.contains("chrome") || command.endsWith("node"))
+                .filter(process -> process.info().command().map(command -> command.contains("chrome") || command.endsWith("node")
+                        || command.endsWith("node.exe"))
                         .orElse(false))
                 .toList();
     }

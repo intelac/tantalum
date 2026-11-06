@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -28,6 +29,7 @@ import java.util.concurrent.Future;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.attachment.AttachmentRejected.Reason;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.attachment.AttachmentRef;
@@ -241,6 +243,7 @@ class AttachmentStoreTest {
     @Test
     void directoriesAndFilesArePrivate() throws Exception {
         AttachmentRef ref = upload(store(), ALICE, "a.txt", text("private"));
+        assumeTrue(PrivateFiles.posix(data), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(objects(ALICE))));
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(objects(ALICE).getParent())));
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(objects(ALICE).resolve(ref.hash()))));

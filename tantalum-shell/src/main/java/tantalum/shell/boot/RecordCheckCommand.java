@@ -31,6 +31,9 @@ final class RecordCheckCommand {
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(Config.class)
                 .web(WebApplicationType.NONE).bannerMode(Banner.Mode.OFF).logStartupInfo(false).run(args)) {
             TantalumProperties properties = context.getBean(TantalumProperties.class);
+            if (!DataDirCheck.forCommand(properties.dataDir(), out, text)) {
+                return 1;
+            }
             List<KernelHook> hooks = context.getBeanProvider(KernelHook.class).orderedStream().toList();
             List<Tool> tools = context.getBeanProvider(Tool.class).orderedStream().toList();
             Kernel kernel = KernelFactory.kernel(properties, KernelFactory.safety(properties, tools), hooks);

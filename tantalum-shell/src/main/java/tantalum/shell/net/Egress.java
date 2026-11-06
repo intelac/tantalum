@@ -52,6 +52,7 @@ public final class Egress implements AutoCloseable {
     public static final String ERROR_HEADER = "X-Tantalum-Egress";
 
     static final int MAX_CONNECTIONS = 512;
+    private static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
     private static final int MAX_HEAD = 16 * 1024;
     private static final int MAX_RESPONSE_HEAD = 64 * 1024;
     private static final int HEAD_TIMEOUT_MS = 10_000;
@@ -166,7 +167,7 @@ public final class Egress implements AutoCloseable {
                 }
                 continue;
             }
-            Thread.ofVirtual().name("egress").start(() -> {
+            connectionThreads().name("egress").start(() -> {
                 try {
                     handle(socket);
                 } finally {
@@ -544,7 +545,7 @@ public final class Egress implements AutoCloseable {
                 // 隧道先结束了
             }
         });
-        Thread back = Thread.ofVirtual().name("egress-relay").start(() -> pump(farIn, near, far, last));
+        Thread back = connectionThreads().name("egress-relay").start(() -> pump(farIn, near, far, last));
         pump(nearIn, far, near, last);
         try {
             back.join();
@@ -553,6 +554,16 @@ public final class Egress implements AutoCloseable {
         } finally {
             lifetime.interrupt();
         }
+    }
+
+    /**
+     * 每条连接的线程。隧道两头同时一读一写：这条线程读近端、写远端，{@code egress-relay} 读远端、写近端。Windows 上两个虚拟线程同时
+     * 在一个套接字上等读、等写时，等写的那个收不到“可写”的唤醒，往回转发卡死（windows-latest 实测：FetcherTlsIT 抓 6 MB 的页面
+     * 30 秒超时，线程转储里 {@code egress-relay} 停在 {@code NioSocketImpl.implWrite}；改成平台线程后 2.6 秒通过）。所以 Windows 上用
+     * 平台线程（守护线程，同虚拟线程不挡退出），macOS、Linux 照旧用虚拟线程。
+     */
+    private static Thread.Builder connectionThreads() {
+        return WINDOWS ? Thread.ofPlatform().daemon(true) : Thread.ofVirtual();
     }
 
     private static void pump(InputStream from, Socket to, Socket source, AtomicLong last) {

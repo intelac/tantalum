@@ -3,6 +3,7 @@ package tantalum.shell.web;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.model.ModelClient;
@@ -59,6 +61,7 @@ class SaveBeforeAcceptTest {
     void aSubmissionThatCannotBeSavedIsNotAccepted() throws Exception {
         Path userDir = new SessionPaths(data()).userDir(new Principal("alice"));
         Files.createDirectories(userDir);
+        assumeTrue(PrivateFiles.posix(userDir), "读不了、写不进的文件用 POSIX 权限造；Windows 上没有这个办法，读写失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(userDir, PosixFilePermissions.fromString("r-x------"));
         try (TestServer server = server()) {
             HttpResponse<String> first = submit(server, "r-lost");

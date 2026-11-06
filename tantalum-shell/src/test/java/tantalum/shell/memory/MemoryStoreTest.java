@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.memory.MemoryStore.WriteResult;
 
 class MemoryStoreTest {
@@ -51,6 +53,7 @@ class MemoryStoreTest {
         assertEquals("- [java-version](java-version.md) — user — 回答一律用 Java 25\n", store.indexText());
         assertEquals(List.of(entry), store.list());
         assertEquals(entry, store.read("java-version").orElseThrow());
+        assumeTrue(PrivateFiles.posix(temp), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(
                 Files.getPosixFilePermissions(temp.resolve("alice/memory"))));
     }

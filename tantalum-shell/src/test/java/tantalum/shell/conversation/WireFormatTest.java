@@ -76,6 +76,8 @@ import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
+import tools.jackson.core.util.DefaultIndenter;
+import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
@@ -85,6 +87,9 @@ import tools.jackson.databind.json.JsonMapper;
  * （SSE 事实消息的键顺序不是约定，按键排序后比较）。有意改格式时用 {@code -Dwire.record=true} 重新生成期望文件，并在提交里说明。
  */
 class WireFormatTest {
+
+    private static final DefaultPrettyPrinter LF_PRETTY =
+            new DefaultPrettyPrinter().withObjectIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE.withLinefeed("\n"));
 
     private static final Path EXPECTED = Path.of("src/test/resources/wire");
     private static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
@@ -285,7 +290,8 @@ class WireFormatTest {
     }
 
     private String pageJson(TracePage page) {
-        return codec.mapper().writerWithDefaultPrettyPrinter().writeValueAsString(page.toMap(codec.mapper())) + "\n";
+        // 换行一律 \n：Jackson 默认的缩进用系统的换行，Windows 上是 \r\n，期望文件是 LF（windows-server N9）
+        return codec.mapper().writer().with(LF_PRETTY).writeValueAsString(page.toMap(codec.mapper())) + "\n";
     }
 
     @Test

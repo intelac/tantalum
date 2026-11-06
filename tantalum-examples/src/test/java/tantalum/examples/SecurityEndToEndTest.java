@@ -2,6 +2,7 @@ package tantalum.examples;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.net.URLEncoder;
 import java.net.http.HttpRequest;
@@ -16,6 +17,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.web.TestServer;
 import tantalum.value.model.StopReason;
@@ -91,6 +93,7 @@ class SecurityEndToEndTest {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
                     "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
             Thread.sleep(500);
+            assumeTrue(PrivateFiles.posix(data), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
             List<String> exposed = exposed(data);
             assertTrue(exposed.isEmpty(), "readable by others while running: " + exposed);
         }

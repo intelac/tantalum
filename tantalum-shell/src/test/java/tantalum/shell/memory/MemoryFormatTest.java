@@ -60,6 +60,19 @@ class MemoryFormatTest {
         }
     }
 
+    /** windows-server 需求 3.3：记忆名加 .md 是文件名，Windows 设备名不行，拒绝的原因单独写明。 */
+    @Test
+    void windowsDeviceNamesAreRejectedWithTheirOwnReason() {
+        for (String reserved : new String[] {"nul", "con", "com1", "lpt0"}) {
+            assertFalse(MemoryFormat.isValidName(reserved), reserved);
+            MemoryStore.WriteResult.Rejected rejected = MemoryFormat.validate(reserved, "user", "d", "c", 100).orElseThrow();
+            assertEquals(MemoryStore.Problem.RESERVED_NAME, rejected.problem());
+            assertEquals(reserved + " is a reserved device name on Windows; choose another name", rejected.reason());
+        }
+        assertTrue(MemoryFormat.isValidName("nul-notes"));
+        assertEquals(MemoryStore.Problem.INVALID_NAME, MemoryFormat.validate("NUL", "user", "d", "c", 100).orElseThrow().problem());
+    }
+
     @Test
     void validationExplainsEachRule() {
         assertTrue(MemoryFormat.validate("ok", "user", "d", "c", 100).isEmpty());

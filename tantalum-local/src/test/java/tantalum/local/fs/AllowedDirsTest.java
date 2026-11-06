@@ -9,10 +9,15 @@ import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 /** 前半段从服务器上的 {@code WorkspaceTest} 搬来，断言不变（只有报错的措辞换成“allowed directories”）；后半段是多个目录（L12、需求 2.2）。 */
 class AllowedDirsTest {
+
+    /** 只在 Windows 上跳过的原因。 */
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上显示的路径用 \\ 分隔，怎么显示归 Windows 连接程序 spec";
 
     @TempDir
     Path temp;
@@ -166,6 +171,7 @@ class AllowedDirsTest {
 
     /** 一个允许的目录在另一个里面：两种写法都到同一个真实路径，显示时按主目录写相对路径。 */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void nestedDirectoriesResolveToTheSameFile() throws Exception {
         Path sub = Files.createDirectory(root.resolve("sub"));
         Files.writeString(sub.resolve("x.txt"), "x");

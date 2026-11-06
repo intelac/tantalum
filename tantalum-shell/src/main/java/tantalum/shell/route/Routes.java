@@ -27,6 +27,7 @@ public final class Routes implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(Routes.class);
     public static final Duration REFRESH = Duration.ofMinutes(10);
+    private static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
 
     /** 一条路线的客户端和列表，由 {@code boot} 按种类建：Claude 的两者共用一个 SDK 客户端。{@code apiKey} 可以为 null。 */
     @FunctionalInterface
@@ -61,6 +62,16 @@ public final class Routes implements AutoCloseable {
         return create(settings, defaultRoute, builder, injected, env, windowFromModel, clock, REFRESH);
     }
 
+    /**
+     * 缺密钥时说怎么设。Windows 上没有 {@code ~/.config/tantalum/env} 的习惯：设成用户环境变量，计划任务启动的服务也读得到
+     * （windows-server 设计“TantalumApplication”）。
+     */
+    static String keyHint(String env, boolean windows) {
+        return windows
+                ? "for example in PowerShell: [Environment]::SetEnvironmentVariable(\"" + env + "\", \"...\", \"User\"), then open a new PowerShell"
+                : "for example by loading ~/.config/tantalum/env";
+    }
+
     static Routes create(List<RouteSettings> settings, String defaultRoute, Builder builder, RouteClients injected,
                          Function<String, String> env, boolean windowFromModel, Clock clock, Duration refreshEvery) {
         Map<String, Route> routes = new LinkedHashMap<>();
@@ -76,7 +87,7 @@ public final class Routes implements AutoCloseable {
                 if (value == null || value.isBlank()) {
                     if (route.name().equals(defaultRoute)) {
                         throw new IllegalStateException(route.apiKeyEnv() + " is not set, so the default route " + route.name()
-                                + " cannot start. Set it, for example by loading ~/.config/tantalum/env, or make another route "
+                                + " cannot start. Set it, " + keyHint(route.apiKeyEnv(), WINDOWS) + ", or make another route "
                                 + "the default with --tantalum.provider=<route>.");
                     }
                     LOG.warn("route {} is not enabled: the environment variable {} is not set", route.name(), route.apiKeyEnv());

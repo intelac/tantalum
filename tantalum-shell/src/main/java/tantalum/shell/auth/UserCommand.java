@@ -54,6 +54,7 @@ public final class UserCommand {
         } catch (UserStore.Refused refused) {
             Key key = switch (refused.kind()) {
                 case BAD_NAME -> Key.USERS_BAD_NAME;
+                case RESERVED_NAME -> Key.USERS_RESERVED_NAME;
                 case EXISTS -> Key.USERS_EXISTS;
                 case NO_SUCH -> Key.USERS_NO_SUCH;
             };

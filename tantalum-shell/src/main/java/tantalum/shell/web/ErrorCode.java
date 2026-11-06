@@ -63,6 +63,8 @@ public enum ErrorCode {
     PLUGIN_REQUIRED("plugin/required", 400),
     MEMORY_NOT_FOUND("memory/not-found", 404),
     MEMORY_INVALID_NAME("memory/invalid-name", 400),
+    /** Windows 的设备名（con、nul、com1 这类），所有平台都不收（windows-server N5）。 */
+    MEMORY_RESERVED_NAME("memory/reserved-name", 400),
     /** 参数 {@code field}：type、description 或 content。 */
     MEMORY_INVALID("memory/invalid", 400),
     /** 参数 {@code limit}：一条记忆正文的字节数上限。 */
@@ -120,6 +122,7 @@ public enum ErrorCode {
     public static ErrorCode of(MemoryStore.Problem problem) {
         return switch (problem) {
             case INVALID_NAME -> MEMORY_INVALID_NAME;
+            case RESERVED_NAME -> MEMORY_RESERVED_NAME;
             case INVALID -> MEMORY_INVALID;
             case TOO_LONG -> MEMORY_TOO_LONG;
             case FULL -> MEMORY_FULL;

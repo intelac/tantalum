@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.connect.Main.Refused;
 import tantalum.connect.Main.Setup;
@@ -24,6 +26,9 @@ import tantalum.value.text.Language;
 
 /** local-workspace L2、L4、需求 2.1、7.3：连接程序的参数、令牌从哪来、启动说明。 */
 class MainTest {
+
+    /** 只在 Windows 上跳过的原因。 */
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：问候里的 git 检查经 Git.java，标准输入接 /dev/null，归 Windows 连接程序 spec";
 
     /** 已有的断言是中文的：固定用中文跑（console-i18n 任务 12）。 */
     private static final Words ZH = new Words(Language.ZH);
@@ -194,6 +199,7 @@ class MainTest {
      * （L13，需求 4.3）。
      */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void theHelloSaysWhatThisComputerAllows() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
         Path link = Files.createSymbolicLink(temp.resolve("link"), work);

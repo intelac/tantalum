@@ -564,6 +564,7 @@ export const ja: Text = {
     "plugin/required": (name) => `${name} は管理者が必須に設定しているため、オフにできません`,
     "memory/not-found": "このメモリは存在しません",
     "memory/invalid-name": "名前に使えるのは英小文字、数字、ハイフンで、64 文字までです",
+    "memory/reserved-name": "この名前は Windows で予約されています（con、nul、com1 など）。別の名前にしてください",
     "memory/invalid": (field) => `この項目が正しくありません：${field}`,
     "memory/too-long": (limit) => `本文は ${limit} までです`,
     "memory/full": (max) => `メモリがいっぱいです（最大 ${max} 件）。先にいくつか削除してください`,

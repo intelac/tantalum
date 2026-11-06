@@ -584,6 +584,7 @@ export const zh = {
     "plugin/required": (name: string) => `${name} 是管理员设为必须开启的，不能关`,
     "memory/not-found": "这条记忆不存在",
     "memory/invalid-name": "名称只能用小写字母、数字和连字符，最多 64 个",
+    "memory/reserved-name": "这个名称是 Windows 保留的（如 con、nul、com1），请换一个",
     "memory/invalid": (field: string) => `这一项没有填对：${field}`,
     "memory/too-long": (limit: string) => `正文不能超过 ${limit}`,
     "memory/full": (max: string) => `记忆已满（最多 ${max} 条），先删掉一些`,

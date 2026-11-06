@@ -76,7 +76,7 @@
 
 保留名、数据目录检查、浏览器驱动和 `users` 命令的小改动；然后让整个测试套件在 Windows 上能跑（权限断言只在 POSIX 上做、macOS 专用的测试跳过、关掉漏开的文件），再加只在 Windows 上跑的测试。阶段结束时 CI 上 `mvn verify` 全绿。
 
-- [ ] 6. `ReservedName` 和三处名字规则
+- [x] 6. `ReservedName` 和三处名字规则
   - File: value/id/ReservedName.java（新）、value/id/Principal.java、shell/auth/UserStore.java、shell/journal/SessionPaths.java、shell/memory/MemoryFormat.java（改），valuetest/id/ReservedNameTest.java（新），shelltest/journal/SessionPathsTest.java、shelltest/auth/UserStoreTest.java、shelltest/memory/MemoryFormatTest.java（改）
   - 照设计“`ReservedName`”“名字规则”；`UserStore.add` 先判断保留名，给出设计里那句消息；`SessionPaths.encode` 的结果是保留名时把第一个字符写成 `%xx`
   - 部署前再查一次 8091：`~/.local/share/tantalum`（`sessions/`、`attachments/`）和 `~/tantalum-workspace`（各用户的 `memory/`）下有没有名字正好是保留名的文件或目录（2026-11-06 写 spec 时查过，没有）；有就停下来问 Yi
@@ -84,28 +84,28 @@
   - _Requirements: N5, 需求 3.1, 3.2, 3.3_
   - _Prompt: Role: Java 开发 | Task: 拒绝或避开 Windows 保留设备名 | Restrictions: 所有平台同一条规则；不是保留名的名字编码结果不变 | Success: 测试全过，8091 检查结果记进日志_
 
-- [ ] 7. `DataDirCheck`
+- [x] 7. `DataDirCheck`
   - File: shell/boot/DataDirCheck.java（新）、shell/boot/TantalumApplication.java（改），shelltest/boot/DataDirCheckTest.java（新）
   - 照设计“`DataDirCheck`”：只在 Windows 上查；网络路径拒绝；最近一个已存在的上级 `toRealPath` 后不在用户目录下 WARN；卷不支持 `AclFileAttributeView` WARN；三句话照设计原文，`icacls` 里填真实用户名。`userStore` bean 打开数据目录之前调用，拒绝时抛 `IllegalStateException`；`users`、`check`、`browser` 子命令也调用，拒绝时退出码 1
   - 测试：设计“`DataDirCheckTest`”各条（传入事实的那个重载）；真实路径的情况放在任务 11
   - _Requirements: N3, N4, 需求 2.2, 2.3, 2.4, 2.5_
   - _Prompt: Role: Java 后端开发 | Task: 启动时检查数据目录的位置和卷 | Restrictions: 不读不改 ACL；只拒绝网络路径，其余只 WARN；macOS、Linux 上什么都不做 | Success: 测试全过，macOS 上启动日志没有新行_
 
-- [ ] 8. `BrowserDriver` 在 Windows 上的两处
+- [x] 8. `BrowserDriver` 在 Windows 上的两处
   - File: shell/browser/BrowserDriver.java、shell/browser/BrowserCommand.java（改），shelltest/browser/BrowserDriverTest.java（改）
   - 照设计“`BrowserDriver`、`BrowserCommand`”：解压后改名接 `FileSystemException`，目标完整就用它；`installCommand` 加 `windows` 参数，Windows 上不加 `--with-deps`，`BrowserCommand` 打印那一行说明
   - 测试：目标目录已完整、改名抛 `AccessDeniedException` 时用现成的；目标不完整时抛原来的异常；Windows 模式下命令里没有 `--with-deps`
   - _Requirements: N11, 需求 5.3, 5.4_
   - _Prompt: Role: Java 开发 | Task: 让浏览器驱动的解压和安装命令在 Windows 上正确 | Restrictions: macOS、Linux 上的行为不变 | Success: BrowserDriverTest 全过_
 
-- [ ] 9. `users` 命令的输入编码和缺密钥的提示
+- [x] 9. `users` 命令的输入编码和缺密钥的提示
   - File: shell/boot/TantalumApplication.java（改）
   - 照设计“`TantalumApplication`、`UserCommand`”：`System.console()` 不为空且 `isTerminal()` 时按 `Console.charset()` 读密码，否则 UTF-8；缺密钥的提示在 Windows 上写用户环境变量的设法
   - 测试：这一处没有自动测试（要真实的中文控制台，单元测试只能测到 `InputStreamReader` 本身）；验证放在任务 17 的手工检查第 1 条
   - _Requirements: N12, 需求 1.2_
   - _Prompt: Role: Java 开发 | Task: 按控制台编码读密码，Windows 上给对的设密钥提示 | Restrictions: 管道和重定向时照旧 UTF-8 | Success: UserCommandTest 照过，macOS 上行为不变_
 
-- [ ] 10. 测试套件在 Windows 上能跑
+- [-] 10. 测试套件在 Windows 上能跑
   - File: 设计“现状清单 › 测试代码”列出的测试类，加上任务 2 基线里列出的其他失败
   - 检查 600/700 的断言前加 `assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest")`；一个测试方法里既有权限断言又有别的断言时，拆成两个，别的断言在 Windows 上照跑
   - `MxcPolicyTest`、`MxcTest` 这类依赖 `/bin/sh`、`/usr/bin/false` 的，用 `@EnabledOnOs(value = OS.MAC, disabledReason = "…")`，原因写明“macOS 连接程序；Windows 连接程序另开 spec”

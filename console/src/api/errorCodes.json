@@ -36,6 +36,7 @@
     "plugin/required",
     "memory/not-found",
     "memory/invalid-name",
+    "memory/reserved-name",
     "memory/invalid",
     "memory/too-long",
     "memory/full",

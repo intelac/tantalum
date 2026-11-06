@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import tantalum.local.fs.PrivateFiles;
 
 class TextFilesTest {
 
@@ -146,6 +148,7 @@ class TextFilesTest {
         Path fresh = temp.resolve("fresh.txt");
         TextFiles.writeAtomically(fresh, "new".getBytes(StandardCharsets.UTF_8));
         assertEquals("new", Files.readString(fresh));
+        assumeTrue(PrivateFiles.posix(temp), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(fresh)));
 
         Path script = file("run.sh", "old".getBytes(StandardCharsets.UTF_8));
@@ -169,9 +172,11 @@ class TextFilesTest {
     void parentsAreCreatedPrivately() throws IOException {
         Path file = temp.resolve("a/b/c.txt");
         TextFiles.createParents(file);
+        assertTrue(Files.isDirectory(temp.resolve("a/b")));
+        assertFalse(Files.exists(file));
+        assumeTrue(PrivateFiles.posix(temp), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(temp.resolve("a"))));
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(temp.resolve("a/b"))));
-        assertFalse(Files.exists(file));
     }
 
     private List<String> names() throws IOException {

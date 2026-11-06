@@ -12,12 +12,17 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.value.json.Json;
 
 /** core-tools 需求 4 的验收标准，逐条对应。 */
 class ListFindToolsTest {
+
+    /** 只在 Windows 上跳过的原因。 */
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上显示的路径用 \\ 分隔，怎么显示归 Windows 连接程序 spec";
 
     @TempDir
     Path temp;
@@ -76,12 +81,14 @@ class ListFindToolsTest {
 
     // 4.3 不带 / 匹配任意深度的文件名；带 / 按相对路径匹配
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void aPatternWithoutSlashMatchesNamesAtAnyDepth() throws Exception {
         files("A.java", "src/main/B.java", "src/test/BTest.java", "README.md");
         assertEquals("A.java\nsrc/main/B.java\nsrc/test/BTest.java", find.run(context, args("pattern", "*.java")).text());
     }
 
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void aPatternWithSlashMatchesRelativePaths() throws Exception {
         files("src/ATest.java", "src/test/BTest.java", "src/main/B.java", "other/CTest.java");
         assertEquals("src/ATest.java\nsrc/test/BTest.java", find.run(context, args("pattern", "src/**/*Test.java")).text());
@@ -91,6 +98,7 @@ class ListFindToolsTest {
 
     // 4.4 跳过版本库和 node_modules，不跟随符号链接，只返回文件
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void findSkipsRepositoriesDependenciesAndLinks() throws Exception {
         files("a.js", ".git/hooks/b.js", "node_modules/lib/c.js", "web/node_modules/d.js", ".hg/e.js", ".svn/f.js", "lib/g.js");
         Path outside = Files.createDirectory(temp.resolve("outside"));
@@ -103,6 +111,7 @@ class ListFindToolsTest {
 
     // 4.5 超过 1000 个只给前 1000 并写总数；没有结果写明
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void findStopsAt1000AndSaysSo() throws Exception {
         for (int i = 0; i < 1010; i++) {
             files(String.format("d/f%04d.txt", i));
@@ -132,6 +141,7 @@ class ListFindToolsTest {
     }
 
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void resultsAreSortedByPath() throws Exception {
         files(IntStream.of(3, 1, 2).mapToObj(i -> "z" + i + "/a.txt").toArray(String[]::new));
         assertEquals(IntStream.rangeClosed(1, 3).mapToObj(i -> "z" + i + "/a.txt").collect(Collectors.joining("\n")),
@@ -142,6 +152,7 @@ class ListFindToolsTest {
 
     /** 其他允许目录用绝对路径列、找；找到的路径是绝对路径，能原样交给 read_file。 */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void otherAllowedDirectoriesAreListedAndSearchedByAbsolutePath() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other")).toRealPath();
         Files.createDirectories(other.resolve("lib"));

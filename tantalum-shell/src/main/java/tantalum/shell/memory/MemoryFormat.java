@@ -11,6 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tantalum.shell.memory.MemoryStore.Problem;
 import tantalum.shell.memory.MemoryStore.WriteResult.Rejected;
+import tantalum.value.id.ReservedName;
 
 /**
  * 记忆文件格式的纯函数：条目文件（frontmatter + Markdown 正文）和索引行。
@@ -33,6 +34,9 @@ public final class MemoryFormat {
 
     /** 名称、类型、描述、正文的检查；返回空表示通过，否则是拒绝：英文原因给模型和日志，种类和参数给控制台（console-i18n I9）。 */
     public static Optional<Rejected> validate(String name, String type, String description, String content, int maxEntryBytes) {
+        if (name != null && NAME.matcher(name).matches() && ReservedName.matches(name)) {
+            return rejected(Problem.RESERVED_NAME, name + " is a reserved device name on Windows; choose another name", Map.of());
+        }
         if (!isValidName(name)) {
             return rejected(Problem.INVALID_NAME, "name must match [a-z0-9-]{1,64}", Map.of());
         }
@@ -60,8 +64,9 @@ public final class MemoryFormat {
         return Optional.of(new Rejected(problem, reason, params));
     }
 
+    /** 记忆名加 {@code .md} 就是文件名，所以 Windows 的设备名（{@code con}、{@code nul}，{@link ReservedName}）也不行。 */
     public static boolean isValidName(String name) {
-        return name != null && NAME.matcher(name).matches();
+        return name != null && NAME.matcher(name).matches() && !ReservedName.matches(name);
     }
 
     // ---- 条目文件 ----

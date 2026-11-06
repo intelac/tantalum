@@ -30,6 +30,8 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
 import tantalum.value.text.LocalText;
+import tools.jackson.core.util.DefaultIndenter;
+import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -121,7 +123,9 @@ class PluginApiTest {
      */
     @Test
     void pluginPageAsTheConsoleReadsIt() throws Exception {
-        check("plugins.json", JSON.writerWithDefaultPrettyPrinter().writeValueAsString(plugins("alice")) + "\n");
+        // 换行一律 \n：Jackson 默认的缩进用系统的换行，Windows 上是 \r\n，期望文件是 LF（windows-server N9）
+        DefaultPrettyPrinter lf = new DefaultPrettyPrinter().withObjectIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE.withLinefeed("\n"));
+        check("plugins.json", JSON.writer().with(lf).writeValueAsString(plugins("alice")) + "\n");
     }
 
     private static void check(String name, String actual) throws IOException {

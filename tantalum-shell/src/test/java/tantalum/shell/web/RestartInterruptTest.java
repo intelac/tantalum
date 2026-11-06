@@ -3,6 +3,7 @@ package tantalum.shell.web;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionPaths;
@@ -165,6 +167,7 @@ class RestartInterruptTest {
     void indexThatCannotCatchUpRefusesToStart() throws Exception {
         diedDuringTool();
         Path userDir = new SessionPaths(data()).userDir(ALICE);
+        assumeTrue(PrivateFiles.posix(userDir), "读不了、写不进的文件用 POSIX 权限造；Windows 上没有这个办法，读写失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(userDir, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
         try {
             Throwable failure = org.junit.jupiter.api.Assertions.assertThrows(Exception.class, this::server);

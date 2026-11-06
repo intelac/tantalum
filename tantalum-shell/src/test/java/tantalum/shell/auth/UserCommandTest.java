@@ -45,6 +45,9 @@ class UserCommandTest {
         out.reset();
         assertEquals(1, run(Language.EN, "x\n", "reset", "nobody"));
         assertEquals("no such user: nobody", out.toString(StandardCharsets.UTF_8).strip());
+        out.reset();
+        assertEquals(1, run(Language.ZH, "pw\n", "add", "nul"));
+        assertEquals("nul 是 Windows 保留的设备名，不能做用户名。", out.toString(StandardCharsets.UTF_8).strip());
     }
 
     @Test
