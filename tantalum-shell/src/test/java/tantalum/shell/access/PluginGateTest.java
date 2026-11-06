@@ -179,8 +179,45 @@ class PluginGateTest {
     @Test
     void pluginsAreGroupedByTheirPluginName() {
         assertEquals(List.of(
-                new PluginGate.Plugin("citations", "checks citations", List.of("beforeRunEnd", "afterToolExecution", "work:citation"), false),
-                new PluginGate.Plugin("quota", "", List.of("beforeModelCall"), true)), gate.plugins());
+                new PluginGate.Plugin("citations", "checks citations", List.of("beforeRunEnd", "afterToolExecution", "work:citation"), false, true),
+                new PluginGate.Plugin("quota", "", List.of("beforeModelCall"), true, true)), gate.plugins());
+    }
+
+    /** 策略插件默认关（2026-11-06 Yi 定，A2）：用户没设置过时不开，在插件页打开后才生效，只对他自己。 */
+    static final class ReadOnlyPolicy implements KernelHook {
+        @Override public String name() { return "readOnly"; }
+        @Override public boolean defaultEnabled() { return false; }
+        @Override public HookResult beforeToolCall(KernelState state, HookContext context) { return Allow.PLAIN; }
+    }
+
+    @Test
+    void aDefaultOffPluginStaysOffUntilTheUserTurnsItOn() {
+        PluginGate policies = new PluginGate(catalog, switches, LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy(), new CitationHook()),
+                List.of(), List.of(), java.util.Set.of());
+        assertEquals(List.of("citations"), policies.enabledPlugins(ALICE));
+        PluginGate.PluginView view = policies.overview(ALICE).plugins().stream().filter(p -> p.name().equals("readOnly")).findFirst().orElseThrow();
+        assertFalse(view.enabled());
+        assertFalse(view.mandatory(), "default-off policy plugins are optional");
+
+        policies.set(ALICE, Kind.PLUGIN, "readOnly", true);
+        assertEquals(List.of("citations", "readOnly"), policies.enabledPlugins(ALICE));
+        assertEquals(List.of("citations"), policies.enabledPlugins(BOB));
+        policies.set(ALICE, Kind.PLUGIN, "readOnly", false);
+        assertEquals(List.of("citations"), policies.enabledPlugins(ALICE));
+    }
+
+    /** 管理员用 tantalum.hooks.required 强制开启（A2）：默认关的插件对所有人开着，不能关；拼错的名字拒绝启动。 */
+    @Test
+    void anAdminCanRequireADefaultOffPlugin() {
+        PluginGate required = new PluginGate(catalog, switches, LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy()),
+                List.of(), List.of(), java.util.Set.of("readOnly"));
+        assertEquals(List.of("readOnly"), required.enabledPlugins(BOB));
+        assertTrue(required.plugins().getFirst().mandatory());
+        assertThrows(IllegalArgumentException.class, () -> required.set(ALICE, Kind.PLUGIN, "readOnly", false));
+
+        IllegalArgumentException typo = assertThrows(IllegalArgumentException.class, () -> new PluginGate(catalog, switches,
+                LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy()), List.of(), List.of(), java.util.Set.of("readonly")));
+        assertTrue(typo.getMessage().contains("readonly"), typo.getMessage());
     }
 
     /** 策略类钩子（mandatory）的插件不能关，否则用户自己就能绕过额度。 */

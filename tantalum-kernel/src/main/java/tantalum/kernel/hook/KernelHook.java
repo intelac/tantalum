@@ -34,9 +34,28 @@ public interface KernelHook {
         return "";
     }
 
-    /** 强制钩子抛异常时按 {@code Stop} 处理；非强制的跳过并上报（{@code beforeToolCall} 例外，抛异常一律拦截）。 */
+    /**
+     * 必须开启：插件页上不能关，抛异常时按 {@code Stop} 处理（同 {@link #failClosed()}）。管理员也可以用配置
+     * {@code tantalum.hooks.required} 把任何插件设成必须开启，效果相同。
+     */
     default boolean mandatory() {
         return false;
+    }
+
+    /**
+     * 抛异常时按 {@code Stop} 处理；返回 false 的跳过并上报（{@code beforeToolCall} 例外，抛异常一律拦截）。默认同 {@link #mandatory()}。
+     * 用户能关的策略插件（如工具审批）也该返回 true：开着时出了错不能当作放行。
+     */
+    default boolean failClosed() {
+        return mandatory();
+    }
+
+    /**
+     * 用户没在插件页设置过时开不开，默认开。策略类插件（只读、工具审批、每日额度）返回 false，由用户自己打开（2026-11-06 Yi 定）。
+     * 同一个插件里有一个钩子返回 false，整个插件默认就关。必须开启的插件不看这一项。
+     */
+    default boolean defaultEnabled() {
+        return true;
     }
 
     /** 调模型前。放行时补丁生效（追加 system、工具）；{@code Stop} 结束运行；工作做完后再问一次，{@code context.work()} 是结果。 */

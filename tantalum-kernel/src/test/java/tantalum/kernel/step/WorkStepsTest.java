@@ -73,6 +73,40 @@ class WorkStepsTest {
         assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
 
+    /**
+     * A4：工作要求记在会话里的东西（note）在同一步里并进会话状态，onWorkResult 已经看得到；之后的运行、重放都还在。
+     * 失败的工作不记。允许名单因此只来自 journal 里的 WorkDone，钩子不做 I/O。
+     */
+    @Test
+    void aWorkNoteIsMergedIntoTheSessionBeforeHooksSeeIt() {
+        List<Json.Obj> seen = new ArrayList<>();
+        KernelHook reader = new KernelHook() {
+            @Override public String name() { return "reader"; }
+            @Override public HookResult beforeRunEnd(KernelState state, HookContext context) {
+                return context.work() == null ? new NeedWork("check", new Json.Null()) : Allow.PLAIN;
+            }
+            @Override public HookResult onWorkResult(KernelState state, HookContext context) {
+                seen.add(state.sessions().get(context.run().session()).note("check"));
+                return Allow.PLAIN;
+            }
+        };
+        LoopFixture loop = atWork(reader);
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null, null,
+                new Json.Obj(Map.of("write_file", new Json.Bool(true)))));
+        Json.Obj expected = new Json.Obj(Map.of("write_file", new Json.Bool(true)));
+        assertEquals(List.of(expected), seen);
+        assertEquals(expected, loop.session().note("check"));
+        assertEquals(loop.state, Replay.run(loop.kernel, loop.journal).state());
+
+        // 第二个运行里，失败的工作带了 note 也不记；已有的还在
+        loop.prompt("again");
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("y"), StopReason.END_TURN, "m", null, null, null, null));
+        loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "check", new Json.Str("timed out"), true, null, null,
+                new Json.Obj(Map.of("bash", new Json.Bool(true)))));
+        assertEquals(expected, loop.session().note("check"));
+    }
+
     @Test
     void beforeRunEndMayAskForMoreWork() {
         KernelHook always = new KernelHook() {

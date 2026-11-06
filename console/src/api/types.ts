@@ -455,6 +455,20 @@ export interface Chunk {
   text: string;
 }
 
+/** 插件工作在对话页上问用户的问题（如工具审批）：选一个选项交回去。 */
+export interface Question {
+  id: string;
+  title: string;
+  /** 补充说明，如工具参数的 JSON；可以为空。 */
+  detail: string;
+  choices: { id: string; label: string }[];
+}
+
+/** SSE 的 `question` 事件：这个会话的问题变了，再去取。 */
+export interface QuestionChanged {
+  session: string;
+}
+
 /** SSE 的 `PhaseChanged` 事件。 */
 export interface PhaseChanged {
   run: string;

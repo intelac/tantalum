@@ -352,7 +352,7 @@ class ContextHandlerTest {
         });
         Workspaces workspaces = Workspaces.shared(dir);
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
-                new PluginGate(catalog, switches, local, List.of(), List.of(), List.of(), List.of()), memories(workspaces), KnowledgeBase.none(), "",
+                new PluginGate(catalog, switches, local, List.of(), List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
                 noCompaction());
 
         ContextAssembled assembled = assertInstanceOf(ContextAssembled.class, handler.handle(COMMAND));

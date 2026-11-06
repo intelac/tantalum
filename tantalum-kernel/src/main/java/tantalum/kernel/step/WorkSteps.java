@@ -50,6 +50,10 @@ public final class WorkSteps {
         Outcome out = new Outcome(context);
         RunState run = context.run();
         HookPoint origin = run.workOrigin();
+        // 工作要求记在会话里的东西先记下，钩子这一步就能看到（如工具审批的“这个会话里一直允许”）；失败的工作不记
+        if (event.note() != null && !event.failed()) {
+            out.put(out.session(run.ref()).withNote(event.workType(), event.note()));
+        }
 
         HookOutcome hook = out.hooks.run(HookPoint.ON_WORK_RESULT, out.state(),
                 out.hookContext(run.ref()).withWork(event));

@@ -1,24 +1,25 @@
 package tantalum.examples;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Optional;
+import tantalum.shell.plugin.Question;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.WorkType;
 import tantalum.value.json.Json;
 
 /**
- * {@link ToolApprovalHook} 要的工作：把 {@code {"tool","arguments","poll"}} POST 给审批服务，服务回 {@code {"decision":"approved|denied|pending"}}。
- * 待定时钩子会马上再问一次，所以服务应当先等一会儿（长轮询）再回待定。结果原样带回工具、参数和次数，钩子下一轮要用。
- * 认不出的回复按拒绝处理，原因里带上原文前 200 个字：审批没有明确同意就不能执行。连不上时抛异常，工作失败，钩子同样拦截。
+ * {@link ToolApprovalHook} 要的工作：在对话页上问用户“允许调用这个工具吗”，三个选项：允许这一次、这个会话里一直允许、拒绝。
+ * 输入 {@code {"tool","arguments","call","poll"}}；最多等 {@code wait}（要比 {@code tantalum.tool-timeout} 短），没回答就回“待定”，
+ * 钩子马上再问一次，问题一直留在页面上（同一个调用的问题 id 相同）。结果 {@code {"decision":"approved|denied|pending","scope":…}}
+ * 原样带回工具、参数、调用和次数，钩子下一轮要用（失败的工作结果里没有原来的输入）。
+ *
+ * <p>选“这个会话里一直允许”时，结果带 {@code note {"工具名": true}}，内核把它记进会话状态（随 {@code WorkDone} 进 journal），
+ * 钩子之后在这个会话里看到就不再问；别的会话照样问。
  */
 public final class ApprovalWork implements WorkType {
 
@@ -26,16 +27,19 @@ public final class ApprovalWork implements WorkType {
     static final String APPROVED = "approved";
     static final String DENIED = "denied";
     static final String PENDING = "pending";
+    /** 三个选项的 id。 */
+    static final String ONCE = "once";
+    static final String SESSION = "session";
+    static final String DENY = "deny";
+    private static final int SHOWN_ARGUMENT_CHARS = 2000;
 
-    /** 插件 SDK 不带 JSON 库，回复只认这一个字段；前面不能是反斜杠，否则是别的字符串里转义的引号。 */
-    private static final Pattern DECISION = Pattern.compile("(?<!\\\\)\"decision\"\\s*:\\s*\"(approved|denied|pending)\"");
-    private static final int QUOTED_CHARS = 200;
+    private final Duration wait;
 
-    private final URI service;
-    private final HttpClient http = HttpClient.newHttpClient();
-
-    public ApprovalWork(URI service) {
-        this.service = Objects.requireNonNull(service, "service");
+    public ApprovalWork(Duration wait) {
+        if (wait == null || wait.isNegative() || wait.isZero()) {
+            throw new IllegalArgumentException("wait must be positive but was " + wait);
+        }
+        this.wait = wait;
     }
 
     @Override
@@ -49,37 +53,43 @@ public final class ApprovalWork implements WorkType {
     }
 
     @Override
-    public WorkResult run(ToolContext context, Json input) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(service)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(write(input)))
-                .build();
-        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        Matcher matcher = DECISION.matcher(response.body());
-        boolean ok = response.statusCode() / 100 == 2 && matcher.find();
+    public String description() {
+        return "在对话页上问你：允许这一次、这个会话里一直允许，还是拒绝。";
+    }
+
+    @Override
+    public WorkResult run(ToolContext context, Json input) throws InterruptedException {
+        Map<String, Json> asked = input instanceof Json.Obj obj ? obj.fields() : Map.of();
+        String tool = asked.get("tool") instanceof Json.Str name ? name.value() : "";
+        String call = asked.get("call") instanceof Json.Str id ? id.value() : tool;
+        Json arguments = asked.getOrDefault("arguments", new Json.Null());
+        Question question = new Question("approval-" + call, "允许调用 " + tool + " 吗？", shown(arguments), List.of(
+                new Question.Choice(ONCE, "允许这一次"),
+                new Question.Choice(SESSION, "这个会话里一直允许"),
+                new Question.Choice(DENY, "拒绝")));
+        Optional<String> choice = context.questions().ask(context, question, wait);
 
         Map<String, Json> result = new LinkedHashMap<>();
-        result.put("decision", new Json.Str(ok ? matcher.group(1) : DENIED));
-        Map<String, Json> asked = input instanceof Json.Obj obj ? obj.fields() : Map.of();
-        for (String key : new String[] {"tool", "arguments", "poll"}) {
-            result.put(key, asked.getOrDefault(key, new Json.Null()));
+        result.put("decision", new Json.Str(choice.map(id -> id.equals(DENY) ? DENIED : APPROVED).orElse(PENDING)));
+        choice.filter(id -> !id.equals(DENY)).ifPresent(scope -> result.put("scope", new Json.Str(scope)));
+        for (String key : new String[] {"tool", "arguments", "call", "poll"}) {
+            result.put(key, asked.getOrDefault(key, key.equals("poll") ? new Json.Num(BigDecimal.ZERO) : new Json.Null()));
         }
-        if (!ok) {
-            result.put("reason", new Json.Str("unrecognised reply (HTTP " + response.statusCode() + "): " + quoted(response.body())));
-        }
-        return new WorkResult(new Json.Obj(result), null);
+        Json.Obj note = choice.filter(SESSION::equals).isPresent() ? new Json.Obj(Map.of(tool, new Json.Bool(true))) : null;
+        return new WorkResult(new Json.Obj(result), null, note);
     }
 
-    /** 原文前 200 个字，不在代理对中间切开，否则写进 journal 的是一个坏字符。 */
-    private static String quoted(String body) {
-        if (body.length() <= QUOTED_CHARS) {
-            return body;
+    /** 页面上显示的参数：JSON 原文，太长时截断，不在代理对中间切开。 */
+    private static String shown(Json arguments) {
+        String text = write(arguments);
+        if (text.length() <= SHOWN_ARGUMENT_CHARS) {
+            return text;
         }
-        int cut = Character.isHighSurrogate(body.charAt(QUOTED_CHARS - 1)) ? QUOTED_CHARS - 1 : QUOTED_CHARS;
-        return body.substring(0, cut);
+        int cut = Character.isHighSurrogate(text.charAt(SHOWN_ARGUMENT_CHARS - 1)) ? SHOWN_ARGUMENT_CHARS - 1 : SHOWN_ARGUMENT_CHARS;
+        return text.substring(0, cut) + "…";
     }
 
-    /** 把 {@link Json} 写成 JSON 文本。 */
+    /** 把 {@link Json} 写成 JSON 文本（插件 SDK 不带 JSON 库）。 */
     static String write(Json value) {
         StringBuilder out = new StringBuilder();
         write(value, out);

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import tantalum.shell.access.PluginGate;
+import tantalum.shell.plugin.Questions;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.WorkType;
@@ -26,9 +27,16 @@ public final class WorkHandler implements Handler {
     private final PluginGate gate;
     private final Duration timeout;
     private final Clock clock;
+    private final Questions questions;
 
-    /** 工作类型取自 {@code gate}：插件页上列出的和这里能执行的是同一份。 */
+    /** 没有控制台可问时（测试）。 */
     public WorkHandler(Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock) {
+        this(workspaces, gate, timeout, clock, Questions.NONE);
+    }
+
+    /** 工作类型取自 {@code gate}：插件页上列出的和这里能执行的是同一份。{@code questions} 让工作在控制台上问用户。 */
+    public WorkHandler(Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock, Questions questions) {
+        this.questions = questions;
         this.workspaces = workspaces;
         this.gate = gate;
         this.timeout = timeout;
@@ -47,12 +55,13 @@ public final class WorkHandler implements Handler {
         if (type == null) {
             return failed(work, "unknown work type: " + work.workType(), null);
         }
-        ToolContext context = new ToolContext(work.run().principal(), work.run().session(), workspaces.of(work.run().principal()));
+        ToolContext context = new ToolContext(work.run().principal(), work.run().session(), workspaces.of(work.run().principal()),
+                questions);
         // 工作没有名额，几乎等于发出时刻；记下它是为了和模型、工具的计时一致。
         Instant startedAt = clock.instant();
         try {
             WorkResult done = Deadline.call(() -> gate.runWork(context, type, work.input()), timeout);
-            return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText(), startedAt);
+            return new WorkDone(work.id(), work.workType(), done.result(), false, done.continueText(), startedAt, done.note());
         } catch (TimeoutException late) {
             return failed(work, "work timed out after " + timeout, startedAt);
         } catch (ExecutionException failure) {

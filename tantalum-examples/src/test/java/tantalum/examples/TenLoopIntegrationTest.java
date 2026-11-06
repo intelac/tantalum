@@ -41,7 +41,7 @@ class TenLoopIntegrationTest {
 
     private static final List<String> PHASES = List.of(
             "AwaitingContext", "AwaitingModel", "AwaitingTools", "AwaitingModel", "AwaitingTools",
-            "AwaitingModel", "AwaitingTools", "AwaitingModel", "AwaitingWork", "Ended");
+            "AwaitingModel", "AwaitingTools", "AwaitingModel", "AwaitingWork", "AwaitingModel", "Ended");
 
     @TempDir
     Path temp;
@@ -71,14 +71,15 @@ class TenLoopIntegrationTest {
     void tenTurnsThroughTheRealStackAndReplayMatches() throws Exception {
         Path workspace = Files.createDirectory(temp.resolve("workspace"));
         Files.createDirectory(workspace.resolve("alice"));
-        Files.writeString(workspace.resolve("alice/INTEREST.cbl"), "COMPUTE INTEREST = RATE\n");
         Path data = temp.resolve("data");
         ScriptedModelClient model = new ScriptedModelClient(List.of(
                 ScriptedModelClient.tools(call("1", "symbol_search", "{}", new Json.Obj(Map.of()))),
                 ScriptedModelClient.tools(call("2", "grep", "{\"pattern\":\"COMPUTE\"}",
                         new Json.Obj(Map.of("pattern", new Json.Str("COMPUTE"))))),
                 ScriptedModelClient.tools(call("3", "read_symbol", "{}", new Json.Obj(Map.of()))),
-                ScriptedModelClient.answer("It is in INTEREST.cbl:1")));
+                // 没有读过 INTEREST.cbl（grep 因为没连电脑而失败），引用核对让模型改正一次（A3：只看会话里读到的）
+                ScriptedModelClient.answer("It is in INTEREST.cbl:1"),
+                ScriptedModelClient.answer("The COMPUTE INTEREST statement calculates it.")));
 
         String run;
         String turnsBefore;
@@ -118,12 +119,12 @@ class TenLoopIntegrationTest {
             stream.body().close();
         }
 
-        assertEquals(4, model.prompts.size());
+        assertEquals(5, model.prompts.size());
 
         List<EventEnvelope> journal;
         journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
         assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished", "ModelReplied",
-                "ToolFinished", "ModelReplied", "ToolFinished", "ModelReplied", "WorkDone"),
+                "ToolFinished", "ModelReplied", "ToolFinished", "ModelReplied", "WorkDone", "ModelReplied"),
                 journal.stream().map(envelope -> envelope.event().type()).toList());
 
         TransitionTable table = new TransitionTable();

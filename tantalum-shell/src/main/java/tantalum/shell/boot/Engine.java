@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import org.slf4j.Logger;
@@ -60,6 +61,7 @@ import tantalum.shell.model.WindowSource;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.question.OpenQuestions;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
 import tantalum.shell.sse.SseHub;
@@ -101,6 +103,8 @@ public final class Engine implements AutoCloseable {
     private final Storage storage;
     private final StateView view;
     private final SseHub hub;
+    /** 插件工作在控制台上问用户的问题（如工具审批），页面经 {@code QuestionController} 取和回答。 */
+    private final OpenQuestions questions;
     private final MemoryStores memories;
     private final McpRegistry mcp;
     private final ToolCatalog catalog;
@@ -164,7 +168,7 @@ public final class Engine implements AutoCloseable {
                     .start(WINDOW_STARTUP_WAIT);
             compaction = new CompactionPolicy(window, userSettings, limits);
             gate = new PluginGate(catalog, switches, localWorkspace, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
-                    hooks, afterHooks, workTypes);
+                    hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()));
 
             RequestImages requestImages = new RequestImages(storage.attachments);
             Kernel kernel = KernelFactory.kernel(properties, catalog.safety(), hooks);
@@ -176,6 +180,7 @@ public final class Engine implements AutoCloseable {
             view = new StateView();
             TurnQuery turns = new TurnQuery(storage.paths, storage.records, codec.mapper());
             hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
+            questions = new OpenQuestions(clock, hub::question);
             queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths,
                     storage.records::read),
                     turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)));
@@ -194,7 +199,7 @@ public final class Engine implements AutoCloseable {
                             run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
                             window::refreshSoon),
                     RunTool.class, new ToolHandler(catalog, workspaces, gate, properties.toolTimeout(), clock),
-                    DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock),
+                    DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock, questions),
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
@@ -255,6 +260,11 @@ public final class Engine implements AutoCloseable {
 
     public SseHub hub() {
         return hub;
+    }
+
+    /** 插件工作问用户的、还没回答的问题。 */
+    public OpenQuestions questions() {
+        return questions;
     }
 
     /** 插件开关和唯一的调用入口，插件页接口用它。 */
