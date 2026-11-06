@@ -15,8 +15,8 @@ public record Principal(String value) {
         }
     }
 
-    /** 能注册成用户名：可以直接用作目录名，不含路径分隔符，也不可能是 {@code ..}。 */
+    /** 能注册成用户名：可以直接用作目录名，不含路径分隔符，也不可能是 {@code ..} 或 Windows 的设备名（{@link ReservedName}）。 */
     public static boolean isUsable(String name) {
-        return name != null && USABLE.matcher(name).matches();
+        return name != null && USABLE.matcher(name).matches() && !ReservedName.matches(name);
     }
 }

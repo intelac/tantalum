@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.value.json.Json;
 
 /** core-tools 需求 2、3 的验收标准，逐条对应。 */
@@ -61,6 +63,7 @@ class WriteEditToolsTest {
     }
 
     private String mode(String path) throws Exception {
+        assumeTrue(PrivateFiles.posix(root), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         return PosixFilePermissions.toString(Files.getPosixFilePermissions(root.resolve(path)));
     }
 
@@ -81,6 +84,7 @@ class WriteEditToolsTest {
     @Test
     void overwritingAFileReadInThisSessionKeepsItsMode() throws Exception {
         Files.writeString(root.resolve("run.sh"), "echo old\n");
+        assumeTrue(PrivateFiles.posix(root), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         Files.setPosixFilePermissions(root.resolve("run.sh"), PosixFilePermissions.fromString("rwxr-x---"));
         read("run.sh");
         assertEquals("Updated run.sh (9 bytes).", write("run.sh", "echo new\n").text());
@@ -249,6 +253,7 @@ class WriteEditToolsTest {
     @Test
     void anEditKeepsTheMode() throws Exception {
         readable("run.sh", "echo a\n");
+        assumeTrue(PrivateFiles.posix(root), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         Files.setPosixFilePermissions(root.resolve("run.sh"), PosixFilePermissions.fromString("rwxr-xr-x"));
         read("run.sh");
         edit("run.sh", "echo a", "echo b");

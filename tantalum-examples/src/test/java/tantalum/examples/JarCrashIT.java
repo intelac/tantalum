@@ -398,7 +398,9 @@ class JarCrashIT {
                 first.destroyForcibly();
             }
             assertTrue(first.waitFor(10, TimeUnit.SECONDS));
-            assertEquals(137, first.exitValue(), "SIGKILL ends the JVM with 128 + 9");
+            // macOS、Linux 上是 SIGKILL（128 + 9）；Windows 上 destroyForcibly 是 TerminateProcess，JDK 给的退出码是 1（windows-server N10）
+            boolean windows = System.getProperty("os.name", "").startsWith("Windows");
+            assertEquals(windows ? 1 : 137, first.exitValue(), "the JVM was killed, not stopped");
 
             Map<String, List<String>> beforeRestart = journal(data);
             // 回过“已接受”的提交被杀之后都在文件里（one-line-journal 需求 2.1）

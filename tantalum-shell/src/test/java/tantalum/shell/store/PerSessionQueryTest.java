@@ -2,6 +2,7 @@ package tantalum.shell.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +23,7 @@ import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.conversation.TranscriptItem;
 import tantalum.shell.journal.EventCodec;
@@ -162,6 +164,7 @@ class PerSessionQueryTest {
     }
 
     private void unreadable(Principal principal, SessionId session) throws Exception {
+        assumeTrue(PrivateFiles.posix(paths.sessionFile(principal, session)), "读不了、写不进的文件用 POSIX 权限造；Windows 上没有这个办法，读写失败的处理和平台无关，在 macOS 上测");
         Files.setPosixFilePermissions(paths.sessionFile(principal, session), PosixFilePermissions.fromString("---------"));
     }
 

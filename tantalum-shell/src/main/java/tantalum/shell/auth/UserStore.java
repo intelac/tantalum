@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import tantalum.local.fs.PrivateFiles;
 import tantalum.value.id.Principal;
+import tantalum.value.id.ReservedName;
 
 /** 用户表。单独的 SQLite 文件，不进 journal；密码只存 Argon2id 哈希。 */
 public final class UserStore implements AutoCloseable {
@@ -53,7 +54,7 @@ public final class UserStore implements AutoCloseable {
     /** 用户名不能用、已经有了、没有这个用户。命令行按种类换成用户的语言（{@code UserCommand}）；消息是英文，给日志。 */
     public static final class Refused extends IllegalArgumentException {
 
-        public enum Kind { BAD_NAME, EXISTS, NO_SUCH }
+        public enum Kind { BAD_NAME, RESERVED_NAME, EXISTS, NO_SUCH }
 
         private final Kind kind;
         private final String name;
@@ -74,6 +75,9 @@ public final class UserStore implements AutoCloseable {
     }
 
     public synchronized void add(String name, String password) throws SQLException {
+        if (ReservedName.matches(name)) {
+            throw new Refused(Refused.Kind.RESERVED_NAME, name, name + " is reserved by Windows and cannot be a user name.");
+        }
         if (!Principal.isUsable(name)) {
             throw new Refused(Refused.Kind.BAD_NAME, name, "user name may only contain a-z, 0-9, - and _: " + name);
         }

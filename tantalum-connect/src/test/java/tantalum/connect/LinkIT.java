@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
@@ -180,6 +181,10 @@ class LinkIT {
         assertFalse(printed().contains(token.substring(3)), "token in the terminal");
         try (Stream<Path> files = Files.walk(temp.resolve("data"))) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
+                if (!PrivateFiles.posix(file) && file.getFileName().toString().equals("store.lock")) {
+                    // 服务器拿着的进程锁，从来不写内容；Windows 上 LockFileEx 是强制锁，别的句柄读不了（windows-server N8）
+                    continue;
+                }
                 String bytes = new String(Files.readAllBytes(file), StandardCharsets.ISO_8859_1);
                 assertFalse(bytes.contains(token.substring(3)), "token stored in " + file);
             }

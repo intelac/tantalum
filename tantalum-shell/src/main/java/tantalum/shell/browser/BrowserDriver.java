@@ -6,7 +6,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -38,6 +38,7 @@ public final class BrowserDriver {
     private static final Logger LOG = LoggerFactory.getLogger(BrowserDriver.class);
     /** Playwright 认的系统属性：设了就用这个目录里的 {@code node} 和 {@code package/cli.js}，不再往临时目录解压。 */
     static final String CLI_DIR = "playwright.cli.dir";
+    static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
     private static final String PREFIX = "driver-";
     private static final String PART = ".part-";
     /** 别的进程（比如同时跑的 {@code browser install}）可能正在解压；这么久没动的临时目录才算残留。 */
@@ -86,7 +87,7 @@ public final class BrowserDriver {
         long started = System.nanoTime();
         try {
             unpack.into(part);
-            Path node = node(part);
+            Path node = node(part, WINDOWS);
             if (Files.isRegularFile(node) && !Files.isExecutable(node) && !node.toFile().setExecutable(true, false)) {
                 throw new IOException("cannot make the bundled Node.js executable");
             }
@@ -95,8 +96,9 @@ public final class BrowserDriver {
             }
             try {
                 Files.move(part, target, StandardCopyOption.ATOMIC_MOVE);
-            } catch (FileAlreadyExistsException other) {
-                // 另一个进程刚解压好同一个版本，用它的
+            } catch (FileSystemException other) {
+                // 另一个进程刚解压好同一个版本，用它的。目标目录已存在时 macOS、Linux 报 FileAlreadyExists 或
+                // DirectoryNotEmpty，Windows 报 AccessDenied（windows-server N11），都按目标是否完整判断。
                 if (!complete(target)) {
                     throw other;
                 }
@@ -135,11 +137,12 @@ public final class BrowserDriver {
     }
 
     static boolean complete(Path dir) {
-        return Files.isExecutable(node(dir)) && Files.isRegularFile(dir.resolve("package").resolve("cli.js"));
+        return Files.isExecutable(node(dir, WINDOWS)) && Files.isRegularFile(dir.resolve("package").resolve("cli.js"));
     }
 
-    private static Path node(Path dir) {
-        return dir.resolve(System.getProperty("os.name", "").toLowerCase().contains("windows") ? "node.exe" : "node");
+    /** {@code driver-bundle} 里各平台的 Node：Windows 上是 {@code node.exe}。 */
+    static Path node(Path dir, boolean windows) {
+        return dir.resolve(windows ? "node.exe" : "node");
     }
 
     /**
@@ -148,7 +151,10 @@ public final class BrowserDriver {
      */
     public int install(boolean withDeps, PrintStream out, CliText text) throws IOException, InterruptedException {
         Path dir = ensure();
-        ProcessBuilder builder = new ProcessBuilder(installCommand(dir, withDeps)).inheritIO();
+        if (withDeps && WINDOWS) {
+            out.println(text.say(CliText.Key.BROWSER_WITH_DEPS_IGNORED));
+        }
+        ProcessBuilder builder = new ProcessBuilder(installCommand(dir, withDeps, WINDOWS)).inheritIO();
         builder.environment().remove("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD");
         out.println(text.say(CliText.Key.BROWSER_INSTALLING, Map.of("version", version)));
         long started = System.nanoTime();
@@ -158,11 +164,14 @@ public final class BrowserDriver {
         return code;
     }
 
-    /** {@code --no-remove}：不顺手删掉这台机器上别的程序还在用的旧版浏览器（Playwright 默认会删“没人用的”）。 */
-    static List<String> installCommand(Path dir, boolean withDeps) {
-        List<String> command = new ArrayList<>(List.of(node(dir).toString(), dir.resolve("package").resolve("cli.js").toString(),
+    /**
+     * {@code --no-remove}：不顺手删掉这台机器上别的程序还在用的旧版浏览器（Playwright 默认会删“没人用的”）。
+     * {@code --with-deps} 只对 Linux 有意义，Windows 上不加（{@link #install} 已经说明）。
+     */
+    static List<String> installCommand(Path dir, boolean withDeps, boolean windows) {
+        List<String> command = new ArrayList<>(List.of(node(dir, windows).toString(), dir.resolve("package").resolve("cli.js").toString(),
                 "install", "--no-remove"));
-        if (withDeps) {
+        if (withDeps && !windows) {
             command.add("--with-deps");
         }
         command.add("chromium-headless-shell");

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +15,7 @@ import java.time.ZoneOffset;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.access.PluginSwitches.Key;
 import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.auth.UserStore;
@@ -103,6 +105,7 @@ class PluginSwitchesTest {
             assertFalse(switches.enabled(ALICE, Kind.TOOL, "edit_file"));
             assertTrue(users.verify("alice", "a-long-password"));
         }
+        assumeTrue(PrivateFiles.posix(data), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(data.resolve(UserStore.FILE))));
     }
 

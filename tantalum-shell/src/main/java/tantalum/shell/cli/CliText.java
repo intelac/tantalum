@@ -24,6 +24,7 @@ public final class CliText {
         USERS_PASSWORD_REQUIRED,
         USERS_DONE,
         USERS_BAD_NAME,
+        USERS_RESERVED_NAME,
         USERS_EXISTS,
         USERS_NO_SUCH,
         CHECK_DIFFERENT,
@@ -33,7 +34,11 @@ public final class CliText {
         BROWSER_USAGE,
         BROWSER_INSTALLING,
         BROWSER_DONE,
-        BROWSER_FAILED
+        BROWSER_FAILED,
+        BROWSER_WITH_DEPS_IGNORED,
+        DATA_DIR_NETWORK_SHARE,
+        DATA_DIR_OUTSIDE_PROFILE,
+        DATA_DIR_NO_ACL
     }
 
     /** 去掉 {@code --lang} 以后的参数和选出的语言。 */

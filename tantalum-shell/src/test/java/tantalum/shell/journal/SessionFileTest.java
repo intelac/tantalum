@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
@@ -81,6 +83,7 @@ class SessionFileTest {
         SessionPaths paths = new SessionPaths(dir);
         SessionFile.open(paths, ALICE, S1).close();
         Path file = paths.sessionFile(ALICE, S1);
+        assumeTrue(PrivateFiles.posix(file), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file.getParent())));
         assertEquals("rwx------", PosixFilePermissions.toString(Files.getPosixFilePermissions(paths.sessionsDir())));

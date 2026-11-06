@@ -21,11 +21,14 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.value.json.Json;
 
 /** 五个 Git 工具（local-workspace L5、需求 3.2）：输出、截断、拒绝当成选项的参数、不改仓库、不是仓库时报错。 */
+@DisabledOnOs(value = OS.WINDOWS, disabledReason = "连接程序目前只在 macOS 上运行：Git.java 的标准输入接 /dev/null，Windows 上没有，归 Windows 连接程序 spec")
 class GitToolsTest {
 
     @TempDir

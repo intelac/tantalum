@@ -67,7 +67,7 @@ class WorkspaceIsolationTest {
 
     private String read(String user, String session, String path) throws Exception {
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"" + path + "\"}").statusCode());
+                "{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"" + path.replace("\\", "\\\\") + "\"}").statusCode());
         String runs = "";
         for (int i = 0; i < 500 && !runs.contains("COMPLETED"); i++) {
             Thread.sleep(10);

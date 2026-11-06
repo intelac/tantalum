@@ -12,9 +12,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 class ObservationsTest {
+
+    /** 只在 Windows 上跳过的原因。 */
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上 fileKey() 为空，换掉的文件只按大小和时间认不出来，归 Windows 连接程序 spec";
 
     private static final String ONE = "one";
     private static final String TWO = "two";
@@ -77,6 +82,7 @@ class ObservationsTest {
 
     /** 改名替换会换 inode，大小和时间碰巧一样也认得出来。 */
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void aReplacedFileCountsAsAChange() throws Exception {
         Path file = file("x");
         observations.record(ONE, file);
