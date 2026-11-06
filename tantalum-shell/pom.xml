@@ -18,6 +18,14 @@
       <artifactId>tantalum-value</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- BundleChecks：资源文件三种语言齐不齐（console-i18n I14）。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-value</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>dev.tantalum</groupId>
       <artifactId>tantalum-kernel</artifactId>

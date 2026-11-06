@@ -47,7 +47,8 @@ public class SecurityConfig {
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, failure) -> {
                     response.setStatus(401);
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"not_authenticated\"}");
+                    // 代码同 web.ErrorCode.AUTH_NOT_AUTHENTICATED（auth 不依赖 web，这里写字面值；ErrorCodeTest 比对）
+                    response.getWriter().write("{\"error\":\"not_authenticated\",\"code\":\"auth/not-authenticated\"}");
                 }))
                 .authorizeHttpRequests(rules -> rules
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()

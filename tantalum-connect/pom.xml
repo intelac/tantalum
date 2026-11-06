@@ -24,6 +24,14 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- BundleChecks：资源文件三种语言齐不齐（console-i18n I14）。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-value</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
     <!-- 只给 LinkIT：同一个 JVM 里起真的服务器。 -->
     <dependency>
       <groupId>dev.tantalum</groupId>

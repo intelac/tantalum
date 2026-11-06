@@ -10,6 +10,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.cli.CliText;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.store.RecordCheck;
 
@@ -26,16 +27,16 @@ final class RecordCheckCommand {
 
     private RecordCheckCommand() {}
 
-    static int run(String[] args, PrintStream out) {
+    static int run(String[] args, PrintStream out, CliText text) {
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(Config.class)
                 .web(WebApplicationType.NONE).bannerMode(Banner.Mode.OFF).logStartupInfo(false).run(args)) {
             TantalumProperties properties = context.getBean(TantalumProperties.class);
             List<KernelHook> hooks = context.getBeanProvider(KernelHook.class).orderedStream().toList();
             List<Tool> tools = context.getBeanProvider(Tool.class).orderedStream().toList();
             Kernel kernel = KernelFactory.kernel(properties, KernelFactory.safety(properties, tools), hooks);
-            return RecordCheck.print(RecordCheck.run(properties.dataDir(), kernel), out);
+            return RecordCheck.print(RecordCheck.run(properties.dataDir(), kernel), out, text);
         } catch (Exception failure) {
-            out.println("check failed: " + failure.getMessage());
+            out.println(text.say(CliText.Key.CHECK_FAILED, java.util.Map.of("detail", String.valueOf(failure.getMessage()))));
             return 2;
         }
     }

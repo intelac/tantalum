@@ -138,6 +138,7 @@ class AttachmentStoreTest {
         AttachmentRejected rejected = assertThrows(AttachmentRejected.class,
                 () -> store.upload(ALICE, "big.txt", "text/plain", endless, -1));
         assertEquals(Reason.TOO_LARGE, rejected.reason());
+        assertEquals(java.util.Map.of("limit", 10L), rejected.params(), "上限的字节数，不预先格式化");
         assertEquals(List.of(), list(objects(ALICE)));
         assertEquals(List.of(objects(ALICE)), list(objects(ALICE).getParent()));
     }
@@ -148,7 +149,7 @@ class AttachmentStoreTest {
         upload(store, ALICE, "a.txt", text("123456"));
         AttachmentRejected full = assertThrows(AttachmentRejected.class, () -> upload(store, ALICE, "b.txt", text("abcdef")));
         assertEquals(Reason.QUOTA_FULL, full.reason());
-        assertEquals("附件配额已满", full.getMessage());
+        assertEquals("the attachment quota is full", full.getMessage());
         // 没报长度时按上限算，所以也会先拒绝；别人的配额各算各的。
         assertEquals(Reason.QUOTA_FULL, assertThrows(AttachmentRejected.class,
                 () -> store.upload(ALICE, "c.txt", "text/plain", new ByteArrayInputStream(text("1")), -1)).reason());

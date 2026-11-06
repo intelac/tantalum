@@ -26,6 +26,7 @@ import { useEventStream } from "../store/events";
 import { fetchOlderTrace } from "../trace/hooks";
 import { TraceStore } from "../trace/TraceStore";
 import { loginPath, navigate, sessionPath, statsPath, tracePath, useRoute, type Route } from "./router";
+import { errorLine } from "../text/errors";
 
 // 页签 ID 就是路由的页面名，选中状态直接比较。值是页签名在 t.tabs 里的键，渲染时按当前语言取。
 const TABS = [
@@ -113,7 +114,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
         <Sidebar
           sessions={list}
           loading={sessions.isPending}
-          error={sessions.error?.message ?? null}
+          error={sessions.error === null ? null : errorLine(sessions.error)}
           currentSession={route.session}
           rail={rail}
           onToggle={toggle}

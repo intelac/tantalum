@@ -50,12 +50,35 @@ public final class UserStore implements AutoCloseable {
         return new UserStore(connection);
     }
 
+    /** 用户名不能用、已经有了、没有这个用户。命令行按种类换成用户的语言（{@code UserCommand}）；消息是英文，给日志。 */
+    public static final class Refused extends IllegalArgumentException {
+
+        public enum Kind { BAD_NAME, EXISTS, NO_SUCH }
+
+        private final Kind kind;
+        private final String name;
+
+        Refused(Kind kind, String name, String message) {
+            super(message);
+            this.kind = kind;
+            this.name = name;
+        }
+
+        public Kind kind() {
+            return kind;
+        }
+
+        public String name() {
+            return name;
+        }
+    }
+
     public synchronized void add(String name, String password) throws SQLException {
         if (!Principal.isUsable(name)) {
-            throw new IllegalArgumentException("user name may only contain a-z, 0-9, - and _: " + name);
+            throw new Refused(Refused.Kind.BAD_NAME, name, "user name may only contain a-z, 0-9, - and _: " + name);
         }
         if (find(name).isPresent()) {
-            throw new IllegalArgumentException("user already exists: " + name);
+            throw new Refused(Refused.Kind.EXISTS, name, "user already exists: " + name);
         }
         try (PreparedStatement insert = connection.prepareStatement(
                 "INSERT INTO users (name, password_hash, created_at) VALUES (?, ?, ?)")) {
@@ -116,7 +139,7 @@ public final class UserStore implements AutoCloseable {
             update.setString(1, value);
             update.setString(2, name);
             if (update.executeUpdate() == 0) {
-                throw new IllegalArgumentException("no such user: " + name);
+                throw new Refused(Refused.Kind.NO_SUCH, name, "no such user: " + name);
             }
         }
     }

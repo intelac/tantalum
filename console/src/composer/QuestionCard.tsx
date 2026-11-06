@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { answerQuestion, ApiError, listQuestions } from "../api/client";
 import type { Question } from "../api/types";
-import { useText } from "../text";
+import { useLanguage, useText } from "../text";
+import { errorLine } from "../text/errors";
+import { pick } from "../text/localText";
 import { Button } from "../ui/Button";
 
 export function questionsKey(session: string) {
@@ -36,18 +38,22 @@ export function QuestionCards({ session }: { session: string }) {
 
 function QuestionCard({ session, question }: { session: string; question: Question }) {
   const text = useText().conversation;
+  const language = useLanguage();
   const queries = useQueryClient();
   const answer = useMutation({
     mutationFn: (choice: string) => answerQuestion(session, question.id, choice),
     onSettled: () => queries.invalidateQueries({ queryKey: questionsKey(session) }),
   });
   const failure = answer.error;
+  // 问题是插件作者写的，按看的人的语言选，没有就用英文（console-i18n I10）
+  const title = pick(question.title, language);
+  const detail = pick(question.detail, language);
   return (
-    <div role="group" aria-label={question.title} className="rounded-md border border-warning/50 bg-raised p-3 shadow-sm">
-      <p className="text-sm font-medium text-fg">{question.title}</p>
-      {question.detail !== "" && (
+    <div role="group" aria-label={title} className="rounded-md border border-warning/50 bg-raised p-3 shadow-sm">
+      <p className="text-sm font-medium text-fg">{title}</p>
+      {detail !== "" && (
         <pre className="mt-1.5 max-h-32 overflow-auto rounded-xs bg-code px-2 py-1 font-mono text-[11px] break-all whitespace-pre-wrap text-fg-muted">
-          {question.detail}
+          {detail}
         </pre>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -59,13 +65,13 @@ function QuestionCard({ session, question }: { session: string; question: Questi
             disabled={answer.isPending}
             onClick={() => answer.mutate(choice.id)}
           >
-            {choice.label}
+            {pick(choice.label, language)}
           </Button>
         ))}
       </div>
       {failure !== null && (
         <p role="alert" className="mt-1.5 text-xs text-danger">
-          {failure instanceof ApiError && failure.status === 404 ? text.questionGone : text.answerFailed(failure.message)}
+          {failure instanceof ApiError && failure.status === 404 ? text.questionGone : text.answerFailed(errorLine(failure))}
         </p>
       )}
     </div>

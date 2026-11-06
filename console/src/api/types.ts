@@ -2,9 +2,20 @@
 
 export type SubmitMode = "prompt" | "steer" | "follow-up";
 
+/** 控制台的语言（console-i18n I1）。 */
+export type Language = "zh" | "en" | "ja";
+
+/** 登录和 `/api/auth/me` 的返回。`language` 是存在服务器上的选择，null 表示跟随浏览器（I3）。 */
 export interface User {
   username: string;
+  language?: Language | null;
 }
+
+/** 插件作者写给人看的文字（I10）：一个字符串照原样显示，带语言的按用户的语言选，没有就用英文。 */
+export type LocalText = string | { en: string; zh?: string; ja?: string };
+
+/** 接口错误的参数：只有数字和名字（I9）。 */
+export type ErrorParam = string | number | readonly string[];
 
 export interface Config {
   provider: string;
@@ -473,10 +484,10 @@ export interface Chunk {
 /** 插件工作在对话页上问用户的问题（如工具审批）：选一个选项交回去。 */
 export interface Question {
   id: string;
-  title: string;
+  title: LocalText;
   /** 补充说明，如工具参数的 JSON；可以为空。 */
-  detail: string;
-  choices: { id: string; label: string }[];
+  detail: LocalText;
+  choices: { id: string; label: LocalText }[];
 }
 
 /** SSE 的 `question` 事件：这个会话的问题变了，再去取。 */
@@ -529,7 +540,7 @@ export interface McpServerView {
 
 export interface HookPlugin {
   name: string;
-  description: string;
+  description: LocalText;
   /** 挂在哪些位置：钩子方法名、afterToolExecution、work:<工作类型>。 */
   points: string[];
   mandatory: boolean;
@@ -569,7 +580,8 @@ export interface LocalLink {
   git: boolean;
   write: boolean;
   /** 命令行不能用时 reason 写明原因，如 “--allow-shell was not given”。 */
-  shell: { available: boolean; reason?: string | null };
+  /** `code`、`params` 是同一个原因的代码和参数（I12）；老版本连接程序只送英文的 `reason`。 */
+  shell: { available: boolean; reason?: string | null; code?: string | null; params?: Record<string, string> | null };
   network: boolean;
   connectedAt: string;
   expiresAt: string;
@@ -603,6 +615,8 @@ export interface UserSettingsView {
     points: CompactionPoint[];
   };
   model?: ModelChoice | null;
+  /** null 表示跟随浏览器（console-i18n I3）。 */
+  language?: Language | null;
 }
 
 // ---- 模型路线（`/api/models`，model-picker）----

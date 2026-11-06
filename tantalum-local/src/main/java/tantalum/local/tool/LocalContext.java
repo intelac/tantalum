@@ -3,6 +3,7 @@ package tantalum.local.tool;
 import java.util.Objects;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Sandbox;
+import tantalum.local.sandbox.Unavailable;
 
 /**
  * 一次调用的上下文：哪个会话、能进哪些目录、先读后写的记录、跑命令用的沙箱。连接程序只服务一个用户，用户由它在调用前核对，所以这里只有会话。
@@ -10,7 +11,7 @@ import tantalum.local.sandbox.Sandbox;
 public record LocalContext(String session, AllowedDirs dirs, Observations observations, Sandbox sandbox) {
 
     /** 没有命令沙箱时（没有 {@code --allow-shell}、测试）。 */
-    static final Sandbox NO_SANDBOX = Sandbox.unavailable("--allow-shell was not given");
+    static final Sandbox NO_SANDBOX = Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED));
 
     public LocalContext {
         Objects.requireNonNull(session, "session");

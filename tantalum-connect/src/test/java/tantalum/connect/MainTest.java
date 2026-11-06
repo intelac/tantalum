@@ -20,9 +20,13 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.connect.Main.Refused;
 import tantalum.connect.Main.Setup;
 import tantalum.local.wire.Hello;
+import tantalum.value.text.Language;
 
 /** local-workspace L2、L4、需求 2.1、7.3：连接程序的参数、令牌从哪来、启动说明。 */
 class MainTest {
+
+    /** 已有的断言是中文的：固定用中文跑（console-i18n 任务 12）。 */
+    private static final Words ZH = new Words(Language.ZH);
 
     /** 测试用的假令牌，格式和真的一样。 */
     private static final String TOKEN = "tc_" + "A".repeat(43);
@@ -54,7 +58,7 @@ class MainTest {
     }
 
     private Setup setup(String... args) throws Refused {
-        return Main.setup(Main.Options.parse(args), ENV, answering(null));
+        return Main.setup(Main.Options.parse(args, ZH), ENV, answering(null), ZH);
     }
 
     /** 需求 2.1：一个 {@code --allow} 都没给时拒绝启动。 */
@@ -121,48 +125,48 @@ class MainTest {
         Map<String, String> env = Map.of("TANTALUM_TOKEN", TOKEN, "HOME", home.toString());
         Path link = Files.createSymbolicLink(temp.resolve("me"), home);
         for (String dir : List.of(home.toString(), link.toString(), home + "/work/..")) {
-            Refused refused = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", dir}), env, answering(null)), dir);
+            Refused refused = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", dir}, ZH), env, answering(null), ZH), dir);
             assertTrue(refused.getMessage().contains("不能是家目录"), refused.getMessage());
             assertTrue(refused.getMessage().contains("--allow ."), refused.getMessage());
             assertTrue(refused.getMessage().contains(home.toRealPath().resolve("work/shop").toString()), refused.getMessage());
         }
-        Refused root = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", "/"}), env, answering(null)));
+        Refused root = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", "/"}, ZH), env, answering(null), ZH));
         assertTrue(root.getMessage().contains("不能是根目录"), root.getMessage());
-        assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", project.toString(), "--allow", home.toString()}),
-                env, answering(null)), "not as a second directory either");
+        assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", project.toString(), "--allow", home.toString()}, ZH),
+                env, answering(null), ZH), "not as a second directory either");
         assertEquals(List.of(new Hello.Root(project.toRealPath().toString())),
-                Main.setup(Main.Options.parse(new String[] {"--allow", project.toString()}), env, answering(null)).hello().roots());
-        assertEquals(1, Main.run(new String[] {"--allow", home.toString()}, env, answering(null), out));
+                Main.setup(Main.Options.parse(new String[] {"--allow", project.toString()}, ZH), env, answering(null), ZH).hello().roots());
+        assertEquals(1, Main.run(new String[] {"--allow", home.toString(), "--lang", "zh"}, env, answering(null), out));
         assertTrue(printed().contains("不能是家目录"), printed());
     }
 
     @Test
     void unknownOptionsAndMissingValuesAreRefused() {
-        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow", work.toString(), "--yes"}));
-        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow"}));
-        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow", work.toString(), "extra"}));
+        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow", work.toString(), "--yes"}, ZH));
+        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow"}, ZH));
+        assertThrows(Refused.class, () -> Main.Options.parse(new String[] {"--allow", work.toString(), "extra"}, ZH));
     }
 
     /** L2：令牌先看环境变量，没有就在终端问，不回显。 */
     @Test
     void theTokenComesFromTheEnvironmentOrAQuietPrompt() throws Exception {
-        assertEquals(TOKEN, Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}), ENV, answering(null)).token());
+        assertEquals(TOKEN, Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}, ZH), ENV, answering(null), ZH).token());
         assertTrue(asked.isEmpty());
 
-        Setup prompted = Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}), Map.of(), answering("  " + TOKEN + "\n"));
+        Setup prompted = Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}, ZH), Map.of(), answering("  " + TOKEN + "\n"), ZH);
         assertEquals(TOKEN, prompted.token());
         assertEquals(1, asked.size());
 
         Refused noConsole = assertThrows(Refused.class,
-                () -> Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}), Map.of(), answering(null)));
+                () -> Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}, ZH), Map.of(), answering(null), ZH));
         assertTrue(noConsole.getMessage().contains("TANTALUM_TOKEN"));
     }
 
     /** 粘错了东西：说不像令牌，但不回显粘进来的内容。 */
     @Test
     void somethingThatIsNotATokenIsRefusedWithoutEchoingIt() {
-        Refused refused = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}),
-                Map.of("TANTALUM_TOKEN", "sk-secret-value"), answering(null)));
+        Refused refused = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", work.toString()}, ZH),
+                Map.of("TANTALUM_TOKEN", "sk-secret-value"), answering(null), ZH));
         assertFalse(refused.getMessage().contains("sk-secret-value"));
     }
 
@@ -171,7 +175,7 @@ class MainTest {
     void theSetupNeverPrintsTheToken() throws Exception {
         Setup setup = setup("--allow", work.toString());
         assertFalse(setup.toString().contains(TOKEN.substring(3)));
-        Main.summary(setup, out);
+        Main.summary(setup, out, ZH);
         assertFalse(printed().contains(TOKEN.substring(3)));
     }
 
@@ -197,7 +201,7 @@ class MainTest {
         assertEquals(List.of(new Hello.Root(work.toString()), new Hello.Root(other.toString())), hello.roots());
         assertTrue(hello.git(), "git is installed on this machine; neither directory is a repository");
         assertTrue(hello.write());
-        assertEquals(new Hello.Shell(false, "--allow-shell was not given"), hello.shell());
+        assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of()), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
         assertEquals(2, hello.protocol());
@@ -223,7 +227,7 @@ class MainTest {
     void theSummarySaysWhatIsAllowed() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
         Main.summary(setup("--allow", work.toString(), "--allow", other.toString(), "--allow-shell", "--mxc",
-                temp.resolve("no-mxc").toString()), out);
+                temp.resolve("no-mxc").toString()), out, ZH);
         String summary = printed();
         assertTrue(summary.contains("http://127.0.0.1:8091"), summary);
         assertTrue(summary.contains(work.toString()));

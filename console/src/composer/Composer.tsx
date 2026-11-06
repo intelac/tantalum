@@ -7,6 +7,7 @@ import { AttachmentTray } from "../attachment/AttachmentTray";
 import { DropZone } from "../attachment/DropZone";
 import { draftAttachments } from "../attachment/drafts";
 import { admit, DEFAULT_LIMITS, isImage } from "../attachment/limits";
+import { errorLine } from "../text/errors";
 import { formatBytes } from "../text/format";
 import { useQueue } from "../attachment/useQueue";
 import { useText } from "../text";
@@ -51,7 +52,8 @@ export function Composer({
 }: Props) {
   const t = useText();
   const [text, setText] = useState(() => readDraft(session));
-  const [error, setError] = useState<string | null>(null);
+  // 本地的提示是字符串；接口的失败存原样，显示时才变成文字（text/errors.ts）
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const queue = draftAttachments(session);
@@ -138,7 +140,7 @@ export function Composer({
         await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments, choice);
       } catch (failure) {
         failedContent.current = signature;
-        setError(failure instanceof Error ? failure.message : String(failure));
+        setError(failure);
         return;
       }
       requestId.current = null;
@@ -167,7 +169,7 @@ export function Composer({
     try {
       await cancelRun(activeRun);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      setError(failure);
     }
   }
 
@@ -179,7 +181,7 @@ export function Composer({
       <DropZone limitsText={dropLimits} onFiles={addFiles} onRef={addRef} onRefused={setError} />
       {error !== null && (
         <p role="alert" className="px-3 text-xs text-danger">
-          {error}
+          {errorLine(error)}
         </p>
       )}
       {waiting && (

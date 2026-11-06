@@ -12,15 +12,20 @@ import java.util.Objects;
  */
 public interface Sandbox extends AutoCloseable {
 
-    /** 能不能用；不能用时 {@code reason} 写明原因，给用户看。 */
-    record Status(boolean available, String reason) {
+    /** 能不能用；不能用时 {@code why} 是原因的代码和参数（console-i18n I12）。 */
+    record Status(boolean available, Unavailable why) {
 
         public static Status ok() {
             return new Status(true, null);
         }
 
-        public static Status unavailable(String reason) {
-            return new Status(false, Objects.requireNonNull(reason, "reason"));
+        public static Status unavailable(Unavailable why) {
+            return new Status(false, Objects.requireNonNull(why, "why"));
+        }
+
+        /** 原因的英文，给模型和老版本服务器；能用时为 null。 */
+        public String reason() {
+            return why == null ? null : why.english();
         }
     }
 
@@ -43,8 +48,9 @@ public interface Sandbox extends AutoCloseable {
     default void close() {}
 
     /** 不能用的沙箱：没有 {@code --allow-shell}、找不到 MXC 等。 */
-    static Sandbox unavailable(String reason) {
-        Status status = Status.unavailable(reason);
+    static Sandbox unavailable(Unavailable why) {
+        Status status = Status.unavailable(why);
+        String reason = why.english();
         return new Sandbox() {
             @Override
             public Status check() {

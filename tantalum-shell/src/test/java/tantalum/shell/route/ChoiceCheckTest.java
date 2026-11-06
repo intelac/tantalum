@@ -46,22 +46,28 @@ class ChoiceCheckTest {
         routes.close();
     }
 
-    private Optional<String> problem(String route, String model, String effort) {
+    private Optional<ChoiceCheck.Problem> problem(String route, String model, String effort) {
         return check.problem(new ModelChoice(route, model, effort), false, false);
+    }
+
+    /** 种类和参数：控制台按这两样说给人听（console-i18n I9），诊断是英文。 */
+    private static Optional<String> shown(Optional<ChoiceCheck.Problem> problem) {
+        problem.ifPresent(found -> assertFalse(found.diagnostic().matches(".*[\\u3400-\\u9fff].*"), found.diagnostic()));
+        return problem.map(found -> found.kind() + " " + new java.util.TreeMap<>(found.params()));
     }
 
     @Test
     void eachRowOfTheErrorTable() {
         String[][] rows = {
-            {"local-2", "qwen", null, "模型路线 local-2 现在不可用，请换一个模型"},
-            {"down", "qwen", null, "模型路线 down 现在不可用，请换一个模型"},
-            {"claude", "claude-opus-4-5", "high", "模型 claude-opus-4-5 现在不提供，请换一个"},
-            {"claude", "claude-sonnet-4-6", "xhigh", "Claude Sonnet 4.6 没有“很高”这一档，可选：低、中、高、最高"},
-            {"claude", "claude-sonnet-4-6", null, "Claude Sonnet 4.6 要选一个思考档位，可选：低、中、高、最高"},
-            {"local", "qwen", "on", "Name of qwen 没有思考档位"},
+            {"local-2", "qwen", null, "ROUTE_UNAVAILABLE {route=local-2}"},
+            {"down", "qwen", null, "ROUTE_UNAVAILABLE {route=down}"},
+            {"claude", "claude-opus-4-5", "high", "MODEL_NOT_OFFERED {model=claude-opus-4-5}"},
+            {"claude", "claude-sonnet-4-6", "xhigh", "LEVEL_UNKNOWN {level=xhigh, levels=[low, medium, high, max], model=Claude Sonnet 4.6}"},
+            {"claude", "claude-sonnet-4-6", null, "LEVEL_REQUIRED {levels=[low, medium, high, max], model=Claude Sonnet 4.6}"},
+            {"local", "qwen", "on", "NO_LEVELS {model=Name of qwen}"},
         };
         for (String[] row : rows) {
-            assertEquals(Optional.of(row[3]), problem(row[0], row[1], row[2]), String.join(" ", java.util.Arrays.asList(row).subList(0, 3)));
+            assertEquals(Optional.of(row[3]), shown(problem(row[0], row[1], row[2])), String.join(" ", java.util.Arrays.asList(row).subList(0, 3)));
         }
         assertEquals(Optional.empty(), problem("claude", "claude-sonnet-4-6", "max"));
         assertEquals(Optional.empty(), problem("local", "qwen", null));
@@ -70,10 +76,10 @@ class ChoiceCheckTest {
     @Test
     void toolChangesAndImagesDependOnTheModel() {
         ModelChoice sonnet46 = new ModelChoice("claude", "claude-sonnet-4-6", "medium");
-        assertEquals(Optional.of("这个会话中途改过工具，Claude Sonnet 4.6 不支持，请换一个模型"), check.problem(sonnet46, true, false));
+        assertEquals(Optional.of("TOOL_CHANGES {model=Claude Sonnet 4.6}"), shown(check.problem(sonnet46, true, false)));
         assertEquals(Optional.empty(), check.problem(sonnet46, false, false), "a session without tool changes can pick it");
         assertEquals(Optional.empty(), check.problem(new ModelChoice("claude", "claude-sonnet-5-5", "high"), true, true));
-        assertEquals(Optional.of("当前选的模型不支持图片"), check.problem(new ModelChoice("local", "qwen", null), false, true));
+        assertEquals(Optional.of("NO_IMAGES {}"), shown(check.problem(new ModelChoice("local", "qwen", null), false, true)));
         assertTrue(check.usable(sonnet46));
         assertFalse(check.usable(new ModelChoice("down", "qwen", null)));
     }

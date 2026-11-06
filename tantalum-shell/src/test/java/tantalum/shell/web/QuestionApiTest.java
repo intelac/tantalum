@@ -24,6 +24,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.value.text.LocalText;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -31,8 +32,8 @@ import tools.jackson.databind.json.JsonMapper;
 class QuestionApiTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final Question APPROVE = new Question("approval-c1", "允许调用 bash 吗？", "{}",
-            List.of(new Question.Choice("once", "允许这一次"), new Question.Choice("deny", "拒绝")));
+    private static final Question APPROVE = new Question("approval-c1", LocalText.en("Allow calling bash?").zh("允许调用 bash 吗？"), LocalText.of("{}"),
+            List.of(new Question.Choice("once", LocalText.en("Allow once").zh("允许这一次")), new Question.Choice("deny", LocalText.of("拒绝"))));
 
     @TempDir
     Path temp;
@@ -75,7 +76,10 @@ class QuestionApiTest {
             questions = open("alice");
         }
         assertEquals("approval-c1", questions.get(0).get("id").asString());
-        assertEquals("允许这一次", questions.get(0).get("choices").get(0).get("label").asString());
+        // console-i18n 需求 4.5：带语言的是对象，英文在前；只写了一种的是字符串
+        assertEquals("{\"en\":\"Allow calling bash?\",\"zh\":\"允许调用 bash 吗？\"}", questions.get(0).get("title").toString());
+        assertEquals("允许这一次", questions.get(0).get("choices").get(0).get("label").get("zh").asString());
+        assertEquals("拒绝", questions.get(0).get("choices").get(1).get("label").asString());
         assertTrue(open("bob").isEmpty(), "bob does not see alice's question");
 
         assertEquals(404, server.post("bob", "/api/sessions/s1/questions/approval-c1", "{\"choice\":\"once\"}").statusCode());
@@ -83,7 +87,9 @@ class QuestionApiTest {
         assertEquals(400, server.post("alice", "/api/sessions/s1/questions/approval-c1", "{}").statusCode());
         assertEquals(200, server.post("alice", "/api/sessions/s1/questions/approval-c1", "{\"choice\":\"deny\"}").statusCode());
         assertEquals(Optional.of("deny"), asked.get(5, TimeUnit.SECONDS));
-        assertEquals(404, server.post("alice", "/api/sessions/s1/questions/approval-c1", "{\"choice\":\"once\"}").statusCode());
+        HttpResponse<String> gone = server.post("alice", "/api/sessions/s1/questions/approval-c1", "{\"choice\":\"once\"}");
+        assertEquals(404, gone.statusCode());
+        assertTrue(gone.body().contains("\"code\":\"question/gone\""), gone.body());
         assertTrue(open("alice").isEmpty());
     }
 }

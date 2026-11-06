@@ -21,8 +21,19 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 
-@AnalyzeClasses(packages = "tantalum", importOptions = ImportOption.DoNotIncludeTests.class)
+@AnalyzeClasses(packages = "tantalum", importOptions = {ImportOption.DoNotIncludeTests.class, ArchitectureTest.NoTestJars.class})
 class ArchitectureTest {
+
+    /**
+     * 别的模块的测试包（{@code tantalum-value} 的 {@code BundleChecks} 等）打包后是 {@code -tests.jar}，DoNotIncludeTests 认不出来；
+     * {@code mvn test} 时它们是 test-classes 目录，{@code mvn verify} 时是 jar，两种都排除。
+     */
+    static final class NoTestJars implements ImportOption {
+        @Override
+        public boolean includes(com.tngtech.archunit.core.importer.Location location) {
+            return !location.contains("-tests.jar");
+        }
+    }
 
     @ArchTest
     static final ArchRule valueDependsOnNoOtherLayer = noClasses()
@@ -44,6 +55,12 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.shell.local..")
             .and().doNotHaveFullyQualifiedName("tantalum.shell.local.LocalTokens")
             .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
+
+    /** 资源文件只经 {@code Bundle} 读：直接用 {@code ResourceBundle} 的默认读法会回退到系统语言（console-i18n I14）。 */
+    @ArchTest
+    static final ArchRule onlyBundleReadsResourceBundles = noClasses()
+            .that().doNotHaveFullyQualifiedName("tantalum.value.text.Bundle")
+            .should().dependOnClassesThat().haveFullyQualifiedName("java.util.ResourceBundle");
 
     @ArchTest
     static final ArchRule kernelDoesNotDependOnShell = noClasses()

@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.cli.CliText;
+import tantalum.value.text.Language;
 
 /** record-results 任务 12：{@code check} 命令读服务器的配置建内核，不开端口、不写数据目录。 */
 class RecordCheckCommandTest {
@@ -23,7 +25,7 @@ class RecordCheckCommandTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         int code = RecordCheckCommand.run(new String[] {"--tantalum.data-dir=" + data, "--tantalum.workspace=" + dir.resolve("ws")},
-                new PrintStream(out, true, StandardCharsets.UTF_8));
+                new PrintStream(out, true, StandardCharsets.UTF_8), CliText.of(Language.EN));
 
         assertEquals(0, code, out.toString(StandardCharsets.UTF_8));
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("all 0 sessions"));

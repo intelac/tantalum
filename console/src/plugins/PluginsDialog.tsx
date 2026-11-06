@@ -1,7 +1,9 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { HookPlugin, McpServerView, PluginTool } from "../api/types";
-import { lookup, type Text, useText } from "../text";
+import { lookup, type Text, useLanguage, useText } from "../text";
+import { errorLine } from "../text/errors";
+import { pick } from "../text/localText";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { LocalWorkspaceCard } from "./LocalWorkspaceCard";
@@ -29,7 +31,7 @@ export function PluginsDialog({ open, onClose }: Props) {
         )}
         {toggle.isError && (
           <p role="alert" className="text-sm text-danger">
-            {t.plugins.saveFailed(toggle.error.message)}
+            {t.plugins.saveFailed(errorLine(toggle.error))}
           </p>
         )}
         {plugins.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
@@ -148,6 +150,9 @@ function pointName(point: string, text: Text["plugins"]): string {
 
 function HookRow({ plugin, onChange }: { plugin: HookPlugin; onChange: (enabled: boolean) => void }) {
   const t = useText();
+  const language = useLanguage();
+  // 插件作者写的说明：按看的人的语言选，没有就用英文（console-i18n I10）
+  const description = pick(plugin.description, language);
   return (
     <Row
       name={
@@ -162,7 +167,7 @@ function HookRow({ plugin, onChange }: { plugin: HookPlugin; onChange: (enabled:
       }
       detail={
         <>
-          {plugin.description !== "" && <span className="block">{plugin.description}</span>}
+          {description !== "" && <span className="block">{description}</span>}
           <span className="block text-fg-faint">
             {t.plugins.pointsList(plugin.points.map((point) => pointName(point, t.plugins)))}
           </span>

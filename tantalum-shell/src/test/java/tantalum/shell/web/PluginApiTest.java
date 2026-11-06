@@ -29,6 +29,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
+import tantalum.value.text.LocalText;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -40,7 +41,7 @@ class PluginApiTest {
     /** 一个必须开启的策略钩子：用户不能关。 */
     static final class Quota implements KernelHook {
         @Override public String name() { return "dailyQuota"; }
-        @Override public String description() { return "daily limit"; }
+        @Override public LocalText description() { return LocalText.of("daily limit"); }
         @Override public boolean mandatory() { return true; }
         @Override public HookResult beforeModelCall(KernelState state, HookContext context) { return Allow.PLAIN; }
     }
@@ -196,9 +197,13 @@ class PluginApiTest {
 
     @Test
     void mandatoryPluginsAndUnknownNamesAreRefused() throws Exception {
-        assertEquals(400, put("alice", "/api/plugins/plugin/dailyQuota", "{\"enabled\":false}").statusCode());
+        HttpResponse<String> required = put("alice", "/api/plugins/plugin/dailyQuota", "{\"enabled\":false}");
+        assertEquals(400, required.statusCode());
+        assertTrue(required.body().contains("\"code\":\"plugin/required\",\"params\":{\"name\":\"dailyQuota\"}"), required.body());
         assertTrue(named(plugins("alice").get("plugins"), "dailyQuota").get("enabled").asBoolean());
-        assertEquals(404, put("alice", "/api/plugins/tool/nope", "{\"enabled\":false}").statusCode());
+        HttpResponse<String> unknown = put("alice", "/api/plugins/tool/nope", "{\"enabled\":false}");
+        assertEquals(404, unknown.statusCode());
+        assertTrue(unknown.body().contains("\"code\":\"plugin/not-found\",\"params\":{\"name\":\"nope\"}"), unknown.body());
         assertEquals(404, put("alice", "/api/plugins/mcp/nope", "{\"enabled\":false}").statusCode());
         assertEquals(404, put("alice", "/api/plugins/hook/notes", "{\"enabled\":false}").statusCode());
         // 本机工作区的工具没有单独的开关，只有 local 的五个

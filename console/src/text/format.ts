@@ -25,6 +25,11 @@ export function formatBytes(bytes: number): string {
   return `${formatNumber(Number.isInteger(size) ? size : Number(size.toFixed(1)))} ${unit}`;
 }
 
+/** 几个里选一个：“低、中或高”“low, medium, or high”。 */
+export function formatChoices(items: readonly string[], language = currentLanguage()): string {
+  return new Intl.ListFormat(intlLocale(language), { type: "disjunction" }).format(items);
+}
+
 /** 消息下方的时间：当天只显示时分，否则带月日。 */
 export function clockTime(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);

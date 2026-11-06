@@ -8,6 +8,7 @@ import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
+import { errorLine } from "../text/errors";
 
 type View = { kind: "list" } | { kind: "entry"; name: string } | { kind: "add" };
 
@@ -102,7 +103,7 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
       {entry.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
       {entry.isError && (
         <p role="alert" className="text-sm text-danger">
-          {entry.error.message}
+          {errorLine(entry.error)}
         </p>
       )}
       {entry.data !== undefined && (
@@ -122,7 +123,7 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
       )}
       {remove.isError && (
         <p role="alert" className="text-sm text-danger">
-          {remove.error.message}
+          {errorLine(remove.error)}
         </p>
       )}
       <Dialog open={confirming} onClose={() => setConfirming(false)} title={t.memory.confirmDelete} className="max-w-md">
@@ -194,7 +195,7 @@ function AddForm({ onDone }: { onDone: () => void }) {
       </label>
       {create.isError && (
         <p role="alert" className="text-sm text-danger">
-          {create.error.message}
+          {errorLine(create.error)}
         </p>
       )}
       <div className="flex justify-end">

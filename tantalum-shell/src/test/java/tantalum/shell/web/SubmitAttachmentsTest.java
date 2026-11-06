@@ -70,8 +70,10 @@ class SubmitAttachmentsTest {
         return server.post(user, "/api/sessions/s-1/submissions", body);
     }
 
-    private static String error(HttpResponse<String> response) throws Exception {
-        return JSON.readTree(response.body()).get("error").asString();
+    /** 错误的代码和参数（console-i18n I9）：{@code attachment/too-large {"limit":1000}}；诊断是英文，不在这里比。 */
+    private static String code(HttpResponse<String> response) throws Exception {
+        JsonNode body = JSON.readTree(response.body());
+        return body.path("code").asString() + (body.has("params") ? " " + body.get("params") : "");
     }
 
     /** 等提交进了会话历史，返回第一条用户消息。 */
@@ -120,7 +122,7 @@ class SubmitAttachmentsTest {
         HttpResponse<String> foreign = server.post("bob", "/api/sessions/s-2/submissions",
                 "{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"x\",\"attachments\":[{\"id\":\"" + alices + "\",\"name\":\"a.txt\"}]}");
         assertEquals(400, foreign.statusCode());
-        assertEquals("附件不存在或不属于你", error(foreign));
+        assertEquals("attachment/not-found", code(foreign));
         assertEquals(400, submit("alice", "prompt", "x", "[{\"id\":\"sha256:" + "0".repeat(64) + "\"}]").statusCode());
         assertEquals(400, submit("alice", "prompt", "x", "[{\"id\":\"../etc/passwd\"}]").statusCode());
         assertEquals(400, submit("alice", "prompt", "x", "{\"id\":\"" + alices + "\"}").statusCode());
@@ -134,13 +136,13 @@ class SubmitAttachmentsTest {
         String b = upload("alice", "b.png", sample("clean.png")).get("id").asString();
         HttpResponse<String> images = submit("alice", "steer", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
         assertEquals(400, images.statusCode());
-        assertTrue(error(images).contains("最多 1 张图片"), images.body());
+        assertEquals("attachment/too-many-images {\"count\":2,\"max\":1}", code(images));
 
         String f = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         String g = upload("alice", "g.txt", "2".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         HttpResponse<String> files = submit("alice", "follow-up", "x", "[{\"id\":\"" + f + "\"},{\"id\":\"" + g + "\"}]");
         assertEquals(400, files.statusCode());
-        assertTrue(error(files).contains("最多 1 个文件"), files.body());
+        assertEquals("attachment/too-many-files {\"count\":2,\"max\":1}", code(files));
     }
 
     @Test
@@ -150,7 +152,7 @@ class SubmitAttachmentsTest {
         String b = upload("alice", "b.jpg", sample("gps.jpg")).get("id").asString();
         HttpResponse<String> response = submit("alice", "prompt", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
         assertEquals(400, response.statusCode());
-        assertTrue(error(response).contains("图片合计"), response.body());
+        assertEquals("attachment/images-too-large {\"limit\":1000}", code(response));
     }
 
     /** OpenAI 兼容的模型默认不收图片（A7）：带图片的提交拒绝，只带文件的照常。 */
@@ -161,7 +163,7 @@ class SubmitAttachmentsTest {
         String file = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         HttpResponse<String> refused = submit("alice", "prompt", "x", "[{\"id\":\"" + image + "\"}]");
         assertEquals(400, refused.statusCode());
-        assertEquals("当前选的模型不支持图片", error(refused), "the wording of model-picker M15");
+        assertEquals("attachment/model-no-images", code(refused), "model-picker M15");
         assertEquals(200, submit("alice", "prompt", "x", "[{\"id\":\"" + file + "\"}]").statusCode());
     }
 }

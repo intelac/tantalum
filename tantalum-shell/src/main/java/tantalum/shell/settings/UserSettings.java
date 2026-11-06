@@ -19,12 +19,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.text.Language;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 每个用户自己的设置（compaction-threshold T5）。存在 {@code users.db} 的 {@code user_settings} 表里，一行一项，不进 journal：
- * 压缩点，和“上次的选择”（model-picker M7，键 {@code model_choice}，值是 JSON）。按用户缓存在内存里，改的时候先写库再更新缓存。
+ * 压缩点，“上次的选择”（model-picker M7，键 {@code model_choice}，值是 JSON），和控制台的语言（console-i18n I3，键 {@code language}，
+ * 值是 {@code zh}、{@code en}、{@code ja}，没有这一行就是“跟随浏览器”）。按用户缓存在内存里，改的时候先写库再更新缓存。
  */
 public final class UserSettings implements AutoCloseable {
 
@@ -34,6 +36,7 @@ public final class UserSettings implements AutoCloseable {
 
     private static final String COMPACTION_PERCENT = "compaction_percent";
     private static final String MODEL_CHOICE = "model_choice";
+    private static final String LANGUAGE = "language";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final Connection connection;
@@ -41,6 +44,7 @@ public final class UserSettings implements AutoCloseable {
     private final Map<Principal, Integer> percents = new ConcurrentHashMap<>();
     /** 没选过的用户也缓存一份空的，免得每次提问都读库。 */
     private final Map<Principal, Optional<ModelChoice>> choices = new ConcurrentHashMap<>();
+    private final Map<Principal, Optional<Language>> languages = new ConcurrentHashMap<>();
 
     private UserSettings(Connection connection, Clock clock) {
         this.connection = connection;
@@ -121,6 +125,27 @@ public final class UserSettings implements AutoCloseable {
         choices.put(user, Optional.of(choice));
     }
 
+    /** 这个用户选的控制台语言；没选过（跟随浏览器）、或者存的读不懂时为空。 */
+    public Optional<Language> language(Principal user) {
+        Optional<Language> cached = languages.get(user);
+        if (cached != null) {
+            return cached;
+        }
+        Optional<Language> loaded = load(user, LANGUAGE).flatMap(Language::parse);
+        Optional<Language> raced = languages.putIfAbsent(user, loaded);
+        return raced == null ? loaded : raced;
+    }
+
+    /** 空就删掉这一行，回到“跟随浏览器”。只改他自己的。 */
+    public synchronized void setLanguage(Principal user, Optional<Language> language) {
+        if (language.isPresent()) {
+            save(user, LANGUAGE, language.get().id());
+        } else {
+            delete(user, LANGUAGE);
+        }
+        languages.put(user, language);
+    }
+
     private static Optional<ModelChoice> parseChoice(String stored) {
         try {
             JsonNode node = JSON.readTree(stored);
@@ -142,6 +167,16 @@ public final class UserSettings implements AutoCloseable {
             statement.setString(2, name);
             statement.setString(3, value);
             statement.setString(4, clock.instant().toString());
+            statement.executeUpdate();
+        } catch (SQLException failure) {
+            throw new IllegalStateException("cannot save settings for " + user.value(), failure);
+        }
+    }
+
+    private void delete(Principal user, String name) {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_settings WHERE user = ? AND name = ?")) {
+            statement.setString(1, user.value());
+            statement.setString(2, name);
             statement.executeUpdate();
         } catch (SQLException failure) {
             throw new IllegalStateException("cannot save settings for " + user.value(), failure);

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.value.text.LocalText;
 
 /** 插件页按 {@code plugin()} 分组（core-tools C13）。 */
 class PluginNamesTest {
@@ -16,9 +17,9 @@ class PluginNamesTest {
             @Override public WorkResult run(ToolContext context, tantalum.value.json.Json input) { return null; }
         };
         assertEquals("quota", hook.plugin());
-        assertEquals("", hook.description());
+        assertEquals(LocalText.empty(), hook.description());
         assertEquals("lookup", work.plugin());
-        assertEquals("", work.description());
+        assertEquals(LocalText.empty(), work.description());
     }
 
     static final class Shorten implements AfterToolHook {

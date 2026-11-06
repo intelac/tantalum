@@ -21,6 +21,7 @@ import tantalum.value.hook.HookContext;
 import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.state.KernelState;
+import tantalum.value.text.LocalText;
 
 /**
  * 插件的唯一入口（core-tools C16）：组装上下文时给出这个用户开着的工具和钩子插件；执行工具、工具后处理和插件工作前再按当前开关查一次。
@@ -39,7 +40,7 @@ public final class PluginGate {
      * 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项（C13）。
      * {@code mandatory} 是钩子声明的或管理员配置的必须开启；{@code defaultEnabled} 是用户没设置过时开不开。
      */
-    public record Plugin(String name, String description, List<String> points, boolean mandatory, boolean defaultEnabled) {}
+    public record Plugin(String name, LocalText description, List<String> points, boolean mandatory, boolean defaultEnabled) {}
 
     private final ToolCatalog catalog;
     private final PluginSwitches switches;
@@ -145,7 +146,7 @@ public final class PluginGate {
 
     public record ServerView(String name, boolean enabled, List<ToolView> tools) {}
 
-    public record PluginView(String name, String description, List<String> points, boolean mandatory, boolean enabled) {}
+    public record PluginView(String name, LocalText description, List<String> points, boolean mandatory, boolean enabled) {}
 
     public record Overview(List<ToolView> tools, List<ServerView> mcp, List<PluginView> plugins) {}
 
@@ -239,7 +240,7 @@ public final class PluginGate {
                     throw new UnknownPlugin(kind, name);
                 }
                 if (plugin.mandatory() && !enabled) {
-                    throw new IllegalArgumentException("plugin " + name + " is required and cannot be turned off");
+                    throw new RequiredPlugin(name);
                 }
             }
         }
@@ -247,15 +248,37 @@ public final class PluginGate {
     }
 
     public static final class UnknownPlugin extends RuntimeException {
+        private final String name;
+
         UnknownPlugin(Kind kind, String name) {
             super("no such " + kind.key() + ": " + name);
+            this.name = name;
+        }
+
+        /** 插件、工具或服务器的名字，控制台的错误文字要用（console-i18n I9）。 */
+        public String name() {
+            return name;
+        }
+    }
+
+    /** 管理员设为必须开启的插件不能关。 */
+    public static final class RequiredPlugin extends IllegalArgumentException {
+        private final String name;
+
+        RequiredPlugin(String name) {
+            super("plugin " + name + " is required and cannot be turned off");
+            this.name = name;
+        }
+
+        public String name() {
+            return name;
         }
     }
 
     private static Map<String, Plugin> group(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
                                              Set<String> required) {
         Map<String, List<String>> points = new LinkedHashMap<>();
-        Map<String, String> descriptions = new LinkedHashMap<>();
+        Map<String, LocalText> descriptions = new LinkedHashMap<>();
         Map<String, Boolean> mandatory = new LinkedHashMap<>();
         Map<String, Boolean> byDefault = new LinkedHashMap<>();
         for (KernelHook hook : hooks) {
@@ -283,13 +306,13 @@ public final class PluginGate {
                     + "; installed: " + String.join(", ", points.keySet().stream().sorted().toList()));
         }
         Map<String, Plugin> grouped = new LinkedHashMap<>();
-        points.keySet().stream().sorted().forEach(name -> grouped.put(name, new Plugin(name, descriptions.getOrDefault(name, ""),
+        points.keySet().stream().sorted().forEach(name -> grouped.put(name, new Plugin(name, descriptions.getOrDefault(name, LocalText.empty()),
                 points.get(name).stream().distinct().toList(), mandatory.getOrDefault(name, false) || required.contains(name),
                 byDefault.getOrDefault(name, true))));
         return grouped;
     }
 
-    private static String first(String earlier, String later) {
+    private static LocalText first(LocalText earlier, LocalText later) {
         return earlier.isEmpty() ? later : earlier;
     }
 

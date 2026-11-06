@@ -4,6 +4,7 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
+import tantalum.value.text.LocalText;
 
 /** 输出截断：处理器钩子，只改数据，不改流程。 */
 public final class TruncateOutputHook implements AfterToolHook {
@@ -23,8 +24,11 @@ public final class TruncateOutputHook implements AfterToolHook {
     }
 
     @Override
-    public String description() {
-        return "工具结果超过上限时截断，并注明截掉了多少字符。";
+    public LocalText description() {
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        return LocalText.en("Truncates tool results over the limit and notes how many characters were cut.")
+                .zh("工具结果超过上限时截断，并注明截掉了多少字符。")
+                .ja("上限を超えたツール結果を切り詰め、削った文字数を書き添えます。");
     }
 
     /** 不在代理对中间切开，否则截断处是一个坏字符。 */

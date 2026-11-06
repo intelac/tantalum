@@ -29,7 +29,7 @@ public class RunTraceController {
     ResponseEntity<String> turns(@PathVariable String run) {
         Principal user = WebJson.currentUser();
         if (!owns(user, run)) {
-            return json.error(404, "no such run");
+            return json.error(ErrorCode.RUN_NOT_FOUND, "no such run");
         }
         List<Map<String, Object>> summaries = new ArrayList<>();
         for (TurnQuery.Turn turn : engine.queries().turns().turns(user, new RunId(run))) {
@@ -47,12 +47,12 @@ public class RunTraceController {
     ResponseEntity<String> turn(@PathVariable String run, @PathVariable int number) {
         Principal user = WebJson.currentUser();
         if (!owns(user, run)) {
-            return json.error(404, "no such run");
+            return json.error(ErrorCode.RUN_NOT_FOUND, "no such run");
         }
         return engine.queries().turns().turns(user, new RunId(run)).stream()
                 .filter(turn -> turn.number() == number).findFirst()
                 .map(turn -> json.json(200, turn))
-                .orElseGet(() -> json.error(404, "no such turn"));
+                .orElseGet(() -> json.error(ErrorCode.TRACE_NOT_FOUND, "no such turn"));
     }
 
     private boolean owns(Principal user, String run) {

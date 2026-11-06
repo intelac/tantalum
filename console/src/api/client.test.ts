@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { errorText } from "../text/errors";
 import { ApiError, attachmentUrl, createMemory, deleteMemory, getMemory, listMemories, listSessions, login, me, onUnauthorized, submit } from "./client";
 
 function reply(status: number, body: string) {
@@ -37,11 +38,15 @@ describe("client", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  // 文字在显示时才由 text/errors.ts 按语言说（console-i18n I9），这里查错误里带着状态码，说出来还是原来那两句。
   it("maps 429 and 503 to fixed messages", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(503, "")));
-    await expect(submit("s", "prompt", "hi", "r1")).rejects.toThrow(/503/);
+    const halted = await submit("s", "prompt", "hi", "r1").catch((failure: unknown) => failure);
+    expect(halted).toMatchObject({ status: 503, code: null });
+    expect(errorText(halted).message).toMatch(/503/);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(429, "")));
-    await expect(submit("s", "prompt", "hi", "r1")).rejects.toThrow(/429/);
+    const busy = await submit("s", "prompt", "hi", "r1").catch((failure: unknown) => failure);
+    expect(errorText(busy).message).toMatch(/429/);
   });
 
   it("submits with the caller's requestId so retries are idempotent", async () => {

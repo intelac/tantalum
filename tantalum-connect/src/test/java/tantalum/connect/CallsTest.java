@@ -246,7 +246,7 @@ class CallsTest {
     /** {@code --allow-shell} 给了但沙箱不可用：照样拒绝，不会不隔离直接跑（L13）。 */
     @Test
     void anUnavailableSandboxRefusesBashEvenWithAllowShell() throws Exception {
-        Calls calls = new Calls(dirs, true, true, tantalum.local.sandbox.Sandbox.unavailable("找不到 MXC"), journal, Tools.all());
+        Calls calls = new Calls(dirs, true, true, tantalum.local.sandbox.Sandbox.unavailable(tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.MXC_MISSING)), journal, Tools.all());
         calls.welcome("alice");
         calls.call(call("b-1", "alice", "bash"), replies::add);
         assertEquals(Calls.NO_SHELL, reply().text());

@@ -1,7 +1,10 @@
 package tantalum.local.wire;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import tantalum.local.sandbox.Sandbox;
 
 /**
  * 电脑→服务器，连上后的第一条：这台电脑是什么、允许了什么。允许的范围只由连接程序的启动参数决定，服务器据此决定给模型哪些工具，
@@ -37,6 +40,20 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
         }
     }
 
-    /** {@code reason} 只在不能用时有，如 “--allow-shell was not given”。 */
-    public record Shell(boolean available, String reason) {}
+    /**
+     * {@code reason} 只在不能用时有，是英文诊断，如 “--allow-shell was not given”。{@code code}、{@code params} 是同一个原因的代码和参数
+     * （console-i18n I12，如 {@code sandbox/start-failed}、{@code {"detail": …}}），控制台按看的人的语言说；老版本连接程序不送，为 null。
+     * 新字段是可选的，协议版本不变；没有时不写出。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Shell(boolean available, String reason, String code, Map<String, String> params) {
+
+        public Shell(boolean available, String reason) {
+            this(available, reason, null, null);
+        }
+
+        public static Shell of(Sandbox.Status status) {
+            return status.available() ? new Shell(true, null) : new Shell(false, status.reason(), status.why().code().wire(), status.why().params());
+        }
+    }
 }

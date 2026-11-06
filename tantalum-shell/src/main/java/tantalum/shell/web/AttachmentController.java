@@ -52,25 +52,25 @@ public class AttachmentController {
     ResponseEntity<String> upload(@PathVariable String session, @RequestParam(required = false) String name,
                                   @RequestParam(required = false) String type, HttpServletRequest request) {
         if (!isOctetStream(request.getContentType())) {
-            return json.error(415, "请求体要是原始字节（application/octet-stream）");
+            return json.error(415, ErrorCode.REQUEST_INVALID, "the body must be raw bytes (application/octet-stream)");
         }
         Optional<SessionId> id = ApiController.sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         Principal user = WebJson.currentUser();
         int access = engine.intake().access(user, id.get());
         if (access != 200) {
-            return json.error(access, access == 404 ? "no such session" : "session unavailable");
+            return access == 404 ? json.error(ErrorCode.SESSION_NOT_FOUND, "no such session") : json.error(access, ErrorCode.SESSION_UNAVAILABLE, "session unavailable");
         }
         try (InputStream body = request.getInputStream()) {
             AttachmentRef ref = engine.attachments().upload(user, name, type, body, request.getContentLengthLong());
             return json.json(200, describe(ref));
         } catch (AttachmentRejected rejected) {
-            return json.error(status(rejected.reason()), rejected.getMessage());
+            return json.error(status(rejected.reason()), ErrorCode.of(rejected.reason()), rejected.getMessage(), rejected.params());
         } catch (IOException failure) {
             LOG.warn("attachment upload failed: {}", failure.toString());
-            return json.error(500, "附件没有存好，请重试");
+            return json.error(ErrorCode.ATTACHMENT_NOT_STORED, "the attachment was not stored");
         }
     }
 
@@ -83,10 +83,10 @@ public class AttachmentController {
             stored = engine.attachments().find(WebJson.currentUser(), id);
         } catch (IOException failure) {
             LOG.warn("attachment read failed: {}", failure.toString());
-            return json.error(500, "附件读取失败");
+            return json.error(ErrorCode.ATTACHMENT_READ_FAILED, "the attachment could not be read");
         }
         if (stored.isEmpty()) {
-            return json.error(404, "no such attachment");
+            return json.error(ErrorCode.ATTACHMENT_NOT_FOUND, "no such attachment");
         }
         AttachmentStore.Meta meta = stored.get().meta();
         boolean image = "image".equals(meta.kind());
@@ -135,8 +135,8 @@ public class AttachmentController {
 
     static int status(AttachmentRejected.Reason reason) {
         return switch (reason) {
-            case TOO_LARGE, QUOTA_FULL -> 413;
-            case IMAGE_TOO_LARGE, INVALID_IMAGE -> 422;
+            case TOO_LARGE, IMAGE_FILE_TOO_LARGE, QUOTA_FULL -> 413;
+            case IMAGE_TOO_LARGE, IMAGE_TOO_MANY_PIXELS, INVALID_IMAGE -> 422;
             case BUSY -> 503;
         };
     }

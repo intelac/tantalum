@@ -63,7 +63,7 @@ class SaveBeforeAcceptTest {
         try (TestServer server = server()) {
             HttpResponse<String> first = submit(server, "r-lost");
             assertEquals(500, first.statusCode(), first.body());
-            assertTrue(first.body().contains("保存失败"), first.body());
+            assertTrue(first.body().contains("\"code\":\"server/save-failed\""), first.body());
             assertEquals(503, submit(server, "r-lost").statusCode(), "the same request again: the original was not saved");
             assertEquals(503, submit(server, "r-next").statusCode(), "the process stopped handling events");
         } finally {

@@ -5,6 +5,7 @@ import type { TraceSource } from "../../api/types";
 import { currentText, useText } from "../../text";
 import { Tabs } from "../../ui/Tabs";
 import { formatLocal, formatUnix } from "../format";
+import { errorLine } from "../../text/errors";
 
 /** 字段表：值为空的行不显示。 */
 export function Fields({ rows }: { rows: [string, ReactNode][] }) {
@@ -86,5 +87,5 @@ export function TabbedBody({ pages }: { pages: Page[] }) {
 /** 按需加载的请求详情的三种状态。 */
 export function Loading({ error }: { error?: Error | null }) {
   const t = useText().trace;
-  return <p className="text-xs text-fg-faint">{error ? t.record.loadFailed(error.message) : t.record.loading}</p>;
+  return <p className="text-xs text-fg-faint">{error ? t.record.loadFailed(errorLine(error)) : t.record.loading}</p>;
 }

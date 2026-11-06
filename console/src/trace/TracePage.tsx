@@ -13,6 +13,7 @@ import { Timeline } from "./Timeline";
 import { buildTimeline, spansInRange, type TimelineMode, type TimeRange } from "./segments";
 import { Toolbar } from "./Toolbar";
 import type { TraceStore } from "./TraceStore";
+import { errorLine } from "../text/errors";
 
 interface Props {
   store: TraceStore;
@@ -150,7 +151,7 @@ export function TracePage({ store, session, run, record }: Props) {
   if (error !== null && !paging.loaded) {
     return (
       <p role="alert" className="p-4 text-sm text-danger">
-        {error}
+        {errorLine(error)}
       </p>
     );
   }

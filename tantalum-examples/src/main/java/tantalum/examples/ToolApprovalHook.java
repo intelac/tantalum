@@ -15,6 +15,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
+import tantalum.value.text.LocalText;
 
 /**
  * 工具审批（{@code beforeToolCall} + {@code onWorkResult}）：调用列出的工具前在对话页上问用户（{@link ApprovalWork}），
@@ -51,8 +52,11 @@ public final class ToolApprovalHook implements KernelHook {
     }
 
     @Override
-    public String description() {
-        return "调用列出的工具前先在对话页上问你，可以只允许这一次、这个会话里一直允许，或者拒绝。";
+    public LocalText description() {
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        return LocalText.en("Before a listed tool is called, asks you on the conversation page: allow once, always allow in this session, or deny.")
+                .zh("调用列出的工具前先在对话页上问你，可以只允许这一次、这个会话里一直允许，或者拒绝。")
+                .ja("リストにあるツールを呼び出す前に、会話ページで確認します。今回だけ許可、このセッションでは常に許可、または拒否を選べます。");
     }
 
     /** 策略插件：默认关，用户在插件页打开（管理员要对所有人强制开启时写进 {@code tantalum.hooks.required}）；开着时出错按拦截处理。 */

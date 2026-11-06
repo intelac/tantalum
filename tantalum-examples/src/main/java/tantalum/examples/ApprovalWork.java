@@ -11,6 +11,7 @@ import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.WorkType;
 import tantalum.value.json.Json;
+import tantalum.value.text.LocalText;
 
 /**
  * {@link ToolApprovalHook} 要的工作：在对话页上问用户“允许调用这个工具吗”，三个选项：允许这一次、这个会话里一直允许、拒绝。
@@ -53,8 +54,11 @@ public final class ApprovalWork implements WorkType {
     }
 
     @Override
-    public String description() {
-        return "在对话页上问你：允许这一次、这个会话里一直允许，还是拒绝。";
+    public LocalText description() {
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        return LocalText.en("Asks you on the conversation page: allow once, always allow in this session, or deny.")
+                .zh("在对话页上问你：允许这一次、这个会话里一直允许，还是拒绝。")
+                .ja("会話ページで確認します。今回だけ許可、このセッションでは常に許可、または拒否を選べます。");
     }
 
     @Override
@@ -63,10 +67,12 @@ public final class ApprovalWork implements WorkType {
         String tool = asked.get("tool") instanceof Json.Str name ? name.value() : "";
         String call = asked.get("call") instanceof Json.Str id ? id.value() : tool;
         Json arguments = asked.getOrDefault("arguments", new Json.Null());
-        Question question = new Question("approval-" + call, "允许调用 " + tool + " 吗？", shown(arguments), List.of(
-                new Question.Choice(ONCE, "允许这一次"),
-                new Question.Choice(SESSION, "这个会话里一直允许"),
-                new Question.Choice(DENY, "拒绝")));
+        Question question = new Question("approval-" + call,
+                LocalText.en("Allow calling " + tool + "?").zh("允许调用 " + tool + " 吗？").ja(tool + " の呼び出しを許可しますか？"),
+                LocalText.of(shown(arguments)), List.of(
+                new Question.Choice(ONCE, LocalText.en("Allow once").zh("允许这一次").ja("今回だけ許可")),
+                new Question.Choice(SESSION, LocalText.en("Always allow in this session").zh("这个会话里一直允许").ja("このセッションでは常に許可")),
+                new Question.Choice(DENY, LocalText.en("Deny").zh("拒绝").ja("拒否"))));
         Optional<String> choice = context.questions().ask(context, question, wait);
 
         Map<String, Json> result = new LinkedHashMap<>();

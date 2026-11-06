@@ -199,11 +199,14 @@ class ImageNormalizerTest {
         AttachmentRejected edge = assertThrows(AttachmentRejected.class,
                 () -> normalizer.normalize(write("edge.png", pngHeaderOnly(70_000, 10))));
         assertEquals(Reason.IMAGE_TOO_LARGE, edge.reason());
-        assertTrue(edge.getMessage().contains("边长"), edge.getMessage());
+        // console-i18n 任务 9：尺寸和上限作为参数给控制台，消息是英文诊断
+        assertEquals(java.util.Map.of("width", 70_000, "height", 10, "limit", 65_535), edge.params());
+        assertTrue(edge.getMessage().contains("each side"), edge.getMessage());
         AttachmentRejected pixels = assertThrows(AttachmentRejected.class,
                 () -> normalizer.normalize(write("pixels.png", pngHeaderOnly(10_000, 10_000))));
-        assertEquals(Reason.IMAGE_TOO_LARGE, pixels.reason());
-        assertTrue(pixels.getMessage().contains("像素"), pixels.getMessage());
+        assertEquals(Reason.IMAGE_TOO_MANY_PIXELS, pixels.reason());
+        assertEquals(java.util.Map.of("width", 10_000, "height", 10_000, "limit", 64_000_000L), pixels.params());
+        assertTrue(pixels.getMessage().contains("pixels"), pixels.getMessage());
         assertEquals(Reason.INVALID_IMAGE, assertThrows(AttachmentRejected.class,
                 () -> normalizer.normalize(write("small.png", pngHeaderOnly(10, 10)))).reason());
     }

@@ -63,14 +63,14 @@ class MemoryFormatTest {
     @Test
     void validationExplainsEachRule() {
         assertTrue(MemoryFormat.validate("ok", "user", "d", "c", 100).isEmpty());
-        assertTrue(MemoryFormat.validate("Bad", "user", "d", "c", 100).orElseThrow().contains("name"));
-        assertTrue(MemoryFormat.validate("ok", "video", "d", "c", 100).orElseThrow().contains("type"));
-        assertTrue(MemoryFormat.validate("ok", "user", "  ", "c", 100).orElseThrow().contains("description"));
-        assertTrue(MemoryFormat.validate("ok", "user", "two\nlines", "c", 100).orElseThrow().contains("single line"));
-        assertTrue(MemoryFormat.validate("ok", "user", "d".repeat(201), "c", 100).orElseThrow().contains("200"));
-        assertTrue(MemoryFormat.validate("ok", "user", "d", null, 100).orElseThrow().contains("content"));
+        assertTrue(MemoryFormat.validate("Bad", "user", "d", "c", 100).orElseThrow().reason().contains("name"));
+        assertTrue(MemoryFormat.validate("ok", "video", "d", "c", 100).orElseThrow().reason().contains("type"));
+        assertTrue(MemoryFormat.validate("ok", "user", "  ", "c", 100).orElseThrow().reason().contains("description"));
+        assertTrue(MemoryFormat.validate("ok", "user", "two\nlines", "c", 100).orElseThrow().reason().contains("single line"));
+        assertTrue(MemoryFormat.validate("ok", "user", "d".repeat(201), "c", 100).orElseThrow().reason().contains("200"));
+        assertTrue(MemoryFormat.validate("ok", "user", "d", null, 100).orElseThrow().reason().contains("content"));
         // 字节按 UTF-8 算：一个汉字三字节。
-        assertTrue(MemoryFormat.validate("ok", "user", "d", "汉字汉字", 11).orElseThrow().contains("12 bytes"));
+        assertTrue(MemoryFormat.validate("ok", "user", "d", "汉字汉字", 11).orElseThrow().reason().contains("12 bytes"));
         assertTrue(MemoryFormat.validate("ok", "user", "d", "汉字汉字", 12).isEmpty());
     }
 

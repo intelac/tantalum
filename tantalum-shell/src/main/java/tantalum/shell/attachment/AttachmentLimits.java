@@ -1,6 +1,7 @@
 package tantalum.shell.attachment;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
@@ -38,20 +39,31 @@ public record AttachmentLimits(int maxImagesPerMessage, long maxImageBytesPerMes
     }
 
     /** 一条消息里的附件超出哪条限制（A4、A5、需求 2.1）；都没超出时为空。按服务器的元数据算，不看客户端报的。 */
-    public Optional<String> violation(List<AttachmentRef> attachments) {
+    public Optional<Violation> violation(List<AttachmentRef> attachments) {
         long images = attachments.stream().filter(ImageRef.class::isInstance).count();
         long imageBytes = attachments.stream().filter(ImageRef.class::isInstance).mapToLong(AttachmentRef::bytes).sum();
         long files = attachments.size() - images;
         if (images > maxImagesPerMessage) {
-            return Optional.of("一条消息最多 " + maxImagesPerMessage + " 张图片，这条有 " + images + " 张");
+            return Optional.of(new Violation(Violation.Kind.TOO_MANY_IMAGES,
+                    "a message may have at most " + maxImagesPerMessage + " images; this one has " + images,
+                    Map.of("max", maxImagesPerMessage, "count", images)));
         }
         if (imageBytes > maxImageBytesPerMessage) {
-            return Optional.of("一条消息里的图片合计不能超过 " + maxImageBytesPerMessage / MIB + " MiB");
+            return Optional.of(new Violation(Violation.Kind.IMAGES_TOO_LARGE,
+                    "the images in a message may total at most " + maxImageBytesPerMessage + " bytes",
+                    Map.of("limit", maxImageBytesPerMessage)));
         }
         if (files > maxFilesPerMessage) {
-            return Optional.of("一条消息最多 " + maxFilesPerMessage + " 个文件，这条有 " + files + " 个");
+            return Optional.of(new Violation(Violation.Kind.TOO_MANY_FILES,
+                    "a message may have at most " + maxFilesPerMessage + " files; this one has " + files,
+                    Map.of("max", maxFilesPerMessage, "count", files)));
         }
         return Optional.empty();
+    }
+
+    /** 超了哪一条：英文诊断，加上控制台说给人听时要的数字（console-i18n I9）。 */
+    public record Violation(Kind kind, String diagnostic, Map<String, Object> params) {
+        public enum Kind { TOO_MANY_IMAGES, IMAGES_TOO_LARGE, TOO_MANY_FILES }
     }
 
     /** 上传时还不知道是图片还是文件，边读边查用两者中大的；知道类型后再按各自的上限查。 */

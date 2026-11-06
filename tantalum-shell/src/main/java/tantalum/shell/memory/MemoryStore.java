@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -32,8 +33,12 @@ public final class MemoryStore {
     public sealed interface WriteResult {
         record Created(MemoryEntry entry) implements WriteResult {}
         record Updated(MemoryEntry entry) implements WriteResult {}
-        record Rejected(String reason) implements WriteResult {}
+        /** {@code reason} 是英文，原样给模型（memory_write 的结果）；{@code problem} 和 {@code params} 给控制台按语言说。 */
+        record Rejected(Problem problem, String reason, Map<String, Object> params) implements WriteResult {}
     }
+
+    /** 拒绝的种类（console-i18n I9）。 */
+    public enum Problem { INVALID_NAME, INVALID, TOO_LONG, FULL, INDEX_FULL, CREDENTIAL }
 
     private final Path dir;
     private final MemoryLimits limits;
@@ -127,30 +132,31 @@ public final class MemoryStore {
 
     /** 新建或同名覆盖。校验、凭据检查和上限都在这里，调用方只需转达 {@code Rejected.reason()}。 */
     public WriteResult write(String name, String type, String description, String content) {
-        Optional<String> invalid = MemoryFormat.validate(name, type, description, content, limits.maxEntryBytes());
+        Optional<WriteResult.Rejected> invalid = MemoryFormat.validate(name, type, description, content, limits.maxEntryBytes());
         if (invalid.isPresent()) {
-            return new WriteResult.Rejected(invalid.get());
+            return invalid.get();
         }
         Optional<String> credential = CredentialGuard.detect(description, content);
         if (credential.isPresent()) {
             LOG.info("memory write rejected: looks like {}", credential.get());
-            return new WriteResult.Rejected(CredentialGuard.REASON);
+            return new WriteResult.Rejected(Problem.CREDENTIAL, CredentialGuard.REASON, Map.of());
         }
         MemoryEntry entry = new MemoryEntry(name, MemoryType.parse(type).orElseThrow(), description.trim(), content, clock.instant());
         synchronized (this) {
             List<MemoryEntry> existing = list();
             boolean replaces = existing.stream().anyMatch(other -> other.name().equals(name));
             if (!replaces && existing.size() >= limits.maxEntries()) {
-                return new WriteResult.Rejected("memory is full (" + existing.size() + "/" + limits.maxEntries()
-                        + " entries); delete one with memory_delete or merge into an existing entry with memory_write");
+                return new WriteResult.Rejected(Problem.FULL, "memory is full (" + existing.size() + "/" + limits.maxEntries()
+                        + " entries); delete one with memory_delete or merge into an existing entry with memory_write",
+                        Map.of("max", limits.maxEntries()));
             }
             List<MemoryEntry> after = new ArrayList<>(existing.stream().filter(other -> !other.name().equals(name)).toList());
             after.add(entry);
             String index = MemoryFormat.formatIndex(after);
             int indexBytes = MemoryFormat.utf8Length(index);
             if (indexBytes > limits.maxIndexBytes()) {
-                return new WriteResult.Rejected("memory index would be " + indexBytes + " bytes; the limit is "
-                        + limits.maxIndexBytes() + ". Shorten descriptions or delete entries first");
+                return new WriteResult.Rejected(Problem.INDEX_FULL, "memory index would be " + indexBytes + " bytes; the limit is "
+                        + limits.maxIndexBytes() + ". Shorten descriptions or delete entries first", Map.of("limit", limits.maxIndexBytes()));
             }
             try {
                 ensureDirectory();

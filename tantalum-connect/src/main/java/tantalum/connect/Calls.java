@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Sandbox;
+import tantalum.local.sandbox.Unavailable;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
@@ -59,7 +60,7 @@ final class Calls {
 
     /** 测试用：没有命令沙箱、换一套工具。 */
     Calls(AllowedDirs dirs, boolean write, boolean shell, Journal journal, List<LocalTool> tools) {
-        this(dirs, write, shell, Sandbox.unavailable(Main.NO_SHELL_FLAG), journal, tools);
+        this(dirs, write, shell, Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), journal, tools);
     }
 
     Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools) {

@@ -40,6 +40,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
+import tantalum.value.text.Language;
 
 /** 工具审批（A4）：在对话页上问用户，允许这一次 / 这个会话里一直允许 / 拒绝。钩子和工作各自测，不经过管线。 */
 class ToolApprovalHookTest {
@@ -181,9 +182,13 @@ class ToolApprovalHookTest {
         run(questions, 0);
         Question question = questions.asked.getFirst();
         assertEquals("approval-c", question.id(), "the same call keeps the same question across polls");
-        assertTrue(question.title().contains("write_file"));
-        assertEquals("{\"path\":\"a.txt\"}", question.detail());
-        assertEquals(List.of("允许这一次", "这个会话里一直允许", "拒绝"), question.choices().stream().map(Question.Choice::label).toList());
+        for (Language language : Language.values()) {
+            assertTrue(question.title().in(language).contains("write_file"), language.id());
+        }
+        assertEquals("{\"path\":\"a.txt\"}", question.detail().in(Language.EN));
+        assertEquals(List.of("允许这一次", "这个会话里一直允许", "拒绝"), question.choices().stream().map(choice -> choice.label().in(Language.ZH)).toList());
+        assertEquals(List.of("Allow once", "Always allow in this session", "Deny"),
+                question.choices().stream().map(choice -> choice.label().in(Language.EN)).toList());
     }
 
     @Test

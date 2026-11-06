@@ -1,10 +1,11 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
-import { currentText } from "../text";
 import { reportHalted } from "./connection";
 import type {
   AttachmentRef,
   Config,
+  ErrorParam,
+  Language,
   LocalStatus,
   LocalToken,
   LocalValidity,
@@ -28,14 +29,23 @@ import type {
   UserSettingsView,
 } from "./types";
 
+/**
+ * 接口错误：状态码、服务器给的代码和参数（console-i18n I9）、英文诊断。`message` 就是诊断，只给开发者和日志看；
+ * 画面上的文字在渲染时由 `text/errors.ts` 按当前语言说。
+ */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
-    message: string,
+    readonly code: string | null,
+    readonly params: Readonly<Record<string, ErrorParam>>,
+    readonly diagnostic: string,
   ) {
-    super(message);
+    super(diagnostic);
   }
 }
+
+/** 网络断了，请求没有到服务器。 */
+export class NetworkError extends Error {}
 
 type Unauthorized = () => void;
 let unauthorized: Unauthorized = () => undefined;
@@ -65,18 +75,18 @@ async function call<T>(path: string, { quiet401 = false, ...init }: Options = {}
   if (response.status === 401 && !quiet401) unauthorized();
   // 任何接口返回 503 表示服务已停止处理事件，界面要说明。
   if (response.status === 503) reportHalted();
-  if (!response.ok) throw new ApiError(response.status, messageOf(response.status, body));
+  if (!response.ok) throw errorOf(response.status, body);
   return (body === "" ? undefined : JSON.parse(body)) as T;
 }
 
-function messageOf(status: number, body: string): string {
-  const text = currentText().error;
-  if (status === 429) return text.busy;
-  if (status === 503) return text.halted;
+/** 错误的响应体 `{"error", "code", "params"}`；老服务器、代理返回的不是 JSON 时只有状态码。 */
+function errorOf(status: number, body: string): ApiError {
   try {
-    return (JSON.parse(body) as { error?: string }).error ?? text.request(status);
+    const parsed = JSON.parse(body) as { error?: unknown; code?: unknown; params?: unknown };
+    const params = parsed.params !== null && typeof parsed.params === "object" ? (parsed.params as Record<string, ErrorParam>) : {};
+    return new ApiError(status, typeof parsed.code === "string" ? parsed.code : null, params, typeof parsed.error === "string" ? parsed.error : "");
   } catch {
-    return text.request(status);
+    return new ApiError(status, null, {}, "");
   }
 }
 
@@ -153,9 +163,9 @@ export function uploadAttachment(session: string, file: File, onProgress: Upload
       if (request.status === 401) unauthorized();
       if (request.status === 503) reportHalted();
       if (request.status >= 200 && request.status < 300) resolve(JSON.parse(request.responseText) as AttachmentRef);
-      else reject(new ApiError(request.status, messageOf(request.status, request.responseText)));
+      else reject(errorOf(request.status, request.responseText));
     };
-    request.onerror = () => reject(new ApiError(0, currentText().attachment.networkError));
+    request.onerror = () => reject(new NetworkError("network error"));
     request.onabort = () => reject(new DOMException("upload cancelled", "AbortError"));
     signal?.addEventListener("abort", () => request.abort(), { once: true });
     if (signal?.aborted) {
@@ -293,4 +303,9 @@ export function setModelChoice(choice: ModelChoice): Promise<UserSettingsView> {
 /** 只改当前登录用户的压缩点：50、70、85 或 100（用满），返回保存后的设置。 */
 export function setCompactionPercent(percent: number): Promise<UserSettingsView> {
   return call("/api/settings/compaction", { method: "PUT", body: JSON.stringify({ percent }) });
+}
+
+/** 存这个用户的控制台语言；null 是跟随浏览器（console-i18n I3）。只改自己的。 */
+export function saveLanguage(language: Language | null): Promise<UserSettingsView> {
+  return call("/api/settings/language", { method: "PUT", body: JSON.stringify({ language }) });
 }

@@ -73,6 +73,7 @@ class MemoryApiTest {
 
         assertEquals(204, delete("alice", "java").statusCode());
         assertEquals(404, server.get("alice", "/api/memory/java").statusCode());
+        assertTrue(server.get("alice", "/api/memory/java").body().contains("\"code\":\"memory/not-found\""));
         assertEquals(404, delete("alice", "java").statusCode());
     }
 
@@ -82,11 +83,14 @@ class MemoryApiTest {
         HttpResponse<String> badName = server.post("alice", "/api/memory", entry("Bad Name", "user", "d", "c"));
         assertEquals(400, badName.statusCode());
         assertTrue(badName.body().contains("name"), badName.body());
-        assertTrue(server.post("alice", "/api/memory", entry("x", "video", "d", "c")).body().contains("type"));
+        // console-i18n I9：代码加参数给控制台按语言说
+        assertTrue(badName.body().contains("\"code\":\"memory/invalid-name\""), badName.body());
+        assertTrue(server.post("alice", "/api/memory", entry("x", "video", "d", "c")).body().contains("\"code\":\"memory/invalid\",\"params\":{\"field\":\"type\"}"));
         assertTrue(server.post("alice", "/api/memory", "{\"name\":\"x\",\"type\":\"user\",\"content\":\"c\"}").body().contains("description"));
         HttpResponse<String> secret = server.post("alice", "/api/memory", entry("x", "user", "d", "password=hunter2secret"));
         assertEquals(400, secret.statusCode());
         assertTrue(secret.body().contains("credentials"), secret.body());
+        assertTrue(secret.body().contains("\"code\":\"memory/credential\""), secret.body());
         assertFalse(secret.body().contains("hunter2"));
         assertEquals(0, JSON.readTree(server.get("alice", "/api/memory").body()).get("used").asInt());
     }

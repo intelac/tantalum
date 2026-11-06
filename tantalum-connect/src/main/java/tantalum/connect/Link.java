@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -46,23 +47,25 @@ final class Link {
     private final Hello hello;
     private final Calls calls;
     private final PrintStream out;
+    private final Words words;
     private final List<Duration> backoff;
     private final Duration silence;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final CompletableFuture<Void> stopped = new CompletableFuture<>();
     private volatile Session current;
 
-    Link(Main.Setup setup, Calls calls, PrintStream out) {
-        this(setup.socket(), setup.token(), setup.hello(), calls, out, BACKOFF, SILENCE);
+    Link(Main.Setup setup, Calls calls, PrintStream out, Words words) {
+        this(setup.socket(), setup.token(), setup.hello(), calls, out, words, BACKOFF, SILENCE);
     }
 
     /** {@code backoff} 是每次重连前等多久，用完之后一直用最后一个。 */
-    Link(URI socket, String token, Hello hello, Calls calls, PrintStream out, List<Duration> backoff, Duration silence) {
+    Link(URI socket, String token, Hello hello, Calls calls, PrintStream out, Words words, List<Duration> backoff, Duration silence) {
         this.socket = socket;
         this.token = token;
         this.hello = hello;
         this.calls = calls;
         this.out = out;
+        this.words = words;
         this.backoff = List.copyOf(backoff);
         this.silence = silence;
     }
@@ -78,7 +81,7 @@ final class Link {
                         .buildAsync(socket, session).get();
             } catch (ExecutionException failure) {
                 Duration wait = wait(attempt++);
-                out.println("连不上服务器（" + describe(failure.getCause()) + "），" + wait.toSeconds() + " 秒后重试。");
+                out.println(words.say(Words.Key.LINK_RETRY, Map.of("cause", describe(failure.getCause()), "seconds", wait.toSeconds())));
                 if (pause(wait)) {
                     return 0;
                 }
@@ -90,7 +93,7 @@ final class Link {
             if (stopped.isDone()) {
                 return 0;
             }
-            String fatal = fatal(ended);
+            String fatal = fatal(ended, words);
             if (fatal != null) {
                 out.println(fatal);
                 return ENDED_BY_SERVER;
@@ -99,7 +102,8 @@ final class Link {
                 attempt = 0;
             }
             Duration wait = wait(attempt++);
-            out.println((ended.bye == Bye.Reason.SHUTDOWN ? "服务器在关机" : "连接断开") + "，" + wait.toSeconds() + " 秒后重连。");
+            out.println(words.say(ended.bye == Bye.Reason.SHUTDOWN ? Words.Key.LINK_SHUTDOWN : Words.Key.LINK_LOST,
+                    Map.of("seconds", wait.toSeconds())));
             if (pause(wait)) {
                 return 0;
             }
@@ -133,27 +137,26 @@ final class Link {
     }
 
     /** 不再重连的几种结束，返回给用户看的原因；可以重连时为 null。先看关闭码，没有时看 {@code bye}。 */
-    static String fatal(Ended ended) {
+    static String fatal(Ended ended, Words words) {
         switch (ended.code) {
             case Wire.CLOSE_BAD_TOKEN -> {
-                return "令牌无效。请在网页的插件页重新生成一个令牌。";
+                return words.say(Words.Key.LINK_BAD_TOKEN);
             }
             case Wire.CLOSE_EXPIRED -> {
-                return "revoked".equals(ended.reason) || ended.bye == Bye.Reason.REVOKED ? "已在网页上撤销，连接已断开。"
-                        : "令牌已到期。请在网页的插件页重新生成一个令牌。";
+                return words.say("revoked".equals(ended.reason) || ended.bye == Bye.Reason.REVOKED ? Words.Key.LINK_REVOKED : Words.Key.LINK_EXPIRED);
             }
             case Wire.CLOSE_REPLACED -> {
-                return "已被另一台电脑的连接替换，这里断开。";
+                return words.say(Words.Key.LINK_REPLACED);
             }
             case Wire.CLOSE_PROTOCOL -> {
-                return "服务器版本不同，请下载新的连接程序。";
+                return words.say(Words.Key.LINK_PROTOCOL);
             }
             default -> {
                 if (ended.bye == null || ended.bye == Bye.Reason.SHUTDOWN) {
                     return null;
                 }
                 return fatal(new Ended(ended.bye == Bye.Reason.REPLACED ? Wire.CLOSE_REPLACED : Wire.CLOSE_EXPIRED,
-                        ended.bye == Bye.Reason.REVOKED ? "revoked" : "expired", ended.bye));
+                        ended.bye == Bye.Reason.REVOKED ? "revoked" : "expired", ended.bye), words);
             }
         }
     }
@@ -233,7 +236,7 @@ final class Link {
                 try {
                     handle(Wire.decode(text));
                 } catch (IllegalArgumentException unreadable) {
-                    out.println("服务器发来看不懂的消息，断开重连。");
+                    out.println(words.say(Words.Key.LINK_UNREADABLE));
                     webSocket.sendClose(1003, "bad message");
                     end(new Ended(1003, "bad message", bye));
                 }
@@ -247,8 +250,8 @@ final class Link {
                 case Welcome welcome -> {
                     welcomed = true;
                     calls.welcome(welcome.user());
-                    out.println("已连接，用户 " + welcome.user() + "，" + welcome.expiresAt().atZone(ZoneId.systemDefault()).format(CLOCK)
-                            + " 到期。");
+                    out.println(words.say(Words.Key.LINK_CONNECTED, Map.of("user", welcome.user(),
+                            "time", welcome.expiresAt().atZone(ZoneId.systemDefault()).format(CLOCK))));
                 }
                 case Call call -> calls.call(call, this::send);
                 case Cancel cancel -> calls.cancel(cancel.id());

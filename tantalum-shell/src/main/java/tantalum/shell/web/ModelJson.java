@@ -20,7 +20,7 @@ final class ModelJson {
         JsonNode effort = node.path("effort");
         if (!node.isObject() || route == null || model == null || route.isBlank() || model.isBlank()
                 || !(effort.isMissingNode() || effort.isNull() || effort.isString())) {
-            throw new IllegalArgumentException("model 要写成 {\"route\": …, \"model\": …, \"effort\": …}");
+            throw new IllegalArgumentException("model must be {\"route\": …, \"model\": …, \"effort\": …}");
         }
         return new ModelChoice(route, model, effort.isString() ? effort.asString() : null);
     }
