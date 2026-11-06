@@ -38,7 +38,22 @@ class AddressRulesTest {
                 Arguments.of("fd00::1", true),
                 Arguments.of("::ffff:10.0.0.1", true),
                 Arguments.of("8.8.8.8", false),
-                Arguments.of("2001:4860:4860::8888", false));
+                Arguments.of("2001:4860:4860::8888", false),
+                // 运营商级 NAT 100.64/10：阿里云元数据 100.100.100.200 在里面（2026-11-06 补）
+                Arguments.of("100.100.100.200", true),
+                Arguments.of("100.64.0.1", true),
+                Arguments.of("100.127.255.255", true),
+                Arguments.of("100.63.255.255", false),
+                Arguments.of("100.128.0.1", false),
+                // 内嵌 IPv4 的 IPv6：按里面的 IPv4 查
+                Arguments.of("64:ff9b::a9fe:a9fe", true),
+                Arguments.of("64:ff9b::7f00:1", true),
+                Arguments.of("64:ff9b::808:808", false),
+                Arguments.of("2002:a00:1::", true),
+                Arguments.of("2002:a9fe:a9fe::1", true),
+                Arguments.of("2002:808:808::", false),
+                Arguments.of("::10.0.0.1", true),
+                Arguments.of("::8.8.8.8", false));
     }
 
     @ParameterizedTest

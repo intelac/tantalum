@@ -201,6 +201,11 @@ public final class AttachmentStore {
         }
     }
 
+    /** 附件的各项上限：工具结果里的图片也按“一条消息最多几张”收（web-tools W8）。 */
+    public AttachmentLimits limits() {
+        return limits;
+    }
+
     /** 用户已存储的字节数。 */
     public long used(Principal principal) throws IOException {
         return used(principal, userDir(principal));

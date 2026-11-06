@@ -4,17 +4,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.modelcontextprotocol.spec.McpSchema;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.attachment.AttachmentLimits;
+import tantalum.shell.attachment.AttachmentStore;
+import tantalum.shell.attachment.ImageNormalizer;
+import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.mcp.TestMcpServer.Definition;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
+import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.tool.ToolCatalog;
+import tantalum.value.attachment.AttachmentText;
+import tantalum.value.attachment.ImageRef;
 import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 
@@ -145,5 +155,32 @@ class McpRegistryTest {
         registry.awaitReady();
         assertTrue(java.time.Duration.ofNanos(System.nanoTime() - start).toMillis() < 2000);
         assertTrue(registry.tools().isEmpty());
+    }
+
+    /** W8、需求 3.1、3.2：真实 MCP 协议返回一张 PNG，存进调用者本人的附件，结果里是引用，文字里没有 base64。 */
+    @Test
+    void imagesFromAToolAreStoredInTheCallersAttachments(@TempDir Path temp) throws Exception {
+        byte[] png;
+        try (java.io.InputStream in = McpRegistryTest.class.getResourceAsStream("/attachments/clean.png")) {
+            png = in.readAllBytes();
+        }
+        String data = java.util.Base64.getEncoder().encodeToString(png);
+        server = new TestMcpServer(new Definition("chart", true, args -> McpSchema.CallToolResult.builder()
+                .addTextContent("the chart").addContent(new McpSchema.ImageContent(null, data, "image/png")).isError(false).build()));
+        AttachmentStore store = new AttachmentStore(temp, AttachmentLimits.defaults(), new ImageNormalizer(AttachmentLimits.defaults()));
+        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), Set.of(), Set.of(), 64)), Duration.ofSeconds(10)),
+                FAST, new ToolImages(store));
+        registry.awaitReady();
+        Tool chart = registry.find("mcp__s__chart").orElseThrow();
+        Principal alice = new Principal("alice");
+        var context = new ToolContext(alice, new tantalum.value.id.SessionId("s"), new tantalum.shell.plugin.Workspace(temp));
+        ToolOutput output = chart.run(context, new Json.Obj(java.util.Map.of()));
+        assertFalse(output.error(), output.text());
+        ImageRef image = output.images().getFirst();
+        assertEquals("s-chart.png", image.name());
+        assertEquals("the chart\n" + AttachmentText.image(image), output.text());
+        assertFalse(output.text().contains(data.substring(0, 16)));
+        assertTrue(store.find(alice, image.id()).isPresent());
+        assertTrue(store.find(new Principal("bob"), image.id()).isEmpty());
     }
 }

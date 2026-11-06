@@ -60,6 +60,11 @@ public final class Egress implements AutoCloseable {
     private static final long IDLE_NANOS = Duration.ofMinutes(5).toNanos();
     /** 明文请求从发出到转完回复最长 10 分钟：一个字节一个字节慢慢发的网站也只能占一个名额这么久。 */
     private static final long PLAIN_LIFETIME_NANOS = Duration.ofMinutes(10).toNanos();
+    /**
+     * CONNECT 隧道从建立起最长 30 分钟，不论有没有数据：一直有数据的连接（网页里的 WebSocket、长轮询、慢慢推的流）也不能永远占着
+     * 512 个名额里的一个。浏览器 10 分钟不用就关，正常的网页请求远用不到这么久；30 分钟到了网页自己会重连。
+     */
+    static final Duration TUNNEL_LIFETIME = Duration.ofMinutes(30);
     private static final int ACCEPT_BACKOFF_MS = 200;
     /** 一个名字最多试 4 个地址，每个 10 秒：返回几十个连不上的地址的 DNS 拖不住线程。 */
     private static final int MAX_ADDRESSES_TRIED = 4;
@@ -79,10 +84,12 @@ public final class Egress implements AutoCloseable {
     private final Semaphore slots = new Semaphore(MAX_CONNECTIONS);
     private final Set<Socket> open = ConcurrentHashMap.newKeySet();
     private final HttpClient client;
+    private final long tunnelLifetimeNanos;
     private volatile boolean closed;
 
-    private Egress(AddressRules rules, UpstreamProxy upstream, ServerSocket server) {
+    private Egress(AddressRules rules, UpstreamProxy upstream, ServerSocket server, Duration tunnelLifetime) {
         this.rules = rules;
+        this.tunnelLifetimeNanos = tunnelLifetime.toNanos();
         this.upstream = upstream;
         this.server = server;
         this.client = HttpClient.newBuilder()
@@ -94,15 +101,25 @@ public final class Egress implements AutoCloseable {
 
     /** 只听 {@code 127.0.0.1}；自己的端口报给 {@code rules}，经出口再连出口也被拦。 */
     public static Egress start(AddressRules rules, UpstreamProxy upstream) throws IOException {
+        return start(rules, upstream, TUNNEL_LIFETIME);
+    }
+
+    /** 测试用：隧道寿命改短。 */
+    static Egress start(AddressRules rules, UpstreamProxy upstream, Duration tunnelLifetime) throws IOException {
         ServerSocket server = new ServerSocket(0, MAX_CONNECTIONS, InetAddress.getLoopbackAddress());
         rules.egressPort(server.getLocalPort());
-        Egress egress = new Egress(rules, upstream, server);
+        Egress egress = new Egress(rules, upstream, server, tunnelLifetime);
         Thread.ofVirtual().name("egress-accept").start(egress::acceptLoop);
         return egress;
     }
 
     public int port() {
         return server.getLocalPort();
+    }
+
+    /** 出口用的地址规则：浏览器打开网址前先查一遍，给模型清楚的原因（真正拦的还是出口）。 */
+    public AddressRules rules() {
+        return rules;
     }
 
     /** 给 {@code web_fetch}：经出口，不自动跟跳转，连接超时 10 秒。联网的代码不自己建 {@code HttpClient}（ArchitectureTest 规则 3）。 */
@@ -512,17 +529,29 @@ public final class Egress implements AutoCloseable {
         quietly(far);
     }
 
-    /** CONNECT 成功后两边互相转发，直到两边都关；5 分钟两个方向都没有数据就关。 */
-    private static void relay(Socket near, InputStream nearIn, Socket far, InputStream farIn) throws IOException {
+    /** CONNECT 成功后两边互相转发，直到两边都关；5 分钟两个方向都没有数据、或者隧道满 {@link #TUNNEL_LIFETIME} 就关。 */
+    private void relay(Socket near, InputStream nearIn, Socket far, InputStream farIn) throws IOException {
         AtomicLong last = new AtomicLong(System.nanoTime());
         near.setSoTimeout(POLL_MS);
         far.setSoTimeout(POLL_MS);
+        // 寿命到了两头一起关：两个方向都卡在写上时，读超时的检查也轮不到，只能由另一个线程关
+        Thread lifetime = Thread.ofVirtual().name("egress-lifetime").start(() -> {
+            try {
+                Thread.sleep(Duration.ofNanos(tunnelLifetimeNanos));
+                quietly(near);
+                quietly(far);
+            } catch (InterruptedException finished) {
+                // 隧道先结束了
+            }
+        });
         Thread back = Thread.ofVirtual().name("egress-relay").start(() -> pump(farIn, near, far, last));
         pump(nearIn, far, near, last);
         try {
             back.join();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+        } finally {
+            lifetime.interrupt();
         }
     }
 

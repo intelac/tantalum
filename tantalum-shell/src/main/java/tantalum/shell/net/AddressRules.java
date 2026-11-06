@@ -18,8 +18,11 @@ import java.util.Set;
  * <ul>
  *   <li>不论开关：Tantalum 自己的端口加本机地址一律拦下，免得模型用用户的身份调服务器接口。服务器绑在 {@code 0.0.0.0} 时，
  *       用局域网地址也绕不过去。</li>
- *   <li>开关打开时：回环、私网、链路本地（含云服务器元数据地址 {@code 169.254.169.254}）和 {@code 0.0.0.0}。只拦这几段，
- *       OpenClaw 多拦的段不拦。</li>
+ *   <li>开关打开时：回环、私网、链路本地（含云服务器元数据地址 {@code 169.254.169.254}）、{@code 0.0.0.0}，以及运营商级 NAT
+ *       {@code 100.64.0.0/10}（阿里云的元数据地址 {@code 100.100.100.200} 在这一段；2026-11-06 为 W6“拦云元数据”补上）。
+ *       OpenClaw 多拦的其他段不拦。</li>
+ *   <li>内嵌 IPv4 的 IPv6 写法（NAT64 {@code 64:ff9b::/96}、6to4 {@code 2002::/16}、IPv4 兼容 {@code ::a.b.c.d}）取出里面的 IPv4，
+ *       按同样的规则再查一遍：有 NAT64 网关的服务器上，{@code 64:ff9b::a9fe:a9fe} 就是 {@code 169.254.169.254}。</li>
  * </ul>
  */
 public final class AddressRules {
@@ -134,20 +137,51 @@ public final class AddressRules {
     private static boolean isPrivate(InetAddress address) {
         byte[] b = address.getAddress();
         if (address instanceof Inet4Address) {
-            int first = b[0] & 0xff;
-            int second = b[1] & 0xff;
-            return first == 127                                  // 回环 127.0.0.0/8
-                    || first == 10                               // 10/8
-                    || (first == 172 && second >= 16 && second <= 31) // 172.16/12
-                    || (first == 192 && second == 168)           // 192.168/16
-                    || (first == 169 && second == 254)           // 链路本地，含 169.254.169.254
-                    || address.isAnyLocalAddress();              // 0.0.0.0
+            return isPrivateV4(b);
         }
         int first = b[0] & 0xff;
         return address.isLoopbackAddress()                       // ::1
                 || address.isAnyLocalAddress()                   // ::
                 || (first & 0xfe) == 0xfc                        // fc00::/7
-                || (first == 0xfe && (b[1] & 0xc0) == 0x80);     // fe80::/10
+                || (first == 0xfe && (b[1] & 0xc0) == 0x80)      // fe80::/10
+                || embeddedV4(b).map(AddressRules::isPrivateV4).orElse(false);
+    }
+
+    private static boolean isPrivateV4(byte[] b) {
+        int first = b[0] & 0xff;
+        int second = b[1] & 0xff;
+        return first == 127                                      // 回环 127.0.0.0/8
+                || first == 10                                   // 10/8
+                || (first == 172 && second >= 16 && second <= 31) // 172.16/12
+                || (first == 192 && second == 168)               // 192.168/16
+                || (first == 169 && second == 254)               // 链路本地，含 169.254.169.254
+                || (first == 100 && (second & 0xc0) == 64)       // 100.64/10，含阿里云元数据 100.100.100.200
+                || (first == 0 && second == 0 && b[2] == 0 && b[3] == 0); // 0.0.0.0
+    }
+
+    /** IPv6 里内嵌的 IPv4：NAT64 {@code 64:ff9b::/96} 和 IPv4 兼容 {@code ::/96} 在最后 4 字节，6to4 {@code 2002::/16} 在第 2–5 字节。 */
+    static Optional<byte[]> embeddedV4(byte[] b) {
+        if (b.length != 16) {
+            return Optional.empty();
+        }
+        boolean nat64 = b[0] == 0 && b[1] == 0x64 && b[2] == (byte) 0xff && b[3] == (byte) 0x9b && zero(b, 4, 12);
+        boolean compatible = zero(b, 0, 12);
+        if (nat64 || compatible) {
+            return Optional.of(new byte[] {b[12], b[13], b[14], b[15]});
+        }
+        if (b[0] == 0x20 && b[1] == 0x02) {
+            return Optional.of(new byte[] {b[2], b[3], b[4], b[5]});
+        }
+        return Optional.empty();
+    }
+
+    private static boolean zero(byte[] b, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (b[i] != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isLocal(InetAddress address) {

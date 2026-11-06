@@ -359,6 +359,40 @@ class EgressTest {
         }
     }
 
+    /** 一直有数据的 CONNECT 隧道也有总寿命（默认 30 分钟），到了两头一起关，名额空出来。这里寿命改成 1 秒。 */
+    @Test
+    void aBusyTunnelIsClosedWhenItsLifetimeIsOver() throws Exception {
+        assertEquals(java.time.Duration.ofMinutes(30), Egress.TUNNEL_LIFETIME);
+        ServerSocket chatty = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        cleanup.add(chatty);
+        Thread.ofVirtual().start(() -> {
+            try (Socket peer = chatty.accept()) {
+                while (true) {
+                    peer.getOutputStream().write('x');
+                    peer.getOutputStream().flush();
+                    Thread.sleep(50);
+                }
+            } catch (IOException | InterruptedException closed) {
+                // 隧道关了
+            }
+        });
+        Egress egress = Egress.start(new AddressRules(false), UpstreamProxy.none(), java.time.Duration.ofSeconds(1));
+        cleanup.add(egress);
+        try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), egress.port())) {
+            socket.setSoTimeout(10_000);
+            String target = "127.0.0.1:" + chatty.getLocalPort();
+            socket.getOutputStream().write(("CONNECT " + target + " HTTP/1.1\r\nHost: " + target + "\r\n\r\n")
+                    .getBytes(StandardCharsets.ISO_8859_1));
+            long start = System.nanoTime();
+            byte[] all = socket.getInputStream().readAllBytes();
+            long millis = java.time.Duration.ofNanos(System.nanoTime() - start).toMillis();
+            String text = new String(all, StandardCharsets.ISO_8859_1);
+            assertTrue(text.startsWith("HTTP/1.1 200"), text);
+            assertTrue(text.contains("xxxx"), "data kept flowing, so the idle limit did not close it");
+            assertTrue(millis >= 900 && millis < 5_000, millis + " ms");
+        }
+    }
+
     /** 用 JDK 的 keytool 生成一张只在测试里用的自签证书。 */
     private SSLContext selfSigned() throws Exception {
         Path store = temp.resolve("test.p12");
