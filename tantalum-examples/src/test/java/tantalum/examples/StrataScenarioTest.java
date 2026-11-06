@@ -40,6 +40,7 @@ class StrataScenarioTest {
                 OverflowRules.defaults());
         CompactionScenario.Verdict verdict;
         try (TestServer server = new TestServer(data, workspace, client, CompactionScenario.SETTINGS_OPENAI)) {
+            server.connectComputer("notes", workspace.resolve("notes"), true);
             verdict = CompactionScenario.run(server, "notes", "s1", data, "strata");
         }
         assertEquals("COMPLETED", verdict.endReason());
@@ -57,6 +58,7 @@ class StrataScenarioTest {
         CompactionScenario.writeHugeFile(workspace.resolve("huge"));
         Path data = temp.resolve("data-huge");
         try (TestServer server = new TestServer(data, workspace, client(), CompactionScenario.SETTINGS_OPENAI)) {
+            server.connectComputer("huge", workspace.resolve("huge"), true);
             String answer = CompactionScenario.ask(server, "huge", "s1",
                     "Read huge.txt with read_file once and tell me the code on its first line and the code on its last line.");
             System.out.println("[strata huge] compactions=" + CompactionScenario.compactions(server, "huge", "s1") + " answer=" + answer.replace("\n", " | "));
@@ -74,6 +76,7 @@ class StrataScenarioTest {
         CompactionScenario.writeNotes(workspace.resolve("twice"));
         Path data = temp.resolve("data-twice");
         try (TestServer server = new TestServer(data, workspace, client(), CompactionScenario.SETTINGS_OPENAI)) {
+            server.connectComputer("twice", workspace.resolve("twice"), true);
             CompactionScenario.ask(server, "twice", "s1", "A standing rule for this whole conversation: end every report with the exact word FINCH-END. Reply with OK.");
             CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt one at a time, then say done.");
             CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt one at a time, then say done.");

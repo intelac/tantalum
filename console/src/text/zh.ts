@@ -583,7 +583,8 @@ export const zh = {
       validity: "有效期",
       validities: { "30m": "半小时", "1h": "1 小时", "4h": "4 小时", "1d": "1 天" } as Record<string, string>,
       issued: (time: string) => `在电脑的终端里运行下面这条命令。令牌只显示这一次，${time} 到期。`,
-      commandHint: "--allow 后面写要允许的目录（可以写多个，第一个是主目录），默认是当前目录；要改文件加 --allow-write。",
+      commandHint:
+        "--allow 后面写要允许的目录（可以写多个，第一个是主目录），默认是当前目录；要改文件加 --allow-write，要跑命令加 --allow-shell。tantalum-connect 在 macOS 安装包 Tantalum Connect.app 里，装法见 README 的“本机工作区”。",
       token: "令牌",
       command: "命令",
       revoke: "撤销",

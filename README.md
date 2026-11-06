@@ -13,6 +13,8 @@
 | `tantalum-value` | 不可变类型：事件、命令、状态 |
 | `tantalum-kernel` | 纯逻辑：转移表、钩子，不做 I/O |
 | `tantalum-shell` | 一切 I/O：环、journal、Handler、模型客户端、Web |
+| `tantalum-local` | 在用户电脑上执行的工具（文件、Git、`bash`）、MXC 沙箱、和连接程序之间的消息格式，服务器和连接程序共用；不依赖 Spring 和 `tantalum-shell` |
+| `tantalum-connect` | 连接程序：在用户电脑上运行，主动连服务器，执行本机工作区的工具；macOS 安装包 |
 | `tantalum-examples` | 示例插件，不打进可执行 jar |
 | `console/` | 参考控制台 |
 
@@ -27,7 +29,8 @@
 | `conversation` | 控制台看到的对话条目，是事件的展示投影 |
 | `handler` | 执行命令：组装上下文、调模型、跑工具和插件工作 |
 | `model` | Claude 和 OpenAI 兼容两个模型客户端，失败分类共用 `ModelFailures` |
-| `tool`、`mcp`、`memory` | 内置工具、MCP 客户端、每用户记忆 |
+| `tool`、`mcp`、`memory` | 内置工具（`read_attachment`）、MCP 客户端、每用户记忆 |
+| `local` | 本机工作区：令牌、连接、转发到电脑的工具、插件页接口用的状态 |
 | `sse`、`web`、`auth` | 推送、HTTP 接口、登录 |
 | `plugin` | 插件 SDK |
 | `access` | 每个用户的插件开关，以及插件唯一的调用入口 `PluginGate` |
@@ -48,19 +51,20 @@ mvn clean package -DskipTests
 
 ```sh
 export ANTHROPIC_API_KEY=...
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.workspace=/path/to/code
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar
 ```
 
 不能外发代码时，用本地的 OpenAI 兼容模型（默认指向 `127.0.0.1:8090` 的 strata）：
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar \
-  --tantalum.provider=openai --tantalum.workspace=/path/to/code
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.provider=openai
 ```
 
 然后打开 <http://127.0.0.1:8080>。配置项和默认值见 `tantalum-shell/src/main/resources/application.properties`。
 
 服务默认只绑定 `127.0.0.1`。
+
+服务器上不读写代码：agent 读、改的是用户自己电脑上的文件，要在电脑上运行连接程序，见下面“本机工作区”。服务器的工作目录（`tantalum.workspace`）只放每个用户的记忆这类服务器自己的数据。
 
 ## 登录和用户
 
@@ -218,29 +222,97 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 
 - **存储**：每个用户自己的 `attachments/<用户>/`，按内容的 SHA-256 存，同样的内容只存一份；别人的附件和不存在一样。图片上传时统一规范化：按照片方向转正、去掉 GPS 等元数据、GIF 只取第一帧，超过 2048×2048 就缩小；已经干净的图片原样保存。只收 PNG、JPEG、WebP、GIF 四种图片，SVG 当普通文件。
 - **限制**（都可配置，`tantalum.attachments.*`）：每条消息最多 20 张图片、合计 200 MB；每张最多 50 MB、6400 万像素、单边 65535 px；每条消息最多 20 个文件，每个 50 MB；每个用户合计 5 GB。前端先查一遍，服务器再查一遍。
-- **给模型的样子**：图片前面一行说明（名字、哈希、尺寸、只读路径），再是图片本身；文件只给说明和只读路径 `/attachments/sha256-<哈希>`，模型要看时用 `read_file` 读；PDF 在 Claude 上另作为文档整份发出（32 MB、100 页以内）。一次请求里图片合计超过 20 MB（base64）时，从最早的开始换成省略说明，省略过的一直省略，prompt 缓存不会反复失效。
+- **给模型的样子**：图片前面一行说明（名字、哈希、尺寸、只读路径），再是图片本身；文件只给说明和只读路径 `/attachments/sha256-<哈希>`，模型要看时用服务器上的 `read_attachment` 读（不用连电脑）；PDF 在 Claude 上另作为文档整份发出（32 MB、100 页以内）。一次请求里图片合计超过 20 MB（base64）时，从最早的开始换成省略说明，省略过的一直省略，prompt 缓存不会反复失效。
 - **模型不收图片时**：OpenAI 兼容的模型默认当作只收文字（`tantalum.openai.vision=false`），带图片的提交返回 400；`read_file` 读到的图片换成占位文字。
-- **`read_file`**：能读本人附件的只读路径；读到图片（工作区里的也算）时规范化、存进附件目录，把图片交给模型；读到 PDF 时不把二进制当文字返回。
+- **`read_attachment`、`read_file`**：`read_attachment` 只读本人附件，参数和窗口读同 `read_file`；电脑上的 `read_file` 读到图片时，服务器照附件规则规范化、存进本人附件目录，把图片交给模型；读到 PDF 时不把二进制当文字返回。
 - **接口**：`POST /api/sessions/{id}/attachments?name=…`（请求体是原始字节）、`GET /api/attachments/{附件 ID}[?download=1]`；提交接口的请求体加 `attachments: [{id, name}]`，尺寸和大小以服务器存的为准。下载一律 `nosniff` 加沙箱 CSP，非图片一律作为下载，HTML、SVG 不会在页面里执行。
 - **没做的**：没有引用的附件怎么清理，等以后做会话删除时一起做（A9）。
 
-## 文件工具和插件页
+## 本机工作区：文件、Git、命令行
 
-内置工具（`core-tools` spec）：`read_file`、`write_file`、`edit_file`、`list_dir`、`find_files`、`grep`，加上三个记忆工具。路径都相对于本人的工作目录，越出工作目录和不存在用同一句话拒绝。
+服务器上没有读写文件、跑命令的工具（`local-workspace` spec）。这些工具在**用户自己的电脑上**执行：电脑上运行连接程序 `tantalum-connect`，由它主动用 WebSocket 连到服务器（电脑上不开端口），模型调 `read_file`、`git_diff`、`bash` 时，服务器把调用转给这台电脑，执行完再把结果送回来。服务器上唯一读文件的工具是 `read_attachment`，只读本人上传的附件；记忆、待办照常在服务器上。
 
-- **`read_file`**：按行窗口读，`offset`（从 1 开始）和 `limit`；默认最多 2000 行或 50 KB，没读完时结尾写明下一次从哪一行接着读；超过 2000 字符的行截断并注明。边读边数，64 MB 以内的文件不会整个进内存，超过 64 MB 拒绝并提示先用 `grep` 找位置；二进制和不是 UTF-8 的文件拒绝。
-- **`write_file`、`edit_file`**：先读后写。覆盖或修改已有文件前，这个会话必须用 `read_file` 读过它，而且之后没被改过（别的运行、别的工具或你自己改过都算）；自己刚写完、刚改完的接着改不用重读。“读过”记在内存里，服务重启或会话移出内存后要重读。写法是先写临时文件再改名，保留原来的权限、CRLF 换行和 BOM；新文件 600、新目录 700，单次最多 10 MB。`edit_file` 逐字匹配，默认必须正好出现一次，多处时用 `replace_all`。
-- **不能写的地方**：`memory/` 只能用记忆工具改；共用工作目录模式（`tantalum.workspace-mode=shared`）不提供写工具。
-- **`list_dir`、`find_files`**：列一层（最多 500 项），按 glob 找文件（最多 1000 个，跳过 `.git`、`.svn`、`.hg`、`node_modules`，不跟符号链接）。
-- **显示**：对话页上 `edit_file` 显示改动前后的差异，`write_file` 显示字节数和前 20 行（可展开），`read_file` 显示读了哪几行；轨迹页检查器里 `edit_file` 有“差异”页签。发给模型的只是简短的结果文字。
+**能动什么只由电脑这边的启动参数决定**：`--allow` 列出的目录才能进，加 `--allow-write` 才能改文件，加 `--allow-shell` 才能跑命令。服务器没有任何办法改这几项；每个调用到了电脑上，连接程序都自己再查一遍（用户对不对、这一类工具允许没有、路径在不在允许的目录里），不信任服务器的判断。每个调用在终端里打一行：时间、会话、工具、路径或命令原文、结果（`ok`、`denied`、`error`、`cancelled`），不打文件内容和令牌。
+
+### 安装（macOS，Apple 芯片）
+
+1. 拿到安装包 `tantalum-connect-<版本>-macos-arm64.zip`（自己打：`mvn -o -pl tantalum-connect -am package -Pmac -DskipTests`，产物在 `tantalum-connect/target/`）。包里有自带的 Java 运行环境和微软 MXC 的 `mxc-exec-mac`，不用另装 Java。
+2. 解压，把 `Tantalum Connect.app` 放进“应用程序”。
+3. **第一次打开**：安装包没有签名、没有公证。从浏览器下载的会带隔离标记，系统会拦下并提示“无法验证开发者”。二选一：
+   - 终端里去掉隔离标记：`xattr -dr com.apple.quarantine "/Applications/Tantalum Connect.app"`；
+   - 或者先在终端运行一次下面的命令，被拦后到“系统设置 › 隐私与安全性”底部点“仍要打开”。
+4. 把命令放到 `PATH` 上，插件页给出的命令才能直接运行：
+
+   ```sh
+   mkdir -p ~/.local/bin
+   ln -sf "/Applications/Tantalum Connect.app/Contents/MacOS/tantalum-connect" ~/.local/bin/tantalum-connect
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc   # 已经在 PATH 上就不用
+   ```
+
+   `tantalum-connect --help` 列出全部参数。
+
+### 连接
+
+1. 控制台侧栏“更多 › 插件”，“本机工作区”一栏点“连接这台电脑”，选有效期（半小时、1 小时、4 小时、1 天）。页面给出令牌和一行命令，**只显示这一次**；服务器只存令牌的哈希。
+2. 在电脑的终端里，到要交给 agent 的目录下运行这行命令，按需改参数：
+
+   ```sh
+   TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . --allow-write --allow-shell
+   ```
+
+   令牌只从环境变量 `TANTALUM_TOKEN` 读；不设就在启动后按提示粘贴（不显示）。**不要写在命令行参数里**（同一台电脑上的其他程序看得到参数），写了连接程序拒绝启动。令牌不写进任何文件。
+3. 启动说明写明连到哪、允许了什么、命令行能不能用以及原因；插件页 2 秒内显示“已连接”、电脑名、目录、权限和到期时间。下一次提问开始，模型就有这些工具，对话里这一轮上方显示“工具变化：新增 …”。
+4. 有效期内断网会自动重连（1、2、4 … 30 秒）。到期、在插件页点“撤销”、同一个账号从另一台电脑连上时，连接程序写明原因退出（退出码 2）；下一次提问显示这些工具不能用了。按 Ctrl+C 断开，正在跑的命令连同它启动的进程一起结束。
+
+一个账号同一时间只连一台电脑；这个账号的所有会话共用它，同时最多执行 4 个调用。服务器只绑 `127.0.0.1` 时只有同一台电脑能连；要从别的电脑连，在前面放 HTTPS 反向代理，`--server` 写 `https://` 地址。
+
+### 参数和风险
+
+| 参数 | 意思 | 风险 |
+|---|---|---|
+| `--server URL` | 服务器地址，默认 `http://127.0.0.1:8091` | 不是本机时用 `https://`，否则令牌和文件内容明文经过网络 |
+| `--allow 目录` | 允许 agent 进的目录，可以写多个，第一个是主目录（相对路径按它解析，`AGENTS.md` 从这里读，是 Git 仓库时才有 Git 工具） | agent 能读里面的所有文件，包括 `.env` 这类密钥文件；不要给整个家目录 |
+| `--allow-write` | 允许 `write_file`、`edit_file`，命令也能写这些目录 | 能改、能删允许目录里的任何内容；用 Git 管着的目录出错了好恢复 |
+| `--allow-shell` | 允许 `bash`，在 MXC 沙箱里执行 | 命令能读允许目录、联网（除非 `--no-network`），能用本机的工具链；见下面“沙箱拦什么” |
+| `--allow-read 目录` | 命令额外能读（只读）的目录，如 `~/.m2`、另装的 JDK | 只给命令，文件工具不能进 |
+| `--env 名字` | 把这台电脑上的这个环境变量交给命令，可以写多个（如 `--env JAVA_HOME`） | 名字里有 `KEY`、`TOKEN`、`SECRET`、`PASSWORD` 的一律拒绝；其他变量的值模型能读到 |
+| `--no-network` | 命令不能联网 | 下载依赖、访问内网的命令会失败 |
+| `--name 名字` | 插件页和 system 里显示的电脑名，默认主机名 | |
+| `--mxc 路径` | 用这个 `mxc-exec-mac`，不用包里的 | 只在调试或不用安装包时用 |
+
+### 工具
+
+- **读文件**（`read_file`、`list_dir`、`find_files`、`grep`）：路径相对主目录或写绝对路径，解析符号链接之后必须在某个允许的目录里，越界和不存在用同一句话拒绝。`read_file` 按行窗口读，`offset`（从 1 开始）和 `limit`；默认最多 2000 行或 50 KB，没读完时结尾写明下一次从哪一行接着读；超过 2000 字符的行截断并注明；64 MB 以内的文件不会整个进内存，二进制和不是 UTF-8 的文件拒绝。读到图片时电脑送回原始字节，服务器照附件规则规范化、存进本人附件目录再交给模型。`list_dir` 列一层（最多 500 项），`find_files` 按 glob 找（最多 1000 个，跳过 `.git`、`node_modules` 等，不跟符号链接）。
+- **改文件**（`write_file`、`edit_file`，要 `--allow-write`）：先读后写，覆盖或修改已有文件前这个会话必须读过它，而且之后没被改过。“读过”记在连接程序的内存里，只留最近 64 个会话；连接程序重启或会话太久没用要重读。先写临时文件再改名，保留原来的权限、CRLF 换行和 BOM；单次最多 10 MB。`edit_file` 逐字匹配，默认必须正好出现一次，多处时用 `replace_all`。
+- **Git 查询**（`git_log`、`git_show`、`git_diff`、`git_blame`、`git_branches`，主目录是 Git 仓库时才有）：调本机的 `git`，只读，不碰索引锁；只接受路径、提交号、行范围、条数，以 `-` 开头的提交号拒绝；输出最多 2000 行或 50 KB。
+- **命令行**（`bash`，要 `--allow-shell` 而且 MXC 可用）：参数 `command`、`timeout`（秒，默认 120，最多 600）、`workdir`（默认主目录，必须在允许的目录里）。标准输出和错误输出合在一起，只留最后 2000 行或 50 KB，截掉时写明；退出码不是 0 算错误并写明；超时、取消、断开时结束整个进程树。每次调用一个临时目录（`TMPDIR`），结束后删掉。
+- **显示**：对话页上 `edit_file` 显示改动前后的差异，`write_file` 显示字节数和前 20 行，`read_file` 显示读了哪几行；轨迹页检查器里 `edit_file` 有“差异”页签。
+
+### 沙箱拦什么、不拦什么（`bash`）
+
+命令在微软 MXC（`microsoft/mxc` v1.0.1）的 `mxc-exec-mac` 里执行，它用 macOS 自带的 Seatbelt，规则从“全部拒绝”开始。连接程序启动时先检查 MXC（`--dry-run` 检查规则，再真跑一次 `/usr/bin/true`）；找不到或检查不过，`bash` 就不出现，启动说明和插件页写明原因，读文件、改文件照常能用，**不会退回到不隔离直接跑**。
+
+- **能读**：系统目录（`/usr`、`/bin`、`/System`、`/Library` 等，MXC 自带）、允许的目录、`/opt/homebrew`、`/usr/local`、`--allow-read` 的目录。
+- **读不到**：家目录里的其他东西（`~/Documents`、浏览器资料、`~/.gitconfig` 等）；`~/.ssh`、`~/Library/Keychains` 就算在允许的目录里也读不到。
+- **能写**：有 `--allow-write` 时只能写允许的目录和这次的临时目录；没有就只能写临时目录（结束后删掉）。
+- **网络**：默认放开，`--no-network` 整体关掉。MXC 在 macOS 上**只能整体开关，不能按网址放行**。不管开没开，**都连不上本机的端口**（`localhost`、本机的局域网地址）：命令碰不到 Tantalum 自己的接口，也碰不到本机的数据库、开发服务器；要在命令里起服务再自己连（比如测试里起的嵌入式服务器）也连不上。
+- **环境变量**：命令拿不到连接程序的环境变量（包括 `TANTALUM_TOKEN`），只有 `PATH`、`HOME`（连接程序自己的空目录，只读）、`TMPDIR`、`LANG` 和 `--env` 放行的。
+- **不拦的**：允许目录里的东西随便读（含 `.env`）；网络开着时能把读到的内容发出去；能用本机装的所有工具链。MXC 清理进程是尽力而为：一直在飞快地起新进程的命令，极少数情况下可能漏掉一个（MXC 文档 “Process cleanup › Limits”）。
+
+Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2` 并用离线模式（`mvn -o`），或者把它加成允许目录（`--allow ~/.m2`，有 `--allow-write` 时可写；注意文件工具也能读它）。Java 的 `user.home` 取的是真实家目录，不受 `HOME` 影响。JDK 不在 `/opt/homebrew`、`/Library/Java` 下时用 `--allow-read` 加上它，再 `--env JAVA_HOME`。
+
+### 插件页的开关
 
 插件页在侧栏“更多 › 插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认全开。
 
-- **能开关的**：每个内置工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。策略类插件（钩子声明了 `mandatory()`，如额度）显示为“必须开启”，不能关。
-- **什么时候生效**：打开的工具从下一次提问开始可用，在同一个会话里也是；关掉的立即不能再调用，模型这时再调会收到“已在插件页关闭”。运行进行中不换名单。钩子插件同样从下一次提问起按新名单运行。
-- **怎么做到不破坏思考签名**：Claude 把历史里的思考内容和当时的工具列表绑定，直接改工具列表会让新账号收到 400。所以会话的工具列表从一开始就是全集，没开的工具标为延后加载（模型看不见）；开关变了，就在下一次提问后追加一条系统消息写明新增和移除了哪些（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。出现过这种变化的会话不再带服务端备用模型。支持的 Claude 模型见 `ClaudeRequest.TOOL_CHANGE_MODELS`；不支持的模型（如 Sonnet 5）打开的工具要等新会话，插件页会写明。OpenAI 兼容的模型直接发现在开着的工具，变化另写一段文字说明。
+- **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行四个子开关。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，MXC 不可用时写明原因。
+- **其他能开关的**：`read_attachment` 和记忆工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。策略类插件（钩子声明了 `mandatory()`，如额度）显示为“必须开启”，不能关。
+- **什么时候生效**：打开的工具、连上的电脑从下一次提问开始可用，在同一个会话里也是；关掉的立即不能再调用，模型这时再调会收到“已在插件页关闭”；运行中途电脑断开，再调会收到 “The local workspace is not connected.”，调用途中断开收到 “The computer disconnected. Whether this operation finished is unknown.”，不自动重发。运行进行中不换名单。
+- **怎么做到不破坏思考签名**：Claude 把历史里的思考内容和当时的工具列表绑定，直接改工具列表会让新账号收到 400。所以会话的工具列表从一开始就是全集（本机工作区的工具定义固定，不随电脑变；目录和权限写在 system 里会变的“本机工作区”一段），没开的工具标为延后加载（模型看不见）；开关变了，就在下一次提问后追加一条系统消息写明新增和移除了哪些（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。支持的 Claude 模型见 `ClaudeRequest.TOOL_CHANGE_MODELS`；不支持的模型打开的工具要等新会话，插件页会写明。OpenAI 兼容的模型直接发现在开着的工具，变化另写一段文字说明。
 - **过滤只有一个入口**：工具、工具后处理、插件工作只经 `PluginGate` 调用，它在调用前按当前用户的开关查一次；内核钩子只经 `HookChain`，按会话记下的名单过滤。两条 ArchUnit 规则钉住，绕过的代码构建失败。
-- **接口**：`GET /api/plugins`、`PUT /api/plugins/{tool|mcp|plugin}/{名字}`（请求体 `{"enabled": true}`），只操作当前登录用户的开关。
+- **接口**：`GET /api/plugins`、`PUT /api/plugins/{tool|mcp|plugin|local}/{名字}`（请求体 `{"enabled": true}`）；本机工作区另有 `GET /api/local`（开关和连接状态）、`POST /api/local/tokens`（`{"validity": "30m" | "1h" | "4h" | "1d"}`，返回令牌和命令）、`DELETE /api/local/tokens`（撤销全部令牌并断开）。都只操作当前登录用户的。
+
+实测（细节在 `.spec-workflow/steering/tech.md`）：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）；`bash true` 一次往返约 28 ms，主要是 MXC 启动沙箱。
 
 ## 上下文压缩
 
@@ -328,7 +400,12 @@ mvn clean verify          # 不访问外网，不花钱
 (cd console && pnpm e2e)  # Playwright 端到端：自动起脚本化模型的后端（8097）和 vite（5174）
 ```
 
-`mvn verify` 在集成测试阶段还会用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。
+`mvn verify` 在集成测试阶段还会跑 `LinkIT`（同一个 JVM 里起服务器和真的连接程序，测令牌、断网重连、被顶替、硬发越权调用被电脑拒）和 `MxcIT`（用真的 `mxc-exec-mac` 跑 `bash`：读不到允许目录外和 `~/.ssh`、没有 `--allow-write` 写不了、`--no-network` 上不了网、连不上本机端口、超时和取消后没有残留进程、环境变量里没有令牌。只在 macOS 上、程序存在时跑，否则跳过并写明原因；程序默认用打安装包时下载校验过的 `~/.cache/tantalum/mxc/1.0.1/mxc-exec-mac`，也可 `-Dtantalum.mxc=路径`），并用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。连接程序的往返和内存用 `LinkBench` 手动跑（先打安装包，有包时测包里的连接程序）：
+
+```sh
+mvn -o -pl tantalum-connect -am verify -Djacoco.skip=true -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false \
+    -Dit.test=LinkBench -Dfailsafe.failIfNoSpecifiedTests=false
+```
 
 浏览器和磁盘看到的 JSON（`/messages` 的条目、SSE 消息）由 `WireFormatTest` 逐字节钉住，期望文件在 `tantalum-shell/src/test/resources/wire/`。有意改格式时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么。
 
@@ -369,10 +446,12 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |
 | MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
-| 文件读写（窗口读、写、改、列目录、找文件） | 有（`read`、`write`、`edit`、`ls`、`find`） | 有（读、写、改、glob，先读后写） | 有：窗口读取和续读、先读后写、原子写、保留换行和 BOM、对话页差异，`core-tools` spec | `bash` 等沙箱 |
+| 文件读写（窗口读、写、改、列目录、找文件） | 有（`read`、`write`、`edit`、`ls`、`find`） | 有（读、写、改、glob，先读后写） | 有：窗口读取和续读、先读后写、原子写、保留换行和 BOM、对话页差异，`core-tools` spec；`local-workspace` 起在用户电脑上执行，只能进 `--allow` 的目录 | 代码索引 `code-index` spec |
+| 工具在用户自己的电脑上执行 | 可换执行方式（例子用 SSH） | 服务器主动 SSH 进去 | 有：连接程序主动连服务器，有期限可撤销的令牌，允许什么只由电脑决定、每个调用电脑再查一遍；文件、Git 查询、`bash`；插件页总开关和子开关，`local-workspace` spec | Windows 连接程序、连多台电脑 |
+| `bash` | 有（不隔离） | 有（沙箱） | 有：在用户电脑上的 MXC 沙箱里执行，读不到允许目录外的用户文件、只能写允许目录、网络整体开关、连不上本机端口，沙箱不可用就不提供 | Windows 的 `powershell` |
 | 插件页、每个用户开关工具和插件 | 无 | 有（插件页） | 有：内置工具、MCP 服务器和工具、钩子插件，每人自己的开关；会话中途开关从下一次提问生效，不破坏思考签名 | |
-| 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**，内置工具有文件读写、目录、搜索和记忆，没有联网 | `web-tools` spec |
-| 操作系统级沙箱 | 无 | 无 | **没有**，隔离靠路径校验，工具都在同一进程 | 沙箱 spec |
+| 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch` | **没有**专门的联网工具；电脑连上并允许命令行时，模型能在电脑上用 `bash` 跑 curl | `web-tools` spec |
+| 操作系统级沙箱 | 无 | 有（`sandbox-local`：Seatbelt、受限令牌、bwrap） | 有，只用于电脑上的 `bash`（macOS 用微软 MXC 的 Seatbelt 后端）；服务器上不再有读写文件、跑命令的工具 | Windows 上换 MXC 的 Windows 后端 |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |
 | 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |

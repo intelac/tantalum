@@ -79,6 +79,7 @@ class WindowCompactionTest {
         }
         Path data = temp.resolve("data");
         try (TestServer server = new TestServer(data, workspace, model, settings)) {
+            server.connectComputer(USER, files, false);
             JsonNode config = JSON.readTree(server.get(USER, "/api/config").body());
             assertEquals(window, config.get("contextWindow").asLong(), config.toString());
             assertEquals("model", config.get("windowSource").asString());

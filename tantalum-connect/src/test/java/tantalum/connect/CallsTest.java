@@ -61,7 +61,7 @@ class CallsTest {
     }
 
     private Calls calls(boolean write) {
-        Calls calls = new Calls(dirs, write, false, journal);
+        Calls calls = new Calls(dirs, write, false, journal, Tools.all());
         calls.welcome("alice");
         return calls;
     }
@@ -111,7 +111,7 @@ class CallsTest {
     /** L18：只接受发给 {@code welcome} 里这个用户的调用；还没 {@code welcome} 时一个都不接。 */
     @Test
     void aCallForAnotherUserIsRefused() throws Exception {
-        Calls fresh = new Calls(dirs, true, false, journal);
+        Calls fresh = new Calls(dirs, true, false, journal, Tools.all());
         fresh.call(call("c-0", "alice", "read_file", "path", "a.txt"), replies::add);
         assertEquals(new Result("c-0", Calls.OTHER_USER, true, List.of()), reply());
 
@@ -226,16 +226,30 @@ class CallsTest {
         assertFalse(capped.contains("�"), "cut on a UTF-8 boundary");
     }
 
-    /** 全部真工具都按类别检查：改文件的两个要 {@code --allow-write}，其余的不要。 */
+    /**
+     * 全部真工具都按类别检查（需求 2.3）：改文件的两个要 {@code --allow-write}，{@code bash} 要 {@code --allow-shell} 而且沙箱可用，
+     * 其余的都不要。服务器硬发 {@code bash} 也被拒，命令不会跑。
+     */
     @Test
-    void onlyTheWriteToolsNeedAllowWrite() throws Exception {
+    void onlyTheWriteToolsNeedAllowWriteAndOnlyBashNeedsTheShell() throws Exception {
         Calls calls = calls(false);
         int id = 0;
         for (LocalTool tool : Tools.all()) {
             calls.call(call("c-" + ++id, "alice", tool.name()), replies::add);
             Result result = reply();
             assertEquals(tool.kind() == LocalTool.Kind.WRITE, Calls.NO_WRITE.equals(result.text()), tool.name() + ": " + result.text());
+            assertEquals(tool.kind() == LocalTool.Kind.SHELL, Calls.NO_SHELL.equals(result.text()), tool.name() + ": " + result.text());
         }
+        assertTrue(Tools.all().stream().anyMatch(tool -> tool.kind() == LocalTool.Kind.SHELL), "bash is in the list");
+    }
+
+    /** {@code --allow-shell} 给了但沙箱不可用：照样拒绝，不会不隔离直接跑（L13）。 */
+    @Test
+    void anUnavailableSandboxRefusesBashEvenWithAllowShell() throws Exception {
+        Calls calls = new Calls(dirs, true, true, tantalum.local.sandbox.Sandbox.unavailable("找不到 MXC"), journal, Tools.all());
+        calls.welcome("alice");
+        calls.call(call("b-1", "alice", "bash"), replies::add);
+        assertEquals(Calls.NO_SHELL, reply().text());
     }
 
     /** 一直等到被打断的工具。 */

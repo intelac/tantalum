@@ -6,6 +6,8 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -13,12 +15,15 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * 先读后写（需求 C5，照 DSH 的观察记录 {@code tool-fs/src/error.ts:29-42}）：按会话记下每个文件最后一次读到或写下时的版本。
  * 覆盖或修改已有文件前，这个会话必须读过它，而且之后没被改过。记录只在连接程序的内存里：连接程序重启后要重新读。
- * 一个连接程序只服务一个用户，所以只按会话分。
+ * 一个连接程序只服务一个用户，所以只按会话分。连接程序不知道会话什么时候结束，所以只记最近用过的 {@value #MAX_SESSIONS} 个会话，
+ * 更早的忘掉：被忘掉的会话要改文件时得先重新读，这是保守的方向，内存也不随会话数增长。
  */
 public final class Observations {
 
     /** 文件锁分成固定的几份，按路径散列；不同文件偶尔共用一把锁只是多等一会儿，内存不随文件数增长。 */
     private static final int LOCK_STRIPES = 64;
+    /** 最多记多少个会话的读写记录。 */
+    static final int MAX_SESSIONS = 64;
 
     /** 文件的版本：大小、修改时间、文件键（inode）。原子写会换 inode，所以改名替换也认得出来。 */
     record Version(long size, FileTime modified, Object fileKey) {
@@ -37,7 +42,13 @@ public final class Observations {
         T run() throws IOException;
     }
 
-    private final Map<String, Map<Path, Version>> seen = new ConcurrentHashMap<>();
+    /** 按最近使用排序，超过上限时去掉最久没用的会话。 */
+    private final Map<String, Map<Path, Version>> seen = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Map<Path, Version>> eldest) {
+            return size() > MAX_SESSIONS;
+        }
+    });
     private final ReentrantLock[] locks = new ReentrantLock[LOCK_STRIPES];
 
     public Observations() {

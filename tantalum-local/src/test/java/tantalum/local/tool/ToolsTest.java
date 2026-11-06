@@ -20,7 +20,7 @@ class ToolsTest {
     @Test
     void namesAndOrderAreFixed() {
         assertEquals(List.of("read_file", "grep", "list_dir", "find_files", "write_file", "edit_file",
-                        "git_log", "git_show", "git_diff", "git_blame", "git_branches"),
+                        "git_log", "git_show", "git_diff", "git_blame", "git_branches", "bash"),
                 Tools.all().stream().map(LocalTool::name).toList());
         assertEquals(Tools.all(), Tools.all());
     }
@@ -36,6 +36,7 @@ class ToolsTest {
         assertEquals(LocalTool.Kind.WRITE, kinds.get("edit_file"));
         Tools.all().stream().filter(tool -> tool.name().startsWith("git_"))
                 .forEach(tool -> assertEquals(LocalTool.Kind.GIT, tool.kind(), tool.name()));
+        assertEquals(LocalTool.Kind.SHELL, kinds.get("bash"));
     }
 
     /**

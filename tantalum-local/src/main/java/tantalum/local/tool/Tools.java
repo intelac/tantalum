@@ -10,7 +10,7 @@ public final class Tools {
 
     private static final List<LocalTool> ALL = List.of(
             new ReadFile(), new Grep(), new ListDir(), new FindFiles(), new WriteFile(), new EditFile(),
-            new GitLog(), new GitShow(), new GitDiff(), new GitBlame(), new GitBranches());
+            new GitLog(), new GitShow(), new GitDiff(), new GitBlame(), new GitBranches(), new Bash());
 
     private Tools() {}
 

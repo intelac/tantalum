@@ -21,7 +21,9 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.auth.UserStore;
@@ -103,12 +105,23 @@ class LocalTokensTest {
     void unknownTokensAreInvalid() throws Exception {
         try (LocalTokens tokens = LocalTokens.open(data, clock)) {
             String issued = tokens.issue(ALICE, Duration.ofHours(1)).token();
-            for (String bad : new String[] {null, "", "tc_", "nonsense", issued + "x", issued.substring(0, issued.length() - 1) + "A",
-                    issued.substring(3)}) {
-                Verdict verdict = tokens.verify(bad);
-                assertEquals(Status.INVALID, verdict.status(), String.valueOf(bad));
-                assertEquals(null, verdict.principal());
-            }
+            // 改最后一个字符：一定要换成不同的字符（随机令牌有 1/64 的机会本来就以 A 结尾）
+            char last = issued.charAt(issued.length() - 1);
+            String changed = issued.substring(0, issued.length() - 1) + (last == 'A' ? 'B' : 'A');
+            Map<String, String> bad = new LinkedHashMap<>();
+            bad.put("null", null);
+            bad.put("empty", "");
+            bad.put("prefix only", "tc_");
+            bad.put("nonsense", "nonsense");
+            bad.put("one more character", issued + "x");
+            bad.put("last character changed", changed);
+            bad.put("without the prefix", issued.substring(3));
+            // 断言消息只写是哪一种，不打印令牌
+            bad.forEach((what, token) -> {
+                Verdict verdict = tokens.verify(token);
+                assertEquals(Status.INVALID, verdict.status(), what);
+                assertEquals(null, verdict.principal(), what);
+            });
         }
     }
 

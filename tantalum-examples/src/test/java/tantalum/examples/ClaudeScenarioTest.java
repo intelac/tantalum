@@ -207,6 +207,7 @@ class ClaudeScenarioTest {
         Path data = temp.resolve("data-chain");
 
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"))) {
+            server.connectComputer("chain", workspace.resolve("chain"), true);
             submit(server, "chain", "s1", "Start by reading step1.txt with read_file and follow the instruction in each file "
                     + "until you find the secret word. Each file tells you the next file. Report the secret word at the end.");
             JsonNode run = waitForLatestRun(server, "chain", "s1", Duration.ofMinutes(8));
@@ -240,6 +241,7 @@ class ClaudeScenarioTest {
         Path data = temp.resolve("data-think");
 
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "high"))) {
+            server.connectComputer("think", workspace.resolve("think"), true);
             submit(server, "think", "s1", "Read step1.txt with read_file. Each file gives a recurrence puzzle whose answer is the "
                     + "number of the next file. Think it through carefully and verify your arithmetic before every read, because a wrong "
                     + "answer points at a file that does not exist. Report the secret word at the end.");
@@ -290,6 +292,7 @@ class ClaudeScenarioTest {
         Map<String, List<String>> live;
         List<String> turnBodies = new ArrayList<>();
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins)) {
+            server.connectComputer("hooks", workspace.resolve("hooks"), true);
             // 每一步都依赖上一步的结果，所以模型不能把它们并成一轮：先读 index 才知道文件名，写 summary 要用找到的行号。
             submit(server, "hooks", "s1", "Step 1: read index.txt with read_file to learn the file names; you do not know them yet. "
                     + "Step 2: read the large log file it names and tell me whether the content you received was cut short; "
@@ -357,6 +360,7 @@ class ClaudeScenarioTest {
         };
 
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins)) {
+            server.connectComputer("quota", workspace.resolve("quota"), true);
             submit(server, "quota", "s1", "Use read_file to read note.txt, then tell me the secret word.");
             JsonNode run = waitForLatestRun(server, "quota", "s1", Duration.ofMinutes(4));
             assertEquals("STOPPED", run.get("endReason").asString(), run.toString());
@@ -558,6 +562,9 @@ class ClaudeScenarioTest {
 
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"))) {
             for (String user : users) {
+                server.connectComputer(user, workspace.resolve(user), false);
+            }
+            for (String user : users) {
                 server.get(user, "/api/sessions");   // 先各自登录，提交时才是同时的。
             }
             CountDownLatch go = new CountDownLatch(1);
@@ -670,6 +677,7 @@ class ClaudeScenarioTest {
         ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings(MODEL, 8192, "medium", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true));
         CompactionScenario.Verdict verdict;
         try (TestServer server = new TestServer(data, workspace, strict, CompactionScenario.SETTINGS_CLAUDE)) {
+            server.connectComputer("notes", workspace.resolve("notes"), true);
             verdict = CompactionScenario.run(server, "notes", "s1", data, "claude");
         }
         assertEquals("COMPLETED", verdict.endReason());
@@ -729,6 +737,7 @@ class ClaudeScenarioTest {
         CompactionScenario.writeHugeFile(workspace.resolve("huge"));
         Path data = temp.resolve("data-huge");
         try (TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            server.connectComputer("huge", workspace.resolve("huge"), true);
             String answer = CompactionScenario.ask(server, "huge", "s1",
                     "Read huge.txt with read_file once and tell me the code on its first line and the code on its last line.");
             System.out.println("[claude huge] compactions=" + CompactionScenario.compactions(server, "huge", "s1") + " answer=" + answer.replace("\n", " | "));
@@ -746,6 +755,7 @@ class ClaudeScenarioTest {
         CompactionScenario.writeNotes(workspace.resolve("twice"));
         Path data = temp.resolve("data-twice");
         try (TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            server.connectComputer("twice", workspace.resolve("twice"), true);
             CompactionScenario.ask(server, "twice", "s1", "A standing rule for this whole conversation: end every report with the exact word FINCH-END. Reply with OK.");
             CompactionScenario.ask(server, "twice", "s1", "Read note01.txt to note05.txt one at a time, then say done.");
             CompactionScenario.ask(server, "twice", "s1", "Read note06.txt to note10.txt one at a time, then say done.");
@@ -771,6 +781,7 @@ class ClaudeScenarioTest {
         try (TestMcpServer mcp = new TestMcpServer(new TestMcpServer.Definition("lookup", true, "key", arguments -> TestMcpServer.text("value-3391")));
              TestServer server = new TestServer(data, workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE[0], CompactionScenario.SETTINGS_CLAUDE[1],
                      "--tantalum.mcp.servers.demo.url=" + mcp.url(), "--tantalum.mcp.servers.demo.max-tools=1")) {
+            server.connectComputer("gone", workspace.resolve("gone"), true);
             CompactionScenario.ask(server, "gone", "s1", "Read note01.txt to note04.txt one at a time, then say done.");
             CompactionScenario.ask(server, "gone", "s1", "Call the lookup tool with key a and tell me the value.");
             mcp.stop();
@@ -816,6 +827,7 @@ class ClaudeScenarioTest {
         Path data = temp.resolve("data-think");
         CompactionScenario.Verdict verdict;
         try (TestServer server = new TestServer(data, workspace, strict("high"), CompactionScenario.SETTINGS_CLAUDE)) {
+            server.connectComputer("think", workspace.resolve("think"), true);
             verdict = CompactionScenario.run(server, "think", "s1", data, "claude thinking");
         }
         assertScenarioPassed(verdict);
@@ -840,6 +852,7 @@ class ClaudeScenarioTest {
                 arguments -> TestMcpServer.text("after-note05".equals(arguments.get("key")) ? "read note06.txt" : "unknown key")));
              TestServer server = new TestServer(data, workspace, strict("medium"),
                      CompactionScenario.SETTINGS_CLAUDE[0], CompactionScenario.SETTINGS_CLAUDE[1], "--tantalum.mcp.servers.demo.url=" + mcp.url())) {
+            server.connectComputer("hop", workspace.resolve("hop"), true);
             for (int i = 0; i < 500 && !server.context.getBean(tantalum.shell.boot.Engine.class).mcpHas("mcp__demo__next_note"); i++) {
                 Thread.sleep(10);
             }
@@ -873,10 +886,12 @@ class ClaudeScenarioTest {
         CompactionScenario.Verdict on;
         CompactionScenario.Verdict off;
         try (TestServer server = new TestServer(temp.resolve("data-cost-on"), workspace, strict("medium"), CompactionScenario.SETTINGS_CLAUDE)) {
+            server.connectComputer("cost", workspace.resolve("cost"), true);
             on = CompactionScenario.run(server, "cost", "on", temp.resolve("data-cost-on"), "claude cost on");
         }
         try (TestServer server = new TestServer(temp.resolve("data-cost-off"), workspace, strict("medium"),
                 "--tantalum.claude.context-window=200000", "--tantalum.claude.max-tokens=8192", "--tantalum.compaction.window-from-model=false")) {
+            server.connectComputer("cost", workspace.resolve("cost"), true);
             off = CompactionScenario.run(server, "cost", "off", temp.resolve("data-cost-off"), "claude cost off");
         }
         System.out.println("[claude cost] ON : calls=" + on.modelCalls() + " promptTokens=" + on.promptTokens() + " output=" + on.outputTokens()
@@ -1124,7 +1139,10 @@ class ClaudeScenarioTest {
         usage("pdf", journal);
     }
 
-    /** 需求 A6、3.5：文件只给只读路径，模型自己用 read_file 读。判定：有一次 read_file 读到了文件内容，回答里有文件里的词。 */
+    /**
+     * 需求 A6、3.5：文件只给只读路径，模型自己用服务器上的 {@code read_attachment} 读（local-workspace L7：不用连电脑）。
+     * 判定：有一次工具调用读到了文件内容，回答里有文件里的词。
+     */
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void readsAnAttachedTextFileThroughItsReadonlyPath() throws Exception {
@@ -1139,7 +1157,7 @@ class ClaudeScenarioTest {
         }
         List<EventEnvelope> journal = journal(data);
         assertTrue(events(journal, ToolFinished.class).stream().anyMatch(tool -> !tool.error() && tool.text().contains(word)),
-                "expected a read_file call that returned the file");
+                "expected a read_attachment call that returned the file");
         assertTrue(lastText(journal).contains(word), "expected " + word + " in: " + lastText(journal));
         usage("text file", journal);
     }
