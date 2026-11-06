@@ -58,10 +58,13 @@ export ANTHROPIC_API_KEY=...
 java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar
 ```
 
-不能外发代码时，用本地的 OpenAI 兼容模型（默认指向 `127.0.0.1:8090` 的 strata）：
+不能外发代码时，配一条本地的 OpenAI 兼容路线并设成默认（见下面“模型路线”），例如本机 llama.cpp：
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.provider=openai
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.provider=local \
+  --tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1 \
+  --tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl \
+  --tantalum.openai-routes.local.thinking=chat-template
 ```
 
 然后打开 <http://127.0.0.1:8080>。配置项和默认值见 `tantalum-shell/src/main/resources/application.properties`。
@@ -69,6 +72,61 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalu
 服务默认只绑定 `127.0.0.1`。
 
 服务器上不读写代码：agent 读、改的是用户自己电脑上的文件，要在电脑上运行连接程序，见下面“本机工作区”。服务器的工作目录（`tantalum.workspace`）只放每个用户的记忆这类服务器自己的数据。
+
+## 模型路线
+
+管理员配几条“路线”，用户在输入框旁给每个会话选模型和思考档位（`model-picker` spec）。一条 Claude 路线（名字固定 `claude`），加上任意条 OpenAI 兼容路线（托管的 Kimi、GLM、Qwen、MiniMax 这类接口，和本机的 llama.cpp、vLLM）。
+
+### 配置
+
+| 项 | Claude 路线 `tantalum.claude.*` | OpenAI 兼容路线 `tantalum.openai-routes.{名字}.*` |
+|---|---|---|
+| 默认路线 | `tantalum.provider=claude`（默认） | `tantalum.provider={名字}` |
+| 显示名 | `display-name`（默认 Claude） | `display-name`（默认是路线名） |
+| 地址 | 官方接口 | `base-url`（必填，到 `/v1`） |
+| 密钥 | `api-key-env`：存密钥的环境变量名，默认 `ANTHROPIC_API_KEY` | `api-key-env`：不写就不发认证头（本机服务） |
+| 默认模型、档位 | `model`（`claude-sonnet-5-5`）、`effort`（`medium`，只能是 low、medium、high、xhigh、max） | `model`（必填）、`default-effort` |
+| 允许列表 | `models`，逗号分隔；空 = Models 接口里支持 adaptive 思考的全部 | `models`；`list-models=false` 时不读 `/models`，列表就是允许列表（没写就是默认模型） |
+| 思考参数 | 自动（见下） | `thinking`、`efforts`，见下 |
+| 其他 | `max-tokens`、`concurrency`、`context-window`、`bytes-per-token`、`fallbacks`、超时 | `max-tokens`（16384）、`concurrency`（1）、`context-window`、`bytes-per-token`（1.75）、`vision`、超时；`overrides[模型名].*` 单独写某个模型的 `thinking`、`efforts`、`default-effort`、`vision`、`context-window` |
+
+- 路线名只用小写字母、数字、`-`，最长 32，`claude` 保留。名字不合规、重复、`thinking` 或档位写错、默认路线不存在，启动失败并写明哪一项。
+- **密钥只从环境变量读**，不进配置文件、日志、journal、接口返回和画面；接口也不返回路线地址和变量名。变量没设的路线不启用（启动日志写变量名，不写值）；默认路线的变量没设时启动失败。
+- 模型名里有 `/`、`.` 时 `overrides` 用 Spring 的方括号写法：`--tantalum.openai-routes.kimi.overrides[moonshotai/kimi-k2].thinking=thinking-type`。
+- 云端路线（Claude，或地址不是本机回环的）启动日志提示 prompt 会发出去；选择器旁写“云端”或“本地”。
+- **迁移**：旧的 `tantalum.openai.*` 已改为 `tantalum.openai-routes.{名字}.*`，配置里还有旧键时启动失败，写明要改成什么。
+
+### 模型列表
+
+- Claude 读 Models 接口（翻完所有页），只列支持 `adaptive` 思考的模型：只收 `budget_tokens` 的老模型（Haiku 4.5、Sonnet 4.5、Opus 4.5）发出去会 400，不提供，允许列表里写了也只在启动日志里说明。窗口取 `max_input_tokens`（开着备用模型时取它和备用模型中最小的），收不收图片读 `capabilities.image_input`。
+- OpenAI 兼容的读 `GET {base-url}/models` 的 `data[].id`，窗口读 `meta.n_ctx`、`max_model_len` 或 `context_length`，读不到用 `context-window`（设置页写“来自配置”）。
+- 启动时几条路线并行读，总共最多等 5 秒；之后每 10 分钟后台再读，失败时保留上次的。一次也没读到的路线在选择器里是灰色的一组“暂时连不上（连不上 / 401 / 超时）”。用户取列表只读内存，不调接口。
+
+### 思考档位
+
+- **Claude**：档位就是 `output_config.effort`，按 Models 接口列这个模型支持的（如 Sonnet 4.6 没有“很高”）。不提供“关”：Opus 5.5 关思考会 400，Sonnet 5.5 只能换成 `between_tools`；要少想用“低”。
+- **OpenAI 兼容**：接口不报这项能力，由管理员按服务商文档写 `thinking`：
+
+| `thinking` | 档位 | 请求体里加的 | 适用 |
+|---|---|---|---|
+| `none`（默认） | 没有，不显示档位 | — | 不能控制思考的服务 |
+| `reasoning-effort` | `efforts`（默认 low、medium、high） | `"reasoning_effort": "low"` | 支持 OpenAI 写法的托管服务 |
+| `enable-thinking` | 关、开 | `"enable_thinking": true/false` | 部分 Qwen 托管接口 |
+| `chat-template` | 关、开 | `"chat_template_kwargs": {"enable_thinking": true/false}` | 本机 llama.cpp、vLLM 跑 Qwen3（实测关掉后输出 4 token、开着 49 token） |
+| `thinking-type` | 关、开 | `"thinking": {"type": "enabled/disabled"}` | Kimi、GLM 一类 |
+
+服务器只收这个模型列出的档位，别的直接 400，不就近换。
+
+### 换模型
+
+- 每个会话记自己的选择；新会话从这个用户上次选的开始（存在 `users.db`，每人一份），没选过或上次的不能用了，就用管理员的默认。
+- **从下一次提问生效**：正在跑的运行一直用开始时的模型和档位；插话不换模型。选择器旁写“下一次提问生效”。
+- 路线或模型变了，这次提问前面追加一句 `[Model changed: earlier assistant turns were written by …; you are now ….]`，对话页那一轮上面写“换成 {显示名} · {档位}”。只换档位不告诉模型。
+- **缓存**：缓存按模型分，换模型、换档位（Claude 的 `effort` 也一样）之后的第一次请求没有缓存命中。
+- **窗口变小**：换到窗口更小的模型、历史超过它的压缩点时，第一次调它之前先压缩，摘要由上一个模型写；压缩失败时这次运行失败（“换到 X 之前压缩失败，请重试或换窗口更大的模型”），会话退回上一个模型。
+- **思考块**：发给 Claude 时历史里所有 Claude 模型的思考块原样发回（读不了的由服务端丢掉、不计费，换回原来的模型时还能用；自己去掉反而可能 400）。发给 OpenAI 兼容路线的 `reasoning_content` 只发回同一条路线、同一个模型写的。另一种协议的推理内容不发。system 和工具定义不随模型变。
+- **灰掉的 Claude 模型**：会话里有工具变化（一开始就有关着的工具，比如没连电脑时本机工作区的工具，或中途开关过工具）时，不支持会话中途工具变化的 Claude 模型（Sonnet 5、Haiku 5.5、Opus 4.7、Sonnet 4.6、Opus 4.6）不能选：它们看到的历史和支持的模型不一样，换回来时思考签名会失效。
+- 回放和重启后打开会话只读 journal 里记下的选择，模型下线了旧会话照样打开。
 
 ## 登录和用户
 
@@ -119,7 +177,7 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 
 **一步一行。** 每一行是一个事件（用户消息、模型回复、工具结果、上下文组装……）加上内核处理它的结果（`"result": {...}`）：这一步追加了哪些消息、压缩换了哪一段、运行到了哪一步、发出了哪些命令、钩子做了什么决定、用了多少 token，只写变了的部分。事件进来时不写文件，内核处理完才写这一行；落盘之后才去调模型、执行工具、推送画面、写索引，提交接口也这时才回“已接受”（写不进去回 500，10 秒没写完回 504）。崩溃时没写进去的那一步等于没发生过，它的命令也没执行。
 
-**配上了什么，只在变化时记。** 上下文组装那一行记着这个会话配上的插件、工具（完整定义和来源：`builtin` 或 `mcp:<服务器名>`）、system 各段和压缩设置。会话第一次组装、压缩之后写全文，其余只写变了的部分（`"diff": true`）。恢复时照着记录还原，不读插件、工具目录和 MCP，插件删了也照样打开。
+**配上了什么，只在变化时记。** 上下文组装那一行记着这个会话配上的插件、工具（完整定义和来源：`builtin` 或 `mcp:<服务器名>`）、system 各段、压缩设置和这次用的模型选择（路线、模型、档位；提交里带的选择记在提问那一行）。会话第一次组装、压缩之后写全文，其余只写变了的部分（`"diff": true`）。恢复时照着记录还原，不读插件、工具目录和 MCP，插件删了也照样打开。
 
 恢复只读这些行，不再调用内核和钩子：打开不在内存的会话、重启后建索引、执行轨迹、请求详情、断线补读都是把记下的结果套回去。所以升级了内核、改了钩子规则或者卸载了插件，旧会话的历史和画面都不变，新规则只管之后的步骤。工具不能用了（插件删了、在插件页关了），下一次提问时告诉模型，压缩之后也再说一次；对话页在那一轮上面显示一行“工具变化”。
 
@@ -379,10 +437,10 @@ sudo java -jar tantalum.jar browser install --with-deps   # Linux：同时装浏
 长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
 
 - **窗口**：每个模型用它自己的窗口。启动时和每 10 分钟从模型那边读：Claude 读 Models 接口的 `max_input_tokens`（开着备用模型时取主模型和备用模型中最小的），本地服务读 `/v1/models` 里的 `meta.n_ctx`、`max_model_len` 或 `context_length`；模型报上下文超长时再读一次。读不到才用配置的 `context-window`。设置页“模型”一栏写明窗口从哪来。
-- **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 该供应商的 `max-tokens`))。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。
+- **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 这个模型的输出上限))，窗口是这次提问用的模型的（见“模型路线”）。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。
 - **规则**：保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
 - **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
-- **配置**：`tantalum.<provider>.context-window`（读不到模型的窗口时用，为 0 时不压缩）；`tantalum.<provider>.bytes-per-token`（估算系数，宁可多算：Claude 1.5、本地 1.75，按实测定）；`tantalum.compaction.window-from-model`（默认 true，测试用小窗口时关掉）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置每次提问时按当时的窗口和用户的选择重算，记进 journal，回放用记下的那份。
+- **配置**：每条路线的 `context-window`（读不到模型的窗口时用，为 0 时不压缩）和 `bytes-per-token`（估算系数，宁可多算：Claude 1.5、本地 1.75，按实测定）；`tantalum.compaction.window-from-model`（默认 true，测试用小窗口时关掉）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置每次提问时按当时的窗口和用户的选择重算，记进 journal，回放用记下的那份。
 - **手动**：状态栏的压缩按钮，或 `POST /api/sessions/{id}/compact`（可带 `instructions`）；会话运行中或没有可压缩的内容时返回 409。
 - **回复被截断**：回复因输出上限结束时运行照常完成，对话页提示“回复被截断”；不自动续写。
 
@@ -538,6 +596,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有：轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作两类记录，`trace-view` spec | 嵌套子工具、`run_code` 源码视图等 sandbox 之后 |
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
 | 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec；窗口从模型读，压缩点每个用户在设置页选（pi 和 DSH 画面上都没有），`compaction-threshold` spec | 自定义摘要钩子待定 |
+| 画面上选模型和思考档位 | 有（`/model`、Shift+Tab 切档位） | 有（输入框旁下拉） | 有：几条路线（Claude 加任意条 OpenAI 兼容），输入框旁按会话选模型和档位，新会话从上次的选择开始，换模型从下一次提问生效，`model-picker` spec | 管理员在画面上配路线以后再说 |
 | 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | **没有** | `ops-hardening` |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |

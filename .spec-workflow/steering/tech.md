@@ -52,7 +52,8 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 ### External Integrations
 - **模型协议**：OpenAI 兼容的 `/v1/chat/completions`，使用流式请求（`stream: true`）。
-- **可选模型：本地 strata**，配置如下。
+- **模型路线（`model-picker`）**：一条 Claude 路线（`tantalum.claude.*`）加任意条 OpenAI 兼容路线（`tantalum.openai-routes.{名字}.*`），每条自己的地址、存密钥的环境变量名（`api-key-env`）、默认模型、并发和超时；`tantalum.provider` 是默认路线的名字。模型列表从各自的接口读（Claude Models 接口、`GET {base-url}/models`），用户在输入框旁按会话选模型和思考档位，详见 README“模型路线”。下面两张表是两种路线各自的默认值。
+- **OpenAI 兼容路线（如本地 strata）**，配置如下。
 
 | 配置 | 默认值 |
 |---|---|
@@ -140,11 +141,13 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 9. **`reasoning_content` 逐字回传**：沿用 DeepSeek Harness 的决定。它曾只在工具轮次回传，导致经网关转发时对话重建出错；开关设错又会静默失败，所以不提供开关。代价是多占输入 token。
 10. **预留对照 pi 和 DeepSeek Harness（2026-10-31）**：压缩都以追加事件替换投影视图，溢出都规范化后压缩并重试一次，我们预留相同的边界。子 agent 都以工具形式接入；DeepSeek Harness 限每棵树 8 个活跃子 agent、深度 1、超限拒绝不排队，以此为后续默认值的参考。memory 在 DeepSeek Harness 中是默认关闭的第三方 MCP 工具，没有内置服务，我们同样优先走工具接入，但多用户隔离是我们额外的要求。
 
-11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。一次只选一个模型，多模型路由不在本 spec。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-compaction` 必须按此设计。
+11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。按会话选模型（多条路线、换模型）见 `model-picker` spec 和下面第 14 条。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-compaction` 必须按此设计。
 
 12. **项目定名 Tantalum（Yi 决定）**：Maven 模块以 `tantalum-` 为前缀，Java 顶层包 `tantalum.*`。`groupId` 暂用 `dev.tantalum`，只在本地构建；对外发布前要确认已取得域名，否则按简报改用 `io.github.<handle>`。
 
 13. **浏览器用 Playwright for Java，每人一个实例（`web-tools` 方案 A），不用每人一个 `@playwright/mcp`（方案 B）**（2026-11-06 实测，全文在 `specs/web-tools/design.md`“实测”“方案选择”）：A 的快照和截图都在内存里，`acceptDownloads=false` 不留下载文件；B 每次操作都把快照、截图写进输出目录，下载自动存盘，打开网页的结果只给快照文件的链接，违背“服务器上不为联网留下任何文件”。A 的 11 个工具和说明（Bing 搜索、W9 那句话、50,000 字符上限）由我们定，B 要过滤上游 25 个工具、改它的输出，而且每个版本都可能变。A 不用另装 Node（打包在 `driver-bundle` 里），B 要 Node 和每人一个监听本机端口的 MCP 服务器（本机任何进程都能连上去操作这个用户的浏览器）。内存差不多（4 人 Bing：A 1050 MB，B 换成 headless shell 1224 MB），不是理由。A 的代价：jar 大约 209 MB、要联网下载一次；每人多一个驱动进程；浏览器工具和 HTML 转 Markdown 自己写。DSH 用 B，它是单用户的本机程序，输出目录就是用户自己的工作目录，那边不算问题。
+
+14. **换模型时 Claude 的思考块不管是哪个 Claude 模型写的都原样发回（`model-picker` M9），不照 pi、DSH 跨模型就丢掉**（2026-11-06）：Claude 文档 `shared/model-migration.md` 写明换模型时思考块原样发回，接收的模型读不了的由服务端丢掉、不计费，自己去掉反而可能 400；只换 `model` 不算改历史，换回原来的模型时还能读到原来的思考。pi（`transform-messages.ts:122-132`）和 DSH（`llm-deepseek/src/replay.ts:33-38`）跨模型就丢，是因为它们面对的多是不认对方签名的协议。OpenAI 兼容路线的 `reasoning_content` 只发回同一条路线、同一个模型写的（照 pi 的“同一模型”）；跨协议照旧不发。换模型的说明写成这次用户消息开头的文字，system 和工具定义不随模型变，思考签名继续有效；会话里有工具变化时，不支持会话中途工具变化的 Claude 模型不能选（它们看到的历史不一样）。一个运行只有一个模型（从下一次提问生效），压缩、摘要和用量按运行算清楚。
 
 ### Claude 实测（2026-10-31）
 
@@ -565,3 +568,10 @@ record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之�
   内存用 macOS `footprint`（共享页只算一次）量全部驱动和 Chromium 进程；Linux 上 `BrowsersIT` 改用 `/proc/<pid>/smaps_rollup` 的 PSS 相加，还没在 Linux 上跑过。很重的页面上 4 人略超 1.2 GB，所以 NFR 按“比 Bing 结果页大的普通结果页”判定（设计“实测”里 4 人开真实 Bing 是 1,050 MB），重页面的数字写进 README，管理员按 `max-open` × 300 MB 预留内存。每人固定多一个约 125 MB 的驱动进程是方案 A 的代价（Decision Log 13）。
 - **工具定义的 token 和压缩场景的余量（估算，没有调真实模型）**：12 个联网工具的定义约 5.8 KB。用 `TokenEstimate.ofTools` 在默认配置的服务器上量：Claude 系数 1.5 时 3,197，本地系数 1.75 时 2,749，3 时 1,606。按 core-tools 用 `count_tokens` 实测的 JSON、英文每 token 约 1.8 字节算，真实 Claude 约 3,200 token（5.8 KB ÷ 1.8），和 Claude 的估算 3,197 差不多；任务 11 的实施日志记的 1,606–2,749 是系数 3 和 1.75 的估算，按 Claude 算偏少。`CompactionScenario`（窗口 32000，阈值 15616）里，system 加工具从 6,768 估算 token 变成 10,121，阈值下留给历史的从约 8,850 降到约 5,500，一篇 7.9 KB 的笔记按 1.5 估算约 5,300：每读一篇就要压缩一次，保留段只够放一篇，很可能“nothing fits”或连续压缩，和 tech.md 里记下的几次真实结果（12 次调用、1 次压缩）不再可比。这个场景测的是压缩，所以 `SETTINGS_CLAUDE`、`SETTINGS_OPENAI` 关掉两样联网工具（同 2026-11-06 对 `CompactApiTest` 等小窗口测试的处理），余量回到原来。`WindowCompactionTest`、`CoreToolsClaudeTest` 用模型自己的窗口（1M），多 3.2K 无关紧要，没改。真实部署（8091，Claude 1M 窗口）每次请求多约 3.2K 输入 token，有缓存时几乎都是缓存读。
 - **测试**：`WebChainTest`（examples）走真实服务器：关掉浏览器后下一次提问的工具变化正好去掉 11 个 `browser_*`、来源 `web`；截图在会话文件里只有 `ImageRef`、没有 `iVBORw0K`；`web_fetch` 的正文在会话文件里，重启后读会话不再访问网站。控制台端到端：插件页“联网”一块（开关每人各管、刷新还在），`E2eServer` 在主端口 + 1 另起一个 `tantalum.web.browser.enabled=false` 的服务看“管理员已关闭”，`fetch:` 剧本经 `web_fetch` 抓 `E2eServer` 自带的本地页。都不访问外网。
+
+### model-picker（2026-11-07）：几条路线，按会话选模型和思考档位
+
+- **处理时间**（这台 Mac，`ModelApiTest`、`RoutesTest` 量，含本机 HTTP 往返，比服务器处理时间长）：200 个模型时 `GET /api/models` 100 次 P95 3.0–3.2 ms（目标 ≤ 50 ms）；提交接口 100 次 P95 不带 `model` 22.3–24.8 ms、带 `model` 22.4–25.7 ms，差在 ±1 ms 内（目标 ≤ 5 ms，选模型只查内存里的列表）；三条路线、一条 8 秒才回列表，启动等了 5011 ms（目标 ≤ 5 s 加调度误差），另两条照常可用。选择器 200 个模型打开到能点：jsdom 里 23–29 ms（目标 ≤ 100 ms）。
+- **真实模型**（`ModelSwitchScenario`，`TANTALUM_SMOKE_CLAUDE=1` 门控，Claude 严格校验加本机 qwen）：写好了，还没跑；跑完把每一步的模型、档位、调用数、输入、输出、缓存读写、用时记在这里。
+- **顺带修的两处不稳**：`web_fetch` 不要正文的回复（跳转、不收的类型）在 HTTP/2 上取消订阅时，JDK 有时把已经交出的回复当成失败（“Stream N cancelled”，`FetcherTlsIT` 约四次一次，8091 上表现为跳转的 https 网址偶尔“连接失败”），改成小的正文读完丢掉，64 KB 以上才取消；钩子矩阵测试读 journal 前先等最后一行落盘（运行视图先于这一行更新）。
+- **`check`**：用新 jar 检查 8091 的数据目录，6 个会话里 `yi/s-onelinesmoke` 和记录不一致（seq 1 的会话结果）；用部署在 8091 上的旧 jar 检查结果相同，不是本 spec 引起的。

@@ -158,19 +158,19 @@
 
 用真实 Claude 和本地 qwen 在严格校验下验证换模型不破坏思考签名，量 NFR，写文档，8091 加本地路线，最后在 8091 上演示。
 
-- [ ] 17. `ModelSwitchScenario`（真实模型）
+- [-] 17. `ModelSwitchScenario`（真实模型）
   - File: examples/ModelSwitchScenario.java（新），.spec-workflow/steering/tech.md（改，记结果）
   - 风险：换模型后 Claude 因历史（思考块、工具变化、换模型的说明）拒绝请求，或者丢了上下文。`TANTALUM_SMOKE_CLAUDE=1` 门控，Claude 严格校验（`prefix_mismatch_behavior: error`）加本地 qwen（`chat-template`）。照设计“真实模型”那一条的五步和判定标准；先估算用量（预计 15 次调用以内，几十万缓存读），跑一次，结论写进 tech.md：每一步的模型、档位、调用数、输入、输出、缓存读写、用时
   - _Requirements: M9, M11, 需求 6.5_
   - _Prompt: Role: 测试开发 | Task: 用真实模型验证换模型不破坏思考签名 | Restrictions: 只跑一次，失败先查原因再重跑；输出里不出现密钥 | Success: 五步都没有 400，暗号答对，用量记进 tech.md_
 
-- [ ] 18. NFR 测量
+- [x] 18. NFR 测量
   - File: shelltest/web/ModelApiTest.java、shelltest/route/RoutesTest.java（改）、.spec-workflow/steering/tech.md（改）
   - `GET /api/models` 200 个模型 100 次取 P95 ≤ 50 ms；提交接口带不带 `model` 的 P95 差 ≤ 5 ms；启动时三条路线（一条 8 秒才回）等待 ≤ 5 s；结果写进 tech.md
   - _Requirements: NFR Performance_
   - _Prompt: Role: 测试开发 | Task: 量选模型相关的处理时间 | Success: 数字达标并记进 tech.md_
 
-- [ ] 19. 说明文档
+- [x] 19. 说明文档
   - File: README.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md（改）
   - README 新的一节“模型路线”和“能力对照”一行，照设计“文档”；“数据目录”里 journal 那段补一句选择也照“只在变化时记”；tech.md 照设计“改动的已有代码”里那三处；BACKLOG 两行照设计
   - _Requirements: 需求 9.2_
