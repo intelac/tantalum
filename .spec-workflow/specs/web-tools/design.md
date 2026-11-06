@@ -536,7 +536,7 @@ flowchart LR
 | 正文超过 5 MB | 停止下载，用已经读到的部分 | 正文前写明“在 5 MB 停止” |
 | 正文超过 50,000 字符 | 只留开头 | 结尾写明原长度，建议抓更具体的网址 |
 | 网站返回 404、500 | 正常结果（W13） | 状态码和正文 |
-| 连不上、DNS 失败、TLS 失败、30 秒超时 | 错误结果（W13） | “Could not fetch …: <原因>”，原因只写类别，比如 “connection refused”、“timed out after 30 s” |
+| 连不上、DNS 失败、TLS 失败、30 秒超时 | 错误结果（W13） | `Could not fetch …: <原因>`，原因只写类别，比如 “connection refused”、“timed out after 30 s” |
 | 浏览器都在用 | 不起新的，不挤掉别人的（需求 2.5） | “All browsers on this server are in use (4 of 4). Try again in a few minutes.”，就是需求里的“浏览器都在用，稍后再试”；工具结果一律用英文，同现有工具 |
 | 服务器上没装浏览器 | 起浏览器失败，日志记 ERROR，带安装命令 | “The browser is not installed on this server. Ask the administrator to run: java -jar tantalum.jar browser install” |
 | 沙箱起不来（常见于没开用户命名空间的 Linux 容器） | 起浏览器失败，日志记 ERROR | “The browser could not start …”；日志和 README 说明可以设 `tantalum.web.browser.sandbox=false`，以及这样做的风险 |
