@@ -46,7 +46,9 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
-          pnpm test
+          # 测试文件一个一个跑：ModelPicker 的“200 个模型 100 ms 内打开”是 jsdom 粗测，runner 上并行的测试文件抢 CPU 时
+          # 量到 65–100.6 ms（6 次运行），不是控件慢；断言不改
+          pnpm test --no-file-parallelism
       - name: Package
         run: mvn -B -ntp package "-DskipTests"
       - name: Cache Chromium
