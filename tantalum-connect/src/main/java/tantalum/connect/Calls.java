@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
+import tantalum.local.sandbox.Sandbox;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
@@ -40,6 +41,7 @@ final class Calls {
     private final AllowedDirs dirs;
     private final boolean write;
     private final boolean shell;
+    private final Sandbox sandbox;
     private final Journal journal;
     private final Map<String, LocalTool> tools;
     /**
@@ -50,15 +52,21 @@ final class Calls {
     private final Map<String, Thread> running = new ConcurrentHashMap<>();
     private volatile String user;
 
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Journal journal) {
-        this(dirs, write, shell, journal, Tools.all());
+    /** {@code shell}：有 {@code --allow-shell} 而且 {@code sandbox} 检查通过。 */
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal) {
+        this(dirs, write, shell, sandbox, journal, Tools.all());
     }
 
-    /** 测试用：换一套工具。 */
+    /** 测试用：没有命令沙箱、换一套工具。 */
     Calls(AllowedDirs dirs, boolean write, boolean shell, Journal journal, List<LocalTool> tools) {
+        this(dirs, write, shell, Sandbox.unavailable(Main.NO_SHELL_FLAG), journal, tools);
+    }
+
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools) {
         this.dirs = dirs;
         this.write = write;
-        this.shell = shell;
+        this.shell = shell && sandbox.check().available();
+        this.sandbox = sandbox;
         this.journal = journal;
         this.tools = tools.stream().collect(Collectors.toUnmodifiableMap(LocalTool::name, tool -> tool));
     }
@@ -104,7 +112,7 @@ final class Calls {
         LocalResult result;
         Outcome outcome;
         try {
-            result = tool.run(new LocalContext(call.session(), dirs, observations), call.arguments());
+            result = tool.run(new LocalContext(call.session(), dirs, observations, sandbox), call.arguments());
             outcome = !result.error() ? Outcome.OK : outside(call) ? Outcome.DENIED : Outcome.ERROR;
         } catch (InterruptedException stopped) {
             result = null;

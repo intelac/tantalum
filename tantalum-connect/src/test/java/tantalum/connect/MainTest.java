@@ -159,7 +159,7 @@ class MainTest {
                 .options().env());
     }
 
-    /** {@code hello}：允许目录的真实路径、是不是 Git 仓库、能否改文件；命令行这一步还不能用，如实说原因。 */
+    /** {@code hello}：允许目录的真实路径、是不是 Git 仓库、能否改文件；命令行不可用时如实说原因（L13，需求 4.3）。 */
     @Test
     void theHelloSaysWhatThisComputerAllows() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
@@ -172,8 +172,10 @@ class MainTest {
         assertEquals("Yi's MacBook", hello.device().name());
         assertEquals(1, hello.protocol());
 
-        Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network").hello();
-        assertEquals(new Hello.Shell(false, "the command sandbox is not built yet"), shell.shell());
+        Path missing = temp.resolve("no-mxc");
+        Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network", "--mxc", missing.toString()).hello();
+        assertFalse(shell.shell().available());
+        assertTrue(shell.shell().reason().contains(missing.toString()) || shell.shell().reason().contains("macOS"), shell.shell().reason());
         assertFalse(shell.network());
         assertFalse(shell.write());
     }
@@ -190,12 +192,13 @@ class MainTest {
     @Test
     void theSummarySaysWhatIsAllowed() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
-        Main.summary(setup("--allow", work.toString(), "--allow", other.toString(), "--allow-shell"), out);
+        Main.summary(setup("--allow", work.toString(), "--allow", other.toString(), "--allow-shell", "--mxc",
+                temp.resolve("no-mxc").toString()), out);
         String summary = printed();
         assertTrue(summary.contains("http://127.0.0.1:8091"), summary);
         assertTrue(summary.contains(work.toString()));
         assertTrue(summary.contains(other.toString()));
-        assertTrue(summary.contains("the command sandbox is not built yet"), summary);
+        assertTrue(summary.contains("命令行：不可用，"), summary);
         assertTrue(summary.contains("--allow-write"), "says how to allow file changes: " + summary);
     }
 }

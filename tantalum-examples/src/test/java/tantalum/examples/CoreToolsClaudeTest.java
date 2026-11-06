@@ -11,13 +11,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.context.support.GenericApplicationContext;
+import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.OverflowRules;
@@ -95,8 +99,9 @@ class CoreToolsClaudeTest {
     }
 
     /**
-     * 需求 1：长文件只靠窗口读。6 万行的日志，暗号藏在第 41 237 行；grep 关掉，告诉模型大概在哪一段。
-     * 判定：答出暗号；至少一次 read_file 带了 offset；没有一次请求被拒。
+     * 需求 1：长文件只靠窗口读。6 万行的日志，暗号藏在第 41 237 行；告诉模型大概在哪一段。文件在测试电脑上（local-workspace），
+     * 本机工作区的工具不能单独开关，所以用只读策略只放行 read_file，grep 调了也被拦下。
+     * 判定：答出暗号；至少一次 read_file 带了 offset；没有一次 grep 真的执行；没有一次请求被拒。
      */
     @Test
     @Timeout(value = 10, unit = TimeUnit.MINUTES)
@@ -107,8 +112,10 @@ class CoreToolsClaudeTest {
         String log = IntStream.rangeClosed(1, 60_000).mapToObj(i -> i == 41_237 ? "line " + i + ": the vault code is OSPREY-4471"
                 : "line " + i + ": routine heartbeat ok").collect(Collectors.joining("\n")) + "\n";
         Files.writeString(workspace.resolve("alice/big.log"), log);
-        try (TestServer server = new TestServer(data, workspace, strict("low"))) {
-            turn(server, "alice", "tool", "grep", false);
+        Consumer<GenericApplicationContext> onlyReadFile = context -> context.registerBean("readOnly", KernelHook.class,
+                () -> new ReadOnlyHook(Set.of("read_file")));
+        try (TestServer server = new TestServer(data, workspace, strict("low"), onlyReadFile)) {
+            server.connectComputer("alice", workspace.resolve("alice"), false);
             String answer = CompactionScenario.ask(server, "alice", "s1",
                     "big.log has 60000 lines. One line between line 41000 and line 41500 contains a vault code. "
                             + "Find it with read_file and tell me the code.");
@@ -117,7 +124,10 @@ class CoreToolsClaudeTest {
             System.out.println("[claude window] reads=" + calls(journal).stream().map(ToolCallBlock::rawArguments).toList() + " answer=" + answer);
             assertTrue(answer.contains("OSPREY-4471"), answer);
             assertTrue(calls(journal).stream().anyMatch(call -> call.name().equals("read_file") && call.rawArguments().contains("offset")));
-            assertTrue(calls(journal).stream().noneMatch(call -> call.name().equals("grep")), "grep was turned off");
+            Set<String> greps = calls(journal).stream().filter(call -> call.name().equals("grep")).map(ToolCallBlock::id)
+                    .collect(Collectors.toSet());
+            assertTrue(events(journal, tantalum.value.event.ToolFinished.class).stream()
+                    .filter(done -> greps.contains(done.toolCallId())).allMatch(tantalum.value.event.ToolFinished::error), "grep never ran");
             assertEquals(0, invalid(journal));
         }
     }
@@ -151,6 +161,7 @@ class CoreToolsClaudeTest {
                 print("ok")
                 """);
         try (TestServer server = new TestServer(data, workspace, strict("low"))) {
+            server.connectComputer("alice", user, true);
             String answer = CompactionScenario.ask(server, "alice", "s1",
                     "test_pricing.py fails because total() in pricing.py is wrong. Fix total() with edit_file. Do not change the test.");
             List<EventEnvelope> journal = journal(data);
@@ -167,7 +178,7 @@ class CoreToolsClaudeTest {
     }
 
     /**
-     * 需求 8 和设计第 1 节：同一个会话，开始时 write_file 关着；带思考地答一个问题；中途打开；下一次提问模型用它写文件；再关掉，
+     * 需求 8 和设计第 1 节：同一个会话，开始时 write_file 关着（local-workspace 起是插件页“改文件”子开关 {@code local/file-edit}）；带思考地答一个问题；中途打开；下一次提问模型用它写文件；再关掉，
      * 下一次提问不能再写。严格校验下历史里的思考一直有效。
      * 判定：第一问的回复里有思考块（否则这项测不到东西）；文件写出且内容对；关掉后没有新文件；没有一次请求被拒。
      */
@@ -178,18 +189,19 @@ class CoreToolsClaudeTest {
         Path data = temp.resolve("data");
         Path user = Files.createDirectories(workspace.resolve("alice"));
         try (TestServer server = new TestServer(data, workspace, strict("max"))) {
-            turn(server, "alice", "tool", "write_file", false);
+            server.connectComputer("alice", user, true);
+            turn(server, "alice", "local", "file-edit", false);
             String first = CompactionScenario.ask(server, "alice", "s1",
                     "Let a1 = 7 and a(n+1) = 3*a(n) - 4. Find a closed form, prove it by induction, then compute a20 exactly and check it "
                             + "against the recurrence. Do not use any tools.");
             List<ContentBlock> firstReply = events(journal(data), ModelReplied.class).getFirst().content();
             assertTrue(firstReply.stream().anyMatch(ReasoningBlock.class::isInstance), "no thinking to protect: " + firstReply);
 
-            turn(server, "alice", "tool", "write_file", true);
+            turn(server, "alice", "local", "file-edit", true);
             String second = CompactionScenario.ask(server, "alice", "s1", "Now save just the value of a20 into result.txt with write_file.");
             System.out.println("[claude switch] second=" + second.replace("\n", " | "));
 
-            turn(server, "alice", "tool", "write_file", false);
+            turn(server, "alice", "local", "file-edit", false);
             String third = CompactionScenario.ask(server, "alice", "s1",
                     "Also save the value of a19 into second.txt if you can; if you have no tool for writing files, just say so.");
 

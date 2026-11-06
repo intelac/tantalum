@@ -122,6 +122,8 @@ class ClaudeCrashRecoveryTest {
 
         ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
         try (TestServer restarted = new TestServer(data, workspace, client)) {
+            // 文件工具在电脑上执行（local-workspace）：恢复后连一台测试电脑，接着问时模型能读 note.txt
+            restarted.connectComputer("alice", workspace.resolve("alice"), false);
             JsonNode view = JSON.readTree(restarted.get("alice", "/api/runs/" + runId).body());
             assertEquals("CANCELLED", view.get("endReason").asString(), view.toString());
             assertEquals("interrupted by restart", view.get("detail").asString(), view.toString());

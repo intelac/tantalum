@@ -39,6 +39,16 @@
 | @tanstack/react-virtual（含 @tanstack/virtual-core 3.19.6） | 3.14.21 | MIT |
 | diff | 9.0.0 | BSD-3-Clause |
 
+## 连接程序安装包（`tantalum-connect`，macOS）
+
+`Tantalum Connect.app` 里除了 Tantalum 自己的 jar（`tantalum-connect`、`tantalum-local`、`tantalum-value`），还随包分发下面这些。
+
+| 项目 | 版本 | 许可证 | 用途 |
+|---|---|---|---|
+| Microsoft MXC 的 `mxc-exec-mac`（<https://github.com/microsoft/mxc>） | 1.0.1 | MIT | 在 macOS 的 Seatbelt 沙箱里执行 `bash`。取自发布包 `mxc-release-binaries.zip`，原文件、保留微软签名，构建时校验 SHA-256；程序不进本仓库。许可证全文随包放在 `Contents/app/MXC-LICENSE.txt` |
+| OpenJDK 运行环境（`jlink` 裁剪：`java.base`、`java.desktop`、`java.net.http`、`java.sql`） | 25 | GPL-2.0 with Classpath Exception | 用户不用另装 Java。各模块的声明在 `Contents/runtime/Contents/Home/legal/` |
+| Jackson 3（`jackson-databind`、`jackson-core`）与 `jackson-annotations` | 3.1.7、2.21 | Apache-2.0 | 消息格式 |
+
 ## 只在构建和测试时使用
 
 | 项目 | 版本 | 许可证 |
@@ -47,6 +57,7 @@
 | ArchUnit | 1.5.1 | Apache-2.0 |
 | JaCoCo | 0.8.16 | EPL-2.0 |
 | Exec Maven Plugin | 3.6.3 | Apache-2.0 |
+| Maven Dependency Plugin | 3.8.1 | Apache-2.0 |
 | TypeScript | 7.0.2 | Apache-2.0 |
 | Vite、@vitejs/plugin-react | 8.3.5、6.1.2 | MIT |
 | Tailwind CSS、@tailwindcss/vite | 4.3.3 | MIT |

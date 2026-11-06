@@ -161,35 +161,36 @@
 
 ## 阶段 4：命令行和安装包
 
-- [ ] 20. MXC 检查和规则
+- [x] 20. MXC 检查和规则
   - File: local/sandbox/Sandbox.java、Mxc.java、MxcPolicy.java（新）
   - 找 `mxc-exec-mac`（安装包里的或 `--mxc`），`--dry-run` 最小规则，再真跑 `/usr/bin/true`，任何一步失败都给出原因。规则按设计：读写目录、只读目录（含 `/opt/homebrew`、`/usr/local`、`--allow-read`）、禁止 `~/.ssh` 和 `~/Library/Keychains`、网络、`hostLoopback` 拒绝、环境变量
   - 测试：规则 JSON 的内容（没有 `--allow-write` 时允许目录是只读）；找不到程序时原因清楚；环境变量里不会出现含 `KEY`、`TOKEN`、`SECRET`、`PASSWORD` 的名字和 `TANTALUM_TOKEN`
   - _Requirements: L13, L14, 需求 4.2, 4.3, 4.5_
   - _Prompt: Role: Java 开发 | Task: 实现 MXC 的检查和规则生成 | Restrictions: 不可用时不能退回不隔离执行 | Success: 测试全过_
 
-- [ ] 21. `bash`
+- [x] 21. `bash`
   - File: local/tool/Bash.java（新）、local/tool/Tools.java、tantalum-local/src/test/java/tantalum/local/sandbox/MxcIT.java（新）
   - 参数 `command`、`timeout`（默认 120、最多 600）、`workdir`；声明自己的超时；只保留最后 2000 行或 50 KB；退出码不是 0 算错误；取消时先取子孙进程再逐个结束；每次调用一个临时目录，结束后删掉
   - 测试（`MxcIT`，只在 macOS 上、程序存在时跑，否则跳过并写明原因）：读不到 `~/.ssh` 和另造的家目录文件；没有写权限时写不了；有时只能写允许目录；`--no-network` 连不上外网；连不上本机服务器端口；超时和取消后没有残留进程
   - _Requirements: L13, L14, 需求 4, 8.2_
   - _Prompt: Role: Java 开发 | Task: 实现在 MXC 里执行的 bash | Success: MxcIT 在 Yi 的 Mac 上全过_
 
-- [ ] 22. 安装包
+- [x] 22. 安装包
   - File: tantalum-connect/pom.xml（`mac` profile）、tantalum-connect/src/package/*、THIRD_PARTY_NOTICES.md
   - 下载 MXC v1.0.1 发布包并校验 SHA-256，取出 `mxc-exec-mac`；`jlink` 裁剪运行环境；`jpackage` 做 `Tantalum Connect.app`，打成 `.zip`；包里带启动脚本 `tantalum-connect`
   - 测试：解压后在没有装 Java 的环境（`PATH` 去掉 Java、`JAVA_HOME` 置空）里 `tantalum-connect --help` 能跑；包里有 MXC 并且检查通过
   - _Requirements: L16, 需求 7.1_
   - _Prompt: Role: 构建工程 | Task: 打 macOS 安装包 | Restrictions: MXC 程序不进 Git 仓库 | Success: 安装包能用_
 
-- [ ] 23. 说明文档
+- [x] 23. 说明文档
   - File: README.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md
   - README：下载、第一次打开怎么放行、生成令牌、启动命令、每个参数的意思和风险、MXC 拦什么不拦什么（网络只能整体开关）。tech.md 记设计和测量结果；BACKLOG 更新反向沙箱一行，加 Windows、代码索引两项
   - _Requirements: 需求 7.2_
   - _Prompt: Role: 技术写作 | Task: 写说明 | Success: Yi 照着能装起来_
 
-- [ ] 24. 测量和 8091 演示
+- [-] 24. 测量和 8091 演示
   - File: tantalum-connect/src/test/java/tantalum/connect/LinkBench.java（新）
   - `read_file` 经过连接程序和直接执行各 1000 次，比 P95（≤ 20 ms）；连接程序空闲内存（≤ 150 MB）。8091 上用 Yi 的 Mac 和真实 Claude，在一个小 Maven 项目里修一个失败的测试：读代码、改代码、跑 `mvn -q test` 通过；截图给 Yi；报告 Claude 用量
   - _Requirements: NFR Performance, 需求 8.4_
   - _Prompt: Role: 测试开发 | Task: 测量并做真实演示 | Success: 数字达标，演示成功_
+  - 进度（2026-11-06）：`LinkBench` 已做，数字达标（P95 多花 0.94 ms，空闲 114 MB，见 tech.md）；8091 的真实演示还没做。

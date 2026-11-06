@@ -77,4 +77,61 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      macOS（Apple 芯片）安装包（local-workspace 任务 22）：自带 jlink 裁剪的运行环境和 MXC 的 Tantalum Connect.app，打成 zip。
+        mvn -o -pl tantalum-connect -am package -Pmac -DskipTests
+      产物 target/tantalum-connect-<版本>-macos-arm64.zip。MXC 的发布包缓存在 ~/.cache/tantalum/mxc/1.0.1，构建时校验 SHA-256，
+      不进 Git 仓库；离线构建时可用环境变量 MXC_ZIP 指向已下载的 mxc-release-binaries.zip。细节见 src/package/build-mac.sh。
+    -->
+    <profile>
+      <id>mac</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-dependency-plugin</artifactId>
+            <version>3.8.1</version>
+            <executions>
+              <execution>
+                <id>package-input</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>copy-dependencies</goal>
+                </goals>
+                <configuration>
+                  <includeScope>runtime</includeScope>
+                  <overWriteSnapshots>true</overWriteSnapshots>
+                  <outputDirectory>${project.build.directory}/package/input</outputDirectory>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>build-mac</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <configuration>
+                  <executable>${project.basedir}/src/package/build-mac.sh</executable>
+                  <arguments>
+                    <argument>${project.build.directory}</argument>
+                    <argument>${project.version}</argument>
+                    <argument>${project.build.finalName}.jar</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

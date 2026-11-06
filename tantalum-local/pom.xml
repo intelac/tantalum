@@ -13,6 +13,11 @@
   <!-- 用户电脑上执行的工具和连接用的消息格式，服务器和连接程序共用。不依赖 Spring，也不依赖 tantalum-shell。 -->
   <artifactId>tantalum-local</artifactId>
 
+  <properties>
+    <!-- MxcIT 用的 mxc-exec-mac；空着时用打包时下载、校验过的那份。 -->
+    <tantalum.mxc></tantalum.mxc>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>dev.tantalum</groupId>
@@ -29,4 +34,33 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!-- MxcIT 用真的 mxc-exec-mac 跑命令（只在 macOS 上、程序存在时），放在 integration-test 阶段。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <argLine>@{argLine}</argLine>
+          <systemPropertyVariables>
+            <tantalum.mxc>${tantalum.mxc}</tantalum.mxc>
+          </systemPropertyVariables>
+          <properties>
+            <configurationParameters>junit.jupiter.execution.timeout.default = 60 s
+            junit.jupiter.execution.timeout.thread.mode.default = SEPARATE_THREAD</configurationParameters>
+          </properties>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

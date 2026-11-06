@@ -16,6 +16,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import tantalum.local.fs.AllowedDirs;
+import tantalum.local.sandbox.Mxc;
+import tantalum.local.sandbox.MxcPolicy;
+import tantalum.local.sandbox.Sandbox;
 import tantalum.local.tool.GitRepo;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
@@ -32,9 +35,10 @@ public final class Main {
     static final String PATH = "/api/local/connect";
     /** 启动被拒（参数不对、目录不存在、没有令牌）。 */
     static final int REFUSED = 1;
-    /** 这一步还没有命令沙箱（阶段 4 用 MXC 实现），有 {@code --allow-shell} 也如实报不可用。 */
-    static final String NO_SANDBOX_YET = "the command sandbox is not built yet";
     static final String NO_SHELL_FLAG = "--allow-shell was not given";
+    /** 安装包的启动器经这个系统属性告诉程序包里的 {@code mxc-exec-mac} 在哪。 */
+    static final String BUNDLED_MXC = "tantalum.mxc";
+    private static final Pattern ENV_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     /** 参数里夹着一整个令牌（如 {@code --allow=tc_…}）。令牌的随机部分是 43 个 base64url 字符。 */
     private static final Pattern EMBEDDED_TOKEN = Pattern.compile(TOKEN_PREFIX + "[A-Za-z0-9_-]{40,}");
 
@@ -89,9 +93,13 @@ public final class Main {
         }
         summary(setup, out);
         Journal journal = new Journal(out, Clock.systemDefaultZone());
-        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), journal);
-        // Ctrl+C：先打断在跑的调用，git 这类子进程跟着结束
-        Runtime.getRuntime().addShutdownHook(new Thread(calls::stopAll, "stop-calls"));
+        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.sandbox(), journal);
+        // Ctrl+C：打断在跑的调用，再结束这个程序启动的全部进程（MXC 和命令、git），最后删掉沙箱的临时目录
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            calls.stopAll();
+            ProcessHandle.current().descendants().forEach(ProcessHandle::destroyForcibly);
+            setup.sandbox().close();
+        }, "stop-calls"));
         try {
             return new Link(setup, calls, out).run();
         } catch (InterruptedException stopped) {
@@ -172,10 +180,10 @@ public final class Main {
     }
 
     /**
-     * 检查过的启动设置：WebSocket 地址、允许的目录、要发给服务器的 {@code hello}、令牌。
-     * {@link #toString()} 不带令牌，打印或写进异常都不会泄露。
+     * 检查过的启动设置：WebSocket 地址、允许的目录、要发给服务器的 {@code hello}、令牌、跑命令的沙箱（没有 {@code --allow-shell}
+     * 或不可用时是不能用的沙箱）。{@link #toString()} 不带令牌，打印或写进异常都不会泄露。
      */
-    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token) {
+    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox) {
 
         @Override
         public String toString() {
@@ -183,7 +191,7 @@ public final class Main {
         }
     }
 
-    /** 检查目录、取令牌、算出 {@code hello}。 */
+    /** 检查目录、取令牌、检查沙箱、算出 {@code hello}。 */
     static Setup setup(Options options, Map<String, String> env, Prompt prompt) throws Refused {
         URI socket = socket(options.server());
         AllowedDirs dirs;
@@ -203,13 +211,31 @@ public final class Main {
             }
         }
         for (String name : options.env()) {
-            String upper = name.toUpperCase(Locale.ROOT);
-            if (upper.contains("KEY") || upper.contains("TOKEN") || upper.contains("SECRET") || upper.contains("PASSWORD")) {
+            if (MxcPolicy.secret(name)) {
                 throw new Refused("--env 不能放行 " + name + "：名字里有 KEY、TOKEN、SECRET 或 PASSWORD 的变量可能是密钥，不交给命令。");
             }
+            if (!ENV_NAME.matcher(name).matches()) {
+                throw new Refused("--env 后面写环境变量的名字（字母、数字、下划线），不写值：" + name);
+            }
         }
-        Hello hello = hello(options, dirs);
-        return new Setup(socket, options, dirs, hello, token(env, prompt));
+        String token = token(env, prompt);
+        Sandbox sandbox = sandbox(options, dirs, env);
+        return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check()), token, sandbox);
+    }
+
+    /**
+     * 有 {@code --allow-shell} 时找 MXC 并检查（L13）。不可用时命令行不出现，原因写进启动说明和插件页，文件工具照常能用；
+     * 不会退回到不隔离直接跑。
+     */
+    private static Sandbox sandbox(Options options, AllowedDirs dirs, Map<String, String> env) {
+        if (!options.shell()) {
+            return Sandbox.unavailable(NO_SHELL_FLAG);
+        }
+        String bundled = System.getProperty(BUNDLED_MXC);
+        MxcPolicy policy = MxcPolicy.of(dirs, options.write(), options.read(), options.network(), options.env(), env);
+        Sandbox sandbox = Mxc.open(options.mxc(), bundled == null || bundled.isBlank() ? null : Path.of(bundled), policy);
+        sandbox.check();
+        return sandbox;
     }
 
     private static URI socket(String server) throws Refused {
@@ -249,7 +275,7 @@ public final class Main {
         return token;
     }
 
-    private static Hello hello(Options options, AllowedDirs dirs) {
+    private static Hello hello(Options options, AllowedDirs dirs, Sandbox.Status shell) {
         List<Hello.Root> roots = new ArrayList<>();
         for (Path dir : dirs.all()) {
             boolean git;
@@ -261,8 +287,8 @@ public final class Main {
             }
             roots.add(new Hello.Root(dir.toString(), git));
         }
-        Hello.Shell shell = options.shell() ? new Hello.Shell(false, NO_SANDBOX_YET) : new Hello.Shell(false, NO_SHELL_FLAG);
-        return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(), shell, options.network());
+        return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
+                new Hello.Shell(shell.available(), shell.reason()), options.network());
     }
 
     static String version() {
@@ -302,6 +328,9 @@ public final class Main {
         }
         out.println("改文件：" + (hello.write() ? "允许" : "不允许（要允许请加 --allow-write）"));
         out.println("命令行：" + (hello.shell().available() ? "可用" : "不可用，" + hello.shell().reason()));
+        if (setup.sandbox() instanceof Mxc mxc && hello.shell().available()) {
+            out.println("命令沙箱：" + mxc.program());
+        }
         if (setup.options().shell()) {
             out.println("命令联网：" + (hello.network() ? "允许" : "不允许"));
             for (Path dir : setup.options().read()) {

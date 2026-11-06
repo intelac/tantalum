@@ -25,6 +25,9 @@
 | shell | `anthropic-java` | 3.3.0（实施时确认与 Spring Boot 的依赖无冲突） | 调用 Claude |
 | shell | Spring Security | Spring Boot 4.1.2 管理 | 登录、Cookie 会话、Origin 校验 |
 | shell | Bouncy Castle `bcprov-jdk18on` | 1.86 | Argon2id 口令哈希 |
+| local | Jackson | 同 shell | 和连接程序之间的消息、MXC 规则；`tantalum-local` 只依赖 value 和 Jackson |
+| connect | JDK `java.net.http.WebSocket` | JDK 自带 | 连接程序连服务器；服务器用 Tomcat 自带的 Jakarta WebSocket |
+| connect（外部程序） | 微软 MXC `mxc-exec-mac` | 1.0.1（MIT） | 用户电脑上 `bash` 的沙箱（macOS Seatbelt）；随安装包分发，构建时校验 SHA-256，不进仓库 |
 | 测试 | Playwright | 1.64 | 端到端（脚本化模型，不访问外网） |
 | 测试 | JUnit | 6.1.3（以 Spring Boot 管理的版本为准） | 单元与集成测试 |
 | 测试 | ArchUnit | 1.5.1 | 分层守护 |
@@ -101,6 +104,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **Target Platform**：单进程部署，开发环境为 macOS arm64。
 - **Distribution**：Spring Boot 可执行 jar，内含控制台静态文件。
 - **Installation Requirements**：JDK 25；模型服务可用。
+- **连接程序**（`local-workspace`）：macOS Apple 芯片的 `Tantalum Connect.app`（`jpackage` + `jlink` 裁剪的运行环境 + MXC），打成 zip，不签名、不公证；命令行启动器 `Contents/MacOS/tantalum-connect`。`mvn -o -pl tantalum-connect -am package -Pmac -DskipTests`，脚本 `tantalum-connect/src/package/build-mac.sh`。
 
 ## Technical Requirements & Constraints
 
@@ -402,7 +406,8 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 ## Known Limitations
 - **Disruptor 版本较旧**：4.0.0 发布于 2023-09，以 Java 11 为基线，尚未在 Java 25 上验证；骨架的第一批 task 先做冒烟验证。
 - **SQLite 原生访问**：`sqlite-jdbc` 在 Java 25 上正常工作，但会触发受限方法警告，且未来版本默认会阻止。可执行 jar 的清单要声明 `Enable-Native-Access: ALL-UNNAMED`，测试用 `--enable-native-access=ALL-UNNAMED`。
-- **会话在内存里，没有用户管理界面**：重启后要重新登录；用户只能用命令行管理。目录隔离靠路径校验，不是操作系统沙箱，沙箱另开 spec。
+- **会话在内存里，没有用户管理界面**：重启后要重新登录；用户只能用命令行管理。
+- **本机工作区的边界**（`local-workspace`）：服务器被攻破时，它能在每台连着的电脑的允许范围里读写、跑命令（DS 文章 §8.4 的问题没有根治，只靠电脑决定范围和有期限的令牌缩小）。`bash` 的网络只能整体开关；连不上本机端口，命令里起的本地服务自己也连不上。先读后写的记录在连接程序内存里只留最近 64 个会话。只有 macOS。
 - **模型并发默认为 1**：strata 的并发能力尚未测试，多用户时模型调用会排队（不阻塞内核）。
 - **strata 与其他任务共用**：其他任务占用时，模型调用可能等待数分钟，甚至超时后进入重试。冒烟测试需要记录模型调用耗时，结果受当时负载影响。
 
@@ -508,3 +513,21 @@ macOS 的 `FileChannel.force` 每次刷整块磁盘的缓存，每秒 200 次就
 | 会话文件 | 20 MB | 25 MB（+25%） | 合成语料不设预算 |
 
 record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之前还快。预热和每行只解析一次各占多少没有分开测。合成语料的事件小、每几轮压缩一次，结果占比高，所以文件比真实会话增加得多（真实会话见第 2 步，103.8%）。
+
+### local-workspace（2026-11-06）：工具在用户自己的电脑上执行
+
+- **结构**：服务器上不再有读写文件、跑命令的工具（只剩读本人附件的 `read_attachment`）。用户电脑上的连接程序 `tantalum-connect` 主动用 WebSocket 连 `/api/local/connect`，令牌（`tc_…`，30 分钟到 1 天，只存 SHA-256，可撤销）只从环境变量或不回显的输入读。服务器的转发工具把调用交给 `LocalLinks`，电脑上 `Calls` 再查一遍用户、工具类别、路径后执行。工具代码和消息格式在 `tantalum-local`，服务器和连接程序共用（ArchUnit：`tantalum.local` 不依赖 shell、kernel、Spring）。工具定义固定，电脑连上、断开只改“开着哪些工具”，走现有的工具变化消息，缓存前缀和思考签名不受影响。
+- **命令沙箱**（`tantalum.local.sandbox`）：微软 MXC v1.0.1 的 `mxc-exec-mac`（Seatbelt）。启动时 `--dry-run` 检查实际规则、再真跑 `/usr/bin/true`，不通过就没有 `bash`，不会退回到不隔离（照 DSH `SANDBOX_UNAVAILABLE`）。规则：允许目录有 `--allow-write` 时读写、否则只读；每次调用一个临时目录当 `TMPDIR`；只读 `/opt/homebrew`、`/usr/local`、`--allow-read`；禁止 `~/.ssh`、`~/Library/Keychains`；出站整体开关，`hostLoopback` 一律拒绝；环境变量只有 `PATH`、`HOME`（连接程序自己的空目录：设成真实家目录时 git 读 `~/.gitconfig` 被拒报 fatal）、`TMPDIR`、`LANG` 和 `--env` 放行的（名字含 KEY、TOKEN、SECRET、PASSWORD 的不行）。规则文件 600，放在命令读不到的私有目录。MXC 本身也以空环境启动。
+- **进程树**：超时交给 MXC 的 `process.timeout`（到期退出码 255，错误输出最后一行是 `{"error":{"code":"backend_error","message":"script timed out after …"}}`，这行不给模型看）。直接结束 `mxc-exec-mac` 时它启动的进程会留下，所以取消时先反复取 `ProcessHandle.descendants()` 逐个结束，再结束 MXC；连接程序退出时结束自己的全部子孙进程。`MxcIT` 用 `pgrep` 确认超时和取消后没有残留。
+- **安装包**：`jpackage` 会把包里每个 Mach-O 重新做临时签名，MXC 的微软签名也被换掉；构建脚本换回原文件、不带 `--deep` 重新封 `.app`，再验证 `.app` 和 MXC 的微软签名。macOS 的包版本第一位不能是 0，包版本写 1.0.0，程序自己的版本照旧。默认初始堆是内存的 1/64（128 GB 的 Mac 上 512 MB 封顶），空闲 RSS 245 MB；加 `-Xms16m`（`-XX:+UseSerialGC -Xmx512m`）后 114 MB。
+- **实测**（`LinkBench`，同一台 Mac Studio，服务器和安装包里的连接程序都在本机，各热身 200 次后 1000 次，读一个 120 行的 Java 文件）：
+
+| 指标 | 结果 | 要求 |
+|---|---|---|
+| `read_file` 直接执行 | P50 0.10 ms，P95 0.13 ms，P99 0.20 ms | |
+| `read_file` 经过连接程序 | P50 0.55 ms，P95 1.07 ms，P99 1.70 ms | |
+| P95 多花 | 0.94 ms | ≤ 20 ms |
+| 连接程序空闲 RSS（调用完等 10 秒，`ps`） | 114 MB（堆已提交约 16 MB，`jcmd GC.heap_info`） | ≤ 150 MB |
+| `bash true` 往返（20 次，参考） | P50 28 ms，P95 32 ms | |
+
+`bash` 的往返主要花在 MXC 每次起沙箱（设计时实测跑 `/usr/bin/true` 一次 10–20 ms）和 bash 自己启动上。

@@ -35,6 +35,22 @@ class ObservationsTest {
         assertEquals(Observations.Check.NOT_READ, observations.check(ONE, file("x")));
     }
 
+    /**
+     * 连接程序不知道会话什么时候结束（phase 3 留下的风险）：记录只留最近用过的 {@value Observations#MAX_SESSIONS} 个会话，
+     * 内存不随会话数增长；被忘掉的会话要先重新读才能改，最近还在用的会话不受影响。
+     */
+    @Test
+    void onlyTheMostRecentSessionsAreRemembered() throws Exception {
+        Path file = file("x");
+        observations.record(ONE, file);
+        for (int i = 0; i < Observations.MAX_SESSIONS; i++) {
+            observations.record("other-" + i, file);
+            assertEquals(Observations.Check.OK, observations.check("other-0", file), "still in use");
+        }
+        assertEquals(Observations.Check.NOT_READ, observations.check(ONE, file), "the oldest session is forgotten");
+        assertEquals(Observations.Check.OK, observations.check("other-0", file), "a recently used one is kept");
+    }
+
     @Test
     void aFileReadAndUnchangedCanBeChanged() throws Exception {
         Path file = file("x");
