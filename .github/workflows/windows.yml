@@ -68,9 +68,18 @@ jobs:
           ./.github/scripts/assert-not-skipped.ps1 NoSuchTest
           if ($LASTEXITCODE -ne 1) { throw "assert-not-skipped.ps1 passed a class that never ran" }
           exit 0
+      - name: Jar, connector and data directory smoke
+        if: success() || failure()
+        # 设计“手工检查”里 CI 能做的部分：中文密码登录、重启后都还在、check、连接程序连上和被撤销、D:\ 下的 WARN 和 icacls、UNC 拒绝
+        run: |
+          mvn -B -ntp -q -pl tantalum-connect -am package dependency:build-classpath "-DskipTests" "-Djacoco.skip=true" "-Dmdep.outputFile=$env:RUNNER_TEMP\connect-cp.txt" "-Dmdep.includeScope=runtime"
+          $cp = (Resolve-Path tantalum-connect\target\tantalum-connect-0.1.0-SNAPSHOT.jar).Path + ';' + (Get-Content -Raw "$env:RUNNER_TEMP\connect-cp.txt").Trim()
+          ./.github/scripts/windows-smoke.ps1 -Jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar -ConnectorClasspath $cp
       - name: Scheduled task
+        if: success() || failure()
         run: ./docs/windows/tantalum-task.ps1 selftest -Jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar
       - name: Console end-to-end
+        if: success() || failure()
         working-directory: console
         run: |
           pnpm exec playwright install chromium

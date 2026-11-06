@@ -211,7 +211,20 @@ function Invoke-Selftest {
   }
   try {
     $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
-    if (-not $answered) { throw (Say notready 60) }
+    if (-not $answered) {
+      # 看不到 javaw 的输出：日志尾巴，再用 java.exe 照同样的参数跑一次，把它说的打出来
+      $log = Join-Path $dir 'logs\tantalum.log'
+      if (Test-Path $log) { "== $log"; Get-Content $log -Tail 60 }
+      Install-Task $dir 'S4U'
+      $line = (Get-Task).Actions[0].Arguments
+      Remove-Task
+      $out = Join-Path $dir 'java-direct.txt'
+      $direct = Start-Process -PassThru -NoNewWindow -FilePath (Find-Javaw).Replace('javaw.exe', 'java.exe') -ArgumentList $line `
+        -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+      if (-not $direct.WaitForExit(30000)) { Stop-Process -Id $direct.Id -Force }
+      "== java.exe $line"; Get-Content $out, "$out.err" -Tail 80 -ErrorAction SilentlyContinue
+      throw (Say notready 60)
+    }
     Say ready $seconds
     "logon type: $logonType"
     Show-Status
