@@ -193,31 +193,31 @@
 
 补链路测试和控制台端到端，量 NFR 的数字，写文档，去掉 8091 上临时接的 `@playwright/mcp`，最后用真实 Claude 在 8091 上做一次完整的演示。
 
-- [ ] 21. 链路测试和会话文件
+- [x] 21. 链路测试和会话文件
   - File: examples/WebChainTest.java（新）、examples/E2eServer.java（改）
   - `E2eServer` 带一个本地测试页和一个返回图片的假 MCP 工具。脚本化模型：在插件页关掉“浏览器”，下一次提问出现工具变化，浏览器工具不再可用，来源 `web`（5.2）；调 `browser_take_screenshot` 和假 MCP 工具，会话文件里有 `ImageRef`、没有 `iVBORw0K`（3.4、W11）；调 `web_fetch` 后会话文件里有正文，回放时不再联网
   - _Requirements: W11, 需求 3.4, 5.2_
   - _Prompt: Role: Java 测试 | Task: 写联网的链路测试和会话文件检查 | Restrictions: 不访问外网 | Success: 测试全过_
 
-- [ ] 22. 控制台端到端
+- [x] 22. 控制台端到端
   - File: e2e/plugins.spec.ts（改）、e2e/web-fetch.spec.ts（新）、examples/E2eServer.java（改，按需加启动参数）
   - 插件页有“联网”一块；关掉“抓网页”后刷新还是关的，换一个用户还是开的（5.1）；`E2eServer` 用 `tantalum.web.browser.enabled=false` 起时，“浏览器”一行禁用、写着“管理员已关闭”（5.3）；脚本化模型调 `web_fetch` 抓 `E2eServer` 自带的测试页，对话页的工具结果里有正文和第一行那句话（1.1、1.8）
   - _Requirements: 需求 1.1, 1.8, 5.1, 5.3_
   - _Prompt: Role: 测试开发 | Task: 写联网的端到端测试 | Restrictions: E2E 不访问外网 | Success: Playwright 全过_
 
-- [ ] 23. NFR 测量
+- [x] 23. NFR 测量
   - File: shelltest/fetch/FetcherIT.java、shelltest/browser/BrowsersIT.java（改）、.spec-workflow/steering/tech.md（改）
   - `web_fetch`：100 KB HTML 从收到正文到结果，100 次取 P95 ≤ 200 ms；浏览器：1 个空闲 ≤ 300 MB，4 个同时开着本地大页面合计 ≤ 1.2 GB，第一次打开 ≤ 5 s；macOS 用 `footprint`，Linux 用 `/proc/<pid>/smaps_rollup` 的 PSS；结果写进 tech.md
   - _Requirements: NFR Performance_
   - _Prompt: Role: 测试开发 | Task: 量联网的处理时间、内存和启动时间 | Success: 数字达标并记进 tech.md_
 
-- [ ] 24. 说明文档和许可证
+- [x] 24. 说明文档和许可证
   - File: README.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md、THIRD_PARTY_NOTICES.md（改）
   - README 新的一节“联网”：`browser install`（约 200 MB）、Linux `--with-deps`、中文字体 `fonts-noto-cjk`、不用装 Node；`tantalum.web.*` 每一项的含义和默认值；风险（内网默认能访问和 `169.254.169.254`、自己的端口永远拦、上游代理时 DNS 由代理解析、上限和内存、沙箱默认开及关掉的后果、网页内容只标明不过滤、登录状态 10 分钟或重启就没了、正文和快照进会话文件）；插件页开关；“能力对照”表联网一行改成现状。tech.md 依赖表加 Playwright、jsoup 两行，Decision Log 加“选 A 不选 B”。THIRD_PARTY_NOTICES 加 Playwright、jsoup、`driver-bundle` 里的 Node。BACKLOG“联网”“MCP 工具结果里的图片”两行改成完成，写 spec 名
   - _Requirements: 需求 6.2_
   - _Prompt: Role: 技术写作 | Task: 写联网的说明、依赖和许可证 | Restrictions: 不写真实的代理地址、密钥 | Success: Yi 照着能在一台新服务器上装好联网_
 
-- [ ] 25. 去掉 8091 的临时浏览器
+- [x] 25. 去掉 8091 的临时浏览器
   - File: scratchpad/app/start.sh、scratchpad/app/up.sh（改）
   - `start.sh` 去掉五个 `--tantalum.mcp.servers.playwright.*` 参数；`up.sh` 不再起 `scratchpad/pwmcp/start.sh`、不再等 8931，`pkill @playwright/mcp` 那一行留着；部署后确认 8931 没有监听、服务器没有连 8931，插件页没有 `playwright` 这个 MCP 服务器。旧的 `/Users/kangyi/tantalum-workspace/yi/.browser` 先不删，问 Yi
   - _Requirements: 需求 6.1_

@@ -338,7 +338,7 @@ class ContextHandlerTest {
         ToolCatalog catalog = catalog();
         LocalTool.all(links, null, Duration.ofSeconds(60)).stream().filter(tool -> tool.name().equals("read_file"))
                 .forEach(catalog::register);
-        Tool fetch = new Tool() {
+        Tool fetch = new tantalum.shell.access.WebTool() {
             @Override public String name() { return "web_fetch"; }
             @Override public String description() { return "d"; }
             @Override public Json schema() { return new Json.Null(); }

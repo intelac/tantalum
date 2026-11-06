@@ -80,8 +80,31 @@ class FetcherIT {
         site.createContext("/pic.png", exchange -> send(exchange, 200, "image/png", new byte[] {(byte) 0x89, 'P', 'N', 'G'}));
         site.createContext("/missing", exchange -> send(exchange, 404, "text/html", "<p>No such page</p>".getBytes(StandardCharsets.UTF_8)));
         site.createContext("/broken", exchange -> send(exchange, 500, "text/plain", "internal error".getBytes(StandardCharsets.UTF_8)));
+        site.createContext("/article", exchange -> send(exchange, 200, "text/html; charset=utf-8", ARTICLE));
         site.start();
         base = "http://127.0.0.1:" + site.getAddress().getPort();
+    }
+
+    /** 约 100 KB 的文章页：导航、脚本、样式、段落、链接、列表、表格、隐藏内容，像一篇普通的文档页。 */
+    private static final byte[] ARTICLE = article();
+
+    private static byte[] article() {
+        StringBuilder html = new StringBuilder("<!doctype html><html><head><meta charset=\"utf-8\"><title>Article</title>"
+                + "<style>body{font:14px sans-serif}.x{display:none}</style><script>window.a = 1;</script></head><body>"
+                + "<nav><ul><li><a href=\"/\">Home</a></li><li><a href=\"/docs\">Docs</a></li></ul></nav><main><h1>Article</h1>");
+        for (int section = 1; html.length() < 100 * 1024; section++) {
+            html.append("<h2>Section ").append(section).append("</h2>");
+            for (int p = 0; p < 4; p++) {
+                html.append("<p>Paragraph ").append(p).append(" of section ").append(section)
+                        .append(" with <a href=\"/ref/").append(section).append('-').append(p).append("\">a link</a>, <b>bold</b> text,"
+                                + " <code>inline code</code> and enough words to look like an ordinary sentence in a document.</p>");
+            }
+            html.append("<ul><li>first point</li><li>second point<ul><li>nested</li></ul></li></ul>")
+                    .append("<table><tr><th>Name</th><th>Value</th></tr><tr><td>a|b</td><td>").append(section).append("</td></tr></table>")
+                    .append("<div class=\"x\" style=\"display:none\">hidden ").append(section).append("</div>")
+                    .append("<pre><code>for (int i = 0; i < ").append(section).append("; i++) {}</code></pre>");
+        }
+        return html.append("</main><script>track();</script></body></html>").toString().getBytes(StandardCharsets.UTF_8);
     }
 
     @AfterEach
@@ -123,6 +146,55 @@ class FetcherIT {
         assertTrue(seenHeaders.get("user-agent").startsWith("Tantalum/"), seenHeaders.toString());
         assertFalse(seenHeaders.containsKey("accept-encoding"), seenHeaders.toString());
         assertFalse(seenHeaders.containsKey("cookie"), seenHeaders.toString());
+    }
+
+    /**
+     * NFR Performance：100 KB 的 HTML 从收到正文到结果（解码、jsoup 解析、转 Markdown、拼结果）≤ 200 ms，热身 20 次后量 100 次取 P95。
+     * 另量整次 {@code fetch}（本机回环、经出口）的 P95 作参考，它是上面那段时间的上限。数字记在 tech.md。
+     */
+    @Test
+    void aHundredKilobytePageIsProcessedWellUnderTwoHundredMilliseconds() throws Exception {
+        assertTrue(ARTICLE.length >= 100 * 1024 && ARTICLE.length < 110 * 1024, ARTICLE.length + " bytes");
+        URI url = URI.create(base + "/article");
+        long[] processing = new long[100];
+        String text = "";
+        for (int i = -20; i < processing.length; i++) {
+            long started = System.nanoTime();
+            String markdown = HtmlMarkdown.of(org.jsoup.Jsoup.parse(new java.io.ByteArrayInputStream(ARTICLE), null, url.toString()));
+            text = WebFetchTool.text(new Fetched(url, 200, "text/html; charset=utf-8", markdown, false));
+            if (i >= 0) {
+                processing[i] = System.nanoTime() - started;
+            }
+        }
+        assertTrue(text.contains("# Article") && !text.contains("hidden 1") && !text.contains("track()"), text.substring(0, 300));
+
+        Fetcher fetcher = open();
+        long[] whole = new long[100];
+        for (int i = -20; i < whole.length; i++) {
+            long started = System.nanoTime();
+            Fetched page = fetcher.fetch(url);
+            WebFetchTool.text(page);
+            if (i >= 0) {
+                whole[i] = System.nanoTime() - started;
+            }
+        }
+        double processingP95 = p95(processing);
+        double wholeP95 = p95(whole);
+        System.out.printf(java.util.Locale.ROOT, "NFR web_fetch: %d bytes, processing P95 %.1f ms (median %.1f), whole fetch P95 %.1f ms%n",
+                ARTICLE.length, processingP95, median(processing), wholeP95);
+        assertTrue(processingP95 <= 200, "processing P95 " + processingP95 + " ms");
+    }
+
+    private static double p95(long[] nanos) {
+        long[] sorted = nanos.clone();
+        java.util.Arrays.sort(sorted);
+        return sorted[(int) Math.ceil(sorted.length * 0.95) - 1] / 1e6;
+    }
+
+    private static double median(long[] nanos) {
+        long[] sorted = nanos.clone();
+        java.util.Arrays.sort(sorted);
+        return sorted[sorted.length / 2] / 1e6;
     }
 
     /** 需求 1.3：最多跟 5 次，第 6 次报错。 */

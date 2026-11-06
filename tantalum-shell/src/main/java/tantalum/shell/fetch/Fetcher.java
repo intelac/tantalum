@@ -315,7 +315,7 @@ public final class Fetcher {
         return new FetchFailed("Could not fetch " + url + ": " + reason + ".");
     }
 
-    /** 收正文，收满 {@code limit} 字节就取消订阅（连接随之关掉），记下“下载停了”。 */
+    /** 收正文，收满 {@code limit} 字节就取消订阅（HTTP/1.1 关掉连接，HTTP/2 只结束这个 stream），记下“下载停了”。 */
     private static final class LimitedBody implements HttpResponse.BodySubscriber<Body> {
 
         private final int limit;
@@ -331,8 +331,7 @@ public final class Fetcher {
         public void onSubscribe(Flow.Subscription subscription) {
             this.subscription = subscription;
             if (limit == 0) {
-                subscription.cancel();
-                result.complete(new Body(new byte[0], false));
+                stop(new Body(new byte[0], false));
             } else {
                 subscription.request(1);
             }
@@ -349,8 +348,7 @@ public final class Fetcher {
                     byte[] part = new byte[room];
                     item.get(part);
                     bytes.writeBytes(part);
-                    subscription.cancel();
-                    result.complete(new Body(bytes.toByteArray(), true));
+                    stop(new Body(bytes.toByteArray(), true));
                     return;
                 }
                 byte[] all = new byte[item.remaining()];
@@ -358,6 +356,16 @@ public final class Fetcher {
                 bytes.writeBytes(all);
             }
             subscription.request(1);
+        }
+
+        /**
+         * 先交出正文，再取消订阅。顺序不能反：HTTP/2（https 经隧道时通常是它）上取消会结束这个 stream，正文还没交出的话，
+         * JDK 把整个回复当成失败（“Stream 1 cancelled”）。2026-11-07 8091 上所有回跳转的 https 网址都因此报“连接失败”，
+         * 明文 http（HTTP/1.1）没有这个问题；{@code FetcherTlsIT} 钉住。
+         */
+        private void stop(Body body) {
+            result.complete(body);
+            subscription.cancel();
         }
 
         @Override

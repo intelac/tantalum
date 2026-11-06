@@ -82,6 +82,13 @@ class MultiUserTest {
         assertTrue(server.get("bob", "/api/sessions/s2/runs").body().contains("COMPLETED"));
     }
 
+    /** 读线程还在往里加：拼接要拿着列表自己的锁，否则偶尔 ConcurrentModificationException（2026-11-07 回归里出现过一次）。 */
+    private static String joined(List<String> lines) {
+        synchronized (lines) {
+            return String.join("\n", lines);
+        }
+    }
+
     @Test
     void eventStreamCarriesOnlyTheOwnersEvents() throws Exception {
         HttpResponse<InputStream> stream = server.http.send(server.request("bob", "/api/events").GET().build(),
@@ -98,16 +105,16 @@ class MultiUserTest {
         finishedRun("alice", "s1");
         Thread.sleep(300);
 
-        String seen = String.join("\n", bobLines);
+        String seen = joined(bobLines);
         assertFalse(seen.contains(SECRET), seen);
         assertFalse(seen.contains("\"session\":\"s1\""), seen);
 
         // 确认这个连接确实活着：bob 自己的事件能收到。
         finishedRun("bob", "s2");
-        for (int i = 0; i < 300 && !String.join("\n", bobLines).contains("\"session\":\"s2\""); i++) {
+        for (int i = 0; i < 300 && !joined(bobLines).contains("\"session\":\"s2\""); i++) {
             Thread.sleep(10);
         }
-        assertTrue(String.join("\n", bobLines).contains("\"session\":\"s2\""));
+        assertTrue(joined(bobLines).contains("\"session\":\"s2\""));
         stream.body().close();
     }
 
@@ -125,7 +132,7 @@ class MultiUserTest {
             }
         });
         Thread.sleep(300);
-        assertFalse(String.join("\n", lines).contains("\"session\":\"s1\""));
+        assertFalse(joined(lines).contains("\"session\":\"s1\""));
         stream.body().close();
     }
 }

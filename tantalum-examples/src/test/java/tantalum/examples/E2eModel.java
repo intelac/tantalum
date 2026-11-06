@@ -31,6 +31,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code fail}：供应商出错；</li>
  *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
+ *   <li>{@code fetch:}（联网）：调用 web_fetch 抓 {@link E2eServer} 自带的本地测试页（{@link #webPage}），然后回答“抓到了网页。”；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
  *   <li>{@code approve:}（工具审批，A4）：调用 write_file 写 {@code e2e/approve-<后面的词>.txt}，然后回答“结果：”加工具结果；
@@ -51,6 +52,8 @@ public final class E2eModel implements ModelClient {
     private final AtomicInteger callIds = new AtomicInteger();
     /** 已经故意失败过一次的 {@code trace:} 提问，重试时成功。 */
     private final java.util.Set<String> rateLimited = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** {@code fetch:} 抓的网页：E2eServer 启动时设成它自带的本地测试页，不访问外网。 */
+    static volatile String webPage = "http://127.0.0.1:9/article";
     /** 当前这次调用的 prompt 估算；openai 供应商并发为 1，调用是串行的。 */
     private static volatile long promptSize;
 
@@ -73,6 +76,10 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains(E2eTraceHook.KEYWORD)) {
                 return traceScenario(text, results, chunks);
+            }
+            if (text.contains("fetch:")) {
+                return results == 0 ? reply(think(chunks, "用 web_fetch 读这个网页。"), call("web_fetch", Map.of("url", webPage)))
+                        : answer(chunks, "抓到了网页。");
             }
             if (text.contains("tools")) {
                 return toolChain(results, chunks);

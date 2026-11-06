@@ -25,10 +25,12 @@
 | shell | `anthropic-java` | 3.3.0（实施时确认与 Spring Boot 的依赖无冲突） | 调用 Claude |
 | shell | Spring Security | Spring Boot 4.1.2 管理 | 登录、Cookie 会话、Origin 校验 |
 | shell | Bouncy Castle `bcprov-jdk18on` | 1.86 | Argon2id 口令哈希 |
+| shell | Playwright for Java | 1.64.0（Apache-2.0；driver-bundle 带 5 个平台的 Node） | 每用户的无头浏览器（`web-tools`）；只有 `tantalum.shell.browser` 能用（ArchUnit） |
+| shell | jsoup | 1.19.1（MIT） | `web_fetch` 解析 HTML；只有 `tantalum.shell.fetch` 能用（ArchUnit） |
 | local | Jackson | 同 shell | 和连接程序之间的消息、MXC 规则；`tantalum-local` 只依赖 value 和 Jackson |
 | connect | JDK `java.net.http.WebSocket` | JDK 自带 | 连接程序连服务器；服务器用 Tomcat 自带的 Jakarta WebSocket |
 | connect（外部程序） | 微软 MXC `mxc-exec-mac` | 1.0.1（MIT） | 用户电脑上 `bash` 的沙箱（macOS Seatbelt）；随安装包分发，构建时校验 SHA-256，不进仓库 |
-| 测试 | Playwright | 1.64 | 端到端（脚本化模型，不访问外网） |
+| 测试 | Playwright | 1.64 | 端到端（脚本化模型，不访问外网）；和上面服务器用的 Playwright for Java 是两个包 |
 | 测试 | JUnit | 6.1.3（以 Spring Boot 管理的版本为准） | 单元与集成测试 |
 | 测试 | ArchUnit | 1.5.1 | 分层守护 |
 | 测试 | JaCoCo | 实施时取最新稳定版 | 覆盖率 |
@@ -103,7 +105,8 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 ## Deployment & Distribution
 - **Target Platform**：单进程部署，开发环境为 macOS arm64。
 - **Distribution**：Spring Boot 可执行 jar，内含控制台静态文件。
-- **Installation Requirements**：JDK 25；模型服务可用。
+- **Installation Requirements**：JDK 25；模型服务可用。要用浏览器工具（`web-tools`）时，运行一次 `java -jar tantalum.jar browser install`（解压驱动、下载 Chromium headless shell 约 200 MB；Linux 加 `--with-deps`，要 root），中文网页截图要装中文字体（Debian/Ubuntu `fonts-noto-cjk`）。不用装 Node。
+- **jar 大小**：带上 Playwright 的 `driver-bundle`（5 个平台的 Node）后，可执行 jar 从约 103 MB 变成约 312 MB（`web-tools` 定下的事 1）。
 - **连接程序**（`local-workspace`）：macOS Apple 芯片的 `Tantalum Connect.app`（`jpackage` + `jlink` 裁剪的运行环境 + MXC），打成 zip，不签名、不公证；命令行启动器 `Contents/MacOS/tantalum-connect`。`mvn -o -pl tantalum-connect -am package -Pmac -DskipTests`，脚本 `tantalum-connect/src/package/build-mac.sh`。
 
 ## Technical Requirements & Constraints
@@ -140,6 +143,8 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 11. **默认用 Claude Sonnet 5.5（Yi 决定），用官方 Java SDK，与 strata 并存**：两者都实现 `ModelClient`，协议差异（内容块、`thinking` 签名、SSE 事件、停止原因）不进内核。journal 存规范化字段和原始内容块，回放能精确还原 prompt。一次只选一个模型，多模型路由不在本 spec。Claude 要求已发送历史只追加；以后的压缩不能改写含 `thinking` 块的历史，`context-compaction` 必须按此设计。
 
 12. **项目定名 Tantalum（Yi 决定）**：Maven 模块以 `tantalum-` 为前缀，Java 顶层包 `tantalum.*`。`groupId` 暂用 `dev.tantalum`，只在本地构建；对外发布前要确认已取得域名，否则按简报改用 `io.github.<handle>`。
+
+13. **浏览器用 Playwright for Java，每人一个实例（`web-tools` 方案 A），不用每人一个 `@playwright/mcp`（方案 B）**（2026-11-06 实测，全文在 `specs/web-tools/design.md`“实测”“方案选择”）：A 的快照和截图都在内存里，`acceptDownloads=false` 不留下载文件；B 每次操作都把快照、截图写进输出目录，下载自动存盘，打开网页的结果只给快照文件的链接，违背“服务器上不为联网留下任何文件”。A 的 11 个工具和说明（Bing 搜索、W9 那句话、50,000 字符上限）由我们定，B 要过滤上游 25 个工具、改它的输出，而且每个版本都可能变。A 不用另装 Node（打包在 `driver-bundle` 里），B 要 Node 和每人一个监听本机端口的 MCP 服务器（本机任何进程都能连上去操作这个用户的浏览器）。内存差不多（4 人 Bing：A 1050 MB，B 换成 headless shell 1224 MB），不是理由。A 的代价：jar 大约 209 MB、要联网下载一次；每人多一个驱动进程；浏览器工具和 HTML 转 Markdown 自己写。DSH 用 B，它是单用户的本机程序，输出目录就是用户自己的工作目录，那边不算问题。
 
 ### Claude 实测（2026-10-31）
 
@@ -408,6 +413,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **SQLite 原生访问**：`sqlite-jdbc` 在 Java 25 上正常工作，但会触发受限方法警告，且未来版本默认会阻止。可执行 jar 的清单要声明 `Enable-Native-Access: ALL-UNNAMED`，测试用 `--enable-native-access=ALL-UNNAMED`。
 - **会话在内存里，没有用户管理界面**：重启后要重新登录；用户只能用命令行管理。
 - **本机工作区的边界**（`local-workspace`）：服务器被攻破时，它能在每台连着的电脑的允许范围里读写、跑命令（DS 文章 §8.4 的问题没有根治，只靠电脑决定范围和有期限的令牌缩小）。`bash` 的网络只能整体开关；连不上本机端口，命令里起的本地服务自己也连不上。先读后写的记录在连接程序内存里只留最近 64 个会话。只有 macOS。
+- **联网的边界**（`web-tools`）：内网默认能访问（Yi 决定，同 DSH），多用户的服务器要管理员打开 `tantalum.web.block-private-network`。打开后仍有缺口：配了上游代理时 DNS 由代理解析，出口只能按本机的解析结果检查；经公网反向代理、Docker 或 K8s 的端口映射绕回内网的“发夹”地址（公网地址本身不在拦的范围里）拦不住。网页内容只标明不可信，不过滤。浏览器的登录状态只在内存里，10 分钟不用或重启就没了。读不了 PDF。
 - **模型并发默认为 1**：strata 的并发能力尚未测试，多用户时模型调用会排队（不阻塞内核）。
 - **strata 与其他任务共用**：其他任务占用时，模型调用可能等待数分钟，甚至超时后进入重试。冒烟测试需要记录模型调用耗时，结果受当时负载影响。
 
@@ -539,3 +545,23 @@ record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之�
 - **引用核对**：不读文件。依据是会话里 `read_file` 读到的行（`offset` 起，按结果行数或 “Showing lines a-b”）和 `grep` 结果的 `路径:行号:`，判断全在钩子里；`CitationWork` 只把更正要求作为 `continueText` 交回模型（钩子不能追加消息）。改过 2 次还不对就 `Stop`。
 - **一直允许**：`WorkDone` 加可选的 `note`（对象），内核在 `workDone` 里先并进 `SessionState.notes[工作类型]` 再跑钩子；结果行加 `notes`，没变不写，旧行逐字节不变。问用户的是新的 `tantalum.shell.question.OpenQuestions`（SDK `Questions`，经 `ToolContext.questions()`），只在内存里：每次等 `answer-wait`，没回答就回“待定”、钩子再要一轮（问题 id 按调用不变，两次询问之间的回答也算），没人再问 5 秒后撤下。参照 DSH 和 pi：两边的工具审批都没有“一直允许”（DSH `user-approval/README.md:165` 只有一次性的；pi `permission-gate.ts:25` 每次都问），DSH 电脑操作插件按应用记“这个会话里允许”但存在内存（`cua/src/application-access.ts:154-182`）；我们按工具名记、记进 journal。
 - **Git**：连接协议 2：`hello.roots[].git` 换成 `hello.git`（电脑上 `git --version` 能跑通）。意思变了所以加版本：旧的连接程序被拒绝并提示下载新的，不会悄悄少了 Git 工具。每次调用按路径找仓库，仓库顶层必须在允许目录里这条不变。连接程序拒绝把家目录或 `/` 当允许目录（按真实路径比较）。
+
+### web-tools（2026-11-07）：`web_fetch` 和每用户一个的浏览器
+
+- **结构**：两样工具都在 `tantalum-shell`，内核不改。`web_fetch` 用 JDK `HttpClient` 下载、jsoup 解析、自己写的 `HtmlMarkdown` 转 Markdown；浏览器是 Playwright for Java，每个用户一个 `Playwright` 实例（一个驱动进程加一个 Chromium headless shell），内存里的环境，懒启动、空闲关闭、崩溃重开。两样工具的每个连接都经进程内的出口 `Egress`（只听 `127.0.0.1` 的过滤代理）：解析一次、检查每个地址、连到检查过的地址。方案选择见 Decision Log 13，实测和设计全文在 `specs/web-tools/design.md`。
+- **8091 真实演示里抓到的（已修）**：所有回跳转的 https 网址（`api-docs.deepseek.com` 的 302、arXiv 的 303、DuckDuckGo 跨主机的 302）都报 “the connection failed”，没跳转的 https 页面正常。原因：跳转和不收的类型不读正文，`Fetcher` 的正文订阅一开始就先取消、再交出空正文；https 经出口的隧道在 TLS 里协商成 HTTP/2，JDK `HttpClient` 在 HTTP/2 上把取消当成整个回复失败（`IOException: Stream 1 cancelled`），HTTP/1.1 上只是关连接，所以明文 http 的 `FetcherIT` 没暴露。读满 5 MB 截断和图片、PDF 的提示走的是同一段代码，https 上也坏了。改成先交出正文再取消。`FetcherTlsIT` 用内嵌 Tomcat（TLS + h2、自签名证书，测试期间只信任这一张，生产的信任设置不变）钉住同主机 302、303、跨主机 302、不收的类型、5 MB 截断，并断言服务端真的是 `HTTP/2.0`；修之前三项都失败。修好后手动对那三个公网网址各试一次，都跟到了最后一页。
+- **按类型认联网工具**：`WebAccess` 只认实现了 `access/WebTool` 的工具（`WebFetchTool`、`BrowserTool`），再按 `server()` 选子开关。原来只看 `server()` 的名字，一个碰巧叫 `browser` 或 `web-fetch` 的插件工具（`Tool.server()` 默认就是工具名）会跟着联网的开关走、来源记成 `web`；`WebAccessTest.onlyWebToolsAreOwnedNotToolsThatShareTheirServerName` 钉住。MCP 工具的服务端名带 `mcp:` 前缀，本来就不会撞。
+- **NFR 实测**（同一台 Mac Studio，macOS 26.2，arm64，JDK 25；`FetcherIT`、`BrowsersIT` 打印 `NFR …` 一行）：
+
+| 指标 | 结果 | 要求 |
+|---|---|---|
+| `web_fetch` 处理 100 KB HTML（解码、jsoup、转 Markdown、拼结果），热身 20 次后 100 次 | P95 9.9 ms，中位 7.9 ms（100.2 KB 的合成文档页：标题、段落、链接、列表、表格、代码、隐藏内容、脚本） | ≤ 200 ms |
+| 整次 `web_fetch`（本机回环测试站、经出口），同上 | P95 9.2 ms（参考：是上面那段的上限，两次量的波动比差值大） | |
+| 浏览器第一次打开（驱动已解压，同 `browser install` 之后）：起驱动、起 Chromium、新环境、打开本地页、取快照 | 单独跑 398–510 ms（三次）；全量回归里和别的测试一起跑约 1.5 s（两次） | ≤ 5 s |
+| 1 个浏览器空闲（开着一个小页面，等 2 秒），`footprint` 整组进程 | 156–157 MB（其中驱动 node 约 125 MB） | ≤ 300 MB |
+| 4 个同时开着本地搜索结果页（50 条结果、40 个导航链接），各取快照、截图 | 714–715 MB；4 人并行共 491–509 ms | ≤ 1.2 GB |
+| 4 个同时开着很重的本地页（340 KB：3,000 段、1,000 行带按钮的表、400 个链接），同上 | 1,224–1,245 MB | 只量不判定 |
+
+  内存用 macOS `footprint`（共享页只算一次）量全部驱动和 Chromium 进程；Linux 上 `BrowsersIT` 改用 `/proc/<pid>/smaps_rollup` 的 PSS 相加，还没在 Linux 上跑过。很重的页面上 4 人略超 1.2 GB，所以 NFR 按“比 Bing 结果页大的普通结果页”判定（设计“实测”里 4 人开真实 Bing 是 1,050 MB），重页面的数字写进 README，管理员按 `max-open` × 300 MB 预留内存。每人固定多一个约 125 MB 的驱动进程是方案 A 的代价（Decision Log 13）。
+- **工具定义的 token 和压缩场景的余量（估算，没有调真实模型）**：12 个联网工具的定义约 5.8 KB。用 `TokenEstimate.ofTools` 在默认配置的服务器上量：Claude 系数 1.5 时 3,197，本地系数 1.75 时 2,749，3 时 1,606。按 core-tools 用 `count_tokens` 实测的 JSON、英文每 token 约 1.8 字节算，真实 Claude 约 3,200 token（5.8 KB ÷ 1.8），和 Claude 的估算 3,197 差不多；任务 11 的实施日志记的 1,606–2,749 是系数 3 和 1.75 的估算，按 Claude 算偏少。`CompactionScenario`（窗口 32000，阈值 15616）里，system 加工具从 6,768 估算 token 变成 10,121，阈值下留给历史的从约 8,850 降到约 5,500，一篇 7.9 KB 的笔记按 1.5 估算约 5,300：每读一篇就要压缩一次，保留段只够放一篇，很可能“nothing fits”或连续压缩，和 tech.md 里记下的几次真实结果（12 次调用、1 次压缩）不再可比。这个场景测的是压缩，所以 `SETTINGS_CLAUDE`、`SETTINGS_OPENAI` 关掉两样联网工具（同 2026-11-06 对 `CompactApiTest` 等小窗口测试的处理），余量回到原来。`WindowCompactionTest`、`CoreToolsClaudeTest` 用模型自己的窗口（1M），多 3.2K 无关紧要，没改。真实部署（8091，Claude 1M 窗口）每次请求多约 3.2K 输入 token，有缓存时几乎都是缓存读。
+- **测试**：`WebChainTest`（examples）走真实服务器：关掉浏览器后下一次提问的工具变化正好去掉 11 个 `browser_*`、来源 `web`；截图在会话文件里只有 `ImageRef`、没有 `iVBORw0K`；`web_fetch` 的正文在会话文件里，重启后读会话不再访问网站。控制台端到端：插件页“联网”一块（开关每人各管、刷新还在），`E2eServer` 在主端口 + 1 另起一个 `tantalum.web.browser.enabled=false` 的服务看“管理员已关闭”，`fetch:` 剧本经 `web_fetch` 抓 `E2eServer` 自带的本地页。都不访问外网。

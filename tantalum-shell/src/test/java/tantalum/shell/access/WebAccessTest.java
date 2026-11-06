@@ -27,6 +27,17 @@ class WebAccessTest {
 
     private PluginSwitches switches;
 
+    /** 联网工具：实现 {@link WebTool}（同 web_fetch 和 browser_*）。 */
+    private static Tool webTool(String name, String server) {
+        return new WebTool() {
+            @Override public String name() { return name; }
+            @Override public String description() { return name; }
+            @Override public Json schema() { return new Json.Obj(Map.of()); }
+            @Override public String server() { return server; }
+            @Override public ToolOutput run(ToolContext context, Json arguments) { return ToolOutput.ok(name); }
+        };
+    }
+
     private static Tool tool(String name, String server) {
         return new Tool() {
             @Override public String name() { return name; }
@@ -47,11 +58,11 @@ class WebAccessTest {
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(tool("read_attachment", "attachments"));
         if (fetchAllowed) {
-            catalog.register(tool("web_fetch", WebAccess.FETCH));
+            catalog.register(webTool("web_fetch", WebAccess.FETCH));
         }
         if (browserAllowed) {
-            catalog.register(tool("browser_navigate", WebAccess.BROWSER));
-            catalog.register(tool("browser_snapshot", WebAccess.BROWSER));
+            catalog.register(webTool("browser_navigate", WebAccess.BROWSER));
+            catalog.register(webTool("browser_snapshot", WebAccess.BROWSER));
         }
         return new PluginGate(catalog, switches, List.of(new WebAccess(switches, fetchAllowed, browserAllowed, false)), List.of(),
                 List.of(), List.of(), List.of(), Set.of());
@@ -108,8 +119,8 @@ class WebAccessTest {
         PluginGate gate = gate(true, true);
         assertEquals(List.of("read_attachment"), gate.overview(ALICE).tools().stream().map(PluginGate.ToolView::name).toList());
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.TOOL, "web_fetch", false));
-        assertEquals("web", gate.source(tool("web_fetch", WebAccess.FETCH)));
-        assertEquals("web", gate.source(tool("browser_click", WebAccess.BROWSER)));
+        assertEquals("web", gate.source(webTool("web_fetch", WebAccess.FETCH)));
+        assertEquals("web", gate.source(webTool("browser_click", WebAccess.BROWSER)));
         assertEquals("builtin", gate.source(tool("read_attachment", "attachments")));
     }
 
@@ -124,10 +135,24 @@ class WebAccessTest {
         assertEquals(false, switches.enabled(ALICE, Kind.WEB, WebAccess.BROWSER));
     }
 
-    /** MCP 工具的服务端名带 mcp: 前缀，名叫 browser 的 MCP 服务器不会被当成联网工具。 */
+    /**
+     * 按类型认，不按名字认：名叫 browser 的 MCP 服务器（服务端名 mcp:browser），和名字碰巧是 browser、web-fetch 的插件工具
+     * （{@code server()} 默认是工具名）都不是联网工具，不跟联网的开关走，来源也不是 web。
+     */
     @Test
-    void anMcpServerNamedBrowserIsNotTheBrowser() {
+    void onlyWebToolsAreOwnedNotToolsThatShareTheirServerName() {
         WebAccess web = new WebAccess(switches, true, true, false);
         assertEquals(false, web.owns(tool("mcp__browser__snapshot", "mcp:browser")));
+        Tool plugin = tool("browser", "browser");
+        assertEquals(false, web.owns(plugin));
+        assertEquals(false, web.owns(tool("web-fetch", "web-fetch")));
+        assertTrue(web.owns(webTool("browser_click", WebAccess.BROWSER)));
+
+        ToolCatalog catalog = new ToolCatalog();
+        catalog.register(plugin);
+        PluginGate gate = new PluginGate(catalog, switches, List.of(web), List.of(), List.of(), List.of(), List.of(), Set.of());
+        gate.set(ALICE, Kind.WEB, WebAccess.MASTER, false);
+        assertEquals(List.of("browser"), List.copyOf(gate.enabledTools(ALICE)), "the web switch does not turn off a plugin tool");
+        assertEquals("builtin", gate.source(plugin));
     }
 }

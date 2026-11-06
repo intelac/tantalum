@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import tantalum.shell.access.WebAccess;
+import tantalum.shell.access.WebTool;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.plugin.Tool;
@@ -33,7 +33,7 @@ class NoServerFileToolsTest {
             "browser_tabs", "browser_evaluate");
 
     private static boolean web(Tool tool) {
-        return tool.server().equals(WebAccess.FETCH) || tool.server().equals(WebAccess.BROWSER);
+        return tool instanceof WebTool;
     }
 
     @TempDir
