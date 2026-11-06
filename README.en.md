@@ -75,6 +75,23 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalu
 
 Open <http://127.0.0.1:8080>. The server binds to `127.0.0.1` by default.
 
+### On Windows
+
+The server also runs on Windows 10 22H2, Windows 11 and Windows Server 2022/2025 (x64; arm64 is untested). Every push runs the whole test suite on GitHub Actions `windows-latest`. In PowerShell:
+
+```powershell
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "<your key>", "User")   # then open a new PowerShell
+$env:TANTALUM_ADMIN_USER = "yi"; $env:TANTALUM_ADMIN_PASSWORD = "<password>"
+java -jar C:\tantalum\tantalum.jar
+java -jar C:\tantalum\tantalum.jar browser install       # no --with-deps on Windows
+.\docs\windows\tantalum-task.ps1 install -Jar C:\tantalum\tantalum.jar   # start at logon as a scheduled task
+```
+
+- The data directory defaults to `%USERPROFILE%\.local\share\tantalum`; files inherit the profile's ACL (you, SYSTEM, Administrators). Outside the profile (for example `D:\tantalum`) the server starts with a warning and the `icacls` command that limits it to you; a network share (`\\server\share`) is refused because SQLite's WAL does not work there.
+- In `.properties` files write paths as `D:/tantalum` or `D:\\tantalum`.
+- Ctrl+C in the console window shuts down cleanly; ending the scheduled task or the process is a crash, which the next start recovers from. A power cut may lose the newest file's directory entry (Windows has no directory fsync).
+- The scheduled task needs no administrator rights and stores no password; logs go to `logs\tantalum.log` in the data directory. Details are in the Chinese manual, "在 Windows 上运行".
+
 ## Languages
 
 The console, the connector and the command line speak Chinese, English and Japanese.

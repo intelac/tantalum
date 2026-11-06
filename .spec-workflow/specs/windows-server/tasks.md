@@ -105,7 +105,7 @@
   - _Requirements: N12, 需求 1.2_
   - _Prompt: Role: Java 开发 | Task: 按控制台编码读密码，Windows 上给对的设密钥提示 | Restrictions: 管道和重定向时照旧 UTF-8 | Success: UserCommandTest 照过，macOS 上行为不变_
 
-- [-] 10. 测试套件在 Windows 上能跑
+- [x] 10. 测试套件在 Windows 上能跑
   - File: 设计“现状清单 › 测试代码”列出的测试类，加上任务 2 基线里列出的其他失败
   - 检查 600/700 的断言前加 `assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest")`；一个测试方法里既有权限断言又有别的断言时，拆成两个，别的断言在 Windows 上照跑
   - `MxcPolicyTest`、`MxcTest` 这类依赖 `/bin/sh`、`/usr/bin/false` 的，用 `@EnabledOnOs(value = OS.MAC, disabledReason = "…")`，原因写明“macOS 连接程序；Windows 连接程序另开 spec”
@@ -115,7 +115,7 @@
   - _Requirements: N15, 需求 7.3_
   - _Prompt: Role: Java 测试 | Task: 让全部测试在 Windows 上能跑 | Restrictions: 不放宽断言；不整类跳过平台无关的测试；不靠调大全局超时 | Success: CI 上 mvn verify 全绿，跳过清单记进日志_
 
-- [ ] 11. `WindowsFilesTest` 和 `DataDirPathTest`
+- [x] 11. `WindowsFilesTest` 和 `DataDirPathTest`
   - File: shelltest/journal/WindowsFilesTest.java（新）、shelltest/journal/DataDirPathTest.java（新）
   - `WindowsFilesTest` 用 `@EnabledOnOs(OS.WINDOWS)`，照设计“Windows 上才跑的测试”六组：ACL 继承、约 300 字符的长路径、保留名真的落到文件上、替换和占用（NIO 读着、`FileInputStream` 占 300 毫秒、一直占着）、两个进程一份数据（子 JVM 拿着 `store.lock`）、数据目录检查的真实情况（`RUNNER~1` 短名算在用户目录内、`C:\` 下 WARN、UNC 拒绝）
   - `DataDirPathTest` 所有平台都跑：数据目录 `数据 目录`，四种存储打开、写入、重开读回
@@ -127,7 +127,7 @@
 
 工作流补上浏览器、端到端和计划任务三步；写计划任务脚本和 README；记下 Windows 上的数字；最后以一次全绿的运行收尾。
 
-- [ ] 12. 浏览器测试在 Windows 上跑到
+- [-] 12. 浏览器测试在 Windows 上跑到
   - File: .github/workflows/windows.yml（改）、.github/scripts/assert-not-skipped.ps1（新）
   - 脚本读 `**/target/surefire-reports/TEST-*.xml` 和 `**/target/failsafe-reports/TEST-*.xml`，对给定的类名：用例数大于 0、没有跳过，否则列出来并退出码 1。工作流加“Browser tests were not skipped”一步，检查 `UserBrowserIT`、`BrowserToolsIT`、`WindowsFilesTest`
   - 修浏览器测试在 Windows 上的失败（例如子进程检查、Chromium 路径）；修法记进日志
@@ -135,7 +135,7 @@
   - _Requirements: N11, N14, 需求 5.1, 5.2_
   - _Prompt: Role: CI 工程师 | Task: 确认浏览器测试和 Windows 专用测试在 CI 上真的跑了 | Restrictions: 不改 web-tools 的断言 | Success: CI 上浏览器 IT 通过且没有跳过_
 
-- [ ] 13. 控制台端到端
+- [-] 13. 控制台端到端
   - File: .github/workflows/windows.yml（改），按需 console/playwright.config.ts（改）
   - 加“Console end-to-end”一步：`pnpm exec playwright install chromium`、`pnpm e2e`（`E2eServer` 经 Maven 启动，vite 开发服务器）；失败时上传 `console/test-results/`
   - `playwright.config.ts` 的启动命令在 Windows 上要改时，只按平台改命令，不改测试
@@ -143,7 +143,7 @@
   - _Requirements: 需求 7.1_
   - _Prompt: Role: 测试开发 | Task: 在 Windows 上跑控制台端到端 | Restrictions: E2E 不访问外网；不改 e2e 用例的断言 | Success: CI 上 Playwright 全过_
 
-- [ ] 14. 计划任务脚本
+- [-] 14. 计划任务脚本
   - File: docs/windows/tantalum-task.ps1（新）、.github/workflows/windows.yml（改）
   - 照设计“`docs/windows/tantalum-task.ps1`”：`install`、`status`、`uninstall`、`selftest`；`javaw.exe`、`--logging.file.name`、当前用户、登录时触发、不限时、`IgnoreNew`、1 分钟重启最多 10 次；不需要管理员、不存密码、不写密钥。工作流加“Scheduled task”一步跑 `selftest`
   - runner 上 `Interactive` 跑不起来时 `selftest` 改用 `S4U` 并写明原因；两种都不行就去掉这一步，只在任务 17 手工验证，原因记进日志
@@ -152,7 +152,7 @@
   - _Requirements: N10, N13, 需求 6.1, 6.2, 6.3, 6.4, 6.5_
   - _Prompt: Role: Windows 运维 | Task: 写登记计划任务的 PowerShell 脚本并在 CI 上自测 | Restrictions: 不要求管理员；不存密码；不删数据目录 | Success: selftest 在 CI 上通过，或写明为什么只能手工验证_
 
-- [ ] 15. 说明文档
+- [-] 15. 说明文档
   - File: README.md、README.en.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md（改）
   - README 新的一节“在 Windows 上运行”，内容照需求 8.1、8.2：要装什么、启动和 `users`、默认数据目录、`browser install`（不需要 `--with-deps`，中文字体系统自带）、计划任务脚本、API 密钥放用户环境变量、`.properties` 里路径写 `/` 或 `\\`、防火墙、Ctrl+C 和结束任务的区别、风险（用户目录外的数据目录和 `icacls` 命令、断电可能丢最新建的文件、不支持网络共享、arm64 没测过）。“测试”一节加 Windows 工作流。README.en.md 的 Run 一节加一段
   - tech.md：测试表加 Windows CI；Decision Log 加四条：不写 ACL、不做 Windows 服务、不用 Jimfs、用户目录外只 WARN

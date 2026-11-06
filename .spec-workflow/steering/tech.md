@@ -98,13 +98,14 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 - **Static Analysis**：ArchUnit（分层）、编译器 `-Xlint:all`。
 - **Testing Framework**：JUnit；`value` 和 `kernel` 零 mock、零线程；`shell` 用集成测试，模型用脚本化替身。前端用 vitest + Testing Library；端到端用 Playwright，后端是 `tantalum-examples` 测试目录里的 `E2eServer`（Maven profile `e2e`，按关键词回放剧本的模型），`pnpm e2e` 自动启动。
 - **覆盖率**：JaCoCo，不低于 80%。
+- **Windows CI**（`windows-server`）：`.github/workflows/windows.yml` 每次推送在 GitHub Actions `windows-latest`（Windows Server 2025）上跑控制台构建和 vitest、`mvn verify`（含 IT 和启动可执行 jar 的测试）、浏览器 IT 不许跳过、计划任务脚本自测、Playwright 端到端。不用密钥，不跑真实模型；覆盖率门槛只在 macOS 的全量回归上卡（MXC 这类 macOS 代码在 Windows 上跳过）。
 
 ### Version Control & Collaboration
 - **VCS**：Git（目录尚未初始化）。
 - **Commit 格式**：`<type>: <description>`。
 
 ## Deployment & Distribution
-- **Target Platform**：单进程部署，开发环境为 macOS arm64。
+- **Target Platform**：单进程部署，开发环境为 macOS arm64。服务器也支持 Windows 10 22H2、11、Server 2022/2025 x64（`windows-server`；arm64 没测过），后台运行用当前用户的计划任务（`docs/windows/tantalum-task.ps1`）。
 - **Distribution**：Spring Boot 可执行 jar，内含控制台静态文件。
 - **Installation Requirements**：JDK 25；模型服务可用。要用浏览器工具（`web-tools`）时，运行一次 `java -jar tantalum.jar browser install`（解压驱动、下载 Chromium headless shell 约 200 MB；Linux 加 `--with-deps`，要 root），中文网页截图要装中文字体（Debian/Ubuntu `fonts-noto-cjk`）。不用装 Node。
 - **jar 大小**：带上 Playwright 的 `driver-bundle`（5 个平台的 Node）后，可执行 jar 从约 103 MB 变成约 312 MB（`web-tools` 定下的事 1）。
@@ -122,7 +123,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 ### Security & Compliance
 - 默认模型是云端的 Claude（Yi 决定），完整 prompt 可能含客户代码，会发送到 Anthropic，启动日志会提示。不能外发代码的部署要切换到 strata。
-- 数据目录下的文件和目录限制为进程所有者（600/700），含 `store.lock` 和 SQLite 的附属文件；数据目录本身的权限不改（BACKLOG）。
+- 数据目录下的文件和目录限制为进程所有者（600/700），含 `store.lock` 和 SQLite 的附属文件；数据目录本身的权限不改（BACKLOG）。Windows 上不写 ACL：新文件继承用户目录的 ACL（本人、SYSTEM、管理员）；数据目录不在用户目录下时启动 WARN 并给 `icacls` 命令，网络共享拒绝启动（决定 17、20）。
 
 ### Scalability & Reliability
 - 明确不做跨进程和水平扩展：一个进程拥有一份存储，启动时取得独占锁。
@@ -152,6 +153,14 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 15. **控制台的多语言用带类型的 TypeScript 字典，不用 i18n 库（`console-i18n` I5，2026-11-07）**：照 DSH 自己写（`packages/client/locale`），不照 i18next 这类库。`zh.ts` 是键的来源，`en.ts`、`ja.ts` 写成 `const en: Text`，少一条、多一条在 `tsc` 就失败；带参数的文字是有名字有类型的函数，复数在函数里按数量选（同 pi chord）。另加三层检查：三份字典的对比测试（记号不能翻掉、英文里不能有中日文字符、日文不能照抄中文）、组件里写死文字的正则扫描（TypeScript 7 没有 JS 的语法树接口，所以不像 DSH 解析语法树）、用英文渲染主要页面不能有中日文字符。日期和数字用 `Intl`（照 pi chord，不照 DSH 把格式写进字典），时长写在字典里（`Intl.DurationFormat` 在 jsdom 里还没有）。三种语言都打进主包。
 
 16. **服务器给画面的文字只给代码和参数，由控制台按看的人的语言说（`console-i18n` I9）**：错误是 `{"error": 英文诊断, "code": "<领域>/<原因>", "params": {…}}`（照 DSH 的错误词汇表），代码清单 `console/src/api/errorCodes.json` 服务器和控制台各自比对；参数只放数字和名字，字节数由控制台按语言格式化。插件作者写的文字是 `LocalText`（一个字符串，或者 `{en, zh, ja}`，照 DSH `LocalizedText`）。连接程序、命令行的终端文字放进每个模块一组 UTF-8 的 `Text*.properties`，经 `tantalum.value.text.Bundle` 读（关掉 JDK 按系统语言的回退，占位符 `{name}`，不用 `MessageFormat`）。给模型的文字一律不翻译，服务器日志一律英文。
+
+17. **Windows 上不写 ACL，只继承（`windows-server` N2）**：文件系统支持 POSIX 权限时照旧 600/700；不支持时（NTFS）照常创建、不带属性，新文件继承所在目录的 ACL。所有权限代码都经 `tantalum.local.fs.PrivateFiles`，ArchUnit 拦住绕过它的代码。照 pi（Node 在 Windows 上忽略 `mode`，`auth-storage.ts:36-37,71`）和 DSH（Windows 上不检查、不模拟，`credentials-local/src/index.ts:121-123,137`）。主动写“只有本人”的 ACL 要经 FFM 调 Win32，没有 Windows 电脑验证不了，也和 pi、DSH 都不一样。
+
+18. **不做 Windows 服务，用当前用户的计划任务（N13）**：服务要第三方包装程序或自己写服务代码，而且服务账号的用户目录不是管理员的，N3 “数据目录在用户目录下就安全”的前提就不成立。`docs/windows/tantalum-task.ps1` 登记登录时启动、不限时、不起第二个、异常退出 1 分钟后重启的任务，不要管理员、不存密码，照 DSH `windows-runner-task.ps1:61-69`。
+
+19. **不用 Jimfs 模拟 Windows（N14）**：Windows 上真正出问题的是 JDK 的 Windows 实现（属性视图不支持、目录打不开、共享冲突、保留设备名、`LockFileEx`），Jimfs 一样都不模拟。改为在 GitHub Actions 的 `windows-latest` 上跑全部测试，再用 ArchUnit 在 macOS 上就拦住新写的 POSIX 权限代码。
+
+20. **数据目录在用户目录外只 WARN，不拒绝启动（N3）**：拒绝更安全，但管理员可能有意把数据放在 `D:\` 并自己设好了 ACL（例如给备份账号读权限）；我们按位置判断、不读 ACL（JDK 给的 ACL 条目只有本地化的账号名，拿不到 SID），确认不了已经改好，拒绝会逼人关掉检查。WARN 附用 SID 写的 `icacls` 命令，不受系统语言影响。网络共享（UNC）照旧拒绝：SQLite 的 WAL 不能用在网络文件系统上。
 
 ### Claude 实测（2026-10-31）
 

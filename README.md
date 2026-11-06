@@ -206,7 +206,7 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 
 ## 数据目录
 
-默认 `~/.local/share/tantalum`（`tantalum.data-dir`）。目录下的文件只有进程所有者能读写（600/700），会话文件含完整的 prompt 和工具结果。
+默认 `~/.local/share/tantalum`（`tantalum.data-dir`）。目录下的文件只有进程所有者能读写（600/700；Windows 上继承用户目录的权限，见“在 Windows 上运行”），会话文件含完整的 prompt 和工具结果。
 
 | 路径 | 内容 |
 |---|---|
@@ -312,6 +312,75 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 | `tantalum.residency.sweep-interval` | `1s` | 两次回收检查的最小间隔 |
 
 **关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后关索引和文件。被中断的运行下次启动按上面的规则收尾。
+
+## 在 Windows 上运行
+
+服务器在 Windows 10 22H2、Windows 11、Windows Server 2022/2025（x64）上照常运行（`windows-server` spec）。每次推送都在 GitHub Actions 的 `windows-latest` 上跑全部测试，见下面“测试”。arm64 没测过，不保证。
+
+**要装什么：** JDK 25（例如 Temurin 25）。从源码构建时还要 Maven 3.9、Node 25 和 pnpm。下面的命令都在 PowerShell 里运行。
+
+```powershell
+# 从源码构建（只运行打好的 jar 时跳过）
+cd console; pnpm install; pnpm build; cd ..
+mvn clean package "-DskipTests"
+Copy-Item tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar C:\tantalum\tantalum.jar
+```
+
+**API 密钥放在用户环境变量里**，不写进文件和计划任务。设好后重新打开 PowerShell：
+
+```powershell
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "<你的密钥>", "User")
+```
+
+**第一个账号、启动、管理用户：** 密码从标准输入读，和 macOS 上一样。
+
+```powershell
+$env:TANTALUM_ADMIN_USER = "yi"; $env:TANTALUM_ADMIN_PASSWORD = "<密码>"
+java -jar C:\tantalum\tantalum.jar
+# 另开一个 PowerShell：
+java -jar C:\tantalum\tantalum.jar users add alice
+```
+
+然后打开 <http://127.0.0.1:8080>。在控制台窗口里按 Ctrl+C 是正常关闭：等已接受的请求处理完再退出。
+
+**数据目录** 默认 `%USERPROFILE%\.local\share\tantalum`（也就是 `C:\Users\<你>\.local\share\tantalum`），新文件继承用户目录的权限：只有你、SYSTEM 和管理员能读。服务器不改 ACL。
+
+- 配置文件（`.properties`）里 `\` 是转义符，路径写成 `D:/tantalum` 或 `D:\\tantalum`；命令行参数里照常写 `--tantalum.data-dir=D:\tantalum`。
+- 换了数据目录时，`users` 命令也要指过去：`$env:TANTALUM_DATA_DIR = "D:\tantalum"`，再运行 `java -jar C:\tantalum\tantalum.jar users add alice`。
+- **数据目录不在用户目录下**（例如 `D:\tantalum`）时照常启动，日志里有一行 WARN：别的本机用户可能读得到。只给自己、SYSTEM 和管理员：
+
+  ```powershell
+  icacls "D:\tantalum" /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"
+  ```
+
+  服务器按位置判断，不读 ACL，所以改好以后这行 WARN 还在。
+- FAT32、exFAT 这类没有文件权限的卷：WARN，任何人都能读，请用 NTFS。
+- **不支持网络共享：** 数据目录是 `\\server\share\…` 时拒绝启动（SQLite 的 WAL 不能用在网络文件系统上）。映射成盘符的网络驱动器认不出来，同样不要用。
+
+**浏览器：** `java -jar C:\tantalum\tantalum.jar browser install` 把 Chromium headless shell 装进 `%LOCALAPPDATA%\ms-playwright`。不需要 `--with-deps`（那是给 Linux 装系统库的，Windows 上会提示并忽略），中文字体系统自带。
+
+**防火墙：** 默认只绑 `127.0.0.1`。改成 `--server.address=0.0.0.0` 时，Windows 防火墙会问是否放行 `java.exe`（或 `javaw.exe`）。
+
+### 后台运行（计划任务）
+
+`docs/windows/tantalum-task.ps1` 用当前用户登记一个计划任务：登录 Windows 后自动启动，不限运行时间，已在运行就不再起第二个，异常退出 1 分钟后重启、最多 10 次；用 `javaw.exe`，不弹控制台窗口。不需要管理员权限，不保存密码；API 密钥从你的用户环境变量读。
+
+```powershell
+.\docs\windows\tantalum-task.ps1 install -Jar C:\tantalum\tantalum.jar          # 可加 -Port 8080 -DataDir D:\tantalum -Arguments "--tantalum.provider=local ..."
+Start-ScheduledTask -TaskName Tantalum                                            # 不想等到下次登录
+.\docs\windows\tantalum-task.ps1 status                                           # 任务状态、端口、日志位置
+.\docs\windows\tantalum-task.ps1 uninstall                                        # 删任务，数据目录和日志都留着
+```
+
+脚本被执行策略拦住时，用 `powershell -ExecutionPolicy Bypass -File .\docs\windows\tantalum-task.ps1 install -Jar …`。脚本的输出跟 Windows 的显示语言（中文、英文、日文），或用 `-Lang zh|en|ja` 指定。
+
+计划任务没有控制台，日志写到数据目录的 `logs\tantalum.log`（10 MB 滚动）。
+
+### 风险
+
+- **结束任务等于崩溃：** 在任务计划程序里结束任务、任务管理器结束进程都是直接结束，没有优雅关闭。下次启动按崩溃收尾：已接受的提问不丢，正在跑的运行显示“服务重启，这次运行已中断”。要正常关闭就在控制台窗口里按 Ctrl+C。
+- **断电可能丢最新建的文件：** Windows 上不能对目录做 fsync，跳过了目录落盘。进程崩溃不受影响（NTFS 的元数据有日志）；断电时可能丢掉刚建的那个会话文件或格式文件的目录项。
+- 数据目录在用户目录外时别的本机用户可能读得到（见上面的 `icacls`）；不支持网络共享；arm64 没测过。
 
 ## 记忆
 
@@ -626,6 +695,8 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 ```
 
 `ClaudeScenarioTest` 和 `ClaudeCrashRecoveryTest` 用真实的 Claude 走完整的环：八步顺序工具链、thinking 签名跨多轮回传、每一个钩子位置、流式中取消后继续、三个用户同时调用、模型调用进行中杀进程再恢复。一轮约 0.1 美元，结论记在 `.spec-workflow/steering/tech.md`。
+
+**Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`、浏览器 IT）、检查浏览器测试和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 
 第三方依赖和界面参考（DeepSeek Harness）的许可证见 `THIRD_PARTY_NOTICES.md`。
 

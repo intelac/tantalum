@@ -57,16 +57,26 @@ jobs:
       - name: Install Chromium
         run: java -jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar browser install
       - name: Maven verify
-        # 阶段 1、2（临时）：failure.ignore 让每个模块的测试都跑完，拿到完整的失败清单；下一步再按报告判红。
-        run: mvn -B -ntp -fae verify "-Djacoco.haltOnFailure=false" "-Dmaven.test.failure.ignore=true"
-      - name: No test failures
+        # 覆盖率门槛留在 macOS 的全量回归上：MXC 这类 macOS 连接程序的代码在这里跳过，比例会偏低（设计“windows.yml”）。
+        run: mvn -B -ntp verify "-Djacoco.haltOnFailure=false"
+      - name: Browser tests and Windows-only tests were not skipped
+        if: success() || failure()
         run: |
-          $failed = Get-ChildItem -Recurse -Filter 'TEST-*.xml' | Where-Object { $_.FullName -match '\\target\\(surefire|failsafe)-reports\\' } |
-            ForEach-Object { ([xml](Get-Content -Raw $_.FullName)).testsuite.testcase } |
-            Where-Object { $_.failure -or $_.error } | ForEach-Object { "$($_.classname).$($_.name)" }
-          if ($failed) { $failed | Sort-Object -Unique; throw "$(@($failed).Count) tests failed" }
+          ./.github/scripts/assert-not-skipped.ps1 UserBrowserIT BrowserToolsIT WindowsFilesTest DataDirCheckTest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # 检查本身也要会失败：一个没跑过的类名必须让它退出码 1
+          ./.github/scripts/assert-not-skipped.ps1 NoSuchTest
+          if ($LASTEXITCODE -ne 1) { throw "assert-not-skipped.ps1 passed a class that never ran" }
+          exit 0
+      - name: Scheduled task
+        run: ./docs/windows/tantalum-task.ps1 selftest -Jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar
+      - name: Console end-to-end
+        working-directory: console
+        run: |
+          pnpm exec playwright install chromium
+          pnpm e2e
       - name: Upload reports
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-reports
