@@ -29,7 +29,7 @@
 
 先把两个新依赖下载好，再做网络出口（网址规则、地址规则、上游代理、过滤代理），最后做 `web_fetch` 本身。这一阶段的类都能单独测，不改 `Engine`，8091 上看不到变化。
 
-- [ ] 1. 依赖和两条依赖规则
+- [x] 1. 依赖和两条依赖规则
   - File: tantalum-shell/pom.xml（改）、shelltest/ArchitectureTest.java（改）
   - 联网执行一次 `mvn -pl tantalum-shell -am dependency:resolve`，加 `com.microsoft.playwright:playwright:1.64.0` 和 `org.jsoup:jsoup:1.19.1`（版本写死）；确认 `driver`、`driver-bundle`、`Java-WebSocket` 下载到 `~/.m2`，`gson`、`jspecify` 用已缓存的版本；之后 `mvn -o -q verify` 能过
   - ArchitectureTest 加规则 1、2：只有 `tantalum.shell.browser` 依赖 `com.microsoft.playwright..`（写法同 `mcpSdkStaysInItsPackage`）；只有 `tantalum.shell.fetch` 依赖 `org.jsoup..`
@@ -37,7 +37,7 @@
   - _Requirements: 设计“Technical Standards”“Project Structure”规则 1、2_
   - _Prompt: Role: Java 构建 | Task: 下载并加入 Playwright 和 jsoup，加两条依赖规则 | Restrictions: 只联网这一次；不加别的第三方依赖；不改其他模块的 pom | Success: mvn -o -q verify 通过，两条规则的变异都被抓到_
 
-- [ ] 2. `WebUrl` 和 `AddressRules`
+- [x] 2. `WebUrl` 和 `AddressRules`
   - File: shell/net/WebUrl.java、shell/net/AddressRules.java（新），shelltest/net/WebUrlTest.java、AddressRulesTest.java（新）
   - `WebUrl.check`：只收 `http`、`https`，不带用户名密码，最长 2048 字符，三种错误消息照设计原文
   - `AddressRules(blockPrivateNetwork)`：`ownPort(int)`；`blocked(InetAddress, port)` 返回 `Optional<Reason>`：不论开关，自己的端口加本机地址（回环、`0.0.0.0`/`::`、本机网卡地址，缓存 60 秒）拦为 `OWN_PORT`；开关开时拦 W6 列出的地址段为 `PRIVATE_NETWORK`，IPv4 映射的 IPv6 先还原；`describe` 两句话照设计原文
@@ -46,7 +46,7 @@
   - _Requirements: W2, W6, 需求 1.2, 4.1, 4.2, 4.4_
   - _Prompt: Role: Java 网络安全开发 | Task: 实现网址规则和地址规则 | Restrictions: 只拦 W6 列出的段，不多拦；这里不做 DNS 以外的网络访问 | Success: 两个表驱动测试全过_
 
-- [ ] 3. `UpstreamProxy`
+- [x] 3. `UpstreamProxy`
   - File: shell/net/UpstreamProxy.java（新），shelltest/net/UpstreamProxyTest.java（新）
   - `fromEnvironment(Function<String,String>)` 读 `HTTPS_PROXY`、`HTTP_PROXY`、`NO_PROXY`，大小写都认，空值当没设；SOCKS 或解析不了的值 WARN 一行（不打印值），这个协议直连；`route(host, port, tunnel)` 返回 `Direct` 或 `Via(host, port, credentials)`；回环永远直连；`NO_PROXY` 认主机名、`.example.com` 后缀、`*`
   - 测试：大小写两种；空值；`NO_PROXY` 后缀和 `*`；回环不走代理；SOCKS 改直连；截获日志，WARN 里没有代理网址和用户名密码
@@ -54,14 +54,14 @@
   - _Requirements: W12_
   - _Prompt: Role: Java 开发 | Task: 实现上游代理的选择 | Restrictions: 代理的用户名密码只在内存里，不进日志和 toString | Success: 测试全过_
 
-- [ ] 4. 出口 `Egress`
+- [x] 4. 出口 `Egress`
   - File: shell/net/Egress.java（新），shelltest/net/EgressTest.java（新）
   - 照设计“出口”1–8：`ServerSocket` 只听 `127.0.0.1:0`，每条连接一个虚拟线程；请求头最多 16 KB、10 秒；只认 `CONNECT` 和绝对网址的明文 http，其余 400；解析一次、每个地址都过 `AddressRules`，有一个被拦就 403 加 `X-Tantalum-Blocked: private-network|own-port`；连这次解析出来的地址（IPv4 优先，10 秒）；上游代理按 `UpstreamProxy`；CONNECT 双向转发，5 分钟没数据关；明文 http 一条连接只转一个请求（改写请求头、`Connection: close`、去掉 `Proxy-*`，分块正文 411）；最多 512 条连接，再多 503。出口自己的端口也报给 `AddressRules` 当“自己的端口”。`client()` 给一个经出口、不跟跳转、连接超时 10 秒的 `HttpClient`
   - 测试：只绑 127.0.0.1；CONNECT 到本地 https 测试站通；被拦地址 403 带头；**同一条连接上第二个明文请求指向被拦的端口也被拦**（实测漏洞的回归）；假上游代理收到的 CONNECT 主机正确、带 `Proxy-Authorization`；超过 512 条连接回 503；截获日志只有主机、端口、原因，没有路径
   - _Requirements: W6, W12, 需求 4.2, 4.4, NFR Security_
   - _Prompt: Role: Java 网络开发 | Task: 实现进程内的过滤代理 | Restrictions: 只听 127.0.0.1；检查后不再查 DNS；不记路径；不看 TLS 内容 | Success: 测试全过，回归用例钉住明文复用的漏洞_
 
-- [ ] 5. `HtmlMarkdown`
+- [x] 5. `HtmlMarkdown`
   - File: shell/fetch/HtmlMarkdown.java（新），shelltest/fetch/HtmlMarkdownTest.java（新）
   - `of(Document)`：先删 `script`、`style`、`noscript`、`template`、`iframe`、`object`、`embed`，`hidden`、`aria-hidden="true"`、`input[type=hidden]`，行内 `display:none`、`visibility:hidden|collapse`；转换：标题 `#`、代码块 ```` ``` ````、列表 `-`、链接和图片转绝对网址、GFM 管道表（单元格里的 `|` 转义）、连续空行压成一个
   - 测试：每种不显示的内容都不出现；标题、相对链接变绝对、嵌套列表、代码块、表格各一例
@@ -69,14 +69,14 @@
   - _Requirements: W4, 需求 1.1_
   - _Prompt: Role: Java 开发 | Task: 在 jsoup DOM 上写 HTML 转 Markdown | Restrictions: 不引入别的转换库 | Success: 测试全过_
 
-- [ ] 6. `Fetcher` 和 `FetcherIT`
+- [x] 6. `Fetcher` 和 `FetcherIT`
   - File: shell/fetch/Fetcher.java（新），shelltest/fetch/FetcherIT.java（新）
   - 设计“一次 `web_fetch`”1–7：每跳 `WebUrl.check` 加 `AddressRules` 事先检查（只为给清楚的原因）；`User-Agent: Tantalum/<版本>`，不发 `Accept-Encoding`、不带 Cookie；最多 5 次跳转；按 `Content-Type` 分 HTML、文本、拒绝（图片和 PDF 提示不同，照“偏离需求的地方”）；流式读满 5 MB 停；整次 30 秒；解码顺序：头里的 charset → jsoup（BOM、`<meta charset>`、`http-equiv`）→ UTF-8；认出 `X-Tantalum-Blocked` 当错误；连接失败只写类别
   - 测试（本地 `com.sun.net.httpserver` 测试站，全程经真实 `Egress`）：5 次跳转成功、6 次报错（1.3）；跳到回环时开关开拦、开关关通（4.3）；`localhost` 域名开关开时拦（4.3）；Shift_JIS 和 GBK 只写在页面里时解对，头里写了以头为准（1.6）；6 MB 在 5 MB 停并写明（1.4）；PDF 和 PNG 被拒、提示不同（1.5）；404、500 是正常结果（1.7）；开关关着时访问设定的“自己的端口”被拦（4.4）；截获日志里没有页面里的标记字符串（NFR Security）
   - _Requirements: W3, W4, W5, W6, W12, W13, 需求 1.1–1.7, 4.3, 4.4, NFR Security_
   - _Prompt: Role: Java 后端开发 | Task: 实现网页下载、跳转、分类和解码 | Restrictions: 只用 Egress.client()，不自己 new HttpClient；常量不做配置；正文不进日志 | Success: FetcherIT 全过_
 
-- [ ] 7. `WebFetchTool` 和出网规则
+- [x] 7. `WebFetchTool` 和出网规则
   - File: shell/fetch/WebFetchTool.java（新），shelltest/fetch/WebFetchToolTest.java（新），shelltest/ArchitectureTest.java（改）
   - `name()` `web_fetch`，参数 `{url}` 必填、`maxLength` 2048；`server()` 是 `"web-fetch"`（任务 10 换成 `WebAccess.FETCH` 常量）、`serverConcurrency()` 16、`isConcurrencySafe` 为 `true`；说明文字照设计原文；结果格式：第一行 W9 那句话，然后 URL、Status、Content-Type、正文；超过 50,000 字符只留开头，写明原长度；5 MB 停止那一行；`FetchFailed` 变成错误结果
   - ArchitectureTest 加规则 3、4（规则对 `fetch` 和 `browser` 两个包写好，`browser` 包在阶段 3 才有类）：不调 `HttpClient.newBuilder`/`newHttpClient`、不 new `java.net.Socket`、不调 `URL.openConnection`；不依赖 `java.nio.file.Files`，`BrowserDriver` 例外

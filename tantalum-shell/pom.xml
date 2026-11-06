@@ -86,6 +86,18 @@
       <artifactId>pdfbox</artifactId>
       <version>3.0.8</version>
     </dependency>
+    <!-- 联网（web-tools spec）：每个用户的无头浏览器；driver-bundle 带 5 个平台的 Node，服务器上不用另装。 -->
+    <dependency>
+      <groupId>com.microsoft.playwright</groupId>
+      <artifactId>playwright</artifactId>
+      <version>1.64.0</version>
+    </dependency>
+    <!-- web_fetch 解析 HTML（编码、没闭合的标签、实体），Markdown 转换在它的 DOM 上自己写。 -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+      <version>1.19.1</version>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
@@ -122,6 +134,27 @@
           <execution>
             <goals>
               <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- FetcherIT 经真实的出口抓本地测试站（web-tools），放在 integration-test 阶段。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
+          <properties>
+            <configurationParameters>junit.jupiter.execution.timeout.default = 60 s
+            junit.jupiter.execution.timeout.thread.mode.default = SEPARATE_THREAD</configurationParameters>
+          </properties>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
             </goals>
           </execution>
         </executions>

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { runOutcome } from "../conversation/runOutcome";
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
@@ -23,10 +23,13 @@ export function ProcessGroup({ store, run, ids }: Props) {
   const rows = useMemo(() => processRows(items), [items]);
   const ended = runStatus?.endReason !== undefined;
   const [open, setOpen] = useState(!ended);
-
-  useEffect(() => {
+  // 结束时在同一次渲染里折叠（React 的“渲染时调整状态”）。以前放在 useEffect 里，标题先变成“已完成”、下一帧才折叠，
+  // 机器忙时 vitest 正好卡在这一帧之间读到 aria-expanded="true"。
+  const [wasEnded, setWasEnded] = useState(ended);
+  if (wasEnded !== ended) {
+    setWasEnded(ended);
     setOpen(!ended);
-  }, [ended]);
+  }
 
   const hasLiveReasoning = live.reasoning !== "";
   if (ids.length === 0 && !hasLiveReasoning) return null;
