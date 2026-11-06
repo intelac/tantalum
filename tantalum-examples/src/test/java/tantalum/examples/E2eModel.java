@@ -33,6 +33,8 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
+ *   <li>{@code approve:}（工具审批，A4）：调用 write_file 写 {@code e2e/approve-<后面的词>.txt}，然后回答“结果：”加工具结果；
+ *       用户打开 toolApproval 插件后，调用前在对话页上问；</li>
  *   <li>{@code readedit:}（本机工作区）：读电脑上的 {@code a.txt}，把 hello 改成 hi，回答“改好了：”加改动结果；</li>
  *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
  *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
@@ -97,6 +99,11 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("write:")) {
                 return write(word(text, "write:"), false, prompt, results, chunks);
+            }
+            if (text.contains("approve:")) {
+                String name = word(text, "approve:");
+                return results == 0 ? reply(List.of(), call("write_file", Map.of("path", "e2e/approve-" + name + ".txt", "content", name + "\n")))
+                        : answer(chunks, "结果：" + lastResult(prompt));
             }
             if (text.contains("readedit:")) {
                 return readEdit(results, prompt, chunks);

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import tantalum.value.hook.Allow;
@@ -59,10 +60,14 @@ class PolicyHooksTest {
         assertSame(Allow.PLAIN, new DailyQuotaHook(100).beforeModelCall(KernelState.empty(), CONTEXT));
     }
 
+    /** A2（2026-11-06 Yi 定）：策略插件不再必须开启，默认关、由用户打开；开着时出错仍按拦截处理。 */
     @Test
-    void policiesAreMandatory() {
-        assertEquals(true, new DailyQuotaHook(1).mandatory());
-        assertEquals(true, new ReadOnlyHook(Set.of()).mandatory());
+    void policiesAreOffByDefaultAndFailClosed() {
+        for (var policy : List.of(new DailyQuotaHook(1), new ReadOnlyHook(Set.of()))) {
+            assertEquals(false, policy.mandatory());
+            assertEquals(false, policy.defaultEnabled());
+            assertEquals(true, policy.failClosed());
+        }
         assertEquals("dailyQuota", new DailyQuotaHook(1).name());
         assertEquals("readOnly", new ReadOnlyHook(Set.of()).name());
     }

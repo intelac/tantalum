@@ -17,7 +17,7 @@
 | `tantalum-shell` | 一切 I/O：环、journal、Handler、模型客户端、Web |
 | `tantalum-local` | 在用户电脑上执行的工具（文件、Git、`bash`）、MXC 沙箱、和连接程序之间的消息格式，服务器和连接程序共用；不依赖 Spring 和 `tantalum-shell` |
 | `tantalum-connect` | 连接程序：在用户电脑上运行，主动连服务器，执行本机工作区的工具；macOS 安装包 |
-| `tantalum-examples` | 示例插件，不打进可执行 jar |
+| `tantalum-examples` | 示例插件，单独打成一个 jar，不在可执行 jar 里；部署时用 `loader.path` 加载（见“写插件 › 部署示例插件”） |
 | `console/` | 参考控制台 |
 
 `tantalum-shell` 里的包，依赖只朝一个方向，没有循环（ArchUnit 检查）：
@@ -36,6 +36,7 @@
 | `sse`、`web`、`auth` | 推送、HTTP 接口、登录 |
 | `plugin` | 插件 SDK |
 | `access` | 每个用户的插件开关，以及插件唯一的调用入口 `PluginGate` |
+| `question` | 插件工作在对话页上问用户、等回答（如工具审批），只在内存里 |
 | `json`、`net` | JSON 文本、主机名判断 |
 
 设计文档在 `.spec-workflow/`。
@@ -252,11 +253,12 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
    ```
 
    `tantalum-connect --help` 列出全部参数。
+5. 连接程序和服务器的协议版本要一致。2026-11-06 起是协议 2（Git 工具不再要求主目录是仓库）：旧的连接程序连上来会被拒绝，提示“服务器版本不同，请下载新的连接程序”，按第 1 步重新打包安装即可。
 
 ### 连接
 
 1. 控制台侧栏“更多 › 插件”，“本机工作区”一栏点“连接这台电脑”，选有效期（半小时、1 小时、4 小时、1 天）。页面给出令牌和一行命令，**只显示这一次**；服务器只存令牌的哈希。
-2. 在电脑的终端里，到要交给 agent 的目录下运行这行命令，按需改参数：
+2. 先装好 `tantalum-connect`（上面“安装”）。在电脑的终端里先 `cd` 到要交给 agent 的项目目录，再运行这行命令，按需改参数。`--allow .` 的 `.` 就是当前目录；家目录和 `/` 不行，连接程序会拒绝并提示换成具体的项目目录：
 
    ```sh
    TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . --allow-write --allow-shell
@@ -273,7 +275,7 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 | 参数 | 意思 | 风险 |
 |---|---|---|
 | `--server URL` | 服务器地址，默认 `http://127.0.0.1:8091` | 不是本机时用 `https://`，否则令牌和文件内容明文经过网络 |
-| `--allow 目录` | 允许 agent 进的目录，可以写多个，第一个是主目录（相对路径按它解析，`AGENTS.md` 从这里读，是 Git 仓库时才有 Git 工具） | agent 能读里面的所有文件，包括 `.env` 这类密钥文件；不要给整个家目录 |
+| `--allow 目录` | 允许 agent 进的目录，可以写多个，第一个是主目录（相对路径按它解析，`AGENTS.md` 从这里读）。`.` 是当前目录；家目录和 `/` 拒绝启动 | agent 能读里面的所有文件，包括 `.env` 这类密钥文件；只给具体的项目目录 |
 | `--allow-write` | 允许 `write_file`、`edit_file`，命令也能写这些目录 | 能改、能删允许目录里的任何内容；用 Git 管着的目录出错了好恢复 |
 | `--allow-shell` | 允许 `bash`，在 MXC 沙箱里执行 | 命令能读允许目录、联网（除非 `--no-network`），能用本机的工具链；见下面“沙箱拦什么” |
 | `--allow-read 目录` | 命令额外能读（只读）的目录，如 `~/.m2`、另装的 JDK | 只给命令，文件工具不能进 |
@@ -286,7 +288,7 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 
 - **读文件**（`read_file`、`list_dir`、`find_files`、`grep`）：路径相对主目录或写绝对路径，解析符号链接之后必须在某个允许的目录里，越界和不存在用同一句话拒绝。`read_file` 按行窗口读，`offset`（从 1 开始）和 `limit`；默认最多 2000 行或 50 KB，没读完时结尾写明下一次从哪一行接着读；超过 2000 字符的行截断并注明；64 MB 以内的文件不会整个进内存，二进制和不是 UTF-8 的文件拒绝。读到图片时电脑送回原始字节，服务器照附件规则规范化、存进本人附件目录再交给模型。`list_dir` 列一层（最多 500 项），`find_files` 按 glob 找（最多 1000 个，跳过 `.git`、`node_modules` 等，不跟符号链接）。
 - **改文件**（`write_file`、`edit_file`，要 `--allow-write`）：先读后写，覆盖或修改已有文件前这个会话必须读过它，而且之后没被改过。“读过”记在连接程序的内存里，只留最近 64 个会话；连接程序重启或会话太久没用要重读。先写临时文件再改名，保留原来的权限、CRLF 换行和 BOM；单次最多 10 MB。`edit_file` 逐字匹配，默认必须正好出现一次，多处时用 `replace_all`。
-- **Git 查询**（`git_log`、`git_show`、`git_diff`、`git_blame`、`git_branches`，主目录是 Git 仓库时才有）：调本机的 `git`，只读，不碰索引锁；只接受路径、提交号、行范围、条数，以 `-` 开头的提交号拒绝；输出最多 2000 行或 50 KB。
+- **Git 查询**（`git_log`、`git_show`、`git_diff`、`git_blame`、`git_branches`，电脑上装了 `git` 就有）：调本机的 `git`，只读，不碰索引锁；每次调用按 `path` 找仓库（没给时是主目录），主目录下子文件夹里的仓库、任何一个允许目录里的仓库都能查，不在仓库里返回 “Not a Git repository inside the allowed directories”；仓库的顶层必须在允许的目录里，否则同样拒绝（`git show` 会读到外面的文件）。只接受路径、提交号、行范围、条数，以 `-` 开头的提交号拒绝；输出最多 2000 行或 50 KB。
 - **命令行**（`bash`，要 `--allow-shell` 而且 MXC 可用）：参数 `command`、`timeout`（秒，默认 120，最多 600）、`workdir`（默认主目录，必须在允许的目录里）。标准输出和错误输出合在一起，只留最后 2000 行或 50 KB，截掉时写明；退出码不是 0 算错误并写明；超时、取消、断开时结束整个进程树。每次调用一个临时目录（`TMPDIR`），结束后删掉。
 - **显示**：对话页上 `edit_file` 显示改动前后的差异，`write_file` 显示字节数和前 20 行，`read_file` 显示读了哪几行；轨迹页检查器里 `edit_file` 有“差异”页签。
 
@@ -305,10 +307,10 @@ Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2`
 
 ### 插件页的开关
 
-插件页在侧栏“更多 › 插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认全开。
+插件页在侧栏“更多 › 插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认开，策略类插件（只读、工具审批、每日额度）默认关，由用户自己打开。
 
-- **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行四个子开关。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，MXC 不可用时写明原因。
-- **其他能开关的**：`read_attachment` 和记忆工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。策略类插件（钩子声明了 `mandatory()`，如额度）显示为“必须开启”，不能关。
+- **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行四个子开关。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，MXC 不可用时写明原因，电脑上没有 `git` 时写明。连接说明分步写明：先装好 `tantalum-connect`、先 `cd` 到项目目录、`--allow .` 是当前目录。
+- **其他能开关的**：`read_attachment` 和记忆工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。钩子声明了 `defaultEnabled() == false` 的插件（示例里的只读、工具审批、每日额度）对每个用户默认关。管理员要对所有人强制开启时写进 `tantalum.hooks.required`（如 `dailyQuota`），钩子声明了 `mandatory()` 的也一样：显示为“必须开启”，不能关，钩子出错按拦截处理。
 - **什么时候生效**：打开的工具、连上的电脑从下一次提问开始可用，在同一个会话里也是；关掉的立即不能再调用，模型这时再调会收到“已在插件页关闭”；运行中途电脑断开，再调会收到 “The local workspace is not connected.”，调用途中断开收到 “The computer disconnected. Whether this operation finished is unknown.”，不自动重发。运行进行中不换名单。
 - **怎么做到不破坏思考签名**：Claude 把历史里的思考内容和当时的工具列表绑定，直接改工具列表会让新账号收到 400。所以会话的工具列表从一开始就是全集（本机工作区的工具定义固定，不随电脑变；目录和权限写在 system 里会变的“本机工作区”一段），没开的工具标为延后加载（模型看不见）；开关变了，就在下一次提问后追加一条系统消息写明新增和移除了哪些（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。支持的 Claude 模型见 `ClaudeRequest.TOOL_CHANGE_MODELS`；不支持的模型打开的工具要等新会话，插件页会写明。OpenAI 兼容的模型直接发现在开着的工具，变化另写一段文字说明。
 - **过滤只有一个入口**：工具、工具后处理、插件工作只经 `PluginGate` 调用，它在调用前按当前用户的开关查一次；内核钩子只经 `HookChain`，按会话记下的名单过滤。两条 ArchUnit 规则钉住，绕过的代码构建失败。
@@ -369,6 +371,15 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 
 注册成 Spring bean 即可。同一个插件的钩子、工作类型和工具后处理要让 `plugin()` 返回同一个名字（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
 
+开关相关的三个方法（`KernelHook`）：
+- `defaultEnabled()`：用户没设置过时开不开，默认开。策略类插件返回 false，由用户在插件页打开；同一个插件里有一个钩子返回 false，整个插件默认关。
+- `failClosed()`：钩子抛异常时按 `Stop` 处理，默认同 `mandatory()`。用户能关的策略插件也该返回 true，开着时出错不能当作放行。
+- `mandatory()`：必须开启，插件页上不能关，出错按拦截处理。管理员也可以不改代码、用 `tantalum.hooks.required=名字,…` 把任何插件设成必须开启，名字不认识时拒绝启动。
+
+两样给插件工作用的（`tantalum.shell.plugin`）：
+- **在对话页上问用户**：`context.questions().ask(context, new Question(id, 标题, 说明, 选项), 等多久)`，只能在 `WorkType.run` 里用，返回选项的 id，没回答返回空（问题留在页面上，下一次用同一个 id 再问是接着等）。等待受 `tantalum.tool-timeout` 约束，所以每次等的要比它短，没回答就回“待定”让钩子再要一轮（示例 `ApprovalWork`）。问题只在内存里，回答写进工作的结果。接口 `GET /api/sessions/{会话}/questions`、`POST /api/sessions/{会话}/questions/{问题}`（`{"choice": "选项 id"}`），SSE 推 `question` 让页面再取。
+- **记在会话里**：`new WorkResult(结果, 续写文字, note)`，`note` 是一个对象，按字段并进会话状态里这个工作类型的那一份（`SessionState.note(工作类型)`，值为 `null` 的字段删掉），随 `WorkDone` 记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
+
 七个钩子（前 6 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略。
 
 | 钩子 | 能返回 | 结果怎么生效 | 补丁 | 示例插件 |
@@ -376,7 +387,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 | `beforeModelCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束运行；工作做完后再问一次 | 生效 | `DailyQuotaHook` |
 | `beforeToolCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 只拦这个调用，模型收到“被拦下”；工作做完后由 `onWorkResult` 决定，不再问这里 | 忽略 | `ReadOnlyHook`、`ToolApprovalHook` |
 | `onFailure` | `Allow`、`Stop`、`NeedWork` | 放行交给内核（超长恢复、退避重试）；`Stop` 运行失败；工作做完后重试一次，占用重试次数 | 忽略 | `ProviderBackoffHook` |
-| `beforeRunEnd` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook` |
+| `beforeRunEnd` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook`（只拿会话里 `read_file`、`grep` 读到的行核对，不读服务器上的文件） |
 | `onWorkResult` | `Allow`、`Stop`、`NeedWork` | 放行回到原处；`Stop` 在工具调用前只拦那个调用，其余位置结束运行；`NeedWork` 再要一轮，记在原等待点 | 忽略 | `ToolApprovalHook` |
 | `beforeCompact` | `Allow`、`Stop`（`NeedWork` 当作拒绝） | 拒绝自动压缩：本运行不再自动压缩；拒绝手动压缩：以原因失败；拒绝超长恢复：运行失败 | 忽略 | `PinnedContextHook` |
 | `afterToolExecution`（`AfterToolHook`） | 一个 `ToolOutput` | 返回新的就替换结果，原样返回就不变；抛异常时记日志，结果保持上一个 | — | `TruncateOutputHook` |
@@ -389,6 +400,33 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 5. **工作轮数有上限。** 一个等待点连续要求工作最多 `tantalum.hooks.max-work-rounds` 轮（默认 8，小于 1 拒绝启动），超过时运行以失败结束，原因写明钩子、位置和轮数。`onWorkResult` 接着要的工作记在原来的等待点上；`beforeRunEnd` 的轮数整个运行累计，不清零。插件自己的次数（如审批查询次数）要小于这个上限。
 
 **钩子只能看当前用户的当前会话。** `KernelHook` 拿到的是整个 `KernelState`，但只能读当前运行、当前会话和当前用户的用量（`state.principals()` 里这个用户的那一项）。别的会话可能不在内存里，读它们会让钩子的决定取决于当时哪些会话恰好常驻，检查工具重放时就会报出差异。接口拦不住，靠这条约定；示例钩子都符合。
+
+### 部署示例插件
+
+可执行 jar 里没有示例插件。`mvn package` 另外打出 `tantalum-examples/target/tantalum-examples-<版本>.jar`，里面只有示例插件和一个自动配置（`tantalum.examples.boot.ExamplePlugins`）。部署不改可执行 jar：用 jar 里自带的 `PropertiesLauncher` 启动，`loader.path` 指向示例 jar，再打开总开关（`ExamplesJarIT` 按这条命令测）：
+
+```sh
+java --enable-native-access=ALL-UNNAMED -Dloader.path=/path/to/tantalum-examples-0.1.0-SNAPSHOT.jar \
+  -cp tantalum-shell-0.1.0-SNAPSHOT-exec.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+  --tantalum.examples.enabled=true   # 其余参数照旧
+```
+
+用 `-cp` 启动时 jar 清单里的 `Enable-Native-Access` 不生效，所以要自己加 `--enable-native-access=ALL-UNNAMED`（SQLite）。插件页上列出注册了的插件；只读、工具审批、每日额度对每个用户默认关。配置（默认值在 `ExampleSettings`）：
+
+| 配置 `tantalum.examples.` | 默认 | 说明 |
+|---|---|---|
+| `enabled` | `false` | 总开关；示例 jar 在类路径上也要它为 true 才注册 |
+| `<插件>.enabled` | `true` | 单个插件注册不注册，插件名用 `read-only`、`tool-approval`、`daily-quota`、`pinned-context`、`provider-backoff`、`citation-check`、`truncate-output` |
+| `read-only.tools` | 读文件、Git 查询、`read_attachment`、三个记忆工具 | 只读策略放行的工具 |
+| `tool-approval.tools` | `write_file,edit_file,bash` | 调用前在对话页上问的工具 |
+| `tool-approval.answer-wait` / `max-polls` | `50s` / `6` | 每次等多久、最多问几次（约 5 分钟）。`answer-wait` 要比 `tantalum.tool-timeout` 短，`max-polls` 要比 `tantalum.hooks.max-work-rounds` 少，否则拒绝启动 |
+| `daily-quota.tokens` | `2000000` | 每个用户每天（UTC）的 token 上限，输入（含缓存）加输出 |
+| `pinned-context.marker` | `#pin` | 用户消息里带它，这条消息不被自动或手动压缩总结掉 |
+| `provider-backoff.status-url` | 无 | 模型服务出错时轮询的状态地址，返回 2xx 就重试；不配就不注册这个插件。Claude 用 `https://status.claude.com/api/v2/status.json`（`status.anthropic.com` 是 301 跳转，不跟跳转所以永远不算恢复；2026-11-06 实测） |
+| `provider-backoff.max-wait` / `poll` | `60s` / `10s` | 限流要等得比它久就结束运行；轮询间隔 |
+| `truncate-output.max-chars` | `100000` | 工具结果超过就截断 |
+
+**工具审批**（`ToolApprovalHook` + `ApprovalWork`）：用户在插件页打开后，调用列出的工具前，对话页输入框上方出现一张卡片：“允许这一次”“这个会话里一直允许”“拒绝”。选“一直允许”后同一个会话里这个工具不再问（记进 journal，重启后还在），别的会话照样问；拒绝时模型收到 “the user denied this call to … Do not retry it or use another tool to get around this decision.”；问满次数没人回答就拦下这一次调用。参照：DSH 的工具审批只有一次性的“允许这一次”和整个会话的策略开关（`packages/interaction/user-approval/README.md:165`），按对象记“这个会话里允许”的是它的电脑操作插件（`packages/experimental/cua/src/application-access.ts:154-182`，存在内存）；pi 的示例 `permission-gate.ts:25` 每次都问 Yes / No。
 
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数：钩子的决定记在这一步的结果里，恢复时不再调用；检查工具用新版本重放时会再次调用，结果不同说明规则变了。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
 

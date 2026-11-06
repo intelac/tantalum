@@ -125,6 +125,7 @@ public final class EventCodec {
         SimpleModule module = new SimpleModule("tantalum");
         module.addSerializer(Json.class, new JsonValueSerializer());
         module.addDeserializer(Json.class, new JsonValueDeserializer());
+        module.addDeserializer(Json.Obj.class, new JsonObjectDeserializer());
         mapper = JsonMapper.builder()
                 .addModule(module)
                 .addMixIn(ContentBlock.class, ContentBlockMixin.class)
@@ -235,6 +236,17 @@ public final class EventCodec {
                     out.writeEndObject();
                 }
             }
+        }
+    }
+
+    /** 声明为对象的字段（如 {@code WorkDone.note}）：不是对象就是坏行。 */
+    private static final class JsonObjectDeserializer extends ValueDeserializer<Json.Obj> {
+        @Override
+        public Json.Obj deserialize(JsonParser in, DeserializationContext context) {
+            if (JsonText.read(in) instanceof Json.Obj obj) {
+                return obj;
+            }
+            throw new IllegalArgumentException("expected a JSON object");
         }
     }
 

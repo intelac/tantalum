@@ -51,12 +51,12 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         this.dirs = dirs;
     }
 
-    /** 把 {@code main}（第一个允许的目录）连给 {@code user}，到 {@code expiresAt} 为止。{@code git} 只是告诉服务器主目录是不是仓库。 */
+    /** 把 {@code main}（第一个允许的目录）连给 {@code user}，到 {@code expiresAt} 为止。{@code git} 只是告诉服务器这台电脑装没装 git。 */
     public static TestComputer connect(LocalLinks links, Principal user, Instant expiresAt, Path main, boolean write, boolean git)
             throws IOException {
         Path real = main.toRealPath();
         Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString(), git)), write, new Hello.Shell(false, "--allow-shell was not given"), true);
+                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(false, "--allow-shell was not given"), true, git);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
                 .orElseThrow(() -> new IllegalStateException("revoked"));

@@ -66,7 +66,8 @@ test.describe("本机工作区", () => {
     await send(page, "readedit: 读 a.txt，把 hello 改成 hi");
     await expect(page.getByText(/改好了：Edited a\.txt: replaced 1 occurrence\./)).toBeVisible({ timeout: 30_000 });
     expect((await computer(page)).file).toBe("hi world\n");
-    await expect(page.getByRole("note").filter({ hasText: /工具变化：新增 .*read_file/ })).toBeVisible();
+    // 临时目录不是 Git 仓库，Git 工具也照样新增（B1）：一共 11 个，画面上只列前 5 个，完整名单在可访问名称里
+    await expect(page.getByRole("note", { name: /git_log.*read_file/ }).filter({ hasText: /工具变化：新增 .*等 11 个/ })).toBeVisible();
     await page.screenshot({ path: "test-results/local-workspace-connected.png" });
 
     // 5. 撤销：连接程序退出（退出码 2，不重连），卡片变回没连上
@@ -82,6 +83,6 @@ test.describe("本机工作区", () => {
     // 下一次提问：这一轮上方写明这些工具不能用了，原因是本机工作区
     await send(page, `还在吗 ${stamp}`);
     await expect(page.getByText(`你说：还在吗 ${stamp}`)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("note").filter({ hasText: /工具变化：不再可用 .*read_file.*（本机工作区没有连上或没有允许）/ })).toBeVisible();
+    await expect(page.getByRole("note", { name: /read_file/ }).filter({ hasText: /工具变化：不再可用 .*（本机工作区没有连上或没有允许）/ })).toBeVisible();
   });
 });

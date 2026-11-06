@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.hook.KernelHook;
@@ -33,8 +34,11 @@ public final class PluginGate {
     static final List<String> HOOK_POINTS =
             List.of("beforeModelCall", "beforeToolCall", "onFailure", "beforeRunEnd", "onWorkResult", "beforeCompact");
 
-    /** 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项（C13）。 */
-    public record Plugin(String name, String description, List<String> points, boolean mandatory) {}
+    /**
+     * 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项（C13）。
+     * {@code mandatory} 是钩子声明的或管理员配置的必须开启；{@code defaultEnabled} 是用户没设置过时开不开。
+     */
+    public record Plugin(String name, String description, List<String> points, boolean mandatory, boolean defaultEnabled) {}
 
     private final ToolCatalog catalog;
     private final PluginSwitches switches;
@@ -47,22 +51,23 @@ public final class PluginGate {
     /** 没有本机工作区时（嵌入使用和测试）。 */
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<String> mcpServers, List<KernelHook> hooks,
                       List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
-        this(catalog, switches, LocalAccess.NONE, mcpServers, hooks, afterHooks, workTypes);
+        this(catalog, switches, LocalAccess.NONE, mcpServers, hooks, afterHooks, workTypes, Set.of());
     }
 
     /**
      * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code local} 决定本机工作区的工具能不能用：
-     * 它们不看单个工具的开关，只看本机工作区的总开关、子开关和电脑（local-workspace L17）。
+     * 它们不看单个工具的开关，只看本机工作区的总开关、子开关和电脑（local-workspace L17）。{@code required} 是管理员设成必须开启的插件
+     * （{@code tantalum.hooks.required}），名字不认识时抛 {@link IllegalArgumentException}：拼错了等于策略没生效，不能悄悄放过。
      */
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, LocalAccess local, List<String> mcpServers,
-                      List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
+                      List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, Set<String> required) {
         this.catalog = catalog;
         this.switches = switches;
         this.local = local;
         this.mcpServers = List.copyOf(mcpServers);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
-        this.plugins = group(hooks, afterHooks, workTypes);
+        this.plugins = group(hooks, afterHooks, workTypes, required);
     }
 
     /** 没有用户开关的入口：一切都开着（嵌入使用和测试）。仍然是唯一的调用入口。 */
@@ -94,7 +99,7 @@ public final class PluginGate {
 
     public boolean pluginEnabled(Principal user, String plugin) {
         Plugin known = plugins.get(plugin);
-        return known != null && (known.mandatory() || switches.enabled(user, Kind.PLUGIN, plugin));
+        return known != null && (known.mandatory() || switches.enabled(user, Kind.PLUGIN, plugin, known.defaultEnabled()));
     }
 
     public List<String> enabledPlugins(Principal user) {
@@ -223,10 +228,12 @@ public final class PluginGate {
         }
     }
 
-    private static Map<String, Plugin> group(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
+    private static Map<String, Plugin> group(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
+                                             Set<String> required) {
         Map<String, List<String>> points = new LinkedHashMap<>();
         Map<String, String> descriptions = new LinkedHashMap<>();
         Map<String, Boolean> mandatory = new LinkedHashMap<>();
+        Map<String, Boolean> byDefault = new LinkedHashMap<>();
         for (KernelHook hook : hooks) {
             List<String> list = points.computeIfAbsent(hook.plugin(), ignored -> new ArrayList<>());
             for (String point : HOOK_POINTS) {
@@ -236,6 +243,7 @@ public final class PluginGate {
             }
             descriptions.merge(hook.plugin(), hook.description(), PluginGate::first);
             mandatory.merge(hook.plugin(), hook.mandatory(), Boolean::logicalOr);
+            byDefault.merge(hook.plugin(), hook.defaultEnabled(), Boolean::logicalAnd);
         }
         for (AfterToolHook hook : afterHooks) {
             points.computeIfAbsent(hook.plugin(), ignored -> new ArrayList<>()).add("afterToolExecution");
@@ -245,9 +253,15 @@ public final class PluginGate {
             points.computeIfAbsent(type.plugin(), ignored -> new ArrayList<>()).add("work:" + type.name());
             descriptions.merge(type.plugin(), type.description(), PluginGate::first);
         }
+        List<String> unknown = required.stream().filter(name -> !points.containsKey(name)).sorted().toList();
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("tantalum.hooks.required names plugins that are not installed: " + String.join(", ", unknown)
+                    + "; installed: " + String.join(", ", points.keySet().stream().sorted().toList()));
+        }
         Map<String, Plugin> grouped = new LinkedHashMap<>();
         points.keySet().stream().sorted().forEach(name -> grouped.put(name, new Plugin(name, descriptions.getOrDefault(name, ""),
-                points.get(name).stream().distinct().toList(), mandatory.getOrDefault(name, false))));
+                points.get(name).stream().distinct().toList(), mandatory.getOrDefault(name, false) || required.contains(name),
+                byDefault.getOrDefault(name, true))));
         return grouped;
     }
 

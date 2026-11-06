@@ -76,6 +76,9 @@ public final class E2eServer {
                     generic.registerBean(CitationWork.class);
                     generic.registerBean(E2eTraceHook.class);
                     generic.registerBean(E2eScopeHook.class);
+                    // 工具审批的端到端测试（A4）：默认关，用例在插件页打开；审批写文件，在对话页上问
+                    generic.registerBean(ToolApprovalHook.class, () -> new ToolApprovalHook(java.util.Set.of("write_file"), 5));
+                    generic.registerBean(ApprovalWork.class, () -> new ApprovalWork(Duration.ofSeconds(20)));
                 })
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,

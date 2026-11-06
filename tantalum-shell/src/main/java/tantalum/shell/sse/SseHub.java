@@ -24,6 +24,7 @@ import tantalum.shell.trace.TraceRecord;
 import tantalum.value.decision.Fact;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunRef;
+import tantalum.value.id.SessionId;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -249,6 +250,12 @@ public final class SseHub implements FactListener {
         data.put("text", text);
         SseMessage message = new SseMessage(null, "chunk", mapper.writeValueAsString(data));
         forEachSubscriber(run.principal(), subscription -> subscription.offer(message));
+    }
+
+    /** 这个会话等用户回答的问题变了（插件工作问用户，如工具审批）：推一条 {@code question}，页面再去取。不进 journal，不能补读。 */
+    public void question(Principal user, SessionId session) {
+        SseMessage message = new SseMessage(null, "question", mapper.writeValueAsString(Map.of("session", session.value())));
+        forEachSubscriber(user, subscription -> subscription.offer(message));
     }
 
     /** 把条目变化转成 {@code item} 消息：完整条目，客户端按 ID 覆盖。回放补读时也用它。 */

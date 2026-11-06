@@ -2,6 +2,7 @@ package tantalum.shell.boot;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Set;
 import tantalum.kernel.Kernel;
 import tantalum.kernel.Limits;
 import tantalum.kernel.hook.HookChain;
@@ -25,7 +26,7 @@ final class KernelFactory {
     static Kernel kernel(TantalumProperties properties, ToolSafety safety, List<KernelHook> hooks) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        return new Kernel(table, new HookChain(hooks), safety,
+        return new Kernel(table, new HookChain(hooks, Set.copyOf(properties.hooks().required())), safety,
                 new Limits(properties.loop().maxParallelTools(), properties.hooks().maxWorkRounds()));
     }
 

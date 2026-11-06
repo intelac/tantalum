@@ -13,7 +13,7 @@ public interface LocalTool {
     enum Kind {
         /** 读文件，有 {@code --allow} 就有。 */
         READ,
-        /** Git 查询，主目录是 Git 仓库时才有。 */
+        /** Git 查询：电脑上装了 git 就有，每次调用按路径找仓库。 */
         GIT,
         /** 改文件，要 {@code --allow-write}。 */
         WRITE,

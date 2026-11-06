@@ -49,13 +49,16 @@ public final class LocalWorkspace implements LocalAccess {
                 && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false);
     }
 
-    /** 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要沙箱可用，Git 要主目录是仓库。 */
+    /**
+     * 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要沙箱可用，Git 要电脑上装了 git。Git 不看目录是不是仓库：
+     * 每次调用在电脑上按路径找仓库，不在仓库里就报“不是 Git 仓库”，子文件夹和任何一个允许目录里的仓库都能查。
+     */
     public static boolean allows(Hello hello, Kind kind) {
         return switch (kind) {
             case READ -> true;
             case WRITE -> hello.write();
             case SHELL -> hello.shell().available();
-            case GIT -> !hello.roots().isEmpty() && hello.roots().getFirst().git();
+            case GIT -> hello.git();
         };
     }
 
@@ -86,7 +89,7 @@ public final class LocalWorkspace implements LocalAccess {
         List<Hello.Root> roots = hello.roots();
         if (!roots.isEmpty()) {
             Hello.Root main = roots.getFirst();
-            text.append(" Main directory: ").append(main.path()).append(main.git() ? " (git)." : ".");
+            text.append(" Main directory: ").append(main.path()).append('.');
         }
         if (roots.size() > 1) {
             text.append(" Other allowed directories: ")

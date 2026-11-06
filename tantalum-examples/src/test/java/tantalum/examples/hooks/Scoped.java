@@ -7,7 +7,10 @@ import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
 import tantalum.value.state.KernelState;
 
-/** 让一个钩子只对名字满足条件的会话生效，其余会话放行。名字和强制与否都照搬原钩子。 */
+/**
+ * 让一个钩子只对名字满足条件的会话生效，其余会话放行。名字、强制与否、出错时拦不拦都照搬原钩子；默认开不开不照搬：
+ * 矩阵测试里每个插件都开着，默认关的策略插件（A2）也一样。
+ */
 final class Scoped implements KernelHook {
 
     private final Predicate<String> sessions;
@@ -30,6 +33,11 @@ final class Scoped implements KernelHook {
     @Override
     public boolean mandatory() {
         return inner.mandatory();
+    }
+
+    @Override
+    public boolean failClosed() {
+        return inner.failClosed();
     }
 
     @Override

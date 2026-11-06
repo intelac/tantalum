@@ -13,9 +13,11 @@ import java.util.Objects;
  * @param write 有没有 {@code --allow-write}
  * @param shell 命令行能不能用，不能用时写明原因
  * @param network 命令能不能联网（{@code --no-network} 时为 false）
+ * @param git 这台电脑上能不能跑 {@code git}。Git 工具不看目录是不是仓库：每次调用按它的路径找仓库，不在仓库里就报“不是 Git 仓库”
+ *            （协议 2 起；协议 1 按主目录是不是仓库决定有没有 Git 工具，见 {@link Wire#PROTOCOL}）
  */
-public record Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network)
-        implements Message {
+public record Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
+                    boolean git) implements Message {
 
     public Hello {
         Objects.requireNonNull(connector, "connector");
@@ -27,8 +29,8 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
     /** 电脑名（默认主机名）、系统、版本、芯片架构。 */
     public record Device(String name, String os, String osVersion, String arch) {}
 
-    /** 一个允许的目录（真实路径），以及它是不是 Git 仓库。 */
-    public record Root(String path, boolean git) {
+    /** 一个允许的目录（真实路径）。 */
+    public record Root(String path) {
 
         public Root {
             Objects.requireNonNull(path, "path");
