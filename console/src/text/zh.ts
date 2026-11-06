@@ -36,7 +36,7 @@ export const zh = {
   conversation: {
     viewInTrace: "在轨迹中查看",
     emptyTitle: "有什么可以帮你？",
-    emptyHint: "输入问题开始，模型可以读取你工作目录里的文件。",
+    emptyHint: "输入问题开始。要让模型读写你电脑上的文件，先在插件页连上本机工作区。",
     copy: "复制",
     copied: "已复制",
     interrupted: "已中断",

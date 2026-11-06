@@ -299,7 +299,7 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 - **环境变量**：命令拿不到连接程序的环境变量（包括 `TANTALUM_TOKEN`），只有 `PATH`、`HOME`（连接程序自己的空目录，只读）、`TMPDIR`、`LANG` 和 `--env` 放行的。
 - **不拦的**：允许目录里的东西随便读（含 `.env`）；网络开着时能把读到的内容发出去；能用本机装的所有工具链。MXC 清理进程是尽力而为：一直在飞快地起新进程的命令，极少数情况下可能漏掉一个（MXC 文档 “Process cleanup › Limits”）。
 
-Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2` 并用离线模式（`mvn -o`），或者把它加成允许目录（`--allow ~/.m2`，有 `--allow-write` 时可写；注意文件工具也能读它）。Java 的 `user.home` 取的是真实家目录，不受 `HOME` 影响。JDK 不在 `/opt/homebrew`、`/Library/Java` 下时用 `--allow-read` 加上它，再 `--env JAVA_HOME`。
+Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2` 并用离线模式（`mvn -o`），或者把它加成允许目录（`--allow ~/.m2`，有 `--allow-write` 时可写；注意文件工具也能读它）。命令里的 `HOME` 是连接程序给的空目录，Maven 按它找不到 `~/.m2`，会报 “Could not create local repository”：启动前 `export MAVEN_OPTS=-Dmaven.repo.local=$HOME/.m2/repository` 并加 `--env MAVEN_OPTS`，或者让 agent 在命令里带上 `-Dmaven.repo.local=…`（2026-11-06 在 8091 上实测）。JDK 不在 `/opt/homebrew`、`/Library/Java` 下时用 `--allow-read` 加上它，再 `--env JAVA_HOME`。
 
 ### 插件页的开关
 
