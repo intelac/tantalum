@@ -24,6 +24,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
@@ -318,6 +319,7 @@ public final class OpenAiClient implements ModelClient {
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
                 case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
+                case ModelChangeBlock change -> append(text, change.text());
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);
                     parts.add(textPart(AttachmentText.image(image)));

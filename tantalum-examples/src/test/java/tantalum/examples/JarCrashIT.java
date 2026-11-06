@@ -268,10 +268,11 @@ class JarCrashIT {
                 "--server.port=" + port,
                 "--tantalum.data-dir=" + data,
                 "--tantalum.workspace=" + workspace,
-                "--tantalum.provider=openai",
-                "--tantalum.openai.base-url=" + model.baseUrl(),
+                "--tantalum.provider=local",
+                "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072",
+                "--tantalum.openai-routes.local.base-url=" + model.baseUrl(),
                 // 默认并发 1 是给本地模型的；这里 alice 挂住的模型调用不能挡住 bob。
-                "--tantalum.openai.concurrency=4",
+                "--tantalum.openai-routes.local.concurrency=4",
                 "--tantalum.mcp.servers.demo.url=" + mcp.url())
                 .redirectErrorStream(true).redirectOutput(temp.resolve(name + ".log").toFile());
         builder.environment().remove("ANTHROPIC_API_KEY");

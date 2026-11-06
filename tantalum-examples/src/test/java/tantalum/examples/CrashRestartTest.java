@@ -96,8 +96,9 @@ class CrashRestartTest {
                 "--server.port=" + port,
                 "--tantalum.data-dir=" + data,
                 "--tantalum.workspace=" + workspace,
-                "--tantalum.provider=openai",
-                "--tantalum.openai.base-url=http://127.0.0.1:" + fakeModel.getAddress().getPort() + "/v1")
+                "--tantalum.provider=local",
+                "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072",
+                "--tantalum.openai-routes.local.base-url=http://127.0.0.1:" + fakeModel.getAddress().getPort() + "/v1")
                 .redirectErrorStream(true).redirectOutput(temp.resolve("child.log").toFile());
         builder.environment().put("TANTALUM_ADMIN_USER", "alice");
         builder.environment().put("TANTALUM_ADMIN_PASSWORD", TestServer.PASSWORD);

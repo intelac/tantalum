@@ -39,7 +39,8 @@ final class CompactionScenario {
     // 刚够一篇笔记；这个场景测压缩，不测联网，所以关掉，和 tech.md 里记下的几次真实结果保持同样的余量。
     static final String[] SETTINGS_CLAUDE = {"--tantalum.claude.context-window=32000", "--tantalum.claude.max-tokens=8192",
         "--tantalum.compaction.window-from-model=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
-    static final String[] SETTINGS_OPENAI = {"--tantalum.provider=openai", "--tantalum.openai.context-window=32000",
+    static final String[] SETTINGS_OPENAI = {"--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+        "--tantalum.openai-routes.local.context-window=32000",
         "--tantalum.compaction.window-from-model=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String[] WORDS = ("the project ships a kernel that folds events into state and a shell that owns threads journal "

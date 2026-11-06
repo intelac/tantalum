@@ -55,7 +55,7 @@ class ConfigApiTest {
     @Test
     void openAiProviderIsLocal() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("w")), model,
-                "--tantalum.provider=openai", "--tantalum.openai.model=qwen-test", "--tantalum.openai.context-window=0")) {
+                "--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen-test", "--tantalum.openai-routes.local.context-window=0")) {
             JsonNode body = JSON.readTree(server.get("alice", "/api/config").body());
             assertEquals("openai", body.get("provider").asString());
             assertEquals("qwen-test", body.get("model").asString());

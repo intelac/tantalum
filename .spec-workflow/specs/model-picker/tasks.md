@@ -31,7 +31,7 @@
 
 先加记录选择用的值类型和 journal 字段，再改配置，最后做路线、模型列表和档位。这一阶段的类都能单独测；`Engine` 照旧用一个客户端，8091 上看不到变化。
 
-- [ ] 1. 值类型和 journal 字段
+- [x] 1. 值类型和 journal 字段
   - File: value/model/ModelChoice.java、ModelChangeBlock.java（新），value/model/Prompt.java、ReasoningBlock.java、value/event/UserPrompt.java、FollowUpSubmitted.java、ContextAssembled.java、value/command/AssembleContext.java、value/state/SessionContext.java（改），shell/journal/ 下的编解码（改），对应的测试（改）
   - 照设计“`tantalum-value`”加字段，全部可以为空，保留旧构造函数；编解码：为空不写，`ContextAssembled.model` 走 `MatchedCodec` 只在变化时写，`Prompt.model` 照“请求只写相对上一次的变化”写，`ModelChangeBlock` 写成 `{"type":"model_change","from","to"}`
   - 测试：每个字段写了能读回；为空时写出的行和改动前逐字节相同（用现有的旧格式会话文件资源）；`ContextAssembled.model` 不变时 `diff` 行里没有它（需求 7.1）；`WireFormatTest` 照跑
@@ -39,14 +39,14 @@
   - _Requirements: M13, 需求 7.1, 7.4_
   - _Prompt: Role: Java 开发 | Task: 加记录模型选择的值类型和 journal 字段 | Restrictions: 不改内核行为；旧行逐字节不变；不升内核语义版本 | Success: 编解码测试和 WireFormatTest 全过_
 
-- [ ] 2. 路线的配置
+- [x] 2. 路线的配置
   - File: shell/boot/TantalumProperties.java、新增 shell/boot/RemovedKeys.java（`EnvironmentPostProcessor`）、tantalum-shell/src/main/resources/application.properties、META-INF/spring.factories（改），shelltest/boot/TantalumPropertiesTest.java（改）
   - `Claude` 加 `apiKeyEnv`、`models`、`displayName`，`effort` 只收五个档位；新增 `Map<String, OpenAiRoute> openaiRoutes`（字段照设计 `RouteSettings`）；`provider` 必须是已配的路线；删 `OpenAi`；有 `tantalum.openai.` 开头的键时启动失败，消息照设计原文；路线名只用小写字母、数字、`-`，最长 32，`claude` 保留；`thinking` 不认识、`efforts` 为空、`default-effort` 不在档位里都启动失败；`application.properties` 照设计改。这一步 `TantalumProperties` 先保留 `model()`、`vision()` 这些方法，改成取默认路线的值，任务 10 再删
   - 测试：`tantalum.openai.base-url` 还在时失败、消息对（需求 1.4）；路线名大写、重复、叫 `claude` 时失败（需求 1.5）；`effort=extreme` 失败；`thinking=foo` 失败；`overrides[moonshotai/kimi-k2].thinking` 方括号写法能读到
   - _Requirements: M1, M5, M17, 需求 1.4, 1.5, 9.1_
   - _Prompt: Role: Java 后端开发 | Task: 把模型配置改成路线 | Restrictions: 密钥不进配置；不悄悄忽略旧键；默认值和现在的行为一致（默认路线 claude，claude-sonnet-5-5，medium） | Success: 配置测试全过，现有测试不改断言_
 
-- [ ] 3. `Levels` 和 `OpenAiThinking`
+- [x] 3. `Levels` 和 `OpenAiThinking`
   - File: shell/route/Levels.java、shell/model/OpenAiThinking.java（新），shelltest/route/LevelsTest.java、shelltest/model/OpenAiThinkingTest.java（新）
   - `Levels.claude(capabilities, defaultEffort)`：五个档位里 `supported` 的，按顺序；默认档位取法照设计；`Levels.openAi(thinking, efforts, defaultEffort)`：五种写法的档位和默认值。`OpenAiThinking.apply(body, level)` 照设计的表写请求体，`NONE` 什么都不写，不认识的档位抛异常
   - 测试：用 `claude-models.json` 实测数据（任务 4 放进测试资源，这里先用其中两个模型的片段），Sonnet 4.6 没有 `xhigh`、默认 `medium`；路线默认 `xhigh` 而模型没有时取最近的；OpenAI 五种写法各一例（需求 2.6、2.7）；四种请求体和期望文件一致
@@ -54,7 +54,7 @@
   - _Requirements: M5, 需求 2.6, 2.7_
   - _Prompt: Role: Java 开发 | Task: 定义思考档位和 OpenAI 兼容的思考参数写法 | Restrictions: 不就近换档位；不认识的写法和档位直接报错 | Success: 测试全过_
 
-- [ ] 4. `ClaudeModels`
+- [x] 4. `ClaudeModels`
   - File: shell/route/ModelList.java、ModelInfo.java、Listing.java、ClaudeModels.java（新），shelltest/route/ClaudeModelsTest.java（新），tantalum-shell/src/test/resources/route/claude-models.json（新，从 scratchpad 复制，确认不含密钥）
   - 照设计“`ClaudeModels`”：翻完所有页；去掉不支持 `adaptive` 的并记日志（M3）；允许列表；`fallbacks` 开着时逐个 `retrieve` 取最小窗口（搬 `ClaudeWindow.java:33-60` 的做法）；`maxTokens`、`vision`、`levels`；`toolChanges` 来自 `ClaudeRequest.TOOL_CHANGE_MODELS`
   - 测试（假的 Models 接口返回实测数据）：14 个里留 11 个，去掉的 3 个在日志里（需求 2.3）；允许列表只留两个、列表里有接口里没有的一个写进日志（需求 2.2）；两页的列表翻完；备用模型窗口更小时取小的；Haiku 5.5 的 `toolChanges` 为假
@@ -62,7 +62,7 @@
   - _Requirements: M2, M3, M4, 需求 2.2, 2.3, 2.5, 2.6_
   - _Prompt: Role: Java 后端开发 | Task: 从 Claude Models 接口读模型列表和每个模型的信息 | Restrictions: 用现有官方 SDK；不自己维护模型能力表 | Success: 测试全过_
 
-- [ ] 5. `OpenAiModels`
+- [x] 5. `OpenAiModels`
   - File: shell/route/OpenAiModels.java（新），shelltest/route/OpenAiModelsTest.java（新）
   - 照设计“`OpenAiModels`”：`GET {base-url}/models`，有密钥带 `Authorization: Bearer`，5 秒，不跟跳转；窗口字段照 T1 的顺序，`overrides` 优先，都没有用配置并标 `CONFIG`；`list-models=false` 不发请求；`vision` 和档位按 `overrides` → 路线
   - 测试（`com.sun.net.httpserver`）：llama.cpp 的实测返回（`meta.n_ctx` 131072）、vLLM `max_model_len`、LM Studio `context_length` 各一份；允许列表；`list-models=false` 时服务器没收到请求；401 时 `Listing` 的错误类别是“401”，日志里没有地址路径和请求头
@@ -70,7 +70,7 @@
   - _Requirements: M2, M4, M5, 需求 2.2, 2.5, 2.7_
   - _Prompt: Role: Java 后端开发 | Task: 从 OpenAI 兼容接口读模型列表和窗口 | Restrictions: 密钥不进日志；不跟跳转 | Success: 测试全过_
 
-- [ ] 6. `Routes` 和 `ChoiceCheck`
+- [x] 6. `Routes` 和 `ChoiceCheck`
   - File: shell/route/Route.java、RouteSettings.java、Routes.java、ChoiceCheck.java（新），shelltest/route/RoutesTest.java、ChoiceCheckTest.java（新），shelltest/ArchitectureTest.java（改）
   - `Routes`：每条路线一个虚拟线程读列表，总共等 5 秒；10 分钟刷新；失败 `OK` → `STALE` 保留模型，从没读到是 `UNAVAILABLE`；`refreshSoon(route)`；密钥变量没设的路线不建、日志写变量名不写值；默认路线的密钥变量没设时 `create` 抛异常（列表读不到不算）；`snapshot()`、`model(choice)`、`defaultChoice()`。`ChoiceCheck`：`problem` 覆盖设计 Error Handling 表的前六行，消息照原文；`usable`。ArchitectureTest 加设计里的两条规则
   - 测试：两条路线一快一慢（慢的 8 秒），`start` 在 5 秒内返回，慢的之后变成 `OK`（需求 2.1）；刷新失败保留（2.4）；没设密钥变量不建（1.2）；默认路线没设密钥变量时启动失败、只是列表读不到时照常启动（1.3）；`ChoiceCheck` 表驱动；规则各变异一次

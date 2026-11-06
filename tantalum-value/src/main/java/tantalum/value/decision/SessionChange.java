@@ -9,6 +9,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
@@ -22,7 +23,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                             Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
                             Changed<SessionContext> context, Changed<Compaction> compaction,
                             Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
-                            Changed<Map<String, Json.Obj>> notes) {
+                            Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<ModelChoice> followUpModel) {
 
     /** 一个变了的字段的新值。 */
     public record Changed<T>(T value) {}
@@ -38,7 +39,18 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                          Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
                          Changed<SessionContext> context, Changed<Compaction> compaction,
                          Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages) {
-        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null, null);
+        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null, null,
+                null, null);
+    }
+
+    /** 模型选择没变时。 */
+    public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
+                         Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
+                         Changed<SessionContext> context, Changed<Compaction> compaction,
+                         Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
+                         Changed<Map<String, Json.Obj>> notes) {
+        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes,
+                null, null);
     }
 
     /** 比较同一个会话处理前后的状态。{@code before} 为 null 表示这一步新建了它。消息不是只追加时抛出。 */
@@ -57,7 +69,8 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 changed(base.followUps(), after.followUps()), changed(base.context(), after.context()),
                 changed(base.compaction(), after.compaction()), changed(base.anchor(), after.anchor()),
                 changed(base.omittedImages(), after.omittedImages()), changed(base.toolsSeen(), after.toolsSeen()),
-                changed(base.notes(), after.notes()));
+                changed(base.notes(), after.notes()), changed(base.model(), after.model()),
+                changed(base.followUpModel(), after.followUpModel()));
     }
 
     /** 套到处理前的状态上。{@code before} 为 null 时以新会话为底。 */
@@ -72,14 +85,15 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         return new SessionState(id, principal, messages,
                 pick(activeRun, base.activeRun()), pick(lastRun, base.lastRun()), pick(followUps, base.followUps()),
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
-                pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()));
+                pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()),
+                pick(model, base.model()), pick(followUpModel, base.followUpModel()));
     }
 
     /** 没有任何变化：可以不写。 */
     public boolean isEmpty() {
         return !created && appended.isEmpty() && activeRun == null && lastRun == null && followUps == null
                 && context == null && compaction == null && anchor == null && omittedImages == null && toolsSeen == null
-                && notes == null;
+                && notes == null && model == null && followUpModel == null;
     }
 
     /** 先比引用：内核追加时沿用原来的消息对象，长历史不用逐条深比较。 */

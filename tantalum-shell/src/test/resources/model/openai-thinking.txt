@@ -1,0 +1,10 @@
+# OpenAiThinking.fields：每种写法、每一档加进请求体的字段（model-picker 设计“OpenAiThinking”的表）。
+none medium: {}
+reasoning-effort low: {"reasoning_effort":"low"}
+reasoning-effort high: {"reasoning_effort":"high"}
+enable-thinking on: {"enable_thinking":true}
+enable-thinking off: {"enable_thinking":false}
+chat-template on: {"chat_template_kwargs":{"enable_thinking":true}}
+chat-template off: {"chat_template_kwargs":{"enable_thinking":false}}
+thinking-type on: {"thinking":{"type":"enabled"}}
+thinking-type off: {"thinking":{"type":"disabled"}}

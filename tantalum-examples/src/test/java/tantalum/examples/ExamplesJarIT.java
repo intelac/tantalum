@@ -56,7 +56,8 @@ class ExamplesJarIT {
                 "--enable-native-access=ALL-UNNAMED", "-Dloader.path=" + examples,
                 "-cp", jar.toString(), "org.springframework.boot.loader.launch.PropertiesLauncher",
                 "--server.port=" + port, "--tantalum.data-dir=" + data, "--tantalum.workspace=" + temp.resolve("ws"),
-                "--tantalum.provider=openai", "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
+                "--tantalum.provider=local", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072",
+                "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                 "--tantalum.examples.enabled=true"));
         Process server = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(temp.resolve("server.log").toFile()).start();
         try {

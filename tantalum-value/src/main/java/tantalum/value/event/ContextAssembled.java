@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import tantalum.value.id.CommandId;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
@@ -14,10 +15,11 @@ import tantalum.value.state.ContextSection;
  * {@code tools} 是服务器上的全部工具；{@code enabledTools}、{@code enabledPlugins} 是这个用户当时开着的工具和钩子插件
  * （core-tools C15），为 null 表示全部开着。{@code toolSources} 是每个工具从哪来：{@code builtin} 或 {@code mcp:<服务器名>}
  * （one-line-journal J5），内核不读它，画面用来说明工具为什么不能用了。
+ * {@code model} 是这次提问实际用的路线、模型和档位（“配上了什么”，model-picker M13），旧事件为 null。
  */
 public record ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
                                List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
-                               Map<String, String> toolSources)
+                               Map<String, String> toolSources, ModelChoice model)
         implements ResultEvent {
 
     public static final String TYPE = "ContextAssembled";
@@ -31,16 +33,23 @@ public record ContextAssembled(CommandId command, String system, List<ToolSpec> 
         toolSources = toolSources == null ? Map.of() : Map.copyOf(toolSources);
     }
 
+    /** 不记选择时（旧事件、测试）。 */
+    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
+                            List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
+                            Map<String, String> toolSources) {
+        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, toolSources, null);
+    }
+
     /** 不记工具来源时（测试）。 */
     public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
                             List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins) {
-        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, Map.of());
+        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, Map.of(), null);
     }
 
     /** 不区分用户开关时（全部开着）。 */
     public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
                             List<ContextSection> sections) {
-        this(command, system, tools, compaction, sections, null, null, Map.of());
+        this(command, system, tools, compaction, sections, null, null, Map.of(), null);
     }
 
     @Override

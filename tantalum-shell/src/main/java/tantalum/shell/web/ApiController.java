@@ -115,9 +115,11 @@ public class ApiController {
     @GetMapping("/api/config")
     ResponseEntity<String> config() {
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("provider", properties.provider());
+        // 默认路线的种类，兼容旧画面（model-picker 之前只有一个供应商）
+        boolean claude = properties.defaultOpenAiRoute() == null;
+        response.put("provider", claude ? "claude" : "openai");
         response.put("model", properties.model());
-        response.put("cloud", properties.provider().equals("claude"));
+        response.put("cloud", claude);
         ContextWindow.Reading window = engine.compaction().window();
         if (window.tokens() > 0) {
             response.put("contextWindow", window.tokens());

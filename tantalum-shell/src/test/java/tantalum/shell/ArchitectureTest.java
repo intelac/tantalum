@@ -198,6 +198,18 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.kernel.*..")
             .should().dependOnClassesThat().resideInAPackage("tantalum.kernel");
 
+    /** 发请求的代码不知道有几条路线（model-picker 设计“Project Structure”）：读列表在 {@code route}，发请求在 {@code model}。 */
+    @ArchTest
+    static final ArchRule modelKnowsNoRoutes = noClasses()
+            .that().resideInAPackage("tantalum.shell.model..")
+            .should().dependOnClassesThat().resideInAPackage("tantalum.shell.route..");
+
+    /** 路线只管列表和选择，不碰接口、处理器和环：并发上限在 {@code ModelHandler} 里按路线各管各的。 */
+    @ArchTest
+    static final ArchRule routesStayBelowThePipeline = noClasses()
+            .that().resideInAPackage("tantalum.shell.route..")
+            .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell.web..", "tantalum.shell.handler..", "tantalum.shell.loop..");
+
     /** 只有组装和 Web 层读全局配置；其余的包拿自己的设置记录。 */
     @ArchTest
     static final ArchRule onlyTheEdgeReadsTheConfiguration = noClasses()

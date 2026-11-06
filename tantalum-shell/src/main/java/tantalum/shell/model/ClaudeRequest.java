@@ -37,6 +37,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
@@ -361,6 +362,7 @@ final class ClaudeRequest {
                     .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
+            case ModelChangeBlock change -> ContentBlockParam.ofText(TextBlockParam.builder().text(change.text()).build());
         };
     }
 

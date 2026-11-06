@@ -36,6 +36,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
 import tantalum.value.model.TokenUsage;
@@ -82,7 +83,8 @@ public final class RecordCodec {
     /** 掐头去尾至少保留这么多字符才值得写成切片。 */
     private static final int MIN_SLICE_KEPT = 64;
     /** 内容块的类型名（{@code EventCodec} 里 {@code ContentBlock} 的 {@code kind}）。 */
-    private static final Set<String> BLOCK_KINDS = Set.of("text", "reasoning", "toolCall", "toolResult", "attachment", "toolChange");
+    private static final Set<String> BLOCK_KINDS = Set.of("text", "reasoning", "toolCall", "toolResult", "attachment", "toolChange",
+            "modelChange");
     /** 序列化后至少这么长的块才写成引用。 */
     private static final int MIN_BLOCK_BYTES = 96;
     private static final TypeReference<List<Message>> MESSAGES = new TypeReference<>() { };
@@ -331,6 +333,8 @@ public final class RecordCodec {
         changed(node, "omittedImages", change.omittedImages());
         changed(node, "toolsSeen", change.toolsSeen());
         changed(node, "notes", change.notes());
+        changed(node, "model", change.model());
+        changed(node, "followUpModel", change.followUpModel());
         return node;
     }
 
@@ -360,7 +364,8 @@ public final class RecordCodec {
                 changedList(node, "followUps", MESSAGES),
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
-                changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node));
+                changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
+                changed(node, "model", ModelChoice.class), changed(node, "followUpModel", ModelChoice.class));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */
@@ -514,7 +519,7 @@ public final class RecordCodec {
 
     /**
      * 模型调用：system 和工具和上一次相同时不写；消息写和上一次相同的前几条有多少（{@code keep}）和之后的（{@code add}）。
-     * 上一次不知道时全写。
+     * 模型选择和上一次相同时不写，变成没有时写 null（model-picker M13）。上一次不知道时全写，选择为空时不写。
      */
     private ObjectNode callModel(CallModel call, RecordMemo memo) {
         Prompt prompt = call.prompt();
@@ -537,6 +542,10 @@ public final class RecordCodec {
         written.put("keep", keep);
         written.set("add", messages(prompt.messages().subList(keep, prompt.messages().size()), memo));
         written.set("output", mapper.valueToTree(prompt.output()));
+        ModelChoice before = last == null ? null : last.model();
+        if (!java.util.Objects.equals(before, prompt.model())) {
+            written.set("model", prompt.model() == null ? mapper.nullNode() : mapper.valueToTree(prompt.model()));
+        }
         node.put("fingerprint", fingerprint(prompt));
         memo.lastPrompt(prompt);
         return node;
@@ -554,11 +563,20 @@ public final class RecordCodec {
         messages.addAll(messages(written.required("add"), memo));
         Prompt prompt = new Prompt(written.has("system") ? written.get("system").asString() : last.system(),
                 written.has("tools") ? tools(written.get("tools"), memo) : last.tools(),
-                messages, mapper.treeToValue(written.required("output"), Prompt.Output.class));
+                messages, mapper.treeToValue(written.required("output"), Prompt.Output.class), model(written, last));
         memo.lastPrompt(prompt);
         List<String> omitted = node.has("omittedImages") ? mapper.convertValue(node.get("omittedImages"), STRINGS) : List.of();
         return new CallModel(mapper.treeToValue(node.required("id"), CommandId.class),
                 mapper.treeToValue(node.required("run"), RunRef.class), prompt, omitted);
+    }
+
+    /** 请求的模型选择：没写就和上一次相同。 */
+    private ModelChoice model(JsonNode written, Prompt last) {
+        if (!written.has("model")) {
+            return last == null ? null : last.model();
+        }
+        JsonNode value = written.get("model");
+        return value.isNull() ? null : mapper.treeToValue(value, ModelChoice.class);
     }
 
     /** 和会话上下文里相同的工具写成下标，标为 deferred 的写成 {@code {"deferred": 下标}}；钩子加的写原样。 */
