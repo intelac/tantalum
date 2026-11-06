@@ -39,6 +39,9 @@ import tantalum.value.state.OwnerRef;
  * 启动时创建用户 {@value #USER}（密码 {@value #PASSWORD}）、两个示例文件和一个运行被崩溃打断的会话 {@value #CRASHED_SESSION}。
  * 文件工具在用户自己的电脑上执行（local-workspace）：{@value #USER} 和 {@value #OTHER_USER} 各连着一台测试电脑（{@link TestComputer}），
  * 允许各自的目录、可以改文件；{@value #LOCAL_USER} 什么都没连，本机工作区的端到端测试用它起真的连接程序。
+ * 联网（web-tools）：自带一个只听 127.0.0.1 的测试页 {@value #WEB_PAGE_PATH}，脚本化模型的 {@code fetch:} 用 web_fetch 抓它；
+ * 另起一个管理员关掉浏览器的服务（端口 = 主端口 + 1，{@code tantalum.web.browser.enabled=false}，只有账号 {@value #USER}），
+ * 插件页的端到端测试在那里看“管理员已关闭”。它用 jar 里打包的控制台（{@code console/dist}），要先 {@code pnpm build}。
  * 由 {@code console/playwright.config.ts} 通过 {@code mvn -P e2e} 启动，进程被杀即结束。
  */
 public final class E2eServer {
@@ -55,6 +58,12 @@ public final class E2eServer {
     /** 同上，进程死在工具执行途中：文件停在模型要调工具之后，没有结果行（record-results 需求 11.4）。 */
     public static final String CRASHED_TOOL_SESSION = "s-c0ffee01";
 
+    /** 本地测试页：标题、正文里的标记，外加不该出现在 web_fetch 结果里的脚本。 */
+    static final String WEB_PAGE_PATH = "/article";
+    static final String WEB_PAGE = "<!doctype html><html><head><meta charset=\"utf-8\"><title>E2E 测试文章</title>"
+            + "<script>document.title = 'script-ran-e2e';</script></head>"
+            + "<body><h1>E2E 测试文章</h1><p>这是联网端到端测试的正文 web-e2e-body。</p></body></html>";
+
     private E2eServer() {}
 
     public static void main(String[] args) throws Exception {
@@ -63,6 +72,8 @@ public final class E2eServer {
         Path data = root.resolve("data");
         Path workspace = root.resolve("workspace");
         seed(data, workspace);
+        E2eModel.webPage = "http://127.0.0.1:" + webSite().getAddress().getPort() + WEB_PAGE_PATH;
+        adminOffServer(port + 1, root.resolve("admin-off"));
         TestMcpServer mcp = new TestMcpServer(
                 new TestMcpServer.Definition("lookup", true, arguments -> TestMcpServer.text("ticket 42 is owned by e2e-owner")),
                 new TestMcpServer.Definition("delete_all", null, arguments -> TestMcpServer.text("deleted")));
@@ -99,6 +110,39 @@ public final class E2eServer {
         }
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
+    }
+
+    /** 联网的测试页，只听 127.0.0.1 的随机端口（不是服务器自己的端口，所以不被拦）。 */
+    private static com.sun.net.httpserver.HttpServer webSite() throws java.io.IOException {
+        com.sun.net.httpserver.HttpServer site = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        site.createContext(WEB_PAGE_PATH, exchange -> {
+            byte[] page = WEB_PAGE.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(200, page.length);
+            exchange.getResponseBody().write(page);
+            exchange.close();
+        });
+        site.start();
+        return site;
+    }
+
+    /** 管理员在配置里关掉了浏览器的服务（web-tools 需求 5.3）：只给插件页看，不连电脑、不接 MCP。 */
+    private static void adminOffServer(int port, Path root) throws Exception {
+        Path data = root.resolve("data");
+        try (UserStore store = UserStore.open(data)) {
+            store.add(USER, PASSWORD);
+        }
+        new SpringApplicationBuilder(TantalumApplication.class)
+                .initializers(context -> ((GenericApplicationContext) context).registerBean(ModelClient.class, E2eModel::new))
+                .run("--server.port=" + port,
+                        "--tantalum.data-dir=" + data,
+                        "--tantalum.workspace=" + root.resolve("workspace"),
+                        "--tantalum.provider=openai",
+                        "--tantalum.openai.model=" + E2eModel.MODEL,
+                        "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
+                        "--tantalum.openai.context-window=35000",
+                        "--tantalum.web.browser.enabled=false");
     }
 
     private static void seed(Path data, Path workspace) throws Exception {

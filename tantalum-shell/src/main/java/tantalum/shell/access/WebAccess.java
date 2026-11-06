@@ -9,7 +9,8 @@ import tantalum.value.id.Principal;
 /**
  * 联网这一组（web-tools W10，设计“包 {@code tantalum.shell.access}”）：总开关 {@code web}，子开关“抓网页”和“浏览器”，默认都开。
  * 一个工具能用 = 总开关开 × 它那一项的子开关开。管理员在配置里关掉的那一项根本不注册工具，这里不用再看配置；
- * {@link #admin()} 只给插件页显示“管理员已关闭”。按 {@link Tool#server()} 认工具，所以不依赖 {@code fetch}、{@code browser} 包。
+ * {@link #admin()} 只给插件页显示“管理员已关闭”。按 {@link WebTool} 类型加 {@link Tool#server()} 认工具，所以不依赖
+ * {@code fetch}、{@code browser} 包，别的工具名字或服务端名碰巧相同也不会被当成联网工具。
  */
 public final class WebAccess implements ToolGroup {
 
@@ -53,7 +54,7 @@ public final class WebAccess implements ToolGroup {
 
     @Override
     public boolean owns(Tool tool) {
-        return tool.server().equals(FETCH) || tool.server().equals(BROWSER);
+        return tool instanceof WebTool && (tool.server().equals(FETCH) || tool.server().equals(BROWSER));
     }
 
     @Override

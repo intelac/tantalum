@@ -58,6 +58,49 @@ class BrowsersIT {
     private static final Principal BOB = new Principal("bob");
     private static final Pattern REF = Pattern.compile("\"([^\"\\n]+)\"[^\\n]*\\[ref=((?:f\\d+)?e\\d+)]");
 
+    /**
+     * 本地的搜索结果页，比 Bing 的结果页大（设计“实测”里 Bing 结果页的快照约 16,000–18,000 字符）：50 条结果、40 个导航链接、搜索框、
+     * 一段脚本和样式。NFR 的 4 人 1.2 GB 按它判定。
+     */
+    private static final String RESULTS_PAGE = resultsPage();
+
+    private static String resultsPage() {
+        StringBuilder html = new StringBuilder("<html><head><title>Results</title><style>body{font:14px sans-serif}li{margin:8px}</style>"
+                + "<script>window.started = Date.now();</script></head><body><header><input aria-label='Search' value='tantalum'>"
+                + "<button>Search</button><nav>");
+        for (int i = 0; i < 40; i++) {
+            html.append("<a href='/nav/").append(i).append("'>Section ").append(i).append("</a> ");
+        }
+        html.append("</nav></header><ol>");
+        for (int i = 0; i < 50; i++) {
+            html.append("<li><h2><a href='/r/").append(i).append("'>Result ").append(i).append(" title for the query</a></h2><cite>https://example")
+                    .append(i).append(".test/a/b/c</cite><p>Snippet ").append(i)
+                    .append(": a couple of lines of text from the page that matched the words of the query, cut short like a search engine "
+                            + "does.</p></li>");
+        }
+        return html.append("</ol></body></html>").toString();
+    }
+
+    /** 本地的“大页面”：约 340 KB，3,000 段文字、一张 1,000 行带按钮的表、400 个链接，比一般的文档页重得多。只量不判定，数字记在 tech.md。 */
+    private static final String BIG_PAGE = bigPage();
+
+    private static String bigPage() {
+        StringBuilder html = new StringBuilder("<html><head><title>Big</title></head><body><h1>Big page</h1>");
+        for (int i = 0; i < 3000; i++) {
+            html.append("<p>Paragraph ").append(i).append(": some ordinary words that make the page long and the layout real.</p>");
+        }
+        html.append("<table>");
+        for (int i = 0; i < 1000; i++) {
+            html.append("<tr><td>row ").append(i).append("</td><td>value ").append(i * 7).append("</td><td><button>Act ").append(i)
+                    .append("</button></td></tr>");
+        }
+        html.append("</table>");
+        for (int i = 0; i < 400; i++) {
+            html.append("<a href='/item/").append(i).append("'>item ").append(i).append("</a> ");
+        }
+        return html.append("</body></html>").toString();
+    }
+
     @TempDir
     Path temp;
 
@@ -100,6 +143,8 @@ class BrowsersIT {
                 case "/form" -> "<html><head><title>Form</title></head><body><input aria-label='Query' id='q'>"
                         + "<button onclick=\"document.title='clicked ' + q.value\">Go</button>"
                         + "<a href='/file.bin'>Get file</a></body></html>";
+                case "/big" -> BIG_PAGE;
+                case "/results" -> RESULTS_PAGE;
                 case "/own" -> "<html><head><title>Own port</title></head><body><p>picture below</p>"
                         + "<img src='http://127.0.0.1:" + ownServer.getAddress().getPort() + "/pixel.png'></body></html>";
                 default -> "<html><head><title>" + path.substring(1) + "</title></head><body><p>cookie=" + (cookie == null ? "none" : cookie)
@@ -195,6 +240,94 @@ class BrowsersIT {
                 .filter(process -> process.parent().flatMap(parent -> parent.info().command()).map(command -> command.endsWith("node"))
                         .orElse(false))
                 .findFirst().orElseThrow(() -> new AssertionError("no Chromium main process in " + group));
+    }
+
+    // ---- 内存 ----
+
+    /**
+     * 这些进程合起来的内存（MB）：macOS 用 {@code footprint}（共享页只算一次），Linux 用 {@code /proc/<pid>/smaps_rollup} 的 PSS 相加。
+     * 别的系统返回 -1。
+     */
+    private static double memoryMb(Set<Long> pids) throws Exception {
+        String os = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT);
+        if (os.contains("linux")) {
+            long kb = 0;
+            for (long pid : pids) {
+                for (String line : Files.readAllLines(Path.of("/proc", Long.toString(pid), "smaps_rollup"))) {
+                    if (line.startsWith("Pss:")) {
+                        kb += Long.parseLong(line.replaceAll("\\D", ""));
+                    }
+                }
+            }
+            return kb / 1024.0;
+        }
+        if (!os.contains("mac")) {
+            return -1;
+        }
+        List<String> command = new ArrayList<>(List.of("footprint", "-f", "bytes", "--noCategories"));
+        pids.forEach(pid -> command.add(Long.toString(pid)));
+        Process footprint = new ProcessBuilder(command).redirectErrorStream(true).start();
+        String output = new String(footprint.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(0, footprint.waitFor(), output);
+        Matcher total = Pattern.compile("(?:Summary Footprint|Footprint): (\\d+) B").matcher(output);
+        long bytes = -1;
+        while (total.find()) {
+            bytes = Long.parseLong(total.group(1));
+        }
+        assertTrue(bytes > 0, output);
+        return bytes / 1024.0 / 1024.0;
+    }
+
+    /**
+     * NFR Performance：第一次打开（驱动已经解压好，同 {@code browser install} 之后的服务器）≤ 5 s；1 个浏览器空闲时 ≤ 300 MB；
+     * 4 个同时开着本地大页面合计 ≤ 1.2 GB。数字打印出来，记在 tech.md。
+     */
+    @Test
+    void firstOpenMemoryOfOneIdleAndOfFourBusyBrowsersStayWithinTheNfr() throws Exception {
+        new BrowserDriver(UserBrowserIT.DRIVER_DATA).ensure();
+        browsers(4, Duration.ofMinutes(10), false);
+        long started = System.nanoTime();
+        open(ALICE, "a1", "/start");
+        double firstOpenMs = (System.nanoTime() - started) / 1e6;
+        Thread.sleep(2000);
+        double idleMb = memoryMb(browserProcesses());
+        assumeTrue(idleMb >= 0, "memory is only measured on macOS and Linux");
+
+        List<Principal> users = List.of(ALICE, BOB, new Principal("carol"), new Principal("dave"));
+        long parallel = System.nanoTime();
+        openInParallel(users, "/results");
+        double parallelMs = (System.nanoTime() - parallel) / 1e6;
+        assertEquals(4, browsers.openCount());
+        double fourMb = memoryMb(browserProcesses());
+        openInParallel(users, "/big");
+        double fourBigMb = memoryMb(browserProcesses());
+        System.out.printf(java.util.Locale.ROOT, "NFR browser: first open %.0f ms, 1 idle %.0f MB, 4 on a results page %.0f MB "
+                + "(opened, snapshotted and screenshotted in parallel in %.0f ms), 4 on a %d KB heavy page %.0f MB%n", firstOpenMs, idleMb,
+                fourMb, parallelMs, BIG_PAGE.length() / 1024, fourBigMb);
+        assertTrue(firstOpenMs <= 5000, "first open " + firstOpenMs + " ms");
+        assertTrue(idleMb <= 300, "one idle browser " + idleMb + " MB");
+        assertTrue(fourMb <= 1200, "four browsers " + fourMb + " MB");
+    }
+
+    /** 几个用户同时打开 {@code path}、拿快照、截图。 */
+    private void openInParallel(List<Principal> users, String path) throws InterruptedException {
+        List<Thread> threads = new ArrayList<>();
+        List<Throwable> failures = java.util.Collections.synchronizedList(new ArrayList<>());
+        for (Principal user : users) {
+            threads.add(Thread.ofVirtual().start(() -> {
+                try {
+                    ToolOutput page = call(user, "s1", "browser_navigate", "url", base + path);
+                    assertFalse(page.error(), page.text());
+                    assertFalse(call(user, "s1", "browser_take_screenshot").error());
+                } catch (Throwable failure) {
+                    failures.add(failure);
+                }
+            }));
+        }
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        assertEquals(List.of(), failures);
     }
 
     // ---- 用例 ----

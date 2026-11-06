@@ -23,6 +23,10 @@
 | MCP Java SDK `mcp-core`、`mcp-json-jackson3`（含 Reactor、json-schema-validator） | 2.1.0 | MIT；Reactor 为 Apache-2.0；json-schema-validator 为 Apache-2.0 | 连接 MCP 服务器 |
 | TwelveMonkeys ImageIO `imageio-jpeg`、`imageio-webp`、`imageio-metadata`（含 `imageio-core`、`common-lang`、`common-io`、`common-image`） | 3.15.3 | BSD-3-Clause | 附件：解 WebP、更完整的 JPEG 解码、读 EXIF 方向 |
 | Apache PDFBox（含 `pdfbox-io`、`fontbox`、`commons-logging` 1.3.6） | 3.0.8 | Apache-2.0 | 附件：数 PDF 页数。jar 内的 `META-INF/NOTICE` 随 jar 一起分发 |
+| Playwright for Java `playwright`（含 `gson` 2.13.2、`jspecify` 1.0.1） | 1.64.0 | Apache-2.0；gson、jspecify 为 Apache-2.0 | 联网：每用户的无头浏览器（`web-tools`） |
+| Playwright 驱动 `driver`（playwright-core 1.64.1 的 JavaScript 包） | 1.64.0 | Apache-2.0；包内打包的第三方代码见 jar 里的 `driver/package/ThirdPartyNotices.txt` 和 `driver/package/lib/*.LICENSE` | 驱动浏览器，运行时解压到数据目录 |
+| Playwright `driver-bundle`（macOS、Linux、Windows 共 5 个平台的 Node.js 可执行文件） | 1.64.0 | Node.js 为 MIT；它内含的 V8、OpenSSL、ICU、libuv 等各自的许可证全文在 jar 里的 `driver/<平台>/LICENSE` | 运行驱动，服务器上不用另装 Node |
+| jsoup | 1.19.1 | MIT | 联网：`web_fetch` 解析 HTML |
 | SLF4J | Spring Boot 管理 | MIT | 日志门面 |
 | Logback | Spring Boot 管理 | EPL-1.0 / LGPL-2.1 双许可 | 日志实现 |
 
@@ -66,5 +70,7 @@
 | @testing-library/dom、react、user-event | 10.4.1、16.3.3、14.6.8 | MIT |
 | @playwright/test | 1.64.1 | Apache-2.0 |
 | @types/react、@types/react-dom | 19.3.0 | MIT |
+
+Chromium（headless shell）不随 jar 分发：管理员用 `browser install` 从 Playwright 的下载地址另行安装，许可证随浏览器一起装在 Playwright 的浏览器目录里。
 
 控制台依赖的许可证取自各包 `package.json` 的 `license` 字段；后端依赖的许可证取自各项目的官方声明。发布前应再用工具（如 `license-maven-plugin` 的 `third-party-report`）生成一份完整的传递依赖清单核对。

@@ -4,7 +4,7 @@ import com.microsoft.playwright.PlaywrightException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tantalum.shell.access.WebAccess;
-import tantalum.shell.plugin.Tool;
+import tantalum.shell.access.WebTool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.id.Principal;
@@ -17,7 +17,7 @@ import tantalum.value.json.Json;
  * <p>名额：这里的 64 只是全体用户合起来的上限；每人串行、开几个浏览器，由 {@link Browsers} 管（同 {@code LocalTool} 的做法）。
  * 错误只给 Playwright 消息的第一行，不给调用日志；快照和截图不进日志。
  */
-final class BrowserTool implements Tool {
+final class BrowserTool implements WebTool {
 
     /** 插件页“浏览器”子开关和并发名额用的服务端名。 */
     static final String SERVER = WebAccess.BROWSER;

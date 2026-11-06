@@ -34,11 +34,13 @@ import tools.jackson.databind.json.JsonMapper;
 final class CompactionScenario {
 
     static final int FILES = 10;
-    // 窗口要小，压缩才会尽快发生：不向模型读窗口，用配置的 32000（compaction-threshold）
+    // 窗口要小，压缩才会尽快发生：不向模型读窗口，用配置的 32000（compaction-threshold）。
+    // 联网的 12 个工具定义按 Claude 的估算约 3,200 token（web-tools），会把阈值 15616 下留给历史的约 8,800 压到约 5,500，
+    // 刚够一篇笔记；这个场景测压缩，不测联网，所以关掉，和 tech.md 里记下的几次真实结果保持同样的余量。
     static final String[] SETTINGS_CLAUDE = {"--tantalum.claude.context-window=32000", "--tantalum.claude.max-tokens=8192",
-        "--tantalum.compaction.window-from-model=false"};
+        "--tantalum.compaction.window-from-model=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
     static final String[] SETTINGS_OPENAI = {"--tantalum.provider=openai", "--tantalum.openai.context-window=32000",
-        "--tantalum.compaction.window-from-model=false"};
+        "--tantalum.compaction.window-from-model=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String[] WORDS = ("the project ships a kernel that folds events into state and a shell that owns threads journal "
             + "disruptor rings handlers plugins tools model client prompt cache reply thinking signature session run command fact "
