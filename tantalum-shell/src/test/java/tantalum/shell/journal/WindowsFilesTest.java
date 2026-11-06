@@ -119,13 +119,25 @@ class WindowsFilesTest {
 
     // ---- 替换时目标被占用（需求 4.1）----
 
+    /**
+     * 本进程用 NIO 读着目标时也替换不了：NIO 虽然带“共享删除”打开，{@code MoveFileEx} 替换一个还开着的文件照样拒绝
+     * （CI 实测，设计的 JDK 行为表原来写错了）。读的人 300 毫秒后关掉，替换靠重试成功。
+     */
     @Test
-    void aTargetReadThroughNioCanBeReplaced() throws Exception {
+    void aTargetReadThroughNioIsReplacedOnceTheReaderCloses() throws Exception {
         Path target = Files.writeString(temp.resolve("format.json"), "old");
         Path source = Files.writeString(temp.resolve("format.json.tmp"), "new");
-        try (FileChannel reading = FileChannel.open(target, StandardOpenOption.READ)) {
-            PrivateFiles.replace(source, target);
-        }
+        FileChannel reading = FileChannel.open(target, StandardOpenOption.READ);
+        Thread release = Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(300);
+                reading.close();
+            } catch (Exception ignored) {
+                // 测试线程会因为替换失败而报告
+            }
+        });
+        PrivateFiles.replace(source, target);
+        release.join();
         assertEquals("new", Files.readString(target));
     }
 

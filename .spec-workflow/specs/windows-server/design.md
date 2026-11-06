@@ -55,6 +55,15 @@
 | 默认字符集 | UTF-8 | UTF-8（JEP 400）；控制台输入用代码页（中文系统 936） | N12 |
 | `Process.destroy()` | `SIGTERM` | `TerminateProcess`，和 `destroyForcibly()` 一样 | N10 |
 
+**`windows-latest` 实测补充（2026-11-07，任务 2、10）：** 上表的行为都对上了（属性视图的 UOE 原文是 “'posix:permissions' not supported as initial attribute”；`LockFileEx` 是强制锁，`LinkIT` 读被锁住的 `store.lock` 报 “another process has locked a portion of the file”；`destroyForcibly` 的退出码是 1，不是 137）。另有几条和表里不同或表里没有的：
+
+| 操作 | macOS、Linux | Windows | 改法 |
+|---|---|---|---|
+| `Files.move(…, ATOMIC_MOVE)` 替换一个本进程用 NIO 读着的文件 | 正常 | 上表说“NIO 带删除共享，所以能替换”不对：只要目标还有句柄开着，`MoveFileEx` 就报 `AccessDeniedException` | 靠 1 秒的重试：读的人关掉以后替换成功（`WindowsFilesTest`）；一直开着就报原来的错 |
+| 两个虚拟线程同时在一个套接字上等读、等写（出口的隧道） | 正常 | 等写的那个收不到“可写”的唤醒，往回转发卡死：`FetcherTlsIT` 抓 6 MB 页面 30 秒超时，转储里 `egress-relay` 停在 `NioSocketImpl.implWrite`；同样的代码换成平台线程 2.6 秒通过 | `Egress` 的连接线程在 Windows 上用平台线程（任务 10） |
+| Jackson `DefaultPrettyPrinter` | `\n` | 系统换行 `\r\n` | 只有测试在用：逐字节比较的测试改成 `\n` 缩进（任务 10） |
+| 测试里把 `C:\…` 直接拼进 JSON | — | `\U` 不是合法转义，400 | 测试里转义（任务 10） |
+
 ## 现状清单
 
 `grep` 了 `PosixFilePermission`、`PosixFileAttributeView`、`setPosixFilePermissions`、`ATOMIC_MOVE`、`REPLACE_EXISTING`、`FileChannel.open`、`tryLock`、`force(true)`、`ProcessBuilder`、`ProcessHandle`、`os.name`、`user.home`、`java.io.tmpdir`、`createTemp`、`"/"` 拼接、`split("\n")`、`lines()`、`lineSeparator`、`InputStreamReader`、`jdbc:sqlite:`，范围是六个模块的 `src/main`。路径前缀同 tasks.md：`shell/`、`local/`、`value/`、`connect/` 分别是各模块 `src/main/java/tantalum/...` 下的包目录。
