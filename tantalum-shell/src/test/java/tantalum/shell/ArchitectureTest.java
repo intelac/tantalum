@@ -86,6 +86,39 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.mcp..")
             .should().dependOnClassesThat().resideInAPackage("io.modelcontextprotocol..");
 
+    /** 浏览器的驱动只在浏览器包里用（web-tools 设计“Project Structure”规则 1）：换掉 Playwright 时只改一个包。 */
+    @ArchTest
+    static final ArchRule playwrightStaysInTheBrowserPackage = noClasses()
+            .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.browser..")
+            .should().dependOnClassesThat().resideInAPackage("com.microsoft.playwright..");
+
+    /** HTML 解析只在 {@code web_fetch} 的包里用（规则 2）。 */
+    @ArchTest
+    static final ArchRule jsoupStaysInTheFetchPackage = noClasses()
+            .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.fetch..")
+            .should().dependOnClassesThat().resideInAPackage("org.jsoup..");
+
+    /**
+     * 联网只能经出口（规则 3）：抓网页和浏览器不自己建 {@code HttpClient}、不开 {@code Socket}、不调 {@code URL.openConnection}，
+     * 内网限制和“自己的端口”才不会被绕过。
+     */
+    @ArchTest
+    static final ArchRule webToolsGoOnlyThroughTheEgress = noClasses()
+            .that().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..")
+            .should().callMethodWhere(callTo(java.net.http.HttpClient.class, "newBuilder|newHttpClient"))
+            .orShould().callConstructorWhere(callTo(java.net.Socket.class, "<init>"))
+            .orShould().callMethodWhere(callTo(java.net.URL.class, "openConnection"));
+
+    /**
+     * 服务器不为联网写文件（规则 4）：浏览器资料在内存里，下载拒绝，截图只进附件。{@code BrowserDriver} 例外：它把 Playwright 驱动
+     * 解压进数据目录，碰的是服务器自己的程序文件（同 {@code LocalTokens} 的例外）。
+     */
+    @ArchTest
+    static final ArchRule webToolsTouchNoFiles = noClasses()
+            .that().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..")
+            .and().doNotHaveFullyQualifiedName("tantalum.shell.browser.BrowserDriver")
+            .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
+
     /** 压缩是通用逻辑：内核不认识任何供应商的 SDK。 */
     @ArchTest
     static final ArchRule kernelKnowsNoProvider = noClasses()
@@ -128,18 +161,18 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule onlyTheGateRunsPlugins = noClasses()
             .that().doNotHaveFullyQualifiedName("tantalum.shell.access.PluginGate")
-            .should().callMethodWhere(pluginCall(Tool.class, "run"))
-            .orShould().callMethodWhere(pluginCall(WorkType.class, "run"))
-            .orShould().callMethodWhere(pluginCall(AfterToolHook.class, "afterToolExecution"));
+            .should().callMethodWhere(callTo(Tool.class, "run"))
+            .orShould().callMethodWhere(callTo(WorkType.class, "run"))
+            .orShould().callMethodWhere(callTo(AfterToolHook.class, "afterToolExecution"));
 
     /** 内核钩子只由 {@code HookChain} 调用，它按会话记下的插件名单过滤。 */
     @ArchTest
     static final ArchRule onlyTheHookChainRunsHooks = noClasses()
             .that().doNotHaveFullyQualifiedName("tantalum.kernel.hook.HookChain")
-            .should().callMethodWhere(pluginCall(KernelHook.class,
+            .should().callMethodWhere(callTo(KernelHook.class,
                     "beforeModelCall|beforeToolCall|onFailure|beforeRunEnd|onWorkResult|beforeCompact"));
 
-    private static DescribedPredicate<JavaCall<?>> pluginCall(Class<?> type, String names) {
+    private static DescribedPredicate<JavaCall<?>> callTo(Class<?> type, String names) {
         return JavaCall.Predicates.target(HasName.Predicates.nameMatching(names))
                 .and(JavaCall.Predicates.target(HasOwner.Predicates.With.owner(JavaClass.Predicates.assignableTo(type))))
                 .as("a call to " + type.getSimpleName() + "." + names);
