@@ -372,7 +372,7 @@ flowchart LR
 - 操作之后返回新的快照，同 `@playwright/mcp` 默认的 `--snapshot-mode full`，少一轮“操作完再读一次”；每次最多 50,000 字符，免得重演 11-03 十几万 token 的快照。
 - `browser_navigate` 的说明文字：
 
-  > Open a URL in your own headless browser on the server. The browser is yours alone: tabs, cookies and logins are not shared with other users, and they are discarded when the browser closes after 10 minutes without use. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open https://www.bing.com/search?q=<words> (URL-encode the words). Google often shows headless browsers a rate-limit page instead of results. Use web_fetch instead when you only need the text of a known page: it is faster and uses fewer tokens.
+  > Open a URL in your own headless browser on the server. The browser is yours alone: tabs, cookies and logins are not shared with other users, and they are discarded when the browser closes after 10 minutes without use. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows headless browsers a rate-limit page instead of results. Use web_fetch instead when you only need the text of a known page: it is faster and uses fewer tokens.
 
   其他工具的说明各一两句，凡是会用到编号的都写“refs come from the latest browser_snapshot or action result”。
 
