@@ -149,6 +149,10 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 14. **换模型时 Claude 的思考块不管是哪个 Claude 模型写的都原样发回（`model-picker` M9），不照 pi、DSH 跨模型就丢掉**（2026-11-06）：Claude 文档 `shared/model-migration.md` 写明换模型时思考块原样发回，接收的模型读不了的由服务端丢掉、不计费，自己去掉反而可能 400；只换 `model` 不算改历史，换回原来的模型时还能读到原来的思考。pi（`transform-messages.ts:122-132`）和 DSH（`llm-deepseek/src/replay.ts:33-38`）跨模型就丢，是因为它们面对的多是不认对方签名的协议。OpenAI 兼容路线的 `reasoning_content` 只发回同一条路线、同一个模型写的（照 pi 的“同一模型”）；跨协议照旧不发。换模型的说明写成这次用户消息开头的文字，system 和工具定义不随模型变，思考签名继续有效；会话里有工具变化时，不支持会话中途工具变化的 Claude 模型不能选（它们看到的历史不一样）。一个运行只有一个模型（从下一次提问生效），压缩、摘要和用量按运行算清楚。
 
+15. **控制台的多语言用带类型的 TypeScript 字典，不用 i18n 库（`console-i18n` I5，2026-11-07）**：照 DSH 自己写（`packages/client/locale`），不照 i18next 这类库。`zh.ts` 是键的来源，`en.ts`、`ja.ts` 写成 `const en: Text`，少一条、多一条在 `tsc` 就失败；带参数的文字是有名字有类型的函数，复数在函数里按数量选（同 pi chord）。另加三层检查：三份字典的对比测试（记号不能翻掉、英文里不能有中日文字符、日文不能照抄中文）、组件里写死文字的正则扫描（TypeScript 7 没有 JS 的语法树接口，所以不像 DSH 解析语法树）、用英文渲染主要页面不能有中日文字符。日期和数字用 `Intl`（照 pi chord，不照 DSH 把格式写进字典），时长写在字典里（`Intl.DurationFormat` 在 jsdom 里还没有）。三种语言都打进主包。
+
+16. **服务器给画面的文字只给代码和参数，由控制台按看的人的语言说（`console-i18n` I9）**：错误是 `{"error": 英文诊断, "code": "<领域>/<原因>", "params": {…}}`（照 DSH 的错误词汇表），代码清单 `console/src/api/errorCodes.json` 服务器和控制台各自比对；参数只放数字和名字，字节数由控制台按语言格式化。插件作者写的文字是 `LocalText`（一个字符串，或者 `{en, zh, ja}`，照 DSH `LocalizedText`）。连接程序、命令行的终端文字放进每个模块一组 UTF-8 的 `Text*.properties`，经 `tantalum.value.text.Bundle` 读（关掉 JDK 按系统语言的回退，占位符 `{name}`，不用 `MessageFormat`）。给模型的文字一律不翻译，服务器日志一律英文。
+
 ### Claude 实测（2026-10-31）
 
 `claude-opus-5-5`（默认模型改为 Sonnet 5.5 之前测的）流式 + 一个工具，`anthropic-version: 2026-10-21`：HTTP 200，返回 `tool_use`，`stop_reason: tool_use`，用量在 `message_start` 和 `message_delta` 中，事件流含 `ping`。
@@ -581,3 +585,11 @@ record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之�
 - **8091 演示**（任务 21，2026-11-07，会话 `s-modelswitch`）：Sonnet 5.5 低 → 本地 qwen 开 → 本地 qwen 关 → Opus 5.5 高，4 轮全部完成。换路线或模型的两次在日志里各追加一条系统通知，只换档位的一次没有追加，但对话里照样显示“换成…”。qwen 开思考有思考内容，关了就没有。Opus 读到前面几轮的模型通知，答得出哪几轮是别的模型。Claude 用量：Sonnet 输出 203、缓存写 3380；Opus 输出 469、缓存写 3886。这个会话因为有工具变化，选单里 Haiku 5.5、Sonnet 5、Opus 4.7、Sonnet 4.6、Opus 4.6 是灰的（M11）。
 - **顺带修的两处不稳**：`web_fetch` 不要正文的回复（跳转、不收的类型）在 HTTP/2 上取消订阅时，JDK 有时把已经交出的回复当成失败（“Stream N cancelled”，`FetcherTlsIT` 约四次一次，8091 上表现为跳转的 https 网址偶尔“连接失败”），改成小的正文读完丢掉，64 KB 以上才取消；钩子矩阵测试读 journal 前先等最后一行落盘（运行视图先于这一行更新）。
 - **`check`**：用新 jar 检查 8091 的数据目录，6 个会话里 `yi/s-onelinesmoke` 和记录不一致（seq 1 的会话结果）；用部署在 8091 上的旧 jar 检查结果相同，不是本 spec 引起的。
+
+### console-i18n（2026-11-07）：中文、英文、日文
+
+- **做法**（决定第 15、16 条）：控制台每种语言一份带类型的字典（`console/src/text/zh.ts` 定键），组件在渲染时用 `useText()` 取，切换语言只重新渲染、不重新挂载；用户的选择存在 `user_settings` 的 `language`，浏览器里的 `tantalum.language` 只为刷新时第一帧就对；服务器的错误是代码加参数（45 个代码，`console/src/api/errorCodes.json`），插件作者的文字是 `LocalText`；连接程序、命令行的终端文字在各模块的 `Text*.properties`。四层检查：`tsc`、三份字典对比（`dictionaries.test.ts`）、写死文字的正则扫描（`literals.test.ts`，112 个源文件）、英文渲染各主要页面（`english.test.tsx`）。
+- **给模型的不变**：`I18nChainTest`（三个用户分别设中、英、日，同样提问，模型收到的 `Prompt` 逐字相同）；`tantalum-shell/src/test/resources` 下请求（`model/`）、接口和轨迹（`wire/`）的金样文件一个字节没变（只新加了插件页的 `wire/plugins.json`），比对它们的测试照过。变了的只有两处“拒绝原因”：图片存不进去时给模型的 `Cannot store image …: …` 后半句、沙箱用不了时的 `The command sandbox is not available: …` 后半句，原来是中文，现在是英文诊断（设计 I9、I12 定的，给模型的本来就该是英文）。
+- **切换语言的时间**（生产构建 `vite preview`，Chromium，这台 Mac；1,000 条记录的轨迹页，时间概览 865 个标记，记录表虚拟滚动、DOM 里 29 行；在设置页“语言”里点选，从点击到新文字出现再过一帧）：5 次 18.7–37.2 ms，最大 37.2 ms；再跑一遍最大 30.9 ms（目标 ≤ 300 ms）。测量脚本在会话的 scratchpad（`i18n-nfr/switch.spec.ts`，接口全部由 `page.route` 假造），不进仓库。
+- **主包大小**（`vite build`，gzip）：改造前 231.31 kB（`model-picker` 收尾时）→ 第 1 步 231.97 kB → 第 2 步 234.07 kB → 三种语言都打进去 252.74 kB，增加 21.4 kB（目标 ≤ 30 KB）。
+- **和设计不同的几处**：中文的相对时间用 `Intl` 的写法（“5分钟前”，原来是“5 分钟前”，“刚刚”成了“现在”）；`CliText` 放在新包 `tantalum.shell.cli`（放 `boot` 会让 `auth`、`store`、`browser` 和 `boot` 成环）；`Bundle` 写成 record（`tantalum.value` 只放 record、接口、枚举）；任务 14（控制台按代码说错误）挪进第 2 步，否则服务器先改成英文诊断时中文界面会露出英文；错误代码比设计的表多了十来个（图片边长、像素、处理繁忙，消息里图片合计、文件个数，选模型的六种，记忆正文和索引超长，会话暂时不可用），`plugin/required` 状态码保持 400。

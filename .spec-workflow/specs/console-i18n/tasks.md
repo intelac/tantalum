@@ -199,7 +199,7 @@
 
 量 NFR，写文档，最后在 8091 上三种语言各看一遍、截图给 Yi。
 
-- [ ] 20. NFR 测量和文档
+- [x] 20. NFR 测量和文档
   - File: .spec-workflow/steering/tech.md、README.md、README.en.md、.spec-workflow/BACKLOG.md（改）
   - 测量：生产构建下，1,000 行的轨迹页切换语言到画面换完 ≤ 300 ms（Playwright 里 `performance.now()` 前后各取一次，取 5 次的最大值）；主包 gzip 后比阶段 1 之前增加 ≤ 30 KB（`vite build` 的输出）；结果写进 tech.md。tech.md 的 Decision Log 加两条：不用 i18n 库、用带类型的字典（I5）；服务器只给代码（I9）。README 和 README.en 加一节“语言”：三种语言、默认跟浏览器、设置页可改、`tantalum-connect --lang`、命令行 `--lang`、给模型的文字不翻译、插件作者怎么写 `LocalText`。BACKLOG“控制台国际化”一行改成完成，写 spec 名
   - _Requirements: NFR Performance, I10, I12, I13_

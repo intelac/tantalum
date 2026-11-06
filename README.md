@@ -147,6 +147,22 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users dis
 
 口令用 Argon2id 哈希存储。登录后身份放在 `HttpOnly`、`SameSite=Strict` 的会话 Cookie 里，会话在内存中，重启后要重新登录；写操作还会校验 `Origin`。每个用户的工作目录隔离在 `<workspace>/<用户名>`（`tantalum.workspace-mode=per-user`），会话、运行、回放和 SSE 都只能看到自己的。登录连续失败会被限速。
 
+## 语言
+
+控制台、连接程序和命令行都有中文、英文、日文三种（`console-i18n`）。
+
+- **控制台默认跟浏览器：** 按浏览器的语言列表，先比整个标签、再比主语言（`zh-TW` 显示简体中文），都对不上用英文。登录页还不知道是谁，只跟浏览器。
+- **设置页“语言”一栏可以改：** 选了当场生效，不刷新页面、设置窗口不关；存在服务器上这个用户的设置里（`users.db` 的 `user_settings`，键 `language`），换一台电脑登录也一样，别的用户不受影响。选“跟随浏览器”就删掉这一项。浏览器里另存一份 `tantalum.language`，只为刷新时第一帧就是对的语言，退出登录时清掉。接口：`PUT /api/settings/language`，`{"language": "zh" | "en" | "ja" | null}`。
+- **日期和数字** 用浏览器的 `Intl` 按当前语言写（“5 分钟前”“5 minutes ago”“5 分前”）。
+- **服务器给画面的错误是代码加参数：** `{"error": "英文诊断", "code": "attachment/image-too-large", "params": {"limit": 52428800}}`，控制台按代码说给人听，字节数按语言格式化；认不出的代码显示“请求失败（状态码）”，下面带英文诊断。全部代码在 `console/src/api/errorCodes.json`，服务器（`ErrorCode`）和三份字典都和它比对。
+- **连接程序和命令行** 跟系统语言（`LC_ALL`、`LC_MESSAGES`、`LANG`，再看 Java 的系统语言），或者用 `--lang zh|en|ja` 指定：`tantalum-connect --lang ja --help`、`java -jar …-exec.jar users add alice --lang en`。值不对时用英文说明可选的值。
+- **给模型看的文字不翻译：** system、工具说明、工具结果、“网页内容不可信”那句、压缩提示词、工具变化告诉模型的那句都不经过字典；同一个会话用三种语言的控制台提问，模型收到的请求逐字相同（`I18nChainTest`）。服务器日志一律英文。
+- **别人写的内容照原样显示：** 用户和模型写的、MCP 服务器给的工具说明、轨迹页的原始数据、钩子停止运行的原因。
+
+**插件作者写多种语言：** `KernelHook`、`AfterToolHook`、`WorkType` 的 `description()` 和 `Question` 的标题、说明、按钮是 `LocalText`。只写一种用 `LocalText.of("…")`，照原样显示；写三种用 `LocalText.en("…").zh("…").ja("…")`（英文必填），控制台按看的人的语言选，没有那种就用英文。`tantalum-examples` 里的 8 个插件和工具审批的问题都是这样写的。
+
+**改控制台的文字：** 文字都在 `console/src/text/` 的 `zh.ts`（键的来源）、`en.ts`、`ja.ts`，组件里用 `useText()` 在渲染时取。少一条、参数对不上，构建失败；`text/dictionaries.test.ts` 查三份对得上、记号（`--allow-write` 这类）没被翻掉、英文里没有中日文字符；`text/literals.test.ts` 查组件里有没有写死的文字。Java 一侧每个模块一组 `Text*.properties`（连接程序 `tantalum/connect/`，命令行 `tantalum/shell/cli/`），占位符写 `{name}`，`BundleChecks` 查三份齐全。
+
 ## 十圈场景
 
 设计图上的十圈有两个测试：
@@ -483,7 +499,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 | 增加工具 | `Tool`，声明服务端和并发上限；未声明时上限为 1 |
 | 修改工具输出 | `AfterToolHook` |
 
-注册成 Spring bean 即可。同一个插件的钩子、工作类型和工具后处理要让 `plugin()` 返回同一个名字（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
+注册成 Spring bean 即可。同一个插件的钩子、工作类型和工具后处理要让 `plugin()` 返回同一个名字（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明（`LocalText`，可以写三种语言，见“语言”）。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
 
 开关相关的三个方法（`KernelHook`）：
 - `defaultEnabled()`：用户没设置过时开不开，默认开。策略类插件返回 false，由用户在插件页打开；同一个插件里有一个钩子返回 false，整个插件默认关。
@@ -491,7 +507,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 - `mandatory()`：必须开启，插件页上不能关，出错按拦截处理。管理员也可以不改代码、用 `tantalum.hooks.required=名字,…` 把任何插件设成必须开启，名字不认识时拒绝启动。
 
 两样给插件工作用的（`tantalum.shell.plugin`）：
-- **在对话页上问用户**：`context.questions().ask(context, new Question(id, 标题, 说明, 选项), 等多久)`，只能在 `WorkType.run` 里用，返回选项的 id，没回答返回空（问题留在页面上，下一次用同一个 id 再问是接着等）。等待受 `tantalum.tool-timeout` 约束，所以每次等的要比它短，没回答就回“待定”让钩子再要一轮（示例 `ApprovalWork`）。问题只在内存里，回答写进工作的结果。接口 `GET /api/sessions/{会话}/questions`、`POST /api/sessions/{会话}/questions/{问题}`（`{"choice": "选项 id"}`），SSE 推 `question` 让页面再取。
+- **在对话页上问用户**：`context.questions().ask(context, new Question(id, 标题, 说明, 选项), 等多久)`（标题、说明和选项上的字是 `LocalText`），只能在 `WorkType.run` 里用，返回选项的 id，没回答返回空（问题留在页面上，下一次用同一个 id 再问是接着等）。等待受 `tantalum.tool-timeout` 约束，所以每次等的要比它短，没回答就回“待定”让钩子再要一轮（示例 `ApprovalWork`）。问题只在内存里，回答写进工作的结果。接口 `GET /api/sessions/{会话}/questions`、`POST /api/sessions/{会话}/questions/{问题}`（`{"choice": "选项 id"}`），SSE 推 `question` 让页面再取。
 - **记在会话里**：`new WorkResult(结果, 续写文字, note)`，`note` 是一个对象，按字段并进会话状态里这个工作类型的那一份（`SessionState.note(工作类型)`，值为 `null` 的字段删掉），随 `WorkDone` 记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
 
 七个钩子（前 6 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略。
