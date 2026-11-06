@@ -5,13 +5,12 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.json.JsonText;
 import tantalum.value.json.Json;
 
@@ -83,19 +82,16 @@ public record StoreFormat(int storage) {
         Files.createDirectories(dataDir);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("storage", format.storage);
-        Path temp = Files.createTempFile(dataDir, FILE, ".tmp",
-                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+        Path temp = PrivateFiles.createTempFile(dataDir, FILE, ".tmp");
         try {
             Files.writeString(temp, JsonText.toText(JsonText.fromPlain(fields)) + "\n", StandardCharsets.UTF_8);
             try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
                 channel.force(true);
             }
-            Files.move(temp, dataDir.resolve(FILE), StandardCopyOption.ATOMIC_MOVE);
+            PrivateFiles.replace(temp, dataDir.resolve(FILE));
         } finally {
             Files.deleteIfExists(temp);
         }
-        try (FileChannel channel = FileChannel.open(dataDir, StandardOpenOption.READ)) {
-            channel.force(true);
-        }
+        PrivateFiles.syncDirectory(dataDir);
     }
 }

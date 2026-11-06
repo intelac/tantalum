@@ -7,11 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.json.JsonText;
 import tantalum.value.event.Event;
@@ -27,9 +27,6 @@ public final class SessionFile implements AutoCloseable {
 
     /** 3：一步一行。2（事件行之间夹着结果行）和 1（只有事件）不再读（one-line-journal J12）。 */
     public static final int FORMAT = 3;
-
-    private static final String DIR_MODE = "rwx------";
-    private static final String FILE_MODE = "rw-------";
 
     private final Principal principal;
     private final SessionId session;
@@ -54,7 +51,7 @@ public final class SessionFile implements AutoCloseable {
         if (!Files.exists(file) || Files.size(file) == 0) {
             unsynced = create(paths, file, principal, session);
         }
-        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString(FILE_MODE));
+        PrivateFiles.restrict(file);
         SessionFile opened = new SessionFile(principal, session, FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND));
         opened.unsyncedDirs = unsynced;
         return opened;
@@ -66,7 +63,7 @@ public final class SessionFile implements AutoCloseable {
         boolean userIsNew = createPrivateDir(file.getParent());
         boolean fileIsNew = !Files.exists(file);
         if (fileIsNew) {
-            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(FILE_MODE)));
+            PrivateFiles.createFile(file);
         }
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
             writeFully(channel, ByteBuffer.wrap(header(principal, session)));
@@ -89,14 +86,8 @@ public final class SessionFile implements AutoCloseable {
         if (Files.isDirectory(dir)) {
             return false;
         }
-        Files.createDirectories(dir, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(DIR_MODE)));
+        PrivateFiles.createDirectories(dir);
         return true;
-    }
-
-    private static void syncDir(Path dir) throws IOException {
-        try (FileChannel channel = FileChannel.open(dir, StandardOpenOption.READ)) {
-            channel.force(true);
-        }
     }
 
     private static byte[] header(Principal principal, SessionId session) {
@@ -125,7 +116,7 @@ public final class SessionFile implements AutoCloseable {
         channel.force(true);
         if (!unsyncedDirs.isEmpty()) {
             for (Path dir : unsyncedDirs) {
-                syncDir(dir);
+                PrivateFiles.syncDirectory(dir);
             }
             unsyncedDirs = List.of();
         }

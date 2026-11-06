@@ -3,7 +3,6 @@ package tantalum.shell.access;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -17,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 
@@ -65,7 +65,7 @@ public final class PluginSwitches implements AutoCloseable {
         Files.createDirectories(dataDir);
         Path file = dataDir.resolve(UserStore.FILE);
         if (!Files.exists(file)) {
-            Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+            PrivateFiles.createFile(file);
         }
         return create(DriverManager.getConnection("jdbc:sqlite:" + file), clock);
     }

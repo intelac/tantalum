@@ -1,0 +1,77 @@
+name: Windows
+
+# 在真实的 Windows（windows-latest）上跑全部测试（windows-server N14）。
+# 不用任何密钥：不引用仓库密钥，仓库只读，检出后不留令牌，只用 push、pull_request、workflow_dispatch 三种触发。
+# 真实模型的冒烟测试要 TANTALUM_SMOKE_* 和 API 密钥，这里都没有，所以不会打开。
+
+on:
+  push:
+    branches: [main, windows-server]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '25.6.0'
+          cache: pnpm
+          cache-dependency-path: console/pnpm-lock.yaml
+      - name: Console build and unit tests
+        working-directory: console
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm test
+      - name: Package
+        run: mvn -B -ntp package "-DskipTests"
+      - name: Cache Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: ms-playwright-java-1.64.0-windows
+      - name: Install Chromium
+        run: java -jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar browser install
+      - name: Maven verify
+        # 阶段 1、2（临时）：failure.ignore 让每个模块的测试都跑完，拿到完整的失败清单；下一步再按报告判红。
+        run: mvn -B -ntp -fae verify "-Djacoco.haltOnFailure=false" "-Dmaven.test.failure.ignore=true"
+      - name: No test failures
+        run: |
+          $failed = Get-ChildItem -Recurse -Filter 'TEST-*.xml' | Where-Object { $_.FullName -match '\\target\\(surefire|failsafe)-reports\\' } |
+            ForEach-Object { ([xml](Get-Content -Raw $_.FullName)).testsuite.testcase } |
+            Where-Object { $_.failure -or $_.error } | ForEach-Object { "$($_.classname).$($_.name)" }
+          if ($failed) { $failed | Sort-Object -Unique; throw "$(@($failed).Count) tests failed" }
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-reports
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+            console/test-results/
+          retention-days: 7

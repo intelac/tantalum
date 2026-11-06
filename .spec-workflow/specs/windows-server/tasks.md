@@ -32,14 +32,14 @@
 
 先让仓库在 Windows 上以 LF 检出，把工作流跑起来，拿到不改代码时的真实失败清单；再做 `PrivateFiles`，把所有 POSIX 权限、目录落盘、替换的代码换成它，加 ArchUnit 规则。这一阶段结束时服务器应该已经能在 Windows 上启动，8091 上看不到变化。
 
-- [ ] 1. `.gitattributes`
+- [x] 1. `.gitattributes`
   - File: .gitattributes（新）
   - 内容照设计“`.gitattributes`”；`git add --renormalize .` 后 `git status` 应该没有内容变化；有变化的文件逐个列进实现日志，确认只是 CRLF 转 LF
   - 测试：`git ls-files --eol` 里没有 `i/crlf` 的文本文件；`mvn -o -q verify` 照过（`WireFormatTest` 的期望文件不变）
   - _Requirements: N9, 需求 4.5_
   - _Prompt: Role: 构建 | Task: 加 .gitattributes，确认仓库里的文本都以 LF 存、以 LF 检出 | Restrictions: 不改任何文件的内容，CRLF 转 LF 除外并逐个列出 | Success: 没有 i/crlf 的文本文件，verify 通过_
 
-- [ ] 2. Windows 工作流和基线
+- [x] 2. Windows 工作流和基线
   - File: .github/workflows/windows.yml（新）
   - 照设计“`.github/workflows/windows.yml`”写，先不含“Browser tests were not skipped”“Scheduled task”“Console end-to-end”三步（任务 12–14 加）；每个 action 查当前稳定版，固定到完整提交哈希，后面注释版本号
   - 主会话推到 `windows-server` 分支，在**不改产品代码**的情况下跑一次。把失败按类记进实现日志：POSIX 属性的 `UnsupportedOperationException`、目录落盘的 `AccessDeniedException`、`@TempDir` 删不掉、只适用于 macOS 的测试、超时、其他（逐个写测试名和第一行错误）
@@ -49,7 +49,7 @@
   - _Requirements: N14, 需求 7.1, 7.2_
   - _Prompt: Role: CI 工程师 | Task: 写 Windows 工作流，拿到不改代码时的失败清单 | Restrictions: 不用任何 secret；不用 pull_request_target；不改产品代码和测试 | Success: 工作流跑完，失败分类和运行链接记进日志，JDK 行为表核对过_
 
-- [ ] 3. `PrivateFiles`
+- [x] 3. `PrivateFiles`
   - File: local/fs/PrivateFiles.java（新），localtest/fs/PrivateFilesTest.java（新）
   - 照设计“`tantalum.local.fs.PrivateFiles`”：`posix`（看 `supportedFileAttributeViews` 里有没有 `posix`）、`fileAttributes`、`createFile`、`createDirectories`（只给新建的那几级 700）、`createTempFile`、`restrict`、`copyPermissions`、`replace`、`syncDirectory`；“是否 Windows”是常量；`replace` 的重试照设计“一次替换”1–5，包内重载接受 `Mover`、`windows`、`Sleeper`
   - 测试：设计“`PrivateFilesTest`”各条（POSIX 上的 600/700、已有上级不变、`restrict`、`copyPermissions`；Windows 模式下重试两次后成功、一直失败在 1 秒预算内放弃并抛最后一次的异常、`NoSuchFileException` 不重试；非 Windows 模式不重试；测试不真睡）
@@ -57,14 +57,14 @@
   - _Requirements: N2, N6, N7, 需求 1.3, 4.1, 4.2_
   - _Prompt: Role: Java 开发 | Task: 实现跨平台的私有文件工具类 | Restrictions: POSIX 上发出的系统调用和现在一样；不读写 ACL；只按类判断异常，不看本地化的消息 | Success: PrivateFilesTest 全过_
 
-- [ ] 4. 存储和账号改用 `PrivateFiles`
+- [x] 4. 存储和账号改用 `PrivateFiles`
   - File: shell/journal/StoreLock.java、StoreFormat.java、SessionFile.java，shell/store/SessionIndex.java，shell/auth/UserStore.java，shell/access/PluginSwitches.java，shell/local/LocalTokens.java，shell/settings/UserSettings.java（改）
   - 设计“现状清单”里标（4）的每一处：创建带 600/700 改成 `createFile`、`createDirectories`、`createTempFile`、`fileAttributes`；打开时收紧改成 `restrict`；`SessionFile.syncDir` 和 `StoreFormat` 的目录落盘改成 `syncDirectory`；`StoreFormat` 的替换改成 `replace`
   - 测试：`SessionFileTest`、`StoreFormatTest`、`StoreLockTest`、`UserStoreTest`、`PluginSwitchesTest`、`LocalTokensTest`、`IndexStoreTest` 照跑，断言不变；推一次 CI，确认基线里这些类的 UOE 和目录落盘失败没了
   - _Requirements: N2, N6, N7, N8, 需求 1.1, 1.3, 4.2_
   - _Prompt: Role: Java 后端开发 | Task: 把存储、索引、账号库的私有文件代码换成 PrivateFiles | Restrictions: 只换调用，不改行为；不碰 web-tools 正在改的类 | Success: 现有测试全过，CI 上这几类失败消失_
 
-- [ ] 5. 附件、记忆、工作目录、连接程序代码改用 `PrivateFiles`，加 ArchUnit 规则
+- [x] 5. 附件、记忆、工作目录、连接程序代码改用 `PrivateFiles`，加 ArchUnit 规则
   - File: shell/attachment/AttachmentStore.java、shell/memory/MemoryStore.java、shell/tool/Workspaces.java、local/tool/TextFiles.java、local/sandbox/Mxc.java（改），shelltest/ArchitectureTest.java（改）
   - 设计“现状清单”里标（5）的每一处；`TextFiles.writeAtomically` 用 `copyPermissions` 保留已有文件的权限，替换用 `replace`；`MemoryStore`、`Workspaces` 去掉接 UOE 的写法
   - ArchitectureTest 加规则：除了 `tantalum.local.fs.PrivateFiles`，没有类依赖 `PosixFilePermissions`、`PosixFilePermission`，也没有类调用 `Files.setPosixFilePermissions`、`Files.getPosixFilePermissions`

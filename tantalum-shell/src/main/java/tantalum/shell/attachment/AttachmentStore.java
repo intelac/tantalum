@@ -9,9 +9,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -28,6 +26,7 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.attachment.AttachmentRejected.Reason;
 import tantalum.shell.attachment.ImageNormalizer.Normalized;
 import tantalum.shell.journal.SessionPaths;
@@ -50,8 +49,6 @@ import tools.jackson.databind.json.JsonMapper;
 public final class AttachmentStore {
 
     private static final Logger LOG = LoggerFactory.getLogger(AttachmentStore.class);
-    private static final String DIR_MODE = "rwx------";
-    private static final String FILE_MODE = "rw-------";
     private static final String OBJECTS = "objects";
     private static final String PART = ".part";
     private static final byte[] PDF = {'%', 'P', 'D', 'F', '-'};
@@ -196,7 +193,7 @@ public final class AttachmentStore {
             createPrivateFile(part);
             Files.write(part, bytes);
             force(part);
-            Files.move(part, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            PrivateFiles.replace(part, target);
         } finally {
             Files.deleteIfExists(part);
         }
@@ -259,7 +256,7 @@ public final class AttachmentStore {
                 throw quotaFull();
             }
             force(part);
-            Files.move(part, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            PrivateFiles.replace(part, object);
             writePrivately(metaFile, JSON.writeValueAsBytes(meta));
             if (!known) {
                 counted.bytes += meta.bytes();
@@ -347,12 +344,12 @@ public final class AttachmentStore {
 
     private static void createPrivateDir(Path dir) throws IOException {
         if (!Files.isDirectory(dir)) {
-            Files.createDirectories(dir, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(DIR_MODE)));
+            PrivateFiles.createDirectories(dir);
         }
     }
 
     private static void createPrivateFile(Path file) throws IOException {
-        Files.createFile(file, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString(FILE_MODE)));
+        PrivateFiles.createFile(file);
     }
 
     private static void force(Path file) throws IOException {

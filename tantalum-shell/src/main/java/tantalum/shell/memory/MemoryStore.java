@@ -5,9 +5,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -18,6 +16,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.local.fs.PrivateFiles;
 
 /**
  * 一个用户的记忆目录。写和删在本实例的锁内串行；文件先写临时文件再重命名，读到的要么是旧版要么是新版。
@@ -215,11 +214,7 @@ public final class MemoryStore {
             return;
         }
         Files.createDirectories(dir);
-        try {
-            Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------"));
-        } catch (UnsupportedOperationException notPosix) {
-            // 非 POSIX 文件系统靠默认 ACL。
-        }
+        PrivateFiles.restrictDirectory(dir);
     }
 
     private static void writeAtomically(Path target, String text) throws IOException {
@@ -227,7 +222,7 @@ public final class MemoryStore {
         Path temp = target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + TEMP);
         try {
             Files.writeString(temp, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            PrivateFiles.replace(temp, target);
         } finally {
             Files.deleteIfExists(temp);
         }

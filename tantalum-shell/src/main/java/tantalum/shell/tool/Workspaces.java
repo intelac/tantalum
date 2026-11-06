@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.plugin.Workspace;
 import tantalum.value.id.Principal;
 
@@ -63,7 +63,7 @@ public final class Workspaces {
             }
             Path dir = root.resolve(principal.value());
             Files.createDirectories(dir);
-            restrictToOwner(dir);
+            PrivateFiles.restrictDirectory(dir);
             Workspace workspace = new Workspace(dir);
             // 用户目录若被换成指向外面的符号链接，真实路径就不在 root 下，不能把外面的目录当成它的工作区。
             if (!workspace.root().startsWith(root.toRealPath())) {
@@ -72,14 +72,6 @@ public final class Workspaces {
             return workspace;
         } catch (IOException failure) {
             throw new UncheckedIOException(failure);
-        }
-    }
-
-    private static void restrictToOwner(Path dir) throws IOException {
-        try {
-            Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------"));
-        } catch (UnsupportedOperationException notPosix) {
-            // Windows 等非 POSIX 文件系统：权限靠操作系统的默认 ACL。
         }
     }
 }

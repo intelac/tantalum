@@ -7,8 +7,8 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
+import tantalum.local.fs.PrivateFiles;
 
 /** 进程独占锁：一个进程拥有一份存储。进程退出时由操作系统释放。 */
 public final class StoreLock implements AutoCloseable {
@@ -26,8 +26,8 @@ public final class StoreLock implements AutoCloseable {
         // 和数据目录里的其他文件一样只有本人可读写；已存在的锁文件也收紧。
         Path file = dir.resolve("store.lock");
         FileChannel channel = FileChannel.open(file, Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE),
-                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
-        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+                PrivateFiles.fileAttributes(file));
+        PrivateFiles.restrict(file);
         FileLock lock;
         try {
             lock = channel.tryLock();
