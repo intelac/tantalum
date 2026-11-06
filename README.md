@@ -364,13 +364,14 @@ java -jar C:\tantalum\tantalum.jar users add alice
 
 ### 后台运行（计划任务）
 
-`docs/windows/tantalum-task.ps1` 用当前用户登记一个计划任务：登录 Windows 后自动启动，不限运行时间，已在运行就不再起第二个，异常退出 1 分钟后重启、最多 10 次；用 `javaw.exe`，不弹控制台窗口。不需要管理员权限，不保存密码；API 密钥从你的用户环境变量读。
+`docs/windows/tantalum-task.ps1` 用当前用户登记一个计划任务：登录 Windows 后自动启动，不限运行时间，已在运行就不再起第二个；没在运行时（崩溃了、进程被结束了）一分钟内再起来；用 `javaw.exe`，不弹控制台窗口。计划任务自带的“失败后重启”只管启动失败、不管运行中退出（windows-latest 上实测），所以脚本另加了一个每分钟触发一次的触发器，没有“最多 10 次”的上限。不需要管理员权限，不保存密码；API 密钥从你的用户环境变量读。
 
 没有账号时服务器不启动，计划任务又没有地方输密码：第一次之前先用 `users add` 建好账号（见上面），不要把 `TANTALUM_ADMIN_PASSWORD` 设成用户环境变量。
 
 ```powershell
 .\docs\windows\tantalum-task.ps1 install -Jar C:\tantalum\tantalum.jar          # 可加 -Port 8080 -DataDir D:\tantalum -Arguments "--tantalum.provider=local ..."
-Start-ScheduledTask -TaskName Tantalum                                            # 不想等到下次登录
+Start-ScheduledTask -TaskName Tantalum                                            # 不想等那一分钟
+Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum  # 让它一直停着（只 Stop 的话一分钟后又起来）；Enable-ScheduledTask 恢复
 .\docs\windows\tantalum-task.ps1 status                                           # 任务状态、端口、日志位置
 .\docs\windows\tantalum-task.ps1 uninstall                                        # 删任务，数据目录和日志都留着
 ```
@@ -381,7 +382,7 @@ Start-ScheduledTask -TaskName Tantalum                                          
 
 ### 风险
 
-- **结束任务等于崩溃：** 在任务计划程序里结束任务、任务管理器结束进程都是直接结束，没有优雅关闭。下次启动按崩溃收尾：已接受的提问不丢，正在跑的运行显示“服务重启，这次运行已中断”。要正常关闭就在控制台窗口里按 Ctrl+C。
+- **结束任务等于崩溃：** 在任务计划程序里结束任务、任务管理器结束进程都是直接结束，没有优雅关闭。下次启动（计划任务一分钟内）按崩溃收尾：已接受的提问不丢，正在跑的运行显示“服务重启，这次运行已中断”。要正常关闭就在控制台窗口里运行、按 Ctrl+C。
 - **断电可能丢最新建的文件：** Windows 上不能对目录做 fsync，跳过了目录落盘。进程崩溃不受影响（NTFS 的元数据有日志）；断电时可能丢掉刚建的那个会话文件或格式文件的目录项。
 - 数据目录在用户目录外时别的本机用户可能读得到（见上面的 `icacls`）；不支持网络共享；arm64 没测过。
 

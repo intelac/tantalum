@@ -156,7 +156,7 @@ Spring 只用于 `shell` 的 Web 和装配部分。调用内核的循环、Handl
 
 17. **Windows 上不写 ACL，只继承（`windows-server` N2）**：文件系统支持 POSIX 权限时照旧 600/700；不支持时（NTFS）照常创建、不带属性，新文件继承所在目录的 ACL。所有权限代码都经 `tantalum.local.fs.PrivateFiles`，ArchUnit 拦住绕过它的代码。照 pi（Node 在 Windows 上忽略 `mode`，`auth-storage.ts:36-37,71`）和 DSH（Windows 上不检查、不模拟，`credentials-local/src/index.ts:121-123,137`）。主动写“只有本人”的 ACL 要经 FFM 调 Win32，没有 Windows 电脑验证不了，也和 pi、DSH 都不一样。
 
-18. **不做 Windows 服务，用当前用户的计划任务（N13）**：服务要第三方包装程序或自己写服务代码，而且服务账号的用户目录不是管理员的，N3 “数据目录在用户目录下就安全”的前提就不成立。`docs/windows/tantalum-task.ps1` 登记登录时启动、不限时、不起第二个、异常退出 1 分钟后重启的任务，不要管理员、不存密码，照 DSH `windows-runner-task.ps1:61-69`。
+18. **不做 Windows 服务，用当前用户的计划任务（N13）**：服务要第三方包装程序或自己写服务代码，而且服务账号的用户目录不是管理员的，N3 “数据目录在用户目录下就安全”的前提就不成立。`docs/windows/tantalum-task.ps1` 登记登录时启动、不限时、不起第二个的任务，不要管理员、不存密码，照 DSH `windows-runner-task.ps1:61-69`。计划任务的“失败后重启”（DSH 也靠它）只管启动失败，进程运行中退出时不重启（windows-latest 实测：结束进程后 120 秒没起来），所以另加每分钟触发一次的触发器，`IgnoreNew` 保证只有一个；代价是没有“最多 10 次”的上限，要一直停着得先 `Disable-ScheduledTask`。
 
 19. **不用 Jimfs 模拟 Windows（N14）**：Windows 上真正出问题的是 JDK 的 Windows 实现（属性视图不支持、目录打不开、共享冲突、保留设备名、`LockFileEx`），Jimfs 一样都不模拟。改为在 GitHub Actions 的 `windows-latest` 上跑全部测试，再用 ArchUnit 在 macOS 上就拦住新写的 POSIX 权限代码。
 

@@ -133,10 +133,19 @@ public final class LocalLinks implements AutoCloseable {
      */
     public Optional<Link> attach(Principal principal, Instant expiresAt, long verifiedAt, Hello hello, Peer peer) {
         Link link = new Link(principal, hello, clock.instant(), expiresAt, peer);
+        if (revokedSince(principal, verifiedAt)) {
+            return Optional.empty();
+        }
+        // 先回 welcome 再登记：登记以后别人才看得到这条连接、才会发调用过来，电脑一定先知道自己连的是谁；反过来时调用可能抢在
+        // welcome 前面，电脑按“连的是别的用户”拒绝（windows-latest 上的 LinkIT 抓到过）
+        if (!link.send(new Welcome(principal.value(), expiresAt))) {
+            // 发不出去：连接已经按断开处理了，不登记
+            return Optional.of(link);
+        }
         Link old;
         synchronized (this) {
-            Long revoked = revokedAt.get(principal);
-            if (revoked != null && revoked - verifiedAt >= 0) {
+            // 发 welcome 的时候用户撤销了：revoke 还看不到这条连接，由这里不接，端点照旧以“已撤销”关掉
+            if (revokedSince(principal, verifiedAt)) {
                 return Optional.empty();
             }
             old = links.put(principal, link);
@@ -150,8 +159,12 @@ public final class LocalLinks implements AutoCloseable {
             LOG.info("local link for {} expired", principal.value());
             link.end(Bye.Reason.EXPIRED, Wire.CLOSE_EXPIRED);
         }), delay, TimeUnit.MILLISECONDS);
-        link.send(new Welcome(principal.value(), expiresAt));
         return Optional.of(link);
+    }
+
+    private boolean revokedSince(Principal principal, long verifiedAt) {
+        Long revoked = revokedAt.get(principal);
+        return revoked != null && revoked - verifiedAt >= 0;
     }
 
     /** 撤销这个用户的全部令牌，并断开它的连接（L3）。正在握手、还没发 {@code hello} 的连接也接不上了。 */

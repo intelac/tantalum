@@ -85,6 +85,27 @@ class LocalLinksTest {
         assertEquals(Optional.empty(), links.status(new Principal("bob")));
     }
 
+    /**
+     * 先发 {@code welcome} 再让别人看得到这条连接：看得到就会有调用发过来，电脑那边要先知道连的是谁，否则它以“连的是别的用户”
+     * 拒绝（windows-latest 上 LinkIT 抓到过调用抢在 welcome 前面）。
+     */
+    @Test
+    void theWelcomeIsSentBeforeTheLinkCanBeUsed() throws Exception {
+        List<Boolean> visibleWhenWelcomed = new java.util.concurrent.CopyOnWriteArrayList<>();
+        FakePeer peer = new FakePeer() {
+            @Override
+            public void send(String text) {
+                if (Wire.decode(text) instanceof Welcome) {
+                    visibleWhenWelcomed.add(links.status(ALICE).isPresent());
+                }
+                super.send(text);
+            }
+        };
+        attach(peer, HOUR_LATER);
+        assertEquals(List.of(false), visibleWhenWelcomed);
+        assertTrue(links.status(ALICE).isPresent());
+    }
+
     /** L10：第二条连接顶替第一条，旧的收到 {@code bye replaced} 和 4409，旧连接上还在等的调用按断开处理。 */
     @Test
     void aSecondLinkReplacesTheFirst() throws Exception {
@@ -404,7 +425,7 @@ class LocalLinksTest {
         }
     }
 
-    static final class FakePeer implements LocalLinks.Peer {
+    static class FakePeer implements LocalLinks.Peer {
 
         final BlockingQueue<Message> sent = new LinkedBlockingQueue<>();
         final CompletableFuture<Integer> closed = new CompletableFuture<>();
