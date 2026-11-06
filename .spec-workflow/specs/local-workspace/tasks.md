@@ -22,14 +22,14 @@
 
 ## 阶段 1：共用模块，工具在电脑这边能执行（还不接服务器）
 
-- [ ] 1. 新模块 `tantalum-local`
+- [x] 1. 新模块 `tantalum-local`
   - File: pom.xml、tantalum-local/pom.xml（新）、tantalum-shell/src/test/java/tantalum/shell/ArchitectureTest.java
   - 模块只依赖 `tantalum-value` 和 Jackson。ArchitectureTest 加规则：`tantalum.local` 不引用 `tantalum.shell`、`tantalum.kernel`、`org.springframework`
   - 测试：规则生效（临时加一个违规引用时失败，确认后删掉）
   - _Requirements: 设计“Project Structure”_
   - _Prompt: Role: Java 构建 | Task: 建 tantalum-local 模块并加依赖规则 | Restrictions: 不加新的第三方依赖 | Success: mvn -o -q verify 通过_
 
-- [ ] 2. `AllowedDirs`
+- [x] 2. `AllowedDirs`
   - File: local/fs/AllowedDirs.java（新），测试从 `WorkspaceTest` 改写
   - 规则逐条照 `plugin/Workspace`：相对路径按主目录、绝对路径须落在某个允许目录、符号链接解析后再查、写入时查最近存在的上级目录、越界和不存在同一句话
   - 测试：多个目录；`..`；指向外面的符号链接；不存在的上级目录；两个目录互相嵌套
@@ -37,7 +37,7 @@
   - _Requirements: L12, 需求 2.2_
   - _Prompt: Role: Java 开发 | Task: 实现多目录的路径检查 | Restrictions: 报错措辞不泄露目录外文件是否存在 | Success: 测试全过_
 
-- [ ] 3. 六个文件工具搬到 `tantalum-local`
+- [x] 3. 六个文件工具搬到 `tantalum-local`
   - File: local/tool/LocalTool.java、LocalContext.java、LocalResult.java（新）；`ReadFile`、`ListDir`、`FindFiles`、`Grep`、`WriteFile`、`EditFile`，以及 `TextFiles`、`ToolArguments`、`Observations`、`WritePaths`（从 `shell/tool/` 搬来）
   - 一个工作目录换成 `AllowedDirs`；读到图片时返回原始字节（`LocalImage`），不再碰附件目录；说明文字改成“用户电脑上允许的目录”，去掉附件那句。`kind()` 标 `READ`、`WRITE`
   - 测试：现有测试跟着搬，断言不变；加多目录的用例
@@ -45,21 +45,21 @@
   - _Requirements: L5, L12, 需求 3.1_
   - _Prompt: Role: Java 开发 | Task: 把文件工具搬进共用模块 | Restrictions: 参数、截断、先读后写、CRLF/BOM 行为不变；这一步不删 shell 里的旧类（任务 13 删） | Success: 搬过来的测试全过_
 
-- [ ] 4. Git 查询工具
+- [x] 4. Git 查询工具
   - File: local/tool/GitLog.java、GitShow.java、GitDiff.java、GitBlame.java、GitBranches.java、local/tool/Git.java（新）
   - 调本机 `git`，参数固定不经过 shell，`--no-pager`、`GIT_TERMINAL_PROMPT=0`、`GIT_OPTIONAL_LOCKS=0`；只接受路径、提交号、行范围、条数字段；输出最多 2000 行或 50 KB 并写明截断；`kind()` 为 `GIT`
   - 测试：临时仓库里造提交，各工具输出；以 `-` 开头的提交号被拒（防止当成选项）；执行前后 `.git` 目录不变；不是仓库时报错
   - _Requirements: L5, 需求 3.2_
   - _Prompt: Role: Java 开发 | Task: 实现五个只读 Git 工具 | Restrictions: 不能改仓库；不接受任意参数 | Success: 测试全过_
 
-- [ ] 5. 消息格式
+- [x] 5. 消息格式
   - File: local/wire/*.java（新）
   - `hello`、`welcome`、`call`、`result`、`cancel`、`context`、`contextResult`、`bye` 八种消息和 `Wire.encode/decode`；`protocol = 1`；关闭码常量
   - 测试：每种往返相等；未知字段忽略；未知 `type` 报错；图片 base64 往返
   - _Requirements: 设计“消息格式”_
   - _Prompt: Role: Java 开发 | Task: 定义连接用的消息和编解码 | Restrictions: 不放令牌字段 | Success: 测试全过_
 
-- [ ] 6. 工具清单
+- [x] 6. 工具清单
   - File: local/tool/Tools.java（新）
   - `all()` 返回全部工具（六个文件、五个 Git，`bash` 在任务 21 加），名字唯一、顺序固定
   - 测试：名字和 core-tools 的旧名字一致；每个工具的参数是合法的 JSON Schema

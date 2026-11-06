@@ -12,6 +12,7 @@
   <modules>
     <module>tantalum-value</module>
     <module>tantalum-kernel</module>
+    <module>tantalum-local</module>
     <module>tantalum-shell</module>
     <module>tantalum-examples</module>
   </modules>
