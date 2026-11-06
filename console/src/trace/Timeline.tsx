@@ -119,7 +119,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
   if (model === null) {
     return (
       <section ref={root} aria-label={t.timeline.aria} className="shrink-0 border-b border-line bg-raised">
-        <div className="grid h-16 grid-cols-[44px_minmax(0,1fr)]">
+        <div className="grid h-16 grid-cols-[56px_minmax(0,1fr)]">
           <LaneLabels />
           <div className="flex items-center px-3 text-xs text-fg-faint">{t.timeline.noTimingData}</div>
         </div>
@@ -221,7 +221,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
 
   return (
     <section ref={root} aria-label={t.timeline.aria} className="relative shrink-0 border-b border-line bg-raised select-none">
-      <div className="grid h-16 grid-cols-[44px_minmax(0,1fr)]">
+      <div className="grid h-16 grid-cols-[56px_minmax(0,1fr)]">
         <LaneLabels />
         <div
           ref={track}
@@ -284,7 +284,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
         <div
           role="tooltip"
           className="pointer-events-none absolute top-full z-30 mt-1 max-w-[360px] rounded-md border border-line bg-overlay px-2 py-1 text-[11px] whitespace-pre-line text-fg shadow-md"
-          style={{ left: `min(calc(44px + ${tooltip.x}px), calc(100% - 360px))` }}
+          style={{ left: `min(calc(56px + ${tooltip.x}px), calc(100% - 360px))` }}
         >
           {tooltipText(tooltip.span)}
         </div>
@@ -298,7 +298,7 @@ function LaneLabels() {
   return (
     <div aria-hidden className="relative border-r border-line text-[10px] leading-none text-fg-faint">
       {t.timeline.lanes.map((label, lane) => (
-        <span key={label} className="absolute right-1 flex h-2 items-center" style={{ top: LANE_TOP[lane] }}>
+        <span key={label} className="absolute right-1 flex h-2 items-center whitespace-nowrap" style={{ top: LANE_TOP[lane] }}>
           {label}
         </span>
       ))}

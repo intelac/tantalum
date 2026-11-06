@@ -31,8 +31,11 @@ export function LanguagePane() {
               role="radio"
               aria-checked={selected}
               lang={option === null ? undefined : htmlLang(option)}
-              disabled={save.isPending}
-              onClick={() => save.mutate(option)}
+              // 保存期间不用 disabled：禁用会让焦点掉到 body，Esc 就关不了设置窗口
+              aria-disabled={save.isPending}
+              onClick={() => {
+                if (!save.isPending) save.mutate(option);
+              }}
               className={cx(
                 "flex h-12 items-center justify-between gap-2 rounded-md border px-3 text-sm transition-colors duration-[var(--duration-fast)]",
                 selected ? "border-fg bg-active text-fg" : "border-line bg-raised text-fg-muted hover:bg-hover",

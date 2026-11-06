@@ -46,6 +46,10 @@ test.describe("语言", () => {
     await expect(ja.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await expect(ja.locator("html")).toHaveAttribute("lang", "en");
     await expect(ja.getByRole("dialog", { name: "Settings" }).getByRole("radio", { name: "English" })).toHaveAttribute("aria-checked", "true");
+    // 焦点留在选中的那一项上，Esc 还能关窗口（8091 上发现保存时按钮被禁用、焦点掉到 body）
+    await expect(ja.getByRole("dialog", { name: "Settings" }).getByRole("radio", { name: "English" })).toBeFocused();
+    await ja.keyboard.press("Escape");
+    await expect(ja.getByRole("dialog", { name: "Settings" })).toBeHidden();
 
     // 刷新：index.html 的内联脚本在 React 起来前就写好 lang
     await ja.reload({ waitUntil: "domcontentloaded" });
