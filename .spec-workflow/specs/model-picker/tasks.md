@@ -158,7 +158,7 @@
 
 用真实 Claude 和本地 qwen 在严格校验下验证换模型不破坏思考签名，量 NFR，写文档，8091 加本地路线，最后在 8091 上演示。
 
-- [-] 17. `ModelSwitchScenario`（真实模型）
+- [x] 17. `ModelSwitchScenario`（真实模型）
   - File: examples/ModelSwitchScenario.java（新），.spec-workflow/steering/tech.md（改，记结果）
   - 风险：换模型后 Claude 因历史（思考块、工具变化、换模型的说明）拒绝请求，或者丢了上下文。`TANTALUM_SMOKE_CLAUDE=1` 门控，Claude 严格校验（`prefix_mismatch_behavior: error`）加本地 qwen（`chat-template`）。照设计“真实模型”那一条的五步和判定标准；先估算用量（预计 15 次调用以内，几十万缓存读），跑一次，结论写进 tech.md：每一步的模型、档位、调用数、输入、输出、缓存读写、用时
   - _Requirements: M9, M11, 需求 6.5_
@@ -176,13 +176,13 @@
   - _Requirements: 需求 9.2_
   - _Prompt: Role: 技术写作 | Task: 写模型路线的说明 | Restrictions: 不写真实的密钥、内网地址以外的私有地址 | Success: Yi 照着能在一台新服务器上配好 Claude 和一条 OpenAI 兼容路线_
 
-- [ ] 20. 8091 加本地路线
+- [x] 20. 8091 加本地路线
   - File: scratchpad/app/start.sh（改）
   - 加 `--tantalum.openai-routes.local.*`（显示名“本地”、`base-url=http://127.0.0.1:8090/v1`、qwen 模型名、`thinking=chat-template`、`context-window=131072`、`bytes-per-token=1.75`、`concurrency=1`）；部署后确认 `/api/models` 有两条路线、本地路线 `status` 为 `ok`；不动别的启动参数
   - _Requirements: 需求 9.3_
   - _Prompt: Role: 运维 | Task: 让 8091 同时提供 Claude 和本地模型 | Restrictions: 不改密钥文件；不动别的启动参数 | Success: 8091 的选择器里能看到两条路线_
 
-- [ ] 21. 8091 真实演示
+- [x] 21. 8091 真实演示
   - 8091 上用 Yi 的账号，一个会话里：Claude Sonnet 5.5 · 中 问一个要读文件的问题（调工具）→ 运行中把选择换成 本地 · qwen3.8 · 开，看到“下一次提问生效”，这个运行照旧用 Sonnet → 下一次提问用 qwen 接着问，对话页出现“换成 …”，状态栏按 131072 算 → 换成 Claude Opus 5.5 · 高 再问，回答用上了前面几轮的内容 → 新开会话，选择器显示 Opus 5.5 · 高。看轨迹页每次调用的模型和档位；截图给 Yi；报告 Claude 用量（每次调用的输入、输出、缓存命中，换模型那次的缓存没命中）、qwen 用时和发现的问题，写进本任务的进度
   - _Requirements: 需求 3, 4, 5, 8 的例子, 9.3_
   - _Prompt: Role: 测试开发 | Task: 在 8091 上演示同一会话里换模型和思考档位 | Restrictions: 截图和报告里不出现密钥、令牌 | Success: 三次换模型都按下一次提问生效，没有请求被拒，Yi 收到截图和用量_
