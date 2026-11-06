@@ -22,7 +22,7 @@
 
 | 事项 | 已知内容 | 还缺什么 |
 |---|---|---|
-| 沙箱 → 反向沙箱 `local-workspace` | 2026-11-03 Yi 提出“反向沙箱”：agent 在服务器，工具在用户本机执行，本机装连接程序主动连服务器；2026-11-06 Yi 强调“非常重要”，定了插件页的样子（总开关“本机工作区”，读文件、Git 查询、改文件、命令行子开关）。Yi 定：有期限令牌代替每次询问；连接程序用 Java；命令隔离用微软 MXC；先只支持 macOS | 2026-11-06 开 spec `local-workspace`，任务 1–23 完成（第 4 阶段：MXC 沙箱里的 `bash`、macOS 安装包、说明，测量见 tech.md）；任务 24 剩 8091 上用真实 Claude 的演示。之后做下面的 Windows 连接程序和代码索引，再做 `web-tools`、服务器装在 Windows 上 |
+| 沙箱 → 反向沙箱 `local-workspace` | 2026-11-03 Yi 提出“反向沙箱”：agent 在服务器，工具在用户本机执行，本机装连接程序主动连服务器；2026-11-06 Yi 强调“非常重要”，定了插件页的样子（总开关“本机工作区”，读文件、Git 查询、改文件、命令行子开关）。Yi 定：有期限令牌代替每次询问；连接程序用 Java；命令隔离用微软 MXC；先只支持 macOS | 2026-11-06 开 spec `local-workspace`，24 个任务全部完成（MXC 沙箱里的 `bash`、macOS 安装包、说明，测量见 tech.md；8091 上用真实 Claude 修好一个失败的 Maven 测试）。Yi 定的顺序：接着做 `web-tools`，再做服务器装在 Windows 上；下面的 Windows 连接程序和代码索引之后再排 |
 | Windows 连接程序（`local-workspace` 的下一个 spec） | `local-workspace` 只做了 macOS。消息格式、令牌、`AllowedDirs`（以后 `/` 和 `\` 都认）、`Calls` 的检查都不绑定 macOS；命令换成 `powershell`（pi 叫 `powershell`，DSH 叫 `pwsh`），沙箱换 MXC 的 Windows 后端、用同一套规则（Codex 在 Windows 上也用 MXC，只支持较新的 Windows 11，`windows-sandbox-rs/src/mxc-sandbox/README.md:1-50`）；安装包、首次运行的提示另做 | 开 spec；要在一台 Windows 机器上跑一遍 `MxcIT` 一类的真实测试才算完成 |
 | 代码索引 `code-index`（`local-workspace` 的下一个 spec） | 插件页“本机工作区”下的一项：`symbol_search`、`outline`、`read_symbol`，在用户电脑上建索引，挂在同一个总开关下 | 选型（tree-sitter、ctags、LSP）要单独调研，查 pi、DSH 的做法后开 spec |
 | 子 agent | 已确认要做，排在沙箱附近 | 开 spec；和沙箱的先后未定 |
