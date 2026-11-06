@@ -29,6 +29,12 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.value..")
             .should().dependOnClassesThat().resideInAnyPackage("tantalum.kernel..", "tantalum.shell..");
 
+    /** 本机工作区的工具在用户电脑上的连接程序里执行，不能拖进服务器、内核和 Spring（local-workspace 设计“Project Structure”）。 */
+    @ArchTest
+    static final ArchRule localStandsAlone = noClasses()
+            .that().resideInAPackage("tantalum.local..")
+            .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell..", "tantalum.kernel..", "org.springframework..");
+
     @ArchTest
     static final ArchRule kernelDoesNotDependOnShell = noClasses()
             .that().resideInAPackage("tantalum.kernel..")
