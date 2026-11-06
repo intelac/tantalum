@@ -1,6 +1,7 @@
 package tantalum.shell.web;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.ResponseEntity;
@@ -51,7 +52,9 @@ public class SettingsController {
         CompactionPolicy policy = engine.compaction();
         Map<String, Object> compaction = new LinkedHashMap<>();
         compaction.put("percent", engine.userSettings().compactionPercent(user));
-        compaction.put("points", policy.points().stream().map(SettingsController::point).toList());
+        // 管理员默认模型上的压缩点；按会话的模型算的在 /api/models 里（model-picker M10）
+        List<CompactionPolicy.Point> points = engine.routes().describe(engine.routes().defaultChoice()).map(policy::points).orElse(List.of());
+        compaction.put("points", points.stream().map(SettingsController::point).toList());
         return Map.of("compaction", compaction);
     }
 

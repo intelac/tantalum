@@ -165,11 +165,28 @@ final class MatrixFixture implements AutoCloseable {
         while (Instant.now().isBefore(deadline)) {
             runs = runs(session);
             if (runs != null && runs.size() == count && runs.get(count - 1).has("endReason")) {
+                awaitDurable(session, deadline);
                 return end(runs.get(count - 1));
             }
             Thread.sleep(5);
         }
         throw new AssertionError(session + ": runs did not settle: " + runs);
+    }
+
+    /**
+     * 等会话视图里的每一步都写进了会话文件：Cleanroom 先发布状态、用户通道再写这一行，运行视图里已经结束时最后一行可能还没落盘，
+     * 紧接着读 journal 会少一行（step=7 的回归里见过 HookMatrixTest 少了 ContextAssembled）。
+     */
+    private void awaitDurable(String session, Instant deadline) throws Exception {
+        long seq = JSON.readTree(messages(session)).get("seq").asLong();
+        while (Instant.now().isBefore(deadline)) {
+            List<EventEnvelope> journal = journal(session);
+            if (!journal.isEmpty() && journal.getLast().seq() >= seq) {
+                return;
+            }
+            Thread.sleep(5);
+        }
+        throw new AssertionError(session + ": the journal never reached seq " + seq);
     }
 
     /** 第一个运行的 ID，等它出现。 */

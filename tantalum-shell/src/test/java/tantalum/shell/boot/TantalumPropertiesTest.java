@@ -19,6 +19,7 @@ import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.memory.MemoryLimits;
+import tantalum.shell.route.RouteSettings;
 import tantalum.shell.settings.CompactionPolicy;
 
 class TantalumPropertiesTest {
@@ -35,16 +36,15 @@ class TantalumPropertiesTest {
         return new Binder(new MapConfigurationPropertySource(properties)).bind("tantalum", TantalumProperties.class).get();
     }
 
-    /** 配置接口显示的窗口和压缩用的窗口是同一个值，换供应商也一样。 */
+    /** 配置的窗口进各自路线的配置，读不到窗口时压缩和配置接口都用它（model-picker M4）。 */
     @Test
-    void contextWindowHasOneSourceForBothProviders() throws Exception {
-        TantalumProperties openai = bind("tantalum.provider", "local", "tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1", "tantalum.openai-routes.local.model", "qwen", "tantalum.openai-routes.local.context-window", "64000");
-        assertEquals(64000, openai.contextWindow());
-        assertEquals(64000, openai.compactionSettings().window());
-        TantalumProperties claude = bind("tantalum.claude.context-window", "150000");
-        assertEquals(150000, claude.contextWindow());
-        assertEquals(150000, claude.compactionSettings().window());
-        assertNull(bind("tantalum.provider", "local", "tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1", "tantalum.openai-routes.local.model", "qwen", "tantalum.openai-routes.local.context-window", "0").compactionSettings());
+    void eachRouteCarriesItsConfiguredWindow() throws Exception {
+        List<RouteSettings> routes = bind("tantalum.provider", "local", "tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1",
+                "tantalum.openai-routes.local.model", "qwen", "tantalum.openai-routes.local.context-window", "64000",
+                "tantalum.claude.context-window", "150000").routeSettings();
+        assertEquals(List.of("claude", "local"), routes.stream().map(RouteSettings::name).toList());
+        assertEquals(150000, routes.get(0).contextWindow());
+        assertEquals(64000, routes.get(1).contextWindow());
     }
 
     @Test
@@ -174,46 +174,30 @@ class TantalumPropertiesTest {
                 Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null);
     }
 
-    /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */
+    /** 压缩参数和模型无关；预留按模型另算（CompactionPolicyTest）。路线配置的窗口不大于预留时启动失败（context-compaction 需求 9）。 */
     @Test
-    void compactionSettingsFollowTheProvider() {
-        tantalum.value.state.CompactionSettings claude = properties("claude", 200_000, 131_072, TantalumProperties.Compaction.defaults()).compactionSettings();
-        assertEquals(136_000, claude.threshold());
-        assertEquals(64_000, claude.reserve(), "Claude's max-tokens is larger than reserve-tokens");
-        assertEquals(20_000, claude.keepRecent());
-        assertEquals(32_768, claude.maxKeptResultBytes());
-        assertEquals(4_096, claude.maxSummarizedResultBytes());
-        assertEquals(8_192, claude.summaryMaxTokens());
-
-        tantalum.value.state.CompactionSettings openai = properties("local", 200_000, 131_072, TantalumProperties.Compaction.defaults()).compactionSettings();
-        assertEquals(114_688, openai.threshold());
-        assertEquals(16_384, openai.reserve());
-
-        assertNull(properties("local", 200_000, 0, TantalumProperties.Compaction.defaults()).compactionSettings(), "unknown window: no compaction");
-        assertEquals(136_000, properties("claude", 200_000, 0, null).compactionSettings().threshold(), "missing section means defaults");
-        assertThrows(IllegalArgumentException.class, () -> properties("local", 200_000, 16_000, TantalumProperties.Compaction.defaults()).compactionSettings(),
+    void compactionLimitsAndTheConfiguredWindowCheck() throws Exception {
+        CompactionPolicy.Limits limits = bind().compactionLimits();
+        assertEquals(new CompactionPolicy.Limits(16_384, 20_000, 32_768, 4_096, 8_192), limits);
+        assertEquals(200_000, properties("claude", 200_000, 131_072, TantalumProperties.Compaction.defaults()).routeSettings().getFirst().contextWindow());
+        assertEquals(List.of(), properties("local", 200_000, 0, TantalumProperties.Compaction.defaults()).routeSettings().get(1).allow());
+        assertThrows(IllegalArgumentException.class, () -> properties("local", 200_000, 16_000, TantalumProperties.Compaction.defaults()).routeSettings(),
                 "a window no larger than the reserve is a configuration error");
+        assertThrows(IllegalArgumentException.class, () -> properties("claude", 64_000, 0, null).routeSettings(),
+                "Claude's max-tokens 64000 is the reserve");
     }
 
-    /** compaction-threshold T7：估算系数按供应商，非正数启动失败；预留同压缩设置。 */
+    /** compaction-threshold T7：估算系数按路线，非正数启动失败。 */
     @Test
-    void compactionLimitsCarryTheProvidersCoefficient() throws Exception {
-        checkLimits(bind().compactionLimits(), 64_000, 1.5);
-        checkLimits(bind("tantalum.provider", "local", "tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1", "tantalum.openai-routes.local.model", "qwen").compactionLimits(), 16_384, 1.75);
-        assertEquals(1.25, bind("tantalum.claude.bytes-per-token", "1.25").compactionLimits().bytesPerToken());
+    void theCoefficientIsPerRoute() throws Exception {
+        assertEquals(1.5, bind().routeSettings().getFirst().bytesPerToken());
+        assertEquals(1.75, bind("tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1", "tantalum.openai-routes.local.model", "qwen")
+                .routeSettings().get(1).bytesPerToken());
+        assertEquals(1.25, bind("tantalum.claude.bytes-per-token", "1.25").routeSettings().getFirst().bytesPerToken());
         assertThrows(BindException.class, () -> bind("tantalum.claude.bytes-per-token", "0"));
         assertThrows(BindException.class, () -> bind("tantalum.provider", "local", "tantalum.openai-routes.local.base-url", "http://127.0.0.1:8090/v1", "tantalum.openai-routes.local.model", "qwen", "tantalum.openai-routes.local.bytes-per-token", "-1"));
         assertTrue(bind().windowFromModel());
         assertFalse(bind("tantalum.compaction.window-from-model", "false").windowFromModel());
-    }
-
-    private static void checkLimits(CompactionPolicy.Limits limits, long reserve, double bytesPerToken) {
-        assertEquals(reserve, limits.reserve());
-        assertEquals(20_000, limits.keepRecent());
-        assertEquals(32_768, limits.maxKeptResultBytes());
-        assertEquals(4_096, limits.maxSummarizedResultBytes());
-        assertEquals(8_192, limits.summaryMaxTokens());
-        assertEquals(bytesPerToken, limits.bytesPerToken());
     }
 
     @Test

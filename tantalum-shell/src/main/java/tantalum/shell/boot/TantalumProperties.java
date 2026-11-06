@@ -14,8 +14,8 @@ import tantalum.shell.mcp.McpProperties;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.model.OpenAiThinking;
 import tantalum.shell.route.Levels;
+import tantalum.shell.route.RouteSettings;
 import tantalum.shell.settings.CompactionPolicy;
-import tantalum.value.state.CompactionSettings;
 
 /**
  * 全部配置，默认值在 {@code application.properties}。模型是几条路线（model-picker M1）：{@code claude} 一条，加上
@@ -315,15 +315,6 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         return names.stream().filter(java.util.Objects::nonNull).map(String::strip).filter(name -> !name.isEmpty()).distinct().toList();
     }
 
-    private boolean usesClaude() {
-        return CLAUDE_ROUTE.equals(provider);
-    }
-
-    /** 默认路线是 OpenAI 兼容的时候它的设置；默认路线是 Claude 时为 null。任务 10 之前只有默认路线接到 agent。 */
-    public OpenAiRoute defaultOpenAiRoute() {
-        return usesClaude() ? null : openaiRoutes.get(provider);
-    }
-
     /** 附件上限；没有配置时用默认值。 */
     public AttachmentLimits attachmentLimits() {
         return attachments == null ? AttachmentLimits.defaults() : attachments;
@@ -334,43 +325,46 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         return web == null ? Web.defaults() : web;
     }
 
-    /** 当前供应商的模型名。 */
-    public String model() {
-        return usesClaude() ? claude.model() : defaultOpenAiRoute().model();
-    }
-
-    /** 当前模型收不收图片：Claude 都收；OpenAI 兼容看配置（A7）。 */
-    public boolean vision() {
-        return usesClaude() || defaultOpenAiRoute().vision();
-    }
-
-    /** 当前供应商的上下文窗口；0 表示未知：不压缩，控制台不显示占比。 */
-    public long contextWindow() {
-        return usesClaude() ? claude.contextWindow() : defaultOpenAiRoute().contextWindow();
-    }
-
     /** 向模型读窗口吗；没有压缩配置段时读。 */
     public boolean windowFromModel() {
         return compaction == null || compaction.windowFromModel();
     }
 
-    /** 当前供应商的压缩参数，和窗口、用户选的压缩点一起由 {@code CompactionPolicy} 合成每次提问的设置。 */
+    /** 和模型无关的压缩参数，和这次用的模型、用户选的压缩点一起由 {@code CompactionPolicy} 合成每次提问的设置。 */
     public CompactionPolicy.Limits compactionLimits() {
-        long maxTokens = usesClaude() ? claude.maxTokens() : defaultOpenAiRoute().maxTokens();
         Compaction c = compaction == null ? Compaction.defaults() : compaction;
-        return new CompactionPolicy.Limits(Math.max(c.reserveTokens(), maxTokens), c.keepRecentTokens(), c.maxKeptToolResultBytes(),
-                c.maxSummarizedToolResultBytes(), c.summaryMaxTokens(), usesClaude() ? claude.bytesPerToken() : defaultOpenAiRoute().bytesPerToken());
+        return new CompactionPolicy.Limits(c.reserveTokens(), c.keepRecentTokens(), c.maxKeptToolResultBytes(),
+                c.maxSummarizedToolResultBytes(), c.summaryMaxTokens());
     }
 
-    /** 按配置的窗口算的压缩设置，启动时用它检查配置（窗口不大于预留时抛出）；窗口未知时为 null，表示不压缩。预留取配置和该供应商输出上限中的大者。 */
-    public CompactionSettings compactionSettings() {
-        long window = contextWindow();
-        long maxTokens = usesClaude() ? claude.maxTokens() : defaultOpenAiRoute().maxTokens();
-        if (window <= 0) {
-            return null;
+    /**
+     * 全部路线的配置，Claude 在前，其余按名字（model-picker M1）。配置的窗口（读不到时用）不大于预留
+     * {@code max(reserve-tokens, 这条路线的输出上限)} 时抛出：启动失败（context-compaction 需求 9）。
+     */
+    public List<RouteSettings> routeSettings() {
+        List<RouteSettings> routes = new java.util.ArrayList<>();
+        routes.add(new RouteSettings(CLAUDE_ROUTE, claude.displayName(), RouteSettings.Kind.CLAUDE, claude.apiKeyEnv(), claude.model(),
+                claude.models(), claude.maxTokens(), claude.contextWindow(), claude.bytesPerToken(), claude.concurrency(),
+                claude.firstChunkTimeout(), claude.betweenChunkTimeout(), claude.effort(), claude.fallbacks(), null, true, null, null,
+                true, Map.of()));
+        openaiRoutes.forEach((name, route) -> {
+            Map<String, RouteSettings.Override> overrides = new TreeMap<>();
+            route.overrides().forEach((model, override) -> overrides.put(model, new RouteSettings.Override(
+                    override.thinking() == null ? null : OpenAiThinking.parse(override.thinking()), override.efforts(),
+                    override.defaultEffort(), override.vision(), override.contextWindow())));
+            routes.add(new RouteSettings(name, route.displayName(), RouteSettings.Kind.OPENAI, route.apiKeyEnv(), route.model(),
+                    route.models(), route.maxTokens(), route.contextWindow(), route.bytesPerToken(), route.concurrency(),
+                    route.firstChunkTimeout(), route.betweenChunkTimeout(), route.defaultEffort(), false, route.baseUrl(),
+                    route.listModels(), OpenAiThinking.parse(route.thinking()), route.efforts(), route.vision(), overrides));
+        });
+        long reserve = compactionLimits().reserveTokens();
+        for (RouteSettings route : routes) {
+            long needed = Math.max(reserve, route.maxTokens());
+            if (route.contextWindow() > 0 && route.contextWindow() <= needed) {
+                throw new IllegalArgumentException("the context window " + route.contextWindow() + " of route " + route.name()
+                        + " must be larger than the reserve " + needed + " (max of reserve-tokens and max-tokens)");
+            }
         }
-        Compaction c = compaction == null ? Compaction.defaults() : compaction;
-        return new CompactionSettings(window, Math.max(c.reserveTokens(), maxTokens), c.keepRecentTokens(),
-                c.maxKeptToolResultBytes(), c.maxSummarizedToolResultBytes(), c.summaryMaxTokens());
+        return List.copyOf(routes);
     }
 }

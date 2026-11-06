@@ -17,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import tantalum.shell.json.JsonText;
 import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.ImageRef;
@@ -25,6 +27,7 @@ import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
@@ -63,18 +66,27 @@ public final class OpenAiClient implements ModelClient {
     private final Duration betweenChunks;
     private final OverflowRules overflow;
     private final HttpClient http;
-    /** 模型收不收图片（A7）。不收时图片只发占位文字。 */
-    private final boolean vision;
-    private final WindowSource window;
+    /** 每个模型收不收图片（A7、model-picker M15）。不收时图片只发占位文字。 */
+    private final Predicate<String> vision;
+    /** 每个模型的思考参数写法（M5），由路线的配置给出；这个包不知道有几条路线。 */
+    private final Function<String, OpenAiThinking> thinking;
 
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
                         Duration betweenChunks, OverflowRules overflow) {
         this(baseUrl, model, apiKey, maxTokens, firstChunk, betweenChunks, overflow, false);
     }
 
-    /** 连接和响应头都受首块超时约束：看门狗只能关已拿到的响应体，服务端接受连接却不回头部时它无能为力。 */
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
                         Duration betweenChunks, OverflowRules overflow, boolean vision) {
+        this(baseUrl, model, apiKey, maxTokens, firstChunk, betweenChunks, overflow, name -> vision, name -> OpenAiThinking.NONE);
+    }
+
+    /**
+     * 连接和响应头都受首块超时约束：看门狗只能关已拿到的响应体，服务端接受连接却不回头部时它无能为力。{@code model} 是 prompt 里
+     * 没有选择时用的默认模型；{@code vision}、{@code thinking} 按模型名给出收不收图片和思考参数的写法。
+     */
+    public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
+                        Duration betweenChunks, OverflowRules overflow, Predicate<String> vision, Function<String, OpenAiThinking> thinking) {
         this.endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/chat/completions");
         this.model = model;
         this.apiKey = apiKey;
@@ -84,21 +96,27 @@ public final class OpenAiClient implements ModelClient {
         this.overflow = overflow;
         this.http = HttpClient.newBuilder().connectTimeout(firstChunk).build();
         this.vision = vision;
-        this.window = new OpenAiWindow(baseUrl, model, apiKey, ClaudeClient.WINDOW_TIMEOUT);
+        this.thinking = thinking;
     }
 
-    @Override
-    public WindowSource window() {
-        return window;
+    /** 这次调用的模型：prompt 里的选择，没有时是默认模型。 */
+    private String model(Prompt prompt) {
+        return prompt.model() == null ? model : prompt.model().model();
     }
 
-    /** 地址不记：可能带凭据。{@code extra} 和请求体里的流式选项一致。 */
+    /**
+     * 地址不记：可能带凭据。{@code extra} 是请求体里模型和消息之外的字段：流式选项，加上这个模型的思考参数（M5），
+     * 轨迹页看到的就是发出的。
+     */
     @Override
     public RequestOptions options(Prompt prompt) {
         Map<String, Json> extra = new LinkedHashMap<>();
         extra.put("stream", new Json.Bool(true));
         extra.put("stream_options", new Json.Obj(Map.of("include_usage", new Json.Bool(true))));
-        return new RequestOptions(PROVIDER, model, prompt.output().maxTokens() > 0 ? prompt.output().maxTokens() : maxTokens,
+        if (prompt.model() != null) {
+            extra.putAll(thinking.apply(prompt.model().model()).fields(prompt.model().effort()));
+        }
+        return new RequestOptions(PROVIDER, model(prompt), prompt.output().maxTokens() > 0 ? prompt.output().maxTokens() : maxTokens,
                 prompt.output().toolsAllowed(), new Json.Obj(extra));
     }
 
@@ -125,7 +143,7 @@ public final class OpenAiClient implements ModelClient {
                 if (response.statusCode() != 200) {
                     return httpFailure(response);
                 }
-                return read(response.body(), chunks, watchdog, text);
+                return read(response.body(), chunks, watchdog, text, prompt);
             } catch (HttpTimeoutException noHeaders) {
                 return ModelFailures.timeout(text.toString());
             } catch (InterruptedException | IOException failure) {
@@ -165,12 +183,12 @@ public final class OpenAiClient implements ModelClient {
         return ModelFailures.http(response.statusCode(), body, response.headers().firstValue("retry-after").orElse(null), "", overflow);
     }
 
-    private ModelOutcome read(InputStream body, ChunkListener chunks, StreamWatchdog watchdog, StringBuilder text)
+    private ModelOutcome read(InputStream body, ChunkListener chunks, StreamWatchdog watchdog, StringBuilder text, Prompt prompt)
             throws IOException {
         StringBuilder reasoning = new StringBuilder();
         Map<Integer, ToolFragments> tools = new TreeMap<>();
         String finishReason = null;
-        String actualModel = model;
+        String actualModel = model(prompt);
         TokenUsage usage = null;
 
         BufferedReader lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
@@ -231,13 +249,16 @@ public final class OpenAiClient implements ModelClient {
         if (cut != null) {
             return cut;
         }
-        return new ModelOutcome.Replied(content(reasoning, text, tools), stop(finishReason), actualModel, usage);
+        return new ModelOutcome.Replied(content(reasoning, text, tools, prompt), stop(finishReason), actualModel, usage);
     }
 
-    private static List<ContentBlock> content(StringBuilder reasoning, StringBuilder text, Map<Integer, ToolFragments> tools) {
+    /** 推理块记下这次的路线和请求的模型名（M9），下次只发回给同一条路线、同一个模型；没有选择时不记（旧做法）。 */
+    private static List<ContentBlock> content(StringBuilder reasoning, StringBuilder text, Map<Integer, ToolFragments> tools,
+                                              Prompt prompt) {
         List<ContentBlock> content = new ArrayList<>();
         if (!reasoning.isEmpty()) {
-            content.add(new ReasoningBlock(PROVIDER, new Json.Str(reasoning.toString())));
+            content.add(prompt.model() == null ? new ReasoningBlock(PROVIDER, new Json.Str(reasoning.toString()))
+                    : new ReasoningBlock(PROVIDER, new Json.Str(reasoning.toString()), prompt.model().route(), prompt.model().model()));
         }
         if (!text.isEmpty()) {
             content.add(new TextBlock(text.toString()));
@@ -276,7 +297,9 @@ public final class OpenAiClient implements ModelClient {
         system.put("role", "system");
         system.put("content", prompt.system());
         messages.add(system);
-        prompt.messages().forEach(message -> addMessage(messages, message, media));
+        // 换模型的说明并进这次的用户消息（M12）
+        boolean images = vision.test(model(prompt));
+        ModelChanges.fold(prompt.messages()).forEach(message -> addMessage(messages, message, media, images, prompt.model()));
         body.put("messages", messages);
         // 这边没有追加式的工具变化：直接发现在开着的工具，变化在历史里另有文字说明
         List<ToolSpec> tools = ToolChanges.active(prompt);
@@ -305,7 +328,7 @@ public final class OpenAiClient implements ModelClient {
      * 一条用户消息（pi {@code openai-completions.ts:1257-1272,1395-1462}）。不收图片时图片换成占位文字（A7）。
      * 文件和 PDF 都只给说明文字。
      */
-    private void addMessage(List<Object> messages, Message message, AttachmentMedia media) {
+    private static void addMessage(List<Object> messages, Message message, AttachmentMedia media, boolean vision, ModelChoice choice) {
         StringBuilder text = new StringBuilder();
         StringBuilder reasoning = new StringBuilder();
         List<Object> calls = new ArrayList<>();
@@ -314,12 +337,12 @@ public final class OpenAiClient implements ModelClient {
         for (ContentBlock block : message.content()) {
             switch (block) {
                 case TextBlock plain -> text.append(plain.text());
-                case ReasoningBlock own when own.provider().equals(PROVIDER) && own.raw() instanceof Json.Str value ->
+                case ReasoningBlock own when own.provider().equals(PROVIDER) && own.raw() instanceof Json.Str value && sameWriter(own, choice) ->
                         reasoning.append(value.value());
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
                 case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
-                case ModelChangeBlock change -> append(text, change.text());
+                case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);
                     parts.add(textPart(AttachmentText.image(image)));
@@ -371,6 +394,14 @@ public final class OpenAiClient implements ModelClient {
             entry.put("tool_calls", calls);
         }
         messages.add(entry);
+    }
+
+    /**
+     * {@code reasoning_content} 只发回同一条路线、同一个模型写的（M9，照 pi {@code AI/src/api/transform-messages.ts:122-125}）。
+     * 没有选择的调用照旧全发；有选择时，升级前没记作者的旧块不发（判断不了是不是同一个模型）。
+     */
+    private static boolean sameWriter(ReasoningBlock block, ModelChoice choice) {
+        return choice == null || (choice.route().equals(block.route()) && choice.model().equals(block.model()));
     }
 
     /** 占位文字和前面的文字之间空一行。 */

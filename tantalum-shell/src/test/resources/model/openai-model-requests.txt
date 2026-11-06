@@ -1,0 +1,12 @@
+== chat-template on
+{"model":"qwen","stream":true,"stream_options":{"include_usage":true},"chat_template_kwargs":{"enable_thinking":true},"max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"hi"}]}
+== thinking-type off
+{"model":"kimi","stream":true,"stream_options":{"include_usage":true},"thinking":{"type":"disabled"},"max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"hi"}]}
+== enable-thinking on
+{"model":"glm","stream":true,"stream_options":{"include_usage":true},"enable_thinking":true,"max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"hi"}]}
+== reasoning-effort high
+{"model":"gpt","stream":true,"stream_options":{"include_usage":true},"reasoning_effort":"high","max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"hi"}]}
+== no thinking setting, no level
+{"model":"plain","stream":true,"stream_options":{"include_usage":true},"max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"hi"}]}
+== only the same route and model's reasoning goes back; the notice opens the question
+{"model":"qwen","stream":true,"stream_options":{"include_usage":true},"chat_template_kwargs":{"enable_thinking":false},"max_tokens":4096,"messages":[{"role":"system","content":"sys"},{"role":"user","content":"q1"},{"role":"assistant","content":"a1","reasoning_content":"local qwen"},{"role":"user","content":"q2"},{"role":"assistant","content":"a2"},{"role":"user","content":"q3"},{"role":"assistant","content":"a3"},{"role":"user","content":"q4"},{"role":"assistant","content":"a4"},{"role":"user","content":"[Model changed: earlier assistant turns were written by claude/claude-sonnet-5-5; you are now local/qwen.]\n\nq5"}]}

@@ -11,15 +11,20 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
+import tantalum.value.model.ModelChoice;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 每个用户自己的设置（compaction-threshold T5）。存在 {@code users.db} 的 {@code user_settings} 表里，一行一项，不进 journal；
- * 现在只有压缩点。按用户缓存在内存里，改的时候先写库再更新缓存。
+ * 每个用户自己的设置（compaction-threshold T5）。存在 {@code users.db} 的 {@code user_settings} 表里，一行一项，不进 journal：
+ * 压缩点，和“上次的选择”（model-picker M7，键 {@code model_choice}，值是 JSON）。按用户缓存在内存里，改的时候先写库再更新缓存。
  */
 public final class UserSettings implements AutoCloseable {
 
@@ -28,10 +33,14 @@ public final class UserSettings implements AutoCloseable {
     public static final int DEFAULT_COMPACTION_PERCENT = 100;
 
     private static final String COMPACTION_PERCENT = "compaction_percent";
+    private static final String MODEL_CHOICE = "model_choice";
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final Connection connection;
     private final Clock clock;
     private final Map<Principal, Integer> percents = new ConcurrentHashMap<>();
+    /** 没选过的用户也缓存一份空的，免得每次提问都读库。 */
+    private final Map<Principal, Optional<ModelChoice>> choices = new ConcurrentHashMap<>();
 
     private UserSettings(Connection connection, Clock clock) {
         this.connection = connection;
@@ -85,38 +94,84 @@ public final class UserSettings implements AutoCloseable {
         if (!COMPACTION_PERCENTS.contains(percent)) {
             throw new IllegalArgumentException("compaction percent must be one of " + COMPACTION_PERCENTS + " but was " + percent);
         }
+        save(user, COMPACTION_PERCENT, Integer.toString(percent));
+        percents.put(user, percent);
+    }
+
+    /** 这个用户上次在选择器里选的（M7）；没选过、或者存的读不懂时为空。能不能用由调用方按现在的模型列表判断。 */
+    public Optional<ModelChoice> modelChoice(Principal user) {
+        Optional<ModelChoice> cached = choices.get(user);
+        if (cached != null) {
+            return cached;
+        }
+        Optional<ModelChoice> loaded = load(user, MODEL_CHOICE).flatMap(UserSettings::parseChoice);
+        Optional<ModelChoice> raced = choices.putIfAbsent(user, loaded);
+        return raced == null ? loaded : raced;
+    }
+
+    /** 存成这个用户的“上次的选择”，只改他自己的。 */
+    public synchronized void setModelChoice(Principal user, ModelChoice choice) {
+        Map<String, String> value = new LinkedHashMap<>();
+        value.put("route", choice.route());
+        value.put("model", choice.model());
+        if (choice.effort() != null) {
+            value.put("effort", choice.effort());
+        }
+        save(user, MODEL_CHOICE, JSON.writeValueAsString(value));
+        choices.put(user, Optional.of(choice));
+    }
+
+    private static Optional<ModelChoice> parseChoice(String stored) {
+        try {
+            JsonNode node = JSON.readTree(stored);
+            String route = node.path("route").asString(null);
+            String model = node.path("model").asString(null);
+            if (route == null || model == null || route.isBlank() || model.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(new ModelChoice(route, model, node.path("effort").asString(null)));
+        } catch (RuntimeException garbled) {
+            return Optional.empty();
+        }
+    }
+
+    private void save(Principal user, String name, String value) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT OR REPLACE INTO user_settings (user, name, value, updated_at) VALUES (?, ?, ?, ?)")) {
             statement.setString(1, user.value());
-            statement.setString(2, COMPACTION_PERCENT);
-            statement.setString(3, Integer.toString(percent));
+            statement.setString(2, name);
+            statement.setString(3, value);
             statement.setString(4, clock.instant().toString());
             statement.executeUpdate();
         } catch (SQLException failure) {
             throw new IllegalStateException("cannot save settings for " + user.value(), failure);
         }
-        percents.put(user, percent);
     }
 
-    private synchronized int loadPercent(Principal user) {
+    private synchronized Optional<String> load(Principal user, String name) {
         try (PreparedStatement query = connection.prepareStatement("SELECT value FROM user_settings WHERE user = ? AND name = ?")) {
             query.setString(1, user.value());
-            query.setString(2, COMPACTION_PERCENT);
+            query.setString(2, name);
             try (ResultSet rows = query.executeQuery()) {
-                if (rows.next()) {
-                    try {
-                        int stored = Integer.parseInt(rows.getString(1));
-                        // 以后版本可能加别的档位，这个版本不认识的按默认
-                        return COMPACTION_PERCENTS.contains(stored) ? stored : DEFAULT_COMPACTION_PERCENT;
-                    } catch (NumberFormatException garbled) {
-                        return DEFAULT_COMPACTION_PERCENT;
-                    }
-                }
+                return rows.next() ? Optional.of(rows.getString(1)) : Optional.empty();
             }
         } catch (SQLException failure) {
             throw new IllegalStateException("cannot read settings for " + user.value(), failure);
         }
-        return DEFAULT_COMPACTION_PERCENT;
+    }
+
+    private int loadPercent(Principal user) {
+        Optional<String> stored = load(user, COMPACTION_PERCENT);
+        if (stored.isEmpty()) {
+            return DEFAULT_COMPACTION_PERCENT;
+        }
+        try {
+            int percent = Integer.parseInt(stored.get());
+            // 以后版本可能加别的档位，这个版本不认识的按默认
+            return COMPACTION_PERCENTS.contains(percent) ? percent : DEFAULT_COMPACTION_PERCENT;
+        } catch (NumberFormatException garbled) {
+            return DEFAULT_COMPACTION_PERCENT;
+        }
     }
 
     @Override

@@ -133,4 +133,22 @@ class RoutesTest {
             assertEquals(TOGGLE, local.levels());
         }
     }
+
+    /**
+     * 模型报告的窗口盖过配置；关掉 window-from-model 时只用配置，来源写“来自配置”（测试要小窗口，compaction-threshold T1；
+     * 原来在 SettingsApiTest，窗口改成每个模型一个后搬到这里）。
+     */
+    @Test
+    void aReportedWindowWinsUnlessReadingIsTurnedOff() throws Exception {
+        ModelList reporting = () -> List.of(new ModelInfo("local", "qwen", "qwen", 1_000_000, ModelInfo.Source.MODEL, 16_384, false,
+                TOGGLE, true));
+        for (boolean fromModel : new boolean[] {true, false}) {
+            try (Routes routes = Routes.create(List.of(RouteFixtures.openAi("local", null, OpenAiThinking.CHAT_TEMPLATE, 200_000)), "local",
+                    lists(Map.of("local", reporting)), null, name -> null, fromModel, Clock.systemUTC()).start(Duration.ofSeconds(2))) {
+                ModelInfo qwen = routes.model(new ModelChoice("local", "qwen", "on")).orElseThrow();
+                assertEquals(fromModel ? 1_000_000 : 200_000, qwen.window());
+                assertEquals(fromModel ? ModelInfo.Source.MODEL : ModelInfo.Source.CONFIG, qwen.windowSource());
+            }
+        }
+    }
 }

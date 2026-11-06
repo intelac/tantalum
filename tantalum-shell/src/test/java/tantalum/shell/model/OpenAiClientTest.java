@@ -21,6 +21,8 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
@@ -438,5 +440,94 @@ class OpenAiClientTest {
             java.nio.file.Files.writeString(TOOL_CHANGE_EXPECTED, actual);
         }
         assertEquals(java.nio.file.Files.readString(TOOL_CHANGE_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
+    }
+
+    // ---- 按会话的选择发（model-picker 任务 9）：openai-model-requests.txt，只加新用例 ----
+
+    private static final java.nio.file.Path MODEL_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-model-requests.txt");
+
+    /** 路线 local 上几个模型各自的思考写法；qwen-vl 收图片。 */
+    private OpenAiClient routed() {
+        Map<String, OpenAiThinking> thinking = Map.of("qwen", OpenAiThinking.CHAT_TEMPLATE, "kimi", OpenAiThinking.THINKING_TYPE,
+                "glm", OpenAiThinking.ENABLE_THINKING, "gpt", OpenAiThinking.REASONING_EFFORT);
+        return new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5), OverflowRules.defaults(),
+                "qwen-vl"::equals, name -> thinking.getOrDefault(name, OpenAiThinking.NONE));
+    }
+
+    private static Prompt hi(ModelChoice choice) {
+        return new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, choice);
+    }
+
+    private static ReasoningBlock reasoning(String text, String route, String model) {
+        return new ReasoningBlock("openai", new Json.Str(text), route, model);
+    }
+
+    /** 本地 qwen 写的、本地 glm 写的、另一条路线上同名 qwen 写的、升级前没记作者的，最后从 Claude 换回本地 qwen。 */
+    private static Prompt mixedHistory() {
+        return new Prompt("sys", List.of(), List.of(
+                Message.user("q1"), new Message(Role.ASSISTANT, List.of(reasoning("local qwen", "local", "qwen"), new TextBlock("a1")), false),
+                Message.user("q2"), new Message(Role.ASSISTANT, List.of(reasoning("local glm", "local", "glm"), new TextBlock("a2")), false),
+                Message.user("q3"), new Message(Role.ASSISTANT, List.of(reasoning("hosted qwen", "hosted", "qwen"), new TextBlock("a3")), false),
+                Message.user("q4"), new Message(Role.ASSISTANT, List.of(new ReasoningBlock("openai", new Json.Str("unknown writer")),
+                        new TextBlock("a4")), false),
+                Message.user("q5"), new Message(Role.SYSTEM, List.of(new ModelChangeBlock("claude/claude-sonnet-5-5", "local/qwen")), false)),
+                Prompt.Output.DEFAULT, new ModelChoice("local", "qwen", "off"));
+    }
+
+    /** M5、需求 6.2、6.3、M12：期望文件。 */
+    @Test
+    void modelChoiceRequestBodies() throws Exception {
+        OpenAiClient client = routed();
+        Map<String, Prompt> prompts = new java.util.LinkedHashMap<>();
+        prompts.put("chat-template on", hi(new ModelChoice("local", "qwen", "on")));
+        prompts.put("thinking-type off", hi(new ModelChoice("local", "kimi", "off")));
+        prompts.put("enable-thinking on", hi(new ModelChoice("local", "glm", "on")));
+        prompts.put("reasoning-effort high", hi(new ModelChoice("local", "gpt", "high")));
+        prompts.put("no thinking setting, no level", hi(new ModelChoice("local", "plain", null)));
+        prompts.put("only the same route and model's reasoning goes back; the notice opens the question", mixedHistory());
+        StringBuilder actual = new StringBuilder();
+        for (Map.Entry<String, Prompt> each : prompts.entrySet()) {
+            server.body = finish("stop");
+            client.call(each.getValue(), AttachmentMedia.NONE, listener);
+            actual.append("== ").append(each.getKey()).append('\n').append(server.requests.getLast()).append('\n');
+        }
+        if (Boolean.getBoolean("openai.record")) {
+            java.nio.file.Files.writeString(MODEL_EXPECTED, actual);
+        }
+        assertEquals(java.nio.file.Files.readString(MODEL_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
+    }
+
+    /** 轨迹页看到的就是发出的：思考参数在选项里；模型名是选的那个。 */
+    @Test
+    void optionsCarryTheChosenModelAndItsThinkingFields() {
+        tantalum.value.model.RequestOptions options = routed().options(hi(new ModelChoice("local", "qwen", "off")));
+        assertEquals("qwen", options.model());
+        assertEquals("{\"stream\":true,\"stream_options\":{\"include_usage\":true},\"chat_template_kwargs\":{\"enable_thinking\":false}}",
+                tantalum.shell.json.JsonText.toText(options.extra()));
+        assertEquals("kimi", routed().options(hi(new ModelChoice("local", "kimi", "on"))).model());
+    }
+
+    /** M9：回复里的推理块记下这次的路线和模型名；没有选择时不记（旧行不变）。 */
+    @Test
+    void reasoningRecordsTheRouteAndModel() throws Exception {
+        server.body = delta("{\"reasoning_content\":\"think\"}") + delta("{\"content\":\"ok\"}") + finish("stop");
+        ModelOutcome.Replied chosen = assertInstanceOf(ModelOutcome.Replied.class,
+                routed().call(hi(new ModelChoice("local", "glm", "on")), AttachmentMedia.NONE, listener));
+        assertEquals(reasoning("think", "local", "glm"), chosen.content().getFirst());
+        server.body = delta("{\"reasoning_content\":\"think\"}") + delta("{\"content\":\"ok\"}") + finish("stop");
+        ModelOutcome.Replied plain = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        assertEquals(new ReasoningBlock("openai", new Json.Str("think")), plain.content().getFirst());
+    }
+
+    /** M15：收不收图片按这次选的模型。 */
+    @Test
+    void visionFollowsTheChosenModel() throws Exception {
+        Prompt image = attachmentPrompts().getFirst();
+        for (String model : List.of("qwen-vl", "qwen")) {
+            server.body = finish("stop");
+            routed().call(new Prompt(image.system(), image.tools(), image.messages(), Prompt.Output.DEFAULT,
+                    new ModelChoice("local", model, null)), MEDIA, listener);
+            assertEquals(model.equals("qwen-vl"), server.requests.getLast().contains("image_url"), model);
+        }
     }
 }

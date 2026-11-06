@@ -27,7 +27,6 @@ import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.fetch.Fetcher;
 import tantalum.shell.fetch.WebFetchTool;
-import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ContextHandler;
 import tantalum.shell.handler.Handler;
 import tantalum.shell.handler.ModelHandler;
@@ -63,15 +62,13 @@ import tantalum.shell.mcp.McpSettings;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
-import tantalum.shell.model.ContextWindow;
-import tantalum.shell.model.ModelClient;
-import tantalum.shell.model.WindowSource;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
 import tantalum.shell.net.UpstreamProxy;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.route.Routes;
 import tantalum.shell.question.OpenQuestions;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
@@ -102,9 +99,8 @@ public final class Engine implements AutoCloseable {
     private static final Duration DRAIN = Duration.ofSeconds(5);
     private static final Duration INTERRUPT_RETRY = Duration.ofMillis(10);
     private static final Duration INTERRUPT_GRACE = Duration.ofSeconds(2);
-    /** 读窗口：启动时最多等 5 秒，之后每 10 分钟（compaction-threshold T2，同 DSH {@code listing-config.ts:7,9}）。 */
-    private static final Duration WINDOW_STARTUP_WAIT = Duration.ofSeconds(5);
-    private static final Duration WINDOW_REFRESH = Duration.ofMinutes(10);
+    /** 读模型列表：启动时几条路线并行，总共最多等 5 秒，之后每 10 分钟（model-picker M2，同 DSH {@code listing-config.ts:7,9}）。 */
+    private static final Duration LIST_STARTUP_WAIT = Duration.ofSeconds(5);
     /** 只供跳号回归：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
 
@@ -130,7 +126,7 @@ public final class Engine implements AutoCloseable {
     private final Browsers browsers;
     private final WebAccess webAccess;
     private final UserSettings userSettings;
-    private final ContextWindow window;
+    private final Routes routes;
     private final CompactionPolicy compaction;
     private final PluginGate gate;
     private final InputRing input;
@@ -147,7 +143,8 @@ public final class Engine implements AutoCloseable {
     /** 关闭开始后入口返回 503。 */
     private final AtomicBoolean closing = new AtomicBoolean();
 
-    public Engine(TantalumProperties properties, ModelClient model, Duration modelWait, int modelConcurrency,
+    /** {@code routes} 还没开始读列表，在这里开始；关机时停掉刷新。 */
+    public Engine(TantalumProperties properties, Routes routes,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
         long started = System.nanoTime();
@@ -194,12 +191,9 @@ public final class Engine implements AutoCloseable {
             // 管理员关掉的那一项不注册工具；这一组照样进开关，插件页照样显示“联网”一块
             webAccess = new WebAccess(switches, web.fetch().enabled(), browser.enabled(), web.blockPrivateNetwork());
             userSettings = openUserSettings(properties.dataDir(), clock);
-            // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
-            properties.compactionSettings();
-            CompactionPolicy.Limits limits = properties.compactionLimits();
-            window = new ContextWindow(properties.windowFromModel() ? model.window() : WindowSource.NONE, properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
-                    .start(WINDOW_STARTUP_WAIT);
-            compaction = new CompactionPolicy(window, userSettings, limits);
+            // 每个模型的窗口在它的路线的列表里，每次提问按这次用的模型算压缩设置（model-picker M10）
+            this.routes = routes.start(LIST_STARTUP_WAIT);
+            compaction = new CompactionPolicy(userSettings, properties.compactionLimits());
             gate = new PluginGate(catalog, switches, List.of(localWorkspace, webAccess), mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                     hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()));
 
@@ -227,10 +221,9 @@ public final class Engine implements AutoCloseable {
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
                     AssembleContext.class, new ContextHandler(localWorkspace, properties.systemPrompt(), catalog, gate, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
-                            fixedNote(mcp.fixedNote(), web.any()), compaction),
-                    CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
-                            run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
-                            window::refreshSoon),
+                            fixedNote(mcp.fixedNote(), web.any()), compaction, routes, userSettings),
+                    CallModel.class, new ModelHandler(routes, hub::chunks, clock,
+                            run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
                     RunTool.class, new ToolHandler(catalog, workspaces, gate, properties.toolTimeout(), clock),
                     DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock, questions),
                     StartTimer.class, new TimerHandler());
@@ -257,6 +250,7 @@ public final class Engine implements AutoCloseable {
             input.connect(lanes);
             cleanroomRing.connect(cleanroom);
         } catch (RuntimeException | IOException failure) {
+            routes.close();
             closeWebQuietly();
             Storage.closeQuietly(storage);
             throw failure;
@@ -328,9 +322,14 @@ public final class Engine implements AutoCloseable {
         return gate;
     }
 
-    /** 窗口和每个用户选的压缩点，设置接口和 {@code /api/config} 用它（compaction-threshold）。 */
+    /** 每个用户选的压缩点按模型算出的压缩设置，设置接口和 {@code /api/models} 用它（compaction-threshold、model-picker M10）。 */
     public CompactionPolicy compaction() {
         return compaction;
+    }
+
+    /** 全部模型路线和它们的模型列表（model-picker）。 */
+    public Routes routes() {
+        return routes;
     }
 
     public UserSettings userSettings() {
@@ -452,7 +451,7 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("close plugin settings", switches),
                 new Shutdown.Step("close local tokens", localTokens),
                 new Shutdown.Step("close user settings", userSettings),
-                new Shutdown.Step("stop reading the context window", window),
+                new Shutdown.Step("stop reading the model lists", routes),
                 new Shutdown.Step("close storage", storage)));
     }
 

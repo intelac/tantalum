@@ -81,15 +81,20 @@ final class ClaudeRequest {
     private final boolean strictThinking;
 
     ClaudeRequest(ClaudeClient.Settings settings) {
-        this.model = settings.model();
+        this.model = settings.defaultModel();
         this.maxTokens = settings.maxTokens();
-        this.effort = settings.effort();
+        this.effort = settings.defaultEffort();
         this.fallbacks = settings.fallbacks();
         this.strictThinking = settings.strictThinking();
     }
 
-    /** {@code extra} 的键名和请求体一致；{@code betas} 是请求头，只在打开时出现，{@code fallbacks} 同理。 */
+    /**
+     * {@code extra} 的键名和请求体一致；{@code betas} 是请求头，只在打开时出现，{@code fallbacks} 同理。模型和档位取 prompt 里的选择
+     * （model-picker M6），没有选择时用设置里的默认；选择里没有档位（模型不支持 effort）时不发 {@code output_config}。
+     */
     RequestOptions options(Prompt prompt) {
+        String model = prompt.model() == null ? this.model : prompt.model().model();
+        String effort = prompt.model() == null ? this.effort : prompt.model().effort();
         Map<String, Json> thinking = new LinkedHashMap<>();
         thinking.put("type", new Json.Str("adaptive"));
         thinking.put("display", new Json.Str("summarized"));
@@ -98,7 +103,9 @@ final class ClaudeRequest {
         }
         Map<String, Json> extra = new LinkedHashMap<>();
         extra.put("thinking", new Json.Obj(thinking));
-        extra.put("output_config", new Json.Obj(Map.of("effort", new Json.Str(effort))));
+        if (effort != null) {
+            extra.put("output_config", new Json.Obj(Map.of("effort", new Json.Str(effort))));
+        }
         // 备用模型不一定认工具变化：出现过工具变化的会话不带备用模型（设计“风险”）
         boolean toolChanges = TOOL_CHANGE_MODELS.contains(model) && ToolChanges.present(prompt);
         boolean withFallbacks = fallbacks && !toolChanges;
@@ -138,8 +145,10 @@ final class ClaudeRequest {
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(options.model())
                 .maxTokens(options.maxTokens())
-                .thinking(thinking((Json.Obj) extra.get("thinking")))
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(text(extra.get("output_config"), "effort"))).build());
+                .thinking(thinking((Json.Obj) extra.get("thinking")));
+        if (extra.containsKey("output_config")) {
+            params.outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(text(extra.get("output_config"), "effort"))).build());
+        }
         if (!options.toolsAllowed()) {
             params.toolChoice(ToolChoiceNone.builder().build());
         }
@@ -154,7 +163,9 @@ final class ClaudeRequest {
         for (int i = 0; i < tools.size(); i++) {
             params.addTool(tool(tools.get(i), i == cachedTool));
         }
-        List<Message> messages = prompt.messages().stream().filter(message -> toolChanges || message.role() != Role.SYSTEM).toList();
+        // 换模型的说明并进这次的用户消息（M12），所有 Claude 模型看到的一样
+        List<Message> messages = ModelChanges.fold(prompt.messages()).stream()
+                .filter(message -> toolChanges || message.role() != Role.SYSTEM).toList();
         int cachedMessage = lastIndexOf(messages, message -> message.role() != Role.SYSTEM);
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
@@ -344,7 +355,10 @@ final class ClaudeRequest {
                 .toolUseId(result.toolCallId()).contentOfBlocks(content).isError(false).build());
     }
 
-    /** 其他供应商的推理内容和空文本不发送。 */
+    /**
+     * 其他供应商的推理内容和空文本不发送。Claude 的思考块不管是哪个 Claude 模型写的都原样发回：读不了的由服务端丢掉、不计费，
+     * 换回原来的模型时还能读到；自己去掉反而可能 400（model-picker M9，Claude 文档 {@code shared/model-migration.md}）。
+     */
     private static ContentBlockParam param(ContentBlock block) {
         return switch (block) {
             case TextBlock text -> text.text().isEmpty() ? null : ContentBlockParam.ofText(
@@ -362,7 +376,7 @@ final class ClaudeRequest {
                     .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
-            case ModelChangeBlock change -> ContentBlockParam.ofText(TextBlockParam.builder().text(change.text()).build());
+            case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
         };
     }
 

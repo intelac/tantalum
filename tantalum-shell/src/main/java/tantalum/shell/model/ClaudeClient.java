@@ -50,20 +50,16 @@ public final class ClaudeClient implements ModelClient {
         }
     }
 
-    /** 读窗口的单次请求最多等多久（compaction-threshold T2，同 DSH {@code listing-config.ts:9}）。 */
-    static final Duration WINDOW_TIMEOUT = Duration.ofSeconds(5);
-
     private final AnthropicClient client;
     private final ClaudeRequest request;
     private final Duration firstChunk;
     private final Duration betweenChunks;
     private final OverflowRules overflow;
-    private final WindowSource window;
 
     /**
      * 模型参数。{@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题，测试用。
      */
-    public record Settings(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunk,
+    public record Settings(String defaultModel, long maxTokens, String defaultEffort, boolean fallbacks, Duration firstChunk,
                            Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {}
 
     public ClaudeClient(AnthropicClient client, Settings settings) {
@@ -72,12 +68,6 @@ public final class ClaudeClient implements ModelClient {
         this.firstChunk = settings.firstChunk();
         this.betweenChunks = settings.betweenChunks();
         this.overflow = settings.overflow();
-        this.window = new ClaudeWindow(client, settings.model(), settings.fallbacks(), WINDOW_TIMEOUT);
-    }
-
-    @Override
-    public WindowSource window() {
-        return window;
     }
 
     @Override
@@ -107,7 +97,7 @@ public final class ClaudeClient implements ModelClient {
                         apply(event, blocks, reply, visible, chunks);
                     });
                 }
-                return finish(blocks, reply, visible, watchdog);
+                return finish(blocks, reply, visible, watchdog, prompt.model() == null ? null : prompt.model().route());
             } catch (AnthropicServiceException failure) {
                 return ModelFailures.http(failure.statusCode(), failure.getMessage(),
                         failure.headers().values("retry-after").stream().findFirst().orElse(null), visible.toString(), overflow);
@@ -222,7 +212,8 @@ public final class ClaudeClient implements ModelClient {
         event.usage().cacheCreationInputTokens().ifPresent(value -> reply.cacheWrite = value);
     }
 
-    private ModelOutcome finish(Map<Long, Pending> blocks, Reply reply, StringBuilder visible, StreamWatchdog watchdog) {
+    /** {@code route} 是这次调用的路线，和实际回复的模型一起记在思考块上（M9；备用模型接手时是备用模型）。 */
+    private ModelOutcome finish(Map<Long, Pending> blocks, Reply reply, StringBuilder visible, StreamWatchdog watchdog, String route) {
         boolean refused = com.anthropic.models.messages.StopReason.REFUSAL.equals(reply.stop);
         ModelOutcome cut = ModelFailures.afterStream(visible.toString(), watchdog, reply.stopped || refused);
         if (cut != null) {
@@ -233,7 +224,7 @@ public final class ClaudeClient implements ModelClient {
                     "refused: " + reply.refusal);
         }
         List<ContentBlock> content = new ArrayList<>();
-        blocks.values().forEach(block -> content.add(toBlock(block)));
+        blocks.values().forEach(block -> content.add(toBlock(block, route, route == null ? null : reply.actualModel)));
         TokenUsage usage = reply.hasUsage ? new TokenUsage(reply.input, reply.output, reply.cacheRead, reply.cacheWrite) : null;
         return new ModelOutcome.Replied(content, stopReason(reply.stop), reply.actualModel, usage);
     }
@@ -252,20 +243,20 @@ public final class ClaudeClient implements ModelClient {
         return StopReason.OTHER;
     }
 
-    private static ContentBlock toBlock(Pending block) {
+    private static ContentBlock toBlock(Pending block, String route, String model) {
         return switch (block.kind) {
             case "thinking" -> {
                 Map<String, Json> raw = new LinkedHashMap<>();
                 raw.put("type", new Json.Str("thinking"));
                 raw.put("thinking", new Json.Str(block.text.toString()));
                 raw.put("signature", new Json.Str(block.signature.toString()));
-                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw));
+                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw), route, model);
             }
             case "redacted_thinking" -> {
                 Map<String, Json> raw = new LinkedHashMap<>();
                 raw.put("type", new Json.Str("redacted_thinking"));
                 raw.put("data", new Json.Str(block.data));
-                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw));
+                yield new ReasoningBlock(ClaudeRequest.PROVIDER, new Json.Obj(raw), route, model);
             }
             case "tool_use" -> {
                 String raw = block.text.toString();

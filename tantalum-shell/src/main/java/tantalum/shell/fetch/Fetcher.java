@@ -318,8 +318,16 @@ public final class Fetcher {
     /** 收正文，收满 {@code limit} 字节就取消订阅（HTTP/1.1 关掉连接，HTTP/2 只结束这个 stream），记下“下载停了”。 */
     private static final class LimitedBody implements HttpResponse.BodySubscriber<Body> {
 
+        /**
+         * 不要正文时最多读这么多再丢掉。取消订阅在 HTTP/2 上和 JDK 交付回复有竞争：正文已经交出，回复照样可能被当成
+         * “Stream N cancelled” 失败（{@code FetcherTlsIT} 约四次一次，跳转的 https 网址报“连接失败”）。跳转和出错页的正文都很小，
+         * 读完就不用取消。
+         */
+        private static final int DISCARD_LIMIT = 64 * 1024;
+
         private final int limit;
         private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        private long discarded;
         private final CompletableFuture<Body> result = new CompletableFuture<>();
         private Flow.Subscription subscription;
 
@@ -330,16 +338,22 @@ public final class Fetcher {
         @Override
         public void onSubscribe(Flow.Subscription subscription) {
             this.subscription = subscription;
-            if (limit == 0) {
-                stop(new Body(new byte[0], false));
-            } else {
-                subscription.request(1);
-            }
+            subscription.request(1);
         }
 
         @Override
         public void onNext(List<ByteBuffer> items) {
             if (result.isDone()) {
+                return;
+            }
+            if (limit == 0) {
+                // 不要正文（跳转、不收的类型）：小的读完丢掉，正常结束；只有大的才取消（见 stop）
+                items.forEach(item -> discarded += item.remaining());
+                if (discarded > DISCARD_LIMIT) {
+                    stop(new Body(new byte[0], false));
+                    return;
+                }
+                subscription.request(1);
                 return;
             }
             for (ByteBuffer item : items) {
@@ -375,7 +389,7 @@ public final class Fetcher {
 
         @Override
         public void onComplete() {
-            result.complete(new Body(bytes.toByteArray(), false));
+            result.complete(new Body(limit == 0 ? new byte[0] : bytes.toByteArray(), false));
         }
 
         @Override
