@@ -89,6 +89,7 @@ public class LocalController {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("device", hello.device());
         view.put("roots", hello.roots());
+        view.put("git", hello.git());
         view.put("write", hello.write());
         view.put("shell", hello.shell());
         view.put("network", hello.network());

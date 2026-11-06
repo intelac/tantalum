@@ -518,10 +518,14 @@ export interface Plugins {
 /** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关（local-workspace L17）。 */
 export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell";
 
-/** 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令。都由连接程序的启动参数决定。 */
+/**
+ * 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令、有没有 git。都由连接程序的启动参数和那台电脑决定。
+ * Git 工具不看目录是不是仓库，每次调用按路径找仓库。
+ */
 export interface LocalLink {
   device: { name: string; os: string; osVersion: string; arch: string };
-  roots: { path: string; git: boolean }[];
+  roots: { path: string }[];
+  git: boolean;
   write: boolean;
   /** 命令行不能用时 reason 写明原因，如 “--allow-shell was not given”。 */
   shell: { available: boolean; reason?: string | null };

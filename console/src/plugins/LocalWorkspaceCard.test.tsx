@@ -16,7 +16,8 @@ const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit
 function link(extra: Partial<LocalLink> = {}): LocalLink {
   return {
     device: { name: "Yi's MacBook", os: "macos", osVersion: "26.2", arch: "arm64" },
-    roots: [{ path: "/Users/yi/work/shop", git: true }],
+    roots: [{ path: "/Users/yi/work/shop" }],
+    git: true,
     write: true,
     shell: { available: true },
     network: true,
@@ -98,6 +99,20 @@ describe("LocalWorkspaceCard", () => {
     expect(within(region).getByRole("button", { name: "撤销" })).toBeTruthy();
   });
 
+  /** B1：Git 查询不再要求主目录是仓库，只在电脑上没有 git 时说明。 */
+  it("only explains Git when the computer has no git", async () => {
+    fakeBackend({ switches: ALL_ON, link: link() });
+    open();
+    const region = await card();
+    await within(region).findByRole("status");
+    expect(within(region).queryByText(/Git 仓库/)).toBeNull();
+    expect(within(region).queryByText(/没有装 git/)).toBeNull();
+    cleanup();
+    fakeBackend({ switches: ALL_ON, link: link({ git: false }) });
+    open();
+    expect(await within(await card()).findByText("这台电脑上没有装 git，Git 查询用不了")).toBeTruthy();
+  });
+
   it("explains a computer that cannot sandbox commands, and stays quiet once the switch is off", async () => {
     const calls = fakeBackend({ switches: ALL_ON, link: link({ shell: { available: false, reason: "mxc-exec-mac was not found" } }) });
     open();
@@ -133,6 +148,12 @@ describe("LocalWorkspaceCard", () => {
     const command = await within(region).findByText(/^TANTALUM_TOKEN=tc_secret-token tantalum-connect/);
     expect(command.textContent).toContain("--server http://127.0.0.1:8091");
     expect(within(region).getByText(/令牌只显示这一次/)).toBeTruthy();
+    // B2：运行前先装好连接程序、先 cd 到项目目录；--allow . 是当前目录
+    const steps = within(region).getByRole("list", { name: "怎么运行" }).textContent ?? "";
+    expect(steps).toContain("先装好连接程序 tantalum-connect");
+    expect(steps).toContain("README“本机工作区 › 安装”");
+    expect(steps).toContain("先 cd 到要交给 agent 的项目目录");
+    expect(steps).toContain("--allow . 的 . 就是当前目录");
     expect(calls.find((call) => call.method === "POST")?.body).toBe('{"validity":"4h"}');
 
     await userEvent.click(within(region).getByRole("button", { name: "撤销" }));

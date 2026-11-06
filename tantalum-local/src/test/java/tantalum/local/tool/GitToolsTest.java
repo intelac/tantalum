@@ -265,15 +265,33 @@ class GitToolsTest {
         assertEquals(Git.NOT_A_REPOSITORY + ".", show.run(none, args("revision", "HEAD")).text());
     }
 
-    /** {@code hello.roots[].git}：同 Git 工具的规则，顶层也在允许的目录里才算仓库。 */
+    /**
+     * B1（2026-11-06）：主目录不是仓库也能查。每次调用按路径找仓库：主目录下子文件夹里的仓库、另一个允许目录里的仓库都行，
+     * 不在仓库里的路径报“不是 Git 仓库”。{@code hello.git} 只说这台电脑装没装 git。
+     */
     @Test
-    void helloMarksOnlyRepositoriesInsideTheAllowedDirectories() throws Exception {
-        Path plain = Files.createDirectory(temp.resolve("plain"));
-        AllowedDirs both = new AllowedDirs(List.of(repo, plain));
-        assertTrue(GitRepo.at(both, repo));
-        assertFalse(GitRepo.at(both, plain));
-        assertFalse(GitRepo.at(new AllowedDirs(List.of(repo.resolve("docs"))), repo.resolve("docs")));
-        assertTrue(GitRepo.at(new AllowedDirs(List.of(repo, repo.resolve("docs"))), repo.resolve("docs")));
+    void eachCallFindsTheRepositoryOfItsPath() throws Exception {
+        Path main = Files.createDirectory(temp.resolve("projects"));
+        Files.writeString(main.resolve("notes.txt"), "x");
+        Path nested = Files.createDirectory(main.resolve("shop"));
+        Files.move(repo, nested.resolve("repo"));
+        Path inner = nested.resolve("repo");
+        Path other = Files.createDirectory(temp.resolve("other"));
+        LocalContext plainMain = new LocalContext("s", new AllowedDirs(List.of(main, other)), new Observations());
+        assertTrue(GitCheck.installed(main));
+
+        LocalResult sub = log.run(plainMain, args("path", "shop/repo"));
+        assertFalse(sub.error(), sub.text());
+        assertEquals(2, sub.text().lines().count());
+        assertTrue(blame.run(plainMain, args("path", "shop/repo/App.java")).text().contains("int a = 2"));
+        assertEquals(Git.NOT_A_REPOSITORY + ".", log.run(plainMain, args()).text(), "the main directory itself is not a repository");
+        assertEquals(Git.NOT_A_REPOSITORY + "notes.txt", log.run(plainMain, args("path", "notes.txt")).text());
+
+        // 第二个允许目录里的仓库
+        Files.move(inner, other.resolve("repo"));
+        LocalResult second = log.run(plainMain, args("path", other.resolve("repo").toString()));
+        assertFalse(second.error(), second.text());
+        assertTrue(second.text().contains("Bob: second: change a"));
     }
 
     /** 只允许了仓库里的一个子目录：仓库顶层在允许的目录外，git show 能读到外面的文件，所以当作不是仓库。 */

@@ -45,7 +45,7 @@ class LocalLinksTest {
     private static final Instant START = Instant.parse("2026-11-06T02:00:00Z");
     private static final Instant HOUR_LATER = START.plus(Duration.ofHours(1));
     private static final Hello HELLO = new Hello(Wire.PROTOCOL, "test", new Hello.Device("mac", "macos", "26.2", "arm64"),
-            List.of(new Hello.Root("/Users/alice/work", true)), true, new Hello.Shell(false, "--allow-shell was not given"), true);
+            List.of(new Hello.Root("/Users/alice/work")), true, new Hello.Shell(false, "--allow-shell was not given"), true, true);
     /** 心跳间隔足够长，不干扰其他用例。 */
     private static final Timing QUIET = new Timing(Duration.ofSeconds(5), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMillis(300));
     private static final Json ARGS = new Json.Obj(Map.of("path", new Json.Str("a.txt")));
