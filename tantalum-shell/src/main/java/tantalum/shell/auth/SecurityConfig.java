@@ -44,6 +44,9 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .securityContext(context -> context.securityContextRepository(contexts))
+                // 不存“登录前被拒的请求”：没有跳转登录页的流程用得上它，存它还要为每个 401 新建会话、发 Cookie，
+                // 顶掉同一浏览器里刚登录拿到的 Cookie（windows-server 任务 13 的 Playwright 实测）
+                .requestCache(cache -> cache.disable())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, failure) -> {
                     response.setStatus(401);
                     response.setContentType("application/json");

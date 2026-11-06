@@ -93,6 +93,20 @@ class AuthApiTest {
         assertEquals(401, server.post(null, "/api/sessions/s/submissions", "{}").statusCode());
     }
 
+    /**
+     * 401 不建会话、不发 Cookie：否则一个还拿着旧会话轮询的页面（另一个标签页、重新登录前发出的请求）收到 401 时，新发的匿名 Cookie
+     * 会顶掉刚登录拿到的 Cookie，人被踢回登录页（windows-latest 上的 Playwright 实测：approval.spec 中途重新登录后回到 /login）。
+     */
+    @Test
+    void aRejectedRequestDoesNotStartASession() throws Exception {
+        String first = cookieOf(server.attemptLogin("alice", "alice-password", null));
+        cookieOf(server.attemptLogin("alice", "alice-password", first));
+        HttpResponse<String> stale = getWith(first, "/api/sessions");
+        assertEquals(401, stale.statusCode());
+        assertEquals(java.util.Optional.empty(), stale.headers().firstValue("set-cookie"), "a 401 must not replace the browser's cookie");
+        assertEquals(java.util.Optional.empty(), getWith(null, "/api/auth/me").headers().firstValue("set-cookie"));
+    }
+
     @Test
     void xPrincipalHeaderIsIgnored() throws Exception {
         assertEquals(401, getWith(null, "/api/auth/me", "X-Principal", "alice").statusCode());

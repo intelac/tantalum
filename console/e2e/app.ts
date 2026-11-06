@@ -11,6 +11,9 @@ export const LOCAL_USER = "e2e3";
 /** 第四个账号（E2eServer.I18N_USER）：语言的用例改它存的语言，不影响别的用例。 */
 export const I18N_USER = "e2e4";
 
+/** 用例跑在 Windows 上（控制台没有 Node 的类型定义，所以不直接写 process）。windows-server：连接程序目前只在 macOS 上运行。 */
+export const ON_WINDOWS = (globalThis as { process?: { platform?: string } }).process?.platform === "win32";
+
 /** 直接调接口登录，Cookie 落到浏览器上下文里；之后打开首页就进入新会话。 */
 export async function login(page: Page, username = USER): Promise<void> {
   const response = await page.request.post("/api/auth/login", {

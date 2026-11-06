@@ -127,7 +127,7 @@
 
 工作流补上浏览器、端到端和计划任务三步；写计划任务脚本和 README；记下 Windows 上的数字；最后以一次全绿的运行收尾。
 
-- [-] 12. 浏览器测试在 Windows 上跑到
+- [x] 12. 浏览器测试在 Windows 上跑到
   - File: .github/workflows/windows.yml（改）、.github/scripts/assert-not-skipped.ps1（新）
   - 脚本读 `**/target/surefire-reports/TEST-*.xml` 和 `**/target/failsafe-reports/TEST-*.xml`，对给定的类名：用例数大于 0、没有跳过，否则列出来并退出码 1。工作流加“Browser tests were not skipped”一步，检查 `UserBrowserIT`、`BrowserToolsIT`、`WindowsFilesTest`
   - 修浏览器测试在 Windows 上的失败（例如子进程检查、Chromium 路径）；修法记进日志

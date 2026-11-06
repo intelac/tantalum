@@ -346,6 +346,7 @@ java -jar C:\tantalum\tantalum.jar users add alice
 **数据目录** 默认 `%USERPROFILE%\.local\share\tantalum`（也就是 `C:\Users\<你>\.local\share\tantalum`），新文件继承用户目录的权限：只有你、SYSTEM 和管理员能读。服务器不改 ACL。
 
 - 配置文件（`.properties`）里 `\` 是转义符，路径写成 `D:/tantalum` 或 `D:\\tantalum`；命令行参数里照常写 `--tantalum.data-dir=D:\tantalum`。
+- 命令行参数里的路径只能用系统代码页里有的字符：Java 在 Windows 上按系统的 ANSI 代码页解码参数（中文 Windows 上中文没问题，英文 Windows 上会变成 `?`）。路径里有这类字符时改用环境变量：`$env:TANTALUM_DATADIR = "D:\数据\tantalum"`（服务器），`users` 命令用 `TANTALUM_DATA_DIR`。
 - 换了数据目录时，`users` 命令也要指过去：`$env:TANTALUM_DATA_DIR = "D:\tantalum"`，再运行 `java -jar C:\tantalum\tantalum.jar users add alice`。
 - **数据目录不在用户目录下**（例如 `D:\tantalum`）时照常启动，日志里有一行 WARN：别的本机用户可能读得到。只给自己、SYSTEM 和管理员：
 
@@ -364,6 +365,8 @@ java -jar C:\tantalum\tantalum.jar users add alice
 ### 后台运行（计划任务）
 
 `docs/windows/tantalum-task.ps1` 用当前用户登记一个计划任务：登录 Windows 后自动启动，不限运行时间，已在运行就不再起第二个，异常退出 1 分钟后重启、最多 10 次；用 `javaw.exe`，不弹控制台窗口。不需要管理员权限，不保存密码；API 密钥从你的用户环境变量读。
+
+没有账号时服务器不启动，计划任务又没有地方输密码：第一次之前先用 `users add` 建好账号（见上面），不要把 `TANTALUM_ADMIN_PASSWORD` 设成用户环境变量。
 
 ```powershell
 .\docs\windows\tantalum-task.ps1 install -Jar C:\tantalum\tantalum.jar          # 可加 -Port 8080 -DataDir D:\tantalum -Arguments "--tantalum.provider=local ..."

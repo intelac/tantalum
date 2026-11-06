@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openNewSession, processHeader, send } from "./app";
+import { ON_WINDOWS, openNewSession, processHeader, send } from "./app";
 
 /** 运行结束后过程区折叠，展开它才能看到思考和工具。 */
 async function expandProcess(page: Page): Promise<void> {
@@ -32,6 +32,8 @@ test.describe("对话", () => {
   });
 
   test("工具链：grep、两个并行 read_file 和每一步的思考都显示", async ({ page }) => {
+    // 工具在测试电脑上的连接程序里跑，Windows 上显示的路径是 notes\hello.md；连接程序目前只在 macOS 上运行（windows-server 任务 13）
+    test.skip(ON_WINDOWS, "连接程序目前只在 macOS 上运行，Windows 上的路径写法归 Windows 连接程序 spec");
     await openNewSession(page);
     await send(page, "tools: 找一下 hello");
     await expandProcess(page);
