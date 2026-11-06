@@ -12,6 +12,8 @@ import type {
   MemoryList,
   MemoryType,
   Messages,
+  ModelChoice,
+  ModelsResponse,
   PluginKind,
   Plugins,
   Question,
@@ -121,9 +123,12 @@ export function submit(
   text: string,
   requestId: string,
   attachments: readonly AttachmentRef[] = [],
+  model: ModelChoice | null = null,
 ): Promise<{ submissionId: string; duplicate: boolean }> {
   const body: Record<string, unknown> = { requestId, mode, text };
   if (attachments.length > 0) body.attachments = attachments.map(({ id, name }) => ({ id, name }));
+  // 选择随开始新运行的提交发出（model-picker M6）；插话不换模型，不带
+  if (model !== null && mode !== "steer") body.model = model;
   return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -272,6 +277,16 @@ export function answerQuestion(session: string, question: string, choice: string
 
 export function getSettings(): Promise<UserSettingsView> {
   return call("/api/settings");
+}
+
+/** 能选的模型，按路线分组，带这个用户上次的选择和管理员的默认。 */
+export function getModels(): Promise<ModelsResponse> {
+  return call("/api/models");
+}
+
+/** 存成当前登录用户“上次的选择”，新会话从它开始（M7）。 */
+export function setModelChoice(choice: ModelChoice): Promise<UserSettingsView> {
+  return call("/api/settings/model", { method: "PUT", body: JSON.stringify(choice) });
 }
 
 /** 只改当前登录用户的压缩点：50、70、85 或 100（用满），返回保存后的设置。 */

@@ -18,6 +18,7 @@ import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.TestComputer;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
+import tantalum.shell.route.RouteClients;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelReplied;
@@ -81,7 +82,9 @@ public final class E2eServer {
         ConfigurableApplicationContext app = new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(context -> {
                     GenericApplicationContext generic = (GenericApplicationContext) context;
-                    generic.registerBean(ModelClient.class, E2eModel::new);
+                    // 两条脚本化路线（model-picker 任务 16）：本地（默认）和 Claude 协议的一条，都用同一个剧本模型
+                    E2eModel model = new E2eModel();
+                    generic.registerBean(RouteClients.class, () -> new RouteClients(java.util.Map.of("local", model, "claude", model)));
                     generic.registerBean(E2eController.class);
                     // 轨迹页的端到端测试：示例插件的引用核对工作，加一个只对 trace: 提问起作用的钩子。
                     generic.registerBean(CitationWork.class);
@@ -100,6 +103,14 @@ public final class E2eServer {
                         // 32000 加上联网 12 个工具定义的约 3000 token（web-tools），压缩发生的轮次和摘要调用的余量都和以前一样
                         "--tantalum.openai-routes.local.context-window=35000",
                         "--tantalum.openai-routes.local.vision=true",
+                        // 选择器：本地路线两个模型，剧本模型有“关”“开”两档，scripted-plain 没有档位；Claude 路线里
+                        // claude-sonnet-5 不支持会话中途工具变化（灰掉的用例）
+                        "--tantalum.openai-routes.local.thinking=chat-template",
+                        "--tantalum.openai-routes.local.list-models=false",
+                        "--tantalum.openai-routes.local.models=" + E2eModel.MODEL + "," + E2eModel.PLAIN,
+                        "--tantalum.openai-routes.local.overrides[" + E2eModel.PLAIN + "].thinking=none",
+                        "--tantalum.claude.models=claude-sonnet-5-5,claude-sonnet-5",
+                        "--tantalum.claude.context-window=1000000",
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s");

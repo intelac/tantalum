@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { LoginPage } from "../auth/LoginPage";
 import { useCurrentUser } from "../auth/useCurrentUser";
 import { ComposerDock } from "../composer/ComposerDock";
+import { useSessionModel } from "../store/hooks";
+import { readChoice } from "../composer/drafts";
+import { pickChoice, sentChoice, useModels } from "../composer/useModels";
 import { ConversationPage } from "../conversation/ConversationPage";
 import { PluginsDialog } from "../plugins/PluginsDialog";
 import { SettingsDialog } from "../settings/SettingsDialog";
@@ -78,6 +81,10 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
   useEventStream(store, queries, trace);
   const sessions = useSessions();
   const config = useConfig();
+  const models = useModels();
+  const sessionModel = useSessionModel(store, route.session);
+  // 设置页按当前会话选的模型算压缩点：没发出的选择 → 刚发出的 → 会话现在的 → 上次的 → 默认
+  const settingsChoice = pickChoice(readChoice(route.session), sentChoice(route.session) ?? sessionModel.model, models.data);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const list = sessions.data ?? [];
@@ -129,6 +136,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           config={config.data}
+          choice={settingsChoice}
           username={username}
           onLogout={onLogout}
         />

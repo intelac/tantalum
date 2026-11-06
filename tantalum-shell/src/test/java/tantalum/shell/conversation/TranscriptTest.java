@@ -141,6 +141,7 @@ class TranscriptTest {
             case Text t -> "text:" + t.text();
             case CompactionMark c -> "compaction";
             case TranscriptItem.ToolChange c -> "tools";
+            case TranscriptItem.ModelChange c -> "model";
         }).toList();
         assertEquals(List.of("user:hi", "run", "think:plan", "tool:read_file", "think:check", "tool:grep",
                 "think:wrap up", "text:done"), kinds);

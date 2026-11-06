@@ -12,7 +12,7 @@ export type Block =
       process: string[];
       /** 结尾连续的文本段，是这轮的回复。 */
       reply: string[];
-      /** 这轮开始时的工具变化，显示在过程区上面；没有时不出现。 */
+      /** 这轮开始时换了模型、工具变了，显示在过程区上面；没有时不出现。 */
       notices?: string[];
     };
 
@@ -42,7 +42,7 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
       runs.set(shape.run, block);
       blocks.push(block);
     }
-    if (shape.kind === "toolChange") {
+    if (shape.kind === "toolChange" || shape.kind === "modelChange") {
       const block = runs.get(shape.run);
       if (block !== undefined) block.notices = [...(block.notices ?? []), id];
       continue;

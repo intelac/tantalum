@@ -120,10 +120,7 @@ public final class ContextHandler implements Handler {
         if (assemble.requested() != null) {
             return assemble.requested();
         }
-        if (assemble.current() != null && check.usable(assemble.current())) {
-            return assemble.current();
-        }
-        return users.modelChoice(principal).filter(check::usable).orElseGet(routes::defaultChoice);
+        return check.fallback(assemble.current(), users.modelChoice(principal));
     }
 
     /** 按这个模型的窗口和输出上限、这条路线的估算系数算；路线不在了（调用会失败）时为 null，内核留着原来的。 */

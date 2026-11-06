@@ -161,7 +161,7 @@ class SubmitAttachmentsTest {
         String file = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         HttpResponse<String> refused = submit("alice", "prompt", "x", "[{\"id\":\"" + image + "\"}]");
         assertEquals(400, refused.statusCode());
-        assertEquals("当前模型不支持图片", error(refused));
+        assertEquals("当前选的模型不支持图片", error(refused), "the wording of model-picker M15");
         assertEquals(200, submit("alice", "prompt", "x", "[{\"id\":\"" + file + "\"}]").statusCode());
     }
 }

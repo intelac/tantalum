@@ -1,6 +1,6 @@
 import { Brain, Cpu, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
-import type { Config } from "../api/types";
+import type { Config, ModelChoice } from "../api/types";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
@@ -15,6 +15,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   config: Config | undefined;
+  /** 当前会话选的模型，模型页按它算压缩点。 */
+  choice?: ModelChoice | null;
   username: string;
   onLogout: () => void;
 }
@@ -27,7 +29,7 @@ const PANES: { id: Pane; label: string; icon: typeof Palette }[] = [
 ];
 
 /** 居中大圆角弹窗，左导航右内容。窄屏时导航变成顶部一行。 */
-export function SettingsDialog({ open, onClose, config, username, onLogout }: Props) {
+export function SettingsDialog({ open, onClose, config, choice = null, username, onLogout }: Props) {
   const [pane, setPane] = useState<Pane>("appearance");
   return (
     <Dialog open={open} onClose={onClose} title={zh.settings.title} className="max-w-3xl">
@@ -51,7 +53,7 @@ export function SettingsDialog({ open, onClose, config, username, onLogout }: Pr
         </nav>
         <div className="min-w-0 flex-1 px-6 pt-2 pb-6 sm:pt-4">
           {pane === "appearance" && <AppearancePane />}
-          {pane === "model" && <ModelPane config={config} />}
+          {pane === "model" && <ModelPane config={config} choice={choice} />}
           {pane === "memory" && <MemoryPane />}
           {pane === "account" && <AccountPane username={username} onLogout={onLogout} />}
         </div>

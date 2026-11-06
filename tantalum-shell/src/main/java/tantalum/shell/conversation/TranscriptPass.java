@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import tantalum.kernel.compaction.SummaryPrompt;
 import tantalum.shell.conversation.TranscriptItem.CompactionMark;
+import tantalum.shell.conversation.TranscriptItem.ModelChange;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
@@ -36,6 +37,7 @@ import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
@@ -118,6 +120,12 @@ final class TranscriptPass {
         List<String> offered = assembled.tools().stream().map(ToolSpec::name).toList();
         List<Message> appended = now.messages().subList(earlier.messages().size(), now.messages().size());
         int index = 0;
+        // 换了模型的那一轮上面一行（model-picker 需求 8.4）；只换档位也写，告诉用户这轮用的档位
+        ModelChoice was = earlier.model();
+        ModelChoice is = now.model();
+        if (was != null && is != null && !was.equals(is)) {
+            put(new ModelChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, is.route(), is.model(), is.effort()));
+        }
         for (Message message : appended) {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolChangeBlock change) {

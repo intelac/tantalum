@@ -54,6 +54,16 @@ public final class ChoiceCheck {
         return Optional.empty();
     }
 
+    /**
+     * 提交里没带选择时用哪个（M7、M14）：会话现在的能用就用它，否则这个用户上次的选择，也不能用就是管理员的默认。
+     */
+    public ModelChoice fallback(ModelChoice current, Optional<ModelChoice> mine) {
+        if (current != null && usable(current)) {
+            return current;
+        }
+        return mine.filter(this::usable).orElseGet(routes::defaultChoice);
+    }
+
     /** 能不能拿来当新会话的默认（“上次的选择”，M7）。 */
     public boolean usable(ModelChoice choice) {
         return problem(choice, false, false).isEmpty();

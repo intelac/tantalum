@@ -1,8 +1,8 @@
 import { ArrowUp, Paperclip, Square } from "lucide-react";
-import type { ChangeEvent, ClipboardEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, KeyboardEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cancelRun, submit } from "../api/client";
-import type { AttachmentLimits, AttachmentRef } from "../api/types";
+import type { AttachmentLimits, AttachmentRef, ModelChoice } from "../api/types";
 import { AttachmentTray } from "../attachment/AttachmentTray";
 import { DropZone } from "../attachment/DropZone";
 import { draftAttachments } from "../attachment/drafts";
@@ -22,6 +22,12 @@ interface Props {
   /** 附件的上限（前端先查）和模型是否收图片；默认同服务器。 */
   limits?: AttachmentLimits;
   vision?: boolean;
+  /** 输入框旁的模型选择器；没有时只写模型名（旧画面、测试）。 */
+  modelPicker?: ReactNode;
+  /** 随这次提交发出的模型选择（model-picker M6）；插话不带。 */
+  choice?: ModelChoice | null;
+  /** 提交成功：选择已经发出去了。 */
+  onSubmitted?: (choice: ModelChoice | null) => void;
 }
 
 const MAX_HEIGHT = 200;
@@ -31,7 +37,17 @@ const MAX_HEIGHT = 200;
  * 运行中提交进入排队，并多一个停止按钮。被拒绝时保留内容和附件，重试用同一个 requestId。
  * 附件按钮、拖放、粘贴走同一条路径（需求 1.1–1.3）；发送时等附件都传完再提交（需求 1.7）。
  */
-export function Composer({ session, activeRun, modelName, cloud, limits = DEFAULT_LIMITS, vision = true }: Props) {
+export function Composer({
+  session,
+  activeRun,
+  modelName,
+  cloud,
+  limits = DEFAULT_LIMITS,
+  vision = true,
+  modelPicker,
+  choice = null,
+  onSubmitted,
+}: Props) {
   const [text, setText] = useState(() => readDraft(session));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,7 +133,7 @@ export function Composer({ session, activeRun, modelName, cloud, limits = DEFAUL
       const signature = JSON.stringify([content, attachments.map((ref) => ref.id)]);
       if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
       try {
-        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments);
+        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments, choice);
       } catch (failure) {
         failedContent.current = signature;
         setError(failure instanceof Error ? failure.message : String(failure));
@@ -125,6 +141,7 @@ export function Composer({ session, activeRun, modelName, cloud, limits = DEFAUL
       }
       requestId.current = null;
       failedContent.current = null;
+      onSubmitted?.(choice);
       setText("");
       clearDraft(session);
       queue.clear();
@@ -187,10 +204,18 @@ export function Composer({ session, activeRun, modelName, cloud, limits = DEFAUL
           </Button>
           <input ref={picker} type="file" multiple hidden onChange={onPick} data-testid="attachment-picker" />
           <span className="flex-1" />
-          <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
-            {modelName}
-            <span className="ml-1 text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
-          </span>
+          {modelPicker === undefined ? (
+            <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
+              {modelName}
+              <span className="ml-1 text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
+            </span>
+          ) : (
+            <>
+              {modelPicker}
+              {/* 选的路线会不会把提示词发到云端，和选择器一起看（tech.md 安全） */}
+              <span className="shrink-0 text-xs text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
+            </>
+          )}
           {running && (
             <Button
               variant="icon"

@@ -1,3 +1,4 @@
+import type { CompactionPoint } from "../api/types";
 import { tokenCount } from "../composer/status";
 import { zh } from "../text/zh";
 import { cx } from "../ui/cx";
@@ -7,11 +8,13 @@ import { useSetCompaction, useSettings } from "./useCompaction";
  * 自动压缩点：四个选项，每项写出对应的 token 数（compaction-threshold T8）。选了立即保存，失败时退回原来的选择。
  * 窗口未知时不可选。
  */
-export function CompactionPicker() {
+export function CompactionPicker({ points: override }: { points?: CompactionPoint[] }) {
   const settings = useSettings();
   const save = useSetCompaction();
   if (settings.data === undefined) return <p className="text-sm text-fg-faint">{zh.common.loading}</p>;
-  const { percent, points } = settings.data.compaction;
+  // token 数按当前会话的模型（model-picker 需求 8.2）；没有时按设置接口给的（默认模型）
+  const percent = settings.data.compaction.percent;
+  const points = override ?? settings.data.compaction.points;
   return (
     <div className="flex flex-col gap-2">
       <h4 id="compaction-label" className="text-sm text-fg-muted">
