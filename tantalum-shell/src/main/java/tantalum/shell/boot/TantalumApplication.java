@@ -83,8 +83,8 @@ public class TantalumApplication {
                   ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
                   ObjectProvider<AfterToolHook> afterHooks, Environment environment) throws IOException {
         boolean claude = properties.provider().equals("claude");
-        Duration wait = claude ? properties.claude().firstChunkTimeout() : properties.openai().firstChunkTimeout();
-        int concurrency = claude ? properties.claude().concurrency() : properties.openai().concurrency();
+        Duration wait = claude ? properties.claude().firstChunkTimeout() : properties.defaultOpenAiRoute().firstChunkTimeout();
+        int concurrency = claude ? properties.claude().concurrency() : properties.defaultOpenAiRoute().concurrency();
         ModelClient client = model.getIfAvailable(() -> createClient(properties));
         Engine engine = new Engine(properties, client, wait, concurrency, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
@@ -142,26 +142,26 @@ public class TantalumApplication {
     private static ModelClient createClient(TantalumProperties properties) {
         OverflowRules rules = OverflowRules.defaults();
         switch (properties.provider()) {
-            case "claude" -> {
-                String key = System.getenv("ANTHROPIC_API_KEY");
+            case TantalumProperties.CLAUDE_ROUTE -> {
+                String variable = properties.claude().apiKeyEnv();
+                String key = System.getenv(variable);
                 if (key == null || key.isBlank()) {
-                    throw new IllegalStateException("ANTHROPIC_API_KEY is not set. Set it, for example by loading "
-                            + "~/.config/tantalum/env, or use the local model with --tantalum.provider=openai.");
+                    throw new IllegalStateException(variable + " is not set. Set it, for example by loading "
+                            + "~/.config/tantalum/env, or make a local route the default with --tantalum.provider=<route>.");
                 }
                 LOG.warn("Using Claude: complete prompts, which may contain customer code, are sent to Anthropic. "
-                        + "Use --tantalum.provider=openai for a local model.");
+                        + "Use --tantalum.provider=<route> for a local model.");
                 TantalumProperties.Claude claude = properties.claude();
                 return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(key).maxRetries(0).build(),
                         new ClaudeClient.Settings(claude.model(), claude.maxTokens(), claude.effort(), claude.fallbacks(),
                                 claude.firstChunkTimeout(), claude.betweenChunkTimeout(), rules, false));
             }
-            case "openai" -> {
-                TantalumProperties.OpenAi openai = properties.openai();
-                return new OpenAiClient(openai.baseUrl(), openai.model(), System.getenv("OPENAI_API_KEY"),
+            default -> {
+                TantalumProperties.OpenAiRoute openai = properties.defaultOpenAiRoute();
+                String key = openai.apiKeyEnv() == null ? null : System.getenv(openai.apiKeyEnv());
+                return new OpenAiClient(openai.baseUrl(), openai.model(), key == null || key.isBlank() ? null : key,
                         openai.maxTokens(), openai.firstChunkTimeout(), openai.betweenChunkTimeout(), rules, openai.vision());
             }
-            default -> throw new IllegalStateException("unknown tantalum.provider: " + properties.provider()
-                    + "; expected claude or openai");
         }
     }
 }

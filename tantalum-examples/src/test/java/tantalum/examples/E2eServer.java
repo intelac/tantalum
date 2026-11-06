@@ -94,12 +94,12 @@ public final class E2eServer {
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,
                         "--tantalum.workspace=" + workspace,
-                        "--tantalum.provider=openai",
-                        "--tantalum.openai.model=" + E2eModel.MODEL,
-                        "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
+                        "--tantalum.provider=local",
+                        "--tantalum.openai-routes.local.model=" + E2eModel.MODEL,
+                        "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                         // 32000 加上联网 12 个工具定义的约 3000 token（web-tools），压缩发生的轮次和摘要调用的余量都和以前一样
-                        "--tantalum.openai.context-window=35000",
-                        "--tantalum.openai.vision=true",
+                        "--tantalum.openai-routes.local.context-window=35000",
+                        "--tantalum.openai-routes.local.vision=true",
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s");
@@ -138,10 +138,10 @@ public final class E2eServer {
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,
                         "--tantalum.workspace=" + root.resolve("workspace"),
-                        "--tantalum.provider=openai",
-                        "--tantalum.openai.model=" + E2eModel.MODEL,
-                        "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
-                        "--tantalum.openai.context-window=35000",
+                        "--tantalum.provider=local",
+                        "--tantalum.openai-routes.local.model=" + E2eModel.MODEL,
+                        "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
+                        "--tantalum.openai-routes.local.context-window=35000",
                         "--tantalum.web.browser.enabled=false");
     }
 

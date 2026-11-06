@@ -66,7 +66,7 @@ class WindowCompactionTest {
         OpenAiClient qwen = new OpenAiClient("http://127.0.0.1:8090/v1", "qwen3.8-flash-next-unsloth-ud-q4_k_xl", null, 16384,
                 Duration.ofSeconds(600), Duration.ofSeconds(120), OverflowRules.defaults());
         // 每个约 16 KB、1.4 万 token：一次 3 个约 4.3 万，两次 8.6 万，越过 65536
-        scenario(qwen, "qwen", 131_072, 65_536, 3, 250, "--tantalum.provider=openai");
+        scenario(qwen, "qwen", 131_072, 65_536, 3, 250, "--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072");
     }
 
     private void scenario(ModelClient model, String label, long window, long point, int filesPerQuestion, int lines, String... settings)

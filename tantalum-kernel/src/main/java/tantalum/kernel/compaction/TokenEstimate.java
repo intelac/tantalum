@@ -10,6 +10,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
@@ -85,6 +86,7 @@ public record TokenEstimate(double bytesPerToken) {
             // 按 OpenAI 那边的文字说明算，比 Claude 的 tool_reference 块长，宁可高估
             case ToolChangeBlock change -> ofText("Tools changed: added " + change.added() + "; removed " + change.removed()
                     + (change.unavailable().isEmpty() ? "." : "; still unavailable " + change.unavailable() + "."));
+            case ModelChangeBlock change -> ofText(change.text());
         };
     }
 

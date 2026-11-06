@@ -156,7 +156,7 @@ class SubmitAttachmentsTest {
     /** OpenAI 兼容的模型默认不收图片（A7）：带图片的提交拒绝，只带文件的照常。 */
     @Test
     void imagesAreRefusedWhenTheModelTakesTextOnly() throws Exception {
-        start("--tantalum.provider=openai");
+        start("--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072");
         String image = upload("alice", "a.jpg", sample("rotated.jpg")).get("id").asString();
         String file = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         HttpResponse<String> refused = submit("alice", "prompt", "x", "[{\"id\":\"" + image + "\"}]");

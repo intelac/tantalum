@@ -29,9 +29,10 @@ public final class BenchProcess {
                 "--server.port=" + port,
                 "--tantalum.data-dir=" + data,
                 "--tantalum.workspace=" + Files.createTempDirectory("tantalum-bench-"),
-                "--tantalum.provider=openai",
-                "--tantalum.openai.model=bench",
-                "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
+                "--tantalum.provider=local",
+                "--tantalum.openai-routes.local.model=bench",
+                "--tantalum.openai-routes.local.context-window=131072",
+                "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                 "--logging.level.root=WARN");
         if (args.length > 2 && args[2].equals("warmup")) {
             report("index_build_ms", ManagementFactory.getRuntimeMXBean().getUptime());
