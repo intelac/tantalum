@@ -66,7 +66,8 @@ function Call([string]$method, [string]$path, $body, $session, [string]$type = '
   $request = @{ Method = $method; Uri = "$base$path"; WebSession = $session; Headers = @{ Origin = $base };
     UseBasicParsing = $true; SkipHttpErrorCheck = $true }
   if ($null -ne $body) {
-    $request.Body = if ($body -is [byte[]]) { $body } else { [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Compress)) }
+    # 直接赋值：写成 $x = if (…) { $bytes } 会把 byte[] 展开成 object[]
+    if ($body -is [byte[]]) { $request.Body = $body } else { $request.Body = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Compress)) }
     $request.ContentType = $type
   }
   return Invoke-WebRequest @request
@@ -81,6 +82,12 @@ function Login {
 
 try {
   New-Item -ItemType Directory -Force $root | Out-Null
+
+  # ---- 0. 记下 Java 怎么解码含中文的命令行参数（只打印，README 的说明以它为准） ----
+  $echo = Join-Path $root 'Echo.java'
+  Set-Content -Encoding utf8 $echo 'class Echo { public static void main(String[] a) { System.out.println(a[0].equals("\u6570\u636e") ? "arguments keep Chinese" : "arguments lose Chinese: " + a[0].chars().boxed().toList()); } }'
+  "code page $([Console]::OutputEncoding.CodePage), $(& $java -XshowSettings:properties -version 2>&1 | Select-String 'sun.jnu.encoding')"
+  & $java $echo '数据'
 
   # ---- 1. users add：中文密码从管道读（UTF-8） ----
   $env:TANTALUM_DATA_DIR = $data

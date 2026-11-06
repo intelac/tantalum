@@ -183,6 +183,12 @@ function Invoke-Selftest {
     '--tantalum.openai-routes.local.model=selftest'
   # 真实用户登录着，install 用 Interactive。CI 的 runner 可能没有交互会话，任务起不来，selftest 就改用 S4U 再登记一次
   # （不需要登录会话，照样不存密码；设计“tantalum-task.ps1”）。
+  # 没有账号时服务器不启动：先像管理员那样建一个（密码从管道读）
+  $env:TANTALUM_DATA_DIR = $dir
+  'selftest-password' | & (Find-Javaw).Replace('javaw.exe', 'java.exe') -jar (Resolve-Path $Jar).Path users add selftest --lang en
+  $created = $LASTEXITCODE
+  Remove-Item Env:TANTALUM_DATA_DIR
+  if ($created -ne 0) { throw "users add exited with $created" }
   $answered = $false
   $started = Get-Date
   foreach ($logonType in @('Interactive', 'S4U')) {
@@ -212,17 +218,9 @@ function Invoke-Selftest {
   try {
     $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
     if (-not $answered) {
-      # 看不到 javaw 的输出：日志尾巴，再用 java.exe 照同样的参数跑一次，把它说的打出来
+      # javaw 没有控制台：把日志尾巴打出来
       $log = Join-Path $dir 'logs\tantalum.log'
-      if (Test-Path $log) { "== $log"; Get-Content $log -Tail 60 }
-      Install-Task $dir 'S4U'
-      $line = (Get-Task).Actions[0].Arguments
-      Remove-Task
-      $out = Join-Path $dir 'java-direct.txt'
-      $direct = Start-Process -PassThru -NoNewWindow -FilePath (Find-Javaw).Replace('javaw.exe', 'java.exe') -ArgumentList $line `
-        -RedirectStandardOutput $out -RedirectStandardError "$out.err"
-      if (-not $direct.WaitForExit(30000)) { Stop-Process -Id $direct.Id -Force }
-      "== java.exe $line"; Get-Content $out, "$out.err" -Tail 80 -ErrorAction SilentlyContinue
+      if (Test-Path $log) { "== $log"; Get-Content $log -Tail 40 }
       throw (Say notready 60)
     }
     Say ready $seconds
