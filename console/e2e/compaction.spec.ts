@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { login, openNewSession, send } from "./app";
 
-// 脚本化模型：含 "long" 的提问得到约 12 KB 的回答（估算 4000 token）；e2e 服务器的窗口是 32000，阈值 15616，
-// 保留 3904，所以第四五轮之间会自动压缩。摘要调用返回固定的 "## Goal" 文本。
+// 脚本化模型：含 "long" 的提问得到约 12 KB 的回答（估算 4000 token）；e2e 服务器的窗口是 35000（32000 加联网工具定义的约 3000），
+// 阈值 18616，所以第四五轮之间会自动压缩。摘要调用返回固定的 "## Goal" 文本。
 
 async function longTurn(page: Page, n: number): Promise<void> {
   await send(page, `long 第 ${n} 轮`);

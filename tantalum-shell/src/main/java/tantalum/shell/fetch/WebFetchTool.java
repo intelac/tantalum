@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import tantalum.shell.access.WebAccess;
 import tantalum.shell.fetch.Fetcher.FetchFailed;
 import tantalum.shell.fetch.Fetcher.Fetched;
 import tantalum.shell.net.WebUrl;
@@ -55,7 +56,7 @@ public final class WebFetchTool implements Tool {
     }
 
     /** 任务 10 换成 {@code WebAccess.FETCH}。同时是插件页“抓网页”子开关的名字。 */
-    @Override public String server() { return "web-fetch"; }
+    @Override public String server() { return WebAccess.FETCH; }
     @Override public int serverConcurrency() { return CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
 

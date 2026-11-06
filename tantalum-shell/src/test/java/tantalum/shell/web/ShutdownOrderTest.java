@@ -126,6 +126,36 @@ class ShutdownOrderTest {
         }
     }
 
+    /**
+     * web-tools 需求 2.8：先停处理，再关浏览器，再关出口（浏览器的连接都经出口）；关完后不再开浏览器。
+     * 顺序从 {@code Shutdown} 每一步的 DEBUG 日志读。
+     */
+    @Test
+    void browsersCloseAfterHandlersStopAndBeforeTheEgress() throws Exception {
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("tantalum.shell.boot.Shutdown");
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> steps = new ch.qos.logback.core.read.ListAppender<>();
+        ch.qos.logback.classic.Level before = logger.getLevel();
+        Engine engine;
+        try (TestServer server = server((prompt, chunks) -> new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null))) {
+            engine = server.context.getBean(Engine.class);
+            // Spring 启动时重设日志配置，所以服务起来之后才挂
+            steps.start();
+            logger.addAppender(steps);
+            logger.setLevel(ch.qos.logback.classic.Level.DEBUG);
+            server.context.close();
+        } finally {
+            logger.detachAppender(steps);
+            logger.setLevel(before);
+        }
+        List<String> order = steps.list.stream().map(event -> event.getFormattedMessage().replace("shutdown step: ", "")).toList();
+        int handlers = order.indexOf("wait for running handlers");
+        int browsers = order.indexOf("close browsers");
+        int egress = order.indexOf("close egress");
+        assertTrue(handlers >= 0 && handlers < browsers && browsers < egress, order.toString());
+        assertTrue(egress < order.indexOf("close storage"), order.toString());
+        assertEquals(0, engine.browsers().orElseThrow().openCount());
+    }
+
     @Test
     void aModelCallThatIgnoresInterruptsCannotHoldTheShutdown() throws Exception {
         try (TestServer server = server(stubborn)) {

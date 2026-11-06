@@ -6,8 +6,8 @@ import java.util.Map;
 import java.util.Optional;
 import tantalum.local.tool.LocalTool.Kind;
 import tantalum.local.wire.Hello;
-import tantalum.shell.access.LocalAccess;
 import tantalum.shell.access.PluginSwitches;
+import tantalum.shell.access.ToolGroup;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
 
@@ -15,7 +15,14 @@ import tantalum.value.id.Principal;
  * 本机工作区（local-workspace 设计“LocalWorkspace”）：哪些工具现在能用、给模型的“本机工作区”一段、电脑上的 {@code AGENTS.md}。
  * 一个工具能用要四样都满足：总开关开、它那一类的子开关开、电脑连着、连接程序允许这一类（L4、L17）。
  */
-public final class LocalWorkspace implements LocalAccess {
+public final class LocalWorkspace implements ToolGroup {
+
+    /** 总开关，也是转发工具的服务端名。 */
+    public static final String MASTER = "local-workspace";
+    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关，默认都开。 */
+    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell");
+    /** {@code ContextAssembled.toolSources} 里的来源。 */
+    public static final String SOURCE = "local";
 
     /** 每一类工具对应的子开关。 */
     private static final Map<Kind, String> SWITCH = Map.of(
@@ -31,6 +38,21 @@ public final class LocalWorkspace implements LocalAccess {
 
     public static String switchName(Kind kind) {
         return SWITCH.get(kind);
+    }
+
+    @Override
+    public PluginSwitches.Kind kind() {
+        return PluginSwitches.Kind.LOCAL;
+    }
+
+    @Override
+    public List<String> switches() {
+        return SWITCHES;
+    }
+
+    @Override
+    public String source() {
+        return SOURCE;
     }
 
     @Override
@@ -62,7 +84,7 @@ public final class LocalWorkspace implements LocalAccess {
         };
     }
 
-    /** 插件页上的开关状态：总开关和四个子开关，按 {@link LocalAccess#SWITCHES} 的顺序。 */
+    /** 插件页上的开关状态：总开关和四个子开关，按 {@link #SWITCHES} 的顺序。 */
     public Map<String, Boolean> switches(Principal user) {
         Map<String, Boolean> states = new LinkedHashMap<>();
         for (String name : SWITCHES) {

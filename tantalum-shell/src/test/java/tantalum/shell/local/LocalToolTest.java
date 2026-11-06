@@ -55,7 +55,7 @@ class LocalToolTest {
         store = new AttachmentStore(temp.resolve("data"), AttachmentLimits.defaults(), new ImageNormalizer(AttachmentLimits.defaults()));
         computer = Files.createDirectories(temp.resolve("mac"));
         tools = new java.util.LinkedHashMap<>();
-        LocalTool.all(links, store, STANDARD).forEach(tool -> tools.put(tool.name(), tool));
+        LocalTool.all(links, new tantalum.shell.attachment.ToolImages(store), STANDARD).forEach(tool -> tools.put(tool.name(), tool));
     }
 
     @AfterEach

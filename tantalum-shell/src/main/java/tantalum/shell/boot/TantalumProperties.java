@@ -17,7 +17,47 @@ import tantalum.value.state.CompactionSettings;
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, OpenAi openai, MemoryLimits memory, Knowledge knowledge, McpProperties mcp,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments) {
+                                 AttachmentLimits attachments, Web web) {
+
+    /**
+     * 联网（web-tools W6、W10）：内网限制、“抓网页”、“浏览器”。管理员关掉的那一项不注册工具；两项都关时不起出口。
+     * 默认值在 {@code application.properties}，没有这一段时（嵌入使用和测试）用 {@link #defaults()}。
+     */
+    public record Web(boolean blockPrivateNetwork, Fetch fetch, Browser browser) {
+
+        public Web {
+            fetch = fetch == null ? new Fetch(true) : fetch;
+            browser = browser == null ? Browser.defaults() : browser;
+        }
+
+        public static Web defaults() {
+            return new Web(false, new Fetch(true), Browser.defaults());
+        }
+
+        /** 两项里有一项开着，就要起出口。 */
+        public boolean any() {
+            return fetch.enabled() || browser.enabled();
+        }
+    }
+
+    public record Fetch(boolean enabled) {}
+
+    /** 浏览器：同时开着的上限（每个用户一个）、空闲多久关、Chromium 渲染进程的沙箱。上限小于 1 时启动失败。 */
+    public record Browser(boolean enabled, int maxOpen, Duration idleClose, boolean sandbox) {
+
+        public Browser {
+            if (maxOpen < 1) {
+                throw new IllegalArgumentException("tantalum.web.browser.max-open must be at least 1 but was " + maxOpen);
+            }
+            if (idleClose == null || idleClose.isNegative() || idleClose.isZero()) {
+                throw new IllegalArgumentException("tantalum.web.browser.idle-close must be positive but was " + idleClose);
+            }
+        }
+
+        public static Browser defaults() {
+            return new Browser(true, 4, Duration.ofMinutes(10), true);
+        }
+    }
 
     /**
      * 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。{@code required} 是管理员设成必须开启的插件名：
@@ -157,6 +197,11 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /** 附件上限；没有配置时用默认值。 */
     public AttachmentLimits attachmentLimits() {
         return attachments == null ? AttachmentLimits.defaults() : attachments;
+    }
+
+    /** 联网的配置；没有配置时用默认值。 */
+    public Web webSettings() {
+        return web == null ? Web.defaults() : web;
     }
 
     /** 当前供应商的模型名。 */

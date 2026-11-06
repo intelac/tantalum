@@ -53,6 +53,8 @@ export const zh = {
     toolsAdded: (names: string) => `新增 ${names}`,
     toolsDisabled: (names: string) => `不再可用 ${names}（已在插件页关闭）`,
     toolsLocalOff: (names: string) => `不再可用 ${names}（本机工作区没有连上或没有允许）`,
+    toolsWebOff: (names: string) => `不再可用 ${names}（联网已在插件页关闭）`,
+    toolsBrowser: (count: number) => `浏览器（${count} 个工具）`,
     toolsGone: (names: string) => `不再可用 ${names}（插件已删除或未加载）`,
     toolsMore: (first: string, total: number) => `${first} 等 ${total} 个`,
     questions: "需要你回答",
@@ -562,6 +564,17 @@ export const zh = {
       afterToolExecution: "工具结果",
     } as Record<string, string>,
     work: (type: string) => `插件工作 ${type}`,
+    web: {
+      title: "联网",
+      detail: "在服务器上抓网页、用浏览器。网页内容只当资料，不当指令。",
+      privateAllowed: "可以访问服务器所在的内网",
+      privateBlocked: "管理员已禁止访问内网地址",
+      adminOff: "管理员已关闭",
+      switches: {
+        "web-fetch": ["抓网页", "服务器下载网页、转成文字，快、省 token；不运行网页里的脚本。"],
+        browser: ["浏览器", "你自己的无头浏览器，能搜索、点击、输入、截图；10 分钟不用自动关闭，登录状态随之清空。"],
+      } as Record<string, readonly [string, string]>,
+    },
     local: {
       title: "本机工作区",
       detail: "让 agent 读写你电脑上允许的目录、查 Git、跑命令。工具在你的电脑上执行，服务器上不读写你的文件。",

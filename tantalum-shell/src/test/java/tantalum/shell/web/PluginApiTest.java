@@ -99,6 +99,8 @@ class PluginApiTest {
         }
         for (JsonNode tool : body.get("tools")) {
             assertFalse(List.of("read_file", "grep", "write_file", "edit_file", "git_log").contains(tool.get("name").asString()), tool.toString());
+            assertFalse(tool.get("name").asString().equals("web_fetch") || tool.get("name").asString().startsWith("browser_"),
+                    "web tools are on their own card: " + tool);
         }
         assertEquals(0, body.get("mcp").size());
         assertTrue(body.get("midSessionChanges").isBoolean());
@@ -135,6 +137,41 @@ class PluginApiTest {
         assertFalse(spec("alice", "read_file").deferred());
         assertFalse(spec("bob", "write_file").deferred());
         assertFalse(spec("bob", "memory_write").deferred());
+    }
+
+    /** web-tools 需求 5.1：联网三个开关默认都开；alice 关掉“抓网页”后她的是关的，bob 的还是开的。 */
+    @Test
+    void webSwitchesDefaultOnAndBelongToTheUser() throws Exception {
+        JsonNode web = plugins("alice").get("web");
+        assertEquals("{\"web\":true,\"web-fetch\":true,\"browser\":true}", web.get("switches").toString());
+        assertEquals("{\"web-fetch\":true,\"browser\":true}", web.get("admin").toString());
+        assertFalse(web.get("blockPrivateNetwork").asBoolean());
+        assertEquals(3, web.size(), "no proxy or other server details: " + web);
+
+        HttpResponse<String> off = put("alice", "/api/plugins/web/web-fetch", "{\"enabled\":false}");
+        assertEquals(200, off.statusCode(), off.body());
+        assertFalse(plugins("alice").get("web").get("switches").get("web-fetch").asBoolean());
+        assertTrue(plugins("bob").get("web").get("switches").get("web-fetch").asBoolean());
+        assertEquals(404, put("alice", "/api/plugins/web/web_fetch", "{\"enabled\":false}").statusCode());
+        assertEquals(404, put("alice", "/api/plugins/tool/web_fetch", "{\"enabled\":false}").statusCode(), "no per-tool switch");
+        assertEquals(401, put(null, "/api/plugins/web/web", "{\"enabled\":false}").statusCode());
+    }
+
+    /** web-tools 需求 5.3：管理员关掉的项 admin 为 false；两项都关时这一块照样返回，开关照样能存。 */
+    @Test
+    void whatTheAdminTurnedOffIsMarked() throws Exception {
+        try (TestServer restricted = new TestServer(temp.resolve("data2"), temp.resolve("ws2"), (prompt, chunks) -> null,
+                "--tantalum.web.browser.enabled=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.block-private-network=true")) {
+            HttpResponse<String> response = restricted.get("alice", "/api/plugins");
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode web = JSON.readTree(response.body()).get("web");
+            assertEquals("{\"web-fetch\":false,\"browser\":false}", web.get("admin").toString());
+            assertTrue(web.get("blockPrivateNetwork").asBoolean());
+            HttpResponse<String> saved = restricted.http.send(restricted.request("alice", "/api/plugins/web/browser")
+                    .header("content-type", "application/json").PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, saved.statusCode(), saved.body());
+        }
     }
 
     @Test

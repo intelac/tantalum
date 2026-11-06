@@ -63,7 +63,7 @@ class LocalWorkspaceTest {
         Workspaces workspaces = Workspaces.perUser(Files.createDirectories(temp.resolve("ws")));
         MemoryTools.all(new MemoryStores(workspaces, temp.resolve("data"), new MemoryLimits(2, 16 * 1024, 64), Clock.systemUTC()))
                 .forEach(catalog::register);
-        gate = new PluginGate(catalog, switches, new LocalWorkspace(switches, links), List.of(), List.of(), List.of(), List.of(), java.util.Set.of());
+        gate = new PluginGate(catalog, switches, List.of(new LocalWorkspace(switches, links)), List.of(), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }
 

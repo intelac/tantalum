@@ -18,6 +18,7 @@ final class Shutdown {
     static void run(List<Step> steps) throws IOException {
         Exception first = null;
         for (Step step : steps) {
+            LOG.debug("shutdown step: {}", step.name());
             try {
                 step.action().close();
             } catch (Exception failure) {

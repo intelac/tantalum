@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { login, openNewSession, OTHER_USER, USER } from "./app";
 
-// 设置页的自动压缩点（compaction-threshold 需求 2）。e2e 服务器的本地模型地址不通，窗口用配置的 32000、预留 16384，
-// 所以四档的压缩点都封顶在 32000 − 16384 = 15616；“改小以后更早压缩”由内核测试和真实模型测试覆盖。
+// 设置页的自动压缩点（compaction-threshold 需求 2）。e2e 服务器的本地模型地址不通，窗口用配置的 35000、预留 16384，
+// 所以 50% 是 17500，其余三档封顶在 35000 − 16384 = 18616；“改小以后更早压缩”由内核测试和真实模型测试覆盖。
 // 选择按用户持久保存，改设置的用例用第二个账号，结束时恢复成用满。
 
 async function openModelPane(page: Page) {
@@ -28,7 +28,7 @@ test.describe("自动压缩点", () => {
     const radios = dialog.getByRole("radiogroup", { name: "自动压缩" }).getByRole("radio");
     await expect(radios).toHaveCount(4);
     await expect(dialog.getByRole("radio", { name: "用满" })).toHaveAttribute("aria-checked", "true");
-    await expect(dialog.getByRole("radio", { name: "50%" })).toContainText("15.6K");
+    await expect(dialog.getByRole("radio", { name: "50%" })).toContainText("17.5K");
     await expect(dialog.getByText(/从下一次提问开始生效/)).toBeVisible();
 
     await dialog.getByRole("radio", { name: "50%" }).click();

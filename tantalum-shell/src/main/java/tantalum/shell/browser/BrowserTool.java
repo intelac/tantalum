@@ -3,6 +3,7 @@ package tantalum.shell.browser;
 import com.microsoft.playwright.PlaywrightException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import tantalum.shell.access.WebAccess;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
@@ -18,8 +19,8 @@ import tantalum.value.json.Json;
  */
 final class BrowserTool implements Tool {
 
-    /** 插件页“浏览器”子开关和并发名额用的服务端名。任务 10 换成 {@code WebAccess.BROWSER}。 */
-    static final String SERVER = "browser";
+    /** 插件页“浏览器”子开关和并发名额用的服务端名。 */
+    static final String SERVER = WebAccess.BROWSER;
     static final int SERVER_CONCURRENCY = 64;
     private static final Pattern TIMEOUT = Pattern.compile("Timeout (\\d+)ms exceeded");
 

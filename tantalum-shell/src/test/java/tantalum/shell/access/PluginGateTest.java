@@ -192,7 +192,7 @@ class PluginGateTest {
 
     @Test
     void aDefaultOffPluginStaysOffUntilTheUserTurnsItOn() {
-        PluginGate policies = new PluginGate(catalog, switches, LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy(), new CitationHook()),
+        PluginGate policies = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new ReadOnlyPolicy(), new CitationHook()),
                 List.of(), List.of(), java.util.Set.of());
         assertEquals(List.of("citations"), policies.enabledPlugins(ALICE));
         PluginGate.PluginView view = policies.overview(ALICE).plugins().stream().filter(p -> p.name().equals("readOnly")).findFirst().orElseThrow();
@@ -209,14 +209,14 @@ class PluginGateTest {
     /** 管理员用 tantalum.hooks.required 强制开启（A2）：默认关的插件对所有人开着，不能关；拼错的名字拒绝启动。 */
     @Test
     void anAdminCanRequireADefaultOffPlugin() {
-        PluginGate required = new PluginGate(catalog, switches, LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy()),
+        PluginGate required = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new ReadOnlyPolicy()),
                 List.of(), List.of(), java.util.Set.of("readOnly"));
         assertEquals(List.of("readOnly"), required.enabledPlugins(BOB));
         assertTrue(required.plugins().getFirst().mandatory());
         assertThrows(IllegalArgumentException.class, () -> required.set(ALICE, Kind.PLUGIN, "readOnly", false));
 
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class, () -> new PluginGate(catalog, switches,
-                LocalAccess.NONE, List.of(), List.of(new ReadOnlyPolicy()), List.of(), List.of(), java.util.Set.of("readonly")));
+                List.of(), List.of(), List.of(new ReadOnlyPolicy()), List.of(), List.of(), java.util.Set.of("readonly")));
         assertTrue(typo.getMessage().contains("readonly"), typo.getMessage());
     }
 

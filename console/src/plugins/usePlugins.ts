@@ -16,9 +16,10 @@ export interface Toggle {
   enabled: boolean;
 }
 
-/** 把一个开关的新状态写进列表：工具在内置列表和各 MCP 服务器里都找。 */
+/** 把一个开关的新状态写进列表：工具在内置列表和各 MCP 服务器里都找；联网的写进 `web.switches`。 */
 export function applyToggle(plugins: Plugins, { kind, name, enabled }: Toggle): Plugins {
   const tool = <T extends { name: string; enabled: boolean }>(item: T) => (item.name === name ? { ...item, enabled } : item);
+  if (kind === "web") return { ...plugins, web: { ...plugins.web, switches: { ...plugins.web.switches, [name]: enabled } } };
   if (kind === "plugin") return { ...plugins, plugins: plugins.plugins.map(tool) };
   if (kind === "mcp") return { ...plugins, mcp: plugins.mcp.map(tool) };
   return {

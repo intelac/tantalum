@@ -54,6 +54,38 @@ describe("ToolChangeNotice", () => {
     );
   });
 
+  /** web-tools 需求 5.2：联网的工具关了，写“联网已在插件页关闭”；11 个浏览器工具合成一项。 */
+  describe("web tools", () => {
+    const BROWSER = [
+      "browser_click", "browser_evaluate", "browser_navigate", "browser_navigate_back", "browser_press_key", "browser_select_option",
+      "browser_snapshot", "browser_tabs", "browser_take_screenshot", "browser_type", "browser_wait_for",
+    ];
+    const web = (list: string[]) => Object.fromEntries(list.map((name) => [name, "web"]));
+
+    it("names web_fetch alone", () => {
+      render(<ToolChangeNotice store={change({ disabled: ["web_fetch"], sources: web(["web_fetch"]) })} id="4.0" />);
+      expect(screen.getByRole("note").textContent).toBe("工具变化：不再可用 web_fetch（联网已在插件页关闭）");
+    });
+
+    it("folds the eleven browser tools into one item", () => {
+      render(<ToolChangeNotice store={change({ disabled: BROWSER, sources: web(BROWSER) })} id="4.0" />);
+      expect(screen.getByRole("note").textContent).toBe("工具变化：不再可用 浏览器（11 个工具）（联网已在插件页关闭）");
+    });
+
+    it("writes both when the whole web group is off, next to other turned-off tools", () => {
+      const all = ["web_fetch", ...BROWSER];
+      render(
+        <ToolChangeNotice
+          store={change({ disabled: ["memory_write", ...all], sources: { memory_write: "builtin", ...web(all) } })}
+          id="4.0"
+        />,
+      );
+      expect(screen.getByRole("note").textContent).toBe(
+        "工具变化：不再可用 memory_write（已在插件页关闭）；不再可用 web_fetch、浏览器（11 个工具）（联网已在插件页关闭）",
+      );
+    });
+  });
+
   it("shows only what changed", () => {
     render(<ToolChangeNotice store={change({ gone: ["fetch_url"] })} id="4.0" />);
     expect(screen.getByRole("note").textContent).toBe("工具变化：不再可用 fetch_url（插件已删除或未加载）");

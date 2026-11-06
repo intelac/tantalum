@@ -146,6 +146,23 @@ class TantalumPropertiesTest {
         assertThrows(BindException.class, () -> bind("tantalum.attachments.max-file-bytes", "0"));
     }
 
+    /** web-tools：发布的配置和代码里的默认值一致；浏览器上限小于 1 时启动失败。 */
+    @Test
+    void webDefaultsMatchTheDesignAndMaxOpenBelowOneFails() throws Exception {
+        assertEquals(TantalumProperties.Web.defaults(), bind().webSettings());
+        assertFalse(bind().webSettings().blockPrivateNetwork());
+        assertEquals(Duration.ofMinutes(10), bind().webSettings().browser().idleClose());
+        assertTrue(bind("tantalum.web.block-private-network", "true").webSettings().blockPrivateNetwork());
+        assertFalse(bind("tantalum.web.browser.enabled", "false").webSettings().browser().enabled());
+        BindException failure = assertThrows(BindException.class, () -> bind("tantalum.web.browser.max-open", "0"));
+        Throwable cause = failure;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        assertTrue(cause.getMessage().contains("max-open"), cause.getMessage());
+        assertEquals(TantalumProperties.Web.defaults(), properties("claude", 0, 0, null).webSettings(), "no web section: defaults");
+    }
+
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
         return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
@@ -153,7 +170,7 @@ class TantalumPropertiesTest {
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 1, openAiWindow, false, 2.0),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null);
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null);
     }
 
     /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */

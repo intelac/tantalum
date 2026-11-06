@@ -28,11 +28,11 @@ import tantalum.value.id.Principal;
 public final class PluginSwitches implements AutoCloseable {
 
     /**
-     * 开关的种类：一个工具、一个 MCP 服务器（关掉等于关掉它的全部工具）、一个钩子插件、本机工作区的总开关或子开关
-     * （名字见 {@link LocalAccess#SWITCHES}）。
+     * 开关的种类：一个工具、一个 MCP 服务器（关掉等于关掉它的全部工具）、一个钩子插件、本机工作区或联网的总开关和子开关
+     * （名字见各自 {@link ToolGroup#switches()}）。
      */
     public enum Kind {
-        TOOL, MCP, PLUGIN, LOCAL;
+        TOOL, MCP, PLUGIN, LOCAL, WEB;
 
         public String key() {
             return name().toLowerCase(Locale.ROOT);
