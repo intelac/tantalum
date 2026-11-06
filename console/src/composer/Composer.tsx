@@ -6,9 +6,10 @@ import type { AttachmentLimits, AttachmentRef, ModelChoice } from "../api/types"
 import { AttachmentTray } from "../attachment/AttachmentTray";
 import { DropZone } from "../attachment/DropZone";
 import { draftAttachments } from "../attachment/drafts";
-import { admit, DEFAULT_LIMITS, formatBytes, isImage } from "../attachment/limits";
+import { admit, DEFAULT_LIMITS, isImage } from "../attachment/limits";
+import { formatBytes } from "../text/format";
 import { useQueue } from "../attachment/useQueue";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { clearDraft, readDraft, saveDraft } from "./drafts";
@@ -48,6 +49,7 @@ export function Composer({
   choice = null,
   onSubmitted,
 }: Props) {
+  const t = useText();
   const [text, setText] = useState(() => readDraft(session));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -126,7 +128,7 @@ export function Composer({
       }
       const attachments = queue.refs();
       if (attachments === null) {
-        setError(zh.attachment.notStaged);
+        setError(t.attachment.notStaged);
         return;
       }
       // 内容（文字加附件）改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。
@@ -170,7 +172,7 @@ export function Composer({
   }
 
   const canSend = (text.trim() !== "" || pending.length > 0) && !busy;
-  const dropLimits = vision ? zh.attachment.dropDesc(limits.maxImagesPerMessage, formatBytes(limits.maxImageBytes)) : zh.attachment.modelUnsupported;
+  const dropLimits = vision ? t.attachment.dropDesc(limits.maxImagesPerMessage, formatBytes(limits.maxImageBytes)) : t.attachment.modelUnsupported;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -182,7 +184,7 @@ export function Composer({
       )}
       {waiting && (
         <p role="status" className="px-3 text-xs text-fg-muted">
-          {zh.attachment.waiting}
+          {t.attachment.waiting}
         </p>
       )}
       <div className="rounded-2xl border border-line bg-raised shadow-sm focus-within:border-line-strong">
@@ -194,12 +196,12 @@ export function Composer({
           onChange={onChange}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={zh.composer.placeholder}
-          aria-label={zh.composer.placeholder}
+          placeholder={t.composer.placeholder}
+          aria-label={t.composer.placeholder}
           className="focus-plain block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-fg placeholder:text-fg-faint"
         />
         <div className="flex h-12 items-center gap-2 pr-2 pl-3">
-          <Button variant="icon" size="sm" aria-label={zh.attachment.add} title={zh.attachment.add} onClick={() => picker.current?.click()}>
+          <Button variant="icon" size="sm" aria-label={t.attachment.add} title={t.attachment.add} onClick={() => picker.current?.click()}>
             <Paperclip size={16} />
           </Button>
           <input ref={picker} type="file" multiple hidden onChange={onPick} data-testid="attachment-picker" />
@@ -207,20 +209,20 @@ export function Composer({
           {modelPicker === undefined ? (
             <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
               {modelName}
-              <span className="ml-1 text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
+              <span className="ml-1 text-fg-faint">{cloud ? t.composer.cloud : t.composer.local}</span>
             </span>
           ) : (
             <>
               {modelPicker}
               {/* 选的路线会不会把提示词发到云端，和选择器一起看（tech.md 安全） */}
-              <span className="shrink-0 text-xs text-fg-faint">{cloud ? zh.composer.cloud : zh.composer.local}</span>
+              <span className="shrink-0 text-xs text-fg-faint">{cloud ? t.composer.cloud : t.composer.local}</span>
             </>
           )}
           {running && (
             <Button
               variant="icon"
-              aria-label={zh.composer.stop}
-              title={zh.composer.stopHint}
+              aria-label={t.composer.stop}
+              title={t.composer.stopHint}
               onClick={() => void stop()}
               className="border border-line text-danger hover:bg-danger-soft"
             >
@@ -229,8 +231,8 @@ export function Composer({
           )}
           <Button
             variant="icon"
-            aria-label={running ? zh.composer.followUp : zh.composer.send}
-            title={running ? zh.composer.queueHint : zh.composer.hint}
+            aria-label={running ? t.composer.followUp : t.composer.send}
+            title={running ? t.composer.queueHint : t.composer.hint}
             disabled={!canSend}
             onClick={() => void send()}
             className={cx("bg-primary text-primary-fg hover:bg-primary hover:text-primary-fg hover:opacity-90", !canSend && "opacity-40")}

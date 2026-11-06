@@ -1,8 +1,8 @@
 // 运行怎么结束的，界面上的两处说法都从这里来：过程区标题和结束说明行。
 
 import { INTERRUPTED_BY_RESTART, type RunStatusItem, SWITCH_COMPACTION_FAILED } from "../api/types";
-import { formatDuration } from "../text/time";
-import { zh } from "../text/zh";
+import { formatDuration } from "../text/format";
+import { currentText, type Text } from "../text";
 
 export interface RunOutcome {
   /** 过程区标题：进行中，或“已完成，用时 …”这样的结果和用时。 */
@@ -11,29 +11,30 @@ export interface RunOutcome {
   explanation: string | null;
 }
 
-export function runOutcome(status: RunStatusItem | undefined): RunOutcome {
-  if (status === undefined || status.endReason === undefined) return { header: zh.process.running, explanation: null };
+/** {@code t} 默认取当前语言的字典；组件传 useText() 的结果，换语言时跟着重新渲染。 */
+export function runOutcome(status: RunStatusItem | undefined, t: Text = currentText()): RunOutcome {
+  if (status === undefined || status.endReason === undefined) return { header: t.process.running, explanation: null };
   const elapsed = formatDuration(new Date(status.updatedAt).getTime() - new Date(status.at).getTime());
   switch (status.endReason) {
     case "COMPLETED":
-      return { header: zh.process.done(elapsed), explanation: null };
+      return { header: t.process.done(elapsed), explanation: null };
     case "FAILED":
-      return { header: zh.process.failed(elapsed), explanation: failure(status) };
+      return { header: t.process.failed(elapsed), explanation: failure(status, t) };
     case "CANCELLED":
       return status.detail === INTERRUPTED_BY_RESTART
-        ? { header: zh.process.interrupted(elapsed), explanation: zh.failure.restarted }
-        : { header: zh.process.cancelled(elapsed), explanation: zh.failure.cancelled };
+        ? { header: t.process.interrupted(elapsed), explanation: t.failure.restarted }
+        : { header: t.process.cancelled(elapsed), explanation: t.failure.cancelled };
     case "STOPPED":
       return {
-        header: zh.process.stopped(elapsed),
-        explanation: status.detail === undefined || status.detail === "" ? zh.failure.stopped : `${zh.failure.stopped}：${status.detail}`,
+        header: t.process.stopped(elapsed),
+        explanation: status.detail === undefined || status.detail === "" ? t.failure.stopped : t.failure.stoppedWith(status.detail),
       };
   }
 }
 
-function failure(status: RunStatusItem): string {
-  if (status.detail?.startsWith(SWITCH_COMPACTION_FAILED)) return zh.failure.switchCompaction(status.detail.slice(SWITCH_COMPACTION_FAILED.length));
-  if (status.failure !== undefined) return zh.failure[status.failure] ?? zh.failure.UNKNOWN;
-  if (status.detail?.includes("output ring full")) return zh.failure.dropped;
-  return zh.failure.generic;
+function failure(status: RunStatusItem, t: Text): string {
+  if (status.detail?.startsWith(SWITCH_COMPACTION_FAILED)) return t.failure.switchCompaction(status.detail.slice(SWITCH_COMPACTION_FAILED.length));
+  if (status.failure !== undefined) return t.failure[status.failure] ?? t.failure.UNKNOWN;
+  if (status.detail?.includes("output ring full")) return t.failure.dropped;
+  return t.failure.generic;
 }

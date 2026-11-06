@@ -3,7 +3,7 @@ import type { ConversationStore } from "../store/ConversationStore";
 import { useRunStatus } from "../store/hooks";
 import { runOutcome } from "./runOutcome";
 import { navigate, tracePath } from "../app/router";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 
 interface Props {
   store: ConversationStore;
@@ -12,9 +12,10 @@ interface Props {
 
 /** 运行没有正常完成时的说明行：失败按原因解释，取消、重启中断和钩子停止各有说法。 */
 export function RunStatusRow({ store, run }: Props) {
+  const t = useText();
   const item = useRunStatus(store, run);
   if (item === undefined) return null;
-  const text = runOutcome(item).explanation;
+  const text = runOutcome(item, t).explanation;
   if (text === null) return null;
   const Icon = item.endReason === "CANCELLED" ? Ban : item.endReason === "STOPPED" ? OctagonX : AlertCircle;
   const danger = item.endReason === "FAILED";
@@ -39,7 +40,7 @@ export function RunStatusRow({ store, run }: Props) {
           }}
           className="mt-1 inline-block text-xs text-accent hover:underline"
         >
-          {zh.conversation.viewInTrace}
+          {t.conversation.viewInTrace}
         </a>
       </div>
     </div>

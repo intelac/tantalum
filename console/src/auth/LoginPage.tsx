@@ -3,7 +3,7 @@ import { useState } from "react";
 import { ApiError, login } from "../api/client";
 import type { User } from "../api/types";
 import { Brand } from "../shell/Brand";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
 
 interface Props {
@@ -16,6 +16,7 @@ const FIELD =
 
 /** 居中卡片，28 px 圆角。失败只说“用户名或密码错误”。手机宽度下卡片占满，留 16 px 边距。 */
 export function LoginPage({ onLoggedIn }: Props) {
+  const t = useText();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,9 +30,9 @@ export function LoginPage({ onLoggedIn }: Props) {
     try {
       onLoggedIn(await login(username.trim(), password));
     } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 429) setError(zh.login.throttled);
-      else if (failure instanceof ApiError && (failure.status === 401 || failure.status === 400)) setError(zh.login.failed);
-      else setError(zh.login.unavailable);
+      if (failure instanceof ApiError && failure.status === 429) setError(t.login.throttled);
+      else if (failure instanceof ApiError && (failure.status === 401 || failure.status === 400)) setError(t.login.failed);
+      else setError(t.login.unavailable);
     } finally {
       setBusy(false);
     }
@@ -47,12 +48,12 @@ export function LoginPage({ onLoggedIn }: Props) {
         <div className="flex flex-col items-center gap-3 pb-1">
           <Brand size="lg" symbolOnly />
           <h1 id="login-title" className="text-xl font-semibold text-fg">
-            {zh.app.name}
+            {t.app.name}
           </h1>
-          <p className="text-sm text-fg-muted">{zh.app.tagline}</p>
+          <p className="text-sm text-fg-muted">{t.app.tagline}</p>
         </div>
         <label className="flex flex-col gap-1.5 text-sm text-fg">
-          {zh.login.username}
+          {t.login.username}
           <input
             className={FIELD}
             name="username"
@@ -64,7 +65,7 @@ export function LoginPage({ onLoggedIn }: Props) {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-sm text-fg">
-          {zh.login.password}
+          {t.login.password}
           <input
             className={FIELD}
             name="password"
@@ -81,7 +82,7 @@ export function LoginPage({ onLoggedIn }: Props) {
           </p>
         )}
         <Button type="submit" variant="primary" size="lg" disabled={busy} className="w-full">
-          {busy ? zh.login.submitting : zh.login.submit}
+          {busy ? t.login.submitting : t.login.submit}
         </Button>
       </form>
     </main>

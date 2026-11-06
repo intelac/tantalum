@@ -1,0 +1,46 @@
+{
+  "midSessionChanges" : true,
+  "tools" : [ {
+    "name" : "memory_delete",
+    "description" : "Delete one of your memory entries by name, for example when the user asks you to forget something.",
+    "enabled" : true
+  }, {
+    "name" : "memory_read",
+    "description" : "Read the full body of one of your memory entries by name (see the memory index).",
+    "enabled" : true
+  }, {
+    "name" : "memory_write",
+    "description" : "Save a long-term memory for this user (new, or overwrite the entry with the same name). name: [a-z0-9-]; type: user, feedback, project, reference; description: one line shown in the index; content: Markdown body.",
+    "enabled" : true
+  }, {
+    "name" : "read_attachment",
+    "description" : "Read a file the user attached, by its read-only path (/attachments/sha256-...). Images are shown to you. Text is cut at 2000 lines or 50 KB, whichever comes first; read in parts with offset and limit.",
+    "enabled" : true
+  } ],
+  "mcp" : [ ],
+  "web" : {
+    "switches" : {
+      "web" : true,
+      "web-fetch" : true,
+      "browser" : true
+    },
+    "admin" : {
+      "web-fetch" : true,
+      "browser" : true
+    },
+    "blockPrivateNetwork" : false
+  },
+  "plugins" : [ {
+    "name" : "dailyQuota",
+    "description" : "daily limit",
+    "points" : [ "beforeModelCall" ],
+    "mandatory" : true,
+    "enabled" : true
+  }, {
+    "name" : "notes",
+    "description" : "",
+    "points" : [ "beforeRunEnd" ],
+    "mandatory" : false,
+    "enabled" : true
+  } ]
+}

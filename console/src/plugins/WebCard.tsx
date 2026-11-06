@@ -1,5 +1,5 @@
 import type { WebPlugins, WebSwitch } from "../api/types";
-import { zh } from "../text/zh";
+import { lookup, useText } from "../text";
 import { Row, Section } from "./Rows";
 
 const MASTER: WebSwitch = "web";
@@ -7,13 +7,12 @@ const CHILDREN: Exclude<WebSwitch, "web">[] = ["web-fetch", "browser"];
 /** 子开关名旁边灰色写的工具名：浏览器有 11 个工具，不列。 */
 const TOOL_NAMES: Record<string, string | undefined> = { "web-fetch": "web_fetch" };
 
-const text = zh.plugins.web;
-
 /**
  * 插件页的“联网”（web-tools W10，需求 5.1、5.3）：总开关和“抓网页”“浏览器”两个子开关，下面一行写内网限制。数据跟着 /api/plugins 来，
  * 不轮询。管理员关掉的那一项开关禁用、写“管理员已关闭”；两项都关时总开关也禁用。
  */
 export function WebCard({ web, onChange }: { web: WebPlugins; onChange: (name: WebSwitch, enabled: boolean) => void }) {
+  const text = useText().plugins.web;
   const anyAllowed = CHILDREN.some((name) => web.admin[name]);
   const master = web.switches[MASTER];
   return (
@@ -40,7 +39,7 @@ export function WebCard({ web, onChange }: { web: WebPlugins; onChange: (name: W
         onChange={(enabled) => onChange(MASTER, enabled)}
       />
       {CHILDREN.map((name) => {
-        const [label, detail] = text.switches[name] ?? [name, ""];
+        const [label, detail] = lookup(text.switches, name) ?? [name, ""];
         const allowed = web.admin[name];
         const tool = TOOL_NAMES[name];
         return (

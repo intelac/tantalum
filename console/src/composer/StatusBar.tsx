@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Minimize2 } from "lucide-react";
 import { compactSession, getTurn, listTurns } from "../api/client";
 import { compactionPoint, useSettings } from "../settings/useCompaction";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { statusParts, WARN_PERCENT } from "./status";
 
@@ -24,6 +24,7 @@ interface Props {
  * 到用户选的自动压缩点的 90% 时变色提示（还没读到设置时按窗口的 80%）。窄屏只留占比。
  */
 export function StatusBar({ session, run, running, version, contextWindow, point }: Props) {
+  const t = useText();
   const turns = useQuery({
     queryKey: ["turns", run, version],
     enabled: run !== null,
@@ -47,13 +48,13 @@ export function StatusBar({ session, run, running, version, contextWindow, point
   const canCompact = run !== null && !running;
 
   return (
-    <div className="flex h-6 items-center justify-center gap-3 text-xs text-fg-faint" aria-label={zh.trace.usage}>
-      {segments.length === 0 && <span>{run === null ? zh.status.noRun : ""}</span>}
+    <div className="flex h-6 items-center justify-center gap-3 text-xs text-fg-faint" aria-label={t.trace.usage}>
+      {segments.length === 0 && <span>{run === null ? t.status.noRun : ""}</span>}
       {segments.map((segment, index) => (
         <span
           key={segment.key}
           className={cx(segment.narrow ? "" : "hidden sm:inline", segment.key === "context" && parts.warn ? "font-medium text-danger" : "")}
-          title={segment.key === "context" && parts.warn ? zh.status.contextHigh(parts.pointPercent ?? WARN_PERCENT) : undefined}
+          title={segment.key === "context" && parts.warn ? t.status.contextHigh(parts.pointPercent ?? WARN_PERCENT) : undefined}
         >
           {index > 0 && <span className="mr-3 hidden sm:inline">·</span>}
           {segment.text}
@@ -62,8 +63,8 @@ export function StatusBar({ session, run, running, version, contextWindow, point
       {run !== null && (
         <button
           type="button"
-          aria-label={zh.status.compact}
-          title={compact.isError ? zh.status.compactRejected : zh.status.compactHint}
+          aria-label={t.status.compact}
+          title={compact.isError ? t.status.compactRejected : t.status.compactHint}
           disabled={!canCompact || compact.isPending}
           onClick={() => compact.mutate()}
           className={cx(
@@ -74,7 +75,7 @@ export function StatusBar({ session, run, running, version, contextWindow, point
           <Minimize2 size={12} aria-hidden="true" />
         </button>
       )}
-      {compact.isError && <span role="status">{zh.status.compactRejected}</span>}
+      {compact.isError && <span role="status">{t.status.compactRejected}</span>}
     </div>
   );
 }

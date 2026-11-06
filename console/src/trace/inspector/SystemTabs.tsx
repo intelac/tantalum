@@ -1,16 +1,15 @@
 // system 变化的页签：差异（和上一次请求比）、系统提示词（分段标来源）、工具。
 
 import type { SystemPrompt } from "../../api/types";
-import { zh } from "../../text/zh";
+import { useText } from "../../text";
 import { useTraceCall } from "../hooks";
 import { LineDiff } from "../../ui/LineDiff";
 import { Fields, Loading, Section, sourceText, TabbedBody } from "./parts";
 import { CallTools } from "./RequestTabs";
 import { LongText } from "./LongText";
 
-const t = zh.trace;
-
 function Diff({ session, system }: { session: string; system: SystemPrompt }) {
+  const t = useText().trace;
   const detail = useTraceCall(session, system.call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   const previous = detail.data.previous;
@@ -36,6 +35,7 @@ function Diff({ session, system }: { session: string; system: SystemPrompt }) {
 }
 
 function Prompt({ session, system }: { session: string; system: SystemPrompt }) {
+  const t = useText().trace;
   const detail = useTraceCall(session, system.call);
   return (
     <>
@@ -54,6 +54,7 @@ function Prompt({ session, system }: { session: string; system: SystemPrompt }) 
 }
 
 export function SystemTabs({ session, system }: { session: string; system: SystemPrompt }) {
+  const t = useText().trace;
   return (
     <TabbedBody
       pages={[

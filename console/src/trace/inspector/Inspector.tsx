@@ -5,7 +5,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { TraceRecord } from "../../api/types";
-import { zh } from "../../text/zh";
+import { useText } from "../../text";
 import { Button } from "../../ui/Button";
 import { cx } from "../../ui/cx";
 import { localArea, readStored, writeStored } from "../../ui/storage";
@@ -49,6 +49,7 @@ interface Props {
 }
 
 export function Inspector({ session, record, lookup, containerWidth, overlay, onClose, onOpen }: Props) {
+  const t = useText().trace;
   const [chosen, setChosen] = useState<number | null>(storedWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
   const width = clampWidth(chosen ?? defaultWidth(containerWidth), containerWidth);
@@ -104,7 +105,7 @@ export function Inspector({ session, record, lookup, containerWidth, overlay, on
 
   return (
     <aside
-      aria-label={zh.trace.details.event}
+      aria-label={t.details.event}
       className={cx("flex min-h-0 flex-col bg-canvas", overlay ? "absolute inset-0 z-20" : "relative shrink-0 border-l border-line")}
       style={overlay ? undefined : { width }}
     >
@@ -112,11 +113,11 @@ export function Inspector({ session, record, lookup, containerWidth, overlay, on
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label={zh.trace.details.resize}
+          aria-label={t.details.resize}
           aria-valuenow={width}
           aria-valuemin={DETAILS_MIN_WIDTH}
           aria-valuemax={DETAILS_MAX_WIDTH}
-          title={zh.trace.details.resizeTitle}
+          title={t.details.resizeTitle}
           tabIndex={0}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -128,10 +129,10 @@ export function Inspector({ session, record, lookup, containerWidth, overlay, on
       )}
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {zh.trace.kind[record.kind] ?? record.kind}
+          {t.kind[record.kind] ?? record.kind}
           <span className="ml-2 font-mono text-xs font-normal text-fg-faint">{record.id}</span>
         </span>
-        <Button variant="icon" size="sm" aria-label={zh.trace.details.close} title={zh.trace.details.close} onClick={onClose}>
+        <Button variant="icon" size="sm" aria-label={t.details.close} title={t.details.close} onClick={onClose}>
           <X size={14} aria-hidden />
         </Button>
       </div>

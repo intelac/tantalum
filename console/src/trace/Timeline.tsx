@@ -3,14 +3,12 @@
 // 自定：视口内的段是按钮，可以 Tab 聚焦、Enter 选中；每段有至少 6 px 宽的透明点击区。
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 import { cx } from "../ui/cx";
 import { formatMs } from "./format";
 import { contentOf, isError } from "./LedgerRow";
 import type { Row } from "./rows";
 import { buildTimeline, centered, minimumSelection, nearestSpan, panned, revealed, zoomed, type Span, type TimelineMode, type TimeRange } from "./segments";
-
-const t = zh.trace;
 
 export const TOOLTIP_DELAY_MS = 500;
 export const MINIMUM_DRAG_PX = 3;
@@ -48,6 +46,7 @@ function clock(ms: number): string {
 
 /** 提示：类型和内容、开始和结束时刻、总时长，助手再加首 token 和解码。时刻取记录原来的时间，不受压掉空档影响。 */
 export function tooltipText(span: Span): string {
+  const t = currentText().trace;
   const { record } = span;
   const lines = [`${t.kind[record.kind] ?? record.kind} · ${contentOf(record)}`];
   const start = Date.parse(record.at);
@@ -68,6 +67,7 @@ function clamp01(value: number): number {
 }
 
 export function Timeline({ rows, mode, range, onRange, selected, matches, onSelect, onFocus, hasEarlier, onLoadEarlier }: Props) {
+  const t = useText().trace;
   const model = useMemo(() => buildTimeline(rows, mode), [rows, mode]);
   const root = useRef<HTMLElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -294,6 +294,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
 }
 
 function LaneLabels() {
+  const t = useText().trace;
   return (
     <div aria-hidden className="relative border-r border-line text-[10px] leading-none text-fg-faint">
       {t.timeline.lanes.map((label, lane) => (
@@ -318,6 +319,8 @@ interface SegmentProps {
 }
 
 function Segment({ span, left, width, firstToken, selected, matched, onHover, onSelect }: SegmentProps) {
+  const text = useText();
+  const t = text.trace;
   const error = isError(span.record);
   const color = error ? "bg-danger" : (LANE_COLOR[span.lane] ?? "bg-fg-faint");
   // 点击区至少 6 px；瞬时记录（零宽）的点击区以它为中心。
@@ -333,7 +336,7 @@ function Segment({ span, left, width, firstToken, selected, matched, onHover, on
     <button
       type="button"
       data-span={span.id}
-      aria-label={`${t.kind[span.record.kind] ?? span.record.kind}，${contentOf(span.record)}`}
+      aria-label={text.common.labelled(t.kind[span.record.kind] ?? span.record.kind, contentOf(span.record))}
       aria-pressed={selected}
       onPointerEnter={(event) => onHover(event.currentTarget.offsetLeft)}
       onKeyDown={(event) => {

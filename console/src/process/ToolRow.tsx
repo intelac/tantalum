@@ -1,8 +1,8 @@
 import { Ban, Check, ChevronDown, ChevronRight, Clock, Loader2, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import type { ToolStepItem } from "../api/types";
-import { formatDuration } from "../text/time";
-import { zh } from "../text/zh";
+import { formatDuration } from "../text/format";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { navigate, traceRecordPath } from "../app/router";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
@@ -13,12 +13,13 @@ interface Props {
   step: ToolStepItem;
 }
 
-const STATUS_TEXT = {
-  WAITING: zh.process.toolWaiting,
-  RUNNING: zh.process.toolRunning,
-  DONE: zh.process.toolDone,
-  FAILED: zh.process.toolFailed,
-  BLOCKED: zh.process.toolBlocked,
+/** 状态在字典 process 里的键。 */
+const STATUS_KEY = {
+  WAITING: "toolWaiting",
+  RUNNING: "toolRunning",
+  DONE: "toolDone",
+  FAILED: "toolFailed",
+  BLOCKED: "toolBlocked",
 } as const;
 
 function StatusIcon({ status }: { status: ToolStepItem["status"] }) {
@@ -38,6 +39,7 @@ function StatusIcon({ status }: { status: ToolStepItem["status"] }) {
 
 /** 一行工具调用：名称、参数摘要、状态、耗时；展开后看完整参数和结果。错误和合成结果有明显标记。 */
 export function ToolRow({ step }: Props) {
+  const t = useText();
   const [open, setOpen] = useState(false);
   const now = useNow(step.status === "RUNNING");
   const elapsed = elapsedMs(step, now);
@@ -64,7 +66,7 @@ export function ToolRow({ step }: Props) {
           {range !== null && <span className="ml-2 font-sans text-fg-faint">{range}</span>}
         </span>
         <span className={cx("shrink-0 text-xs", failed ? (step.status === "BLOCKED" ? "text-warning" : "text-danger") : "")}>
-          {STATUS_TEXT[step.status]}
+          {t.process[STATUS_KEY[step.status]]}
         </span>
         {elapsed !== null && <span className="w-14 shrink-0 text-right text-xs tabular-nums text-fg-faint">{formatDuration(elapsed)}</span>}
         {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
@@ -79,34 +81,34 @@ export function ToolRow({ step }: Props) {
             }}
             className="self-start text-xs text-accent hover:underline"
           >
-            {zh.conversation.viewInTrace}
+            {t.conversation.viewInTrace}
           </a>
           {hasFileView(step) ? (
             <FileChange step={step} />
           ) : (
             <section>
-              <h4 className="mb-1 text-xs font-medium text-fg-muted">{zh.process.arguments}</h4>
+              <h4 className="mb-1 text-xs font-medium text-fg-muted">{t.process.arguments}</h4>
               <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>
             </section>
           )}
           {step.result !== undefined && (
             <section>
               <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">
-                {zh.process.result}
+                {t.process.result}
                 {step.result.error && (
                   <span className={cx("rounded-xs px-1.5 py-0.5 text-[11px]", step.status === "BLOCKED" ? "bg-warning/15 text-warning" : "bg-danger-soft text-danger")}>
-                    {STATUS_TEXT[step.status]}
+                    {t.process[STATUS_KEY[step.status]]}
                   </span>
                 )}
                 {synthesized && (
-                  <span className="rounded-xs bg-danger-soft px-1.5 py-0.5 font-mono text-[11px] text-danger" title={zh.process.synthesized}>
+                  <span className="rounded-xs bg-danger-soft px-1.5 py-0.5 font-mono text-[11px] text-danger" title={t.process.synthesized}>
                     {step.result.code}
                   </span>
                 )}
               </h4>
               {synthesized && (
                 <p className="mb-1 text-xs text-danger">
-                  {step.result.code === "TOOL_OUTCOME_UNKNOWN" ? zh.process.outcomeUnknown : zh.process.abortedBeforeDispatch}
+                  {step.result.code === "TOOL_OUTCOME_UNKNOWN" ? t.process.outcomeUnknown : t.process.abortedBeforeDispatch}
                 </p>
               )}
               <pre

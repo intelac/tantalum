@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { attachmentUrl } from "../api/client";
 import type { ImageAttachment } from "../api/types";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 
 interface Props {
   image: ImageAttachment;
@@ -20,6 +20,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * 打开时焦点进灯箱、Tab 在灯箱里循环，关闭后焦点回到打开它的图片。
  */
 export function Lightbox({ image, src, onClose }: Props) {
+  const t = useText();
   const panel = useRef<HTMLDivElement>(null);
   const [actual, setActual] = useState(false);
 
@@ -57,7 +58,7 @@ export function Lightbox({ image, src, onClose }: Props) {
       ref={panel}
       role="dialog"
       aria-modal="true"
-      aria-label={zh.attachment.preview}
+      aria-label={t.attachment.preview}
       onKeyDown={onKeyDown}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -68,16 +69,16 @@ export function Lightbox({ image, src, onClose }: Props) {
         <button
           type="button"
           className={control}
-          aria-label={actual ? zh.attachment.fitWindow : zh.attachment.actualSize}
-          title={actual ? zh.attachment.fitWindow : zh.attachment.actualSize}
+          aria-label={actual ? t.attachment.fitWindow : t.attachment.actualSize}
+          title={actual ? t.attachment.fitWindow : t.attachment.actualSize}
           onClick={() => setActual((value) => !value)}
         >
           {actual ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
-        <a className={control} href={attachmentUrl(image, true)} download={image.name} aria-label={zh.attachment.downloadNamed(image.name)}>
+        <a className={control} href={attachmentUrl(image, true)} download={image.name} aria-label={t.attachment.downloadNamed(image.name)}>
           <Download size={16} />
         </a>
-        <button type="button" className={control} aria-label={zh.attachment.closePreview} onClick={onClose}>
+        <button type="button" className={control} aria-label={t.attachment.closePreview} onClick={onClose}>
           <X size={16} />
         </button>
       </div>

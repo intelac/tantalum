@@ -37,7 +37,7 @@
 
 先把“当前语言”和“渲染时取字典”搭好，58 个文件都改成经 `useText()` 取文字，日期数字换成 `Intl`，修掉写死的文字，加上源码扫描。这一阶段只有中文一份字典，8091 上看起来不变，插件页的内置工具变成中文。
 
-- [ ] 1. `language.ts` 和 `<html lang>`
+- [x] 1. `language.ts` 和 `<html lang>`
   - File: console/text/language.ts（新）、console/index.html（改）、console/test/setup.ts（新）、console/vite.config.ts（改），console/text/language.test.ts（新）
   - `Language`、`LANGUAGES`、`NAMES`、`detect(tags)`（先整个标签、再主语言，都没有 `en`）、`htmlLang`、`intlLocale`、`readCached`/`cache`/`clearCache`（键 `tantalum.language`，经 `ui/storage.ts`）；`index.html` 去掉写死的 `lang="zh-CN"`，内联脚本按“缓存 → `navigator.languages` → en”写 `lang`；`test.setupFiles` 指向 `test/setup.ts`，每个测试前设成中文（这一步先只写 `document.documentElement.lang`，任务 2 再接上 `setLanguage`）
   - 测试：`detect` 表驱动（`ja-JP`、`zh-TW`、`["fr-FR","ja"]`、`fr`、空、`EN-gb`）；把内联脚本的函数体抽出来，用同一组输入跑，结果和 `detect` 相同
@@ -45,7 +45,7 @@
   - _Requirements: I1, I2, I3, 需求 1.1, 1.2, 1.8_
   - _Prompt: Role: 前端开发 | Task: 实现语言检测、缓存和 html lang | Restrictions: 不加依赖；本地存储读写一律经 ui/storage.ts | Success: 测试全过，pnpm build 通过_
 
-- [ ] 2. `Dictionary` 类型、`useText()` 和渲染时取字典
+- [x] 2. `Dictionary` 类型、`useText()` 和渲染时取字典
   - File: console/text/dictionary.ts、console/text/index.ts（新）、console/text/zh.ts（改）、console/api/types.ts（改，补联合类型），引用 `text/zh` 的 58 个文件（改），console/text/index.test.ts（新）
   - `Dictionary<T>`：字面量放宽成 `string`、函数保留参数类型、元组保留长度、对象逐键递归；`Text = Dictionary<typeof zh>`。`index.ts`：`currentLanguage`、`currentText`、`setLanguage`（写 `<html lang>`、通知订阅者）、`useLanguage`、`useText`（`useSyncExternalStore`）；这一步只注册 `zh`。`zh.ts` 的 `as Record<string, string>` 全部换成 `satisfies Record<联合类型, string>`，`api/types.ts` 缺的联合类型补上（如钩子位置）。组件改用 `useText()`；非组件的 `api/client.ts`、`conversation/runOutcome.ts`、`composer/status.ts`、`attachment/limits.ts` 在调用时用 `currentText()`；模块顶层取字典的 17 个文件（`trace/*.tsx` 的 `const t = zh.trace`、`SettingsDialog.tsx:22-27`、`App.tsx:29-31`、`Sidebar.tsx:43-45`、`AppearancePane.tsx:6-10`、`LocalWorkspaceCard.tsx:16`、`QuestionCard.tsx:7`、`stats/*.tsx`）改成常量只放 `id` 和图标、渲染时查文字。`test/setup.ts` 改调 `setLanguage("zh")`
   - 测试：`index.test.ts`：订阅者在 `setLanguage` 后被通知、`<html lang>` 改了；临时注册一份假字典，渲染 `Sidebar` 后切换，菜单文字跟着变、组件没有重新挂载（用一个 `useRef` 计数）；已有的 vitest 和 Playwright 全部照过，断言一条不改
@@ -53,7 +53,7 @@
   - _Requirements: I4, I5, 需求 2.1, 2.2_
   - _Prompt: Role: 前端开发 | Task: 搭字典类型和当前语言的订阅，把所有组件改成渲染时取文字 | Restrictions: 不改任何中文文字；不改组件的行为和样式；不许用 as 绕过 Dictionary 类型 | Success: tsc、vitest、Playwright 全过，画面和改之前一样_
 
-- [ ] 3. `format.ts`：日期、数字、时长
+- [x] 3. `format.ts`：日期、数字、时长
   - File: console/text/format.ts（新）、console/text/time.ts、console/text/time.test.ts（删，用例并入新测试）、console/trace/format.ts、console/plugins/LocalWorkspaceCard.tsx、console/text/zh.ts 和引用 `time.ts` 的文件（改），console/text/format.test.ts（新）
   - `formatNumber`、`formatBytes`、`clockTime`、`relativeTime`（`Intl.RelativeTimeFormat`，`numeric: "auto"`，分界照 `time.ts:4-14`）、`formatDuration`（文字取 `time.duration`）；locale 用 `intlLocale(currentLanguage())`。删掉 `zh.time` 里的相对时间条目；`process.bytes` 改用 `formatBytes`；`trace/format.ts:5-6` 的“毫秒”“秒”改取字典；`LocalWorkspaceCard.tsx:95` 的 `zh-CN` 改用 `clockTime` 的规则
   - 测试：只注册了中文，先测中文：同一天、跨天、零点是 `00:05` 不是 `24:05`、5 分钟前、昨天、3 天前、`1,234,567`、三档时长；`time.test.ts` 的原用例照搬、期望值不变（“刚刚”改成 `Intl` 的“现在”是唯一的变化，测试里写明）。英文和日文的用例在任务 15、16 加
@@ -61,7 +61,7 @@
   - _Requirements: I7, 需求 3.1, 3.3_
   - _Prompt: Role: 前端开发 | Task: 用 Intl 按当前语言格式化日期、相对时间、数字，时长取字典 | Restrictions: 代码里不再出现 zh-CN 字面量（language.ts 的 intlLocale 除外）；分界规则不变 | Success: format.test.ts 和已有测试全过_
 
-- [ ] 4. 插件页的内置工具和其他写死的文字
+- [x] 4. 插件页的内置工具和其他写死的文字
   - File: console/plugins/PluginsDialog.tsx、console/text/zh.ts（改），console/plugins/plugins.test.tsx（改或新）
   - `zh.plugins.tools` 补齐全部内置工具（`read_attachment`、`memory_*`、`web_fetch`；浏览器工具看 web-tools 那时的样子，单独列出就加，合在“联网”卡片里就不用）；`toolText` 不再退回 `tool.description`：字典里没有的内置工具显示工具名，并且测试失败；MCP 工具的说明照原样（I8）。插件页的服务器名、状态已经按代码翻译，不动
   - 测试：用 `/api/plugins` 的真实返回（从 `E2eServer` 抓一份存成测试数据）渲染，每个内置工具都有字典里的名字和说明；MCP 工具的说明原样出现
@@ -69,7 +69,7 @@
   - _Requirements: I8, 需求 2.4, 2.7_
   - _Prompt: Role: 前端开发 | Task: 插件页的内置工具全部用字典里的名字和说明 | Restrictions: 不改服务器给模型的工具说明；MCP 的说明不翻译 | Success: 测试全过，8091 插件页没有给模型看的英文说明_
 
-- [ ] 5. 写死文字的源码扫描
+- [x] 5. 写死文字的源码扫描
   - File: console/text/literals.test.ts、console/text/literals.allow.ts（新）
   - 照设计“控制台的四层检查”第 ③ 层：去注释；`text/` 以外不许有中日文字符、不许在 `aria-label`/`title`/`placeholder`/`alt`/`label` 写含字母的字面文字、不许有含字母的 JSX 文字节点、不许引用 `text/zh|en|ja`、不许在模块顶层写 `currentText()`；放行清单每条写文件、文字、理由；扫到少于 50 个文件就失败；失败信息写文件和行号。扫出来的现有问题当场改掉（任务 4 之后应该只剩品牌名、`macOS` 这类）
   - 测试：变异各一次：组件里写 `aria-label="Close"`、写一句中文、`import { zh } from "../text/zh"`、模块顶层 `const t = currentText().trace`，四次都失败，删掉后通过

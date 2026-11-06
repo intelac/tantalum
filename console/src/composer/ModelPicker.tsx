@@ -2,7 +2,7 @@ import { Check, ChevronDown } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ModelChoice, ModelInfo, ModelsResponse } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText, lookup, useText } from "../text";
 import { cx } from "../ui/cx";
 import { findModel, levelFor } from "./useModels";
 
@@ -22,9 +22,10 @@ const SEARCH_FROM = 8;
 
 /** 按钮上的字：“模型显示名 · 档位”；没有档位只写模型名（需求 3.1，照 DSH `ModelSelect.tsx:395-407`）。 */
 export function choiceLabel(models: ModelsResponse | undefined, choice: ModelChoice | null): string {
-  if (choice === null) return zh.composer.model;
+  const t = currentText();
+  if (choice === null) return t.composer.model;
   const name = findModel(models, choice)?.name ?? choice.model;
-  return choice.effort == null ? name : `${name} · ${zh.composer.picker.level(choice.effort)}`;
+  return choice.effort == null ? name : `${name} · ${lookup(t.composer.picker.levelNames, choice.effort) ?? choice.effort}`;
 }
 
 /**
@@ -32,6 +33,7 @@ export function choiceLabel(models: ModelsResponse | undefined, choice: ModelCho
  * 没有档位不显示右栏（需求 3.3）。“暂时连不上”的路线是灰色的一组；灰掉的模型鼠标移上去写原因。运行中照样能改。
  */
 export function ModelPicker({ models, choice, pending, toolChangesInHistory, onSelect }: Props) {
+  const t = useText();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
@@ -79,15 +81,15 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
 
   return (
     <div ref={root} className="relative flex min-w-0 items-center gap-1.5">
-      {pending && <span className="hidden text-xs text-fg-faint sm:inline">{zh.composer.picker.nextTurn}</span>}
+      {pending && <span className="hidden text-xs text-fg-faint sm:inline">{t.composer.picker.nextTurn}</span>}
       <button
         ref={trigger}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={`${zh.composer.picker.label}：${choiceLabel(models, choice)}`}
-        title={pending ? zh.composer.picker.nextTurn : undefined}
+        aria-label={t.composer.picker.labelWith(choiceLabel(models, choice))}
+        title={pending ? t.composer.picker.nextTurn : undefined}
         onClick={() => setOpen((current) => !current)}
         className="flex max-w-64 items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
       >
@@ -98,7 +100,7 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
         <div
           id={panelId}
           role="dialog"
-          aria-label={zh.composer.picker.label}
+          aria-label={t.composer.picker.label}
           onKeyDown={onKeyDown}
           className="absolute right-0 bottom-full z-40 mb-2 flex max-h-96 w-[min(32rem,calc(100vw-2rem))] rounded-md border border-line bg-raised shadow-lg"
         >
@@ -108,8 +110,8 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={zh.composer.picker.search}
-                aria-label={zh.composer.picker.search}
+                placeholder={t.composer.picker.search}
+                aria-label={t.composer.picker.search}
                 className="mb-1 rounded-sm border border-line bg-transparent px-2 py-1 text-sm text-fg placeholder:text-fg-faint"
               />
             )}
@@ -117,7 +119,7 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
               <div key={route.name} role="group" aria-label={route.displayName} className="py-1">
                 <p className={cx("px-2 py-1 text-xs", route.status === "unavailable" ? "text-fg-faint" : "text-fg-muted")}>
                   {route.displayName}
-                  {route.status === "unavailable" && <span className="ml-1">{zh.composer.picker.unavailable(route.error ?? "")}</span>}
+                  {route.status === "unavailable" && <span className="ml-1">{t.composer.picker.unavailable(route.error ?? "")}</span>}
                 </p>
                 {shown.map((model) => {
                   const active = choice?.route === route.name && choice.model === model.id;
@@ -128,7 +130,7 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
                       type="button"
                       aria-pressed={active}
                       disabled={disabled}
-                      title={disabled ? zh.composer.picker.toolChangesUnsupported : model.id}
+                      title={disabled ? t.composer.picker.toolChangesUnsupported : model.id}
                       onClick={() => pickModel(route.name, model)}
                       className={cx(
                         "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
@@ -144,12 +146,12 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
               </div>
             ))}
             {routes.every(({ models: shown }) => shown.length === 0) && query !== "" && (
-              <p className="px-2 py-1 text-sm text-fg-faint">{zh.composer.picker.empty}</p>
+              <p className="px-2 py-1 text-sm text-fg-faint">{t.composer.picker.empty}</p>
             )}
           </div>
           {selected !== undefined && selected.levels.length > 0 && choice !== null && (
-            <div role="group" aria-label={zh.composer.picker.levels} className="w-28 shrink-0 border-l border-line p-1">
-              <p className="px-2 py-1 text-xs text-fg-muted">{zh.composer.picker.levels}</p>
+            <div role="group" aria-label={t.composer.picker.levels} className="w-28 shrink-0 border-l border-line p-1">
+              <p className="px-2 py-1 text-xs text-fg-muted">{t.composer.picker.levels}</p>
               {selected.levels.map((level) => (
                 <button
                   key={level}
@@ -161,7 +163,7 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
                   }}
                   className={cx("flex w-full rounded-sm px-2 py-1.5 text-left text-sm text-fg hover:bg-hover", choice.effort === level && "bg-active")}
                 >
-                  {zh.composer.picker.level(level)}
+                  {lookup(t.composer.picker.levelNames, level) ?? level}
                 </button>
               ))}
             </div>

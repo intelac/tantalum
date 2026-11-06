@@ -3,7 +3,8 @@
 
 import { useState } from "react";
 import type { ToolStepItem } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
+import { formatNumber } from "../text/format";
 import { LineDiff } from "../ui/LineDiff";
 
 export const PREVIEW_LINES = 20;
@@ -27,13 +28,14 @@ const SHOWING = /\[Showing lines (\d+)-(\d+) of (\d+)\./;
 
 /** read_file 读了哪几行：结果里有续读说明时照它；否则只知道参数。整文件读完、不带参数时为 null。 */
 export function readRange(step: ToolStepItem): string | null {
+  const t = currentText();
   if (step.call.name !== "read_file") return null;
   const shown = step.result !== undefined && !step.result.error ? SHOWING.exec(step.result.text) : null;
-  if (shown !== null) return zh.process.lines(Number(shown[1]), Number(shown[2]), Number(shown[3]));
+  if (shown !== null) return t.process.lines(Number(shown[1]), Number(shown[2]), Number(shown[3]));
   const offset = number(args(step).offset);
   const limit = number(args(step).limit);
-  if (offset !== undefined) return zh.process.fromLine(offset);
-  if (limit !== undefined) return zh.process.upTo(limit);
+  if (offset !== undefined) return t.process.fromLine(offset);
+  if (limit !== undefined) return t.process.upTo(limit);
   return null;
 }
 
@@ -47,13 +49,14 @@ export function hasFileView(step: ToolStepItem): boolean {
 
 /** 展开后的内容：edit_file 的差异、write_file 的预览。路径在行的摘要里已经有了。 */
 export function FileChange({ step }: { step: ToolStepItem }) {
+  const t = useText();
   const a = args(step);
   if (step.call.name === "edit_file") {
     return (
       <section>
         <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">
-          {zh.process.change}
-          {a.replace_all === true && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px]">{zh.process.replaceAll}</span>}
+          {t.process.change}
+          {a.replace_all === true && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px]">{t.process.replaceAll}</span>}
         </h4>
         <LineDiff before={text(a.old_string) ?? ""} after={text(a.new_string) ?? ""} hunkHeaders={false} />
       </section>
@@ -63,6 +66,7 @@ export function FileChange({ step }: { step: ToolStepItem }) {
 }
 
 function WritePreview({ content }: { content: string }) {
+  const t = useText();
   const [all, setAll] = useState(false);
   const lines = content.split("\n");
   if (lines.at(-1) === "") lines.pop();
@@ -71,13 +75,13 @@ function WritePreview({ content }: { content: string }) {
   return (
     <section>
       <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">
-        {zh.process.content}
-        <span className="font-normal text-fg-faint">{zh.process.bytes(bytes)}</span>
+        {t.process.content}
+        <span className="font-normal text-fg-faint">{t.process.bytes(formatNumber(bytes))}</span>
       </h4>
       <pre className="max-h-96 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{shown.join("\n")}</pre>
       {lines.length > PREVIEW_LINES && (
         <button type="button" className="mt-1 text-xs text-accent hover:underline" onClick={() => setAll(!all)}>
-          {all ? zh.process.collapse : zh.process.showAll(lines.length)}
+          {all ? t.process.collapse : t.process.showAll(lines.length)}
         </button>
       )}
     </section>

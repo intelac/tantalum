@@ -18,7 +18,7 @@ describe("SessionRow", () => {
       </ul>,
     );
     const row = screen.getByRole("button", { name: /利息在哪里算的/ });
-    expect(row.textContent).toContain("5 分钟前");
+    expect(row.textContent).toContain("5分钟前");
     await userEvent.click(row);
     expect(onSelect).toHaveBeenCalledWith("s1");
   });

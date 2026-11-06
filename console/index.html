@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,6 +16,29 @@
         } catch (ignored) {}
         var dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
+    <script>
+      // 同样在 React 起来前先定 <html lang>，刷新时第一帧就是对的语言。规则与 src/text/language.ts 的 detect 保持一致，
+      // language.test.ts 抽出 detectLanguage 用同一组输入比对。
+      (function () {
+        function detectLanguage(tags) {
+          var known = ["zh", "en", "ja"];
+          for (var i = 0; i < tags.length; i++) {
+            var whole = String(tags[i]).toLowerCase();
+            if (known.indexOf(whole) >= 0) return whole;
+            var primary = whole.split("-")[0];
+            if (known.indexOf(primary) >= 0) return primary;
+          }
+          return "en";
+        }
+        var language = null;
+        try {
+          var stored = localStorage.getItem("tantalum.language");
+          if (stored === "zh" || stored === "en" || stored === "ja") language = stored;
+        } catch (ignored) {}
+        if (language === null) language = detectLanguage(navigator.languages || [navigator.language || ""]);
+        document.documentElement.lang = language === "zh" ? "zh-CN" : language;
       })();
     </script>
   </head>

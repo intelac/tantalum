@@ -3,18 +3,17 @@
 import { FileText } from "lucide-react";
 import { attachmentUrl } from "../../api/client";
 import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, RunHead, TraceRecord, UserInput } from "../../api/types";
-import { formatBytes } from "../../attachment/limits";
+import { formatBytes } from "../../text/format";
 import { Markdown } from "../../markdown/Markdown";
-import { zh } from "../../text/zh";
+import { currentText, type Text, useText } from "../../text";
 import { between, formatMs, formatTokens } from "../format";
 import { JsonTree } from "./JsonTree";
 import { LineDiff } from "../../ui/LineDiff";
 import { LongText } from "./LongText";
 import { Fields, Section, sourceText, TabbedBody, Timestamp } from "./parts";
 
-const t = zh.trace;
-
 function Link({ id, onOpen }: { id: string | undefined; onOpen: (id: string) => void }) {
+  const t = useText().trace;
   if (id === undefined) return null;
   return (
     <button type="button" onClick={() => onOpen(id)} className="font-mono text-accent hover:underline">
@@ -24,11 +23,12 @@ function Link({ id, onOpen }: { id: string | undefined; onOpen: (id: string) => 
 }
 
 function Value({ value }: { value: unknown }) {
+  const t = useText().trace;
   if (value === undefined || value === null) return <p className="text-xs text-fg-faint">{t.record.noOutput}</p>;
   return typeof value === "string" ? <LongText text={value} /> : <JsonTree value={value} />;
 }
 
-function RunPages(run: RunHead) {
+function RunPages(run: RunHead, t: Text["trace"]) {
   return [
     {
       id: "summary",
@@ -49,7 +49,7 @@ function RunPages(run: RunHead) {
   ];
 }
 
-function UserPages(user: UserInput) {
+function UserPages(user: UserInput, t: Text["trace"]) {
   const attachments = user.attachments ?? [];
   return [
     {
@@ -70,8 +70,9 @@ function UserPages(user: UserInput) {
 
 /** 检查器里的附件：图片 48 px 缩略图，每个附件一行名字、大小、类型和尺寸（需求 5.5）。 */
 function AttachmentList({ attachments }: { attachments: readonly AttachmentRef[] }) {
+  const text = useText();
   return (
-    <Section title={zh.attachment.list}>
+    <Section title={text.attachment.list}>
       <ul className="flex flex-col gap-2 text-xs">
         {attachments.map((ref, index) => (
           <li key={`${ref.id}-${index}`} className="flex items-center gap-2">
@@ -96,17 +97,18 @@ function AttachmentList({ attachments }: { attachments: readonly AttachmentRef[]
 }
 
 function attachmentDetail(ref: AttachmentRef): string {
+  const text = currentText().attachment;
   const parts = [formatBytes(ref.bytes), ref.mediaType];
   if (ref.kind === "image") {
-    parts.push(zh.attachment.imageSize(ref.width, ref.height));
-    if (ref.sourceWidth !== undefined && ref.sourceHeight !== undefined) parts.push(zh.attachment.downscaled(ref.sourceWidth, ref.sourceHeight));
+    parts.push(text.imageSize(ref.width, ref.height));
+    if (ref.sourceWidth !== undefined && ref.sourceHeight !== undefined) parts.push(text.downscaled(ref.sourceWidth, ref.sourceHeight));
   } else if (ref.pages !== undefined) {
-    parts.push(zh.attachment.pages(ref.pages));
+    parts.push(text.pages(ref.pages));
   }
   return parts.join(" · ");
 }
 
-function ContextPages(context: ContextChange) {
+function ContextPages(context: ContextChange, t: Text["trace"]) {
   const added = context.toolsAdded ?? [];
   const removed = context.toolsRemoved ?? [];
   const tools = added.length > 0 || removed.length > 0;
@@ -146,7 +148,7 @@ function ContextPages(context: ContextChange) {
   ];
 }
 
-function CompactedPages(compacted: Compacted) {
+function CompactedPages(compacted: Compacted, t: Text["trace"]) {
   return [
     {
       id: "summary",
@@ -177,7 +179,7 @@ function CompactedPages(compacted: Compacted) {
   ];
 }
 
-function WorkPages(work: PluginWork, onOpen: (id: string) => void) {
+function WorkPages(work: PluginWork, onOpen: (id: string) => void, t: Text["trace"]) {
   return [
     {
       id: "summary",
@@ -216,7 +218,7 @@ function WorkPages(work: PluginWork, onOpen: (id: string) => void) {
   ];
 }
 
-function HookPages(hook: HookDecision, onOpen: (id: string) => void) {
+function HookPages(hook: HookDecision, onOpen: (id: string) => void, t: Text["trace"]) {
   return [
     {
       id: "summary",
@@ -248,20 +250,21 @@ function HookPages(hook: HookDecision, onOpen: (id: string) => void) {
 
 /** 不是请求、工具、system 的记录。 */
 export function RecordTabs({ record, onOpen }: { record: Exclude<TraceRecord, { kind: "request" | "tool" | "system" }>; onOpen: (id: string) => void }) {
+  const t = useText().trace;
   const pages = (() => {
     switch (record.kind) {
       case "run":
-        return RunPages(record);
+        return RunPages(record, t);
       case "user":
-        return UserPages(record);
+        return UserPages(record, t);
       case "context":
-        return ContextPages(record);
+        return ContextPages(record, t);
       case "compacted":
-        return CompactedPages(record);
+        return CompactedPages(record, t);
       case "work":
-        return WorkPages(record, onOpen);
+        return WorkPages(record, onOpen, t);
       case "hook":
-        return HookPages(record, onOpen);
+        return HookPages(record, onOpen, t);
     }
   })();
   return <TabbedBody pages={pages} />;

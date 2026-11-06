@@ -3,7 +3,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import type { Row } from "./rows";
 import { LedgerHeader, LedgerRow } from "./LedgerRow";
@@ -45,6 +45,7 @@ interface Props {
 }
 
 export function Ledger({ rows, paging, selected, matches, scrollTo, onLoadOlder, onSelect, onToggleTurn, onToggleCalls }: Props) {
+  const t = useText().trace;
   const scroller = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
   // 第一次定位到末尾之前，用加载行遮住真实记录（DSH README“使用本包”第 1 段）。
@@ -97,11 +98,11 @@ export function Ledger({ rows, paging, selected, matches, scrollTo, onLoadOlder,
 
   const items = virtualizer.getVirtualItems();
   return (
-    <div role="table" aria-label={zh.trace.title} aria-rowcount={count} className="flex h-full min-h-0 flex-col">
+    <div role="table" aria-label={t.title} aria-rowcount={count} className="flex h-full min-h-0 flex-col">
       <LedgerHeader compact={compact} />
       <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto">
         {!positioned && (
-          <div className="absolute inset-0 z-10 flex items-start bg-canvas px-3 pt-2 text-xs text-fg-faint">{zh.trace.history.loadingTrajectory}</div>
+          <div className="absolute inset-0 z-10 flex items-start bg-canvas px-3 pt-2 text-xs text-fg-faint">{t.history.loadingTrajectory}</div>
         )}
         <div role="rowgroup" style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
           {items.map((item) => {
@@ -138,6 +139,7 @@ export function Ledger({ rows, paging, selected, matches, scrollTo, onLoadOlder,
 }
 
 function LoadRow({ loading, onLoad }: { loading: boolean; onLoad: () => void }) {
+  const t = useText().trace;
   return (
     <div role="row" className="flex items-center px-2" style={{ height: HISTORY_LOAD_ROW_HEIGHT_PX }}>
       <button
@@ -145,9 +147,9 @@ function LoadRow({ loading, onLoad }: { loading: boolean; onLoad: () => void }) 
         disabled={loading}
         onClick={onLoad}
         className={cx("text-xs", loading ? "text-fg-faint" : "text-accent hover:underline")}
-        aria-label={loading ? zh.trace.history.loadingEarlier : zh.trace.history.loadEarlier}
+        aria-label={loading ? t.history.loadingEarlier : t.history.loadEarlier}
       >
-        {loading ? zh.trace.history.loadingEarlier : zh.trace.history.loadEarlier}
+        {loading ? t.history.loadingEarlier : t.history.loadEarlier}
       </button>
     </div>
   );

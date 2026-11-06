@@ -1,7 +1,7 @@
 import { Brain, Cpu, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
 import type { Config, ModelChoice } from "../api/types";
-import { zh } from "../text/zh";
+import { type Text, useText } from "../text";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { AccountPane } from "./AccountPane";
@@ -21,21 +21,27 @@ interface Props {
   onLogout: () => void;
 }
 
-const PANES: { id: Pane; label: string; icon: typeof Palette }[] = [
-  { id: "appearance", label: zh.settings.appearance, icon: Palette },
-  { id: "model", label: zh.settings.model, icon: Cpu },
-  { id: "memory", label: zh.memory.title, icon: Brain },
-  { id: "account", label: zh.settings.account, icon: UserRound },
+const PANES: { id: Pane; icon: typeof Palette }[] = [
+  { id: "appearance", icon: Palette },
+  { id: "model", icon: Cpu },
+  { id: "memory", icon: Brain },
+  { id: "account", icon: UserRound },
 ];
+
+/** 导航上的页名，渲染时按当前语言取。 */
+function label(t: Text, pane: Pane): string {
+  return pane === "memory" ? t.memory.title : t.settings[pane];
+}
 
 /** 居中大圆角弹窗，左导航右内容。窄屏时导航变成顶部一行。 */
 export function SettingsDialog({ open, onClose, config, choice = null, username, onLogout }: Props) {
+  const t = useText();
   const [pane, setPane] = useState<Pane>("appearance");
   return (
-    <Dialog open={open} onClose={onClose} title={zh.settings.title} className="max-w-3xl">
+    <Dialog open={open} onClose={onClose} title={t.settings.title} className="max-w-3xl">
       <div className="flex min-h-[26rem] flex-col sm:flex-row">
-        <nav aria-label={zh.settings.title} className="flex gap-1 px-4 py-3 sm:w-44 sm:flex-col sm:py-4">
-          {PANES.map(({ id, label, icon: Icon }) => (
+        <nav aria-label={t.settings.title} className="flex gap-1 px-4 py-3 sm:w-44 sm:flex-col sm:py-4">
+          {PANES.map(({ id, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -47,7 +53,7 @@ export function SettingsDialog({ open, onClose, config, choice = null, username,
               )}
             >
               <Icon size={16} aria-hidden="true" />
-              {label}
+              {label(t, id)}
             </button>
           ))}
         </nav>

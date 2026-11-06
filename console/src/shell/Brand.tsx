@@ -1,4 +1,4 @@
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 
 interface Props {
@@ -28,8 +28,9 @@ const NAME: Record<NonNullable<Props["size"]>, string> = {
 
 /** 原创标志：元素周期表样式的 “Ta” 方格（钽，73 号），配 “Tantalum” 字样。深浅色都用前景色，不用品牌色。 */
 export function Brand({ symbolOnly = false, size = "md", className }: Props) {
+  const t = useText();
   return (
-    <span className={cx("inline-flex items-center gap-2 text-fg", className)} aria-label={zh.app.name}>
+    <span className={cx("inline-flex items-center gap-2 text-fg", className)} aria-label={t.app.name}>
       <span
         aria-hidden="true"
         className={cx(
@@ -38,9 +39,9 @@ export function Brand({ symbolOnly = false, size = "md", className }: Props) {
         )}
       >
         <span className={cx("absolute font-medium leading-none opacity-70", NUMBER[size])}>73</span>
-        {zh.app.symbol}
+        {t.app.symbol}
       </span>
-      {!symbolOnly && <span className={cx("font-semibold tracking-tight", NAME[size])}>{zh.app.name}</span>}
+      {!symbolOnly && <span className={cx("font-semibold tracking-tight", NAME[size])}>{t.app.name}</span>}
     </span>
   );
 }

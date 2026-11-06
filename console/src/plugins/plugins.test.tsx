@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import pluginsJson from "../../../tantalum-shell/src/test/resources/wire/plugins.json?raw";
 import type { Plugins } from "../api/types";
+import { currentText, lookup } from "../text";
 import { applyToggle } from "./usePlugins";
 import { PluginsDialog } from "./PluginsDialog";
 
@@ -160,6 +162,32 @@ describe("PluginsDialog", () => {
     open();
     const builtins = await screen.findByRole("region", { name: "内置工具" });
     expect(within(builtins).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["读附件", "读记忆", "删记忆", "custom_tool"]);
+  });
+});
+
+// console-i18n 任务 4：用服务器真实的 /api/plugins（PluginApiTest 写出的 wire/plugins.json）渲染，每个内置工具都是字典里的名字和说明，
+// 给模型看的英文说明不出现；MCP 工具的说明是 MCP 服务器写的，原样显示。
+describe("built-in tools from the real server", () => {
+  const real = JSON.parse(pluginsJson) as Plugins;
+  const withMcp: Plugins = { ...real, mcp: [{ name: "docs", enabled: true, state: "READY", tools: [{ name: "mcp__docs__search", description: "Search the docs index", enabled: true }] }] };
+
+  it("every built-in tool has a dictionary entry", () => {
+    expect(real.tools.length).toBeGreaterThan(0);
+    for (const tool of real.tools) expect(lookup(currentText().plugins.tools, tool.name), tool.name).toBeDefined();
+  });
+
+  it("shows dictionary names and details, never the model-facing description", async () => {
+    fakeBackend(withMcp);
+    open();
+    const builtins = await screen.findByRole("region", { name: "内置工具" });
+    for (const tool of real.tools) {
+      const [label, detail] = lookup(currentText().plugins.tools, tool.name)!;
+      expect(within(builtins).getByRole("switch", { name: label })).toBeTruthy();
+      expect(within(builtins).getByText(detail)).toBeTruthy();
+      expect(document.body.textContent).not.toContain(tool.description);
+    }
+    await userEvent.click(screen.getByRole("button", { name: currentText().plugins.showTools(1) }));
+    expect(await screen.findByText("Search the docs index")).toBeTruthy();
   });
 });
 

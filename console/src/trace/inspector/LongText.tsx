@@ -2,7 +2,7 @@
 
 import { WrapText } from "lucide-react";
 import { useState } from "react";
-import { zh } from "../../text/zh";
+import { useText } from "../../text";
 import { CopyButton } from "../../ui/CopyButton";
 import { cx } from "../../ui/cx";
 import { localArea, readStored, writeStored } from "../../ui/storage";
@@ -20,17 +20,18 @@ interface Props {
   className?: string;
 }
 
-export function LongText({ text, empty = zh.trace.record.noOutput, className }: Props) {
+export function LongText({ text, empty, className }: Props) {
+  const t = useText().trace.record;
   const [wrap, setWrap] = useState(readWrap);
-  if (text === undefined || text === "") return <p className="text-xs text-fg-faint">{empty}</p>;
+  if (text === undefined || text === "") return <p className="text-xs text-fg-faint">{empty ?? t.noOutput}</p>;
   return (
     <div className={cx("relative rounded-md border border-line bg-code", className)}>
       <div className="absolute top-1 right-1 flex items-center gap-0.5">
         <button
           type="button"
           aria-pressed={wrap}
-          aria-label={zh.trace.record.wrapLines}
-          title={zh.trace.record.wrapLines}
+          aria-label={t.wrapLines}
+          title={t.wrapLines}
           onClick={() => {
             setWrap(!wrap);
             writeStored(WRAP_KEY, String(!wrap), localArea());

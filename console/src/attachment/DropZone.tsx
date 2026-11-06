@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AttachmentRef } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 import { carriesAttachments, hasDirectory, readDragRef } from "./dragData";
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
  * 提示层不接事件，计数靠 document 上的 dragenter / dragleave，拖过子元素时不会闪。文件夹拒绝并说明。
  */
 export function DropZone({ limitsText, onFiles, onRef, onRefused }: Props) {
+  const t = useText();
   const [visible, setVisible] = useState(false);
   const depth = useRef(0);
   const handlers = useRef({ onFiles, onRef, onRefused });
@@ -51,7 +52,7 @@ export function DropZone({ limitsText, onFiles, onRef, onRefused }: Props) {
         return;
       }
       if (hasDirectory(data)) {
-        handlers.current.onRefused(zh.attachment.directory);
+        handlers.current.onRefused(currentText().attachment.directory);
         return;
       }
       const files = Array.from(data.files);
@@ -73,7 +74,7 @@ export function DropZone({ limitsText, onFiles, onRef, onRefused }: Props) {
   return createPortal(
     <div role="status" className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-overlay">
       <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line-strong bg-raised px-10 py-8 text-center shadow-xl">
-        <p className="text-base font-medium text-fg">{limitsText === null ? zh.attachment.dropBlocked : zh.attachment.dropTitle}</p>
+        <p className="text-base font-medium text-fg">{limitsText === null ? t.attachment.dropBlocked : t.attachment.dropTitle}</p>
         {limitsText !== null && <p className="text-sm text-fg-muted">{limitsText}</p>}
       </div>
     </div>,

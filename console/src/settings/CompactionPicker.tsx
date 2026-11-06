@@ -1,6 +1,6 @@
 import type { CompactionPoint } from "../api/types";
 import { tokenCount } from "../composer/status";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { useSetCompaction, useSettings } from "./useCompaction";
 
@@ -9,24 +9,25 @@ import { useSetCompaction, useSettings } from "./useCompaction";
  * 窗口未知时不可选。
  */
 export function CompactionPicker({ points: override }: { points?: CompactionPoint[] }) {
+  const t = useText();
   const settings = useSettings();
   const save = useSetCompaction();
-  if (settings.data === undefined) return <p className="text-sm text-fg-faint">{zh.common.loading}</p>;
+  if (settings.data === undefined) return <p className="text-sm text-fg-faint">{t.common.loading}</p>;
   // token 数按当前会话的模型（model-picker 需求 8.2）；没有时按设置接口给的（默认模型）
   const percent = settings.data.compaction.percent;
   const points = override ?? settings.data.compaction.points;
   return (
     <div className="flex flex-col gap-2">
       <h4 id="compaction-label" className="text-sm text-fg-muted">
-        {zh.settings.compaction}
+        {t.settings.compaction}
       </h4>
       {points.length === 0 ? (
-        <p className="text-sm text-fg-faint">{zh.settings.compactionUnknown}</p>
+        <p className="text-sm text-fg-faint">{t.settings.compactionUnknown}</p>
       ) : (
         <div role="radiogroup" aria-labelledby="compaction-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {points.map((point) => {
             const selected = point.percent === percent;
-            const label = point.percent === 100 ? zh.settings.compactionFull : `${point.percent}%`;
+            const label = point.percent === 100 ? t.settings.compactionFull : `${point.percent}%`;
             return (
               <button
                 key={point.percent}
@@ -49,10 +50,10 @@ export function CompactionPicker({ points: override }: { points?: CompactionPoin
       )}
       {save.isError ? (
         <p role="alert" className="text-xs text-danger">
-          {zh.settings.compactionFailed}
+          {t.settings.compactionFailed}
         </p>
       ) : (
-        points.length > 0 && <p className="text-xs text-fg-faint">{zh.settings.compactionHint}</p>
+        points.length > 0 && <p className="text-xs text-fg-faint">{t.settings.compactionHint}</p>
       )}
     </div>
   );

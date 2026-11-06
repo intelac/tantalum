@@ -1,7 +1,7 @@
 import { PanelLeft } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import {
@@ -43,6 +43,7 @@ function useLayoutMode(): LayoutMode {
  * 中等宽度默认图标栏，展开时作为抽屉覆盖；窄屏只有抽屉，顶栏有打开按钮。
  */
 export function AppFrame({ sidebar, header, children }: Props) {
+  const t = useText();
   const mode = useLayoutMode();
   const [width, setWidth] = useState(readWidth);
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -102,14 +103,14 @@ export function AppFrame({ sidebar, header, children }: Props) {
         <aside
           className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar"
           style={{ width: dockedWidth }}
-          aria-label={zh.sidebar.sessions}
+          aria-label={t.sidebar.sessions}
         >
           {sidebar({ rail, toggle, close })}
           {mode === "wide" && !collapsed && (
             <div
               role="separator"
               aria-orientation="vertical"
-              aria-label={zh.sidebar.sessions}
+              aria-label={t.sidebar.sessions}
               onPointerDown={onDragStart}
               onPointerMove={onDrag}
               onPointerUp={onDragEnd}
@@ -125,7 +126,7 @@ export function AppFrame({ sidebar, header, children }: Props) {
           <div className="absolute inset-0 bg-overlay" />
           <aside
             className="relative flex h-full w-[min(var(--sidebar-width),85vw)] flex-col border-r border-line bg-sidebar shadow-xl"
-            aria-label={zh.sidebar.sessions}
+            aria-label={t.sidebar.sessions}
           >
             {sidebar({ rail: false, toggle, close })}
           </aside>
@@ -135,7 +136,7 @@ export function AppFrame({ sidebar, header, children }: Props) {
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3 sm:px-4">
           {mode === "narrow" && (
-            <Button variant="icon" size="sm" aria-label={zh.sidebar.expand} onClick={toggle} className={cx("-ml-1")}>
+            <Button variant="icon" size="sm" aria-label={t.sidebar.expand} onClick={toggle} className={cx("-ml-1")}>
               <PanelLeft size={18} />
             </Button>
           )}

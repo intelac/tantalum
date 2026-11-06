@@ -1,22 +1,24 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme, type Theme } from "../theme/theme";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 
-const OPTIONS: { theme: Theme; label: string; icon: typeof Sun }[] = [
-  { theme: "light", label: zh.settings.light, icon: Sun },
-  { theme: "dark", label: zh.settings.dark, icon: Moon },
-  { theme: "system", label: zh.settings.system, icon: Monitor },
+// 卡片名在渲染时按主题取（t.settings.light 等），切换语言后跟着变
+const OPTIONS: { theme: Theme; icon: typeof Sun }[] = [
+  { theme: "light", icon: Sun },
+  { theme: "dark", icon: Moon },
+  { theme: "system", icon: Monitor },
 ];
 
 /** 三张卡片选浅色、深色、跟随系统；选择立即生效并保留。 */
 export function AppearancePane() {
+  const t = useText();
   const [theme, setTheme] = useTheme();
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-medium text-fg">{zh.settings.appearance}</h3>
-      <div role="radiogroup" aria-label={zh.settings.appearance} className="grid grid-cols-3 gap-3">
-        {OPTIONS.map(({ theme: option, label, icon: Icon }) => {
+      <h3 className="text-sm font-medium text-fg">{t.settings.appearance}</h3>
+      <div role="radiogroup" aria-label={t.settings.appearance} className="grid grid-cols-3 gap-3">
+        {OPTIONS.map(({ theme: option, icon: Icon }) => {
           const selected = option === theme;
           return (
             <button
@@ -31,12 +33,12 @@ export function AppearancePane() {
               )}
             >
               <Icon size={18} aria-hidden="true" />
-              {label}
+              {t.settings[option]}
             </button>
           );
         })}
       </div>
-      <p className="text-xs text-fg-faint">{zh.settings.appearanceHint}</p>
+      <p className="text-xs text-fg-faint">{t.settings.appearanceHint}</p>
     </div>
   );
 }

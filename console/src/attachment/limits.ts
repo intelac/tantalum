@@ -1,7 +1,8 @@
 // 附件的限制，前端先查一遍，挡住明显超限的（需求 2.1）；服务器会再查，前端漏掉的以服务器为准。
 
 import type { AttachmentLimits } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText } from "../text";
+import { formatBytes } from "../text/format";
 
 const MIB = 1024 * 1024;
 
@@ -22,13 +23,6 @@ export function isImage(file: { name: string; type: string }): boolean {
   return IMAGE_TYPES.has(file.type) || (file.type === "" && IMAGE_EXTENSIONS.test(file.name));
 }
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < MIB) return `${Math.round(bytes / 1024)} KB`;
-  const mib = bytes / MIB;
-  return `${Number.isInteger(mib) ? mib : mib.toFixed(1)} MB`;
-}
-
 export interface Candidate {
   name: string;
   size: number;
@@ -44,6 +38,7 @@ export interface Admission {
 
 /** 一批新附件里能收下哪些：和已有的合在一起不超过一条消息的限制（A4、A5、A7）。按顺序收，超限的跳过。 */
 export function admit(existing: readonly Candidate[], incoming: readonly Candidate[], limits: AttachmentLimits, vision: boolean): Admission {
+  const t = currentText();
   let images = existing.filter((item) => item.image).length;
   let imageBytes = existing.filter((item) => item.image).reduce((sum, item) => sum + item.size, 0);
   let files = existing.length - images;
@@ -52,18 +47,18 @@ export function admit(existing: readonly Candidate[], incoming: readonly Candida
   incoming.forEach((item, index) => {
     const refusal = item.image
       ? !vision
-        ? zh.attachment.modelUnsupported
+        ? t.attachment.modelUnsupported
         : item.size > limits.maxImageBytes
-          ? zh.attachment.imageFileTooLarge(formatBytes(limits.maxImageBytes))
+          ? t.attachment.imageFileTooLarge(formatBytes(limits.maxImageBytes))
           : images + 1 > limits.maxImagesPerMessage
-            ? zh.attachment.imageTooMany(limits.maxImagesPerMessage)
+            ? t.attachment.imageTooMany(limits.maxImagesPerMessage)
             : imageBytes + item.size > limits.maxImageBytesPerMessage
-              ? zh.attachment.imageTotalTooLarge(formatBytes(limits.maxImageBytesPerMessage))
+              ? t.attachment.imageTotalTooLarge(formatBytes(limits.maxImageBytesPerMessage))
               : undefined
       : item.size > limits.maxFileBytes
-        ? zh.attachment.fileTooLarge(formatBytes(limits.maxFileBytes))
+        ? t.attachment.fileTooLarge(formatBytes(limits.maxFileBytes))
         : files + 1 > limits.maxFilesPerMessage
-          ? zh.attachment.fileTooMany(limits.maxFilesPerMessage)
+          ? t.attachment.fileTooMany(limits.maxFilesPerMessage)
           : undefined;
     if (refusal !== undefined) {
       reason ??= refusal;

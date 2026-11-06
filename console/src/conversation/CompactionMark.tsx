@@ -5,7 +5,7 @@ import { tokenCount } from "../composer/status";
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 
 interface Props {
   store: ConversationStore;
@@ -13,13 +13,15 @@ interface Props {
 }
 
 function triggerLabel(item: CompactionItem): string {
-  if (item.trigger === "MANUAL") return ` · ${zh.conversation.compactedManual}`;
-  if (item.trigger === "OVERFLOW") return ` · ${zh.conversation.compactedOverflow}`;
+  const t = currentText();
+  if (item.trigger === "MANUAL") return ` · ${t.conversation.compactedManual}`;
+  if (item.trigger === "OVERFLOW") return ` · ${t.conversation.compactedOverflow}`;
   return "";
 }
 
 /** 对话里的压缩分隔线：上面的内容在模型看来已经换成摘要。点开看摘要原文；失败时只显示原因。 */
 export function CompactionMark({ store, id }: Props) {
+  const t = useText();
   const item = useItem(store, id);
   const [open, setOpen] = useState(false);
   if (item === undefined || item.kind !== "compaction") return null;
@@ -27,7 +29,7 @@ export function CompactionMark({ store, id }: Props) {
     return (
       <div role="note" className="my-3 flex items-center gap-3 text-xs text-fg-faint">
         <span className="h-px flex-1 bg-line" />
-        <span>{zh.conversation.compactionFailed(item.failure)}</span>
+        <span>{t.conversation.compactionFailed(item.failure)}</span>
         <span className="h-px flex-1 bg-line" />
       </div>
     );
@@ -36,12 +38,12 @@ export function CompactionMark({ store, id }: Props) {
     return (
       <div role="note" className="my-3 flex items-center gap-3 text-xs text-fg-faint">
         <span className="h-px flex-1 bg-line" />
-        <span>{zh.conversation.trimmed(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item)}</span>
+        <span>{t.conversation.trimmed(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item)}</span>
         <span className="h-px flex-1 bg-line" />
       </div>
     );
   }
-  const label = zh.conversation.compacted(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item);
+  const label = t.conversation.compacted(tokenCount(item.estimateBefore), tokenCount(item.estimateAfter)) + triggerLabel(item);
   return (
     <div className="my-3 text-xs text-fg-faint">
       <div className="flex items-center gap-3">
@@ -58,7 +60,7 @@ export function CompactionMark({ store, id }: Props) {
         <span className="h-px flex-1 bg-line" />
       </div>
       {open && (
-        <div className="mt-2 rounded-md border border-line bg-muted px-3 py-2 text-sm text-fg-muted" aria-label={zh.conversation.summary}>
+        <div className="mt-2 rounded-md border border-line bg-muted px-3 py-2 text-sm text-fg-muted" aria-label={t.conversation.summary}>
           <Markdown text={item.summary ?? ""} />
         </div>
       )}

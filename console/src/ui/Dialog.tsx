@@ -1,6 +1,6 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "./Button";
 import { cx } from "./cx";
 
@@ -16,6 +16,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 /** 居中大圆角弹窗。Esc 和遮罩关闭；打开时聚焦第一个控件，关闭后把焦点还给打开它的控件；Tab 在弹窗内循环。 */
 export function Dialog({ open, onClose, title, children, className }: Props) {
+  const t = useText();
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
   const titleId = useId();
@@ -77,7 +78,7 @@ export function Dialog({ open, onClose, title, children, className }: Props) {
           <h2 id={titleId} className="text-base font-semibold">
             {title}
           </h2>
-          <Button variant="icon" size="sm" aria-label={zh.common.close} onClick={onClose}>
+          <Button variant="icon" size="sm" aria-label={t.common.close} onClick={onClose}>
             <CloseIcon />
           </Button>
         </div>

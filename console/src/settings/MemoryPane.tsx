@@ -3,8 +3,8 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import type { MemorySummary, MemoryType } from "../api/types";
 import { Markdown } from "../markdown/Markdown";
-import { relativeTime } from "../text/time";
-import { zh } from "../text/zh";
+import { relativeTime } from "../text/format";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
@@ -22,25 +22,27 @@ export function MemoryPane() {
 }
 
 function TypeTag({ type }: { type: MemoryType }) {
-  return <span className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">{zh.memory.types[type] ?? type}</span>;
+  const t = useText();
+  return <span className="rounded-xs bg-muted px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">{t.memory.types[type] ?? type}</span>;
 }
 
 function ListView({ onOpen, onAdd }: { onOpen: (name: string) => void; onAdd: () => void }) {
+  const t = useText();
   const list = useMemories();
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-fg">{zh.memory.title}</h3>
-        {list.data !== undefined && <span className="text-xs text-fg-faint">{zh.memory.used(list.data.used, list.data.max)}</span>}
+        <h3 className="text-sm font-medium text-fg">{t.memory.title}</h3>
+        {list.data !== undefined && <span className="text-xs text-fg-faint">{t.memory.used(list.data.used, list.data.max)}</span>}
       </div>
-      <p className="text-xs text-fg-faint">{zh.memory.hint}</p>
-      {list.isPending && <p className="text-sm text-fg-faint">{zh.common.loading}</p>}
+      <p className="text-xs text-fg-faint">{t.memory.hint}</p>
+      {list.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
       {list.isError && (
         <p role="alert" className="text-sm text-danger">
-          {zh.memory.loadFailed}
+          {t.memory.loadFailed}
         </p>
       )}
-      {list.data !== undefined && list.data.entries.length === 0 && <p className="text-sm text-fg-muted">{zh.memory.empty}</p>}
+      {list.data !== undefined && list.data.entries.length === 0 && <p className="text-sm text-fg-muted">{t.memory.empty}</p>}
       {list.data !== undefined && list.data.entries.length > 0 && (
         <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
           {list.data.entries.map((entry) => (
@@ -53,7 +55,7 @@ function ListView({ onOpen, onAdd }: { onOpen: (name: string) => void; onAdd: ()
       <div>
         <Button variant="secondary" size="sm" onClick={onAdd}>
           <Plus size={14} aria-hidden="true" />
-          {zh.memory.add}
+          {t.memory.add}
         </Button>
       </div>
     </div>
@@ -74,6 +76,7 @@ function EntryRow({ entry, onOpen }: { entry: MemorySummary; onOpen: () => void 
 }
 
 function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
+  const t = useText();
   const entry = useMemory(name);
   const remove = useDeleteMemory();
   const [confirming, setConfirming] = useState(false);
@@ -89,14 +92,14 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ChevronLeft size={14} aria-hidden="true" />
-          {zh.memory.back}
+          {t.memory.back}
         </Button>
         <span className="ml-auto" />
         <Button variant="danger" size="sm" onClick={() => setConfirming(true)}>
-          {zh.memory.delete}
+          {t.memory.delete}
         </Button>
       </div>
-      {entry.isPending && <p className="text-sm text-fg-faint">{zh.common.loading}</p>}
+      {entry.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
       {entry.isError && (
         <p role="alert" className="text-sm text-danger">
           {entry.error.message}
@@ -108,7 +111,7 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
             <h3 className="font-mono text-sm font-medium text-fg">{entry.data.name}</h3>
             <TypeTag type={entry.data.type} />
             <span className="text-xs text-fg-faint">
-              {zh.memory.updatedAt} {relativeTime(entry.data.updatedAt)}
+              {t.memory.updatedAt} {relativeTime(entry.data.updatedAt)}
             </span>
           </div>
           <p className="text-sm text-fg-muted">{entry.data.description}</p>
@@ -122,15 +125,15 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
           {remove.error.message}
         </p>
       )}
-      <Dialog open={confirming} onClose={() => setConfirming(false)} title={zh.memory.confirmDelete} className="max-w-md">
+      <Dialog open={confirming} onClose={() => setConfirming(false)} title={t.memory.confirmDelete} className="max-w-md">
         <div className="flex flex-col gap-4 p-6">
-          <p className="text-sm text-fg">{zh.memory.confirmDeleteBody(name)}</p>
+          <p className="text-sm text-fg">{t.memory.confirmDeleteBody(name)}</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirming(false)}>
-              {zh.common.cancel}
+              {t.common.cancel}
             </Button>
             <Button variant="danger" onClick={() => void confirmDelete()} disabled={remove.isPending}>
-              {zh.common.confirm}
+              {t.common.confirm}
             </Button>
           </div>
         </div>
@@ -140,6 +143,7 @@ function EntryView({ name, onBack }: { name: string; onBack: () => void }) {
 }
 
 function AddForm({ onDone }: { onDone: () => void }) {
+  const t = useText();
   const create = useCreateMemory();
   const [name, setName] = useState("");
   const [type, setType] = useState<MemoryType>("user");
@@ -162,30 +166,30 @@ function AddForm({ onDone }: { onDone: () => void }) {
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onDone}>
           <ChevronLeft size={14} aria-hidden="true" />
-          {zh.memory.back}
+          {t.memory.back}
         </Button>
-        <h3 className="text-sm font-medium text-fg">{zh.memory.add}</h3>
+        <h3 className="text-sm font-medium text-fg">{t.memory.add}</h3>
       </div>
       <label className="flex flex-col gap-1 text-xs text-fg-muted">
-        {zh.memory.name}
-        <input className={field} value={name} onChange={(event) => setName(event.target.value)} placeholder={zh.memory.nameHint} required />
+        {t.memory.name}
+        <input className={field} value={name} onChange={(event) => setName(event.target.value)} placeholder={t.memory.nameHint} required />
       </label>
       <label className="flex flex-col gap-1 text-xs text-fg-muted">
-        {zh.memory.type}
+        {t.memory.type}
         <select className={field} value={type} onChange={(event) => setType(event.target.value as MemoryType)}>
           {TYPES.map((option) => (
             <option key={option} value={option}>
-              {zh.memory.types[option]}
+              {t.memory.types[option]}
             </option>
           ))}
         </select>
       </label>
       <label className="flex flex-col gap-1 text-xs text-fg-muted">
-        {zh.memory.description}
+        {t.memory.description}
         <input className={field} value={description} onChange={(event) => setDescription(event.target.value)} required />
       </label>
       <label className="flex flex-col gap-1 text-xs text-fg-muted">
-        {zh.memory.content}
+        {t.memory.content}
         <textarea className={field} rows={6} value={content} onChange={(event) => setContent(event.target.value)} required />
       </label>
       {create.isError && (
@@ -195,7 +199,7 @@ function AddForm({ onDone }: { onDone: () => void }) {
       )}
       <div className="flex justify-end">
         <Button variant="primary" type="submit" disabled={create.isPending}>
-          {create.isPending ? zh.memory.saving : zh.memory.save}
+          {create.isPending ? t.memory.saving : t.memory.save}
         </Button>
       </div>
     </form>

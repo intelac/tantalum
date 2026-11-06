@@ -1,16 +1,20 @@
-// 全部界面文案。组件里不写死中文，改文案只改这里。
+// 全部界面文案的中文，也是键的来源（console-i18n I5）：en.ts、ja.ts 的类型由它推出来。组件里不写死文字，改文案只改这里。
+// 按服务器给的值查的表用 `satisfies Record<联合类型, …>`，英文、日文也必须每个值都写。
 
-/** 思考档位的中文名（model-picker M5），和服务器 ChoiceCheck 里的一致。 */
-const LEVEL_NAMES: Record<string, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  xhigh: "很高",
-  max: "最高",
-  minimal: "极低",
-  off: "关",
-  on: "开",
-};
+import type {
+  EndReason,
+  HookDecision,
+  HookPoint,
+  LocalSwitch,
+  LocalValidity,
+  MemoryType,
+  PluginWork,
+  RunHead,
+  ToolCall,
+  TraceKind,
+  UserInput,
+  WebSwitch,
+} from "../api/types";
 
 export const zh = {
   app: {
@@ -61,7 +65,7 @@ export const zh = {
     summary: "摘要",
     queued: "排队中",
     jumpToBottom: "回到底部",
-    toolsChanged: "工具变化",
+    toolsChangedList: (parts: readonly string[]) => `工具变化：${parts.join("；")}`,
     modelChanged: (label: string) => `换成 ${label}`,
     toolsAdded: (names: string) => `新增 ${names}`,
     toolsDisabled: (names: string) => `不再可用 ${names}（已在插件页关闭）`,
@@ -97,7 +101,7 @@ export const zh = {
     lines: (from: number, to: number, total: number) => `第 ${from}–${to} 行，共 ${total} 行`,
     fromLine: (line: number) => `从第 ${line} 行`,
     upTo: (limit: number) => `最多 ${limit} 行`,
-    bytes: (bytes: number) => `${bytes.toLocaleString("zh-CN")} 字节`,
+    bytes: (bytes: string) => `${bytes} 字节`,
     change: "改动",
     content: "内容",
     replaceAll: "全部替换",
@@ -117,6 +121,7 @@ export const zh = {
     cancelled: "已取消",
     restarted: "服务重启，这次运行已中断。可以接着提问",
     stopped: "被钩子停止",
+    stoppedWith: (detail: string) => `被钩子停止：${detail}`,
     dropped: "命令丢失，运行失败",
     switchCompaction: (label: string) => `换到 ${label} 之前压缩失败，请重试或换窗口更大的模型`,
   },
@@ -136,13 +141,24 @@ export const zh = {
     // 输入框旁的模型和思考档位选择器（model-picker）。档位名照 DSH 的说法；不认识的档位照原样显示。
     picker: {
       label: "模型和思考档位",
+      labelWith: (choice: string) => `模型和思考档位：${choice}`,
       search: "搜索模型",
       levels: "思考档位",
       nextTurn: "下一次提问生效",
       unavailable: (reason: string) => (reason === "" ? "暂时连不上" : `暂时连不上（${reason}）`),
       toolChangesUnsupported: "这个会话中途改过工具，这个模型不支持",
       empty: "没有匹配的模型",
-      level: (level: string) => LEVEL_NAMES[level] ?? level,
+      // 思考档位名（model-picker M5），和服务器 ChoiceCheck 里的一致；不认识的档位照原样显示。
+      levelNames: {
+        low: "低",
+        medium: "中",
+        high: "高",
+        xhigh: "很高",
+        max: "最高",
+        minimal: "极低",
+        off: "关",
+        on: "开",
+      },
     },
   },
   // 附件。和 DSH `ui-conversation` zh 词典里 attachment.* / image.* / file.* 的说法一致；灯箱的缩放、汇总等是自定的。
@@ -239,7 +255,7 @@ export const zh = {
       tool: "工具",
       work: "插件工作",
       hook: "钩子决定",
-    } as Record<string, string>,
+    } satisfies Record<TraceKind, string>,
     column: { event: "事件", content: "内容", input: "输入", output: "输出", think: "思考", time: "时间", call: "调用", result: "结果" },
     turnLabel: (turn: number) => `第 ${turn} 轮`,
     betweenTurns: "轮次之间",
@@ -254,10 +270,10 @@ export const zh = {
       collapsedTurn: "已收起的轮次概述",
       collapsedCalls: "已收起的调用概述",
     },
-    trigger: { PROMPT: "提问", FOLLOW_UP: "排队提交", MANUAL_COMPACTION: "手动压缩" } as Record<string, string>,
-    endReason: { COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消", STOPPED: "被插件结束" } as Record<string, string>,
+    trigger: { PROMPT: "提问", FOLLOW_UP: "排队提交", MANUAL_COMPACTION: "手动压缩" } satisfies Record<RunHead["trigger"], string>,
+    endReason: { COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消", STOPPED: "被插件结束" } satisfies Record<EndReason, string>,
     running: "进行中",
-    userMode: { PROMPT: "提问", FOLLOW_UP: "排队", STEER: "插话", CONTINUE: "插件续写" } as Record<string, string>,
+    userMode: { PROMPT: "提问", FOLLOW_UP: "排队", STEER: "插话", CONTINUE: "插件续写" } satisfies Record<UserInput["mode"], string>,
     status: { failed: "失败", pending: "等待中", completed: "已完成" },
     toolStatus: {
       WAITING: "排队",
@@ -267,9 +283,9 @@ export const zh = {
       BLOCKED: "被拦下",
       NOT_SENT: "没有发出",
       UNKNOWN: "结果不明",
-    } as Record<string, string>,
-    workStatus: { RUNNING: "运行中", DONE: "已完成", FAILED: "失败", INTERRUPTED: "被打断" } as Record<string, string>,
-    workAfter: { CONTINUE: "继续", END: "结束" } as Record<string, string>,
+    } satisfies Record<ToolCall["status"], string>,
+    workStatus: { RUNNING: "运行中", DONE: "已完成", FAILED: "失败", INTERRUPTED: "被打断" } satisfies Record<PluginWork["status"], string>,
+    workAfter: { CONTINUE: "继续", END: "结束" } satisfies Record<NonNullable<PluginWork["after"]>, string>,
     hookPoint: {
       BEFORE_MODEL_CALL: "模型调用前",
       BEFORE_TOOL_CALL: "工具调用前",
@@ -277,9 +293,9 @@ export const zh = {
       BEFORE_RUN_END: "结束前",
       ON_WORK_RESULT: "工作结果后",
       BEFORE_COMPACT: "压缩前",
-    } as Record<string, string>,
-    hookResult: { STOP: "拦截", NEED_WORK: "要求工作", PATCH: "补丁", ERROR: "出错" } as Record<string, string>,
-    hookApplied: { APPLIED: "已用于这次调用", NOT_ADOPTED: "未采用", INEFFECTIVE: "此位置补丁不生效" } as Record<string, string>,
+    } satisfies Record<HookPoint, string>,
+    hookResult: { STOP: "拦截", NEED_WORK: "要求工作", PATCH: "补丁", ERROR: "出错" } satisfies Record<HookDecision["result"], string>,
+    hookApplied: { APPLIED: "已用于这次调用", NOT_ADOPTED: "未采用", INEFFECTIVE: "此位置补丁不生效" } satisfies Record<NonNullable<HookDecision["applied"]>, string>,
     layout: {
       initialSystemPrompt: "初始系统提示词",
       systemPromptUpdated: "系统提示词已更新",
@@ -474,7 +490,7 @@ export const zh = {
     continued: "插件续写",
     total: "合计",
     notRecorded: "未记录",
-    trigger: { PROMPT: "用户提问", FOLLOW_UP: "排队提交", MANUAL_COMPACTION: "手动压缩" } as Record<string, string>,
+    trigger: { PROMPT: "用户提问", FOLLOW_UP: "排队提交", MANUAL_COMPACTION: "手动压缩" } satisfies Record<RunHead["trigger"], string>,
     showTotals: "显示合计行",
     showDelta: "显示上下文增量",
     deltaTitle: "相对同轮上一步、上一轮的提示词增量；负值表示上下文减少（如压缩）",
@@ -523,15 +539,15 @@ export const zh = {
     request: (status: number) => `请求失败（${status}）`,
     markdown: "内容渲染出错，已按纯文本显示",
   },
+  // 相对时间（“5 分钟前”）用 Intl.RelativeTimeFormat，不在字典里（text/format.ts）。
   time: {
-    justNow: "刚刚",
-    minutesAgo: (minutes: number) => `${minutes} 分钟前`,
-    hoursAgo: (hours: number) => `${hours} 小时前`,
-    yesterday: "昨天",
-    daysAgo: (days: number) => `${days} 天前`,
-    seconds: (seconds: number) => `${seconds} 秒`,
-    minutesSeconds: (minutes: number, seconds: number) => `${minutes} 分 ${seconds} 秒`,
-    milliseconds: (ms: number) => `${ms} 毫秒`,
+    duration: {
+      milliseconds: (ms: number) => `${ms} 毫秒`,
+      seconds: (seconds: number) => `${seconds} 秒`,
+      minutesSeconds: (minutes: number, seconds: number) => `${minutes} 分 ${seconds} 秒`,
+      /** 轨迹页的秒，带小数，例如 `1.25`。 */
+      preciseSeconds: (seconds: string) => `${seconds} 秒`,
+    },
   },
   memory: {
     title: "记忆",
@@ -551,7 +567,7 @@ export const zh = {
     save: "保存",
     saving: "保存中…",
     updatedAt: "更新于",
-    types: { user: "用户", feedback: "反馈", project: "项目", reference: "引用" } as Record<string, string>,
+    types: { user: "用户", feedback: "反馈", project: "项目", reference: "引用" } satisfies Record<MemoryType, string>,
     loadFailed: "记忆加载失败",
   },
   plugins: {
@@ -566,7 +582,7 @@ export const zh = {
     noServerTools: "现在没有工具（服务器连上后列出）。",
     mandatory: "必须开启",
     mandatoryHint: "管理员设为必须开启（tantalum.hooks.required），不能关闭。",
-    points: "挂在",
+    pointsList: (names: readonly string[]) => `挂在：${names.join("、")}`,
     showTools: (count: number) => `${count} 个工具`,
     hideTools: "收起",
     loadFailed: "插件列表加载失败",
@@ -576,7 +592,7 @@ export const zh = {
       memory_read: ["读记忆", "读取长期记忆的正文。"],
       memory_write: ["写记忆", "新建或更新一条长期记忆。"],
       memory_delete: ["删记忆", "删除一条长期记忆。"],
-    } as Record<string, readonly [string, string]>,
+    } satisfies Record<string, readonly [string, string]>,
     states: {
       READY: "已连接",
       CONNECTING: "连接中",
@@ -584,7 +600,7 @@ export const zh = {
       UNAUTHORIZED: "未授权",
       FAILED: "连接失败",
       CLOSED: "已关闭",
-    } as Record<string, string>,
+    } satisfies Record<string, string>,
     pointNames: {
       beforeModelCall: "调模型前",
       beforeToolCall: "调工具前",
@@ -593,7 +609,7 @@ export const zh = {
       onWorkResult: "插件工作完成后",
       beforeCompact: "压缩前",
       afterToolExecution: "工具结果",
-    } as Record<string, string>,
+    } satisfies Record<string, string>,
     work: (type: string) => `插件工作 ${type}`,
     web: {
       title: "联网",
@@ -604,7 +620,7 @@ export const zh = {
       switches: {
         "web-fetch": ["抓网页", "服务器下载网页、转成文字，快、省 token；不运行网页里的脚本。"],
         browser: ["浏览器", "你自己的无头浏览器，能搜索、点击、输入、截图；10 分钟不用自动关闭，登录状态随之清空。"],
-      } as Record<string, readonly [string, string]>,
+      } satisfies Record<Exclude<WebSwitch, "web">, readonly [string, string]>,
     },
     local: {
       title: "本机工作区",
@@ -621,14 +637,14 @@ export const zh = {
         git: ["Git 查询", "只读地查看提交历史、改动和每一行是谁改的：git_log、git_show、git_diff、git_blame、git_branches。"],
         "file-edit": ["改文件", "新建、覆盖、修改文件：write_file、edit_file。"],
         shell: ["命令行", "在隔离环境里跑命令：bash。"],
-      } as Record<string, readonly [string, string]>,
+      } satisfies Record<Exclude<LocalSwitch, "local-workspace">, readonly [string, string]>,
       notAllowedWrite: "连接程序没有允许：启动时加 --allow-write 才能改文件",
       notAllowedShell: "连接程序没有允许：启动时加 --allow-shell 才能跑命令",
       noSandbox: (reason: string) => `这台电脑不支持隔离执行命令：${reason}`,
       noGit: "这台电脑上没有装 git，Git 查询用不了",
       connect: "连接这台电脑",
       validity: "有效期",
-      validities: { "30m": "半小时", "1h": "1 小时", "4h": "4 小时", "1d": "1 天" } as Record<string, string>,
+      validities: { "30m": "半小时", "1h": "1 小时", "4h": "4 小时", "1d": "1 天" } satisfies Record<LocalValidity, string>,
       issued: (time: string) => `在电脑的终端里运行下面这条命令。令牌只显示这一次，${time} 到期。`,
       commandSteps: "怎么运行",
       commandHint: [
@@ -651,7 +667,8 @@ export const zh = {
     cancel: "取消",
     confirm: "确定",
     loading: "加载中…",
+    /** 读屏的“名称，内容”。 */
+    labelled: (label: string, content: string) => `${label}，${content}`,
   },
 } as const;
 
-export type Text = typeof zh;

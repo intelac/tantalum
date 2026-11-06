@@ -2,10 +2,8 @@
 
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "../ui/Button";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import type { TimelineMode } from "./segments";
-
-const t = zh.trace.toolbar;
 
 interface Props {
   turnsCollapsed: boolean;
@@ -24,6 +22,7 @@ interface Props {
 }
 
 export function Toolbar({ turnsCollapsed, callsCollapsed, onTurns, onCalls, query, onQuery, current, total, onJump, mode, onMode }: Props) {
+  const t = useText().trace.toolbar;
   return (
     <div role="toolbar" aria-label={t.aria} className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-1.5 text-xs">
       <span className="flex items-center gap-1">

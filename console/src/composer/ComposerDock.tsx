@@ -1,7 +1,7 @@
 import type { Config } from "../api/types";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useLatestRun, useRunVersion, useSessionModel } from "../store/hooks";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Composer } from "./Composer";
 import { ModelPicker } from "./ModelPicker";
 import { QuestionCards } from "./QuestionCard";
@@ -20,6 +20,7 @@ interface Props {
  * 模型选择器显示这个会话的选择（model-picker）；状态栏的窗口和压缩点按这个会话的模型算（需求 8.3）。
  */
 export function ComposerDock({ store, session, config }: Props) {
+  const t = useText();
   const { run, running } = useLatestRun(store, session);
   const version = useRunVersion(store, run);
   const models = useModels();
@@ -36,7 +37,7 @@ export function ComposerDock({ store, session, config }: Props) {
       <Composer
         session={session}
         activeRun={running ? run : null}
-        modelName={config?.model ?? zh.composer.model}
+        modelName={config?.model ?? t.composer.model}
         cloud={route?.cloud ?? config?.cloud ?? false}
         limits={config?.attachments}
         vision={findModel(models.data, choice.shown)?.vision ?? config?.vision}
