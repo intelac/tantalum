@@ -265,6 +265,17 @@ class GitToolsTest {
         assertEquals(Git.NOT_A_REPOSITORY + ".", show.run(none, args("revision", "HEAD")).text());
     }
 
+    /** {@code hello.roots[].git}：同 Git 工具的规则，顶层也在允许的目录里才算仓库。 */
+    @Test
+    void helloMarksOnlyRepositoriesInsideTheAllowedDirectories() throws Exception {
+        Path plain = Files.createDirectory(temp.resolve("plain"));
+        AllowedDirs both = new AllowedDirs(List.of(repo, plain));
+        assertTrue(GitRepo.at(both, repo));
+        assertFalse(GitRepo.at(both, plain));
+        assertFalse(GitRepo.at(new AllowedDirs(List.of(repo.resolve("docs"))), repo.resolve("docs")));
+        assertTrue(GitRepo.at(new AllowedDirs(List.of(repo, repo.resolve("docs"))), repo.resolve("docs")));
+    }
+
     /** 只允许了仓库里的一个子目录：仓库顶层在允许的目录外，git show 能读到外面的文件，所以当作不是仓库。 */
     @Test
     void aRepositoryWhoseTopIsOutsideTheAllowedDirectoriesIsNotUsed() throws Exception {

@@ -14,6 +14,7 @@
     <module>tantalum-kernel</module>
     <module>tantalum-local</module>
     <module>tantalum-shell</module>
+    <module>tantalum-connect</module>
     <module>tantalum-examples</module>
   </modules>
 
