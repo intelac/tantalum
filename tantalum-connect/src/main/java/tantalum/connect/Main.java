@@ -19,7 +19,7 @@ import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Mxc;
 import tantalum.local.sandbox.MxcPolicy;
 import tantalum.local.sandbox.Sandbox;
-import tantalum.local.tool.GitRepo;
+import tantalum.local.tool.GitCheck;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
 
@@ -49,7 +49,8 @@ public final class Main {
             启动前放进环境变量 TANTALUM_TOKEN，或者启动后按提示粘贴（不显示）。不要把令牌写在命令行上。
 
               --server URL      服务器地址，默认 http://127.0.0.1:8091
-              --allow 目录      允许 agent 进的目录，可以写多个，第一个是主目录（至少一个）
+              --allow 目录      允许 agent 进的目录，可以写多个，第一个是主目录（至少一个）。
+                                . 是当前目录：先 cd 到项目目录再写 --allow .。不能是家目录或 /
               --allow-write     允许改文件（write_file、edit_file）。不加就只能读
               --allow-shell     允许跑命令（bash，在系统沙箱里执行）
               --allow-read 目录 命令额外能读的目录，可以写多个
@@ -200,6 +201,7 @@ public final class Main {
                 if (!Files.isDirectory(dir)) {
                     throw new Refused("--allow 的目录不存在或不是目录：" + dir);
                 }
+                refuseTooBroad(dir, env);
             }
             dirs = new AllowedDirs(options.allow());
         } catch (IOException | IllegalArgumentException failure) {
@@ -221,6 +223,23 @@ public final class Main {
         String token = token(env, prompt);
         Sandbox sandbox = sandbox(options, dirs, env);
         return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check()), token, sandbox);
+    }
+
+    /**
+     * 不允许把家目录或根目录 {@code /} 交出去（2026-11-06 Yi 定）：里面有密钥、浏览器资料、别的项目，agent 全都能读。
+     * 按真实路径比较，{@code --allow .}、{@code --allow ~}、符号链接都一样拦。家目录取 {@code HOME}，没有时取 {@code user.home}。
+     */
+    static void refuseTooBroad(Path dir, Map<String, String> env) throws Refused, IOException {
+        Path real = dir.toRealPath();
+        if (real.getParent() == null) {
+            throw new Refused("--allow 不能是根目录 /：agent 能读这台电脑上的所有文件。请换成具体的项目目录，例如 "
+                    + "--allow ~/work/shop；或者先 cd 到项目目录，再用 --allow .（. 就是当前目录）。");
+        }
+        String home = env.getOrDefault("HOME", System.getProperty("user.home"));
+        if (home != null && !home.isBlank() && Files.isDirectory(Path.of(home)) && real.equals(Path.of(home).toRealPath())) {
+            throw new Refused("--allow 不能是家目录 " + real + "：里面有密钥（如 ~/.ssh、.env）、浏览器资料和别的项目，agent 全都能读。"
+                    + "请换成具体的项目目录，例如 --allow " + real.resolve("work/shop") + "；或者先 cd 到项目目录，再用 --allow .（. 就是当前目录）。");
+        }
     }
 
     /**
@@ -275,20 +294,21 @@ public final class Main {
         return token;
     }
 
+    /** Git 只看这台电脑装没装：哪个目录是仓库由每次调用按路径判断。 */
     private static Hello hello(Options options, AllowedDirs dirs, Sandbox.Status shell) {
         List<Hello.Root> roots = new ArrayList<>();
         for (Path dir : dirs.all()) {
-            boolean git;
-            try {
-                git = GitRepo.at(dirs, dir);
-            } catch (InterruptedException stopped) {
-                Thread.currentThread().interrupt();
-                git = false;
-            }
-            roots.add(new Hello.Root(dir.toString(), git));
+            roots.add(new Hello.Root(dir.toString()));
+        }
+        boolean git;
+        try {
+            git = GitCheck.installed(dirs.main());
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
+            git = false;
         }
         return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
-                new Hello.Shell(shell.available(), shell.reason()), options.network());
+                new Hello.Shell(shell.available(), shell.reason()), options.network(), git);
     }
 
     static String version() {
@@ -324,8 +344,9 @@ public final class Main {
                 + hello.device().arch() + "）");
         for (int i = 0; i < hello.roots().size(); i++) {
             Hello.Root root = hello.roots().get(i);
-            out.println((i == 0 ? "主目录：" : "允许的目录：") + root.path() + (root.git() ? "（Git 仓库）" : ""));
+            out.println((i == 0 ? "主目录：" : "允许的目录：") + root.path());
         }
+        out.println("Git 查询：" + (hello.git() ? "可用（允许目录里的任何仓库，每次按路径找）" : "不可用，这台电脑上没有 git"));
         out.println("改文件：" + (hello.write() ? "允许" : "不允许（要允许请加 --allow-write）"));
         out.println("命令行：" + (hello.shell().available() ? "可用" : "不可用，" + hello.shell().reason()));
         if (setup.sandbox() instanceof Mxc mxc && hello.shell().available()) {

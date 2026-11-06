@@ -133,6 +133,24 @@ class HookChainTest {
         assertEquals(1, outcome.facts().size());
     }
 
+    /**
+     * A2：默认关、用户能关的策略插件（failClosed）和管理员设成必须开启的插件（tantalum.hooks.required），出错都按拦截处理，
+     * 和声明了 mandatory 的一样；否则审批钩子出一次错就等于放行。
+     */
+    @Test
+    void failClosedAndAdminRequiredHooksStopOnException() {
+        KernelHook approval = new KernelHook() {
+            @Override public String name() { return "approval"; }
+            @Override public boolean failClosed() { return true; }
+            @Override public HookResult beforeModelCall(KernelState state, HookContext context) { throw new IllegalStateException("boom"); }
+        };
+        assertInstanceOf(Stop.class, modelCall(approval, hook("b", false, Allow.PLAIN)).result());
+        HookOutcome required = new HookChain(List.of(throwing("metrics", false), hook("b", false, Allow.PLAIN)), java.util.Set.of("metrics"))
+                .run(HookPoint.BEFORE_MODEL_CALL, KernelState.empty(), CONTEXT);
+        assertInstanceOf(Stop.class, required.result());
+        assertEquals(List.of(), calls);
+    }
+
     /** 返回 null 违反契约：不能当作放行，也不能让后面的钩子被跳过而无人知道。 */
     @Test
     void nullResultIsTreatedAsStopAndReported() {

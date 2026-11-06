@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.BindException;
@@ -133,7 +134,7 @@ class TantalumPropertiesTest {
         }
         assertTrue(cause.getMessage().contains("maxWorkRounds"), cause.getMessage());
         assertThrows(BindException.class, () -> bind("tantalum.hooks.max-work-rounds", "-1"));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Hooks(0));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Hooks(0, List.of()));
     }
 
     /** 发布的配置和代码里的默认值是同一组数（A4、A5、配额 5 GiB）；每项都能单独改。 */
@@ -152,7 +153,7 @@ class TantalumPropertiesTest {
                 new TantalumProperties.OpenAi("http://127.0.0.1:8090/v1", "qwen", 16384, java.time.Duration.ofSeconds(1),
                         java.time.Duration.ofSeconds(1), 1, openAiWindow, false, 2.0),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8), null);
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null);
     }
 
     /** 阈值 = 窗口 − max(预留, 该供应商的输出上限)：Claude 默认 200000 − 64000 = 136000，qwen 131072 − 16384 = 114688。 */

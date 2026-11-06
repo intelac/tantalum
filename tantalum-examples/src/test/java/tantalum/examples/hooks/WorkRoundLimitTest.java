@@ -1,16 +1,12 @@
 package tantalum.examples.hooks;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,12 +19,17 @@ import tantalum.examples.CitationCheckHook;
 import tantalum.examples.CitationWork;
 import tantalum.examples.ToolApprovalHook;
 import tantalum.kernel.tool.ToolPairing;
+import tantalum.shell.plugin.ToolContext;
+import tantalum.shell.plugin.WorkResult;
+import tantalum.shell.plugin.WorkType;
+import tantalum.value.json.Json;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.value.hook.HookPoint;
 
 /**
  * 需求 4.4、2.2、2.3：一个每次都要工作的钩子在 4 个等待点各撞一次工作轮数上限（默认 8），运行以 FAILED 结束，
- * 详情写明钩子、位置和轮数；正常的引用核对（2 轮）和审批（两个调用各 5 轮，合计 10 轮）不受影响。全部走真实管线。
+ * 详情写明钩子、位置和轮数；正常的引用核对（1 轮）和审批（两个调用各 5 轮，合计 10 轮）不受影响。全部走真实管线。
+ * 审批这里不在页面上问人，换成按次数回答的 {@link PollingApprovals}：测的是钩子按调用计数，不是怎么问。
  */
 class WorkRoundLimitTest {
 
@@ -38,7 +39,7 @@ class WorkRoundLimitTest {
     @TempDir
     static Path temp;
     private static MatrixFixture fixture;
-    private static ServiceStub approvals;
+    private static PollingApprovals approvals;
     private static MatrixFixture.CountingTool deployTool;
 
     private static String settled(String hook, HookPoint at) {
@@ -92,16 +93,28 @@ class WorkRoundLimitTest {
                         List.of("user", "run:" + settled(MatrixHook.nameOf("cap-owr"), HookPoint.BEFORE_MODEL_CALL)), 0, 7));
     }
 
-    private static final Pattern POLL = Pattern.compile("\"poll\":(\\d+)");
+    /** 和 {@code ApprovalWork} 同名、同样的结果格式：前 4 次（poll 0–3）回待定，第 5 次同意；记下问了几次。 */
+    static final class PollingApprovals implements WorkType {
+        final java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
+
+        @Override public String name() { return ApprovalWork.TYPE; }
+        @Override public String plugin() { return "toolApproval"; }
+
+        @Override
+        public WorkResult run(ToolContext context, Json input) {
+            asked.incrementAndGet();
+            java.util.Map<String, Json> fields = new java.util.LinkedHashMap<>(((Json.Obj) input).fields());
+            int poll = ((Json.Num) fields.get("poll")).value().intValue();
+            java.util.Map<String, Json> result = new java.util.LinkedHashMap<>();
+            result.put("decision", new Json.Str(poll < 4 ? "pending" : "approved"));
+            result.putAll(fields);
+            return new WorkResult(new Json.Obj(result), null);
+        }
+    }
 
     @BeforeAll
     static void start() throws Exception {
-        // 审批服务：前 4 次回待定，第 5 次（poll 4）同意。
-        approvals = new ServiceStub(body -> {
-            Matcher poll = POLL.matcher(body);
-            int n = poll.find() ? Integer.parseInt(poll.group(1)) : -1;
-            return ServiceStub.Reply.of(200, n < 4 ? "{\"decision\":\"pending\"}" : "{\"decision\":\"approved\"}");
-        });
+        approvals = new PollingApprovals();
         fixture = new MatrixFixture(temp, "--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s");
         fixture.hook(new MatrixHook("cap-bmc", HookPoint.BEFORE_MODEL_CALL, MatrixHook.Result.WORK_OK, false).forever());
         fixture.hook(MatrixHook.source("cap-btc", HookPoint.BEFORE_TOOL_CALL));
@@ -113,12 +126,11 @@ class WorkRoundLimitTest {
         fixture.hook(new MatrixHook("cap-owr", HookPoint.ON_WORK_RESULT, MatrixHook.Result.WORK_OK, false).forever());
 
         fixture.hook(MatrixFixture.scoped("citation"::equals, new CitationCheckHook())).workType(new CitationWork());
-        Files.writeString(fixture.workspace.resolve(MatrixFixture.USER).resolve("A.cbl"), "one\ntwo\n");
-        fixture.model.script("citation", MatrixModel.answer("see A.cbl:9"), MatrixModel.answer("see A.cbl:2"));
+        fixture.model.script("citation", MatrixModel.answer("see A.cbl:9"), MatrixModel.answer("it is the second line"));
 
         MatrixFixture.CountingTool deploy = new MatrixFixture.CountingTool("deploy");
         fixture.hook(MatrixFixture.scoped("approval"::equals, new ToolApprovalHook(Set.of("deploy"), 5)))
-                .workType(new ApprovalWork(approvals.uri())).tool(deploy);
+                .workType(approvals).tool(deploy);
         fixture.model.script("approval", MatrixModel.tools(MatrixModel.call("approval", "d1", "deploy"),
                 MatrixModel.call("approval", "d2", "deploy")), MatrixModel.answer("answer"));
         deployTool = deploy;
@@ -131,7 +143,6 @@ class WorkRoundLimitTest {
             fixture.reopenAndCompare();
         } finally {
             fixture.close();
-            approvals.close();
         }
     }
 
@@ -148,12 +159,12 @@ class WorkRoundLimitTest {
         assertEquals(fixture.model.prompts(cap.id()), fixture.replayedPrompts(cap.id()), "replayed prompts");
     }
 
-    /** 第一次回答的引用不对，核对带着续写文字回到模型；第二次对了，放行。结束前一共 2 轮。 */
+    /** 第一次回答引了没读过的行，核对带着续写文字回到模型；第二次不再引用，放行（核对是纯函数，不再要工作）。结束前一共 1 轮。 */
     @Test
     void citationCheckIsUnaffected() throws Exception {
         fixture.submit("citation", "where?");
         assertEquals("COMPLETED", fixture.awaitEnd("citation", 1));
-        assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "WorkDone[citation]", "ModelReplied", "WorkDone[citation]"),
+        assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "WorkDone[citation]", "ModelReplied"),
                 fixture.events("citation"));
         assertEquals(List.of("msgs=1 last=user", "msgs=3 last=user"), fixture.prompts("citation"));
         assertEquals(fixture.model.prompts("citation"), fixture.replayedPrompts("citation"), "replayed prompts");
@@ -170,6 +181,6 @@ class WorkRoundLimitTest {
         assertEquals(List.of("user", "run:COMPLETED", "tool:deploy:DONE:deploy-ok", "tool:deploy:DONE:deploy-ok", "text:answer"),
                 fixture.items("approval"));
         assertEquals(2, deployTool.calls("approval"));
-        assertTrue(approvals.requests().size() == 10, approvals.requests().toString());
+        assertEquals(10, approvals.asked.get());
     }
 }

@@ -33,8 +33,14 @@ public final class DailyQuotaHook implements KernelHook {
         return "每个用户每天的 token 用量上限，超过就停止。";
     }
 
+    /** 策略插件：默认关，用户在插件页打开（管理员要对所有人强制开启时写进 {@code tantalum.hooks.required}）；开着时出错按拦截处理。 */
     @Override
-    public boolean mandatory() {
+    public boolean defaultEnabled() {
+        return false;
+    }
+
+    @Override
+    public boolean failClosed() {
         return true;
     }
 

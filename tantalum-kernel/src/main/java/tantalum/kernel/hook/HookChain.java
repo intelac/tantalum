@@ -2,6 +2,7 @@ package tantalum.kernel.hook;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.HookReported;
@@ -17,14 +18,21 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
-/** 按注册顺序遍历钩子，并执行异常规则：强制钩子和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
+/** 按注册顺序遍历钩子，并执行异常规则：{@code failClosed} 的钩子、必须开启的插件和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
  * 返回 null 违反契约，一律按 {@code Stop} 处理。每个钩子的决定报一条 {@link HookDecided}，只放行、没有补丁的不报。 */
 public final class HookChain {
 
     private final List<KernelHook> hooks;
+    /** 管理员设成必须开启的插件（{@code tantalum.hooks.required}）：它们的钩子出错同样按拦截处理。 */
+    private final Set<String> required;
 
     public HookChain(List<KernelHook> hooks) {
+        this(hooks, Set.of());
+    }
+
+    public HookChain(List<KernelHook> hooks, Set<String> required) {
         this.hooks = List.copyOf(hooks);
+        this.required = Set.copyOf(required);
     }
 
     public HookOutcome run(HookPoint point, KernelState state, HookContext context) {
@@ -42,7 +50,7 @@ public final class HookChain {
                 result = call(hook, point, state, context);
             } catch (RuntimeException failure) {
                 facts.add(new HookReported(context.run(), hook.name(), failure.toString()));
-                if (hook.mandatory() || point == HookPoint.BEFORE_TOOL_CALL) {
+                if (hook.failClosed() || required.contains(hook.plugin()) || point == HookPoint.BEFORE_TOOL_CALL) {
                     return stopped(new Stop("hook failed: " + hook.name()), facts, hook.name(), point, context);
                 }
                 continue;

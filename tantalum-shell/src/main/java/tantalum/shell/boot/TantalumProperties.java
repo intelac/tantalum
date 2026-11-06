@@ -2,6 +2,7 @@ package tantalum.shell.boot;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import tantalum.shell.attachment.AttachmentLimits;
@@ -18,11 +19,15 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
                                  AttachmentLimits attachments) {
 
-    /** 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。 */
-    public record Hooks(int maxWorkRounds) {
+    /**
+     * 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。{@code required} 是管理员设成必须开启的插件名：
+     * 所有用户都开着、插件页上不能关、钩子出错按拦截处理；默认关的策略插件（如每日额度）要对所有人生效时写在这里。
+     */
+    public record Hooks(int maxWorkRounds, List<String> required) {
 
         public Hooks {
             requirePositive("maxWorkRounds", maxWorkRounds);
+            required = required == null ? List.of() : required.stream().map(String::strip).filter(name -> !name.isEmpty()).toList();
         }
     }
 

@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
+import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
@@ -85,6 +87,7 @@ public final class RecordCodec {
     private static final int MIN_BLOCK_BYTES = 96;
     private static final TypeReference<List<Message>> MESSAGES = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
             "HookReported", "ImagesOmitted");
@@ -327,6 +330,7 @@ public final class RecordCodec {
         changed(node, "anchor", change.anchor());
         changed(node, "omittedImages", change.omittedImages());
         changed(node, "toolsSeen", change.toolsSeen());
+        changed(node, "notes", change.notes());
         return node;
     }
 
@@ -356,7 +360,26 @@ public final class RecordCodec {
                 changedList(node, "followUps", MESSAGES),
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
-                changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS));
+                changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node));
+    }
+
+    /** 插件工作记在会话里的东西：工作类型 → 对象。 */
+    private SessionChange.Changed<Map<String, Json.Obj>> notes(JsonNode node) {
+        if (!node.has("notes")) {
+            return null;
+        }
+        JsonNode value = node.get("notes");
+        if (value.isNull()) {
+            return new SessionChange.Changed<>(null);
+        }
+        Map<String, Json.Obj> notes = new LinkedHashMap<>();
+        mapper.convertValue(value, NOTES).forEach((type, note) -> {
+            if (!(note instanceof Json.Obj obj)) {
+                throw new IllegalArgumentException("note of " + type + " is not an object");
+            }
+            notes.put(type, obj);
+        });
+        return new SessionChange.Changed<>(notes);
     }
 
     /** 上下文只在会话开始时带上 system 和全部工具，之后每次提问只换几个字段：知道上一份时只写变了的字段。 */

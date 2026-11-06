@@ -14,7 +14,7 @@ class PluginGroupsTest {
     @Test
     void hooksAndTheirWorkShareAPluginName() {
         assertEquals(new CitationCheckHook().plugin(), new CitationWork().plugin());
-        assertEquals(new ToolApprovalHook(java.util.Set.of("x"), 1).plugin(), new ApprovalWork(URI.create("http://127.0.0.1:1")).plugin());
+        assertEquals(new ToolApprovalHook(java.util.Set.of("x"), 1).plugin(), new ApprovalWork(java.time.Duration.ofSeconds(1)).plugin());
         assertEquals(new ProviderBackoffHook(Duration.ofSeconds(1)).plugin(), new ProviderStatusWork(URI.create("http://127.0.0.1:1"), Duration.ofSeconds(1)).plugin());
         assertEquals("truncateOutput", new TruncateOutputHook(10).plugin());
     }

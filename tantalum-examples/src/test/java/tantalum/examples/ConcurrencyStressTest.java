@@ -122,12 +122,14 @@ class ConcurrencyStressTest {
             String user = userOf(prompt);
             int results = 0;
             boolean blocked = false;
+            boolean corrected = false;
             for (Message message : prompt.messages()) {
                 for (ContentBlock block : message.content()) {
                     if (block instanceof ToolResultBlock result) {
                         results++;
                         blocked |= result.text().contains("Tool call blocked");
                     }
+                    corrected |= block instanceof TextBlock text && text.text().startsWith(CitationWork.CORRECTION);
                 }
             }
             if (results == 0) {
@@ -146,7 +148,8 @@ class ConcurrencyStressTest {
                 }
                 return tools(call("write_file", "path", "out.txt"));
             }
-            String answer = "The secret of " + user + " is in a.txt:1.";
+            // 第一次多引一个没读过的 notes.txt:4，引用核对要一轮工作让模型改正；改正后只引读过的 a.txt:1
+            String answer = "The secret of " + user + " is in a.txt:1" + (corrected ? "." : " and notes.txt:4.");
             chunks.onText(answer);
             return new ModelOutcome.Replied(List.of(new TextBlock(answer)), StopReason.END_TURN, "stateless", null);
         }
@@ -265,9 +268,10 @@ class ConcurrencyStressTest {
         Map<String, List<String>> sseLines = new ConcurrentHashMap<>();
         List<HttpResponse<InputStream>> streams = new ArrayList<>();
         boolean evict = round == 2;
-        String[] args = evict ? new String[] {"--tantalum.claude.concurrency=16", "--tantalum.residency.idle=0s",
-                "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s"}
-                : new String[] {"--tantalum.claude.concurrency=16"};
+        // 只读策略默认关（A2），由管理员设成必须开启：每个用户的 write_file 都被拦下
+        String[] args = evict ? new String[] {"--tantalum.claude.concurrency=16", "--tantalum.hooks.required=readOnly",
+                "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s"}
+                : new String[] {"--tantalum.claude.concurrency=16", "--tantalum.hooks.required=readOnly"};
         try (TestServer server = new TestServer(data, workspace, model, plugins, args)) {
             for (int i = 0; i < USERS; i++) {
                 server.get(user(i), "/api/sessions");     // 先登录，提交才是同时的

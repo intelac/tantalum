@@ -44,11 +44,20 @@ class PluginBoundaryTest {
     private static final List<String> PURE = List.of(
             "tantalum.value", "tantalum.kernel.hook", "java.lang", "java.util", "java.time", "java.math");
 
+    /** 插件只用插件 SDK；把它们注册成 Spring bean 的自动配置在 {@code tantalum.examples.boot}，只有那里碰 Spring。 */
     @ArchTest
     static final ArchRule examplesOnlyUsePublicPluginApi = classes()
-            .that().resideInAPackage("tantalum.examples..").and(MAIN_CODE)
+            .that().resideInAPackage("tantalum.examples..").and().resideOutsideOfPackage("tantalum.examples.boot..").and(MAIN_CODE)
             .should().onlyDependOnClassesThat().resideInAnyPackage(
-                    "tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..", "tantalum.shell.plugin..", "java..");
+                    "tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..", "tantalum.shell.plugin..", "java..")
+            .andShould().onlyDependOnClassesThat().resideOutsideOfPackage("tantalum.examples.boot..");
+
+    /** 自动配置也只用插件 SDK 和 Spring 的配置注解，不碰 shell 的内部实现。 */
+    @ArchTest
+    static final ArchRule autoConfigurationOnlyUsesThePluginApiAndSpring = classes()
+            .that().resideInAPackage("tantalum.examples.boot..").and(MAIN_CODE)
+            .should().onlyDependOnClassesThat().resideInAnyPackage("tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..",
+                    "tantalum.shell.plugin..", "java..", "org.springframework..", "org.slf4j..");
 
     /**
      * K5：钩子只依赖 value、{@code kernel.hook} 和 JDK 里不做 I/O 的部分（java.lang、java.util、java.time，

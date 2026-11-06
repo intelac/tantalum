@@ -8,8 +8,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,6 +21,7 @@ import tantalum.examples.ProviderBackoffHook;
 import tantalum.examples.ProviderStatusWork;
 import tantalum.examples.ToolApprovalHook;
 import tantalum.value.model.FailureReason;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 需求 4.6：三个新示例插件走真实管线，每种结果各一次，外部服务用本地桩。会话名决定哪个插件生效（pb 提供方退避、ta 审批、pin 钉住），
@@ -39,41 +38,61 @@ class ExampleHooksPipelineTest {
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
         "--tantalum.claude.context-window=6000", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600"};
-    private static final Pattern CELL = Pattern.compile("\"cell\":\"([^\"]+)\"");
 
     @TempDir
     static Path temp;
     private static MatrixFixture fixture;
     private static ServiceStub status;
-    private static ServiceStub approvals;
     private static final AtomicBoolean providerUp = new AtomicBoolean(true);
     private static final MatrixFixture.CountingTool deploy = new MatrixFixture.CountingTool("deploy");
 
-    /** 审批服务按参数里的 cell 回复。 */
-    private static ServiceStub.Reply approve(String body) {
-        Matcher cell = CELL.matcher(body);
-        String id = cell.find() ? cell.group(1) : "";
-        boolean first = body.contains("\"poll\":0");
-        return switch (id) {
-            case "ta-approved" -> ServiceStub.Reply.of(200, "{\"decision\":\"approved\"}");
-            case "ta-denied" -> ServiceStub.Reply.of(200, "{\"decision\":\"denied\"}");
-            case "ta-pending" -> ServiceStub.Reply.of(200, first ? "{\"decision\":\"pending\"}" : "{\"decision\":\"approved\"}");
-            case "ta-exhausted" -> ServiceStub.Reply.of(200, "{\"decision\":\"pending\"}");
-            case "ta-slow" -> new ServiceStub.Reply(200, "{\"decision\":\"approved\"}", 3_000);
-            case "ta-garbage" -> ServiceStub.Reply.of(200, "<html>busy</html>");
-            default -> ServiceStub.Reply.of(500, "unknown cell " + id);
+    /**
+     * 在对话页上回答审批（A4）：和浏览器一样经 {@code GET/POST /api/sessions/{会话}/questions} 取问题、交回答，按会话名决定怎么答。
+     * 待定那一格等第一轮审批工作落盘（没人回答）之后才答。
+     */
+    private static String choice(String session) {
+        return switch (session) {
+            case "ta-approved", "ta-session-other" -> "once";
+            case "ta-denied" -> "deny";
+            case "ta-session" -> "session";
+            case "ta-pending" -> fixture.events(session).contains("WorkDone[approval]") ? "once" : null;
+            default -> null;
         };
+    }
+
+    private static final AtomicBoolean answering = new AtomicBoolean(true);
+
+    private static void answer() {
+        while (answering.get()) {
+            try {
+                for (String session : List.of("ta-approved", "ta-denied", "ta-pending", "ta-exhausted", "ta-session", "ta-session-other")) {
+                    JsonNode open = MatrixFixture.JSON.readTree(fixture.server().get(MatrixFixture.USER,
+                            "/api/sessions/" + session + "/questions").body()).get("questions");
+                    String choice = choice(session);
+                    for (JsonNode question : open) {
+                        if (choice != null) {
+                            fixture.server().post(MatrixFixture.USER, "/api/sessions/" + session + "/questions/" + question.get("id").asString(),
+                                    "{\"choice\":\"" + choice + "\"}");
+                        }
+                    }
+                }
+                Thread.sleep(20);
+            } catch (InterruptedException stopped) {
+                return;
+            } catch (Exception between) {
+                // 服务重开的间隙，下一圈再来
+            }
+        }
     }
 
     @BeforeAll
     static void start() throws Exception {
         status = new ServiceStub(body -> ServiceStub.Reply.of(providerUp.get() ? 200 : 503, ""));
-        approvals = new ServiceStub(ExampleHooksPipelineTest::approve);
         fixture = new MatrixFixture(temp, ARGS)
                 .hook(MatrixFixture.scoped(session -> session.startsWith("pb-"), new ProviderBackoffHook(Duration.ofMinutes(1))))
                 .workType(new ProviderStatusWork(status.uri(), Duration.ofMillis(50)))
                 .hook(MatrixFixture.scoped(session -> session.startsWith("ta-"), new ToolApprovalHook(Set.of("deploy"), 3)))
-                .workType(new ApprovalWork(approvals.uri()))
+                .workType(new ApprovalWork(Duration.ofMillis(300)))
                 .tool(deploy)
                 .hook(MatrixFixture.scoped(session -> session.contains("pin-"), new PinnedContextHook(PIN)));
         for (Backoff cell : backoff().toList()) {
@@ -83,17 +102,22 @@ class ExampleHooksPipelineTest {
         for (Approval cell : approval().toList()) {
             fixture.model.script(cell.id(), MatrixModel.tool(cell.id(), "t1", cell.tool()), MatrixModel.answer("answer"));
         }
+        fixture.model.script("ta-session", MatrixModel.tools(MatrixModel.call("ta-session", "d1", "deploy"),
+                MatrixModel.call("ta-session", "d2", "deploy")), MatrixModel.answer("answer"),
+                MatrixModel.tool("ta-session", "d3", "deploy"), MatrixModel.answer("again"));
+        fixture.model.script("ta-session-other", MatrixModel.tool("ta-session-other", "t1", "deploy"), MatrixModel.answer("answer"));
         fixture.start();
+        Thread.ofVirtual().start(ExampleHooksPipelineTest::answer);
     }
 
     @AfterAll
     static void close() throws Exception {
+        answering.set(false);
         try {
             fixture.reopenAndCompare();
         } finally {
             fixture.close();
             status.close();
-            approvals.close();
         }
     }
 
@@ -175,21 +199,18 @@ class ExampleHooksPipelineTest {
     }
 
     /**
-     * ToolApprovalHook（beforeToolCall + onWorkResult，最多问 3 次）：同意 → 工具执行；拒绝 → 只拦这个调用；先待定再同意 → 问 2 次后执行；
-     * 一直待定 → 第 3 次后拦下；服务太慢 → 工作超时失败，拦下；回复认不出 → 按拒绝，原因带原文；不在列表里的工具不问。运行都照常完成。
+     * ToolApprovalHook（beforeToolCall + onWorkResult，最多问 3 次，每次在页面上等 300 ms）：允许这一次 → 工具执行；拒绝 → 只拦这个调用；
+     * 先没人回答再允许 → 问 2 次后执行；一直没人回答 → 第 3 次后拦下；不在列表里的工具不问。运行都照常完成。
      */
     static Stream<Approval> approval() {
         String asked = "WorkDone[approval]";
         String ran = "ToolFinished[deploy-ok]";
         return Stream.of(
                 new Approval("ta-approved", "deploy", List.of(U, C, R, asked, ran, R), "tool:deploy:DONE:deploy-ok", 1),
-                new Approval("ta-denied", "deploy", List.of(U, C, R, asked, R), blocked("approval denied"), 0),
+                new Approval("ta-denied", "deploy", List.of(U, C, R, asked, R),
+                        blocked("the user denied this call to deploy. Do not retry it or use another tool to get around this decision."), 0),
                 new Approval("ta-pending", "deploy", List.of(U, C, R, asked, asked, ran, R), "tool:deploy:DONE:deploy-ok", 1),
                 new Approval("ta-exhausted", "deploy", List.of(U, C, R, asked, asked, asked, R), blocked("no approval decision after 3 polls"), 0),
-                new Approval("ta-slow", "deploy", List.of(U, C, R, "WorkDone[approval failed: work timed out after PT1S]", R),
-                        blocked("approval failed: work timed out after PT1S"), 0),
-                new Approval("ta-garbage", "deploy", List.of(U, C, R, asked, R),
-                        blocked("approval denied: unrecognised reply (HTTP 200): <html>busy</html>"), 0),
                 new Approval("ta-unlisted", "echo", List.of(U, C, R, "ToolFinished[echo-ok]", R), "tool:echo:DONE:echo-ok", 0));
     }
 
@@ -202,6 +223,27 @@ class ExampleHooksPipelineTest {
         assertEquals(List.of("user", "run:COMPLETED", cell.item(), "text:answer"), fixture.items(cell.id()), "items");
         assertEquals(cell.runs(), deploy.calls(cell.id()), "deploy runs");
         assertEquals(fixture.model.prompts(cell.id()), fixture.replayedPrompts(cell.id()), "replayed prompts");
+    }
+
+    /**
+     * A4：“这个会话里一直允许”。第一次提问里两个 deploy：第一个问、答“一直允许”，第二个不再问；同一会话第二次提问也不再问；
+     * 另一个会话照样问。允许名单记在 WorkDone 里（journal），所以类末尾的重开比较也覆盖了它。
+     */
+    @Test
+    void alwaysAllowInThisSessionAsksOnceAndOnlyInThisSession() throws Exception {
+        String asked = "WorkDone[approval]";
+        String ran = "ToolFinished[deploy-ok]";
+        fixture.submit("ta-session", "go");
+        assertEquals("COMPLETED", fixture.awaitEnd("ta-session", 1));
+        fixture.submit("ta-session", "again");
+        assertEquals("COMPLETED", fixture.awaitEnd("ta-session", 2));
+        assertEquals(List.of(U, C, R, asked, ran, ran, R, U, C, R, ran, R), fixture.events("ta-session"), "journal");
+        assertEquals(3, deploy.calls("ta-session"));
+        assertEquals(fixture.model.prompts("ta-session"), fixture.replayedPrompts("ta-session"), "replayed prompts");
+
+        fixture.submit("ta-session-other", "go");
+        assertEquals("COMPLETED", fixture.awaitEnd("ta-session-other", 1));
+        assertEquals(List.of(U, C, R, asked, ran, R), fixture.events("ta-session-other"), "another session still asks");
     }
 
     /** 两轮对话后手动压缩；第一条用户消息带不带钉住的标记由 {@code pinned} 决定。 */

@@ -64,6 +64,20 @@ class RecordCodecTest {
         assertEquals(appending(2, LONG), codec.decode(second, reader).record());
     }
 
+    /** A4：插件工作记在会话里的东西（如“这个会话里一直允许”的工具）写进结果行，恢复时原样读回；没变时不写。 */
+    @Test
+    void sessionNotesRoundTrip() {
+        java.util.Map<String, tantalum.value.json.Json.Obj> notes = java.util.Map.of("approval", new tantalum.value.json.Json.Obj(
+                java.util.Map.of("write_file", new tantalum.value.json.Json.Bool(true))));
+        SessionChange change = new SessionChange(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null,
+                new SessionChange.Changed<>(notes));
+        StepRecord record = new StepRecord(3, change, List.of(), List.of(), null, null, List.of(), List.of());
+        String line = codec.encode(record, RecordMemo.writer());
+        assertTrue(line.contains("\"notes\":{\"approval\":{\"write_file\":true}}"), line);
+        assertEquals(record, codec.decode(line, RecordMemo.reader()).record());
+        assertFalse(codec.encode(appending(4, "x"), RecordMemo.writer()).contains("notes"));
+    }
+
     @Test
     void aTextFromAnEventLineIsReferencedToo() {
         RecordMemo writer = RecordMemo.writer();

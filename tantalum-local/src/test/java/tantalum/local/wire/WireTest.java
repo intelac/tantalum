@@ -42,8 +42,8 @@ class WireTest {
 
     private static Hello hello() {
         return new Hello(Wire.PROTOCOL, "0.1.0", new Hello.Device("Yi's MacBook", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root("/Users/yi/work/shop", true), new Hello.Root("/Users/yi/.m2", false)), true,
-                new Hello.Shell(false, "--allow-shell was not given"), true);
+                List.of(new Hello.Root("/Users/yi/work/shop"), new Hello.Root("/Users/yi/.m2")), true,
+                new Hello.Shell(false, "--allow-shell was not given"), true, true);
     }
 
     static Stream<Message> messages() {
@@ -69,10 +69,11 @@ class WireTest {
     /** 字段名和设计里的表逐个对上，服务器和连接程序以后各自实现时不会对不上。 */
     @Test
     void fieldNamesMatchTheDesign() {
-        assertEquals(Set.of("type", "protocol", "connector", "device", "roots", "write", "shell", "network"), keys(hello()));
+        assertEquals(Set.of("type", "protocol", "connector", "device", "roots", "write", "shell", "network", "git"), keys(hello()));
         JsonNode hello = PLAIN.readTree(Wire.encode(hello()));
         assertEquals(new TreeSet<>(Set.of("name", "os", "osVersion", "arch")), new TreeSet<>(hello.get("device").propertyNames()));
-        assertEquals(new TreeSet<>(Set.of("path", "git")), new TreeSet<>(hello.get("roots").get(0).propertyNames()));
+        // 协议 2（B1）：是不是仓库不再按目录报，只报电脑上有没有 git
+        assertEquals(new TreeSet<>(Set.of("path")), new TreeSet<>(hello.get("roots").get(0).propertyNames()));
         assertEquals(new TreeSet<>(Set.of("available", "reason")), new TreeSet<>(hello.get("shell").propertyNames()));
         assertEquals(Set.of("type", "user", "expiresAt"), keys(new Welcome("yi", Instant.EPOCH)));
         assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs"),
@@ -92,7 +93,7 @@ class WireTest {
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
-        assertEquals(1, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals(2, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
         }
@@ -181,7 +182,8 @@ class WireTest {
     /** 关闭码是和连接程序的约定，改了旧的连接程序就不知道该不该重连。 */
     @Test
     void closeCodesAndProtocolArePinned() {
-        assertEquals(1, Wire.PROTOCOL);
+        // 2：hello.roots[].git 换成 hello.git（B1，2026-11-06），旧的连接程序被拒绝并提示下载新的
+        assertEquals(2, Wire.PROTOCOL);
         assertEquals(List.of(4400, 4401, 4403, 4409),
                 List.of(Wire.CLOSE_PROTOCOL, Wire.CLOSE_BAD_TOKEN, Wire.CLOSE_EXPIRED, Wire.CLOSE_REPLACED));
     }
