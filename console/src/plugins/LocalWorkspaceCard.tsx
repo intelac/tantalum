@@ -83,7 +83,7 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
 /** 子开关开着、电脑也连着，但连接程序没允许这一类时的说明。读文件只要连上就能用。 */
 function refusal(name: LocalSwitch, link: LocalLink): string | null {
   if (name === "file-edit" && !link.write) return text.notAllowedWrite;
-  if (name === "git" && !(link.roots[0]?.git ?? false)) return text.notGit;
+  if (name === "git" && !link.git) return text.noGit;
   if (name === "shell" && !link.shell.available) {
     const reason = link.shell.reason ?? "";
     return reason === "" || reason === NO_SHELL_FLAG ? text.notAllowedShell : text.noSandbox(reason);
@@ -185,7 +185,11 @@ function Connect({ status }: { status: LocalStatus }) {
             <code className="min-w-0 flex-1 rounded-xs bg-code px-2 py-1 font-mono text-[11px] break-all text-fg">{issued.command}</code>
             <CopyButton text={issued.command} />
           </div>
-          <p className="text-[11px] text-fg-faint">{text.commandHint}</p>
+          <ol aria-label={text.commandSteps} className="list-decimal pl-4 text-[11px] text-fg-muted">
+            {text.commandHint.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
         </div>
       )}
     </div>

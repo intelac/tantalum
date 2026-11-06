@@ -107,7 +107,33 @@ class MainTest {
     @Test
     void aDirectoryWhoseNameContainsTcIsFine() throws Exception {
         Path backup = Files.createDirectory(temp.resolve("etc_backup"));
-        assertEquals(List.of(new Hello.Root(backup.toString(), false)), setup("--allow", backup.toString()).hello().roots());
+        assertEquals(List.of(new Hello.Root(backup.toString())), setup("--allow", backup.toString()).hello().roots());
+    }
+
+    /**
+     * B2（2026-11-06 Yi 定）：家目录和根目录不能当允许的目录，说明里给出具体的项目目录和 cd 之后 --allow . 的写法。
+     * 按真实路径比较：{@code --allow .}、符号链接都拦；家目录下面的项目目录照常可以。
+     */
+    @Test
+    void theHomeDirectoryAndTheRootAreRefused() throws Exception {
+        Path home = Files.createDirectory(temp.resolve("home"));
+        Path project = Files.createDirectories(home.resolve("work/shop"));
+        Map<String, String> env = Map.of("TANTALUM_TOKEN", TOKEN, "HOME", home.toString());
+        Path link = Files.createSymbolicLink(temp.resolve("me"), home);
+        for (String dir : List.of(home.toString(), link.toString(), home + "/work/..")) {
+            Refused refused = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", dir}), env, answering(null)), dir);
+            assertTrue(refused.getMessage().contains("不能是家目录"), refused.getMessage());
+            assertTrue(refused.getMessage().contains("--allow ."), refused.getMessage());
+            assertTrue(refused.getMessage().contains(home.toRealPath().resolve("work/shop").toString()), refused.getMessage());
+        }
+        Refused root = assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", "/"}), env, answering(null)));
+        assertTrue(root.getMessage().contains("不能是根目录"), root.getMessage());
+        assertThrows(Refused.class, () -> Main.setup(Main.Options.parse(new String[] {"--allow", project.toString(), "--allow", home.toString()}),
+                env, answering(null)), "not as a second directory either");
+        assertEquals(List.of(new Hello.Root(project.toRealPath().toString())),
+                Main.setup(Main.Options.parse(new String[] {"--allow", project.toString()}), env, answering(null)).hello().roots());
+        assertEquals(1, Main.run(new String[] {"--allow", home.toString()}, env, answering(null), out));
+        assertTrue(printed().contains("不能是家目录"), printed());
     }
 
     @Test
@@ -159,18 +185,22 @@ class MainTest {
                 .options().env());
     }
 
-    /** {@code hello}：允许目录的真实路径、是不是 Git 仓库、能否改文件；命令行不可用时如实说原因（L13，需求 4.3）。 */
+    /**
+     * {@code hello}：允许目录的真实路径、电脑上有没有 git（B1：不再按目录报是不是仓库，协议 2）、能否改文件；命令行不可用时如实说原因
+     * （L13，需求 4.3）。
+     */
     @Test
     void theHelloSaysWhatThisComputerAllows() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
         Path link = Files.createSymbolicLink(temp.resolve("link"), work);
         Hello hello = setup("--allow", link.toString(), "--allow", other.toString(), "--allow-write", "--name", "Yi's MacBook").hello();
-        assertEquals(List.of(new Hello.Root(work.toString(), false), new Hello.Root(other.toString(), false)), hello.roots());
+        assertEquals(List.of(new Hello.Root(work.toString()), new Hello.Root(other.toString())), hello.roots());
+        assertTrue(hello.git(), "git is installed on this machine; neither directory is a repository");
         assertTrue(hello.write());
         assertEquals(new Hello.Shell(false, "--allow-shell was not given"), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
-        assertEquals(1, hello.protocol());
+        assertEquals(2, hello.protocol());
 
         Path missing = temp.resolve("no-mxc");
         Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network", "--mxc", missing.toString()).hello();

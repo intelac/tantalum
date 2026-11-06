@@ -46,7 +46,7 @@ import tantalum.value.model.TextBlock;
 class LocalEndpointTest {
 
     private static final Hello HELLO = new Hello(Wire.PROTOCOL, "test", new Hello.Device("mac", "macos", "26.2", "arm64"),
-            List.of(new Hello.Root("/Users/someone/work", true)), false, new Hello.Shell(false, "--allow-shell was not given"), true);
+            List.of(new Hello.Root("/Users/someone/work")), false, new Hello.Shell(false, "--allow-shell was not given"), true, true);
     private static final Json ARGS = new Json.Obj(Map.of("path", new Json.Str("a.txt")));
 
     @TempDir
@@ -144,7 +144,7 @@ class LocalEndpointTest {
     @Test
     void theFirstMessageMustBeAHelloOfThisProtocol() throws Exception {
         Client old = Client.connect(server.port(), token("olga"));
-        old.send(new Hello(Wire.PROTOCOL + 1, "future", HELLO.device(), HELLO.roots(), false, HELLO.shell(), true));
+        old.send(new Hello(Wire.PROTOCOL + 1, "future", HELLO.device(), HELLO.roots(), false, HELLO.shell(), true, true));
         assertEquals(Wire.CLOSE_PROTOCOL, old.closeCode());
 
         Client rude = Client.connect(server.port(), token("olga"));
