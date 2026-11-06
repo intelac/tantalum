@@ -528,6 +528,13 @@ export const zh = {
     imagesYes: "收图片",
     imagesNo: "不收图片",
     compactionFor: (name: string) => `压缩点按 ${name} 计算`,
+    language: "语言",
+  },
+  // 设置页的“语言”一栏（console-i18n I3、I4）。语言本身的名字（中文、English、日本語）各用自己的语言写，在 language.ts 里。
+  language: {
+    browser: (name: string) => `跟随浏览器（${name}）`,
+    hint: "语言记在你的账号上，换一台电脑登录也一样。切换后当场生效。",
+    saveFailed: "没能保存，已恢复原来的选择。",
   },
   connection: {
     offline: "连接已断开，正在重连…",

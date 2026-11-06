@@ -1,4 +1,4 @@
-import { Brain, Cpu, Palette, UserRound } from "lucide-react";
+import { Brain, Cpu, Languages, Palette, UserRound } from "lucide-react";
 import { useState } from "react";
 import type { Config, ModelChoice } from "../api/types";
 import { type Text, useText } from "../text";
@@ -6,10 +6,11 @@ import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { AccountPane } from "./AccountPane";
 import { AppearancePane } from "./AppearancePane";
+import { LanguagePane } from "./LanguagePane";
 import { MemoryPane } from "./MemoryPane";
 import { ModelPane } from "./ModelPane";
 
-type Pane = "appearance" | "model" | "memory" | "account";
+type Pane = "appearance" | "language" | "model" | "memory" | "account";
 
 interface Props {
   open: boolean;
@@ -23,6 +24,7 @@ interface Props {
 
 const PANES: { id: Pane; icon: typeof Palette }[] = [
   { id: "appearance", icon: Palette },
+  { id: "language", icon: Languages },
   { id: "model", icon: Cpu },
   { id: "memory", icon: Brain },
   { id: "account", icon: UserRound },
@@ -59,6 +61,7 @@ export function SettingsDialog({ open, onClose, config, choice = null, username,
         </nav>
         <div className="min-w-0 flex-1 px-6 pt-2 pb-6 sm:pt-4">
           {pane === "appearance" && <AppearancePane />}
+          {pane === "language" && <LanguagePane />}
           {pane === "model" && <ModelPane config={config} choice={choice} />}
           {pane === "memory" && <MemoryPane />}
           {pane === "account" && <AccountPane username={username} onLogout={onLogout} />}
