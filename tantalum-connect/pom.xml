@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dev.tantalum</groupId>
+    <artifactId>tantalum</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <!-- 连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。运行时只依赖 tantalum-local 和 JDK。 -->
+  <artifactId>tantalum-connect</artifactId>
+
+  <dependencies>
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-local</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- 只给 LinkIT：同一个 JVM 里起真的服务器。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-shell</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-shell</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>tantalum.connect.Main</mainClass>
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+      <!-- LinkIT 起真的服务器和连接程序，有重连和到期的等待，放在 integration-test 阶段跑。 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
+          <properties>
+            <configurationParameters>junit.jupiter.execution.timeout.default = 60 s
+            junit.jupiter.execution.timeout.thread.mode.default = SEPARATE_THREAD</configurationParameters>
+          </properties>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

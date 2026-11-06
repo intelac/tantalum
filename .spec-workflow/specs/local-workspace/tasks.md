@@ -68,7 +68,7 @@
 
 ## 阶段 2：连接
 
-- [ ] 7. 令牌
+- [x] 7. 令牌
   - File: shell/local/LocalTokens.java（新）
   - `users.db` 加 `local_tokens` 表；`issue(principal, validity)` 只认 30 分钟、1 小时、4 小时、1 天；只存 SHA-256；`verify`、`revokeAll`；启动时删掉到期超过 7 天的行
   - 测试：四种有效期之外的拒绝；数据库里查不到原始令牌；到期、撤销后 `verify` 失败；时钟用可调的
@@ -76,28 +76,28 @@
   - _Requirements: L2, L3, 需求 1.1, 1.7_
   - _Prompt: Role: Java 后端开发 | Task: 实现有期限、可撤销的令牌 | Restrictions: 令牌不进日志 | Success: 测试全过_
 
-- [ ] 8. 服务器端连接
+- [x] 8. 服务器端连接
   - File: shell/local/LocalEndpoint.java、LocalLinks.java（新）、shell/web/SecurityConfig.java、shell/boot/Engine.java
   - Jakarta WebSocket 端点 `/api/local/connect`，握手读 `Authorization`；第一条必须是 `hello`（5 秒）；`LocalLinks` 每用户一条，替换、到期、撤销时发 `bye` 并关；15 秒 ping、45 秒没 pong 就关；`call` 等 `result`，断开时在跑的调用记“结果不确定”；每条连接 4 个名额
   - 测试：用 JDK 的 WebSocket 客户端连真服务器：错令牌 4401、到期 4403、第二条连接让第一条收到 4409；到期时刻断开；断开时在跑的 `call` 得到断开错误
   - _Requirements: L1, L3, L8, L10, L11, 需求 1.2–1.6_
   - _Prompt: Role: Java 后端开发 | Task: 实现服务器端的连接管理 | Restrictions: 不加新依赖；握手路径不走登录会话 | Success: 测试全过_
 
-- [ ] 9. 连接程序：参数和启动说明
+- [x] 9. 连接程序：参数和启动说明
   - File: tantalum-connect/pom.xml（新）、connect/Main.java（新）
   - 参数：`--server`、`--allow`（多个）、`--allow-write`、`--allow-shell`、`--allow-read`、`--env`、`--no-network`、`--name`、`--mxc`、`--help`；令牌从 `TANTALUM_TOKEN` 或不回显的输入读；检查目录；打印启动说明
   - 测试：没有 `--allow` 拒绝启动；目录不存在拒绝；`--help` 列出全部参数；命令行里出现像令牌的参数时拒绝并提示用环境变量
   - _Requirements: L2, L4, L16, 需求 2.1, 7.3_
   - _Prompt: Role: Java 开发 | Task: 写连接程序的入口 | Restrictions: 令牌不写文件 | Success: 测试全过_
 
-- [ ] 10. 连接程序：连接、执行、记录
+- [x] 10. 连接程序：连接、执行、记录
   - File: connect/Link.java、Calls.java、Journal.java（新）
   - `Link`：连接、按 1–30 秒退避重连、收到 4400/4401/4403/4409 退出（退出码 2）。`Calls`：三项检查（用户、工具类别、路径）；虚拟线程执行；`cancel` 和断开时打断；每个会话一份 `Observations`。`Journal`：每个调用一行，不含内容和令牌
   - 测试：服务器硬发 `write_file`（没有 `--allow-write`）被拒；`user` 不对被拒；越界路径被拒；`cancel` 打断；记录里没有文件内容
   - _Requirements: L4, L8, L15, 需求 2.3, 2.5_
   - _Prompt: Role: Java 并发开发 | Task: 实现连接程序的连接和执行 | Restrictions: 不信任服务器的判断，每个调用都检查 | Success: 测试全过_
 
-- [ ] 11. 服务器加连接程序的集成测试
+- [x] 11. 服务器加连接程序的集成测试
   - File: tantalum-connect/src/test/java/tantalum/connect/LinkIT.java（新）
   - 同一个 JVM 里起服务器和 `Link`：生成令牌 → 连上 → `LocalLinks.call` 执行 `read_file`、`edit_file` 结果正确 → 撤销后连接程序退出；强关连接时在跑的调用得到断开错误；断网重连后能继续调用
   - _Requirements: 需求 8.1_

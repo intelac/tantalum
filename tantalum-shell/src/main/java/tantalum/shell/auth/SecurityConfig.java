@@ -30,6 +30,7 @@ import tantalum.shell.net.Hosts;
 /**
  * 认证规则：{@code /api} 只有登录后才能访问，未登录返回 401。
  * 不用 CSRF token：Cookie 是 {@code SameSite=Strict}，写操作再校验 {@code Origin}。
+ * 例外是连接程序的握手 {@code /api/local/connect}，它带令牌，不带登录会话。
  */
 @Configuration
 public class SecurityConfig {
@@ -51,6 +52,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(rules -> rules
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
+                        // 连接程序的 WebSocket 握手：不用登录会话，由端点自己查令牌（local-workspace 设计“Spring Security”）。
+                        // 路径同 LocalEndpoint.PATH，这里写字面值，免得 auth 和 local 两个包互相依赖。
+                        .requestMatchers("/api/local/connect").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class)

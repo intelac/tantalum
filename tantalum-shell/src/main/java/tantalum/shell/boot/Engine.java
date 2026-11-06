@@ -25,6 +25,8 @@ import tantalum.shell.handler.ModelHandler;
 import tantalum.shell.handler.TimerHandler;
 import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
+import tantalum.shell.local.LocalLinks;
+import tantalum.shell.local.LocalTokens;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.RecordCodec;
 import tantalum.shell.journal.TailSequence;
@@ -101,6 +103,9 @@ public final class Engine implements AutoCloseable {
     private final MemoryStores memories;
     private final McpRegistry mcp;
     private final PluginSwitches switches;
+    /** 连接电脑的令牌和连接（local-workspace）。这一步只接线，工具还没转发过去。 */
+    private final LocalTokens localTokens;
+    private final LocalLinks localLinks;
     private final UserSettings userSettings;
     private final ContextWindow window;
     private final CompactionPolicy compaction;
@@ -144,6 +149,8 @@ public final class Engine implements AutoCloseable {
             mcp = new McpRegistry(mcpSettings);
             catalog.setSource(mcp);
             switches = openSwitches(properties.dataDir(), clock);
+            localTokens = openLocalTokens(properties.dataDir(), clock);
+            localLinks = new LocalLinks(localTokens, clock, LocalLinks.Timing.DEFAULT);
             userSettings = openUserSettings(properties.dataDir(), clock);
             // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
             properties.compactionSettings();
@@ -262,6 +269,11 @@ public final class Engine implements AutoCloseable {
         return userSettings;
     }
 
+    /** 连到电脑的连接：WebSocket 端点和以后的转发工具、插件页接口用它。 */
+    public LocalLinks localLinks() {
+        return localLinks;
+    }
+
     public McpRegistry mcp() {
         return mcp;
     }
@@ -322,12 +334,14 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("close event streams", hub::closeEveryone),
                 new Shutdown.Step("stop starting handlers", handlers::close),
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
+                new Shutdown.Step("close local links", localLinks),
                 new Shutdown.Step("drain input ring", () -> input.shutdown(DRAIN)),
                 new Shutdown.Step("drain user lanes", () -> lanes.awaitIdle(DRAIN)),
                 new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
                 new Shutdown.Step("close mcp", mcp),
                 new Shutdown.Step("close plugin settings", switches),
+                new Shutdown.Step("close local tokens", localTokens),
                 new Shutdown.Step("close user settings", userSettings),
                 new Shutdown.Step("stop reading the context window", window),
                 new Shutdown.Step("close storage", storage)));
@@ -338,6 +352,14 @@ public final class Engine implements AutoCloseable {
             return UserSettings.open(dataDir, clock);
         } catch (java.sql.SQLException failure) {
             throw new IOException("cannot open user settings in " + dataDir, failure);
+        }
+    }
+
+    private static LocalTokens openLocalTokens(java.nio.file.Path dataDir, Clock clock) throws IOException {
+        try {
+            return LocalTokens.open(dataDir, clock);
+        } catch (java.sql.SQLException failure) {
+            throw new IOException("cannot open local tokens in " + dataDir, failure);
         }
     }
 
