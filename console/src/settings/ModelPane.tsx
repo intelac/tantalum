@@ -1,7 +1,7 @@
 import type { Config, ModelChoice } from "../api/types";
 import { tokenCount } from "../composer/status";
 import { findModel, useModels } from "../composer/useModels";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { CompactionPicker } from "./CompactionPicker";
 
@@ -16,35 +16,36 @@ interface Props {
  * 模型列表还没读到时照旧显示默认模型。没有任何输入 Key 的地方。
  */
 export function ModelPane({ config, choice = null }: Props) {
+  const t = useText();
   const models = useModels();
-  if (config === undefined) return <p className="text-sm text-fg-faint">{zh.common.loading}</p>;
+  if (config === undefined) return <p className="text-sm text-fg-faint">{t.common.loading}</p>;
   const current = findModel(models.data, choice);
   const cloud = models.data?.routes.some((route) => route.cloud) ?? config.cloud;
   return (
     <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-medium text-fg">{zh.settings.model}</h3>
+      <h3 className="text-sm font-medium text-fg">{t.settings.model}</h3>
       {models.data === undefined ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-          <dt className="text-fg-muted">{zh.settings.provider}</dt>
+          <dt className="text-fg-muted">{t.settings.provider}</dt>
           <dd className="font-mono text-fg">{config.provider}</dd>
-          <dt className="text-fg-muted">{zh.settings.modelName}</dt>
+          <dt className="text-fg-muted">{t.settings.modelName}</dt>
           <dd className="font-mono break-all text-fg">{config.model}</dd>
           {config.contextWindow !== undefined && (
             <>
-              <dt className="text-fg-muted">{zh.settings.contextWindow}</dt>
+              <dt className="text-fg-muted">{t.settings.contextWindow}</dt>
               <dd className="font-mono text-fg">{tokenCount(config.contextWindow)}</dd>
             </>
           )}
         </dl>
       ) : (
         <div className="flex flex-col gap-3">
-          <h4 className="text-sm text-fg-muted">{zh.settings.models}</h4>
+          <h4 className="text-sm text-fg-muted">{t.settings.models}</h4>
           {models.data.routes.map((route) => (
             <section key={route.name} aria-label={route.displayName} className="flex flex-col gap-1">
               <p className={cx("text-xs", route.status === "unavailable" ? "text-fg-faint" : "text-fg-muted")}>
                 {route.displayName}
-                <span className="ml-1">{route.cloud ? zh.composer.cloud : zh.composer.local}</span>
-                {route.status === "unavailable" && <span className="ml-1">{zh.settings.routeUnavailable(route.error ?? "")}</span>}
+                <span className="ml-1">{route.cloud ? t.composer.cloud : t.composer.local}</span>
+                {route.status === "unavailable" && <span className="ml-1">{t.settings.routeUnavailable(route.error ?? "")}</span>}
               </p>
               <ul className="flex flex-col gap-0.5 text-sm">
                 {route.models.map((model) => (
@@ -55,24 +56,24 @@ export function ModelPane({ config, choice = null }: Props) {
                     </span>
                     {model.window > 0 && (
                       <span className="text-xs text-fg-faint">
-                        {model.windowSource === "model" ? zh.settings.windowFromModel : zh.settings.windowFromConfig}
+                        {model.windowSource === "model" ? t.settings.windowFromModel : t.settings.windowFromConfig}
                       </span>
                     )}
-                    <span className="text-xs text-fg-faint">{model.vision ? zh.settings.imagesYes : zh.settings.imagesNo}</span>
+                    <span className="text-xs text-fg-faint">{model.vision ? t.settings.imagesYes : t.settings.imagesNo}</span>
                   </li>
                 ))}
               </ul>
             </section>
           ))}
-          <p className="text-xs text-fg-faint">{zh.settings.modelsHint}</p>
+          <p className="text-xs text-fg-faint">{t.settings.modelsHint}</p>
         </div>
       )}
       <CompactionPicker points={current?.points} />
-      {current !== undefined && <p className="text-xs text-fg-faint">{zh.settings.compactionFor(current.name)}</p>}
+      {current !== undefined && <p className="text-xs text-fg-faint">{t.settings.compactionFor(current.name)}</p>}
       <p className={cloud ? "rounded-md bg-warning/15 px-3 py-2 text-sm text-fg" : "rounded-md bg-muted px-3 py-2 text-sm text-fg-muted"}>
-        {cloud ? zh.settings.cloudNotice : zh.settings.localNotice}
+        {cloud ? t.settings.cloudNotice : t.settings.localNotice}
       </p>
-      <p className="text-xs text-fg-faint">{zh.settings.keyNotice}</p>
+      <p className="text-xs text-fg-faint">{t.settings.keyNotice}</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // 换会话时由调用方用 `key` 重建，界面状态随之清空。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { useLatestTrace, useTracePaging, useTraceRecords } from "./hooks";
 import { buildLedger, expansionFor, focusRows } from "./rows";
 import { Inspector } from "./inspector/Inspector";
@@ -45,6 +45,7 @@ function toggled(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
 }
 
 export function TracePage({ store, session, run, record }: Props) {
+  const t = useText().trace;
   const records = useTraceRecords(store, session);
   const paging = useTracePaging(store, session);
   const error = useLatestTrace(store, session, run);
@@ -154,7 +155,7 @@ export function TracePage({ store, session, run, record }: Props) {
     );
   }
   if (paging.loaded && records.length === 0) {
-    return <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{zh.trace.empty}</div>;
+    return <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{t.empty}</div>;
   }
 
   return (

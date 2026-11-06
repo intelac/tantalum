@@ -4,8 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -109,6 +112,23 @@ class PluginApiTest {
         assertEquals("daily limit", quota.get("description").asString());
         assertEquals("[\"beforeModelCall\"]", quota.get("points").toString());
         assertFalse(named(body.get("plugins"), "notes").get("mandatory").asBoolean());
+    }
+
+    /**
+     * 插件页的真实返回存成 {@code src/test/resources/wire/plugins.json}，控制台的 {@code plugins.test.tsx} 拿它渲染，
+     * 查每个内置工具都有字典里的名字和说明（console-i18n 任务 4）。改了返回格式就用 {@code -Dwire.record=true} 重写这份文件。
+     */
+    @Test
+    void pluginPageAsTheConsoleReadsIt() throws Exception {
+        check("plugins.json", JSON.writerWithDefaultPrettyPrinter().writeValueAsString(plugins("alice")) + "\n");
+    }
+
+    private static void check(String name, String actual) throws IOException {
+        Path file = Path.of("src/test/resources/wire").resolve(name);
+        if (Boolean.getBoolean("wire.record")) {
+            Files.writeString(file, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(file, StandardCharsets.UTF_8), actual, name + " changed; record it again with -Dwire.record=true");
     }
 
     /**

@@ -1,8 +1,8 @@
 import { AttachmentView } from "../attachment/AttachmentView";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
-import { clockTime } from "../text/time";
-import { zh } from "../text/zh";
+import { clockTime } from "../text/format";
+import { useText } from "../text";
 import { CopyButton } from "../ui/CopyButton";
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
 
 /** 右对齐的浅蓝气泡，圆角 20 px；附件在气泡上方；下方时间和复制。排队中的提交带标签。只有附件时没有文字气泡。 */
 export function UserBubble({ store, id }: Props) {
+  const t = useText();
   const item = useItem(store, id);
   if (item === undefined || item.kind !== "user") return null;
   return (
@@ -23,7 +24,7 @@ export function UserBubble({ store, id }: Props) {
         </div>
       )}
       <div className="flex h-6 items-center gap-1 text-xs text-fg-faint">
-        {item.queued && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted">{zh.conversation.queued}</span>}
+        {item.queued && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted">{t.conversation.queued}</span>}
         <span>{clockTime(item.at)}</span>
         <CopyButton text={item.text} className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" />
       </div>

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Component, isValidElement } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { CodeBlock } from "./CodeBlock";
 import "./markdown.css";
@@ -53,6 +53,17 @@ const COMPONENTS: Components = {
   ),
 };
 
+/** 出错时的纯文本。类组件不能用 hook，文字放在这个函数组件里取。 */
+function Fallback({ text }: { text: string }) {
+  const t = useText();
+  return (
+    <div>
+      <p className="mb-2 text-xs text-fg-faint">{t.error.markdown}</p>
+      <pre className="whitespace-pre-wrap font-sans">{text}</pre>
+    </div>
+  );
+}
+
 interface BoundaryState {
   failed: boolean;
 }
@@ -71,12 +82,7 @@ class Boundary extends Component<{ text: string; children: ReactNode }, Boundary
 
   render() {
     if (this.state.failed) {
-      return (
-        <div>
-          <p className="mb-2 text-xs text-fg-faint">{zh.error.markdown}</p>
-          <pre className="whitespace-pre-wrap font-sans">{this.props.text}</pre>
-        </div>
-      );
+      return <Fallback text={this.props.text} />;
     }
     return this.props.children;
   }

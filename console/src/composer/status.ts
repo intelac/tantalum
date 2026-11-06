@@ -1,5 +1,5 @@
 import type { TokenUsage } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText } from "../text";
 
 /** 1234 → 1.2K，1234567 → 1.2M。 */
 export function tokenCount(count: number): string {
@@ -29,14 +29,15 @@ export const WARN_OF_POINT = 0.9;
  * {@code point} 是这个用户选的自动压缩点（token 数）。
  */
 export function statusParts(turns: number, usage: TokenUsage | undefined, contextWindow: number | undefined, point?: number): StatusParts {
+  const t = currentText();
   const input = usage === undefined ? 0 : usage.input + usage.cacheRead + usage.cacheWrite;
   const total = usage === undefined ? 0 : input + usage.output;
   const percent = usage !== undefined && contextWindow !== undefined && contextWindow > 0 ? Math.min(100, Math.round((input / contextWindow) * 100)) : null;
   return {
-    turns: turns > 0 ? zh.status.turns(turns) : null,
-    tokens: usage === undefined ? null : zh.status.tokens(tokenCount(total)),
-    inOut: usage === undefined ? null : zh.status.inOut(tokenCount(input), tokenCount(usage.output)),
-    context: percent === null ? null : zh.status.context(percent),
+    turns: turns > 0 ? t.status.turns(turns) : null,
+    tokens: usage === undefined ? null : t.status.tokens(tokenCount(total)),
+    inOut: usage === undefined ? null : t.status.inOut(tokenCount(input), tokenCount(usage.output)),
+    context: percent === null ? null : t.status.context(percent),
     warn: percent !== null && (point === undefined ? percent >= WARN_PERCENT : input >= point * WARN_OF_POINT),
     pointPercent: point === undefined || contextWindow === undefined || contextWindow <= 0 ? null : Math.round((point / contextWindow) * 100),
   };

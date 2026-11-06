@@ -18,7 +18,7 @@ import { Sidebar } from "../shell/Sidebar";
 import { useConfig } from "../shell/useConfig";
 import { useSessions } from "../shell/useSessions";
 import { ConversationStore } from "../store/ConversationStore";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { StatsPage } from "../stats/StatsPage";
 import { TracePage } from "../trace/TracePage";
 import { Tabs } from "../ui/Tabs";
@@ -27,11 +27,11 @@ import { fetchOlderTrace } from "../trace/hooks";
 import { TraceStore } from "../trace/TraceStore";
 import { loginPath, navigate, sessionPath, statsPath, tracePath, useRoute, type Route } from "./router";
 
-// 页签 ID 就是路由的页面名，选中状态直接比较。
+// 页签 ID 就是路由的页面名，选中状态直接比较。值是页签名在 t.tabs 里的键，渲染时按当前语言取。
 const TABS = [
-  { id: "session", label: zh.tabs.conversation },
-  { id: "trace", label: zh.tabs.trace },
-  { id: "stats", label: zh.tabs.stats },
+  { id: "session", key: "conversation" },
+  { id: "trace", key: "trace" },
+  { id: "stats", key: "stats" },
 ] as const;
 
 function tabPath(id: string, session: string): string {
@@ -75,6 +75,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ route, username, onLogout }: WorkspaceProps) {
+  const t = useText();
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
   const [trace] = useState(() => new TraceStore(fetchOlderTrace));
@@ -89,7 +90,8 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const list = sessions.data ?? [];
   const summary = list.find((session) => session.id === route.session);
-  const title = sessionTitle(summary);
+  const title = sessionTitle(summary, t);
+  const tabs = TABS.map(({ id, key }) => ({ id, label: t.tabs[key] }));
 
   return (
     <AppFrame
@@ -99,8 +101,8 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
             {title}
           </h1>
           <Tabs
-            label={zh.tabs.conversation}
-            tabs={TABS}
+            label={t.tabs.conversation}
+            tabs={tabs}
             selected={route.page}
             onSelect={(id) => navigate(tabPath(id, route.session))}
             className="h-12"

@@ -1,6 +1,6 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "./Button";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 
 /** 复制到剪贴板，成功后短暂显示对勾。 */
 export function CopyButton({ text, className }: Props) {
+  const t = useText();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -32,8 +33,8 @@ export function CopyButton({ text, className }: Props) {
       variant="icon"
       size="sm"
       className={className}
-      aria-label={copied ? zh.conversation.copied : zh.conversation.copy}
-      title={copied ? zh.conversation.copied : zh.conversation.copy}
+      aria-label={copied ? t.conversation.copied : t.conversation.copy}
+      title={copied ? t.conversation.copied : t.conversation.copy}
       onClick={() => void copy()}
     >
       {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}

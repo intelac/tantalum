@@ -1,6 +1,6 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
-import { zh } from "../text/zh";
+import { currentText } from "../text";
 import { reportHalted } from "./connection";
 import type {
   AttachmentRef,
@@ -70,12 +70,13 @@ async function call<T>(path: string, { quiet401 = false, ...init }: Options = {}
 }
 
 function messageOf(status: number, body: string): string {
-  if (status === 429) return zh.error.busy;
-  if (status === 503) return zh.error.halted;
+  const text = currentText().error;
+  if (status === 429) return text.busy;
+  if (status === 503) return text.halted;
   try {
-    return (JSON.parse(body) as { error?: string }).error ?? zh.error.request(status);
+    return (JSON.parse(body) as { error?: string }).error ?? text.request(status);
   } catch {
-    return zh.error.request(status);
+    return text.request(status);
   }
 }
 
@@ -154,7 +155,7 @@ export function uploadAttachment(session: string, file: File, onProgress: Upload
       if (request.status >= 200 && request.status < 300) resolve(JSON.parse(request.responseText) as AttachmentRef);
       else reject(new ApiError(request.status, messageOf(request.status, request.responseText)));
     };
-    request.onerror = () => reject(new ApiError(0, zh.attachment.networkError));
+    request.onerror = () => reject(new ApiError(0, currentText().attachment.networkError));
     request.onabort = () => reject(new DOMException("upload cancelled", "AbortError"));
     signal?.addEventListener("abort", () => request.abort(), { once: true });
     if (signal?.aborted) {

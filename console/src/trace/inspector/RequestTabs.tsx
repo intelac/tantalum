@@ -3,25 +3,27 @@
 
 import type { ModelRequest, TokenUsage } from "../../api/types";
 import { Markdown } from "../../markdown/Markdown";
-import { zh } from "../../text/zh";
+import { currentText, useText } from "../../text";
 import { between, formatMs, formatSpeed, formatTokens, parseIsoDuration } from "../format";
 import { useTraceCall } from "../hooks";
 import { JsonTree } from "./JsonTree";
 import { LongText } from "./LongText";
 import { Fields, Loading, Section, sourceText, TabbedBody, Timestamp } from "./parts";
 
-const t = zh.trace;
-
 function statusText(request: ModelRequest): string {
+  const t = currentText().trace;
   if (request.status === "WAITING") return t.status.pending;
   return request.status === "DONE" ? t.status.completed : t.status.failed;
 }
 
 function failureText(failure: string | undefined): string | undefined {
+  const t = currentText().trace;
   return failure === "auth" ? t.details.failureAuth : failure;
 }
 
 function Summary({ request }: { request: ModelRequest }) {
+  const text = useText();
+  const t = text.trace;
   const failed = request.attempts.filter((attempt) => attempt.outcome === "FAILED" || attempt.outcome === "INTERRUPTED");
   return (
     <>
@@ -36,7 +38,7 @@ function Summary({ request }: { request: ModelRequest }) {
           [t.details.attempts, request.attempts.length > 1 ? t.retryProgress(request.attempts.length, request.maxAttempts) : undefined],
           [t.details.error, request.status === "FAILED" || request.status === "INTERRUPTED" ? failureText(request.failure) : undefined],
           [t.details.lastAttemptError, request.status === "DONE" && failed.length > 0 ? (failed.at(-1)?.reason ?? "") : undefined],
-          [t.details.images, (request.omittedImages?.length ?? 0) > 0 ? zh.attachment.omitted(request.omittedImages?.length ?? 0) : undefined],
+          [t.details.images, (request.omittedImages?.length ?? 0) > 0 ? text.attachment.omitted(request.omittedImages?.length ?? 0) : undefined],
         ]}
       />
       {request.attempts.length > 1 && (
@@ -80,6 +82,7 @@ function Summary({ request }: { request: ModelRequest }) {
 
 /** 还原的请求和当时记下的指纹对不上时，在请求详情的每个页签顶部提示。 */
 function Restored({ mismatch }: { mismatch: boolean | undefined }) {
+  const t = useText().trace;
   if (mismatch !== true) return null;
   return (
     <p role="alert" className="mb-2 rounded-md border border-danger/40 bg-danger-soft px-2 py-1 text-xs text-danger">
@@ -89,6 +92,7 @@ function Restored({ mismatch }: { mismatch: boolean | undefined }) {
 }
 
 function CallSystem({ session, call }: { session: string; call: string }) {
+  const t = useText().trace;
   const detail = useTraceCall(session, call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   const { system, segments } = detail.data;
@@ -112,6 +116,7 @@ function CallSystem({ session, call }: { session: string; call: string }) {
 }
 
 export function CallTools({ session, call }: { session: string; call: string }) {
+  const t = useText().trace;
   const detail = useTraceCall(session, call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   if (detail.data.tools.length === 0) return <p className="text-xs text-fg-faint">{t.record.toolsMissing}</p>;
@@ -134,6 +139,7 @@ export function CallTools({ session, call }: { session: string; call: string }) 
 }
 
 function CallMessages({ session, call }: { session: string; call: string }) {
+  const t = useText().trace;
   const detail = useTraceCall(session, call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   const { messages, output } = detail.data;
@@ -149,6 +155,7 @@ function CallMessages({ session, call }: { session: string; call: string }) {
 }
 
 function UsageTable({ title, usage }: { title: string; usage: TokenUsage | undefined }) {
+  const t = useText().trace;
   if (usage === undefined) {
     return (
       <Section title={title}>
@@ -174,6 +181,7 @@ function UsageTable({ title, usage }: { title: string; usage: TokenUsage | undef
 }
 
 function Timing({ request }: { request: ModelRequest }) {
+  const t = useText().trace;
   const last = request.attempts.at(-1);
   const started = last?.startedAt ?? last?.issuedAt;
   const ttft = between(started, last?.firstTokenAt);
@@ -196,6 +204,7 @@ function Timing({ request }: { request: ModelRequest }) {
 }
 
 export function RequestTabs({ session, request }: { session: string; request: ModelRequest }) {
+  const t = useText().trace;
   const call = request.attempts.at(-1)?.call ?? request.id.slice(2);
   return (
     <TabbedBody

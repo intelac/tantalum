@@ -2,7 +2,7 @@
 // 轨迹正在加载同一页时这里显示加载中，不会误报已加载完。页脚开关：合计行、上下文增量，记在本机。
 
 import { useMemo, useState } from "react";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { localArea, readStored, writeStored } from "../ui/storage";
 import { useLatestTrace, useTracePaging, useTraceRecords } from "../trace/hooks";
@@ -10,7 +10,6 @@ import type { TraceStore } from "../trace/TraceStore";
 import { buildStats, overallTotals } from "./metrics";
 import { StatsTable } from "./StatsTable";
 
-const t = zh.stats;
 const TOTALS_KEY = "tantalum.stats.totals";
 const DELTA_KEY = "tantalum.stats.delta";
 
@@ -34,6 +33,8 @@ interface Props {
 }
 
 export function StatsPage({ store, session }: Props) {
+  const text = useText();
+  const t = text.stats;
   const records = useTraceRecords(store, session);
   const paging = useTracePaging(store, session);
   const error = useLatestTrace(store, session);
@@ -50,7 +51,7 @@ export function StatsPage({ store, session }: Props) {
       </p>
     );
   }
-  if (!paging.loaded) return <p className="p-4 text-xs text-fg-faint">{zh.trace.history.loadingTrajectory}</p>;
+  if (!paging.loaded) return <p className="p-4 text-xs text-fg-faint">{text.trace.history.loadingTrajectory}</p>;
   if (turns.length === 0) return <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{t.empty}</div>;
 
   return (

@@ -1,6 +1,6 @@
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 
 interface Props {
   store: ConversationStore;
@@ -11,14 +11,16 @@ interface Props {
 const SHOWN = 5;
 
 function names(list: readonly string[]): string {
-  return list.length <= SHOWN ? list.join("、") : zh.conversation.toolsMore(list.slice(0, SHOWN).join("、"), list.length);
+  const t = currentText();
+  return list.length <= SHOWN ? list.join("、") : t.conversation.toolsMore(list.slice(0, SHOWN).join("、"), list.length);
 }
 
 /** 联网的工具：browser_* 合成“浏览器（N 个工具）”一项，免得一行列 11 个名字（web-tools）。 */
 function webNames(list: readonly string[]): string {
+  const t = currentText();
   const browser = list.filter((name) => name.startsWith("browser_"));
   const rest = list.filter((name) => !name.startsWith("browser_"));
-  return [...rest, ...(browser.length > 0 ? [zh.conversation.toolsBrowser(browser.length)] : [])].join("、");
+  return [...rest, ...(browser.length > 0 ? [t.conversation.toolsBrowser(browser.length)] : [])].join("、");
 }
 
 /**
@@ -27,22 +29,23 @@ function webNames(list: readonly string[]): string {
  * 联网的工具（来源 web）是在插件页关了联网的开关，也单独写（web-tools 需求 5.2）。
  */
 export function ToolChangeNotice({ store, id }: Props) {
+  const t = useText();
   const item = useItem(store, id);
   if (item === undefined || item.kind !== "toolChange") return null;
   const local = item.disabled.filter((name) => item.sources?.[name] === "local");
   const web = item.disabled.filter((name) => item.sources?.[name] === "web");
   const off = item.disabled.filter((name) => item.sources?.[name] !== "local" && item.sources?.[name] !== "web");
   const parts = [
-    item.added.length > 0 ? zh.conversation.toolsAdded(names(item.added)) : null,
-    off.length > 0 ? zh.conversation.toolsDisabled(names(off)) : null,
-    local.length > 0 ? zh.conversation.toolsLocalOff(names(local)) : null,
-    web.length > 0 ? zh.conversation.toolsWebOff(webNames(web)) : null,
-    item.gone.length > 0 ? zh.conversation.toolsGone(names(item.gone)) : null,
+    item.added.length > 0 ? t.conversation.toolsAdded(names(item.added)) : null,
+    off.length > 0 ? t.conversation.toolsDisabled(names(off)) : null,
+    local.length > 0 ? t.conversation.toolsLocalOff(names(local)) : null,
+    web.length > 0 ? t.conversation.toolsWebOff(webNames(web)) : null,
+    item.gone.length > 0 ? t.conversation.toolsGone(names(item.gone)) : null,
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return null;
   return (
     <p role="note" className="my-1 text-xs text-fg-faint" title={[...item.added, ...item.disabled, ...item.gone].join(", ")}>
-      {zh.conversation.toolsChanged}：{parts.join("；")}
+      {t.conversation.toolsChangedList(parts)}
     </p>
   );
 }

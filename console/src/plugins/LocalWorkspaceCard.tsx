@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { LocalLink, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
-import { zh } from "../text/zh";
+import { lookup, type Text, useText } from "../text";
+import { clockTime } from "../text/format";
 import { Button } from "../ui/Button";
 import { CopyButton } from "../ui/CopyButton";
 import { cx } from "../ui/cx";
@@ -13,13 +14,12 @@ const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell"];
 const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
-const text = zh.plugins.local;
-
 /**
  * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行四个子开关；连接状态和到期倒计时；
  * “连接这台电脑”生成令牌和一行命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
+  const text = useText().plugins.local;
   const local = useLocal(open);
   const toggle = useToggleLocal();
   const status = local.data;
@@ -53,9 +53,9 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
         onChange={(enabled) => set(MASTER, enabled)}
       />
       {CHILDREN.map((name) => {
-        const [label, detail] = text.switches[name] ?? [name, ""];
+        const [label, detail] = lookup(text.switches, name) ?? [name, ""];
         const on = status.switches[name];
-        const refused = on && status.link !== null ? refusal(name, status.link) : null;
+        const refused = on && status.link !== null ? refusal(text, name, status.link) : null;
         return (
           <Row
             key={name}
@@ -81,7 +81,7 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
 }
 
 /** 子开关开着、电脑也连着，但连接程序没允许这一类时的说明。读文件只要连上就能用。 */
-function refusal(name: LocalSwitch, link: LocalLink): string | null {
+function refusal(text: Text["plugins"]["local"], name: LocalSwitch, link: LocalLink): string | null {
   if (name === "file-edit" && !link.write) return text.notAllowedWrite;
   if (name === "git" && !link.git) return text.noGit;
   if (name === "shell" && !link.shell.available) {
@@ -91,16 +91,13 @@ function refusal(name: LocalSwitch, link: LocalLink): string | null {
   return null;
 }
 
-function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
 function osName(os: string, version: string): string {
   return `${os === "macos" ? "macOS" : os} ${version}`;
 }
 
 /** 已连接时：电脑、允许的目录、能不能改文件和跑命令、什么时候到期；没连接时一句提示。 */
 function LinkState({ link }: { link: LocalLink | null }) {
+  const text = useText().plugins.local;
   const now = useNow(link !== null, 1000);
   if (link === null) return <span className="mt-1 block text-fg-faint">{text.notConnected}</span>;
   const left = new Date(link.expiresAt).getTime() - now;
@@ -112,7 +109,7 @@ function LinkState({ link }: { link: LocalLink | null }) {
         {text.write(link.write)} · {text.shell(link.shell.available)}
       </span>
       <span className={cx("block", left <= 0 ? "text-warning" : "text-fg-muted")}>
-        {left <= 0 ? text.expired : text.expires(clock(link.expiresAt), Math.max(1, Math.ceil(left / 60_000)))}
+        {left <= 0 ? text.expired : text.expires(clockTime(link.expiresAt), Math.max(1, Math.ceil(left / 60_000)))}
       </span>
     </span>
   );
@@ -120,6 +117,7 @@ function LinkState({ link }: { link: LocalLink | null }) {
 
 /** 选有效期、生成令牌；生成的令牌和命令只在这里显示一次，关掉插件页就没了。 */
 function Connect({ status }: { status: LocalStatus }) {
+  const text = useText().plugins.local;
   const [validity, setValidity] = useState<LocalValidity>("1h");
   const issue = useIssueToken();
   const revoke = useRevokeLocal();
@@ -174,7 +172,7 @@ function Connect({ status }: { status: LocalStatus }) {
       )}
       {issued !== undefined && (
         <div className="flex flex-col gap-1.5 rounded-md border border-line bg-muted p-2" aria-label={text.command}>
-          <p className="text-xs text-fg">{text.issued(clock(issued.expiresAt))}</p>
+          <p className="text-xs text-fg">{text.issued(clockTime(issued.expiresAt))}</p>
           <div className="flex items-start gap-1" aria-label={text.token}>
             <span className="shrink-0 py-1 text-[11px] text-fg-muted">{text.token}</span>
             <code className="min-w-0 flex-1 rounded-xs bg-code px-2 py-1 font-mono text-[11px] break-all text-fg">{issued.token}</code>

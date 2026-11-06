@@ -2,10 +2,9 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { zh } from "../../text/zh";
+import { useText } from "../../text";
 import { cx } from "../../ui/cx";
 
-const t = zh.trace;
 export const STRING_PREVIEW_LINES = 12;
 
 function copy(text: string): void {
@@ -19,6 +18,7 @@ export function childPath(parent: string, key: string | number): string {
 }
 
 function NodeActions({ value, path }: { value: unknown; path: string }) {
+  const t = useText().trace;
   const button = "rounded-xs px-1 text-[10px] text-fg-faint hover:bg-hover hover:text-fg";
   return (
     <span className="ml-2 hidden gap-0.5 group-hover:inline-flex group-focus-within:inline-flex">
@@ -36,6 +36,7 @@ function NodeActions({ value, path }: { value: unknown; path: string }) {
 }
 
 function StringValue({ value }: { value: string }) {
+  const t = useText().trace;
   const lines = value.split("\n");
   const [open, setOpen] = useState(false);
   const long = lines.length > STRING_PREVIEW_LINES;
@@ -108,6 +109,7 @@ function Node({ name, value, path, depth }: { name?: string; value: unknown; pat
 }
 
 export function JsonTree({ value, className }: { value: unknown; className?: string }) {
+  const t = useText().trace;
   const button = "rounded-xs px-1.5 py-0.5 text-[10px] text-fg-faint hover:bg-hover hover:text-fg";
   return (
     <div className={cx("rounded-md border border-line bg-code p-2 font-mono text-xs", className)}>

@@ -3,12 +3,10 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 import type { ModelRequest, TraceRecord } from "../api/types";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 import { cx } from "../ui/cx";
 import { between, formatMs, formatTokens } from "./format";
 import { toolLabel, type Row, type TurnSummary } from "./rows";
-
-const t = zh.trace;
 
 /** 一行文字：去掉换行，长文本省略。 */
 function line(text: string | undefined): string {
@@ -45,12 +43,14 @@ export function isError(record: TraceRecord): boolean {
 }
 
 function sourceLabel(source: { type: string; name?: string }): string {
+  const t = currentText().trace;
   if (source.type === "plugin") return t.source.plugin(source.name ?? "");
   return source.type === "user" ? t.source.user : source.type === "context" ? t.source.context : t.source.unknown;
 }
 
 /** 内容列的文字。工具行另有调用和结果两栏，见 {@link toolCells}。 */
 export function contentOf(record: TraceRecord): string {
+  const t = currentText().trace;
   switch (record.kind) {
     case "run":
       return t.trigger[record.trigger] ?? record.trigger;
@@ -67,7 +67,7 @@ export function contentOf(record: TraceRecord): string {
       const origin = record.source.type === "plugin" ? `${sourceLabel(record.source)} · ` : "";
       const attachments = record.attachments ?? [];
       const images = attachments.filter((ref) => ref.kind === "image").length;
-      const counts = attachments.length === 0 ? "" : zh.attachment.summary(images, attachments.length - images);
+      const counts = attachments.length === 0 ? "" : currentText().attachment.summary(images, attachments.length - images);
       const text = line(record.text);
       return `${prefix}${origin}${[text, counts].filter((part) => part !== "").join(" · ")}`;
     }
@@ -110,6 +110,7 @@ export function contentOf(record: TraceRecord): string {
 
 /** 工具行的调用栏和结果栏。出错时原样保留结果文字，没有文字才显示错误码。 */
 export function toolCells(record: Extract<TraceRecord, { kind: "tool" }>): { call: string; result: string } {
+  const t = currentText().trace;
   const status = t.toolStatus[record.status] ?? record.status;
   const call = `${toolLabel(record)} ${line(record.rawArguments)}`;
   if (record.status === "WAITING" || record.status === "RUNNING") return { call, result: status };
@@ -124,12 +125,14 @@ function requestTokens(record: ModelRequest): { input?: number; output?: number 
 }
 
 function duration(record: TraceRecord): string {
+  const t = currentText().trace;
   if (record.end === undefined) return t.running;
   const span = between(record.at, record.end);
   return span === undefined || span === 0 ? "" : formatMs(span);
 }
 
 function summaryText(summary: TurnSummary, names: readonly string[]): string {
+  const t = currentText().trace;
   const parts = [summary.steps > 0 ? t.summary.steps(summary.steps) : "", t.summary.toolCalls(summary.toolCalls)].filter(Boolean);
   return names.length > 0 ? `${parts.join(" · ")} · ${names.join(", ")}` : parts.join(" · ");
 }
@@ -182,6 +185,8 @@ function Cells({ tag, tagClass, children, input, output, time, compact }: {
 }
 
 export function LedgerRow({ row, selected, matched, onSelect, onToggleTurn, onToggleCalls, compact }: Props) {
+  const text = useText();
+  const t = text.trace;
   switch (row.type) {
     case "turn": {
       const label = row.turn === undefined ? t.betweenTurns : t.turnLabel(row.turn);
@@ -220,7 +225,7 @@ export function LedgerRow({ row, selected, matched, onSelect, onToggleTurn, onTo
         <div
           role="row"
           tabIndex={0}
-          aria-label={`${row.of === "turn" ? t.summary.collapsedTurn : t.summary.collapsedCalls}，${summaryText(row.summary, row.names)}`}
+          aria-label={text.common.labelled(row.of === "turn" ? t.summary.collapsedTurn : t.summary.collapsedCalls, summaryText(row.summary, row.names))}
           onClick={expand}
           onKeyDown={(event) => activate(event, expand)}
           className={cx("flex h-5 cursor-pointer items-center pl-[72px] text-xs text-fg-faint hover:bg-hover hover:text-fg-muted", matched && "bg-warning/15")}
@@ -304,6 +309,7 @@ function ToolContent({ record }: { record: Extract<TraceRecord, { kind: "tool" }
 
 /** 列标题。 */
 export function LedgerHeader({ compact }: { compact: boolean }) {
+  const t = useText().trace;
   return (
     <div role="row" className="flex h-[30px] shrink-0 items-center gap-2 border-b border-line px-2 text-[11px] text-fg-faint">
       <span role="columnheader" className="w-16 shrink-0">{t.column.event}</span>

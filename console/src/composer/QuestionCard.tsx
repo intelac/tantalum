@@ -1,10 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { answerQuestion, ApiError, listQuestions } from "../api/client";
 import type { Question } from "../api/types";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { Button } from "../ui/Button";
-
-const text = zh.conversation;
 
 export function questionsKey(session: string) {
   return ["questions", session] as const;
@@ -24,6 +22,7 @@ export function useQuestions(session: string) {
 
 /** 输入框上方：每个问题一张卡片，标题、说明和选项按钮。第一个选项是主按钮。 */
 export function QuestionCards({ session }: { session: string }) {
+  const text = useText().conversation;
   const questions = useQuestions(session).data ?? [];
   if (questions.length === 0) return null;
   return (
@@ -36,6 +35,7 @@ export function QuestionCards({ session }: { session: string }) {
 }
 
 function QuestionCard({ session, question }: { session: string; question: Question }) {
+  const text = useText().conversation;
   const queries = useQueryClient();
   const answer = useMutation({
     mutationFn: (choice: string) => answerQuestion(session, question.id, choice),

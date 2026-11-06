@@ -1,8 +1,8 @@
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
-import { clockTime } from "../text/time";
-import { zh } from "../text/zh";
+import { clockTime } from "../text/format";
+import { useText } from "../text";
 import { CopyButton } from "../ui/CopyButton";
 
 interface Props {
@@ -14,16 +14,17 @@ interface Props {
 
 /** 模型回复正文：无气泡，Markdown。被取消的回复标记“已中断”。 */
 export function AssistantText({ store, id, last }: Props) {
+  const t = useText();
   const item = useItem(store, id);
   if (item === undefined || item.kind !== "text") return null;
   return (
     <div className="py-1">
       <Markdown text={item.text} />
       {item.interrupted && (
-        <p className="mt-2 inline-block rounded-xs bg-muted px-1.5 py-0.5 text-xs text-fg-muted">{zh.conversation.interrupted}</p>
+        <p className="mt-2 inline-block rounded-xs bg-muted px-1.5 py-0.5 text-xs text-fg-muted">{t.conversation.interrupted}</p>
       )}
       {item.truncated && (
-        <p role="note" className="mt-2 inline-block rounded-xs bg-muted px-1.5 py-0.5 text-xs text-fg-muted">{zh.conversation.truncated}</p>
+        <p role="note" className="mt-2 inline-block rounded-xs bg-muted px-1.5 py-0.5 text-xs text-fg-muted">{t.conversation.truncated}</p>
       )}
       {last && (
         <div className="mt-2 flex h-7 items-center gap-2 text-xs text-fg-faint">

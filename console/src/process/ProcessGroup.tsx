@@ -4,6 +4,7 @@ import { runOutcome } from "../conversation/runOutcome";
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItems, useLive, useRunStatus } from "../store/hooks";
+import { useText } from "../text";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { processRows } from "./chain";
 import { ToolGroup } from "./ToolGroup";
@@ -17,6 +18,7 @@ interface Props {
 
 /** 过程区：标题显示状态和用时；运行中展开并实时更新，结束后折叠，可再次展开。 */
 export function ProcessGroup({ store, run, ids }: Props) {
+  const t = useText();
   const runStatus = useRunStatus(store, run);
   const live = useLive(store, run);
   const items = useItems(store, ids);
@@ -35,7 +37,7 @@ export function ProcessGroup({ store, run, ids }: Props) {
   if (ids.length === 0 && !hasLiveReasoning) return null;
 
   return (
-    <section className="my-2 border-b border-line pb-2" aria-label={runOutcome(runStatus).header}>
+    <section className="my-2 border-b border-line pb-2" aria-label={runOutcome(runStatus, t).header}>
       <button
         type="button"
         aria-expanded={open}
@@ -43,7 +45,7 @@ export function ProcessGroup({ store, run, ids }: Props) {
         className="flex w-full items-center gap-1.5 py-1 text-left text-sm text-fg-muted hover:text-fg"
       >
         {!ended && <Loader2 size={14} className="animate-spin text-accent" aria-hidden="true" />}
-        <span>{runOutcome(runStatus).header}</span>
+        <span>{runOutcome(runStatus, t).header}</span>
         {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
       </button>
       {open && (

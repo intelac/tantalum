@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttachmentRef } from "../api/types";
 import { draftAttachments, resetDraftAttachments } from "./drafts";
-import { admit, DEFAULT_LIMITS, formatBytes, isImage } from "./limits";
+import { formatBytes } from "../text/format";
+import { admit, DEFAULT_LIMITS, isImage } from "./limits";
 import { localPreview, type Uploader, UploadQueue } from "./uploads";
 
 /** 可控的上传：每次调用留下一个句柄，测试决定何时报进度、成功或失败。 */

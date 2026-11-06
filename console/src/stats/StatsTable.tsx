@@ -3,32 +3,32 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
-import { zh } from "../text/zh";
+import { currentText, useText } from "../text";
 import { cx } from "../ui/cx";
 import { formatMs, formatTokens } from "../trace/format";
 import type { Metrics, StepStats, TurnStats } from "./metrics";
 
-const t = zh.stats;
-
-const COLUMNS: [string, string][] = [
-  [t.column.scope, t.column.scopeTitle],
-  [t.column.prompt, t.column.promptTitle],
-  [t.column.did, t.column.didTitle],
-  [t.column.context, t.column.contextTitle],
-  [t.column.output, t.column.outputTitle],
-  [t.column.cache, t.column.cacheTitle],
-  [t.column.ttft, t.column.ttftTitle],
-  [t.column.model, t.column.modelTitle],
-  [t.column.tool, t.column.toolTitle],
-  [t.column.speed, t.column.speedTitle],
-  [t.column.time, t.column.timeTitle],
-];
+const COLUMNS = [
+  ["scope", "scopeTitle"],
+  ["prompt", "promptTitle"],
+  ["did", "didTitle"],
+  ["context", "contextTitle"],
+  ["output", "outputTitle"],
+  ["cache", "cacheTitle"],
+  ["ttft", "ttftTitle"],
+  ["model", "modelTitle"],
+  ["tool", "toolTitle"],
+  ["speed", "speedTitle"],
+  ["time", "timeTitle"],
+] as const;
 
 function missing(): ReactNode {
+  const t = currentText().stats;
   return <span className="text-fg-faint">{t.notRecorded}</span>;
 }
 
 function tokens(value: number | undefined, delta: number | undefined, showDelta: boolean): ReactNode {
+  const t = currentText().stats;
   if (value === undefined) return missing();
   return (
     <>
@@ -53,7 +53,7 @@ function duration(value: number | undefined): ReactNode {
 
 function speed(metrics: Metrics): ReactNode {
   if (metrics.speed !== undefined) return `${metrics.speed.toFixed(1)} tok/s`;
-  return metrics.tooShort === true ? <span className="text-fg-faint">{zh.trace.timing.durationTooShort}</span> : missing();
+  return metrics.tooShort === true ? <span className="text-fg-faint">{currentText().trace.timing.durationTooShort}</span> : missing();
 }
 
 /** 合计行里不做合计的列。 */
@@ -116,14 +116,16 @@ interface Props {
 }
 
 export function StatsTable({ turns, expanded, onToggle, totals, showDelta }: Props) {
+  const text = useText();
+  const t = text.stats;
   const longestTurn = Math.max(0, ...turns.map((turn) => turn.total ?? 0));
   return (
     <table aria-label={t.aria} className="w-full min-w-[880px] border-collapse text-xs">
       <thead className="sticky top-0 z-10 bg-canvas">
         <tr className="border-b border-line text-[11px] text-fg-faint">
           {COLUMNS.map(([label, title], index) => (
-            <th key={label} scope="col" title={title} className={cx("px-2 py-2 font-normal whitespace-nowrap", index < 3 ? "text-left" : index === 10 ? "text-left" : "text-right")}>
-              {label}
+            <th key={label} scope="col" title={t.column[title]} className={cx("px-2 py-2 font-normal whitespace-nowrap", index < 3 ? "text-left" : index === 10 ? "text-left" : "text-right")}>
+              {t.column[label]}
             </th>
           ))}
         </tr>
@@ -158,7 +160,7 @@ export function StatsTable({ turns, expanded, onToggle, totals, showDelta }: Pro
                   <span className="mr-1 text-fg-faint">{turn.head === undefined ? "" : (t.trigger[turn.head.trigger] ?? turn.head.trigger)}</span>
                   {turn.prompt?.text.replace(/\s+/g, " ").trim()}
                 </td>
-                <td className="px-2 py-1.5 text-fg-faint">{zh.trace.summary.steps(turn.steps.filter((step) => !step.compaction).length)}</td>
+                <td className="px-2 py-1.5 text-fg-faint">{text.trace.summary.steps(turn.steps.filter((step) => !step.compaction).length)}</td>
                 <MetricCells metrics={turn} longest={longestTurn} delta={turn.contextDelta} showDelta={showDelta} />
               </tr>
               {open &&

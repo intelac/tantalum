@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ToolCall, TraceRecord } from "../../api/types";
-import { zh } from "../../text/zh";
+import { useText } from "../../text";
 import { cx } from "../../ui/cx";
 import { LineDiff } from "../../ui/LineDiff";
 import { between, formatMs } from "../format";
@@ -12,9 +12,8 @@ import { JsonTree, parseJsonContainer } from "./JsonTree";
 import { LongText } from "./LongText";
 import { Fields, Loading, TabbedBody, Timestamp } from "./parts";
 
-const t = zh.trace;
-
 function Payload({ tool }: { tool: ToolCall }) {
+  const t = useText().trace;
   const parsed = tool.arguments ?? parseJsonContainer(tool.rawArguments);
   const [raw, setRaw] = useState(parsed === undefined);
   if (tool.rawArguments === "") return <p className="text-xs text-fg-faint">{t.record.noPayload}</p>;
@@ -37,6 +36,7 @@ function Payload({ tool }: { tool: ToolCall }) {
 }
 
 function Result({ tool }: { tool: ToolCall }) {
+  const t = useText().trace;
   if (tool.status === "WAITING" || tool.status === "RUNNING") return <p className="text-xs text-fg-faint">{t.toolStatus[tool.status]}</p>;
   // 出错时原样保留结果文字，包括只有空白的；没有文字才显示错误码（DSH README“理解实现”第 5 段）。
   const text = tool.result ?? "";
@@ -46,6 +46,7 @@ function Result({ tool }: { tool: ToolCall }) {
 }
 
 function Schema({ session, tool, request }: { session: string; tool: ToolCall; request: TraceRecord | undefined }) {
+  const t = useText().trace;
   const call = request?.kind === "request" ? request.attempts.at(-1)?.call : undefined;
   const detail = useTraceCall(session, call);
   if (call === undefined) return <p className="text-xs text-fg-faint">{t.record.schemaUnavailable}</p>;
@@ -71,6 +72,7 @@ function editOf(tool: ToolCall): { before: string; after: string } | undefined {
 }
 
 export function ToolTabs({ session, tool, request }: { session: string; tool: ToolCall; request: TraceRecord | undefined }) {
+  const t = useText().trace;
   const edit = editOf(tool);
   const queued = between(tool.issuedAt, tool.startedAt);
   const ran = between(tool.startedAt, tool.end);

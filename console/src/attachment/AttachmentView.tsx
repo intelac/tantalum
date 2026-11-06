@@ -2,10 +2,10 @@ import { FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { attachmentUrl } from "../api/client";
 import type { AttachmentRef, FileAttachment, ImageAttachment } from "../api/types";
-import { zh } from "../text/zh";
+import { useText } from "../text";
 import { writeDragRef } from "./dragData";
 import { Lightbox } from "./Lightbox";
-import { formatBytes } from "./limits";
+import { formatBytes } from "../text/format";
 import { localPreview } from "./uploads";
 
 interface Props {
@@ -76,6 +76,7 @@ function useImageSource(image: ImageAttachment) {
 }
 
 function ImageTile({ image, single, onOpen }: { image: ImageAttachment; single: boolean; onOpen: (src: string) => void }) {
+  const t = useText();
   const { src, failed, attempt, onError, retry } = useImageSource(image);
   const size = single ? singleImageSize(image) : { width: TILE, height: TILE };
   if (failed) {
@@ -86,7 +87,7 @@ function ImageTile({ image, single, onOpen }: { image: ImageAttachment; single: 
         style={size}
         className="flex items-center justify-center rounded-lg border border-line bg-muted px-1 text-center text-[11px] text-fg-muted"
       >
-        {zh.attachment.loadFailed}
+        {t.attachment.loadFailed}
       </button>
     );
   }
@@ -96,7 +97,7 @@ function ImageTile({ image, single, onOpen }: { image: ImageAttachment; single: 
       draggable
       onDragStart={(event) => writeDragRef(event.dataTransfer, image)}
       onClick={() => onOpen(src)}
-      aria-label={zh.attachment.openOriginalLabel(image.name)}
+      aria-label={t.attachment.openOriginalLabel(image.name)}
       title={image.name}
       style={size}
       className="overflow-hidden rounded-lg border border-line bg-muted"
@@ -107,14 +108,15 @@ function ImageTile({ image, single, onOpen }: { image: ImageAttachment; single: 
 }
 
 function FileCard({ file }: { file: FileAttachment }) {
-  const detail = [formatBytes(file.bytes), file.pages === undefined ? "" : zh.attachment.pages(file.pages)].filter((part) => part !== "").join(" · ");
+  const t = useText();
+  const detail = [formatBytes(file.bytes), file.pages === undefined ? "" : t.attachment.pages(file.pages)].filter((part) => part !== "").join(" · ");
   return (
     <a
       href={attachmentUrl(file, true)}
       download={file.name}
       draggable
       onDragStart={(event) => writeDragRef(event.dataTransfer, file)}
-      aria-label={zh.attachment.downloadNamed(file.name)}
+      aria-label={t.attachment.downloadNamed(file.name)}
       title={file.name}
       className="flex h-16 w-60 items-center gap-2.5 rounded-lg border border-line bg-raised px-3 text-left hover:bg-hover"
     >

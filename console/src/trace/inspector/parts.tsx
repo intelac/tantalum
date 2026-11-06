@@ -2,11 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import type { TraceSource } from "../../api/types";
-import { zh } from "../../text/zh";
+import { currentText, useText } from "../../text";
 import { Tabs } from "../../ui/Tabs";
 import { formatLocal, formatUnix } from "../format";
-
-const t = zh.trace;
 
 /** 字段表：值为空的行不显示。 */
 export function Fields({ rows }: { rows: [string, ReactNode][] }) {
@@ -34,6 +32,7 @@ export function Section({ title, children }: { title: string; children: ReactNod
 
 /** 时刻：默认 `YYYY-MM-DD HH:MM:SS.mmm`，点击切换 Unix 时间戳（DSH StartedAtValue）。 */
 export function Timestamp({ iso }: { iso: string | undefined }) {
+  const t = useText().trace;
   const [unix, setUnix] = useState(false);
   if (iso === undefined) return <span className="text-fg-faint">{t.timing.notRecorded}</span>;
   return (
@@ -49,6 +48,7 @@ export function Timestamp({ iso }: { iso: string | undefined }) {
 }
 
 export function sourceText(source: TraceSource | undefined): string {
+  const t = currentText().trace;
   if (source === undefined) return t.source.unknown;
   switch (source.type) {
     case "user":
@@ -70,6 +70,7 @@ export interface Page {
 
 /** 页签和正文；切换记录时回到第一个页签由调用方用 `key` 保证。 */
 export function TabbedBody({ pages }: { pages: Page[] }) {
+  const t = useText().trace;
   const [selected, setSelected] = useState(pages[0]?.id ?? "");
   const current = pages.find((page) => page.id === selected) ?? pages[0];
   return (
@@ -84,5 +85,6 @@ export function TabbedBody({ pages }: { pages: Page[] }) {
 
 /** 按需加载的请求详情的三种状态。 */
 export function Loading({ error }: { error?: Error | null }) {
+  const t = useText().trace;
   return <p className="text-xs text-fg-faint">{error ? t.record.loadFailed(error.message) : t.record.loading}</p>;
 }

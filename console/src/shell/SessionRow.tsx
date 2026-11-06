@@ -1,6 +1,6 @@
 import type { SessionSummary } from "../api/types";
-import { relativeTime } from "../text/time";
-import { zh } from "../text/zh";
+import { relativeTime } from "../text/format";
+import { type Text, useText } from "../text";
 import { cx } from "../ui/cx";
 
 interface Props {
@@ -11,14 +11,15 @@ interface Props {
 }
 
 /** 会话的显示标题：还没有第一条消息时是“新会话”。 */
-export function sessionTitle(session: SessionSummary | undefined): string {
-  return session === undefined || session.title === "" ? zh.sidebar.untitled : session.title;
+export function sessionTitle(session: SessionSummary | undefined, t: Text): string {
+  return session === undefined || session.title === "" ? t.sidebar.untitled : session.title;
 }
 
 /** 一行会话：标题，右侧相对时间；运行中显示跳动的点。 */
 export function SessionRow({ session, selected, onSelect, now }: Props) {
+  const t = useText();
   const running = session.runStatus !== "idle";
-  const title = sessionTitle(session);
+  const title = sessionTitle(session, t);
   return (
     <li>
       <button
@@ -33,9 +34,9 @@ export function SessionRow({ session, selected, onSelect, now }: Props) {
       >
         <span className="min-w-0 flex-1 truncate">{title}</span>
         {running && (
-          <span className="flex shrink-0 items-center gap-1 text-xs text-accent" aria-label={zh.sidebar.running}>
+          <span className="flex shrink-0 items-center gap-1 text-xs text-accent" aria-label={t.sidebar.running}>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-            {zh.sidebar.running}
+            {t.sidebar.running}
           </span>
         )}
         {!running && (

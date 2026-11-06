@@ -1,9 +1,10 @@
 // 轨迹页的数字和时刻格式，照 DSH（`TrajectoryTable.tsx` 的 formatDuration、formatStartedAt）。
 
-/** 毫秒数：1 秒以下取整显示毫秒，10 秒以下两位小数，再长一位小数。 */
+import { formatPreciseDuration } from "../text/format";
+
+/** 毫秒数：1 秒以下取整显示毫秒，10 秒以下两位小数，再长一位小数；单位按当前语言。 */
 export function formatMs(milliseconds: number): string {
-  if (milliseconds < 1_000) return `${Math.round(milliseconds)} 毫秒`;
-  return `${(milliseconds / 1_000).toFixed(milliseconds < 10_000 ? 2 : 1)} 秒`;
+  return formatPreciseDuration(milliseconds);
 }
 
 /** 两个 ISO 时刻之间的毫秒数；缺一个就是 undefined。 */
