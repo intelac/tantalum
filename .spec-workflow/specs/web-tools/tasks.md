@@ -223,7 +223,7 @@
   - _Requirements: 需求 6.1_
   - _Prompt: Role: 运维 | Task: 去掉临时接的共用浏览器 | Restrictions: 不删 Yi 的旧快照和截图；不动别的启动参数 | Success: 8091 只用本 spec 的联网工具_
 
-- [ ] 26. 8091 真实演示
+- [x] 26. 8091 真实演示
   - 8091 上用真实 Claude 问“DeepSeek 最近发的 super agent 文章讲了什么”：模型用浏览器打开 `https://www.bing.com/search?q=…` 读结果页，找到文章链接，用 `web_fetch` 读文章，再截一张图描述页面（需求的例子表）；看对话页的工具结果第一行是 W9 那句话，截图在 Yi 的附件里；截图给 Yi；报告 Claude 用量（上下文、输出、缓存命中、用时）和发现的问题，写进本任务的进度
   - _Requirements: 需求 1, 2, 3 的例子, 需求 6.1_
   - _Prompt: Role: 测试开发 | Task: 在 8091 上做一次真实的联网演示 | Restrictions: 截图和报告里不出现密钥、令牌；不在服务器上留联网的文件 | Success: 模型用 Bing 找到文章、读出正文、看到截图，Yi 收到截图和用量_
