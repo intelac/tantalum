@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { logout as logoutRequest, me, onUnauthorized } from "../api/client";
 import type { User } from "../api/types";
+import { applyStoredLanguage } from "../text";
 
 export const ME_KEY = ["me"] as const;
 
@@ -25,6 +26,13 @@ export function useCurrentUser(): CurrentUser {
     queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
     setUser(null);
   }, [queries, setUser]);
+
+  // 登录、刷新后用这个用户存的语言；没登录（登录页）、退出登录时跟浏览器（console-i18n 需求 1.2、1.5、1.7）
+  const known = query.isSuccess;
+  const stored = query.data?.language ?? null;
+  useEffect(() => {
+    if (known) applyStoredLanguage(stored);
+  }, [known, stored]);
 
   useEffect(() => {
     onUnauthorized(forget);

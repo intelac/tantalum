@@ -8,6 +8,8 @@ export const PASSWORD = "e2e-password";
 export const OTHER_USER = "e2e2";
 /** 第三个账号（E2eServer.LOCAL_USER）：没连测试电脑，本机工作区的用例用它连真的连接程序。 */
 export const LOCAL_USER = "e2e3";
+/** 第四个账号（E2eServer.I18N_USER）：语言的用例改它存的语言，不影响别的用例。 */
+export const I18N_USER = "e2e4";
 
 /** 直接调接口登录，Cookie 落到浏览器上下文里；之后打开首页就进入新会话。 */
 export async function login(page: Page, username = USER): Promise<void> {

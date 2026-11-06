@@ -53,6 +53,8 @@ public final class E2eServer {
     public static final String OTHER_USER = "e2e2";
     /** 第三个账号：本机工作区的端到端测试用它连真的连接程序，不影响前两个账号的测试电脑。 */
     public static final String LOCAL_USER = "e2e3";
+    /** 第四个账号：语言的端到端测试改它存的语言（console-i18n），不影响别的用例。 */
+    public static final String I18N_USER = "e2e4";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -161,6 +163,7 @@ public final class E2eServer {
             store.add(USER, PASSWORD);
             store.add(OTHER_USER, PASSWORD);
             store.add(LOCAL_USER, PASSWORD);
+            store.add(I18N_USER, PASSWORD);
         }
         Path notes = Files.createDirectories(workspace.resolve(USER).resolve("notes"));
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");

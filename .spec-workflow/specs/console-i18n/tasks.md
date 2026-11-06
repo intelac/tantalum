@@ -157,7 +157,7 @@
   - _Requirements: I9, I10, I12, 需求 4.2–4.5, 4.7_
   - _Prompt: Role: 前端开发 | Task: 控制台按错误代码和多语言文字显示服务器给的内容 | Restrictions: 错误在渲染时才变成文字；不显示参数以外的服务器原文（诊断小字除外） | Success: 测试全过_
 
-- [ ] 15. 英文字典和三份字典的对比测试
+- [x] 15. 英文字典和三份字典的对比测试
   - File: console/text/en.ts（新）、console/text/index.ts（改，注册 en）、console/text/dictionaries.test.ts（新）、console/text/format.test.ts（改）
   - 先写 `dictionaries.test.ts`（设计第 ② 层：路径集合、值的种类、函数参数个数、样例调用、记号不变、英文无中日文字符、`errors` 和 `sandbox` 的键等于 `errorCodes.json`、少于 400 条失败），确认在没有 `en` 时失败；再写 `en.ts`：全部条目照术语表，句首大写其余小写，复数在函数里按数量选，按钮短、提示直接；`format.test.ts` 加英文用例（`5 minutes ago`、`yesterday`、`12:05 AM` 还是 `00:05` 照 `en-US` 的 `h23` 规则、`1,234,567`、`1m 5s`）
   - 测试：上面这些；变异：删掉 `en` 的一条、把一个函数的参数去掉、在英文里留一个中文字，三次都失败
@@ -165,7 +165,7 @@
   - _Requirements: I5, I6, I7, I15, 需求 2.1, 2.2, 2.6, 3.2_
   - _Prompt: Role: 前端开发兼英文技术写作 | Task: 写英文字典和三份字典的对比测试 | Restrictions: 不许用 as 绕过 Text 类型；产品名、工具名、参数、配置项原样；术语只用术语表里的说法 | Success: tsc、dictionaries.test.ts、format.test.ts 全过_
 
-- [ ] 16. 日文字典
+- [x] 16. 日文字典
   - File: console/text/ja.ts（新）、console/text/index.ts（改，注册 ja）、console/text/dictionaries.test.ts（改，加日文的放行清单）、console/text/format.test.ts（改）
   - 全部条目照术语表：按钮和标签用名词形，说明和提示用です・ます体，英文单词和日文之间留半角空格，`ブラウザー` 这类带长音的写法全篇统一；和中文完全相同的值只能是放行清单里的（`MCP`、`Git`、`Schema`…）；`format.test.ts` 加日文用例（`5 分前`、`昨日`、`1分5秒`）
   - 测试：`dictionaries.test.ts` 对日文全过；变异：把一条日文改成和中文相同，测试失败
@@ -173,14 +173,14 @@
   - _Requirements: I5, I6, I7, I15, 需求 2.1, 2.2, 2.6, 3.2_
   - _Prompt: Role: 前端开发兼日文技术写作 | Task: 写日文字典 | Restrictions: 不机翻腔，读起来像日本的开发工具；术语只用术语表里的说法；不许用 as 绕过类型 | Success: tsc、dictionaries.test.ts、format.test.ts 全过_
 
-- [ ] 17. 译文审校
+- [x] 17. 译文审校
   - File: console/text/en.ts、console/text/ja.ts、tantalum-connect 和 tantalum-shell 的 `Text_*.properties`、tantalum-examples 里的 `LocalText`（按审校意见改）
   - 交给一个没参与翻译的 agent：对照中文原文和设计的术语表，逐条看英文和日文：意思对不对、同一概念是不是同一个词、语气（英文句首大写、日文です・ます体）、长度（按钮在 `settings`、`plugins`、`trace.toolbar` 里会不会撑破，看渲染截图）；意见写成清单，逐条改或写明不改的理由，记进实现日志
   - 测试：`dictionaries.test.ts`、`BundleChecks` 照过
   - _Requirements: I15, 需求 2.6_
   - _Prompt: Role: 英日双语审校 | Task: 审英文和日文译文 | Restrictions: 不改中文原文的意思；术语表要改先写明理由 | Success: 审校清单每条都有结论_
 
-- [ ] 18. 设置页的“语言”和登录、退出时的切换
+- [x] 18. 设置页的“语言”和登录、退出时的切换
   - File: console/settings/LanguagePane.tsx、console/settings/useLanguage.ts（新）、console/settings/SettingsDialog.tsx、console/app/App.tsx、console/auth/LoginPage.tsx（改），console/settings/language.test.tsx、console/text/english.test.tsx（新）
   - “语言”一栏放在“外观”下面，图标 `Languages`；四个选项：“跟随浏览器（检测到的语言名）”、`中文`、`English`、`日本語`；选了先 `setLanguage` 再 `PUT`，失败换回并提示；`me` 和登录返回后照设计“控制台怎么决定用哪种语言”第 3、4 步；退出登录删缓存、回到浏览器的语言；`english.test.tsx` 照设计第 ④ 层
   - 测试：`language.test.tsx`：选英文后标题当场变英文、窗口还开着、输入框里的草稿还在（1.3、I4）；`PUT` 失败换回（Error Handling）；选“跟随浏览器”发 `null`（1.4）；`me` 返回 `ja` 后变日文、写进缓存；401 后删缓存（1.7）；`english.test.tsx` 通过（2.5），变异：在某个组件的模块顶层取一次字典，测试失败后恢复
@@ -188,7 +188,7 @@
   - _Requirements: I2, I3, I4, 需求 1.2–1.7, 2.5_
   - _Prompt: Role: 前端开发 | Task: 做设置页的语言选择和登录、退出时的语言切换 | Restrictions: 切换不刷新页面、不重新挂载；检测到的语言不写回服务器 | Success: vitest 全过_
 
-- [ ] 19. 端到端和“给模型的不变”
+- [x] 19. 端到端和“给模型的不变”
   - File: e2e/i18n.spec.ts（新）、examples/I18nChainTest.java（新）、examples/E2eServer.java（改，按需）
   - `i18n.spec.ts` 照设计“End-to-End Testing”：`ja-JP` 浏览器的登录页和 `lang`；设置里换 English 当场生效、窗口不关；刷新后第一帧就是 `en`；另一个 `zh-CN` 上下文登录同一用户还是英文；退出后回到浏览器的语言；日文下传超大图片的提示；日文插件页的内置工具。`I18nChainTest`：脚本化模型，三个用户分别设 `zh`、`en`、`ja`，同样的提问，记录的模型请求逐字相同（4.8）
   - 测试：上面这些；已有的 Playwright 测试照 `zh-CN` 跑、断言不改
