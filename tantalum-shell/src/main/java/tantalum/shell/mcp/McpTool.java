@@ -23,7 +23,7 @@ final class McpTool implements Tool {
     private final Json schema;
     private final ToolImages images;
 
-    /** {@code images} 为 null 时（还没接上附件的旧装配）图片换成一行说明，不交给模型。 */
+    /** {@code images} 把返回的图片存进调用者本人的附件（W8）。 */
     McpTool(McpSettings.Server server, McpConnection connection, String publicName, String remoteName, String description,
             Json schema, ToolImages images) {
         this.server = server;
@@ -52,13 +52,6 @@ final class McpTool implements Tool {
         McpResults.Result result = connection.call(remoteName, map);
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
-        }
-        if (images == null) {
-            StringBuilder text = new StringBuilder(result.text());
-            for (ToolImages.Image image : result.images()) {
-                text.append(text.isEmpty() ? "" : "\n").append("[").append(image.mediaType()).append(" image omitted]");
-            }
-            return new ToolOutput(text.toString(), result.error());
         }
         // 图片存进调用者本人的附件（W8），名字 <服务器>-<工具>.<扩展名>
         String name = server.name() + "-" + remoteName + extension(result.images().getFirst().mediaType());

@@ -143,6 +143,45 @@ class McpIntegrationTest {
         }
     }
 
+    /**
+     * web-tools W8、W11、需求 3.1、3.4：真实 MCP 工具返回一张 PNG，经整个服务存进调用者本人的附件；会话文件里只有引用
+     * （ToolFinished.images），没有 base64（PNG 的 base64 开头 iVBORw0K）。
+     */
+    @Test
+    void anMcpImageIsStoredInTheCallersAttachmentsAndTheSessionFileHoldsOnlyTheReference() throws Exception {
+        byte[] png;
+        try (java.io.InputStream in = McpIntegrationTest.class.getResourceAsStream("/attachments/clean.png")) {
+            png = in.readAllBytes();
+        }
+        String base64 = java.util.Base64.getEncoder().encodeToString(png);
+        assertTrue(base64.startsWith("iVBORw0K"));
+        Path data = temp.resolve("d3");
+        try (TestMcpServer mcp = new TestMcpServer(new Definition("chart", true, args -> io.modelcontextprotocol.spec.McpSchema.CallToolResult
+                .builder().addTextContent("the chart").addContent(new io.modelcontextprotocol.spec.McpSchema.ImageContent(null, base64, "image/png"))
+                .isError(false).build()));
+             TestServer server = new TestServer(data, temp.resolve("w3"), model, args(mcp))) {
+            awaitTool(server, "mcp__t__chart");
+            submit(server, "ann", "s1", "mcp__t__chart ann");
+            String messages = awaitEnd(server, "ann", "s1");
+            assertTrue(messages.contains("got: the chart"), messages);
+            assertFalse(messages.contains("iVBORw0K"), messages);
+
+            ToolFinished finished = new SessionStore(data, EventCodec.withBuiltins()).readAll().stream()
+                    .map(tantalum.value.event.EventEnvelope::event).filter(ToolFinished.class::isInstance).map(ToolFinished.class::cast)
+                    .findFirst().orElseThrow();
+            assertEquals(1, finished.images().size());
+            assertEquals("t-chart.png", finished.images().getFirst().name());
+            tantalum.shell.attachment.AttachmentStore attachments = server.context.getBean(tantalum.shell.boot.Engine.class).attachments();
+            assertTrue(attachments.find(new tantalum.value.id.Principal("ann"), finished.images().getFirst().id()).isPresent());
+            assertTrue(attachments.find(new tantalum.value.id.Principal("bob"), finished.images().getFirst().id()).isEmpty());
+        }
+        try (java.util.stream.Stream<Path> files = java.nio.file.Files.walk(data)) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".jsonl") || path.toString().endsWith(".json")).toList()) {
+                assertFalse(java.nio.file.Files.readString(file).contains("iVBORw0K"), "base64 in " + file);
+            }
+        }
+    }
+
     @Test
     void replayAndRestartNeverCallTheServerAndStayIdenticalWhenItIsGone() throws Exception {
         Path data = temp.resolve("d2");

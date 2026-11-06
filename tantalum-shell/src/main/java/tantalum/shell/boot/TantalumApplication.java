@@ -20,13 +20,17 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.server.context.WebServerInitializedEvent;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.core.env.Environment;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.auth.AdminBootstrap;
 import tantalum.shell.auth.UserCommand;
 import tantalum.shell.auth.UserStore;
+import tantalum.shell.browser.BrowserCommand;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.local.LocalEndpoint;
 import tantalum.shell.model.ClaudeClient;
@@ -54,6 +58,9 @@ public class TantalumApplication {
         if (args.length > 0 && args[0].equals("check")) {
             System.exit(RecordCheckCommand.run(Arrays.copyOfRange(args, 1, args.length), System.out));
         }
+        if (args.length > 0 && args[0].equals("browser")) {
+            System.exit(BrowserCommand.run(Arrays.copyOfRange(args, 1, args.length), dataDirFromEnvironment(), System.out));
+        }
         SpringApplication.run(TantalumApplication.class, args);
     }
 
@@ -74,7 +81,7 @@ public class TantalumApplication {
     @Bean(destroyMethod = "close")
     Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<Tool> tools,
                   ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
-                  ObjectProvider<AfterToolHook> afterHooks) throws IOException {
+                  ObjectProvider<AfterToolHook> afterHooks, Environment environment) throws IOException {
         boolean claude = properties.provider().equals("claude");
         Duration wait = claude ? properties.claude().firstChunkTimeout() : properties.openai().firstChunkTimeout();
         int concurrency = claude ? properties.claude().concurrency() : properties.openai().concurrency();
@@ -84,7 +91,18 @@ public class TantalumApplication {
                 EventCodec.withBuiltins(), Clock.systemUTC());
         // 停用或删掉的账号不能再连电脑（local-workspace L3）：握手时查，之后每次心跳再查
         engine.localLinks().accounts(principal -> usable(users, principal.value()));
+        // 联网访问自己永远被拦（W6）：先用配置的端口，Web 服务器起来后换成实际端口（见 ownPort）
+        int configured = environment.getProperty("server.port", Integer.class, 8080);
+        if (configured > 0) {
+            engine.addressRules().ownPort(configured);
+        }
         return engine;
+    }
+
+    /** Web 服务器的实际端口（配置 0 时是随机的）告诉联网的地址规则。 */
+    @Bean
+    ApplicationListener<WebServerInitializedEvent> ownPort(ObjectProvider<Engine> engine) {
+        return event -> engine.getObject().addressRules().ownPort(event.getWebServer().getPort());
     }
 
     /** 读不了用户表时当作还能用：心跳里查失败一次就撤销全部令牌，代价太大；登录本身照常由 {@code LoginCheck} 把关。 */

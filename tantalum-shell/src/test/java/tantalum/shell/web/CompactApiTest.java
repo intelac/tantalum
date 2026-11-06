@@ -30,7 +30,9 @@ class CompactApiTest {
 
     private static final String[] SETTINGS = {"--tantalum.claude.context-window=6000", "--tantalum.claude.max-tokens=500",
         "--tantalum.claude.bytes-per-token=3",
-        "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600"};
+        "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
+        // 联网的 12 个工具定义约 1600 token（系数 3），6000 的窗口放不下；这里测的是压缩，不用联网（web-tools）
+        "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
 
     @TempDir
     Path temp;

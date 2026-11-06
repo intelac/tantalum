@@ -105,7 +105,7 @@
   - _Requirements: W8, 需求 3.2, 3.3_
   - _Prompt: Role: Java 后端开发 | Task: 让 MCP 图片照附件规则进本人附件 | Restrictions: 图片的 base64 不进文字、不进日志 | Success: MCP 相关测试全过_
 
-- [ ] 10. `ToolGroup`、`WebAccess` 和 `WEB` 开关
+- [x] 10. `ToolGroup`、`WebAccess` 和 `WEB` 开关
   - File: shell/access/ToolGroup.java、WebAccess.java（新）、shell/access/LocalAccess.java（删）、shell/access/PluginSwitches.java、PluginGate.java、shell/local/LocalWorkspace.java、LocalTool.java、shell/handler/ContextHandler.java、shell/fetch/WebFetchTool.java（改），shelltest/access/WebAccessTest.java（新）、PluginGateTest.java（改）
   - `ToolGroup`：`kind()`、`switches()`（第一个是总开关）、`owns`、`enabled`、`source()`；`LocalAccess` 的常量搬进 `LocalWorkspace`，`LocalWorkspace` 实现 `ToolGroup`；`WebAccess`：`MASTER`/`FETCH`/`BROWSER`、`owns` 按 `server()`、`enabled` = 总开关 × 子开关、`admin()`、`blockPrivateNetwork()`、`NOTE`（设计 `ContextHandler` 那段原文）。`PluginSwitches.Kind.WEB`；`PluginGate` 持有组列表，`toolEnabled`、`overview`、`set`（名字不在组里抛 `UnknownPlugin`）、新增 `source(Tool)`；`ContextHandler.sources()` 改问它；`WebFetchTool.server()` 改用 `WebAccess.FETCH`
   - 测试：总开关 × 子开关 × 管理员关闭的组合表（5.1–5.3）；联网工具不进“内置工具”；`source` 为 `web`；本机工作区的 `PluginGateTest`、`LocalWorkspaceTest` 断言不变；`access` 不依赖 `fetch`、`browser`
@@ -113,14 +113,14 @@
   - _Requirements: W10, 需求 5.1, 5.2, 5.3_
   - _Prompt: Role: Java 后端开发 | Task: 把开关组推广成 ToolGroup 并加联网这一组 | Restrictions: 不改开关表结构；本机工作区行为不变 | Success: 测试和 ArchitectureTest 全过_
 
-- [ ] 11. 配置和 `Engine` 接上 `web_fetch`
+- [x] 11. 配置和 `Engine` 接上 `web_fetch`
   - File: shell/boot/TantalumProperties.java、Engine.java、TantalumApplication.java（改）、tantalum-shell/src/main/resources/application.properties（改），shelltest/boot/TantalumPropertiesTest.java、shelltest/handler/ContextHandlerTest.java、shelltest/web/ShutdownOrderTest.java（改）
   - `Web(blockPrivateNetwork, Fetch, Browser)`、`Fetch(enabled)`、`Browser(enabled, maxOpen, idleClose, sandbox)`，`maxOpen < 1` 启动失败；`application.properties` 照设计加六行和注释。`Engine`：两项都没开时不起出口；否则 `AddressRules`、`UpstreamProxy.fromEnvironment(System::getenv)`、`Egress.start`、`ToolImages`，开着时注册 `web_fetch`，`WebAccess` 进 `PluginGate`；`fixedNote` = MCP 说明 + `WebAccess.NOTE`；`close()` 关出口；公开 `addressRules()`。`TantalumApplication` 监听 `WebServerInitializedEvent` 设实际端口
   - 测试：`maxOpen=0` 启动失败；`fetch.enabled=false` 时没有 `web_fetch`；system 里有“## Web content”那段；服务器随机端口启动后，`web_fetch` 访问自己的端口被拦（4.4）；关机后出口端口不再接受连接
   - _Requirements: W6, W9, W10, 需求 4.4, 5.3, 2.8_
   - _Prompt: Role: Java 后端开发 | Task: 把联网配置和 web_fetch 接进服务器 | Restrictions: 默认绑定地址不变；Egress 只听 127.0.0.1；代理凭据不进日志 | Success: 测试全过，本地起服务能抓本地测试页_
 
-- [ ] 12. 插件页接口
+- [x] 12. 插件页接口
   - File: shell/web/PluginController.java（改），shelltest/web/PluginApiTest.java（改）
   - `GET /api/plugins` 加 `web: {switches, admin, blockPrivateNetwork}`（设计“数据模型”）；两项都被管理员关掉时照样返回；`PUT /api/plugins/web/{name}` 照用，未知名字 404
   - 测试：默认三项都开；关掉 `web-fetch` 后再取是关的，另一个用户还是开的（5.1）；管理员关掉 `browser` 时 `admin.browser=false`（5.3）；未登录 401；未知名字被拒
@@ -128,14 +128,14 @@
   - _Requirements: W10, 需求 5.1, 5.3_
   - _Prompt: Role: Java 后端开发 | Task: 在插件接口里加联网这一项 | Restrictions: 不返回代理地址和凭据 | Success: PluginApiTest 全过_
 
-- [ ] 13. 插件页“联网”卡片
+- [x] 13. 插件页“联网”卡片
   - File: console/plugins/WebCard.tsx（新）、console/plugins/PluginsDialog.tsx、console/plugins/usePlugins.ts、console/api/types.ts、console/text/zh.ts（改），console/plugins/WebCard.test.tsx（新）
   - 放在本机工作区下面、内置工具上面；用现有 `Section`、`Row`；开关用 `useTogglePlugin({kind: "web", …})`；不轮询。总开关“联网”加灰色 `web`、说明和内网限制那一行；子开关“抓网页 `web_fetch`”“浏览器”及说明照设计原文；管理员关掉的项禁用并写“管理员已关闭”，两项都关时总开关也禁用。`PluginKind` 加 `"web"`，`PluginsResponse.web`；`zh.plugins.web`
   - 测试：vitest 覆盖默认、关掉一项、管理员关掉一项、两项都关、内网限制开着这几种样子
   - _Requirements: W10, 需求 5.1, 5.3_
   - _Prompt: Role: 前端开发 | Task: 做插件页的联网卡片 | Restrictions: 照现有插件页样式；文字放 zh.ts | Success: vitest 全过_
 
-- [ ] 14. 对话页的工具变化
+- [x] 14. 对话页的工具变化
   - File: console/conversation/ToolChangeNotice.tsx、console/text/zh.ts（改），console/conversation/ToolChangeNotice.test.tsx（改）
   - 来源 `web` 的“不再可用”写成 `不再可用 web_fetch、浏览器（11 个工具）（联网已在插件页关闭）`；`browser_*` 合成“浏览器（N 个工具）”；新增的照现有写法；加 `zh.conversation.toolsWebOff`
   - 测试：只关 `web_fetch`；只关浏览器（11 个合成一项）；两样都关；`local` 和 MCP 的现有用例不变
@@ -176,14 +176,14 @@
   - _Requirements: W1, W7, W9, 需求 2.2, 2.6, 2.7, 3.1_
   - _Prompt: Role: Java 开发 | Task: 定义 11 个浏览器工具和结果格式 | Restrictions: 不提供上传、下载、执行任意 Playwright 代码；快照和截图不进日志 | Success: 测试全过_
 
-- [ ] 19. `Engine` 接上浏览器
+- [x] 19. `Engine` 接上浏览器
   - File: shell/boot/Engine.java（改），shelltest/web/ShutdownOrderTest.java、shelltest/ArchitectureTest.java（改）
   - `browser.enabled` 时 `BrowserTools.all(new Browsers(...))` 注册；`close()` 先停处理，再 `browsers.close()`，再关出口；确认规则 3、4 对 `browser` 包生效，`BrowserDriver` 是 `Files` 的唯一例外
   - 测试：`browser.enabled=false` 时没有 `browser_*`；关机顺序：浏览器先于出口关闭；变异：在 `browser` 的别的类里临时用 `Files`，确认规则 4 抓到后删掉
   - _Requirements: W10, 需求 2.8, 5.3, 设计规则 3、4_
   - _Prompt: Role: Java 后端开发 | Task: 把浏览器工具接进服务器 | Restrictions: 浏览器懒启动，服务器启动时不起 Chromium | Success: 测试和 ArchitectureTest 全过_
 
-- [ ] 20. `BrowsersIT`
+- [x] 20. `BrowsersIT`
   - File: shelltest/browser/BrowsersIT.java（新）
   - 真实 Chromium、本地测试站、真实 `Egress`；没装浏览器时跳过并写明原因（同 `MxcIT`）。用例：A 设 Cookie 后 B 看不到 Cookie 和 A 的标签页（2.1）；快照有 `[ref=…]`，按编号输入、点击后结果对（2.2）；点下载链接报错，临时目录、数据目录、`~/Downloads` 没有新文件（2.3）；空闲设 2 秒，到期后子进程没了，再调用重开、Cookie 没了（2.4）；上限 2 时第三个用户得到“都在用”、前两个照常（2.5）；杀掉一个用户的 Chromium 主进程，这次得到崩溃说明、下次正常、另一个用户不受影响（NFR Reliability）；`close()` 后没有子进程（2.8）；截图进本人附件、结果里是 `ImageRef`（3.1）；开关开时打开回环测试页被拦、关着能打开，测试页里指向“自己端口”的图片被出口拦下（看出口的计数）（4.1、4.2、4.4）；同一用户两个会话各有自己的当前页
   - _Requirements: 需求 2.1–2.5, 2.8, 3.1, 4.1, 4.2, 4.4, NFR Reliability_

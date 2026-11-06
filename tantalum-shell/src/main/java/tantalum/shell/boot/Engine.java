@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -14,11 +15,18 @@ import tantalum.kernel.Kernel;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches;
+import tantalum.shell.access.WebAccess;
 import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.attachment.RequestImages;
 import tantalum.shell.attachment.StoredMedia;
+import tantalum.shell.attachment.ToolImages;
+import tantalum.shell.browser.BrowserDriver;
+import tantalum.shell.browser.BrowserTools;
+import tantalum.shell.browser.Browsers;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.conversation.Transcript;
+import tantalum.shell.fetch.Fetcher;
+import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ContextHandler;
 import tantalum.shell.handler.Handler;
@@ -58,6 +66,9 @@ import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.model.ContextWindow;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.WindowSource;
+import tantalum.shell.net.AddressRules;
+import tantalum.shell.net.Egress;
+import tantalum.shell.net.UpstreamProxy;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
@@ -113,6 +124,11 @@ public final class Engine implements AutoCloseable {
     private final LocalTokens localTokens;
     private final LocalLinks localLinks;
     private final LocalWorkspace localWorkspace;
+    /** 联网（web-tools）：地址规则总是有；出口和浏览器只在管理员开着对应的项时才有，否则为 null。 */
+    private final AddressRules addressRules;
+    private final Egress egress;
+    private final Browsers browsers;
+    private final WebAccess webAccess;
     private final UserSettings userSettings;
     private final ContextWindow window;
     private final CompactionPolicy compaction;
@@ -149,17 +165,34 @@ public final class Engine implements AutoCloseable {
             }
             localTokens = openLocalTokens(properties.dataDir(), clock);
             localLinks = new LocalLinks(localTokens, clock, LocalLinks.Timing.DEFAULT);
+            // 本机工作区读到的图片、MCP 返回的图片、浏览器截图都照附件规则存进本人附件（web-tools W8）
+            ToolImages toolImages = new ToolImages(storage.attachments);
             // 服务器上只读附件；读写文件、Git 都转发到用户的电脑（local-workspace L6）
             BuiltinTools.of(storage.attachments).forEach(catalog::register);
-            LocalTool.all(localLinks, storage.attachments, properties.toolTimeout()).forEach(catalog::register);
+            LocalTool.all(localLinks, toolImages, properties.toolTimeout()).forEach(catalog::register);
             memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
             MemoryTools.all(memories).forEach(catalog::register);
             tools.forEach(catalog::register);
+            TantalumProperties.Web web = properties.webSettings();
+            addressRules = new AddressRules(web.blockPrivateNetwork());
+            egress = web.any() ? Egress.start(addressRules, UpstreamProxy.fromEnvironment(System::getenv)) : null;
+            if (web.fetch().enabled()) {
+                catalog.register(new WebFetchTool(new Fetcher(egress, addressRules)));
+            }
+            // 浏览器懒启动：这里只登记，用户第一次调浏览器工具时才起 Chromium
+            TantalumProperties.Browser browser = web.browser();
+            browsers = browser.enabled() ? new Browsers(new Browsers.Settings(browser.maxOpen(), browser.idleClose(), browser.sandbox()),
+                    egress, toolImages, clock, new BrowserDriver(properties.dataDir())) : null;
+            if (browsers != null) {
+                BrowserTools.all(browsers).forEach(catalog::register);
+            }
             McpSettings mcpSettings = McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv);
-            mcp = new McpRegistry(mcpSettings);
+            mcp = new McpRegistry(mcpSettings, toolImages);
             catalog.setSource(mcp);
             switches = openSwitches(properties.dataDir(), clock);
             localWorkspace = new LocalWorkspace(switches, localLinks);
+            // 管理员关掉的那一项不注册工具；这一组照样进开关，插件页照样显示“联网”一块
+            webAccess = new WebAccess(switches, web.fetch().enabled(), browser.enabled(), web.blockPrivateNetwork());
             userSettings = openUserSettings(properties.dataDir(), clock);
             // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
             properties.compactionSettings();
@@ -167,7 +200,7 @@ public final class Engine implements AutoCloseable {
             window = new ContextWindow(properties.windowFromModel() ? model.window() : WindowSource.NONE, properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
                     .start(WINDOW_STARTUP_WAIT);
             compaction = new CompactionPolicy(window, userSettings, limits);
-            gate = new PluginGate(catalog, switches, localWorkspace, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
+            gate = new PluginGate(catalog, switches, List.of(localWorkspace, webAccess), mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                     hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()));
 
             RequestImages requestImages = new RequestImages(storage.attachments);
@@ -193,8 +226,8 @@ public final class Engine implements AutoCloseable {
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
                     AssembleContext.class, new ContextHandler(localWorkspace, properties.systemPrompt(), catalog, gate, memories,
-                            new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
-                            compaction),
+                            new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
+                            fixedNote(mcp.fixedNote(), web.any()), compaction),
                     CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
                             run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
                             window::refreshSoon),
@@ -223,7 +256,8 @@ public final class Engine implements AutoCloseable {
                     (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
             input.connect(lanes);
             cleanroomRing.connect(cleanroom);
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException | IOException failure) {
+            closeWebQuietly();
             Storage.closeQuietly(storage);
             throw failure;
         }
@@ -234,6 +268,28 @@ public final class Engine implements AutoCloseable {
         Warmup.start(codec);
         LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
                 properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
+    }
+
+    /** 固定说明：MCP 的那段加联网的那段（W9），都不随用户开关变化。 */
+    private static String fixedNote(String mcpNote, boolean web) {
+        if (!web) {
+            return mcpNote;
+        }
+        return mcpNote.isEmpty() ? WebAccess.NOTE : mcpNote + "\n\n" + WebAccess.NOTE;
+    }
+
+    /** 启动到一半失败时：已经起来的出口和浏览器线程不能留着。 */
+    private void closeWebQuietly() {
+        try {
+            if (browsers != null) {
+                browsers.close();
+            }
+            if (egress != null) {
+                egress.close();
+            }
+        } catch (RuntimeException ignored) {
+            // 启动本来就失败了，原来的异常更要紧
+        }
     }
 
     /** 一个事件走完全程：归还外部名额和放行名额。 */
@@ -295,6 +351,26 @@ public final class Engine implements AutoCloseable {
         return mcp;
     }
 
+    /** 联网的开关组，插件页接口用它。 */
+    public WebAccess webAccess() {
+        return webAccess;
+    }
+
+    /** 出口；管理员把抓网页和浏览器都关了时没有。给诊断和测试用。 */
+    public Optional<Egress> egress() {
+        return Optional.ofNullable(egress);
+    }
+
+    /** 每个用户的浏览器；管理员关了浏览器时没有。给诊断和测试用。 */
+    public Optional<Browsers> browsers() {
+        return Optional.ofNullable(browsers);
+    }
+
+    /** 联网的地址规则：Web 服务器起来后由 Spring 设置实际端口（{@code WebServerInitializedEvent}），访问自己永远被拦（W6）。 */
+    public AddressRules addressRules() {
+        return addressRules;
+    }
+
     /** 每用户的长期记忆，接口和工具共用同一份实例。 */
     public MemoryStores memories() {
         return memories;
@@ -346,7 +422,8 @@ public final class Engine implements AutoCloseable {
 
     /**
      * 关闭：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
-     * 排空输入环、各用户通道和两个下游环 → 关 MCP 和存储。每一步失败都不跳过后面的。
+     * 关浏览器，再关出口（浏览器的连接都经出口，需求 2.8）→ 排空输入环、各用户通道和两个下游环 → 关 MCP 和存储。
+     * 每一步失败都不跳过后面的。
      * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动时以“因重启中断”收尾。
      */
     @Override
@@ -357,6 +434,16 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("stop starting handlers", handlers::close),
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
                 new Shutdown.Step("close local links", localLinks),
+                new Shutdown.Step("close browsers", () -> {
+                    if (browsers != null) {
+                        browsers.close();
+                    }
+                }),
+                new Shutdown.Step("close egress", () -> {
+                    if (egress != null) {
+                        egress.close();
+                    }
+                }),
                 new Shutdown.Step("drain input ring", () -> input.shutdown(DRAIN)),
                 new Shutdown.Step("drain user lanes", () -> lanes.awaitIdle(DRAIN)),
                 new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),

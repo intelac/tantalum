@@ -37,7 +37,9 @@ class ExampleHooksPipelineTest {
     /** 窗口 6000、预留 500：阈值 5500，和 CompactApiTest 相同（local-workspace 的工具定义变长，从 4000 加到 6000）。 */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
         "--tantalum.claude.context-window=6000", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
-        "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600"};
+        "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
+        // 联网的 12 个工具定义约 1600 token（系数 3），6000 的窗口放不下；这里测的是钩子和压缩，不用联网（web-tools，同 CompactApiTest）
+        "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
 
     @TempDir
     static Path temp;

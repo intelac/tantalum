@@ -62,7 +62,10 @@ class CompactionStressTest {
         "--tantalum.claude.max-tokens=500",
         "--tantalum.compaction.reserve-tokens=500",
         "--tantalum.compaction.keep-recent-tokens=600",
-        "--tantalum.claude.concurrency=4"
+        "--tantalum.claude.concurrency=4",
+        // 联网的 12 个工具定义会挤占 7000 的小窗口、改变压缩次数；这里测的是压缩，不用联网（web-tools）
+        "--tantalum.web.fetch.enabled=false",
+        "--tantalum.web.browser.enabled=false"
     };
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

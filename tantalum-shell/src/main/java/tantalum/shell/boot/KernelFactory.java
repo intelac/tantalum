@@ -10,6 +10,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.kernel.tool.ToolSafety;
+import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.local.LocalTool;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
@@ -36,7 +37,8 @@ final class KernelFactory {
     }
 
     /**
-     * 只回答调度问题的工具目录：和服务器注册同样的内置工具、转发工具、记忆工具和插件工具，但不打开附件库、不连电脑。
+     * 只回答调度问题的工具目录：和服务器注册同样的内置工具、转发工具、记忆工具、{@code web_fetch} 和插件工具，但不打开附件库、
+     * 不连电脑、不起出口。
      * MCP 工具恒为独占（{@code McpTool}），目录里没有它们时答案相同，所以不用连 MCP 服务器。
      */
     static ToolSafety safety(TantalumProperties properties, List<Tool> plugins) {
@@ -44,6 +46,10 @@ final class KernelFactory {
         Workspaces workspaces = workspaces(properties);
         BuiltinTools.of(null).forEach(catalog::register);
         LocalTool.all(null, null, properties.toolTimeout()).forEach(catalog::register);
+        // web_fetch 可以并行（参数的纯函数）；浏览器工具和没登记的一样按独占，不用起出口
+        if (properties.webSettings().fetch().enabled()) {
+            catalog.register(new WebFetchTool(null));
+        }
         MemoryTools.all(new MemoryStores(workspaces, properties.dataDir(), properties.memory(), Clock.systemUTC()))
                 .forEach(catalog::register);
         plugins.forEach(catalog::register);

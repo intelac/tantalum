@@ -496,7 +496,7 @@ export interface MemoryList {
 }
 
 /** 插件页（core-tools 需求 7）：当前用户自己的开关。 */
-export type PluginKind = "tool" | "mcp" | "plugin" | "local";
+export type PluginKind = "tool" | "mcp" | "plugin" | "local" | "web";
 
 export interface PluginTool {
   name: string;
@@ -521,11 +521,23 @@ export interface HookPlugin {
   enabled: boolean;
 }
 
+/** 联网的开关：总开关 `web` 和“抓网页”“浏览器”两个子开关（web-tools W10）。 */
+export type WebSwitch = "web" | "web-fetch" | "browser";
+
+/** 插件页的“联网”一块：这个用户的开关、管理员开着哪几项、管理员是否禁止访问内网。两项都被管理员关掉时照样返回。 */
+export interface WebPlugins {
+  switches: Record<WebSwitch, boolean>;
+  /** `false` 的那项管理员在配置里关掉了，没有注册工具。 */
+  admin: Record<Exclude<WebSwitch, "web">, boolean>;
+  blockPrivateNetwork: boolean;
+}
+
 export interface Plugins {
   /** 打开的工具能否在同一个会话的下一次提问就用上；不能时要等新会话。 */
   midSessionChanges: boolean;
   tools: PluginTool[];
   mcp: McpServerView[];
+  web: WebPlugins;
   plugins: HookPlugin[];
 }
 

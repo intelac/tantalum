@@ -86,7 +86,8 @@ public final class E2eServer {
                         "--tantalum.provider=openai",
                         "--tantalum.openai.model=" + E2eModel.MODEL,
                         "--tantalum.openai.base-url=http://127.0.0.1:9/v1",
-                        "--tantalum.openai.context-window=32000",
+                        // 32000 加上联网 12 个工具定义的约 3000 token（web-tools），压缩发生的轮次和摘要调用的余量都和以前一样
+                        "--tantalum.openai.context-window=35000",
                         "--tantalum.openai.vision=true",
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。

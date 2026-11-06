@@ -1,50 +1,42 @@
 package tantalum.shell.local;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
-import tantalum.local.tool.LocalImage;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.Tools;
-import tantalum.shell.access.LocalAccess;
-import tantalum.shell.attachment.AttachmentRejected;
-import tantalum.shell.attachment.AttachmentStore;
+import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
-import tantalum.value.attachment.AttachmentRef;
-import tantalum.value.attachment.AttachmentText;
-import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 
 /**
  * 转发工具（local-workspace 设计“一次调用”）：定义取自 {@code tantalum-local}，执行全部交给用户连着的电脑，自己不读写任何文件
- * （ArchitectureTest 钉住）。电脑送回的图片照附件规则规范化、存进本人的附件目录，再交给模型。
+ * （ArchitectureTest 钉住）。电脑送回的图片经 {@link ToolImages} 照附件规则规范化、存进本人的附件目录，再交给模型。
  * 名额：这里的 64 只是全体用户合起来的上限；每个用户的电脑同时最多 4 个，由 {@link LocalLinks} 管（L11）。
  */
 public final class LocalTool implements Tool {
 
     /** 插件页和并发名额用的服务端名，也是总开关的名字。 */
-    public static final String SERVER = LocalAccess.MASTER;
+    public static final String SERVER = LocalWorkspace.MASTER;
     static final int SERVER_CONCURRENCY = 64;
 
     private final tantalum.local.tool.LocalTool definition;
     private final LocalLinks links;
-    private final AttachmentStore attachments;
+    private final ToolImages images;
     private final Duration standard;
 
-    LocalTool(tantalum.local.tool.LocalTool definition, LocalLinks links, AttachmentStore attachments, Duration standard) {
+    LocalTool(tantalum.local.tool.LocalTool definition, LocalLinks links, ToolImages images, Duration standard) {
         this.definition = definition;
         this.links = links;
-        this.attachments = attachments;
+        this.images = images;
         this.standard = standard;
     }
 
     /** 本机工作区的全部工具，顺序同 {@link Tools#all()}。{@code standard} 是服务器的标准工具超时。 */
-    public static List<Tool> all(LocalLinks links, AttachmentStore attachments, Duration standard) {
-        return Tools.all().stream().<Tool>map(definition -> new LocalTool(definition, links, attachments, standard)).toList();
+    public static List<Tool> all(LocalLinks links, ToolImages images, Duration standard) {
+        return Tools.all().stream().<Tool>map(definition -> new LocalTool(definition, links, images, standard)).toList();
     }
 
     public tantalum.local.tool.LocalTool.Kind kind() {
@@ -67,22 +59,10 @@ public final class LocalTool implements Tool {
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
         }
-        List<ImageRef> images = new ArrayList<>();
-        String path = argument(arguments, "path");
-        for (LocalImage image : result.images()) {
-            try {
-                AttachmentRef ref = attachments.upload(context.principal(), fileName(path), image.mime(),
-                        new ByteArrayInputStream(image.bytes()), image.bytes().length);
-                if (!(ref instanceof ImageRef stored)) {
-                    return ToolOutput.error("Not an image: " + path);
-                }
-                images.add(stored);
-            } catch (AttachmentRejected rejected) {
-                return ToolOutput.error("Cannot read image " + path + ": " + rejected.getMessage());
-            }
-        }
-        String text = String.join("\n", images.stream().map(AttachmentText::image).toList());
-        return new ToolOutput(text, result.error(), images);
+        // 有图片时文字只是图片说明，结果就是图片引用那几行（同抽出 ToolImages 之前）
+        return images.output(context.principal(), "", result.error(),
+                result.images().stream().map(image -> new ToolImages.Image(image.mime(), image.bytes())).toList(),
+                fileName(argument(arguments, "path")));
     }
 
     private static String argument(Json arguments, String name) {

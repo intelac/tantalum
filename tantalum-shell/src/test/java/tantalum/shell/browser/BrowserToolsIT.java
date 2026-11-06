@@ -49,7 +49,7 @@ import tantalum.value.json.Json;
 class BrowserToolsIT {
 
     private static final Principal ALICE = new Principal("alice");
-    private static final Pattern REF = Pattern.compile("\"([^\"\\n]+)\"[^\\n]*\\[ref=(e\\d+)]");
+    private static final Pattern REF = Pattern.compile("\"([^\"\\n]+)\"[^\\n]*\\[ref=((?:f\\d+)?e\\d+)]");
 
     @TempDir
     Path temp;

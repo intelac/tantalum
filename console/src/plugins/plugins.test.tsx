@@ -26,6 +26,7 @@ const PLUGINS: Plugins = {
       tools: [{ name: "mcp__playwright__browser_navigate", description: "Navigate to a URL", enabled: true }],
     },
   ],
+  web: { switches: { web: true, "web-fetch": true, browser: true }, admin: { "web-fetch": true, browser: true }, blockPrivateNetwork: false },
   plugins: [
     { name: "dailyQuota", description: "每个用户每天的 token 用量上限，超过就停止。", points: ["beforeModelCall"], mandatory: true, enabled: true },
     { name: "citationCheck", description: "", points: ["beforeRunEnd", "work:citation"], mandatory: false, enabled: true },
@@ -58,7 +59,7 @@ function fakeBackend(plugins: Plugins, putStatus = 200) {
       }
       const [, , , kind, name] = input.split("/");
       const enabled = (JSON.parse(init?.body as string) as { enabled: boolean }).enabled;
-      current = applyToggle(current, { kind: kind as "tool" | "mcp" | "plugin", name: decodeURIComponent(name!), enabled });
+      current = applyToggle(current, { kind: kind as "tool" | "mcp" | "plugin" | "web", name: decodeURIComponent(name!), enabled });
       return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("{}") });
     }),
   );
@@ -94,6 +95,20 @@ describe("PluginsDialog", () => {
     await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
     expect(calls.find((call) => call.method === "PUT")).toEqual({ method: "PUT", path: "/api/plugins/tool/memory_write", body: '{"enabled":true}' });
     expect(screen.getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  /** web-tools 5.1：联网一块在本机工作区和内置工具之间，开关写到 /api/plugins/web/<名字>。 */
+  it("shows the web card between the local workspace and the built-in tools and saves its switches", async () => {
+    const calls = fakeBackend(PLUGINS);
+    open();
+    const web = await screen.findByRole("region", { name: "联网" });
+    const order = screen.getAllByRole("region").map((region) => region.getAttribute("aria-label"));
+    expect(order.indexOf("联网")).toBe(order.indexOf("内置工具") - 1);
+    expect(order.indexOf("本机工作区")).toBeLessThan(order.indexOf("联网"));
+    await userEvent.click(within(web).getByRole("switch", { name: "抓网页" }));
+    await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
+    expect(calls.find((call) => call.method === "PUT")).toEqual({ method: "PUT", path: "/api/plugins/web/web-fetch", body: '{"enabled":false}' });
+    expect(within(web).getByRole("switch", { name: "抓网页" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("puts a switch back and says why when saving fails", async () => {

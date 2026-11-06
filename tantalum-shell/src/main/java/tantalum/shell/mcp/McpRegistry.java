@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.json.JsonText;
 import tantalum.shell.plugin.Tool;
@@ -33,24 +32,15 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
     private volatile Map<String, Tool> visible = Map.of();
     private final ToolImages images;
 
-    /** 旧装配：MCP 返回的图片换成一行说明。{@code Engine} 改用 {@link #McpRegistry(McpSettings, ToolImages)} 后删掉。 */
-    public McpRegistry(McpSettings settings) {
-        this(settings, McpConnection.Policy.defaults(), null);
-    }
-
     /** MCP 工具返回的图片经 {@code images} 存进调用者本人的附件，交给模型（web-tools W8）。 */
     public McpRegistry(McpSettings settings, ToolImages images) {
         this(settings, McpConnection.Policy.defaults(), images);
     }
 
-    McpRegistry(McpSettings settings, McpConnection.Policy policy) {
-        this(settings, policy, null);
-    }
-
     McpRegistry(McpSettings settings, McpConnection.Policy policy, ToolImages images) {
         this.settings = settings;
         this.images = images;
-        int maxImages = images == null ? AttachmentLimits.defaults().maxImagesPerMessage() : images.maxImages();
+        int maxImages = images.maxImages();
         for (McpSettings.Server server : settings.servers()) {
             connections.put(server.name(), new McpConnection(server, policy, tools -> update(server, tools), maxImages));
         }

@@ -94,15 +94,11 @@ public final class ContextHandler implements Handler {
                 gate.enabledTools(principal), gate.enabledPlugins(principal), sources());
     }
 
-    /**
-     * 每个工具从哪来（one-line-journal J5）：内置的写 {@code builtin}，本机工作区的写 {@code local}，MCP 的写配置里的服务器名；
-     * 不写地址、令牌、电脑名和目录。
-     */
+    /** 每个工具从哪来（one-line-journal J5），由 {@link PluginGate#source} 决定：{@code builtin}、{@code local}、{@code web} 或 {@code mcp:<服务器>}。 */
     private Map<String, String> sources() {
         Map<String, String> sources = new LinkedHashMap<>();
         for (Tool tool : catalog.tools()) {
-            String source = local.owns(tool) ? "local" : catalog.isRegistered(tool.name()) ? "builtin" : "mcp:" + catalog.serverName(tool);
-            sources.put(tool.name(), source);
+            sources.put(tool.name(), gate.source(tool));
         }
         return sources;
     }

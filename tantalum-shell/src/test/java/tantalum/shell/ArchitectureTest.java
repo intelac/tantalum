@@ -119,6 +119,12 @@ class ArchitectureTest {
             .and().doNotHaveFullyQualifiedName("tantalum.shell.browser.BrowserDriver")
             .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
 
+    /** 开关组按 {@code server()} 认联网工具（web-tools 设计“包 access”）：开关不依赖抓网页和浏览器的实现。 */
+    @ArchTest
+    static final ArchRule accessKnowsNoWebTools = noClasses()
+            .that().resideInAPackage("tantalum.shell.access..")
+            .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..", "tantalum.shell.local..");
+
     /** 压缩是通用逻辑：内核不认识任何供应商的 SDK。 */
     @ArchTest
     static final ArchRule kernelKnowsNoProvider = noClasses()

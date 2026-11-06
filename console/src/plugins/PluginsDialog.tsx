@@ -7,13 +7,14 @@ import { Dialog } from "../ui/Dialog";
 import { LocalWorkspaceCard } from "./LocalWorkspaceCard";
 import { Row, Section } from "./Rows";
 import { type Toggle, usePlugins, useTogglePlugin } from "./usePlugins";
+import { WebCard } from "./WebCard";
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-/** 插件页（core-tools 需求 7）：本机工作区、内置工具、MCP 服务器、钩子插件四块，每项一个开关，只改自己的。 */
+/** 插件页（core-tools 需求 7）：本机工作区、联网、内置工具、MCP 服务器、钩子插件五块，每项一个开关，只改自己的。 */
 export function PluginsDialog({ open, onClose }: Props) {
   const plugins = usePlugins(open);
   const toggle = useTogglePlugin();
@@ -39,6 +40,7 @@ export function PluginsDialog({ open, onClose }: Props) {
         <LocalWorkspaceCard open={open} />
         {data !== undefined && (
           <>
+            <WebCard web={data.web} onChange={(name, enabled) => set({ kind: "web", name, enabled })} />
             <Section title={zh.plugins.builtins}>
               {byUse(data.tools).map((tool) => (
                 <ToolRow key={tool.name} tool={tool} onChange={(enabled) => set({ kind: "tool", name: tool.name, enabled })} />

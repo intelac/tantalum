@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,28 +43,31 @@ public final class PluginGate {
 
     private final ToolCatalog catalog;
     private final PluginSwitches switches;
-    private final LocalAccess local;
+    private final List<ToolGroup> groups;
     private final List<String> mcpServers;
     private final List<AfterToolHook> afterHooks;
     private final List<WorkType> workTypes;
     private final Map<String, Plugin> plugins;
 
-    /** 没有本机工作区时（嵌入使用和测试）。 */
+    /** 没有本机工作区、联网这些开关组时（嵌入使用和测试）。 */
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<String> mcpServers, List<KernelHook> hooks,
                       List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
-        this(catalog, switches, LocalAccess.NONE, mcpServers, hooks, afterHooks, workTypes, Set.of());
+        this(catalog, switches, List.of(), mcpServers, hooks, afterHooks, workTypes, Set.of());
     }
 
     /**
-     * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code local} 决定本机工作区的工具能不能用：
-     * 它们不看单个工具的开关，只看本机工作区的总开关、子开关和电脑（local-workspace L17）。{@code required} 是管理员设成必须开启的插件
+     * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code groups} 是本机工作区、联网这些开关组：
+     * 组里的工具不看单个工具的开关，只问自己的组（local-workspace L17、web-tools W10）。{@code required} 是管理员设成必须开启的插件
      * （{@code tantalum.hooks.required}），名字不认识时抛 {@link IllegalArgumentException}：拼错了等于策略没生效，不能悄悄放过。
      */
-    public PluginGate(ToolCatalog catalog, PluginSwitches switches, LocalAccess local, List<String> mcpServers,
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups, List<String> mcpServers,
                       List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, Set<String> required) {
+        if (groups.stream().map(ToolGroup::kind).distinct().count() != groups.size()) {
+            throw new IllegalArgumentException("two tool groups share one switch kind");
+        }
         this.catalog = catalog;
         this.switches = switches;
-        this.local = local;
+        this.groups = List.copyOf(groups);
         this.mcpServers = List.copyOf(mcpServers);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
@@ -81,15 +85,34 @@ public final class PluginGate {
 
     // ---- 名单 ----
 
-    /** 内置工具看自己的开关；MCP 工具还要看所属服务器的开关；本机工作区的工具问 {@link LocalAccess}。 */
+    /** 内置工具看自己的开关；MCP 工具还要看所属服务器的开关；本机工作区、联网的工具问自己的 {@link ToolGroup}。 */
     public boolean toolEnabled(Principal user, Tool tool) {
-        if (local.owns(tool)) {
-            return local.enabled(user, tool);
+        Optional<ToolGroup> group = groupOf(tool);
+        if (group.isPresent()) {
+            return group.get().enabled(user, tool);
         }
         if (!switches.enabled(user, Kind.TOOL, tool.name())) {
             return false;
         }
         return catalog.isRegistered(tool.name()) || switches.enabled(user, Kind.MCP, catalog.serverName(tool));
+    }
+
+    /**
+     * 这个工具从哪来（one-line-journal J5，写进 {@code ContextAssembled.toolSources}）：开关组的写组的来源（{@code local}、
+     * {@code web}），内置的写 {@code builtin}，MCP 的写 {@code mcp:} 加配置里的服务器名；不写地址、令牌、电脑名和目录。
+     */
+    public String source(Tool tool) {
+        return groupOf(tool).map(ToolGroup::source)
+                .orElseGet(() -> catalog.isRegistered(tool.name()) ? "builtin" : "mcp:" + catalog.serverName(tool));
+    }
+
+    private Optional<ToolGroup> groupOf(Tool tool) {
+        for (ToolGroup group : groups) {
+            if (group.owns(tool)) {
+                return Optional.of(group);
+            }
+        }
+        return Optional.empty();
     }
 
     /** 这个用户现在开着的工具名，按名称排序（同 {@link ToolCatalog#specs()}）。 */
@@ -126,13 +149,13 @@ public final class PluginGate {
 
     public record Overview(List<ToolView> tools, List<ServerView> mcp, List<PluginView> plugins) {}
 
-    /** 这个用户的插件页：内置工具、MCP 服务器和它们现在的工具、钩子插件。本机工作区的工具不在这里，在它自己的卡片上。 */
+    /** 这个用户的插件页：内置工具、MCP 服务器和它们现在的工具、钩子插件。开关组（本机工作区、联网）的工具不在这里，在各自的卡片上。 */
     public Overview overview(Principal user) {
         List<ToolView> builtins = new ArrayList<>();
         Map<String, List<ToolView>> byServer = new LinkedHashMap<>();
         mcpServers.forEach(server -> byServer.put(server, new ArrayList<>()));
         for (Tool tool : catalog.tools()) {
-            if (local.owns(tool)) {
+            if (groupOf(tool).isPresent()) {
                 continue;
             }
             ToolView view = new ToolView(tool.name(), tool.description(), switches.enabled(user, Kind.TOOL, tool.name()));
@@ -190,17 +213,18 @@ public final class PluginGate {
 
     /**
      * 只改这个用户自己的。不存在的名字抛 {@link UnknownPlugin}；必须开启的插件不能关，抛 {@link IllegalArgumentException}。
-     * 本机工作区的工具没有单独的开关，只能用 {@code LOCAL} 开关总开关和子开关。
+     * 开关组（本机工作区、联网）的工具没有单独的开关，只能用组的种类（{@code LOCAL}、{@code WEB}）开关总开关和子开关；
+     * 管理员关掉的联网项也能存，插件页上禁用。
      */
     public void set(Principal user, Kind kind, String name, boolean enabled) {
         switch (kind) {
             case TOOL -> {
-                if (catalog.find(name).filter(tool -> !local.owns(tool)).isEmpty()) {
+                if (catalog.find(name).filter(tool -> groupOf(tool).isEmpty()).isEmpty()) {
                     throw new UnknownPlugin(kind, name);
                 }
             }
-            case LOCAL -> {
-                if (!LocalAccess.SWITCHES.contains(name)) {
+            case LOCAL, WEB -> {
+                if (groups.stream().noneMatch(group -> group.kind() == kind && group.switches().contains(name))) {
                     throw new UnknownPlugin(kind, name);
                 }
             }

@@ -332,12 +332,20 @@ class ContextHandlerTest {
         assertTrue(event.system().contains("truncated"));
     }
 
-    /** one-line-journal J5：每个工具记下来源，内置的写 builtin，本机工作区的写 local，MCP 的写配置里的服务器名。 */
+    /** one-line-journal J5、web-tools 设计“会话文件”：每个工具记下来源，内置的写 builtin，本机工作区的写 local，联网的写 web，MCP 的写配置里的服务器名。 */
     @Test
     void eachToolRecordsWhereItComesFrom() throws Exception {
         ToolCatalog catalog = catalog();
         LocalTool.all(links, null, Duration.ofSeconds(60)).stream().filter(tool -> tool.name().equals("read_file"))
                 .forEach(catalog::register);
+        Tool fetch = new Tool() {
+            @Override public String name() { return "web_fetch"; }
+            @Override public String description() { return "d"; }
+            @Override public Json schema() { return new Json.Null(); }
+            @Override public String server() { return tantalum.shell.access.WebAccess.FETCH; }
+            @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) { return ToolOutput.ok(""); }
+        };
+        catalog.register(fetch);
         Tool navigate = new Tool() {
             @Override public String name() { return "browser_navigate"; }
             @Override public String description() { return "d"; }
@@ -352,12 +360,14 @@ class ContextHandlerTest {
         });
         Workspaces workspaces = Workspaces.shared(dir);
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
-                new PluginGate(catalog, switches, local, List.of(), List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
+                new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, true, false)), List.of(),
+                        List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
                 noCompaction());
 
         ContextAssembled assembled = assertInstanceOf(ContextAssembled.class, handler.handle(COMMAND));
 
-        assertEquals(java.util.Map.of("grep", "builtin", "read_file", "local", "browser_navigate", "mcp:browser"), assembled.toolSources());
+        assertEquals(java.util.Map.of("grep", "builtin", "read_file", "local", "web_fetch", "web", "browser_navigate", "mcp:browser"),
+                assembled.toolSources());
         assertFalse(assembled.enabledTools().contains("read_file"), "not connected");
     }
 }

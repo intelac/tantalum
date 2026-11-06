@@ -34,8 +34,15 @@ class McpRegistryTest {
     private static final McpConnection.Policy FAST = new McpConnection.Policy(Duration.ofMillis(20), Duration.ofMillis(100), 5,
             Duration.ofSeconds(60), Duration.ofMillis(100), Duration.ofMillis(100));
 
+    @TempDir
+    Path attachments;
+
     private TestMcpServer server;
     private McpRegistry registry;
+
+    private ToolImages images() throws java.io.IOException {
+        return new ToolImages(new AttachmentStore(attachments, AttachmentLimits.defaults(), new ImageNormalizer(AttachmentLimits.defaults())));
+    }
 
     @AfterEach
     void stop() throws Exception {
@@ -57,7 +64,7 @@ class McpRegistryTest {
                 new Definition("create", false, args -> TestMcpServer.text("created")),
                 new Definition("delete_all", null, args -> TestMcpServer.text("deleted")),
                 new Definition("bad.name", true, args -> TestMcpServer.text("x")));
-        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), allow, deny, maxTools)), java.time.Duration.ofSeconds(1)), FAST);
+        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), allow, deny, maxTools)), java.time.Duration.ofSeconds(1)), FAST, images());
         for (int i = 0; i < 1000 && registry.state("s") != McpConnection.State.READY; i++) {
             Thread.sleep(10);
         }
@@ -120,14 +127,14 @@ class McpRegistryTest {
 
     @Test
     void noteOnlyWhenServersAreConfigured() throws Exception {
-        assertEquals("", new McpRegistry(McpSettings.none()).fixedNote());
+        assertEquals("", new McpRegistry(McpSettings.none(), images()).fixedNote());
         open(Set.of(), Set.of(), 64);
         assertTrue(registry.fixedNote().contains("untrusted"));
     }
 
     @Test
-    void unreachableServerDoesNotBlockConstruction() {
-        registry = new McpRegistry(new McpSettings(List.of(settings("http://127.0.0.1:9/mcp", Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(1)), FAST);
+    void unreachableServerDoesNotBlockConstruction() throws Exception {
+        registry = new McpRegistry(new McpSettings(List.of(settings("http://127.0.0.1:9/mcp", Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(1)), FAST, images());
         assertEquals(List.of(), registry.tools());
     }
 
@@ -144,13 +151,13 @@ class McpRegistryTest {
     @Test
     void awaitReadyIsBoundedAndSeesTheToolsOfAReachableServer() throws Exception {
         server = new TestMcpServer(new Definition("search", true, args -> TestMcpServer.text("found")));
-        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(10)));
+        registry = new McpRegistry(new McpSettings(List.of(settings(server.url(), Set.of(), Set.of(), 64)), java.time.Duration.ofSeconds(10)), images());
         registry.awaitReady();
         assertFalse(registry.tools().isEmpty(), "tools are there right after the first attempt");
         registry.close();
 
         McpSettings.Server silent = settings("http://10.255.255.1:9/mcp", Set.of(), Set.of(), 64);
-        registry = new McpRegistry(new McpSettings(List.of(silent), java.time.Duration.ofMillis(200)));
+        registry = new McpRegistry(new McpSettings(List.of(silent), java.time.Duration.ofMillis(200)), images());
         long start = System.nanoTime();
         registry.awaitReady();
         assertTrue(java.time.Duration.ofNanos(System.nanoTime() - start).toMillis() < 2000);
