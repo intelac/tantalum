@@ -67,12 +67,21 @@ class LocalEndpointTest {
         server.close();
     }
 
-    private static String token(String user) {
+    /** 令牌发给一个真实存在的账号：停用或不存在的账号连不上（见 {@link #aDisabledAccountIsRefused}）。 */
+    private static String token(String user) throws Exception {
+        account(user);
         return links.tokens().issue(new Principal(user), Duration.ofHours(1)).token();
+    }
+
+    private static void account(String user) throws Exception {
+        if (server.users().status(user).isEmpty()) {
+            server.users().add(user, TestServer.PASSWORD);
+        }
     }
 
     /** 用另一个时钟在同一个库里发令牌，造出“已经到期”或“马上到期”的令牌。 */
     private static String tokenExpiringIn(String user, Duration left) throws Exception {
+        account(user);
         Duration validity = Duration.ofMinutes(30);
         try (LocalTokens shifted = LocalTokens.open(temp.resolve("data"), Clock.offset(Clock.systemUTC(), left.minus(validity)))) {
             return shifted.issue(new Principal(user), validity).token();
@@ -102,6 +111,20 @@ class LocalEndpointTest {
         Client revoked = Client.connect(server.port(), token);
         assertEquals(Wire.CLOSE_EXPIRED, revoked.closeCode());
         assertEquals("revoked", revoked.closeReason);
+    }
+
+    /** 账号在服务外被停用（命令行 {@code users disable}）或根本不存在：令牌有效也按“已撤销”拒绝，令牌作废。 */
+    @Test
+    void aDisabledAccountIsRefused() throws Exception {
+        String token = token("dora");
+        server.users().disable("dora");
+        Client client = Client.connect(server.port(), token);
+        assertEquals(Wire.CLOSE_EXPIRED, client.closeCode());
+        assertEquals("revoked", client.closeReason);
+        assertEquals(LocalTokens.Status.REVOKED, links.tokens().verify(token).status());
+
+        String orphan = links.tokens().issue(new Principal("nobody"), Duration.ofHours(1)).token();
+        assertEquals(Wire.CLOSE_EXPIRED, Client.connect(server.port(), orphan).closeCode());
     }
 
     /** 需求 1.2：连上、发 {@code hello}，收到 {@code welcome}，状态里有电脑说的内容。 */

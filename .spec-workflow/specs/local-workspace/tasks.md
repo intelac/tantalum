@@ -105,55 +105,55 @@
 
 ## 阶段 3：接到 agent 和插件页
 
-- [ ] 12. 工具自己的超时
+- [x] 12. 工具自己的超时
   - File: shell/plugin/Tool.java、shell/handler/ToolHandler.java
   - `Tool` 加 `default Duration timeout(Json arguments, Duration standard)`；`ToolHandler` 用它代替固定超时
   - 测试：声明了更长超时的工具不在 60 秒时被打断；没声明的照旧
   - _Requirements: L14_
   - _Prompt: Role: Java 后端开发 | Task: 让工具能声明自己的超时 | Success: ToolHandlerTest 全过_
 
-- [ ] 13. 转发工具，去掉服务器上的文件工具
+- [x] 13. 转发工具，去掉服务器上的文件工具
   - File: shell/local/LocalTool.java（新）、shell/tool/ReadAttachmentTool.java（新）、shell/tool/BuiltinTools.java、shell/boot/Engine.java，删 shell/tool 下的文件工具类；value/attachment/AttachmentText.java、kernel/attachment/ImageBudget.java
   - 每个 `tantalum.local` 工具包一个服务器端 `LocalTool`：只转发，不读写文件；图片照附件规则存好再交给模型。`read_attachment` 从 `ReadFileTool` 拆出来读附件；提示文字改成用 `read_attachment`
   - 测试：转发结果和错误照样变成 `ToolOutput`；图片存进附件目录；没连接时返回 “The local workspace is not connected.”；`read_attachment` 只能读本人附件
   - _Requirements: L6, L7, L8, 需求 3.3, 3.4_
   - _Prompt: Role: Java 后端开发 | Task: 把服务器上的文件工具换成转发工具 | Restrictions: shell.local 不引用 java.nio.file.Files | Success: 测试和 ArchitectureTest 全过_
 
-- [ ] 14. 开关和“哪些工具可用”
+- [x] 14. 开关和“哪些工具可用”
   - File: shell/access/PluginSwitches.java、shell/access/PluginGate.java、shell/local/LocalWorkspace.java（新）
   - `Kind.LOCAL`：`local-workspace`、`fs-read`、`git`、`file-edit`、`shell`，默认开。`LocalWorkspace.enabled` = 总开关 × 子开关 × 有连接 × 连接允许这一类；`PluginGate.toolEnabled` 对本机工作区的工具改问它
   - 测试：组合表（总开关关时全没有；没 `write` 时没有改文件工具；不是 Git 仓库时没有 Git 工具）；待办、记忆、`read_attachment` 不受影响
   - _Requirements: L9, L17, 需求 6.1, 6.2_
   - _Prompt: Role: Java 后端开发 | Task: 实现本机工作区的开关和可用性 | Success: 测试全过_
 
-- [ ] 15. system 段、`AGENTS.md`、工具来源
+- [x] 15. system 段、`AGENTS.md`、工具来源
   - File: shell/handler/ContextHandler.java、shell/local/LocalWorkspace.java、console/conversation/ToolChangeNotice.tsx、console/text/zh.ts
   - “本机工作区”一段（会变的段）；`AGENTS.md` 改从电脑取，2 秒没回就不带；`toolSources` 写 `local`；对话页的工具变化遇到 `local` 写“本机工作区没有连上或没有允许”
   - 测试：连上、换目录、断开时段落变化并追加更新消息；不再读服务器目录里的 `AGENTS.md`；ToolChangeNotice 的 vitest
   - _Requirements: L6, L9, 需求 3.5, 5.3_
   - _Prompt: Role: 全栈开发 | Task: 把电脑的信息放进上下文 | Restrictions: 不改工具定义 | Success: 测试全过_
 
-- [ ] 16. 插件页接口
+- [x] 16. 插件页接口
   - File: shell/web/LocalController.java（新）
   - `GET /api/local`、`POST /api/local/tokens`、`DELETE /api/local/tokens`；要登录、查 Origin；响应里的命令带 `--server` 地址，令牌只在 POST 的响应里出现一次
   - 测试：未登录 401；别人的连接看不到；撤销后连接断开
   - _Requirements: L2, L17, 需求 1.1, 6.4_
   - _Prompt: Role: Java 后端开发 | Task: 写插件页用的接口 | Success: 测试全过_
 
-- [ ] 17. 插件页卡片
+- [x] 17. 插件页卡片
   - File: console/plugins/LocalWorkspaceCard.tsx（新）、console/plugins/PluginsPage.tsx、console/api/*.ts、console/text/zh.ts
   - 总开关和四个子开关；连接状态、到期倒计时；“连接这台电脑”选有效期，弹出令牌和可复制的命令（只显示一次）；“撤销”；子开关开着但连接程序没允许时写明；页面打开时每 2 秒取状态
   - 测试：vitest 覆盖未连接、已连接、命令行不可用、到期这几种样子
   - _Requirements: L17, 需求 6_
   - _Prompt: Role: 前端开发 | Task: 做本机工作区卡片 | Restrictions: 照现有插件页的样式 | Success: vitest 全过_
 
-- [ ] 18. 链路测试和“服务器上没有文件工具”
+- [x] 18. 链路测试和“服务器上没有文件工具”
   - File: tantalum-shell/src/test/java/tantalum/shell/local/LocalChainTest.java、NoServerFileToolsTest.java（新）
   - 假的连接接进 `E2eServer`：连上 → 下一次提问有工具变化（新增）；断开 → 下一次提问显示不再可用；调用中途断开 → 错误结果。启动完整服务器，注册的工具只有转发工具、`read_attachment`、记忆和待办类
   - _Requirements: 需求 5, L6_
   - _Prompt: Role: Java 测试 | Task: 写链路测试和守护测试 | Success: 测试全过_
 
-- [ ] 19. 浏览器端到端
+- [x] 19. 浏览器端到端
   - File: console/e2e/local-workspace.spec.ts（新）、E2eServer 的辅助接口
   - 插件页生成令牌 → 后台起连接程序（临时目录、`--allow-write`）→ 卡片显示已连接 → 对话里改文件，文件真的变了，这一轮上方显示工具变化 → 撤销 → 连接程序退出 → 下一次提问显示不再可用
   - _Requirements: 需求 8.3_

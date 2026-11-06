@@ -2,7 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { openNewSession, processHeader, send } from "./app";
 
 // one-line-journal 需求 5、9.5：工具不能用了，旧对话照会话文件原样还原；接着问时，这一轮上面显示一行工具变化。
-// E2eServer 空闲 2 秒就把会话移出内存，再打开时从会话文件载入。
+// E2eServer 空闲 2 秒就把会话移出内存，再打开时从会话文件载入。grep 是本机工作区的工具（local-workspace），
+// 关掉的是“读文件”开关，所以原因写“本机工作区没有连上或没有允许”。
 const ORIGIN = { origin: "http://localhost:5174" };
 
 async function expandProcess(page: Page, pattern: RegExp, index = 0): Promise<void> {
@@ -25,8 +26,10 @@ async function evict(page: Page, session: string): Promise<void> {
     .toBe(false);
 }
 
+const GREP_OFF = /工具变化：不再可用 .*grep.*（本机工作区没有连上或没有允许）/;
+
 async function grepEnabled(page: Page, enabled: boolean): Promise<void> {
-  const response = await page.request.put("/api/plugins/tool/grep", { data: { enabled }, headers: ORIGIN });
+  const response = await page.request.put("/api/plugins/local/fs-read", { data: { enabled }, headers: ORIGIN });
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
@@ -50,12 +53,12 @@ test.describe("工具变化", () => {
 
     await send(page, `接着说 ${Date.now()}`);
     await expect(processHeader(page, /^已完成/).nth(1)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("note").filter({ hasText: "工具变化：不再可用 grep（已在插件页关闭）" })).toBeVisible();
+    await expect(page.getByRole("note").filter({ hasText: GREP_OFF })).toBeVisible();
     await page.screenshot({ path: "test-results/one-line-journal-tool-change.png" });
 
     // 再从文件打开一次，这一行还在原来的位置
     await evict(page, session);
     await page.reload();
-    await expect(page.getByRole("note").filter({ hasText: "工具变化：不再可用 grep（已在插件页关闭）" })).toBeVisible();
+    await expect(page.getByRole("note").filter({ hasText: GREP_OFF })).toBeVisible();
   });
 });

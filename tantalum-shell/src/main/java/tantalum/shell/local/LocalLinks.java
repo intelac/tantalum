@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.local.tool.LocalResult;
@@ -85,6 +86,8 @@ public final class LocalLinks implements AutoCloseable {
     /** 每个用户最后一次撤销的时刻（{@link System#nanoTime()}），挡住撤销前握手、撤销后才发 {@code hello} 的连接。 */
     private final Map<Principal, Long> revokedAt = new ConcurrentHashMap<>();
     private final AtomicLong ids = new AtomicLong();
+    /** 账号还能不能用（没停用、没删除），默认都能用。 */
+    private volatile Predicate<Principal> accounts = principal -> true;
     private final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().daemon().name("local-links").factory());
 
@@ -102,6 +105,25 @@ public final class LocalLinks implements AutoCloseable {
 
     public Timing timing() {
         return timing;
+    }
+
+    /**
+     * 怎么查账号还能不能用。停用账号可能来自服务之外的命令行，所以不等通知：握手时查（{@link #verify}），之后每次心跳再查；
+     * 停用或删掉的账号，令牌全部撤销、连接断开。
+     */
+    public void accounts(Predicate<Principal> usable) {
+        this.accounts = usable;
+    }
+
+    /** 握手时查令牌：令牌有效但账号已经停用或删掉时，撤销这个用户的全部令牌，按“已撤销”拒绝。 */
+    public LocalTokens.Verdict verify(String token) {
+        LocalTokens.Verdict verdict = tokens.verify(token);
+        if (verdict.valid() && !accounts.test(verdict.principal())) {
+            LOG.info("local connect for {}: the account is disabled or gone; revoking its tokens", verdict.principal().value());
+            tokens.revokeAll(verdict.principal());
+            return new LocalTokens.Verdict(LocalTokens.Status.REVOKED, verdict.principal(), verdict.expiresAt());
+        }
+        return verdict;
     }
 
     /**
@@ -228,7 +250,7 @@ public final class LocalLinks implements AutoCloseable {
         Thread.ofVirtual().name("local-links-action").start(action);
     }
 
-    /** 给每条连接发 ping；太久没 pong 的关掉，电脑那边会重连。 */
+    /** 给每条连接发 ping；太久没 pong 的关掉，电脑那边会重连。账号停用或删掉的，撤销令牌并断开。 */
     private void heartbeat() {
         long now = System.nanoTime();
         for (Link link : links.values()) {
@@ -239,7 +261,14 @@ public final class LocalLinks implements AutoCloseable {
                     link.dropped();
                 });
             } else {
-                later(link::ping);
+                later(() -> {
+                    if (accounts.test(link.principal)) {
+                        link.ping();
+                    } else {
+                        LOG.info("local link for {}: the account is disabled or gone", link.principal.value());
+                        revoke(link.principal);
+                    }
+                });
             }
         }
     }

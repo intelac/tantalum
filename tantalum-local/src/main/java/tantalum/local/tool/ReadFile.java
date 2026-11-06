@@ -129,6 +129,15 @@ public final class ReadFile implements LocalTool {
         return Optional.empty();
     }
 
+    /**
+     * 按 {@code offset}、{@code limit} 读一个文本文件的一个窗口，规则同 {@code read_file}（不查路径、不记先读后写）。
+     * 服务器上的 {@code read_attachment} 用它读文本附件，两边的截断和续读说明是同一份代码。{@code path} 只用在说明和报错里。
+     * 参数不对时抛 {@link IllegalArgumentException}，不是 UTF-8 时抛 {@link CharacterCodingException}。
+     */
+    public static LocalResult window(Path file, String path, Json arguments) throws IOException {
+        return text(file, path, Window.of(arguments));
+    }
+
     /** 先查大小和二进制，再边读边数：窗口里的行放进结果，其余只计数，所以 64 MB 的文件也不会整个进内存。 */
     private static LocalResult text(Path file, String path, Window window) throws IOException {
         if (Files.size(file) > MAX_FILE_BYTES) {

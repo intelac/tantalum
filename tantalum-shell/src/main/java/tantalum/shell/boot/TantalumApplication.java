@@ -72,16 +72,29 @@ public class TantalumApplication {
     }
 
     @Bean(destroyMethod = "close")
-    Engine engine(TantalumProperties properties, ObjectProvider<ModelClient> model, ObjectProvider<Tool> tools,
+    Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<Tool> tools,
                   ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
                   ObjectProvider<AfterToolHook> afterHooks) throws IOException {
         boolean claude = properties.provider().equals("claude");
         Duration wait = claude ? properties.claude().firstChunkTimeout() : properties.openai().firstChunkTimeout();
         int concurrency = claude ? properties.claude().concurrency() : properties.openai().concurrency();
         ModelClient client = model.getIfAvailable(() -> createClient(properties));
-        return new Engine(properties, client, wait, concurrency, List.copyOf(tools.orderedStream().toList()),
+        Engine engine = new Engine(properties, client, wait, concurrency, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
                 EventCodec.withBuiltins(), Clock.systemUTC());
+        // 停用或删掉的账号不能再连电脑（local-workspace L3）：握手时查，之后每次心跳再查
+        engine.localLinks().accounts(principal -> usable(users, principal.value()));
+        return engine;
+    }
+
+    /** 读不了用户表时当作还能用：心跳里查失败一次就撤销全部令牌，代价太大；登录本身照常由 {@code LoginCheck} 把关。 */
+    private static boolean usable(UserStore users, String name) {
+        try {
+            return users.status(name).map(status -> !status.disabled()).orElse(false);
+        } catch (SQLException failure) {
+            LOG.warn("cannot read the account of {} for its local link: {}", name, failure.getMessage());
+            return true;
+        }
     }
 
     /**

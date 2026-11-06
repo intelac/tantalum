@@ -372,6 +372,38 @@ class LocalLinksTest {
     }
 
     /** 记下发出的消息、ping 和关闭码。 */
+    /** 停用或删掉的账号（服务外的命令行停用）：握手时按“已撤销”拒绝，令牌全部作废，账号恢复后也不能再用。 */
+    @Test
+    void aDisabledAccountCannotConnectAndLosesItsTokens() {
+        String token = tokens.issue(ALICE, Duration.ofHours(1)).token();
+        java.util.concurrent.atomic.AtomicBoolean usable = new java.util.concurrent.atomic.AtomicBoolean(false);
+        links.accounts(principal -> usable.get());
+        assertEquals(LocalTokens.Status.REVOKED, links.verify(token).status());
+        usable.set(true);
+        assertEquals(LocalTokens.Status.REVOKED, links.verify(token).status(), "the token stays revoked");
+        String fresh = tokens.issue(ALICE, Duration.ofHours(1)).token();
+        assertEquals(LocalTokens.Status.VALID, links.verify(fresh).status());
+    }
+
+    /** 连着的时候账号被停用：下一次心跳撤销令牌、发 {@code bye revoked} 断开。 */
+    @Test
+    void aLinkEndsWhenItsAccountIsDisabled() throws Exception {
+        try (LocalLinks beating = new LocalLinks(tokens, clock, new Timing(Duration.ofSeconds(5), Duration.ofMillis(100),
+                Duration.ofHours(1), Duration.ofMillis(300)))) {
+            String token = tokens.issue(ALICE, Duration.ofHours(1)).token();
+            java.util.concurrent.atomic.AtomicBoolean usable = new java.util.concurrent.atomic.AtomicBoolean(true);
+            beating.accounts(principal -> usable.get());
+            FakePeer peer = new FakePeer();
+            beating.attach(ALICE, HOUR_LATER, System.nanoTime(), HELLO, peer).orElseThrow();
+            assertInstanceOf(Welcome.class, peer.next());
+            usable.set(false);
+            assertEquals(new Bye(Bye.Reason.REVOKED), peer.next());
+            assertEquals(Wire.CLOSE_EXPIRED, peer.closed.get(2, TimeUnit.SECONDS));
+            assertEquals(Optional.empty(), beating.status(ALICE));
+            assertEquals(LocalTokens.Status.REVOKED, tokens.verify(token).status());
+        }
+    }
+
     static final class FakePeer implements LocalLinks.Peer {
 
         final BlockingQueue<Message> sent = new LinkedBlockingQueue<>();

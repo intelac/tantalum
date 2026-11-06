@@ -35,6 +35,16 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum.local..")
             .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell..", "tantalum.kernel..", "org.springframework..");
 
+    /**
+     * 服务器上不读写用户的文件（local-workspace L6）：转发工具、连接和本机工作区只把调用交给电脑，自己不碰文件。
+     * {@code LocalTokens} 例外：它照 {@code PluginSwitches} 的做法在数据目录里打开 {@code users.db}，碰的是服务器自己的数据。
+     */
+    @ArchTest
+    static final ArchRule localWorkspaceTouchesNoFiles = noClasses()
+            .that().resideInAPackage("tantalum.shell.local..")
+            .and().doNotHaveFullyQualifiedName("tantalum.shell.local.LocalTokens")
+            .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
+
     @ArchTest
     static final ArchRule kernelDoesNotDependOnShell = noClasses()
             .that().resideInAPackage("tantalum.kernel..")

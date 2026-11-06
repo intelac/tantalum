@@ -9,11 +9,11 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.kernel.tool.ToolSafety;
+import tantalum.shell.local.LocalTool;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.tool.BuiltinTools;
-import tantalum.shell.tool.Observations;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 
@@ -35,13 +35,14 @@ final class KernelFactory {
     }
 
     /**
-     * 只回答调度问题的工具目录：和服务器注册同样的内置工具、记忆工具和插件工具，但不打开附件库。
+     * 只回答调度问题的工具目录：和服务器注册同样的内置工具、转发工具、记忆工具和插件工具，但不打开附件库、不连电脑。
      * MCP 工具恒为独占（{@code McpTool}），目录里没有它们时答案相同，所以不用连 MCP 服务器。
      */
     static ToolSafety safety(TantalumProperties properties, List<Tool> plugins) {
         ToolCatalog catalog = new ToolCatalog();
         Workspaces workspaces = workspaces(properties);
-        BuiltinTools.of(workspaces, null, new Observations()).forEach(catalog::register);
+        BuiltinTools.of(null).forEach(catalog::register);
+        LocalTool.all(null, null, properties.toolTimeout()).forEach(catalog::register);
         MemoryTools.all(new MemoryStores(workspaces, properties.dataDir(), properties.memory(), Clock.systemUTC()))
                 .forEach(catalog::register);
         plugins.forEach(catalog::register);

@@ -120,9 +120,13 @@ final class TranscriptPass {
         for (Message message : appended) {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolChangeBlock change) {
+                    Map<String, String> sources = new java.util.HashMap<>();
+                    java.util.stream.Stream.concat(change.added().stream(), change.removed().stream())
+                            .filter(assembled.toolSources()::containsKey)
+                            .forEach(name -> sources.put(name, assembled.toolSources().get(name)));
                     put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(),
                             change.removed().stream().filter(offered::contains).toList(),
-                            change.removed().stream().filter(name -> !offered.contains(name)).toList()));
+                            change.removed().stream().filter(name -> !offered.contains(name)).toList(), sources));
                 }
             }
         }

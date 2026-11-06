@@ -13,9 +13,10 @@ afterEach(() => {
 
 const PLUGINS: Plugins = {
   midSessionChanges: true,
+  // 文件工具移到了本机工作区的卡片（local-workspace），内置工具只剩服务器自己的
   tools: [
-    { name: "read_file", description: "Read a UTF-8 text file.", enabled: true },
-    { name: "write_file", description: "Create a file.", enabled: false },
+    { name: "read_attachment", description: "Read a file the user attached.", enabled: true },
+    { name: "memory_write", description: "Save a long-term memory.", enabled: false },
   ],
   mcp: [
     {
@@ -31,7 +32,10 @@ const PLUGINS: Plugins = {
   ],
 };
 
-/** 假后端：GET 回现在的列表，PUT 成功时记下新状态（和真实服务一样）；记录每次调用。 */
+/**
+ * 假后端：GET 回现在的列表，PUT 成功时记下新状态（和真实服务一样）；记录每次调用。
+ * 本机工作区的卡片另取 /api/local，这里总是“没连上电脑”，它的用例在 LocalWorkspaceCard.test.tsx。
+ */
 function fakeBackend(plugins: Plugins, putStatus = 200) {
   const calls: { method: string; path: string; body?: string }[] = [];
   let current = plugins;
@@ -40,6 +44,10 @@ function fakeBackend(plugins: Plugins, putStatus = 200) {
     "fetch",
     vi.fn((input: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
+      if (input === "/api/local") {
+        const local = { switches: { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true }, link: null };
+        return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(local)) });
+      }
       calls.push({ method, path: input, body: init?.body as string | undefined });
       if (method === "GET" && down) return Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve("") });
       if (method === "GET") return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(current)) });
@@ -70,8 +78,9 @@ describe("PluginsDialog", () => {
     fakeBackend(PLUGINS);
     open();
     const builtins = await screen.findByRole("region", { name: "内置工具" });
-    expect(within(builtins).getByText("读文件")).toBeTruthy();
-    expect(within(builtins).getByRole("switch", { name: "写文件" }).getAttribute("aria-checked")).toBe("false");
+    expect(within(builtins).getByText("读附件")).toBeTruthy();
+    expect(within(builtins).getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("region", { name: "本机工作区" })).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "MCP 服务器" })).getByText("已连接")).toBeTruthy();
     const hooks = screen.getByRole("region", { name: "钩子插件" });
     expect(within(hooks).getByText("挂在：运行结束前、插件工作 citation")).toBeTruthy();
@@ -81,28 +90,28 @@ describe("PluginsDialog", () => {
   it("turns a tool on for the current user", async () => {
     const calls = fakeBackend(PLUGINS);
     open();
-    await userEvent.click(await screen.findByRole("switch", { name: "写文件" }));
+    await userEvent.click(await screen.findByRole("switch", { name: "写记忆" }));
     await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
-    expect(calls.find((call) => call.method === "PUT")).toEqual({ method: "PUT", path: "/api/plugins/tool/write_file", body: '{"enabled":true}' });
-    expect(screen.getByRole("switch", { name: "写文件" }).getAttribute("aria-checked")).toBe("true");
+    expect(calls.find((call) => call.method === "PUT")).toEqual({ method: "PUT", path: "/api/plugins/tool/memory_write", body: '{"enabled":true}' });
+    expect(screen.getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("true");
   });
 
   it("puts a switch back and says why when saving fails", async () => {
     fakeBackend(PLUGINS, 400);
     open();
-    const write = await screen.findByRole("switch", { name: "写文件" });
+    const write = await screen.findByRole("switch", { name: "写记忆" });
     await userEvent.click(write);
     expect((await screen.findByRole("alert")).textContent).toContain("没有保存");
-    await waitFor(() => expect(screen.getByRole("switch", { name: "写文件" }).getAttribute("aria-checked")).toBe("false"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("false"));
   });
 
   /** 服务连不上时重新查询也失败，只有回滚能让开关回到原样，不让界面显示一个没保存的状态。 */
   it("puts a switch back even when the list cannot be fetched again", async () => {
     fakeBackend(PLUGINS, 502);
     open();
-    await userEvent.click(await screen.findByRole("switch", { name: "写文件" }));
+    await userEvent.click(await screen.findByRole("switch", { name: "写记忆" }));
     expect(await screen.findByText(/没有保存/)).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("switch", { name: "写文件" }).getAttribute("aria-checked")).toBe("false"));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("false"));
   });
 
   it("does not let mandatory plugins be turned off", async () => {
@@ -131,11 +140,11 @@ describe("PluginsDialog", () => {
 
 
   it("orders built-in tools by use, not by name", async () => {
-    fakeBackend({ ...PLUGINS, tools: [{ name: "memory_read", description: "", enabled: true }, { name: "edit_file", description: "", enabled: true },
-      { name: "custom_tool", description: "mine", enabled: true }, { name: "read_file", description: "", enabled: true }] });
+    fakeBackend({ ...PLUGINS, tools: [{ name: "memory_read", description: "", enabled: true }, { name: "memory_delete", description: "", enabled: true },
+      { name: "custom_tool", description: "mine", enabled: true }, { name: "read_attachment", description: "", enabled: true }] });
     open();
     const builtins = await screen.findByRole("region", { name: "内置工具" });
-    expect(within(builtins).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["读文件", "改文件", "读记忆", "custom_tool"]);
+    expect(within(builtins).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["读附件", "读记忆", "删记忆", "custom_tool"]);
   });
 });
 

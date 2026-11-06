@@ -12,11 +12,11 @@ public interface AttachmentText {
                 + "px). Read-only copy: " + quoted(ref.readonlyPath()) + ".";
     }
 
-    /** 文件不发内容，只给说明和只读路径，模型要看时自己用 read_file 读（DSH {@code fileHandleText}）。 */
+    /** 文件不发内容，只给说明和只读路径，模型要看时自己用 read_attachment 读（DSH {@code fileHandleText}）。 */
     static String file(FileRef ref) {
         return "[File " + quoted(ref.name()) + " (" + ref.bytes() + " bytes, sha256:" + digest(ref)
                 + "): verbatim read-only copy saved at " + quoted(ref.readonlyPath())
-                + ". Read that path with read_file when its contents are needed.]";
+                + ". Read that path with read_attachment when its contents are needed.]";
     }
 
     /** 超出请求的图片预算而省略的图片（DSH {@code offloadedImageText}）。 */

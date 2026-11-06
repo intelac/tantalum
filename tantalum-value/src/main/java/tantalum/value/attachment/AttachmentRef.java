@@ -23,7 +23,7 @@ public sealed interface AttachmentRef permits ImageRef, FileRef {
         return id().substring(PREFIX.length());
     }
 
-    /** 给模型和 {@code read_file} 用的只读路径。不是服务器上的真实路径。 */
+    /** 给模型和 {@code read_attachment} 用的只读路径。不是服务器上的真实路径。 */
     default String readonlyPath() {
         return "/attachments/sha256-" + hash();
     }

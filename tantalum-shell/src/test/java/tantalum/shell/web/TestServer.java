@@ -14,8 +14,11 @@ import org.springframework.boot.web.server.servlet.context.ServletWebServerAppli
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.shell.auth.UserStore;
+import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumApplication;
+import tantalum.shell.local.TestComputer;
 import tantalum.shell.model.ModelClient;
+import tantalum.value.id.Principal;
 
 /**
  * 启动真实的服务（随机端口），模型用替身，测试走真实 HTTP。
@@ -66,6 +69,15 @@ public final class TestServer implements AutoCloseable {
 
     public UserStore users() {
         return context.getBean(UserStore.class);
+    }
+
+    /**
+     * 给 {@code user} 连一台测试电脑，允许 {@code dir}（local-workspace）：文件工具在“电脑”上执行，不再在服务器上。
+     * 服务关闭时连接一起断开。
+     */
+    public TestComputer connectComputer(String user, Path dir, boolean write) throws java.io.IOException {
+        return TestComputer.connect(context.getBean(Engine.class).localLinks(), new Principal(user),
+                java.time.Instant.now().plus(java.time.Duration.ofDays(1)), dir, write, false);
     }
 
     public HttpResponse<String> get(String principal, String path) throws Exception {

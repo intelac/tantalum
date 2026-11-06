@@ -58,6 +58,8 @@ class MessagesApiTest {
         Files.createDirectory(workspace.resolve("alice"));
         Files.writeString(workspace.resolve("alice/a.txt"), "hello file");
         server = new TestServer(temp.resolve("data"), workspace, model);
+        // read_file 在用户的电脑上执行（local-workspace L6）
+        server.connectComputer("alice", workspace.resolve("alice"), false);
     }
 
     @AfterEach

@@ -38,6 +38,22 @@ describe("ToolChangeNotice", () => {
     expect(screen.getByRole("note").getAttribute("title")).toBe("a, b, c, d, e, f, g");
   });
 
+  /** local-workspace：本机工作区的工具不能用了，原因是电脑没连上或没允许，不是插件页关了。 */
+  it("explains tools of the local workspace separately", () => {
+    render(
+      <ToolChangeNotice
+        store={change({
+          disabled: ["memory_write", "read_file", "grep"],
+          sources: { memory_write: "builtin", read_file: "local", grep: "local" },
+        })}
+        id="4.0"
+      />,
+    );
+    expect(screen.getByRole("note").textContent).toBe(
+      "工具变化：不再可用 memory_write（已在插件页关闭）；不再可用 read_file、grep（本机工作区没有连上或没有允许）",
+    );
+  });
+
   it("shows only what changed", () => {
     render(<ToolChangeNotice store={change({ gone: ["fetch_url"] })} id="4.0" />);
     expect(screen.getByRole("note").textContent).toBe("工具变化：不再可用 fetch_url（插件已删除或未加载）");

@@ -33,6 +33,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
+ *   <li>{@code readedit:}（本机工作区）：读电脑上的 {@code a.txt}，把 hello 改成 hi，回答“改好了：”加改动结果；</li>
  *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
  *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
  *   <li>带附件的提问：回答“看到了附件：名字、名字。”（附件页的端到端测试）；</li>
@@ -96,6 +97,9 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("write:")) {
                 return write(word(text, "write:"), false, prompt, results, chunks);
+            }
+            if (text.contains("readedit:")) {
+                return readEdit(results, prompt, chunks);
             }
             if (text.contains("edit:")) {
                 return edit(results, prompt, chunks);
@@ -187,6 +191,16 @@ public final class E2eModel implements ModelClient {
             case 0 -> reply(think(chunks, "先写一个文件。"), call("write_file", Map.of("path", "e2e/edit.txt", "content", "alpha\nbeta\ngamma\n")));
             case 1 -> reply(think(chunks, "把 beta 改成 delta。"),
                     call("edit_file", Map.of("path", "e2e/edit.txt", "old_string", "beta", "new_string", "delta")));
+            default -> answer(chunks, "改好了：" + lastResult(prompt));
+        };
+    }
+
+    /** 先读再改（电脑上的 edit_file 要先读过）。 */
+    private ModelOutcome readEdit(int results, Prompt prompt, ChunkListener chunks) throws InterruptedException {
+        return switch (results) {
+            case 0 -> reply(think(chunks, "先读 a.txt。"), call("read_file", Map.of("path", "a.txt")));
+            case 1 -> reply(think(chunks, "把 hello 改成 hi。"),
+                    call("edit_file", Map.of("path", "a.txt", "old_string", "hello", "new_string", "hi")));
             default -> answer(chunks, "改好了：" + lastResult(prompt));
         };
     }
@@ -304,9 +318,15 @@ public final class E2eModel implements ModelClient {
         return new TokenUsage(Math.max(0, promptSize - 300), output, Math.min(300, promptSize), 0);
     }
 
-    /** 最后一条有文字或附件的用户消息（工具结果也是用户消息，但两样都没有）。 */
+    /**
+     * 最后一条有文字或附件的用户消息（工具结果也是用户消息，但两样都没有）。内核追加的上下文更新（如电脑连上后“本机工作区”一段变了）
+     * 也是用户消息，但不是用户写的，跳过。
+     */
     private static int lastUserText(List<Message> messages) {
         for (int i = messages.size() - 1; i >= 0; i--) {
+            if (userText(messages.get(i)).startsWith(tantalum.kernel.projection.ContextUpdate.PREFIX)) {
+                continue;
+            }
             if (!userText(messages.get(i)).isEmpty() || !attachmentNames(messages.get(i)).isEmpty()) {
                 return i;
             }

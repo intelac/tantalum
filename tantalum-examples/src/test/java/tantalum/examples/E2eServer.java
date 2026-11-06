@@ -2,15 +2,20 @@ package tantalum.examples;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import tantalum.shell.auth.UserStore;
+import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumApplication;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.local.LocalLinks;
+import tantalum.shell.local.TestComputer;
 import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
 import tantalum.value.event.ContextAssembled;
@@ -32,6 +37,8 @@ import tantalum.value.state.OwnerRef;
 /**
  * Playwright 端到端测试用的服务：固定端口、临时数据目录、脚本化模型（{@link E2eModel}），不访问外网。
  * 启动时创建用户 {@value #USER}（密码 {@value #PASSWORD}）、两个示例文件和一个运行被崩溃打断的会话 {@value #CRASHED_SESSION}。
+ * 文件工具在用户自己的电脑上执行（local-workspace）：{@value #USER} 和 {@value #OTHER_USER} 各连着一台测试电脑（{@link TestComputer}），
+ * 允许各自的目录、可以改文件；{@value #LOCAL_USER} 什么都没连，本机工作区的端到端测试用它起真的连接程序。
  * 由 {@code console/playwright.config.ts} 通过 {@code mvn -P e2e} 启动，进程被杀即结束。
  */
 public final class E2eServer {
@@ -40,6 +47,8 @@ public final class E2eServer {
     public static final String PASSWORD = "e2e-password";
     /** 第二个账号：插件开关每人各管各的。 */
     public static final String OTHER_USER = "e2e2";
+    /** 第三个账号：本机工作区的端到端测试用它连真的连接程序，不影响前两个账号的测试电脑。 */
+    public static final String LOCAL_USER = "e2e3";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -58,7 +67,7 @@ public final class E2eServer {
                 new TestMcpServer.Definition("lookup", true, arguments -> TestMcpServer.text("ticket 42 is owned by e2e-owner")),
                 new TestMcpServer.Definition("delete_all", null, arguments -> TestMcpServer.text("deleted")));
 
-        new SpringApplicationBuilder(TantalumApplication.class)
+        ConfigurableApplicationContext app = new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(context -> {
                     GenericApplicationContext generic = (GenericApplicationContext) context;
                     generic.registerBean(ModelClient.class, E2eModel::new);
@@ -79,6 +88,11 @@ public final class E2eServer {
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s");
+        LocalLinks links = app.getBean(Engine.class).localLinks();
+        for (String user : List.of(USER, OTHER_USER)) {
+            TestComputer.connect(links, new Principal(user), Instant.now().plus(Duration.ofDays(30)),
+                    Files.createDirectories(workspace.resolve(user)), true, false);
+        }
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
     }
@@ -87,6 +101,7 @@ public final class E2eServer {
         try (UserStore store = UserStore.open(data)) {
             store.add(USER, PASSWORD);
             store.add(OTHER_USER, PASSWORD);
+            store.add(LOCAL_USER, PASSWORD);
         }
         Path notes = Files.createDirectories(workspace.resolve(USER).resolve("notes"));
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");
