@@ -99,7 +99,7 @@
 
 - [ ] 9. MCP 工具返回的图片
   - File: shell/mcp/McpResults.java、McpConnection.java、McpTool.java、McpRegistry.java、shell/boot/Engine.java（改），shelltest/mcp/McpResultsTest.java（改），shelltest/model/OpenAiClientTest.java（改）
-  - `McpResults.toOutput` 返回 `Result(text, error, images)`：PNG、JPEG、WebP、GIF 且 base64 是规范写法才收下；否则换成一行 “[<类型> image omitted: only PNG, JPEG, WebP and GIF images are kept]”；一个结果最多收 `tantalum.attachments.max-images-per-message` 张，多的换成一行；文字截断不算图片。`McpConnection.call` 返回 `Result`；`McpTool.run` 交给 `ToolImages.output`，名字 `<服务器>-<工具>.<扩展名>`；`McpRegistry` 构造参数加 `ToolImages`
+  - `McpResults.toOutput` 返回 `Result(text, error, images)`：PNG、JPEG、WebP、GIF 且 base64 是规范写法才收下；否则换成一行 “[`<类型>` image omitted: only PNG, JPEG, WebP and GIF images are kept]”；一个结果最多收 `tantalum.attachments.max-images-per-message` 张，多的换成一行；文字截断不算图片。`McpConnection.call` 返回 `Result`；`McpTool.run` 交给 `ToolImages.output`，名字 `<服务器>-<工具>.<扩展名>`；`McpRegistry` 构造参数加 `ToolImages`
   - 测试：PNG 收下；SVG 换成一行；不规范的 base64 换成一行；超过张数换成一行（3.2）；OpenAI 兼容路线 `vision=false` 时请求里是 `textOnly` 那一行，没有图片数据（3.3，补断言）；`McpIntegrationTest` 用 `TestMcpServer` 返回一张 PNG，存进本人附件
   - _Leverage: shell/mcp/McpResults.java, shelltest/mcp/TestMcpServer.java, DSH `mcp/mcp-client/src/tools.ts:333-397`_
   - _Requirements: W8, 需求 3.2, 3.3_
