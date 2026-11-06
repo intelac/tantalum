@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.id.RunId;
@@ -180,10 +181,12 @@ public sealed interface TranscriptItem {
 
     /**
      * 会话中途工具变了（one-line-journal J8）：从这里起新增了哪些工具、哪些不能用了。不能用的分两种：{@code disabled} 是
-     * 服务器上还有、用户在插件页关了；{@code gone} 是服务器上已经没有（插件删了或没加载、MCP 服务器不在了）。
+     * 服务器上还有、用户在插件页关了（本机工作区的工具也可能是电脑没连上或没允许）；{@code gone} 是服务器上已经没有
+     * （插件删了或没加载、MCP 服务器不在了）。{@code sources} 是这几个工具各自的来源（{@code ContextAssembled.toolSources}），
+     * 画面据此写原因，如来源为 {@code local} 时写“本机工作区没有连上或没有允许”（local-workspace）。
      */
     record ToolChange(String id, SessionId session, RunId run, Instant at, List<String> added, List<String> disabled,
-                      List<String> gone) implements TranscriptItem {
+                      List<String> gone, Map<String, String> sources) implements TranscriptItem {
 
         public ToolChange {
             Objects.requireNonNull(id, "id");
@@ -193,6 +196,7 @@ public sealed interface TranscriptItem {
             added = List.copyOf(added);
             disabled = List.copyOf(disabled);
             gone = List.copyOf(gone);
+            sources = sources == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(sources));
         }
     }
 

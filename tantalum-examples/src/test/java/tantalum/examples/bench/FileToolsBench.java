@@ -9,13 +9,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import tantalum.shell.plugin.ToolContext;
-import tantalum.shell.plugin.ToolOutput;
-import tantalum.shell.plugin.Workspace;
-import tantalum.shell.tool.FindFilesTool;
-import tantalum.shell.tool.ReadFileTool;
-import tantalum.value.id.Principal;
-import tantalum.value.id.SessionId;
+import tantalum.local.fs.AllowedDirs;
+import tantalum.local.tool.FindFiles;
+import tantalum.local.tool.LocalContext;
+import tantalum.local.tool.LocalResult;
+import tantalum.local.tool.Observations;
+import tantalum.local.tool.ReadFile;
 import tantalum.value.json.Json;
 
 /**
@@ -35,14 +34,15 @@ public final class FileToolsBench {
         Path root = Files.createDirectories(dir.resolve("workspace"));
         int lines = bigFile(root.resolve("big.log"));
         tree(root.resolve("tree"));
-        ToolContext context = new ToolContext(new Principal("bench"), new SessionId("bench"), new Workspace(root));
+        // 工具在用户电脑上的连接程序里执行（local-workspace），这里直接调 tantalum-local 的同一份代码
+        LocalContext context = new LocalContext("bench", new AllowedDirs(List.of(root)), new Observations());
         System.out.printf("big.log %.1f MB, %d lines%n", Files.size(root.resolve("big.log")) / 1048576.0, lines);
 
-        ReadFileTool read = new ReadFileTool();
+        ReadFile read = new ReadFile();
         Json window = new Json.Obj(Map.of("path", new Json.Str("big.log"), "offset", new Json.Num(java.math.BigDecimal.valueOf(lines / 2)),
                 "limit", new Json.Num(java.math.BigDecimal.valueOf(100))));
         long readMs = median(samples, () -> read.run(context, window));
-        FindFilesTool find = new FindFilesTool();
+        FindFiles find = new FindFiles();
         Json pattern = new Json.Obj(Map.of("pattern", new Json.Str("*.java"), "path", new Json.Str("tree")));
         long findMs = median(samples, () -> find.run(context, pattern));
 
@@ -53,11 +53,11 @@ public final class FileToolsBench {
     }
 
     /** 第 0 次是 JIT 预热，不计入。 */
-    private static long median(int samples, Supplier<ToolOutput> call) {
+    private static long median(int samples, Supplier<LocalResult> call) {
         List<Long> times = new ArrayList<>();
         for (int i = 0; i <= samples; i++) {
             long started = System.nanoTime();
-            ToolOutput output = call.get();
+            LocalResult output = call.get();
             long ms = (System.nanoTime() - started) / 1_000_000;
             if (output.error()) {
                 throw new IllegalStateException(output.text());

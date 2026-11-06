@@ -122,6 +122,38 @@ class ToolHandlerTest {
         assertTrue(interrupted.await(5, TimeUnit.SECONDS));
     }
 
+    /** 工具可以声明比标准更长的超时（local-workspace L14：bash 最长 600 秒），标准超时到了不打断它；错误里写的是它自己的超时。 */
+    @Test
+    void aToolMayDeclareItsOwnTimeout() throws Exception {
+        Tool patient = new Tool() {
+            @Override public String name() { return "t"; }
+            @Override public String description() { return "d"; }
+            @Override public Json schema() { return new Json.Null(); }
+            @Override public Duration timeout(Json arguments, Duration standard) { return standard.multipliedBy(20); }
+            @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) throws Exception {
+                Thread.sleep(300);
+                return ToolOutput.ok("done");
+            }
+        };
+        ToolFinished finished = result(handler(patient, Duration.ofMillis(50)), "t");
+        assertFalse(finished.error(), finished.text());
+        assertEquals("done", finished.text());
+
+        Tool hasty = new Tool() {
+            @Override public String name() { return "t"; }
+            @Override public String description() { return "d"; }
+            @Override public Json schema() { return new Json.Null(); }
+            @Override public Duration timeout(Json arguments, Duration standard) { return Duration.ofMillis(100); }
+            @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) throws Exception {
+                Thread.sleep(60_000);
+                return ToolOutput.ok("");
+            }
+        };
+        ToolFinished late = result(handler(hasty, Duration.ofSeconds(30)), "t");
+        assertTrue(late.error());
+        assertEquals("Tool timed out after PT0.1S. Its outcome is unknown.", late.text());
+    }
+
     @Test
     void waitingForACapacitySlotCountsTowardsTheTimeout() throws Exception {
         CountDownLatch release = new CountDownLatch(1);

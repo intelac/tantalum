@@ -65,7 +65,7 @@ class AttachmentRefTest {
         assertEquals("Image \"cat.png\" (sha256:01234567, 800x600px). Read-only copy: \"/attachments/sha256-" + HASH
                 + "\".", AttachmentText.image(image));
         assertEquals("[File \"notes.txt\" (1234 bytes, sha256:01234567): verbatim read-only copy saved at \"/attachments/sha256-"
-                + HASH + "\". Read that path with read_file when its contents are needed.]", AttachmentText.file(file));
+                + HASH + "\". Read that path with read_attachment when its contents are needed.]", AttachmentText.file(file));
         assertEquals("[image omitted to fit request image limits; \"cat.png\" (sha256:01234567). Read-only copy: \"/attachments/sha256-"
                 + HASH + "\".]", AttachmentText.omitted(image));
         assertEquals("[image omitted because this model accepts text only; sha256:01234567]", AttachmentText.textOnly(image));

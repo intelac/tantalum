@@ -3,6 +3,7 @@ import { login, openNewSession, OTHER_USER, processHeader, send, USER } from "./
 
 // 插件页（core-tools 需求 7、8）：E2eModel 的 write: 剧本只在 write_file 开着时写文件，forcewrite: 不管开没开都调用它，
 // edit: 先写再改。开关按用户持久保存，改开关的用例都用第二个账号，结束时恢复。
+// 文件工具在用户的电脑上执行（local-workspace）：E2eServer 给前两个账号各连了一台测试电脑；write_file 归本机工作区的“改文件”开关。
 
 async function openPlugins(page: Page) {
   await page.getByRole("button", { name: "更多" }).first().click();
@@ -21,7 +22,7 @@ async function openStep(page: Page, name: RegExp) {
 }
 
 async function setWriteFile(page: Page, enabled: boolean) {
-  const response = await page.request.put("/api/plugins/tool/write_file", { data: { enabled } });
+  const response = await page.request.put("/api/plugins/local/file-edit", { data: { enabled } });
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
@@ -43,18 +44,21 @@ test.describe("插件页", () => {
     await expect(mcp.getByRole("switch", { name: "mcp__demo__lookup" })).toBeVisible();
     await expect(dialog.getByRole("region", { name: "钩子插件" }).getByText("citation", { exact: false }).first()).toBeVisible();
 
-    const write = dialog.getByRole("switch", { name: "写文件" });
+    // 文件工具不在内置工具里，在本机工作区卡片上
+    await expect(dialog.getByRole("region", { name: "内置工具" }).getByText("读附件")).toBeVisible();
+    const local = dialog.getByRole("region", { name: "本机工作区" });
+    await expect(local.getByText(/已连接：Test Mac/)).toBeVisible();
+    const write = local.getByRole("switch", { name: "改文件" });
     await expect(write).toHaveAttribute("aria-checked", "true");
     await write.click();
     await expect(write).toHaveAttribute("aria-checked", "false");
     await page.reload();
-    await expect((await openPlugins(page)).getByRole("switch", { name: "写文件" })).toHaveAttribute("aria-checked", "false");
+    await expect((await openPlugins(page)).getByRole("switch", { name: "改文件" })).toHaveAttribute("aria-checked", "false");
 
     // 另一个账号的开关不受影响
     await login(page, USER);
-    const other = await page.request.get("/api/plugins");
-    const tools = (await other.json()).tools as { name: string; enabled: boolean }[];
-    expect(tools.find((tool) => tool.name === "write_file")?.enabled).toBe(true);
+    const other = await page.request.get("/api/local");
+    expect((await other.json()).switches["file-edit"]).toBe(true);
   });
 
   test("关掉的工具调用时立即被拒；下一次提问模型拿不到它；打开后下一次提问又能用", async ({ page }) => {
@@ -69,8 +73,8 @@ test.describe("插件页", () => {
     await expect(page.getByText("我现在没有写文件的工具。")).toBeVisible({ timeout: 30_000 });
 
     const dialog = await openPlugins(page);
-    await dialog.getByRole("switch", { name: "写文件" }).click();
-    await expect(dialog.getByRole("switch", { name: "写文件" })).toHaveAttribute("aria-checked", "true");
+    await dialog.getByRole("switch", { name: "改文件" }).click();
+    await expect(dialog.getByRole("switch", { name: "改文件" })).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Escape");
 
     // 同一个会话的下一次提问就能用
@@ -80,9 +84,10 @@ test.describe("插件页", () => {
     await expect(page.getByText(/字节/).last()).toBeVisible();
     await expect(page.getByRole("button", { name: "展开全部 25 行" })).toBeVisible();
 
-    // 轨迹页的上下文记录写明新增了 write_file
+    // 轨迹页的上下文记录写明新增了 write_file。“改文件”开关同时管 edit_file；“本机工作区”一段也跟着变成可以改文件，
+    // 所以这一行是“上下文变化：local-workspace · 新增：edit_file, write_file”
     await page.getByRole("tab", { name: "轨迹" }).click();
-    await expect(page.getByText(/工具已更新 · 新增：write_file/).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/上下文变化：local-workspace · 新增：edit_file, write_file/).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("改文件在对话页显示差异，轨迹页的检查器有差异页签", async ({ page }) => {

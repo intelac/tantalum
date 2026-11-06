@@ -158,7 +158,7 @@ public final class LocalEndpoint extends Endpoint {
 
         @Override
         public void modifyHandshake(ServerEndpointConfig config, HandshakeRequest request, HandshakeResponse response) {
-            config.getUserProperties().put(VERDICT, links.get().tokens().verify(bearer(request.getHeaders())));
+            config.getUserProperties().put(VERDICT, links.get().verify(bearer(request.getHeaders())));
             config.getUserProperties().put(VERIFIED_AT, System.nanoTime());
         }
 

@@ -117,8 +117,20 @@ class LinkIT {
         return exit;
     }
 
+    /** 令牌发给一个真实存在的账号：服务器在握手时查账号，停用或不存在的账号连不上。 */
     private static String token(String user) {
+        account(user);
         return links.tokens().issue(new Principal(user), Duration.ofHours(1)).token();
+    }
+
+    private static void account(String user) {
+        try {
+            if (server.users().status(user).isEmpty()) {
+                server.users().add(user, TestServer.PASSWORD);
+            }
+        } catch (java.sql.SQLException failure) {
+            throw new IllegalStateException(failure);
+        }
     }
 
     private static void awaitConnected(String user) throws InterruptedException {
@@ -249,6 +261,7 @@ class LinkIT {
         Duration validity = Duration.ofMinutes(30);
         try (LocalTokens shifted = LocalTokens.open(temp.resolve("data"),
                 Clock.offset(Clock.systemUTC(), Duration.ofMillis(1500).minus(validity)))) {
+            account("frank");
             soon = shifted.issue(new Principal("frank"), validity).token();
         }
         CompletableFuture<Integer> expiring = start(setup(soon), Tools.all());

@@ -24,9 +24,11 @@ import tools.jackson.databind.json.JsonMapper;
 class CompactApiTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    /** 窗口 4000、预留 500：阈值 3500。正常对话远在阈值之下，只有手动压缩会触发摘要调用。 */
-    // 窗口只有 4000：估算系数按旧的 3 算，否则 system 和工具定义就占满了，摘要调用放不下（compaction-threshold 改了默认系数）
-    private static final String[] SETTINGS = {"--tantalum.claude.context-window=4000", "--tantalum.claude.max-tokens=500",
+    /** 窗口 6000、预留 500：阈值 5500。正常对话远在阈值之下，只有手动压缩会触发摘要调用。 */
+    // 估算系数按旧的 3 算，否则 system 和工具定义就占满了，摘要调用放不下（compaction-threshold 改了默认系数）；
+    // local-workspace 换成本机工作区的 11 个工具和 read_attachment，工具定义变长，窗口从 4000 加到 6000
+
+    private static final String[] SETTINGS = {"--tantalum.claude.context-window=6000", "--tantalum.claude.max-tokens=500",
         "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600"};
 

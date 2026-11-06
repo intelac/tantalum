@@ -25,6 +25,13 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- 端到端测试从这里取连接程序的类路径，起一个真的 tantalum-connect 进程（local-workspace 任务 19）。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-connect</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

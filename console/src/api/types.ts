@@ -172,7 +172,8 @@ export interface CompactionItem extends ItemBase {
 }
 
 /**
- * 会话中途工具变了：新增了哪些，哪些不能用了。disabled 是用户在插件页关了，gone 是服务器上已经没有（插件删了或没加载）。
+ * 会话中途工具变了：新增了哪些，哪些不能用了。disabled 是用户在插件页关了（来源为 local 的是本机工作区没连上或没允许），
+ * gone 是服务器上已经没有（插件删了或没加载）。sources 是这几个工具的来源：builtin、local 或 mcp:<服务器名>。
  */
 export interface ToolChangeItem extends ItemBase {
   kind: "toolChange";
@@ -180,6 +181,7 @@ export interface ToolChangeItem extends ItemBase {
   added: string[];
   disabled: string[];
   gone: string[];
+  sources?: Record<string, string>;
 }
 
 export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem;
@@ -480,7 +482,7 @@ export interface MemoryList {
 }
 
 /** 插件页（core-tools 需求 7）：当前用户自己的开关。 */
-export type PluginKind = "tool" | "mcp" | "plugin";
+export type PluginKind = "tool" | "mcp" | "plugin" | "local";
 
 export interface PluginTool {
   name: string;
@@ -511,6 +513,36 @@ export interface Plugins {
   tools: PluginTool[];
   mcp: McpServerView[];
   plugins: HookPlugin[];
+}
+
+/** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关（local-workspace L17）。 */
+export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell";
+
+/** 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令。都由连接程序的启动参数决定。 */
+export interface LocalLink {
+  device: { name: string; os: string; osVersion: string; arch: string };
+  roots: { path: string; git: boolean }[];
+  write: boolean;
+  /** 命令行不能用时 reason 写明原因，如 “--allow-shell was not given”。 */
+  shell: { available: boolean; reason?: string | null };
+  network: boolean;
+  connectedAt: string;
+  expiresAt: string;
+}
+
+/** GET /api/local：开关和现在的连接，没连上时 link 为 null。 */
+export interface LocalStatus {
+  switches: Record<LocalSwitch, boolean>;
+  link: LocalLink | null;
+}
+
+export type LocalValidity = "30m" | "1h" | "4h" | "1d";
+
+/** 新生成的令牌：只在这一次响应里出现。 */
+export interface LocalToken {
+  token: string;
+  command: string;
+  expiresAt: string;
 }
 
 /** 设置页“模型”一栏的压缩点：一个百分比和它对应的 token 数，由服务器按当前窗口算好。 */

@@ -26,7 +26,8 @@ public final class ToolHandler implements Handler {
     private final ToolCatalog catalog;
     private final Workspaces workspaces;
     private final PluginGate gate;
-    private final Duration timeout;
+    /** 标准超时：工具没声明自己的就用它。 */
+    private final Duration standard;
     /** 每个服务端一份名额，同一服务端的工具共用。 */
     private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
     private final Clock clock;
@@ -38,7 +39,7 @@ public final class ToolHandler implements Handler {
         this.catalog = catalog;
         this.workspaces = workspaces;
         this.gate = gate;
-        this.timeout = timeout;
+        this.standard = timeout;
         this.clock = clock;
     }
 
@@ -63,8 +64,9 @@ public final class ToolHandler implements Handler {
         return limiters.computeIfAbsent(tool.server(), server -> new CallLimiter(tool.serverConcurrency()));
     }
 
-    /** 等待名额计入超时。名额由执行工具的线程持有，工具真正结束才归还，超时也不会超过服务端上限。 */
+    /** 超时用工具自己声明的（默认是标准超时）。等待名额计入超时。名额由执行工具的线程持有，工具真正结束才归还，超时也不会超过服务端上限。 */
     private Ran execute(Tool tool, ToolContext context, Json arguments) throws InterruptedException {
+        Duration timeout = tool.timeout(arguments, standard);
         long deadline = System.nanoTime() + timeout.toNanos();
         CallLimiter.Permit permit;
         try {

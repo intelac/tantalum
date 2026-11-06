@@ -27,6 +27,8 @@ import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalTokens;
+import tantalum.shell.local.LocalTool;
+import tantalum.shell.local.LocalWorkspace;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.RecordCodec;
 import tantalum.shell.journal.TailSequence;
@@ -67,7 +69,6 @@ import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.TurnQuery;
 import tantalum.shell.tool.BuiltinTools;
-import tantalum.shell.tool.Observations;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.shell.trace.Trace;
@@ -102,10 +103,12 @@ public final class Engine implements AutoCloseable {
     private final SseHub hub;
     private final MemoryStores memories;
     private final McpRegistry mcp;
+    private final ToolCatalog catalog;
     private final PluginSwitches switches;
-    /** 连接电脑的令牌和连接（local-workspace）。这一步只接线，工具还没转发过去。 */
+    /** 连接电脑的令牌和连接（local-workspace）：转发工具经它在用户的电脑上执行。 */
     private final LocalTokens localTokens;
     private final LocalLinks localLinks;
+    private final LocalWorkspace localWorkspace;
     private final UserSettings userSettings;
     private final ContextWindow window;
     private final CompactionPolicy compaction;
@@ -135,13 +138,16 @@ public final class Engine implements AutoCloseable {
         Loop loop = properties.loop();
         List<SessionIndex.Session> unfinished;
         try {
-            ToolCatalog catalog = new ToolCatalog();
+            catalog = new ToolCatalog();
             Workspaces workspaces = KernelFactory.workspaces(properties);
             if (workspaces.isShared()) {
                 LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
             }
-            Observations observations = new Observations();
-            BuiltinTools.of(workspaces, storage.attachments, observations).forEach(catalog::register);
+            localTokens = openLocalTokens(properties.dataDir(), clock);
+            localLinks = new LocalLinks(localTokens, clock, LocalLinks.Timing.DEFAULT);
+            // 服务器上只读附件；读写文件、Git 都转发到用户的电脑（local-workspace L6）
+            BuiltinTools.of(storage.attachments).forEach(catalog::register);
+            LocalTool.all(localLinks, storage.attachments, properties.toolTimeout()).forEach(catalog::register);
             memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
             MemoryTools.all(memories).forEach(catalog::register);
             tools.forEach(catalog::register);
@@ -149,8 +155,7 @@ public final class Engine implements AutoCloseable {
             mcp = new McpRegistry(mcpSettings);
             catalog.setSource(mcp);
             switches = openSwitches(properties.dataDir(), clock);
-            localTokens = openLocalTokens(properties.dataDir(), clock);
-            localLinks = new LocalLinks(localTokens, clock, LocalLinks.Timing.DEFAULT);
+            localWorkspace = new LocalWorkspace(switches, localLinks);
             userSettings = openUserSettings(properties.dataDir(), clock);
             // 配置的窗口不大于预留时启动失败（context-compaction 需求 9）；读到的窗口另由 ContextWindow 过滤
             properties.compactionSettings();
@@ -158,7 +163,7 @@ public final class Engine implements AutoCloseable {
             window = new ContextWindow(properties.windowFromModel() ? model.window() : WindowSource.NONE, properties.contextWindow(), limits.reserve(), WINDOW_REFRESH)
                     .start(WINDOW_STARTUP_WAIT);
             compaction = new CompactionPolicy(window, userSettings, limits);
-            gate = new PluginGate(catalog, switches, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
+            gate = new PluginGate(catalog, switches, localWorkspace, mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                     hooks, afterHooks, workTypes);
 
             RequestImages requestImages = new RequestImages(storage.attachments);
@@ -182,7 +187,7 @@ public final class Engine implements AutoCloseable {
             input = new InputRing(loop.inputRingSize());
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
-                    AssembleContext.class, new ContextHandler(workspaces, properties.systemPrompt(), catalog, gate, memories,
+                    AssembleContext.class, new ContextHandler(localWorkspace, properties.systemPrompt(), catalog, gate, memories,
                             new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()), mcp.fixedNote(),
                             compaction),
                     CallModel.class, new ModelHandler(model, new CallLimiter(modelConcurrency), modelWait, hub::chunks, clock,
@@ -193,10 +198,7 @@ public final class Engine implements AutoCloseable {
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
-            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock, session -> {
-                observations.forget(session);
-                storage.files.forget(session);
-            });
+            Evictor evictor = new Evictor(properties.residency(), residency, projections, clock, storage.files::forget);
             // 处理完的一步由用户通道写成一行、落盘后才放行命令和推送，提交的回执也在这时完成；
             // 那之后才归还外部名额和放行名额（record-results R3、one-line-journal J2、J4）
             Release saved = (envelope, record, afterDurable, done) -> lanes.release(envelope, record, () -> {
@@ -269,9 +271,14 @@ public final class Engine implements AutoCloseable {
         return userSettings;
     }
 
-    /** 连到电脑的连接：WebSocket 端点和以后的转发工具、插件页接口用它。 */
+    /** 连到电脑的连接：WebSocket 端点、转发工具和插件页接口用它。 */
     public LocalLinks localLinks() {
         return localLinks;
+    }
+
+    /** 本机工作区的开关和可用性，插件页接口用它。 */
+    public LocalWorkspace localWorkspace() {
+        return localWorkspace;
     }
 
     public McpRegistry mcp() {
@@ -285,6 +292,11 @@ public final class Engine implements AutoCloseable {
 
     public EventCodec codec() {
         return codec;
+    }
+
+    /** 注册了的全部工具（不含 MCP 的），按名称排序，给诊断和测试用。 */
+    public List<Tool> tools() {
+        return catalog.tools().stream().filter(tool -> catalog.isRegistered(tool.name())).toList();
     }
 
     /** 内存里的内核状态，给诊断和测试用。 */

@@ -45,6 +45,27 @@ class TranscriptToolChangeTest {
         assertEquals(run, change.run());
     }
 
+    /** local-workspace：条目带上这几个工具的来源，画面据此写原因（本机工作区的写“没有连上或没有允许”）。 */
+    @Test
+    void theItemCarriesWhereEachToolComesFrom() {
+        TranscriptFixture fixture = new TranscriptFixture();
+        Map<String, String> sources = Map.of("read_file", "local", "memory_read", "builtin", "lookup", "mcp:demo");
+        List<ToolSpec> tools = List.of(spec("lookup"), spec("memory_read"), spec("read_file"));
+        fixture.feed(null, fixture.prompt("q1"));
+        RunId first = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
+        fixture.feed(first, new ContextAssembled(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
+                List.of("lookup", "memory_read", "read_file"), List.of(), sources));
+        fixture.feed(first, fixture.reply(TranscriptFixture.text("ok")));
+        fixture.feed(null, fixture.prompt("q2"));
+        RunId second = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
+        fixture.feed(second, new ContextAssembled(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
+                List.of("lookup", "memory_read"), List.of(), sources));
+
+        ToolChange change = fixture.items(ToolChange.class).getFirst();
+        assertEquals(List.of("read_file"), change.disabled());
+        assertEquals(Map.of("read_file", "local"), change.sources());
+    }
+
     @Test
     void theItemIsTheSameWhenTheConversationIsReplayed() {
         TranscriptFixture fixture = new TranscriptFixture();

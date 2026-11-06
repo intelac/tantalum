@@ -4,7 +4,7 @@
 {"kind":"text","id":"2.0","session":"s","run":"s_0","at":"2026-10-31T00:00:02Z","text":"it says hello","interrupted":false,"truncated":false}
 {"kind":"user","id":"3.0","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","text":"now write that to b.txt","queued":false}
 {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
-{"kind":"toolChange","id":"4.0","session":"s","run":"s_3","at":"2026-10-31T00:00:04Z","added":["write_file"],"disabled":[],"gone":[]}
+{"kind":"toolChange","id":"4.0","session":"s","run":"s_3","at":"2026-10-31T00:00:04Z","added":["write_file"],"disabled":[],"gone":[],"sources":{}}
 {"kind":"tool","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","call":{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"DONE","group":"g5","startedAt":"2026-10-31T00:00:05Z","endedAt":"2026-10-31T00:00:06Z","result":{"kind":"toolResult","toolCallId":"w1","text":"Created b.txt (5 bytes).","error":false}}
 {"kind":"text","id":"7.0","session":"s","run":"s_3","at":"2026-10-31T00:00:07Z","text":"done","interrupted":false,"truncated":false}
 # item pushes
@@ -15,7 +15,7 @@
 2.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:02Z","phase":"Ended","endReason":"COMPLETED"}
 3.0 item {"kind":"user","id":"3.0","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","text":"now write that to b.txt","queued":false}
 3.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:03Z","phase":"AwaitingContext"}
-4.0 item {"kind":"toolChange","id":"4.0","session":"s","run":"s_3","at":"2026-10-31T00:00:04Z","added":["write_file"],"disabled":[],"gone":[]}
+4.0 item {"kind":"toolChange","id":"4.0","session":"s","run":"s_3","at":"2026-10-31T00:00:04Z","added":["write_file"],"disabled":[],"gone":[],"sources":{}}
 4.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:04Z","phase":"AwaitingModel"}
 5.0 item {"kind":"tool","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","call":{"kind":"toolCall","id":"w1","name":"write_file","rawArguments":"{\"path\":\"a\"}","arguments":{"path":"a"}},"status":"RUNNING","group":"g5","startedAt":"2026-10-31T00:00:05Z"}
 5.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:05Z","phase":"AwaitingTools"}

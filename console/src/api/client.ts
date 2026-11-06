@@ -5,6 +5,9 @@ import { reportHalted } from "./connection";
 import type {
   AttachmentRef,
   Config,
+  LocalStatus,
+  LocalToken,
+  LocalValidity,
   MemoryEntry,
   MemoryList,
   MemoryType,
@@ -236,6 +239,21 @@ export function listPlugins(): Promise<Plugins> {
 /** 只改当前登录用户的开关。400 时的 ApiError.message 是拒绝原因（如必须开启的插件）。 */
 export function setPlugin(kind: PluginKind, name: string, enabled: boolean): Promise<unknown> {
   return call(`/api/plugins/${kind}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+/** 本机工作区的开关和连接状态（local-workspace）。开关用 {@link setPlugin}("local", …)。 */
+export function getLocal(): Promise<LocalStatus> {
+  return call("/api/local");
+}
+
+/** 生成连接令牌；令牌和命令只在这次返回里。 */
+export function issueLocalToken(validity: LocalValidity): Promise<LocalToken> {
+  return call("/api/local/tokens", { method: "POST", body: JSON.stringify({ validity }) });
+}
+
+/** 撤销全部令牌并断开电脑。 */
+export function revokeLocal(): Promise<unknown> {
+  return call("/api/local/tokens", { method: "DELETE" });
 }
 
 export function getSettings(): Promise<UserSettingsView> {

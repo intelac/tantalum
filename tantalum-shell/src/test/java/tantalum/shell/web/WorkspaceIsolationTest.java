@@ -22,7 +22,10 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 
-/** 需求 11 第 2、6 条：一个用户的运行读不到另一个用户的文件。 */
+/**
+ * 需求 11 第 2、6 条：一个用户的运行读不到另一个用户的文件。文件工具改在各人自己的电脑上执行之后（local-workspace L6），
+ * 每人连一台测试电脑、只允许自己的目录；越界的相对路径、绝对路径、符号链接都由电脑拒绝，没连电脑的人什么文件都读不到。
+ */
 class WorkspaceIsolationTest {
 
     private static final String SECRET = "alice-file-content";
@@ -51,7 +54,10 @@ class WorkspaceIsolationTest {
         workspace = Files.createDirectory(temp.resolve("workspace"));
         Files.createDirectory(workspace.resolve("alice"));
         Files.writeString(workspace.resolve("alice/secret.txt"), SECRET);
+        Files.createDirectory(workspace.resolve("bob"));
         server = new TestServer(temp.resolve("data"), workspace, model);
+        server.connectComputer("alice", workspace.resolve("alice"), false);
+        server.connectComputer("bob", workspace.resolve("bob"), false);
     }
 
     @AfterEach
@@ -95,9 +101,16 @@ class WorkspaceIsolationTest {
 
     @Test
     void symlinkCannotReachAnotherUser() throws Exception {
-        Files.createDirectories(workspace.resolve("bob"));
         Files.createSymbolicLink(workspace.resolve("bob/link.txt"), workspace.resolve("alice/secret.txt"));
         String answer = read("bob", "b3", "link.txt");
+        assertTrue(answer.contains("ERROR: "), answer);
+        assertFalse(answer.contains(SECRET), answer);
+    }
+
+    /** 没连电脑的用户：文件工具一个也执行不了。 */
+    @Test
+    void withoutAComputerNothingIsRead() throws Exception {
+        String answer = read("carol", "c1", workspace.toRealPath().resolve("alice/secret.txt").toString());
         assertTrue(answer.contains("ERROR: "), answer);
         assertFalse(answer.contains(SECRET), answer);
     }

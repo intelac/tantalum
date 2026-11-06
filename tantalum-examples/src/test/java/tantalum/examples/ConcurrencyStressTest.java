@@ -42,11 +42,8 @@ import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.store.SessionStore;
-import tantalum.shell.tool.GrepTool;
-import tantalum.shell.tool.Observations;
-import tantalum.shell.tool.ReadFileTool;
+import tantalum.shell.local.LocalTool;
 import tantalum.shell.tool.ToolCatalog;
-import tantalum.shell.tool.WriteFileTool;
 import tantalum.shell.web.TestServer;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.CommandDropped;
@@ -87,6 +84,8 @@ class ConcurrencyStressTest {
     /** 无状态、线程安全：只看 prompt 内容决定下一步，所以多个用户可以同时调用。 */
     static final class StatelessModel implements ModelClient {
         final List<Prompt> prompts = Collections.synchronizedList(new ArrayList<>());
+        /** 已经走进慢的那次调用的会话：测试等它出现再取消，取消才一定落在模型调用中途。 */
+        final Set<String> slowCalls = ConcurrentHashMap.newKeySet();
         private final Set<String> slowUsers;
 
         StatelessModel(Set<String> slowUsers) {
@@ -137,6 +136,7 @@ class ConcurrencyStressTest {
             }
             if (!blocked) {
                 if (slowUsers.contains(user)) {
+                    slowCalls.add(sessionOf(prompt));
                     try {
                         Thread.sleep(400);
                     } catch (InterruptedException cancelled) {
@@ -271,6 +271,8 @@ class ConcurrencyStressTest {
         try (TestServer server = new TestServer(data, workspace, model, plugins, args)) {
             for (int i = 0; i < USERS; i++) {
                 server.get(user(i), "/api/sessions");     // 先登录，提交才是同时的
+                // 文件工具在各人自己的电脑上执行（local-workspace L6）；允许写，拦住写的仍是只读策略
+                server.connectComputer(user(i), workspace.resolve(user(i)), true);
             }
             for (int i = 0; i < 4; i++) {
                 String user = user(i);
@@ -312,7 +314,11 @@ class ConcurrencyStressTest {
                                         Thread.sleep(5);
                                     }
                                 }
-                                Thread.sleep(150);  // 让它走进慢的那次模型调用
+                                // 等它走进慢的那次模型调用再取消。原来固定等 150 毫秒，工具改在电脑上执行（local-workspace）后
+                                // 偶尔还在工具阶段就取消了，那时内核可能已经发出、但还没执行下一次模型调用，回放和实时对不上
+                                for (int attempt = 0; !model.slowCalls.contains(session) && attempt < 2000; attempt++) {
+                                    Thread.sleep(5);
+                                }
                                 server.post(user, "/api/runs/" + runId + "/cancel", "{}");
                             }
                         } catch (Throwable failure) {
@@ -373,7 +379,7 @@ class ConcurrencyStressTest {
         assertTrue(cancelled > 0, "round " + round + ": no cancel landed during a model call; the slow path was not exercised");
 
         // 2. 只读策略在并发下也拦住了每一次写；截断钩子改了每个用户的 b.txt。
-        // 内置的 write_file 写新文件不用先读，策略没拦住就会留下 out.txt
+        // write_file 写新文件不用先读，电脑也允许写，策略没拦住就会留下 out.txt
         for (int i = 0; i < USERS; i++) {
             assertFalse(Files.exists(workspace.resolve(user(i) + "/out.txt")), "write_file must never execute for " + user(i));
         }
@@ -427,9 +433,8 @@ class ConcurrencyStressTest {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         ToolCatalog catalog = new ToolCatalog();
-        catalog.register(new ReadFileTool());
-        catalog.register(new GrepTool());
-        catalog.register(new WriteFileTool(new Observations()));
+        // 回放只问调度规则（能否并行），用和服务器同样的转发工具定义，不连电脑
+        LocalTool.all(null, null, java.time.Duration.ofSeconds(60)).forEach(catalog::register);
         Kernel kernel = new Kernel(table, new HookChain(hooks()), catalog.safety(), Limits.DEFAULT);
         Replay.Result replay = Replay.run(kernel, journal);
         Map<String, List<Prompt>> replayed = new LinkedHashMap<>();

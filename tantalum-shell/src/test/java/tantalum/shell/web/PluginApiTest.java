@@ -90,11 +90,15 @@ class PluginApiTest {
         throw new AssertionError(name + " not in " + list);
     }
 
+    /** 内置工具只剩服务器自己的（读附件、记忆）；文件和 Git 工具在本机工作区的卡片上，不在这里（local-workspace L17）。 */
     @Test
     void listsBuiltInToolsAndHookPlugins() throws Exception {
         JsonNode body = plugins("alice");
-        for (String tool : List.of("read_file", "grep", "list_dir", "find_files", "write_file", "edit_file", "memory_write")) {
+        for (String tool : List.of("read_attachment", "memory_read", "memory_write", "memory_delete")) {
             assertTrue(named(body.get("tools"), tool).get("enabled").asBoolean(), tool);
+        }
+        for (JsonNode tool : body.get("tools")) {
+            assertFalse(List.of("read_file", "grep", "write_file", "edit_file", "git_log").contains(tool.get("name").asString()), tool.toString());
         }
         assertEquals(0, body.get("mcp").size());
         assertTrue(body.get("midSessionChanges").isBoolean());
@@ -105,22 +109,32 @@ class PluginApiTest {
         assertFalse(named(body.get("plugins"), "notes").get("mandatory").asBoolean());
     }
 
-    /** 7.6：开关只影响自己；关掉的工具从下一次组装开始不给这个用户。 */
+    /**
+     * 7.6：开关只影响自己；关掉的工具从下一次组装开始不给这个用户。本机工作区的工具用 {@code local} 开关（local-workspace），
+     * 两人都连着允许改文件的电脑，alice 关了“改文件”，只有她的 write_file 不见了。
+     */
     @Test
     void switchesBelongToTheUserWhoSetsThem() throws Exception {
-        HttpResponse<String> off = put("alice", "/api/plugins/tool/write_file", "{\"enabled\":false}");
+        for (String user : List.of("alice", "bob")) {
+            server.connectComputer(user, java.nio.file.Files.createDirectories(temp.resolve("mac-" + user)), true);
+        }
+        HttpResponse<String> off = put("alice", "/api/plugins/tool/memory_write", "{\"enabled\":false}");
         assertEquals(200, off.statusCode(), off.body());
-        assertFalse(named(plugins("alice").get("tools"), "write_file").get("enabled").asBoolean());
-        assertTrue(named(plugins("bob").get("tools"), "write_file").get("enabled").asBoolean());
+        assertFalse(named(plugins("alice").get("tools"), "memory_write").get("enabled").asBoolean());
+        assertTrue(named(plugins("bob").get("tools"), "memory_write").get("enabled").asBoolean());
+        HttpResponse<String> local = put("alice", "/api/plugins/local/file-edit", "{\"enabled\":false}");
+        assertEquals(200, local.statusCode(), local.body());
         assertEquals(200, put("alice", "/api/plugins/plugin/notes", "{\"enabled\":false}").statusCode());
         assertTrue(named(plugins("bob").get("plugins"), "notes").get("enabled").asBoolean());
 
         ask("alice", "a1");
         ask("bob", "b1");
-        // 工具列表是全集（会话中途换工具时它不能变，core-tools C14）；alice 关掉的 write_file 标 deferred，模型看不见
+        // 工具列表是全集（会话中途换工具时它不能变，core-tools C14）；alice 关掉的工具标 deferred，模型看不见
+        assertTrue(spec("alice", "memory_write").deferred());
         assertTrue(spec("alice", "write_file").deferred());
         assertFalse(spec("alice", "read_file").deferred());
         assertFalse(spec("bob", "write_file").deferred());
+        assertFalse(spec("bob", "memory_write").deferred());
     }
 
     @Test
@@ -130,14 +144,18 @@ class PluginApiTest {
         assertEquals(404, put("alice", "/api/plugins/tool/nope", "{\"enabled\":false}").statusCode());
         assertEquals(404, put("alice", "/api/plugins/mcp/nope", "{\"enabled\":false}").statusCode());
         assertEquals(404, put("alice", "/api/plugins/hook/notes", "{\"enabled\":false}").statusCode());
-        assertEquals(400, put("alice", "/api/plugins/tool/write_file", "{\"enabled\":\"no\"}").statusCode());
-        assertEquals(400, put("alice", "/api/plugins/tool/write_file", "not json").statusCode());
+        // 本机工作区的工具没有单独的开关，只有 local 的五个
+        assertEquals(404, put("alice", "/api/plugins/tool/read_file", "{\"enabled\":false}").statusCode());
+        assertEquals(404, put("alice", "/api/plugins/local/nope", "{\"enabled\":false}").statusCode());
+        assertEquals(400, put("alice", "/api/plugins/tool/memory_write", "{\"enabled\":\"no\"}").statusCode());
+        assertEquals(400, put("alice", "/api/plugins/tool/memory_write", "not json").statusCode());
     }
 
     @Test
     void anonymousCallersGetNothing() throws Exception {
         assertEquals(401, server.get(null, "/api/plugins").statusCode());
-        assertEquals(401, put(null, "/api/plugins/tool/write_file", "{\"enabled\":false}").statusCode());
+        assertEquals(401, put(null, "/api/plugins/tool/memory_write", "{\"enabled\":false}").statusCode());
+        assertEquals(401, put(null, "/api/plugins/local/local-workspace", "{\"enabled\":false}").statusCode());
     }
 
     private void ask(String user, String session) throws Exception {

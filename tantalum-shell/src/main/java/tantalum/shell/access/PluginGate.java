@@ -38,16 +38,27 @@ public final class PluginGate {
 
     private final ToolCatalog catalog;
     private final PluginSwitches switches;
+    private final LocalAccess local;
     private final List<String> mcpServers;
     private final List<AfterToolHook> afterHooks;
     private final List<WorkType> workTypes;
     private final Map<String, Plugin> plugins;
 
-    /** {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。 */
+    /** 没有本机工作区时（嵌入使用和测试）。 */
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<String> mcpServers, List<KernelHook> hooks,
                       List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
+        this(catalog, switches, LocalAccess.NONE, mcpServers, hooks, afterHooks, workTypes);
+    }
+
+    /**
+     * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code local} 决定本机工作区的工具能不能用：
+     * 它们不看单个工具的开关，只看本机工作区的总开关、子开关和电脑（local-workspace L17）。
+     */
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, LocalAccess local, List<String> mcpServers,
+                      List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
         this.catalog = catalog;
         this.switches = switches;
+        this.local = local;
         this.mcpServers = List.copyOf(mcpServers);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
@@ -65,8 +76,11 @@ public final class PluginGate {
 
     // ---- 名单 ----
 
-    /** 内置工具看自己的开关；MCP 工具还要看所属服务器的开关。 */
+    /** 内置工具看自己的开关；MCP 工具还要看所属服务器的开关；本机工作区的工具问 {@link LocalAccess}。 */
     public boolean toolEnabled(Principal user, Tool tool) {
+        if (local.owns(tool)) {
+            return local.enabled(user, tool);
+        }
         if (!switches.enabled(user, Kind.TOOL, tool.name())) {
             return false;
         }
@@ -107,12 +121,15 @@ public final class PluginGate {
 
     public record Overview(List<ToolView> tools, List<ServerView> mcp, List<PluginView> plugins) {}
 
-    /** 这个用户的插件页：内置工具、MCP 服务器和它们现在的工具、钩子插件。 */
+    /** 这个用户的插件页：内置工具、MCP 服务器和它们现在的工具、钩子插件。本机工作区的工具不在这里，在它自己的卡片上。 */
     public Overview overview(Principal user) {
         List<ToolView> builtins = new ArrayList<>();
         Map<String, List<ToolView>> byServer = new LinkedHashMap<>();
         mcpServers.forEach(server -> byServer.put(server, new ArrayList<>()));
         for (Tool tool : catalog.tools()) {
+            if (local.owns(tool)) {
+                continue;
+            }
             ToolView view = new ToolView(tool.name(), tool.description(), switches.enabled(user, Kind.TOOL, tool.name()));
             if (catalog.isRegistered(tool.name())) {
                 builtins.add(view);
@@ -166,11 +183,19 @@ public final class PluginGate {
 
     // ---- 开关 ----
 
-    /** 只改这个用户自己的。不存在的名字抛 {@link UnknownPlugin}；必须开启的插件不能关，抛 {@link IllegalArgumentException}。 */
+    /**
+     * 只改这个用户自己的。不存在的名字抛 {@link UnknownPlugin}；必须开启的插件不能关，抛 {@link IllegalArgumentException}。
+     * 本机工作区的工具没有单独的开关，只能用 {@code LOCAL} 开关总开关和子开关。
+     */
     public void set(Principal user, Kind kind, String name, boolean enabled) {
         switch (kind) {
             case TOOL -> {
-                if (catalog.find(name).isEmpty()) {
+                if (catalog.find(name).filter(tool -> !local.owns(tool)).isEmpty()) {
+                    throw new UnknownPlugin(kind, name);
+                }
+            }
+            case LOCAL -> {
+                if (!LocalAccess.SWITCHES.contains(name)) {
                     throw new UnknownPlugin(kind, name);
                 }
             }
