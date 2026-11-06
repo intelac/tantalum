@@ -55,6 +55,9 @@ export const zh = {
     toolsLocalOff: (names: string) => `不再可用 ${names}（本机工作区没有连上或没有允许）`,
     toolsGone: (names: string) => `不再可用 ${names}（插件已删除或未加载）`,
     toolsMore: (first: string, total: number) => `${first} 等 ${total} 个`,
+    questions: "需要你回答",
+    questionGone: "这个问题已经不用回答了",
+    answerFailed: (message: string) => `没有交上：${message}`,
   },
   process: {
     running: "正在处理…",
@@ -529,7 +532,7 @@ export const zh = {
     noHooks: "没有安装钩子插件。",
     noServerTools: "现在没有工具（服务器连上后列出）。",
     mandatory: "必须开启",
-    mandatoryHint: "策略类插件（如额度），由管理员安装，不能关闭。",
+    mandatoryHint: "管理员设为必须开启（tantalum.hooks.required），不能关闭。",
     points: "挂在",
     showTools: (count: number) => `${count} 个工具`,
     hideTools: "收起",

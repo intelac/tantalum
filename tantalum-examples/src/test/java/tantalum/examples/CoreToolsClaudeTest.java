@@ -114,7 +114,7 @@ class CoreToolsClaudeTest {
         Files.writeString(workspace.resolve("alice/big.log"), log);
         Consumer<GenericApplicationContext> onlyReadFile = context -> context.registerBean("readOnly", KernelHook.class,
                 () -> new ReadOnlyHook(Set.of("read_file")));
-        try (TestServer server = new TestServer(data, workspace, strict("low"), onlyReadFile)) {
+        try (TestServer server = new TestServer(data, workspace, strict("low"), onlyReadFile, "--tantalum.hooks.required=readOnly")) {
             server.connectComputer("alice", workspace.resolve("alice"), false);
             String answer = CompactionScenario.ask(server, "alice", "s1",
                     "big.log has 60000 lines. One line between line 41000 and line 41500 contains a vault code. "

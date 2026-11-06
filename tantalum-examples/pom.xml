@@ -56,6 +56,8 @@
           <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
           <systemPropertyVariables>
             <tantalum.jar>${project.basedir}/../tantalum-shell/target/tantalum-shell-${project.version}-exec.jar</tantalum.jar>
+            <!-- 示例插件的 jar（只有示例插件和自动配置），ExamplesJarIT 用 loader.path 加载它 -->
+            <tantalum.examples.jar>${project.build.directory}/${project.build.finalName}.jar</tantalum.examples.jar>
           </systemPropertyVariables>
         </configuration>
         <executions>

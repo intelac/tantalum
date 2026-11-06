@@ -12,7 +12,6 @@ import tantalum.value.hook.Stop;
 import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
-import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
@@ -50,7 +49,8 @@ final class E2eTraceHook implements KernelHook {
         if (context.work() != null) {
             return context.work().failed() ? new Stop("citation check failed: " + context.work().result()) : Allow.PLAIN;
         }
-        return new NeedWork(CitationWork.TYPE, new Json.Str(lastAnswer(state.sessions().get(context.run().session()))));
+        // 轨迹页只要看到一轮插件工作：交一份空的名单，工作回 ok、不回到模型。
+        return new NeedWork(CitationWork.TYPE, new Json.Obj(java.util.Map.of("wrong", new Json.Arr(List.of()))));
     }
 
     private static boolean applies(KernelState state, HookContext context) {
@@ -64,15 +64,6 @@ final class E2eTraceHook implements KernelHook {
             }
         }
         return false;
-    }
-
-    private static String lastAnswer(SessionState session) {
-        for (Message message : session.messages().reversed()) {
-            if (message.role() == Role.ASSISTANT) {
-                return text(message);
-            }
-        }
-        return "";
     }
 
     private static String text(Message message) {

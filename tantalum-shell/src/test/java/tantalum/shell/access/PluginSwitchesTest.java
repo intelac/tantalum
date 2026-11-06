@@ -50,6 +50,37 @@ class PluginSwitchesTest {
         }
     }
 
+    /** 默认关的项（策略插件，A2）：打开要记下来，重开服务后还是开的。 */
+    @Test
+    void aDefaultOffItemRemembersBeingTurnedOn() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertFalse(switches.enabled(ALICE, Kind.PLUGIN, "readOnly", false));
+            switches.set(ALICE, Kind.PLUGIN, "readOnly", true);
+        }
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertTrue(switches.enabled(ALICE, Kind.PLUGIN, "readOnly", false));
+            assertFalse(switches.enabled(BOB, Kind.PLUGIN, "readOnly", false));
+            assertEquals(Set.of(), switches.off(ALICE));
+        }
+    }
+
+    /** 加 enabled 列之前的库只存关掉的项：升级后旧行仍是关，没有的仍按默认。 */
+    @Test
+    void rowsFromBeforeTheEnabledColumnStillMeanOff() throws Exception {
+        try (java.sql.Connection old = java.sql.DriverManager.getConnection("jdbc:sqlite:" + data.resolve(UserStore.FILE));
+             java.sql.Statement statement = old.createStatement()) {
+            statement.execute("CREATE TABLE plugin_settings (user TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, "
+                    + "updated_at TEXT NOT NULL, PRIMARY KEY (user, kind, name))");
+            statement.execute("INSERT INTO plugin_settings VALUES ('alice', 'tool', 'write_file', '2026-11-04T00:00:00Z')");
+        }
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertFalse(switches.enabled(ALICE, Kind.TOOL, "write_file"));
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "edit_file"));
+            switches.set(ALICE, Kind.TOOL, "write_file", true);
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "write_file"));
+        }
+    }
+
     /** 需求 7 第 6 条：每个用户只影响自己。 */
     @Test
     void usersDoNotShareSwitches() throws Exception {

@@ -1,8 +1,8 @@
 package tantalum.examples;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,20 +11,20 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import tantalum.examples.HttpStub.Reply;
-import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.json.JsonText;
+import tantalum.shell.plugin.Question;
+import tantalum.shell.plugin.Questions;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.Workspace;
-import tantalum.shell.tool.Workspaces;
-import tantalum.value.command.DoWork;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
@@ -39,11 +39,14 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
+import tantalum.value.state.SessionState;
 
+/** 工具审批（A4）：在对话页上问用户，允许这一次 / 这个会话里一直允许 / 拒绝。钩子和工作各自测，不经过管线。 */
 class ToolApprovalHookTest {
 
     private static final Principal USER = new Principal("u");
-    private static final RunRef RUN = new RunRef(USER, new SessionId("s"), new RunId("r"));
+    private static final SessionId SESSION = new SessionId("s");
+    private static final RunRef RUN = new RunRef(USER, SESSION, new RunId("r"));
     private static final HookContext CONTEXT = HookContext.of(RUN, Instant.EPOCH);
     private static final Json ARGS = new Json.Obj(Map.of("path", new Json.Str("a.txt")));
     private static final ToolApprovalHook HOOK = new ToolApprovalHook(Set.of("write_file"), 3);
@@ -55,6 +58,7 @@ class ToolApprovalHookTest {
         Map<String, Json> fields = new LinkedHashMap<>();
         fields.put("tool", new Json.Str(tool));
         fields.put("arguments", ARGS);
+        fields.put("call", new Json.Str("c"));
         fields.put("poll", new Json.Num(BigDecimal.valueOf(poll)));
         return new Json.Obj(fields);
     }
@@ -70,21 +74,32 @@ class ToolApprovalHookTest {
         return HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(new WorkDone(new CommandId("w"), type, result, failed, null, null)));
     }
 
-    private static HookResult beforeTool(String tool) {
-        return HOOK.beforeToolCall(KernelState.empty(), CONTEXT.withCall(new ToolCallBlock("c", tool, "{}", ARGS)));
+    private static HookResult beforeTool(KernelState state, String tool) {
+        return HOOK.beforeToolCall(state, CONTEXT.withCall(new ToolCallBlock("c", tool, "{}", ARGS)));
     }
 
     @Test
-    void listedToolAsksForApprovalWithToolArgumentsAndFirstPoll() {
-        NeedWork need = assertInstanceOf(NeedWork.class, beforeTool("write_file"));
+    void listedToolAsksWithToolArgumentsCallAndFirstPoll() {
+        NeedWork need = assertInstanceOf(NeedWork.class, beforeTool(KernelState.empty(), "write_file"));
         assertEquals(ApprovalWork.TYPE, need.workType());
         assertEquals(request("write_file", 0), need.input());
-        assertEquals(List.of("tool", "arguments", "poll"), List.copyOf(((Json.Obj) need.input()).fields().keySet()));
+        assertSame(Allow.PLAIN, beforeTool(KernelState.empty(), "read_file"));
     }
 
+    /** 会话里记着“一直允许”这个工具就不再问；别的工具、别的会话照样问。 */
     @Test
-    void unlistedToolIsAllowed() {
-        assertSame(Allow.PLAIN, beforeTool("read_file"));
+    void aToolAlwaysAllowedInThisSessionIsNotAskedAgain() {
+        SessionState allowed = SessionState.start(SESSION, USER)
+                .withNote(ApprovalWork.TYPE, new Json.Obj(Map.of("write_file", new Json.Bool(true))));
+        assertSame(Allow.PLAIN, beforeTool(KernelState.empty().with(allowed), "write_file"));
+
+        ToolApprovalHook two = new ToolApprovalHook(Set.of("write_file", "bash"), 3);
+        assertInstanceOf(NeedWork.class, two.beforeToolCall(KernelState.empty().with(allowed),
+                CONTEXT.withCall(new ToolCallBlock("c", "bash", "{}", ARGS))));
+        SessionState other = SessionState.start(new SessionId("other"), USER);
+        HookContext otherContext = HookContext.of(new RunRef(USER, other.id(), new RunId("r2")), Instant.EPOCH)
+                .withCall(new ToolCallBlock("c", "write_file", "{}", ARGS));
+        assertInstanceOf(NeedWork.class, HOOK.beforeToolCall(KernelState.empty().with(allowed).with(other), otherContext));
     }
 
     @Test
@@ -92,37 +107,31 @@ class ToolApprovalHookTest {
         assertSame(Allow.PLAIN, onWork(ApprovalWork.TYPE, reply("approved", 0), false));
     }
 
+    /** 拒绝时告诉模型不要换个工具绕过去（同 DSH 电脑操作插件的拒绝说明）。 */
     @Test
-    void deniedBlocksTheCallAndKeepsTheReason() {
-        Map<String, Json> fields = new LinkedHashMap<>(((Json.Obj) reply("denied", 0)).fields());
-        fields.put("reason", new Json.Str("unrecognised reply (HTTP 500): boom"));
-        Stop stop = assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, new Json.Obj(fields), false));
-        assertTrue(stop.reason().contains("denied") && stop.reason().contains("boom"), stop.reason());
+    void deniedBlocksOnlyThisCallAndSaysNotToWorkAround() {
+        Stop stop = assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, reply("denied", 0), false));
+        assertTrue(stop.reason().contains("the user denied this call to write_file"), stop.reason());
+        assertTrue(stop.reason().contains("Do not retry"), stop.reason());
     }
 
-    /** 审批没做成（连不上、超时）不能当作同意。 */
     @Test
     void failedApprovalWorkBlocksTheCall() {
         Stop stop = assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, new Json.Str("work timed out after PT1S"), true));
-        assertTrue(stop.reason().contains("timed out"), stop.reason());
+        assertTrue(stop.reason().contains("timed out"));
     }
 
     @Test
-    void pendingAsksAgainWithTheNextPoll() {
+    void pendingAsksAgainUntilThePollsRunOut() {
         NeedWork need = assertInstanceOf(NeedWork.class, onWork(ApprovalWork.TYPE, reply("pending", 0), false));
-        assertEquals(ApprovalWork.TYPE, need.workType());
         assertEquals(request("write_file", 1), need.input());
-    }
-
-    @Test
-    void pendingAtTheLastPollBlocks() {
         assertInstanceOf(NeedWork.class, onWork(ApprovalWork.TYPE, reply("pending", 1), false));
         Stop stop = assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, reply("pending", 2), false));
-        assertTrue(stop.reason().contains("3 polls"), stop.reason());
+        assertTrue(stop.reason().contains("3 polls"));
     }
 
     @Test
-    void resultWithoutADecisionBlocks() {
+    void aReplyWithoutADecisionBlocks() {
         assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, new Json.Obj(Map.of()), false));
         assertInstanceOf(Stop.class, onWork(ApprovalWork.TYPE, new Json.Str("ok"), false));
     }
@@ -134,86 +143,81 @@ class ToolApprovalHookTest {
         assertSame(Allow.PLAIN, onWork(ProviderStatusWork.TYPE, new Json.Str("pending"), false));
     }
 
+    /** 策略插件：默认关、用户可以关，开着时出错按拦截处理（A2）。 */
     @Test
-    void hookIsMandatory() {
-        assertTrue(HOOK.mandatory());
+    void hookIsAnOptionalPolicyThatFailsClosed() {
+        assertEquals(false, HOOK.mandatory());
+        assertEquals(false, HOOK.defaultEnabled());
+        assertEquals(true, HOOK.failClosed());
         assertEquals("toolApproval", HOOK.name());
         assertThrows(IllegalArgumentException.class, () -> new ToolApprovalHook(Set.of("t"), 0));
+        assertThrows(IllegalArgumentException.class, () -> new ApprovalWork(Duration.ZERO));
     }
 
-    @Test
-    void workPostsTheInputAndEchoesItBack() throws Exception {
-        try (HttpStub stub = new HttpStub((n, body) -> new Reply(200, "{\"decision\": \"pending\"}"))) {
-            WorkResult result = new ApprovalWork(stub.uri()).run(context(), request("write_file", 1));
-            assertEquals(request("write_file", 1), JsonText.parseOrNull(stub.requests().getFirst()));
-            assertEquals(reply("pending", 1), result.result());
-            assertEquals(null, result.continueText());
+    /** 记下问了什么、按给定的回答答；回答为 null 表示没人回答。 */
+    private static final class Answering implements Questions {
+        final List<Question> asked = new ArrayList<>();
+        final String choice;
+
+        Answering(String choice) {
+            this.choice = choice;
+        }
+
+        @Override
+        public Optional<String> ask(ToolContext context, Question question, Duration wait) {
+            asked.add(question);
+            return Optional.ofNullable(choice);
         }
     }
 
-    @Test
-    void approvedAndDeniedRepliesAreRead() throws Exception {
-        try (HttpStub stub = new HttpStub((n, body) -> new Reply(200, n == 1 ? "{\"decision\":\"approved\"}" : "{\"decision\":\"denied\"}"))) {
-            ApprovalWork work = new ApprovalWork(stub.uri());
-            assertEquals(reply("approved", 0), work.run(context(), request("write_file", 0)).result());
-            assertEquals(reply("denied", 0), work.run(context(), request("write_file", 0)).result());
-        }
+    private WorkResult run(Answering questions, int poll) throws Exception {
+        ToolContext context = new ToolContext(USER, SESSION, new Workspace(dir), questions);
+        return new ApprovalWork(Duration.ofSeconds(1)).run(context, request("write_file", poll));
     }
 
     @Test
-    void unrecognisedReplyIsDeniedWithTheFirst200Chars() throws Exception {
-        String body = "<html>" + "x".repeat(300);
-        try (HttpStub stub = new HttpStub((n, ignored) -> new Reply(200, body))) {
-            Json.Obj result = (Json.Obj) new ApprovalWork(stub.uri()).run(context(), request("write_file", 0)).result();
-            assertEquals(new Json.Str("denied"), result.fields().get("decision"));
-            String reason = ((Json.Str) result.fields().get("reason")).value();
-            assertTrue(reason.endsWith(body.substring(0, 200)), reason);
-            assertFalse(reason.contains(body.substring(0, 201)), reason);
-            assertInstanceOf(Stop.class, HOOK.onWorkResult(KernelState.empty(),
-                    CONTEXT.withWork(new WorkDone(new CommandId("w"), ApprovalWork.TYPE, result, false, null, null))));
-        }
-    }
-
-    /** 服务出错时就算正文像“同意”也不算：审批没有明确同意就不能执行。 */
-    @Test
-    void errorStatusIsDeniedEvenIfTheBodySaysApproved() throws Exception {
-        try (HttpStub stub = new HttpStub((n, ignored) -> new Reply(500, "{\"decision\":\"approved\"}"))) {
-            Json.Obj result = (Json.Obj) new ApprovalWork(stub.uri()).run(context(), request("write_file", 0)).result();
-            assertEquals(new Json.Str("denied"), result.fields().get("decision"));
-        }
-    }
-
-    /** 别的字符串里转义的 "decision" 不算。 */
-    @Test
-    void escapedDecisionInsideAnotherStringIsNotRead() throws Exception {
-        try (HttpStub stub = new HttpStub((n, ignored) -> new Reply(200, "{\"note\":\"say \\\"decision\\\":\\\"approved\\\"\"}"))) {
-            Json.Obj result = (Json.Obj) new ApprovalWork(stub.uri()).run(context(), request("write_file", 0)).result();
-            assertEquals(new Json.Str("denied"), result.fields().get("decision"));
-        }
+    void theWorkOffersThreeChoicesForThisCall() throws Exception {
+        Answering questions = new Answering(ApprovalWork.ONCE);
+        run(questions, 0);
+        Question question = questions.asked.getFirst();
+        assertEquals("approval-c", question.id(), "the same call keeps the same question across polls");
+        assertTrue(question.title().contains("write_file"));
+        assertEquals("{\"path\":\"a.txt\"}", question.detail());
+        assertEquals(List.of("允许这一次", "这个会话里一直允许", "拒绝"), question.choices().stream().map(Question.Choice::label).toList());
     }
 
     @Test
-    void unreachableServiceFailsTheWorkAndTheHookBlocks() throws Exception {
-        ApprovalWork work = new ApprovalWork(HttpStub.closedPort());
-        WorkHandler handler = new WorkHandler(Workspaces.perUser(dir), tantalum.shell.access.PluginGate.allOn(new tantalum.shell.tool.ToolCatalog(), List.of(), List.of(), List.of(work)), Duration.ofSeconds(5), java.time.Clock.systemUTC());
-        WorkDone done = (WorkDone) handler.handle(new DoWork(new CommandId("w"), RUN, ApprovalWork.TYPE, request("write_file", 0)));
-        assertTrue(done.failed());
-        assertInstanceOf(Stop.class, HOOK.onWorkResult(KernelState.empty(), CONTEXT.withWork(done)));
+    void allowOnceApprovesWithoutANote() throws Exception {
+        WorkResult result = run(new Answering(ApprovalWork.ONCE), 0);
+        assertEquals(reply("approved", 0, "once"), result.result());
+        assertNull(result.note());
     }
 
-    /** 钩子和工作接起来：待定一次后同意，第二轮的输入来自第一轮带回的结果。 */
     @Test
-    void pendingThenApprovedRoundTrip() throws Exception {
-        try (HttpStub stub = new HttpStub((n, body) -> new Reply(200, n == 1 ? "{\"decision\":\"pending\"}" : "{\"decision\":\"approved\"}"))) {
-            ApprovalWork work = new ApprovalWork(stub.uri());
-            NeedWork first = assertInstanceOf(NeedWork.class, beforeTool("write_file"));
-            Json firstResult = work.run(context(), first.input()).result();
-            NeedWork second = assertInstanceOf(NeedWork.class, onWork(ApprovalWork.TYPE, firstResult, false));
-            assertEquals(request("write_file", 1), second.input());
-            assertSame(Allow.PLAIN, onWork(ApprovalWork.TYPE, work.run(context(), second.input()).result(), false));
-            assertEquals(List.of(request("write_file", 0), request("write_file", 1)),
-                    stub.requests().stream().map(JsonText::parseOrNull).toList());
-        }
+    void alwaysAllowInThisSessionApprovesAndNotesTheTool() throws Exception {
+        WorkResult result = run(new Answering(ApprovalWork.SESSION), 0);
+        assertEquals(reply("approved", 0, "session"), result.result());
+        assertEquals(new Json.Obj(Map.of("write_file", new Json.Bool(true))), result.note());
+    }
+
+    @Test
+    void denyAndNoAnswer() throws Exception {
+        assertEquals(reply("denied", 0), run(new Answering(ApprovalWork.DENY), 0).result());
+        WorkResult unanswered = run(new Answering(null), 2);
+        assertEquals(reply("pending", 2), unanswered.result());
+        assertNull(unanswered.note());
+    }
+
+    /** 钩子和工作接起来：先没人回答，第二轮答“一直允许”；第二轮的输入来自第一轮带回的结果。 */
+    @Test
+    void pendingThenAlwaysAllowRoundTrip() throws Exception {
+        NeedWork first = assertInstanceOf(NeedWork.class, beforeTool(KernelState.empty(), "write_file"));
+        ToolContext nobody = new ToolContext(USER, SESSION, new Workspace(dir), new Answering(null));
+        Json firstResult = new ApprovalWork(Duration.ofSeconds(1)).run(nobody, first.input()).result();
+        NeedWork second = assertInstanceOf(NeedWork.class, onWork(ApprovalWork.TYPE, firstResult, false));
+        assertEquals(request("write_file", 1), second.input());
+        ToolContext user = new ToolContext(USER, SESSION, new Workspace(dir), new Answering(ApprovalWork.SESSION));
+        assertSame(Allow.PLAIN, onWork(ApprovalWork.TYPE, new ApprovalWork(Duration.ofSeconds(1)).run(user, second.input()).result(), false));
     }
 
     @Test
@@ -222,7 +226,11 @@ class ToolApprovalHookTest {
         assertEquals(value, JsonText.parseOrNull(ApprovalWork.write(value)));
     }
 
-    private ToolContext context() throws Exception {
-        return new ToolContext(USER, new tantalum.value.id.SessionId("s"), new Workspace(dir));
+    private static Json reply(String decision, int poll, String scope) {
+        Map<String, Json> fields = new LinkedHashMap<>();
+        fields.put("decision", new Json.Str(decision));
+        fields.put("scope", new Json.Str(scope));
+        fields.putAll(((Json.Obj) request("write_file", poll)).fields());
+        return new Json.Obj(fields);
     }
 }

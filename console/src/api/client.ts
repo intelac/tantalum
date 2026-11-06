@@ -14,6 +14,7 @@ import type {
   Messages,
   PluginKind,
   Plugins,
+  Question,
   RunView,
   SessionSummary,
   SubmitMode,
@@ -254,6 +255,19 @@ export function issueLocalToken(validity: LocalValidity): Promise<LocalToken> {
 /** 撤销全部令牌并断开电脑。 */
 export function revokeLocal(): Promise<unknown> {
   return call("/api/local/tokens", { method: "DELETE" });
+}
+
+/** 插件工作在这个会话里问用户、还没回答的问题（如工具审批）。 */
+export function listQuestions(session: string): Promise<{ questions: Question[] }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/questions`);
+}
+
+/** 回答一个问题。404 表示问题已经不在了（答过、插件不再等）。 */
+export function answerQuestion(session: string, question: string, choice: string): Promise<unknown> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/questions/${encodeURIComponent(question)}`, {
+    method: "POST",
+    body: JSON.stringify({ choice }),
+  });
 }
 
 export function getSettings(): Promise<UserSettingsView> {

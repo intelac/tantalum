@@ -27,8 +27,14 @@ public final class ReadOnlyHook implements KernelHook {
         return "只放行名单里的工具，其余调用一律拦下。";
     }
 
+    /** 策略插件：默认关，用户在插件页打开（管理员要对所有人强制开启时写进 {@code tantalum.hooks.required}）；开着时出错按拦截处理。 */
     @Override
-    public boolean mandatory() {
+    public boolean defaultEnabled() {
+        return false;
+    }
+
+    @Override
+    public boolean failClosed() {
         return true;
     }
 

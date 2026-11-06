@@ -291,7 +291,8 @@ class ClaudeScenarioTest {
         String runId;
         Map<String, List<String>> live;
         List<String> turnBodies = new ArrayList<>();
-        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins)) {
+        // 只读策略默认关（A2），这里由管理员设成必须开启
+        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins, "--tantalum.hooks.required=readOnly")) {
             server.connectComputer("hooks", workspace.resolve("hooks"), true);
             // 每一步都依赖上一步的结果，所以模型不能把它们并成一轮：先读 index 才知道文件名，写 summary 要用找到的行号。
             submit(server, "hooks", "s1", "Step 1: read index.txt with read_file to learn the file names; you do not know them yet. "
@@ -325,15 +326,14 @@ class ClaudeScenarioTest {
         assertTrue(events(journal, ToolFinished.class).stream().anyMatch(tool -> tool.text().contains("more characters truncated")),
                 "TruncateOutputHook should have cut big.txt");
 
+        // 引用核对只看会话里读到的（A3）：模型读过 notes.txt，引用第 3 行有根据，不用工作；引错了才有一轮更正
         List<WorkDone> work = events(journal, WorkDone.class);
-        assertFalse(work.isEmpty(), "beforeRunEnd should have requested citation work");
         assertTrue(work.stream().allMatch(done -> done.workType().equals(CitationWork.TYPE)));
         assertTrue(lastText(journal).contains("notes.txt:3"), lastText(journal));
 
         assertEquals(replies.size() + events(journal, ModelFailed.class).size(), live.get("beforeModelCall").size(), live.toString());
         assertTrue(live.getOrDefault("beforeToolCall", List.of()).containsAll(List.of("read_file", "write_file")), live.toString());
-        assertTrue(live.getOrDefault("beforeRunEnd", List.of()).containsAll(List.of("first", "afterWork")),
-                "first call asks for work, the next one sees the work result: " + live);
+        assertTrue(live.getOrDefault("beforeRunEnd", List.of()).contains("first"), live.toString());
         assertEquals(work.size(), live.getOrDefault("onWorkResult", List.of()).size(), live.toString());
         // 回放接口把同一段 journal 又过了一遍内核，纯钩子被再次调用：这正是钩子不能有副作用的原因。
         assertTrue(recording.count("beforeModelCall") > live.get("beforeModelCall").size(),
@@ -359,7 +359,7 @@ class ClaudeScenarioTest {
             context.registerBean("quota", KernelHook.class, () -> new DailyQuotaHook(1));
         };
 
-        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins)) {
+        try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"), plugins, "--tantalum.hooks.required=dailyQuota")) {
             server.connectComputer("quota", workspace.resolve("quota"), true);
             submit(server, "quota", "s1", "Use read_file to read note.txt, then tell me the secret word.");
             JsonNode run = waitForLatestRun(server, "quota", "s1", Duration.ofMinutes(4));
