@@ -60,23 +60,23 @@ public final class Mxc implements Sandbox {
      */
     public static Sandbox open(Path explicit, Path bundled, MxcPolicy policy) {
         if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")) {
-            return Sandbox.unavailable("MXC 的沙箱程序 " + PROGRAM + " 只能在 macOS 上用");
+            return Sandbox.unavailable(Unavailable.of(Unavailable.Code.NOT_MACOS));
         }
         Path program;
         if (explicit != null) {
             if (!Files.isRegularFile(explicit) || !Files.isExecutable(explicit)) {
-                return Sandbox.unavailable("--mxc 给的 " + explicit + " 不存在或不能执行");
+                return Sandbox.unavailable(Unavailable.of(Unavailable.Code.MXC_INVALID, "path", explicit.toString()));
             }
             program = explicit;
         } else if (bundled != null && Files.isRegularFile(bundled) && Files.isExecutable(bundled)) {
             program = bundled;
         } else {
-            return Sandbox.unavailable("找不到 MXC 沙箱程序 " + PROGRAM + "：请用安装包里的 tantalum-connect 启动，或者用 --mxc 指定它的位置");
+            return Sandbox.unavailable(Unavailable.of(Unavailable.Code.MXC_MISSING));
         }
         try {
             return new Mxc(program.toRealPath(), policy, Files.createTempDirectory("tantalum-connect-"));
         } catch (IOException failure) {
-            return Sandbox.unavailable("不能准备沙箱用的临时目录：" + failure.getMessage());
+            return Sandbox.unavailable(Unavailable.of(Unavailable.Code.TEMP_DIR, "detail", failure.getMessage()));
         }
     }
 
@@ -102,25 +102,26 @@ public final class Mxc implements Sandbox {
         try {
             Outcome dry = execute(List.of("--dry-run"), "/usr/bin/true", main, CHECK_TIMEOUT);
             if (dry.exitCode() != 0) {
-                return Status.unavailable("MXC 检查规则没有通过：" + firstLine(dry));
+                return Status.unavailable(Unavailable.of(Unavailable.Code.CHECK_FAILED, "detail", firstLine(dry)));
             }
             Outcome real = execute(List.of(), "/usr/bin/true", main, CHECK_TIMEOUT);
             if (real.timedOut() || real.exitCode() != 0) {
-                return Status.unavailable("MXC 不能启动沙箱：" + firstLine(real));
+                return Status.unavailable(Unavailable.of(Unavailable.Code.START_FAILED, "detail", firstLine(real)));
             }
             return Status.ok();
         } catch (IOException failure) {
-            return Status.unavailable("MXC 不能运行：" + failure.getMessage());
+            return Status.unavailable(Unavailable.of(Unavailable.Code.RUN_FAILED, "detail", failure.getMessage()));
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
-            return Status.unavailable("MXC 的检查被打断了");
+            return Status.unavailable(Unavailable.of(Unavailable.Code.CHECK_INTERRUPTED));
         }
     }
 
     private static String firstLine(Outcome outcome) {
         String text = outcome.output().text().strip();
         if (text.isEmpty()) {
-            return outcome.timedOut() ? "没有在 " + CHECK_TIMEOUT.toSeconds() + " 秒内结束" : "退出码 " + outcome.exitCode();
+            // 拼进 detail 原样显示，写英文，同 MXC 自己的输出
+            return outcome.timedOut() ? "did not finish within " + CHECK_TIMEOUT.toSeconds() + " seconds" : "exit code " + outcome.exitCode();
         }
         String[] lines = text.split("\n");
         return lines[lines.length - 1].strip();

@@ -15,17 +15,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
+import tantalum.connect.Words.Key;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Mxc;
 import tantalum.local.sandbox.MxcPolicy;
 import tantalum.local.sandbox.Sandbox;
+import tantalum.local.sandbox.Unavailable;
 import tantalum.local.tool.GitCheck;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
+import tantalum.value.text.Language;
 
 /**
  * 连接程序的入口（local-workspace 设计“tantalum.connect.Main”）。允许什么只由这里的启动参数决定（L4）；令牌只从环境变量
- * {@code TANTALUM_TOKEN} 或不回显的终端输入读，不从命令行参数读，也不写进任何文件（L2）。提示用简单中文。
+ * {@code TANTALUM_TOKEN} 或不回显的终端输入读，不从命令行参数读，也不写进任何文件（L2）。
+ * 提示按 {@code --lang} 或系统的语言说（{@link Words}，console-i18n I12）。
  */
 public final class Main {
 
@@ -35,36 +39,14 @@ public final class Main {
     static final String PATH = "/api/local/connect";
     /** 启动被拒（参数不对、目录不存在、没有令牌）。 */
     static final int REFUSED = 1;
-    static final String NO_SHELL_FLAG = "--allow-shell was not given";
     /** 安装包的启动器经这个系统属性告诉程序包里的 {@code mxc-exec-mac} 在哪。 */
     static final String BUNDLED_MXC = "tantalum.mxc";
     private static final Pattern ENV_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     /** 参数里夹着一整个令牌（如 {@code --allow=tc_…}）。令牌的随机部分是 43 个 base64url 字符。 */
     private static final Pattern EMBEDDED_TOKEN = Pattern.compile(TOKEN_PREFIX + "[A-Za-z0-9_-]{40,}");
 
-    private static final String HELP = """
-            用法：tantalum-connect --allow 目录 [--allow 目录 ...] [选项]
-
-            把这台电脑上允许的目录交给 Tantalum 服务器上的 agent 使用。令牌在网页的插件页生成，
-            启动前放进环境变量 TANTALUM_TOKEN，或者启动后按提示粘贴（不显示）。不要把令牌写在命令行上。
-
-              --server URL      服务器地址，默认 http://127.0.0.1:8091
-              --allow 目录      允许 agent 进的目录，可以写多个，第一个是主目录（至少一个）。
-                                . 是当前目录：先 cd 到项目目录再写 --allow .。不能是家目录或 /
-              --allow-write     允许改文件（write_file、edit_file）。不加就只能读
-              --allow-shell     允许跑命令（bash，在系统沙箱里执行）
-              --allow-read 目录 命令额外能读的目录，可以写多个
-              --env 名字        把这个环境变量交给命令，可以写多个；名字里有 KEY、TOKEN、SECRET、PASSWORD 的不行
-              --no-network      命令不能联网
-              --name 名字       在网页上显示的电脑名，默认主机名
-              --mxc 路径        MXC 沙箱程序 mxc-exec-mac 的位置
-              --help            显示这段说明
-
-            风险：服务器那边的 agent 能读允许目录里的所有文件；加了 --allow-write 能改、能删其中的内容。
-            每个操作都会在这个终端里打一行记录。按 Ctrl+C 断开。
-
-            退出码：1 启动参数不对；2 服务器拒绝或结束了连接（令牌无效、到期、撤销，或被另一台电脑替换）。
-            """;
+    /** {@code --lang} 的值不对时，还不知道该用哪种语言，一律用英文（需求 5.3）。 */
+    static final String BAD_LANGUAGE = "--lang must be zh, en or ja";
 
     private Main() {}
 
@@ -80,19 +62,27 @@ public final class Main {
 
     /** 测试从这里进：环境变量、终端输入、输出都换得掉。返回退出码。 */
     static int run(String[] args, Map<String, String> env, Prompt prompt, PrintStream out) {
+        Language language;
+        try {
+            language = language(args, env);
+        } catch (IllegalArgumentException bad) {
+            out.println(BAD_LANGUAGE);
+            return REFUSED;
+        }
+        Words words = new Words(language);
         Setup setup;
         try {
-            Options options = Options.parse(args);
+            Options options = Options.parse(args, words);
             if (options.help()) {
-                out.print(HELP);
+                out.print(words.say(Key.HELP));
                 return 0;
             }
-            setup = setup(options, env, prompt);
+            setup = setup(options, env, prompt, words);
         } catch (Refused refused) {
             out.println(refused.getMessage());
             return REFUSED;
         }
-        summary(setup, out);
+        summary(setup, out, words);
         Journal journal = new Journal(out, Clock.systemDefaultZone());
         Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.sandbox(), journal);
         // Ctrl+C：打断在跑的调用，再结束这个程序启动的全部进程（MXC 和命令、git），最后删掉沙箱的临时目录
@@ -102,7 +92,7 @@ public final class Main {
             setup.sandbox().close();
         }, "stop-calls"));
         try {
-            return new Link(setup, calls, out).run();
+            return new Link(setup, calls, out, words).run();
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
             return 0;
@@ -113,6 +103,19 @@ public final class Main {
     @FunctionalInterface
     interface Prompt {
         char[] secret(String question);
+    }
+
+    /**
+     * 终端用哪种语言：先看 {@code --lang}（它决定后面所有报错用什么语言，所以先单独解析），没给就看 {@code LC_ALL}、
+     * {@code LC_MESSAGES}、{@code LANG}，再看 Java 的系统语言，都不是三种之一时用英文。值不对抛 {@link IllegalArgumentException}。
+     */
+    static Language language(String[] args, Map<String, String> env) {
+        for (int i = 0; i < args.length; i++) {
+            if (args[i].equals("--lang")) {
+                return Language.parse(i + 1 < args.length ? args[i + 1] : null).orElseThrow(IllegalArgumentException::new);
+            }
+        }
+        return Language.fromEnvironment(env::get, Locale.getDefault());
     }
 
     /** 启动参数不对。消息直接给用户看，不含令牌。 */
@@ -127,11 +130,10 @@ public final class Main {
     record Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
                    boolean network, String name, Path mxc, boolean help) {
 
-        static Options parse(String[] args) throws Refused {
+        static Options parse(String[] args, Words words) throws Refused {
             for (String arg : args) {
                 if (looksLikeToken(arg)) {
-                    throw new Refused("不要把令牌写在命令行上：同一台电脑上的其他程序能看到命令行参数。"
-                            + "请改用环境变量 " + TOKEN_VARIABLE + "，或者不带令牌启动，再按提示粘贴。");
+                    throw new Refused(words.say(Key.REFUSED_TOKEN_ON_COMMAND_LINE, Map.of("variable", TOKEN_VARIABLE)));
                 }
             }
             String server = DEFAULT_SERVER;
@@ -149,20 +151,22 @@ public final class Main {
                     case "--help", "-h" -> {
                         return new Options(server, List.of(), false, false, List.of(), List.of(), true, null, null, true);
                     }
-                    case "--server" -> server = value(args, ++i, arg);
-                    case "--allow" -> allow.add(Path.of(value(args, ++i, arg)));
-                    case "--allow-read" -> read.add(Path.of(value(args, ++i, arg)));
-                    case "--env" -> env.add(value(args, ++i, arg));
-                    case "--name" -> name = value(args, ++i, arg);
-                    case "--mxc" -> mxc = Path.of(value(args, ++i, arg));
+                    case "--server" -> server = value(args, ++i, arg, words);
+                    case "--allow" -> allow.add(Path.of(value(args, ++i, arg, words)));
+                    case "--allow-read" -> read.add(Path.of(value(args, ++i, arg, words)));
+                    case "--env" -> env.add(value(args, ++i, arg, words));
+                    case "--name" -> name = value(args, ++i, arg, words);
+                    case "--mxc" -> mxc = Path.of(value(args, ++i, arg, words));
+                    // 已经在 language() 里查过
+                    case "--lang" -> i++;
                     case "--allow-write" -> write = true;
                     case "--allow-shell" -> shell = true;
                     case "--no-network" -> network = false;
-                    default -> throw new Refused("不认识的参数：" + arg + "。用 --help 查看全部参数。");
+                    default -> throw new Refused(words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
                 }
             }
             if (allow.isEmpty()) {
-                throw new Refused("至少要用 --allow 给一个目录，例如 --allow ~/work/shop。用 --help 查看全部参数。");
+                throw new Refused(words.say(Key.REFUSED_NO_ALLOW));
             }
             return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false);
         }
@@ -172,9 +176,9 @@ public final class Main {
             return arg.startsWith(TOKEN_PREFIX) || arg.startsWith("--token") || EMBEDDED_TOKEN.matcher(arg).find();
         }
 
-        private static String value(String[] args, int at, String option) throws Refused {
+        private static String value(String[] args, int at, String option, Words words) throws Refused {
             if (at >= args.length || args[at].startsWith("--")) {
-                throw new Refused(option + " 后面要跟一个值。");
+                throw new Refused(words.say(Key.REFUSED_MISSING_VALUE, Map.of("option", option)));
             }
             return args[at];
         }
@@ -193,34 +197,34 @@ public final class Main {
     }
 
     /** 检查目录、取令牌、检查沙箱、算出 {@code hello}。 */
-    static Setup setup(Options options, Map<String, String> env, Prompt prompt) throws Refused {
-        URI socket = socket(options.server());
+    static Setup setup(Options options, Map<String, String> env, Prompt prompt, Words words) throws Refused {
+        URI socket = socket(options.server(), words);
         AllowedDirs dirs;
         try {
             for (Path dir : options.allow()) {
                 if (!Files.isDirectory(dir)) {
-                    throw new Refused("--allow 的目录不存在或不是目录：" + dir);
+                    throw new Refused(words.say(Key.REFUSED_ALLOW_NOT_DIR, Map.of("dir", dir)));
                 }
-                refuseTooBroad(dir, env);
+                refuseTooBroad(dir, env, words);
             }
             dirs = new AllowedDirs(options.allow());
         } catch (IOException | IllegalArgumentException failure) {
-            throw new Refused("--allow 的目录不能用：" + failure.getMessage());
+            throw new Refused(words.say(Key.REFUSED_ALLOW_UNUSABLE, Map.of("detail", String.valueOf(failure.getMessage()))));
         }
         for (Path dir : options.read()) {
             if (!Files.isDirectory(dir)) {
-                throw new Refused("--allow-read 的目录不存在或不是目录：" + dir);
+                throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
             }
         }
         for (String name : options.env()) {
             if (MxcPolicy.secret(name)) {
-                throw new Refused("--env 不能放行 " + name + "：名字里有 KEY、TOKEN、SECRET 或 PASSWORD 的变量可能是密钥，不交给命令。");
+                throw new Refused(words.say(Key.REFUSED_ENV_SECRET, Map.of("name", name)));
             }
             if (!ENV_NAME.matcher(name).matches()) {
-                throw new Refused("--env 后面写环境变量的名字（字母、数字、下划线），不写值：" + name);
+                throw new Refused(words.say(Key.REFUSED_ENV_NAME, Map.of("name", name)));
             }
         }
-        String token = token(env, prompt);
+        String token = token(env, prompt, words);
         Sandbox sandbox = sandbox(options, dirs, env);
         return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check()), token, sandbox);
     }
@@ -229,16 +233,14 @@ public final class Main {
      * 不允许把家目录或根目录 {@code /} 交出去（2026-11-06 Yi 定）：里面有密钥、浏览器资料、别的项目，agent 全都能读。
      * 按真实路径比较，{@code --allow .}、{@code --allow ~}、符号链接都一样拦。家目录取 {@code HOME}，没有时取 {@code user.home}。
      */
-    static void refuseTooBroad(Path dir, Map<String, String> env) throws Refused, IOException {
+    static void refuseTooBroad(Path dir, Map<String, String> env, Words words) throws Refused, IOException {
         Path real = dir.toRealPath();
         if (real.getParent() == null) {
-            throw new Refused("--allow 不能是根目录 /：agent 能读这台电脑上的所有文件。请换成具体的项目目录，例如 "
-                    + "--allow ~/work/shop；或者先 cd 到项目目录，再用 --allow .（. 就是当前目录）。");
+            throw new Refused(words.say(Key.REFUSED_ROOT));
         }
         String home = env.getOrDefault("HOME", System.getProperty("user.home"));
         if (home != null && !home.isBlank() && Files.isDirectory(Path.of(home)) && real.equals(Path.of(home).toRealPath())) {
-            throw new Refused("--allow 不能是家目录 " + real + "：里面有密钥（如 ~/.ssh、.env）、浏览器资料和别的项目，agent 全都能读。"
-                    + "请换成具体的项目目录，例如 --allow " + real.resolve("work/shop") + "；或者先 cd 到项目目录，再用 --allow .（. 就是当前目录）。");
+            throw new Refused(words.say(Key.REFUSED_HOME, Map.of("dir", real, "example", real.resolve("work/shop"))));
         }
     }
 
@@ -248,7 +250,7 @@ public final class Main {
      */
     private static Sandbox sandbox(Options options, AllowedDirs dirs, Map<String, String> env) {
         if (!options.shell()) {
-            return Sandbox.unavailable(NO_SHELL_FLAG);
+            return Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED));
         }
         String bundled = System.getProperty(BUNDLED_MXC);
         MxcPolicy policy = MxcPolicy.of(dirs, options.write(), options.read(), options.network(), options.env(), env);
@@ -257,39 +259,39 @@ public final class Main {
         return sandbox;
     }
 
-    private static URI socket(String server) throws Refused {
+    private static URI socket(String server, Words words) throws Refused {
         try {
             URI uri = new URI(server.strip());
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
             String socketScheme = switch (scheme) {
                 case "http", "ws" -> "ws";
                 case "https", "wss" -> "wss";
-                default -> throw new Refused("--server 要以 http:// 或 https:// 开头：" + server);
+                default -> throw new Refused(words.say(Key.REFUSED_SERVER_SCHEME, Map.of("server", server)));
             };
             if (uri.getHost() == null) {
-                throw new Refused("--server 的地址不对：" + server);
+                throw new Refused(words.say(Key.REFUSED_SERVER_ADDRESS, Map.of("server", server)));
             }
             String base = uri.getPath() == null ? "" : uri.getPath().replaceAll("/+$", "");
             return new URI(socketScheme, null, uri.getHost(), uri.getPort(), base + PATH, null, null);
         } catch (URISyntaxException bad) {
-            throw new Refused("--server 的地址不对：" + server);
+            throw new Refused(words.say(Key.REFUSED_SERVER_ADDRESS, Map.of("server", server)));
         }
     }
 
     /** 令牌：环境变量优先，没有就问。只检查长相，不打印内容。 */
-    private static String token(Map<String, String> env, Prompt prompt) throws Refused {
+    private static String token(Map<String, String> env, Prompt prompt, Words words) throws Refused {
         String token = env.get(TOKEN_VARIABLE);
         if (token == null || token.isBlank()) {
-            char[] typed = prompt.secret("粘贴网页上生成的令牌（不显示），按回车：");
+            char[] typed = prompt.secret(words.say(Key.TOKEN_PROMPT));
             if (typed == null) {
-                throw new Refused("没有令牌。请把网页上生成的令牌放进环境变量 " + TOKEN_VARIABLE + " 再启动。");
+                throw new Refused(words.say(Key.REFUSED_NO_TOKEN, Map.of("variable", TOKEN_VARIABLE)));
             }
             token = new String(typed);
             Arrays.fill(typed, '\0');
         }
         token = token.strip();
         if (!token.startsWith(TOKEN_PREFIX) || token.length() > 200 || !token.matches("[A-Za-z0-9_-]+")) {
-            throw new Refused("这不像 Tantalum 的令牌（应以 " + TOKEN_PREFIX + " 开头）。请在网页的插件页重新复制。");
+            throw new Refused(words.say(Key.REFUSED_NOT_A_TOKEN, Map.of("prefix", TOKEN_PREFIX)));
         }
         return token;
     }
@@ -308,7 +310,7 @@ public final class Main {
             git = false;
         }
         return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
-                new Hello.Shell(shell.available(), shell.reason()), options.network(), git);
+                Hello.Shell.of(shell), options.network(), git);
     }
 
     static String version() {
@@ -336,32 +338,33 @@ public final class Main {
     }
 
     /** 启动说明：连到哪、允许什么、命令行能不能用以及原因。 */
-    static void summary(Setup setup, PrintStream out) {
+    static void summary(Setup setup, PrintStream out, Words words) {
         Hello hello = setup.hello();
         out.println("Tantalum Connect " + hello.connector());
-        out.println("服务器：" + setup.options().server().strip());
-        out.println("电脑名：" + hello.device().name() + "（" + hello.device().os() + " " + hello.device().osVersion() + " "
-                + hello.device().arch() + "）");
+        out.println(words.say(Key.SUMMARY_SERVER, Map.of("server", setup.options().server().strip())));
+        out.println(words.say(Key.SUMMARY_DEVICE, Map.of("name", hello.device().name(), "os", hello.device().os(),
+                "version", hello.device().osVersion(), "arch", hello.device().arch())));
         for (int i = 0; i < hello.roots().size(); i++) {
-            Hello.Root root = hello.roots().get(i);
-            out.println((i == 0 ? "主目录：" : "允许的目录：") + root.path());
+            out.println(words.say(i == 0 ? Key.SUMMARY_MAIN_DIR : Key.SUMMARY_DIR, Map.of("dir", hello.roots().get(i).path())));
         }
-        out.println("Git 查询：" + (hello.git() ? "可用（允许目录里的任何仓库，每次按路径找）" : "不可用，这台电脑上没有 git"));
-        out.println("改文件：" + (hello.write() ? "允许" : "不允许（要允许请加 --allow-write）"));
-        out.println("命令行：" + (hello.shell().available() ? "可用" : "不可用，" + hello.shell().reason()));
-        if (setup.sandbox() instanceof Mxc mxc && hello.shell().available()) {
-            out.println("命令沙箱：" + mxc.program());
+        out.println(words.say(hello.git() ? Key.SUMMARY_GIT_YES : Key.SUMMARY_GIT_NO));
+        out.println(words.say(hello.write() ? Key.SUMMARY_WRITE_YES : Key.SUMMARY_WRITE_NO));
+        Sandbox.Status shell = setup.sandbox().check();
+        out.println(shell.available() ? words.say(Key.SUMMARY_SHELL_YES)
+                : words.say(Key.SUMMARY_SHELL_NO, Map.of("reason", words.sandbox(shell.why()))));
+        if (setup.sandbox() instanceof Mxc mxc && shell.available()) {
+            out.println(words.say(Key.SUMMARY_SANDBOX, Map.of("program", mxc.program())));
         }
         if (setup.options().shell()) {
-            out.println("命令联网：" + (hello.network() ? "允许" : "不允许"));
+            out.println(words.say(hello.network() ? Key.SUMMARY_NETWORK_YES : Key.SUMMARY_NETWORK_NO));
             for (Path dir : setup.options().read()) {
-                out.println("命令额外能读：" + dir);
+                out.println(words.say(Key.SUMMARY_READ, Map.of("dir", dir)));
             }
             if (!setup.options().env().isEmpty()) {
-                out.println("交给命令的环境变量：" + String.join(", ", setup.options().env()));
+                out.println(words.say(Key.SUMMARY_ENV, Map.of("names", String.join(", ", setup.options().env()))));
             }
         }
-        out.println("每个操作会在下面打一行记录。按 Ctrl+C 断开。");
+        out.println(words.say(Key.SUMMARY_FOOTER));
         out.flush();
     }
 }

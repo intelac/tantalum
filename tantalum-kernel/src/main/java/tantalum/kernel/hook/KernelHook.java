@@ -4,6 +4,7 @@ import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
 import tantalum.value.state.KernelState;
+import tantalum.value.text.LocalText;
 
 /**
  * 内核钩子。在内核的单线程上运行，回放时会被再次调用，所以必须是纯函数：同样的状态和上下文给出同样的结果，时间只取 {@code context.at()}。
@@ -29,9 +30,12 @@ public interface KernelHook {
         return name();
     }
 
-    /** 插件页上的一句说明，可以为空。 */
-    default String description() {
-        return "";
+    /**
+     * 插件页上的一句说明，可以为空。写 {@code LocalText.of("…")} 照原样显示；写 {@code LocalText.en("…").zh("…").ja("…")}
+     * 控制台按看的人的语言选，没有那种就用英文（console-i18n I10）。
+     */
+    default LocalText description() {
+        return LocalText.empty();
     }
 
     /**

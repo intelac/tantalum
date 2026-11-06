@@ -85,14 +85,14 @@ public class ApiController {
     ResponseEntity<String> messages(@PathVariable String session, @RequestParam(required = false) Integer before) {
         Optional<SessionId> id = sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         if (before != null && before < 0) {
-            return json.error(400, "invalid page position");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid page position");
         }
         Optional<SessionQueries.SessionView> found = engine.queries().session(WebJson.currentUser(), id.get());
         if (found.isEmpty()) {
-            return json.error(404, "no such session");
+            return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
         Transcript.View view = found.get().transcript();
         MessagePage page = MessagePage.of(view.items(), before);
@@ -114,7 +114,7 @@ public class ApiController {
     @ExceptionHandler(SessionQueries.SessionUnreadable.class)
     ResponseEntity<String> unreadable(SessionQueries.SessionUnreadable failure) {
         LOG.error("session unreadable", failure);
-        return json.error(500, "session unreadable");
+        return json.error(ErrorCode.SESSION_UNREADABLE, "session unreadable");
     }
 
     /**
@@ -151,60 +151,62 @@ public class ApiController {
     ResponseEntity<String> submit(@PathVariable String session, @RequestBody String body) {
         Optional<SessionId> id = sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         Optional<JsonNode> request = json.read(body);
         if (request.isEmpty()) {
-            return json.error(400, "body is not valid JSON");
+            return json.error(ErrorCode.REQUEST_INVALID, "body is not valid JSON");
         }
         String requestId = WebJson.text(request.get(), "requestId");
         String mode = WebJson.text(request.get(), "mode");
         String content = WebJson.text(request.get(), "text");
         if (WebJson.blank(requestId)) {
-            return json.error(400, "missing requestId");
+            return json.error(ErrorCode.REQUEST_INVALID, "missing requestId");
         }
         if (mode == null || !MODES.contains(mode)) {
-            return json.error(400, "mode must be one of " + MODES);
+            return json.error(ErrorCode.REQUEST_INVALID, "mode must be one of " + MODES);
         }
         Principal user = WebJson.currentUser();
         List<AttachmentRef> attachments;
         try {
             attachments = attachments(user, request.get().get("attachments"));
+        } catch (MissingAttachment missing) {
+            return json.error(400, ErrorCode.ATTACHMENT_NOT_FOUND, missing.getMessage());
         } catch (IllegalArgumentException invalid) {
-            return json.error(400, invalid.getMessage());
+            return json.error(ErrorCode.REQUEST_INVALID, invalid.getMessage());
         } catch (IOException failure) {
             LOG.warn("attachment lookup failed: {}", failure.toString());
-            return json.error(500, "附件读取失败");
+            return json.error(ErrorCode.ATTACHMENT_READ_FAILED, "the attachment could not be read");
         }
         if (WebJson.blank(content) && attachments.isEmpty()) {
-            return json.error(400, "missing text");
+            return json.error(ErrorCode.REQUEST_INVALID, "missing text");
         }
         // 插话并进当前运行，不换模型（M8）：带了也不用
         ModelChoice model;
         try {
             model = mode.equals("steer") ? null : ModelJson.read(request.get().get("model"));
         } catch (IllegalArgumentException invalid) {
-            return json.error(400, invalid.getMessage());
+            return json.error(ErrorCode.REQUEST_INVALID, invalid.getMessage());
         }
-        Optional<String> violation = properties.attachmentLimits().violation(attachments);
+        Optional<AttachmentLimits.Violation> violation = properties.attachmentLimits().violation(attachments);
         if (violation.isPresent()) {
-            return json.error(400, violation.get());
+            return json.error(ErrorCode.of(violation.get().kind()), violation.get().diagnostic(), violation.get().params());
         }
         boolean images = attachments.stream().anyMatch(ImageRef.class::isInstance);
-        Optional<String> problem = problem(user, id.get(), model, images);
+        Optional<ChoiceCheck.Problem> problem = problem(user, id.get(), model, images);
         if (problem.isPresent()) {
-            return json.error(400, problem.get());
+            return json.error(ErrorCode.of(problem.get().kind()), problem.get().diagnostic(), problem.get().params());
         }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
                 content == null ? "" : content, attachments, model);
-        return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), "submission rejected");
+        return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
 
     /**
      * 提交里的选择能不能用（model-picker M14、M15、M11），不合格的不进 journal。没带选择时只查图片：按这次会用的模型
      * （会话现在的 → 上次的选择 → 默认），和组装上下文时的取法一样。
      */
-    private Optional<String> problem(Principal user, SessionId session, ModelChoice model, boolean images) {
+    private Optional<ChoiceCheck.Problem> problem(Principal user, SessionId session, ModelChoice model, boolean images) {
         ChoiceCheck check = new ChoiceCheck(engine.routes());
         Optional<SessionState> state = engine.queries().session(user, session).map(SessionQueries.SessionView::state);
         if (model != null) {
@@ -214,12 +216,12 @@ public class ApiController {
             return Optional.empty();
         }
         ModelChoice used = check.fallback(state.map(SessionState::model).orElse(null), engine.userSettings().modelChoice(user));
-        return engine.routes().describe(used).map(ModelInfo::vision).orElse(false) ? Optional.empty() : Optional.of("当前选的模型不支持图片");
+        return engine.routes().describe(used).map(ModelInfo::vision).orElse(false) ? Optional.empty() : ChoiceCheck.noImages();
     }
 
     /**
      * 请求体里的 {@code attachments: [{id, name}]}。每个都在本人目录里查元数据组成引用，客户端报的尺寸和大小一概不用（设计第 2 节）。
-     * 查不到的和别人的一样：400“附件不存在或不属于你”。
+     * 查不到的和别人的一样：400，代码 {@code attachment/not-found}。
      */
     private List<AttachmentRef> attachments(Principal user, JsonNode field) throws IOException {
         if (field == null || field.isNull()) {
@@ -235,9 +237,16 @@ public class ApiController {
                 throw new IllegalArgumentException("each attachment needs an id");
             }
             refs.add(engine.attachments().ref(user, attachment, WebJson.text(item, "name"))
-                    .orElseThrow(() -> new IllegalArgumentException("附件不存在或不属于你")));
+                    .orElseThrow(() -> new MissingAttachment(attachment)));
         }
         return refs;
+    }
+
+    /** 附件查不到，或者不是这个用户的。 */
+    private static final class MissingAttachment extends IllegalArgumentException {
+        MissingAttachment(String id) {
+            super("no such attachment: " + id);
+        }
     }
 
     /** 手动压缩。body 可为空或 {@code {"requestId": "...", "instructions": "..."}}；没给 requestId 时每次都是新请求。 */
@@ -245,13 +254,13 @@ public class ApiController {
     ResponseEntity<String> compact(@PathVariable String session, @RequestBody(required = false) String body) {
         Optional<SessionId> id = sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         JsonNode request = null;
         if (!WebJson.blank(body)) {
             Optional<JsonNode> parsed = json.read(body);
             if (parsed.isEmpty()) {
-                return json.error(400, "body is not valid JSON");
+                return json.error(ErrorCode.REQUEST_INVALID, "body is not valid JSON");
             }
             request = parsed.get();
         }
@@ -262,9 +271,9 @@ public class ApiController {
                 WebJson.blank(instructions) ? null : instructions);
         return switch (result.status()) {
             case 200 -> accepted(result, SAVE_WAIT);
-            case 404 -> json.error(404, "no such session");
-            case 409 -> json.error(409, "session is running or has nothing to compact");
-            default -> json.error(result.status(), "compaction rejected");
+            case 404 -> json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
+            case 409 -> json.error(ErrorCode.SESSION_BUSY, "session is running or has nothing to compact");
+            default -> json.error(result.status(), ErrorCode.SESSION_BUSY, "compaction rejected");
         };
     }
 
@@ -273,28 +282,28 @@ public class ApiController {
         Principal user = WebJson.currentUser();
         Optional<RunState> found = engine.queries().run(user, new RunId(run));
         if (found.isEmpty()) {
-            return json.error(404, "no such run");
+            return json.error(ErrorCode.RUN_NOT_FOUND, "no such run");
         }
         int status = engine.intake().cancel(user, found.get().ref());
-        return status == 200 ? json.json(200, Map.of("cancelled", true)) : json.error(status, "cancel rejected");
+        return status == 200 ? json.json(200, Map.of("cancelled", true)) : json.error(status, ErrorCode.RUN_CANCEL_REJECTED, "cancel rejected");
     }
 
     @GetMapping("/api/runs/{run}")
     ResponseEntity<String> run(@PathVariable String run) {
         return engine.queries().run(WebJson.currentUser(), new RunId(run))
                 .map(found -> json.json(200, describe(found)))
-                .orElseGet(() -> json.error(404, "no such run"));
+                .orElseGet(() -> json.error(ErrorCode.RUN_NOT_FOUND, "no such run"));
     }
 
     @GetMapping("/api/sessions/{session}/runs")
     ResponseEntity<String> runs(@PathVariable String session) {
         Optional<SessionId> id = sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         Optional<SessionQueries.SessionView> found = engine.queries().session(WebJson.currentUser(), id.get());
         if (found.isEmpty()) {
-            return json.error(404, "no such session");
+            return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
         List<Map<String, Object>> runs = found.get().runs().stream()
                 .sorted(Comparator.comparingLong(run -> run.ref().run().seq()))
@@ -318,10 +327,10 @@ public class ApiController {
     private ResponseEntity<String> accepted(Intake.Submission result, Duration wait) {
         int saved = waitSaved(result, wait);
         if (saved == 504) {
-            return json.error(504, "服务器忙，请重发");
+            return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
         }
         if (saved == 500) {
-            return json.error(500, "保存失败，请重发");
+            return json.error(ErrorCode.SERVER_SAVE_FAILED, "the submission was not saved; send again");
         }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("submissionId", result.submission().value());

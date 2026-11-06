@@ -63,7 +63,7 @@ public class PluginController {
         response.put("plugins", overview.plugins().stream().map(plugin -> {
             Map<String, Object> view = new LinkedHashMap<>();
             view.put("name", plugin.name());
-            view.put("description", plugin.description());
+            view.put("description", plugin.description().wire());
             view.put("points", plugin.points());
             view.put("mandatory", plugin.mandatory());
             view.put("enabled", plugin.enabled());
@@ -77,21 +77,21 @@ public class PluginController {
     ResponseEntity<String> set(@PathVariable String kind, @PathVariable String name, @RequestBody String body) {
         Optional<JsonNode> parsed = json.read(body);
         if (parsed.isEmpty() || !parsed.get().path("enabled").isBoolean()) {
-            return json.error(400, "body must be {\"enabled\": true or false}");
+            return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"enabled\": true or false}");
         }
         Kind parsedKind;
         try {
             parsedKind = Kind.of(kind);
         } catch (IllegalArgumentException unknown) {
-            return json.error(404, "no such kind: " + kind);
+            return json.error(ErrorCode.PLUGIN_NOT_FOUND, "no such kind: " + kind, Map.of("name", kind));
         }
         boolean enabled = parsed.get().path("enabled").asBoolean();
         try {
             engine.plugins().set(WebJson.currentUser(), parsedKind, name, enabled);
         } catch (PluginGate.UnknownPlugin unknown) {
-            return json.error(404, unknown.getMessage());
-        } catch (IllegalArgumentException refused) {
-            return json.error(400, refused.getMessage());
+            return json.error(ErrorCode.PLUGIN_NOT_FOUND, unknown.getMessage(), Map.of("name", unknown.name()));
+        } catch (PluginGate.RequiredPlugin refused) {
+            return json.error(ErrorCode.PLUGIN_REQUIRED, refused.getMessage(), Map.of("name", refused.name()));
         }
         return json.json(200, Map.of("kind", parsedKind.key(), "name", name, "enabled", enabled));
     }

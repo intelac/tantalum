@@ -14,7 +14,9 @@ import tantalum.shell.route.ChoiceCheck;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.value.id.Principal;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.text.Language;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /** 每个用户自己的设置（compaction-threshold 需求 2）：只读写当前登录用户的，不接受用户名参数。 */
 @RestController
@@ -28,7 +30,10 @@ public class SettingsController {
         this.json = json;
     }
 
-    /** {@code {compaction: {percent, points: [{percent, tokens}]}}}；窗口未知时 {@code points} 为空。 */
+    /**
+     * {@code {compaction: {percent, points: [{percent, tokens}]}, model, language}}；窗口未知时 {@code points} 为空，
+     * {@code language} 为 {@code null} 表示跟随浏览器（console-i18n I3）。
+     */
     @GetMapping("/api/settings")
     ResponseEntity<String> get() {
         return json.json(200, view(WebJson.currentUser()));
@@ -39,13 +44,13 @@ public class SettingsController {
     ResponseEntity<String> setCompaction(@RequestBody String body) {
         Optional<JsonNode> parsed = json.read(body);
         if (parsed.isEmpty() || !parsed.get().path("percent").isInt()) {
-            return json.error(400, "body must be {\"percent\": 50, 70, 85 or 100}");
+            return json.error(ErrorCode.SETTINGS_INVALID, "body must be {\"percent\": 50, 70, 85 or 100}");
         }
         Principal user = WebJson.currentUser();
         try {
             engine.userSettings().setCompactionPercent(user, parsed.get().path("percent").asInt());
         } catch (IllegalArgumentException refused) {
-            return json.error(400, refused.getMessage());
+            return json.error(ErrorCode.SETTINGS_INVALID, refused.getMessage());
         }
         return json.json(200, view(user));
     }
@@ -61,21 +66,36 @@ public class SettingsController {
         try {
             choice = parsed.isEmpty() ? null : ModelJson.read(parsed.get());
         } catch (IllegalArgumentException invalid) {
-            return json.error(400, invalid.getMessage());
+            return json.error(ErrorCode.REQUEST_INVALID, invalid.getMessage());
         }
         if (choice == null) {
-            return json.error(400, "body must be {\"route\": …, \"model\": …, \"effort\": …}");
+            return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"route\": …, \"model\": …, \"effort\": …}");
         }
-        Optional<String> problem = new ChoiceCheck(engine.routes()).problem(choice, false, false);
+        Optional<ChoiceCheck.Problem> problem = new ChoiceCheck(engine.routes()).problem(choice, false, false);
         if (problem.isPresent()) {
-            return json.error(400, problem.get());
+            return json.error(ErrorCode.of(problem.get().kind()), problem.get().diagnostic(), problem.get().params());
         }
         Principal user = WebJson.currentUser();
         engine.userSettings().setModelChoice(user, choice);
         return json.json(200, view(user));
     }
 
-    private Map<String, Object> view(Principal user) {
+    /** 请求体 {@code {"language": "ja"}}，或者 {@code {"language": null}} 回到跟随浏览器；只收 zh、en、ja（需求 1.9）。 */
+    @PutMapping("/api/settings/language")
+    ResponseEntity<String> setLanguage(@RequestBody String body) {
+        Optional<JsonNode> parsed = json.read(body);
+        JsonNode value = parsed.map(node -> node.get("language")).orElse(null);
+        Optional<Language> language = value == null || !value.isString() ? Optional.empty() : Language.parse(value.asString());
+        boolean clear = value != null && value.isNull();
+        if (!clear && language.isEmpty()) {
+            return json.error(ErrorCode.SETTINGS_INVALID, "body must be {\"language\": \"zh\", \"en\", \"ja\" or null}");
+        }
+        Principal user = WebJson.currentUser();
+        engine.userSettings().setLanguage(user, language);
+        return json.json(200, view(user));
+    }
+
+    private ObjectNode view(Principal user) {
         CompactionPolicy policy = engine.compaction();
         Map<String, Object> compaction = new LinkedHashMap<>();
         compaction.put("percent", engine.userSettings().compactionPercent(user));
@@ -86,7 +106,10 @@ public class SettingsController {
         view.put("compaction", compaction);
         ChoiceCheck check = new ChoiceCheck(engine.routes());
         view.put("model", ModelJson.view(engine.userSettings().modelChoice(user).filter(check::usable).orElse(null)));
-        return view;
+        ObjectNode node = (ObjectNode) json.tree(view);
+        // journal 的 mapper 省略 null，语言要写出显式的 null
+        node.put("language", engine.userSettings().language(user).map(Language::id).orElse(null));
+        return node;
     }
 
     private static Map<String, Object> point(CompactionPolicy.Point point) {

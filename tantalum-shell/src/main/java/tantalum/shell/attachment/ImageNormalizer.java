@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
@@ -84,10 +85,10 @@ public final class ImageNormalizer {
             acquired = permits.tryAcquire(wait.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new AttachmentRejected(Reason.BUSY, "图片处理被中断，请重试");
+            throw new AttachmentRejected(Reason.BUSY, "image processing was interrupted; try again");
         }
         if (!acquired) {
-            throw new AttachmentRejected(Reason.BUSY, "图片处理繁忙，请稍后重试");
+            throw new AttachmentRejected(Reason.BUSY, "image processing is busy; try again later");
         }
         try {
             return normalizeNow(file);
@@ -97,7 +98,7 @@ public final class ImageNormalizer {
     }
 
     private Normalized normalizeNow(Path file) throws IOException, AttachmentRejected {
-        String type = sniff(file).orElseThrow(() -> invalid("不是 PNG、JPEG、WebP 或 GIF 图片"));
+        String type = sniff(file).orElseThrow(() -> invalid("not a PNG, JPEG, WebP or GIF image"));
         long bytes = Files.size(file);
         try (ImageInputStream in = new FileImageInputStream(file.toFile())) {
             ImageScan scan = scan(in, type);
@@ -123,7 +124,7 @@ public final class ImageNormalizer {
                 boolean swap = scan.orientation() >= 5;
                 return fit(decoded, scan.orientation(), swap ? height : width, swap ? width : height, STORED);
             } catch (IOException | RuntimeException e) {
-                throw invalid("图片无法解码");
+                throw invalid("the image cannot be decoded");
             } finally {
                 reader.dispose();
             }
@@ -134,18 +135,20 @@ public final class ImageNormalizer {
         try {
             return ImageScan.of(in, type);
         } catch (IOException e) {
-            throw invalid("图片文件不完整或已损坏");
+            throw invalid("the image file is incomplete or damaged");
         }
     }
 
     private void checkSize(int width, int height) throws AttachmentRejected {
         if (width > limits.maxImageEdge() || height > limits.maxImageEdge()) {
             throw new AttachmentRejected(Reason.IMAGE_TOO_LARGE,
-                    "图片边长 " + width + "×" + height + " 超过上限 " + limits.maxImageEdge() + " 像素");
+                    "the image is " + width + "x" + height + "; each side may be at most " + limits.maxImageEdge() + " pixels",
+                    Map.of("width", width, "height", height, "limit", limits.maxImageEdge()));
         }
         if ((long) width * height > limits.maxImagePixels()) {
-            throw new AttachmentRejected(Reason.IMAGE_TOO_LARGE,
-                    "图片像素 " + width + "×" + height + " 超过上限 " + limits.maxImagePixels() + " 像素");
+            throw new AttachmentRejected(Reason.IMAGE_TOO_MANY_PIXELS,
+                    "the image is " + width + "x" + height + "; it may have at most " + limits.maxImagePixels() + " pixels",
+                    Map.of("width", width, "height", height, "limit", limits.maxImagePixels()));
         }
     }
 

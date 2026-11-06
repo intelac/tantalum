@@ -25,6 +25,7 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
+import tantalum.value.text.LocalText;
 
 /**
  * 引用核对（{@code beforeRunEnd}）：回答里形如 {@code Order.java:42} 的引用，必须是这个会话里真的读到过的那一行。
@@ -56,8 +57,11 @@ public final class CitationCheckHook implements KernelHook {
     }
 
     @Override
-    public String description() {
-        return "回答里引用的 文件:行号 必须是这个会话里读到过的那一行，否则让模型改正。";
+    public LocalText description() {
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        return LocalText.en("File:line citations in an answer must point to lines read in this session; otherwise the model is asked to fix them.")
+                .zh("回答里引用的 文件:行号 必须是这个会话里读到过的那一行，否则让模型改正。")
+                .ja("回答で引用した ファイル:行番号 は、このセッションで読んだ行でなければなりません。違う場合はモデルに直させます。");
     }
 
     @Override

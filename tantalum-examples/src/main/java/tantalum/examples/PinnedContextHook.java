@@ -13,6 +13,7 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
+import tantalum.value.text.LocalText;
 
 /**
  * 钉住的上下文（{@code beforeCompact}）：用压缩计划和触发方式决定这次压缩能不能做。用户在消息里写上 {@code marker}，
@@ -37,8 +38,11 @@ public final class PinnedContextHook implements KernelHook {
     }
 
     @Override
-    public String description() {
-        return "消息里带标记的内容不被自动或手动压缩总结掉。";
+    public LocalText description() {
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        return LocalText.en("Marked content in messages is kept out of automatic and manual compaction summaries.")
+                .zh("消息里带标记的内容不被自动或手动压缩总结掉。")
+                .ja("メッセージ内のマークした内容は、自動・手動の圧縮で要約されません。");
     }
 
     @Override

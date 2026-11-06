@@ -93,8 +93,10 @@ class ModelApiTest {
         return node.isNull() || node.isMissingNode();
     }
 
+    /** 错误的代码和参数（console-i18n I9）；诊断是英文，不在这里比。 */
     private static String error(HttpResponse<String> response) {
-        return JSON.readTree(response.body()).path("error").asString();
+        JsonNode body = JSON.readTree(response.body());
+        return body.path("code").asString() + (body.has("params") ? " " + body.get("params") : "");
     }
 
     private void awaitRuns(String session, int count) throws Exception {
@@ -137,11 +139,11 @@ class ModelApiTest {
     @Test
     void anUnusableChoiceIsRefusedAndNotRecorded() throws Exception {
         Map<String, String> refused = new java.util.LinkedHashMap<>();
-        refused.put("{\"route\":\"kimi\",\"model\":\"k2\",\"effort\":null}", "模型路线 kimi 现在不可用，请换一个模型");
-        refused.put("{\"route\":\"claude\",\"model\":\"claude-opus-4-1\",\"effort\":\"high\"}", "模型 claude-opus-4-1 现在不提供，请换一个");
-        refused.put("{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"high\"}", "qwen3.8 没有“高”这一档，可选：关、开");
-        refused.put("{\"route\":\"local\",\"model\":\"qwen3.8\"}", "qwen3.8 要选一个思考档位，可选：关、开");
-        refused.put("{\"route\":\"local\"}", "model 要写成 {\"route\": …, \"model\": …, \"effort\": …}");
+        refused.put("{\"route\":\"kimi\",\"model\":\"k2\",\"effort\":null}", "model/route-unavailable {\"route\":\"kimi\"}");
+        refused.put("{\"route\":\"claude\",\"model\":\"claude-opus-4-1\",\"effort\":\"high\"}", "model/not-offered {\"model\":\"claude-opus-4-1\"}");
+        refused.put("{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"high\"}", "model/level-unknown {\"level\":\"high\",\"levels\":[\"off\",\"on\"],\"model\":\"qwen3.8\"}");
+        refused.put("{\"route\":\"local\",\"model\":\"qwen3.8\"}", "model/level-required {\"levels\":[\"off\",\"on\"],\"model\":\"qwen3.8\"}");
+        refused.put("{\"route\":\"local\"}", "request/invalid");
         for (Map.Entry<String, String> each : refused.entrySet()) {
             HttpResponse<String> response = submit("alice", "s1", "prompt", each.getKey());
             assertEquals(400, response.statusCode(), each.getKey());
@@ -161,7 +163,7 @@ class ModelApiTest {
         assertTrue(JSON.readTree(server.get("alice", "/api/sessions/s2/messages").body()).path("toolChangesInHistory").asBoolean());
         HttpResponse<String> sonnet5 = submit("alice", "s2", "prompt", "{\"route\":\"claude\",\"model\":\"claude-sonnet-5\",\"effort\":\"low\"}");
         assertEquals(400, sonnet5.statusCode());
-        assertEquals("这个会话中途改过工具，claude-sonnet-5 不支持，请换一个模型", error(sonnet5));
+        assertEquals("model/tool-changes {\"model\":\"claude-sonnet-5\"}", error(sonnet5));
         assertEquals(200, submit("alice", "s2", "prompt", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"low\"}").statusCode());
     }
 

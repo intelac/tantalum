@@ -6,14 +6,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import tantalum.kernel.Kernel;
+import tantalum.shell.cli.CliText.Key;
+import tantalum.shell.cli.CliText;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.journal.Line;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.state.PrincipalState;
+import tantalum.value.text.Language;
 
 /**
  * 回归检查（record-results R12）：用当前的内核把数据目录里的每个会话重放一遍，和结果行逐步比较，
@@ -75,14 +79,19 @@ public final class RecordCheck {
         return new Report(sessions, List.copyOf(problems));
     }
 
-    /** 打印结果，返回退出码：全部一致为 0，否则为 1。 */
+    /** 打印结果（英文），返回退出码：全部一致为 0，否则为 1。 */
     public static int print(Report report, PrintStream out) {
+        return print(report, out, CliText.of(Language.EN));
+    }
+
+    /** 按 {@code text} 的语言打印结果（console-i18n I13）；每个不一致的说明（会话、seq、字段）是给人查的固定写法，不翻译。 */
+    public static int print(Report report, PrintStream out, CliText text) {
         for (String problem : report.problems()) {
-            out.println("DIFFERENT " + problem);
+            out.println(text.say(Key.CHECK_DIFFERENT, Map.of("problem", problem)));
         }
         out.println(report.problems().isEmpty()
-                ? "all " + report.sessions() + " sessions replay to their recorded results"
-                : report.problems().size() + " of " + report.sessions() + " sessions differ from their recorded results");
+                ? text.say(Key.CHECK_ALL_OK, Map.of("sessions", report.sessions()))
+                : text.say(Key.CHECK_SOME_DIFFER, Map.of("count", report.problems().size(), "sessions", report.sessions())));
         return report.exitCode();
     }
 }

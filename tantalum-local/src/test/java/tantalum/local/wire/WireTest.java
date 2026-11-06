@@ -57,7 +57,16 @@ class WireTest {
                 new Context("x-1"),
                 new ContextResult("x-1", "# Rules\nUse tabs.\n"),
                 new ContextResult("x-2", null),
-                new Bye(Bye.Reason.REPLACED));
+                new Bye(Bye.Reason.REPLACED),
+                withCode());
+    }
+
+    /** console-i18n I12：新版连接程序在 shell 里加上原因的代码和参数，老服务器不认识的字段照常忽略。 */
+    private static Hello withCode() {
+        Hello hello = hello();
+        return new Hello(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(),
+                new Hello.Shell(false, "MXC could not start the sandbox: denied", "sandbox/start-failed", Map.of("detail", "denied")),
+                hello.network(), hello.git());
     }
 
     @ParameterizedTest
@@ -75,6 +84,8 @@ class WireTest {
         // 协议 2（B1）：是不是仓库不再按目录报，只报电脑上有没有 git
         assertEquals(new TreeSet<>(Set.of("path")), new TreeSet<>(hello.get("roots").get(0).propertyNames()));
         assertEquals(new TreeSet<>(Set.of("available", "reason")), new TreeSet<>(hello.get("shell").propertyNames()));
+        assertEquals(new TreeSet<>(Set.of("available", "reason", "code", "params")),
+                new TreeSet<>(PLAIN.readTree(Wire.encode(withCode())).get("shell").propertyNames()));
         assertEquals(Set.of("type", "user", "expiresAt"), keys(new Welcome("yi", Instant.EPOCH)));
         assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs"),
                 keys(new Call("c", "yi", "s", "grep", arguments(), 1)));

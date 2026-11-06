@@ -113,6 +113,7 @@ class LocalApiTest {
         assertTrue(link.get("write").asBoolean());
         assertFalse(link.get("shell").get("available").asBoolean());
         assertEquals("--allow-shell was not given", link.get("shell").get("reason").asString());
+        assertFalse(link.get("shell").has("code"), "an old connector sends only the reason; the console shows it as is");
         assertTrue(link.has("connectedAt") && link.has("expiresAt"), link.toString());
         assertTrue(status("bob").get("link").isNull(), "bob does not see alice's computer");
 

@@ -21,11 +21,11 @@ export function useTracePaging(store: TraceStore, session: string): TracePaging 
 
 /**
  * 打开轨迹页和每次重新连上都重新拉最新一页，和 journal 对齐；带 {@code run} 时一次取到包含这个运行的页。
- * 返回加载错误，没有错误时为 null。
+ * 返回加载错误，没有错误时为 null；显示时才变成文字。
  */
-export function useLatestTrace(store: TraceStore, session: string, run?: string): string | null {
+export function useLatestTrace(store: TraceStore, session: string, run?: string): unknown {
   const { connects } = useConnection();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   useEffect(() => {
     let cancelled = false;
     setError(null);
@@ -33,8 +33,8 @@ export function useLatestTrace(store: TraceStore, session: string, run?: string)
       .then((page) => {
         if (!cancelled) store.loadLatest(session, page);
       })
-      .catch((failure: Error) => {
-        if (!cancelled) setError(failure.message);
+      .catch((failure: unknown) => {
+        if (!cancelled) setError(failure);
       });
     return () => {
       cancelled = true;

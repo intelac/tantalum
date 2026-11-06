@@ -59,7 +59,7 @@ describe("Composer", () => {
   });
 
   it("keeps the text and reuses the requestId when the server rejects", async () => {
-    submit.mockRejectedValueOnce(new ApiError(429, "系统繁忙，请稍后重试（429）"));
+    submit.mockRejectedValueOnce(new ApiError(429, null, {}, ""));
     mount();
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     await userEvent.type(box, "再试{Enter}");
@@ -115,7 +115,7 @@ describe("Composer", () => {
   });
 
   it("does not report a choice as sent when the submission fails", async () => {
-    submit.mockRejectedValueOnce(new ApiError(400, "模型 x 现在不提供，请换一个"));
+    submit.mockRejectedValueOnce(new ApiError(400, "model/not-offered", { model: "x" }, "model x is not offered now"));
     const onSubmitted = vi.fn();
     render(<Composer session="s1" activeRun={null} modelName="qwen" cloud={false} choice={{ route: "claude", model: "x", effort: "low" }} onSubmitted={onSubmitted} />);
     await userEvent.type(screen.getByRole("textbox"), "问{Enter}");

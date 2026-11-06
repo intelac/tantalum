@@ -24,7 +24,9 @@ import tantalum.shell.auth.LoginThrottle;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.value.id.Principal;
+import tantalum.value.text.Language;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /** 登录、退出和当前用户。失败时不透露是用户名还是密码错了。 */
 @RestController
@@ -53,24 +55,24 @@ public class AuthController {
     ResponseEntity<String> login(@RequestBody String body, HttpServletRequest request, HttpServletResponse response)
             throws SQLException {
         if (body.length() > MAX_BODY) {
-            return json.error(400, "invalid_request");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid_request");
         }
         Optional<JsonNode> input = json.read(body);
         if (input.isEmpty()) {
-            return json.error(400, "invalid_request");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid_request");
         }
         String username = WebJson.text(input.get(), "username");
         String password = WebJson.text(input.get(), "password");
         if (username == null || password == null || username.isEmpty() || username.length() > MAX_USERNAME
                 || password.length() > MAX_PASSWORD) {
-            return json.error(400, "invalid_request");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid_request");
         }
         String source = request.getRemoteAddr();
         if (!throttle.tryBegin(username, source)) {
-            return json.error(429, "too_many_attempts");
+            return json.error(ErrorCode.AUTH_TOO_MANY_ATTEMPTS, "too_many_attempts");
         }
         if (!users.verify(username, password)) {
-            return json.error(401, "invalid_credentials");
+            return json.error(ErrorCode.AUTH_INVALID_CREDENTIALS, "invalid_credentials");
         }
         throttle.succeeded(username, source);
 
@@ -89,7 +91,7 @@ public class AuthController {
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))));
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
-        return json.json(200, Map.of("username", username));
+        return json.json(200, user(new Principal(username)));
     }
 
     @PostMapping("/api/auth/logout")
@@ -105,6 +107,14 @@ public class AuthController {
 
     @GetMapping("/api/auth/me")
     ResponseEntity<String> me() {
-        return json.json(200, Map.of("username", WebJson.currentUser().value()));
+        return json.json(200, user(WebJson.currentUser()));
+    }
+
+    /** {@code {"username", "language"}}：控制台登录后、刷新后立即用这个用户的语言，{@code null} 是跟随浏览器（console-i18n I3）。 */
+    private ObjectNode user(Principal user) {
+        ObjectNode view = json.object();
+        view.put("username", user.value());
+        view.put("language", engine.userSettings().language(user).map(Language::id).orElse(null));
+        return view;
     }
 }

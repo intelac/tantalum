@@ -9,6 +9,7 @@ import { useLatestTrace, useTracePaging, useTraceRecords } from "../trace/hooks"
 import type { TraceStore } from "../trace/TraceStore";
 import { buildStats, overallTotals } from "./metrics";
 import { StatsTable } from "./StatsTable";
+import { errorLine } from "../text/errors";
 
 const TOTALS_KEY = "tantalum.stats.totals";
 const DELTA_KEY = "tantalum.stats.delta";
@@ -47,7 +48,7 @@ export function StatsPage({ store, session }: Props) {
   if (error !== null && !paging.loaded) {
     return (
       <p role="alert" className="p-4 text-sm text-danger">
-        {error}
+        {errorLine(error)}
       </p>
     );
   }

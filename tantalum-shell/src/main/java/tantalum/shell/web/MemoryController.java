@@ -47,14 +47,14 @@ public class MemoryController {
     @GetMapping("/api/memory/{name}")
     ResponseEntity<String> get(@PathVariable String name) {
         Optional<MemoryEntry> entry = MemoryFormat.isValidName(name) ? store().read(name) : Optional.empty();
-        return entry.map(found -> json.json(200, full(found))).orElseGet(() -> json.error(404, "no such memory"));
+        return entry.map(found -> json.json(200, full(found))).orElseGet(() -> json.error(ErrorCode.MEMORY_NOT_FOUND, "no such memory"));
     }
 
     @PostMapping("/api/memory")
     ResponseEntity<String> create(@RequestBody String body) {
         Optional<JsonNode> parsed = json.read(body);
         if (parsed.isEmpty()) {
-            return json.error(400, "body is not valid JSON");
+            return json.error(ErrorCode.REQUEST_INVALID, "body is not valid JSON");
         }
         JsonNode input = parsed.get();
         MemoryStore.WriteResult result = store().write(WebJson.text(input, "name"), WebJson.text(input, "type"),
@@ -62,14 +62,14 @@ public class MemoryController {
         return switch (result) {
             case MemoryStore.WriteResult.Created created -> json.json(201, full(created.entry()));
             case MemoryStore.WriteResult.Updated updated -> json.json(200, full(updated.entry()));
-            case MemoryStore.WriteResult.Rejected rejected -> json.error(400, rejected.reason());
+            case MemoryStore.WriteResult.Rejected rejected -> json.error(ErrorCode.of(rejected.problem()), rejected.reason(), rejected.params());
         };
     }
 
     @DeleteMapping("/api/memory/{name}")
     ResponseEntity<String> delete(@PathVariable String name) {
         boolean deleted = MemoryFormat.isValidName(name) && store().delete(name);
-        return deleted ? ResponseEntity.noContent().build() : json.error(404, "no such memory");
+        return deleted ? ResponseEntity.noContent().build() : json.error(ErrorCode.MEMORY_NOT_FOUND, "no such memory");
     }
 
     private MemoryStore store() {

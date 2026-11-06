@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { LocalLink, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
 import { lookup, type Text, useText } from "../text";
+import { errorLine, sandboxText } from "../text/errors";
 import { clockTime } from "../text/format";
 import { Button } from "../ui/Button";
 import { CopyButton } from "../ui/CopyButton";
@@ -19,7 +20,8 @@ const NO_SHELL_FLAG = "--allow-shell was not given";
  * “连接这台电脑”生成令牌和一行命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
-  const text = useText().plugins.local;
+  const t = useText();
+  const text = t.plugins.local;
   const local = useLocal(open);
   const toggle = useToggleLocal();
   const status = local.data;
@@ -55,7 +57,7 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
       {CHILDREN.map((name) => {
         const [label, detail] = lookup(text.switches, name) ?? [name, ""];
         const on = status.switches[name];
-        const refused = on && status.link !== null ? refusal(text, name, status.link) : null;
+        const refused = on && status.link !== null ? refusal(t, name, status.link) : null;
         return (
           <Row
             key={name}
@@ -81,12 +83,18 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
 }
 
 /** 子开关开着、电脑也连着，但连接程序没允许这一类时的说明。读文件只要连上就能用。 */
-function refusal(text: Text["plugins"]["local"], name: LocalSwitch, link: LocalLink): string | null {
+function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | null {
+  const text = t.plugins.local;
   if (name === "file-edit" && !link.write) return text.notAllowedWrite;
   if (name === "git" && !link.git) return text.noGit;
   if (name === "shell" && !link.shell.available) {
-    const reason = link.shell.reason ?? "";
-    return reason === "" || reason === NO_SHELL_FLAG ? text.notAllowedShell : text.noSandbox(reason);
+    const { code, params, reason } = link.shell;
+    if (code === "shell/not-allowed") return text.sandbox["shell/not-allowed"];
+    const known = code == null ? undefined : sandboxText(t, code, params ?? {});
+    if (known !== undefined) return text.noSandbox(known);
+    // 老版本连接程序只送原因文字：照原样显示
+    const shown = reason ?? "";
+    return shown === "" || shown === NO_SHELL_FLAG ? text.sandbox["shell/not-allowed"] : text.noSandbox(shown);
   }
   return null;
 }
@@ -162,12 +170,12 @@ function Connect({ status }: { status: LocalStatus }) {
       </div>
       {issue.isError && (
         <p role="alert" className="text-xs text-danger">
-          {text.issueFailed(issue.error.message)}
+          {text.issueFailed(errorLine(issue.error))}
         </p>
       )}
       {revoke.isError && (
         <p role="alert" className="text-xs text-danger">
-          {text.revokeFailed(revoke.error.message)}
+          {text.revokeFailed(errorLine(revoke.error))}
         </p>
       )}
       {issued !== undefined && (

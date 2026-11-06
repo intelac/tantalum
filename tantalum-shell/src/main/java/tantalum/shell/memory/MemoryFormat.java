@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import tantalum.shell.memory.MemoryStore.Problem;
+import tantalum.shell.memory.MemoryStore.WriteResult.Rejected;
 
 /**
  * 记忆文件格式的纯函数：条目文件（frontmatter + Markdown 正文）和索引行。
@@ -29,28 +31,33 @@ public final class MemoryFormat {
 
     // ---- 校验 ----
 
-    /** 名称、类型、描述、正文的检查；返回空表示通过，否则是给模型或用户看的原因。 */
-    public static Optional<String> validate(String name, String type, String description, String content, int maxEntryBytes) {
+    /** 名称、类型、描述、正文的检查；返回空表示通过，否则是拒绝：英文原因给模型和日志，种类和参数给控制台（console-i18n I9）。 */
+    public static Optional<Rejected> validate(String name, String type, String description, String content, int maxEntryBytes) {
         if (!isValidName(name)) {
-            return Optional.of("name must match [a-z0-9-]{1,64}");
+            return rejected(Problem.INVALID_NAME, "name must match [a-z0-9-]{1,64}", Map.of());
         }
         if (MemoryType.parse(type).isEmpty()) {
-            return Optional.of("type must be one of " + MemoryType.keys());
+            return rejected(Problem.INVALID, "type must be one of " + MemoryType.keys(), Map.of("field", "type"));
         }
         if (description == null || description.isBlank()) {
-            return Optional.of("description must not be empty");
+            return rejected(Problem.INVALID, "description must not be empty", Map.of("field", "description"));
         }
         if (description.length() > MAX_DESCRIPTION_CHARS || description.contains("\n") || description.contains("\r")) {
-            return Optional.of("description must be a single line of at most " + MAX_DESCRIPTION_CHARS + " characters");
+            return rejected(Problem.INVALID, "description must be a single line of at most " + MAX_DESCRIPTION_CHARS + " characters",
+                    Map.of("field", "description"));
         }
         if (content == null) {
-            return Optional.of("content must not be null");
+            return rejected(Problem.INVALID, "content must not be null", Map.of("field", "content"));
         }
         int bytes = content.getBytes(StandardCharsets.UTF_8).length;
         if (bytes > maxEntryBytes) {
-            return Optional.of("content is " + bytes + " bytes; the limit is " + maxEntryBytes);
+            return rejected(Problem.TOO_LONG, "content is " + bytes + " bytes; the limit is " + maxEntryBytes, Map.of("limit", maxEntryBytes));
         }
         return Optional.empty();
+    }
+
+    private static Optional<Rejected> rejected(Problem problem, String reason, Map<String, Object> params) {
+        return Optional.of(new Rejected(problem, reason, params));
     }
 
     public static boolean isValidName(String name) {

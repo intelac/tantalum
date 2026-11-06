@@ -59,7 +59,7 @@ public class LocalController {
         Optional<JsonNode> parsed = json.read(body);
         String validity = parsed.map(node -> WebJson.text(node, "validity")).orElse(null);
         if (validity == null || !VALIDITIES.containsKey(validity)) {
-            return json.error(400, "validity must be one of 30m, 1h, 4h, 1d");
+            return json.error(ErrorCode.REQUEST_INVALID, "validity must be one of 30m, 1h, 4h, 1d");
         }
         LocalTokens.Issued issued = engine.localLinks().tokens().issue(WebJson.currentUser(), VALIDITIES.get(validity));
         Map<String, Object> response = new LinkedHashMap<>();

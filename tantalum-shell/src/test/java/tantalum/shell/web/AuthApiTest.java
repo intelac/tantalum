@@ -49,6 +49,21 @@ class AuthApiTest {
         return server.http.send(request.GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    /** console-i18n 需求 1.5：登录和 me 都带这个用户存的语言，换一台电脑登录也是它；没存过是 null。 */
+    @Test
+    void loginAndMeCarryTheUsersLanguage() throws Exception {
+        HttpResponse<String> first = server.attemptLogin("alice", "alice-password", null);
+        assertTrue(first.body().contains("\"language\":null"), first.body());
+        HttpResponse<String> saved = server.http.send(java.net.http.HttpRequest.newBuilder(
+                        java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/settings/language"))
+                .header("Cookie", cookieOf(first)).header("content-type", "application/json")
+                .PUT(java.net.http.HttpRequest.BodyPublishers.ofString("{\"language\":\"ja\"}")).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        HttpResponse<String> again = server.attemptLogin("alice", "alice-password", null);
+        assertTrue(again.body().contains("\"language\":\"ja\""), again.body());
+        assertTrue(getWith(cookieOf(again), "/api/auth/me").body().contains("\"language\":\"ja\""));
+    }
+
     @Test
     void loginSucceedsAndSetsAHardenedCookie() throws Exception {
         HttpResponse<String> login = server.attemptLogin("alice", "alice-password", null);
@@ -66,11 +81,13 @@ class AuthApiTest {
         assertEquals(401, wrong.statusCode());
         assertEquals(401, unknown.statusCode());
         assertEquals(wrong.body(), unknown.body());
+        assertTrue(wrong.body().contains("\"error\":\"invalid_credentials\",\"code\":\"auth/invalid-credentials\""), "the old value stays, a code is added");
     }
 
     @Test
     void apiRequiresLoginIncludingEvents() throws Exception {
         assertEquals(401, getWith(null, "/api/auth/me").statusCode());
+        assertTrue(getWith(null, "/api/auth/me").body().contains("\"code\":\"auth/not-authenticated\""));
         assertEquals(401, getWith(null, "/api/events").statusCode());
         assertEquals(401, getWith(null, "/api/sessions/s/runs").statusCode());
         assertEquals(401, server.post(null, "/api/sessions/s/submissions", "{}").statusCode());

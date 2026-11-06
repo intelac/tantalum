@@ -19,6 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.shell.cli.CliText;
+import tantalum.value.text.Language;
 
 /** 设计“{@code BrowserDriver}”：驱动解到数据目录，完整了才改名；旧版本删掉；只解一次。{@code browser install} 的参数。 */
 class BrowserDriverTest {
@@ -108,8 +110,8 @@ class BrowserDriverTest {
         for (String[] bad : List.of(new String[] {}, new String[] {"uninstall"}, new String[] {"install", "--force"},
                 new String[] {"install", "--with-deps", "x"})) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            assertEquals(2, BrowserCommand.run(bad, temp, new PrintStream(out, true, StandardCharsets.UTF_8)));
-            assertEquals(BrowserCommand.USAGE, out.toString(StandardCharsets.UTF_8).strip());
+            assertEquals(2, BrowserCommand.run(bad, temp, new PrintStream(out, true, StandardCharsets.UTF_8), CliText.of(Language.EN)));
+            assertEquals("usage: browser install [--with-deps] [--lang zh|en|ja]", out.toString(StandardCharsets.UTF_8).strip());
         }
         assertFalse(Files.exists(temp.resolve("browser")), "bad arguments unpack nothing");
     }

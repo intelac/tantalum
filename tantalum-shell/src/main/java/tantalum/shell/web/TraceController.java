@@ -41,10 +41,10 @@ public class TraceController {
                                 @RequestParam(required = false) String run) {
         Optional<SessionId> id = ApiController.sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         if (before != null && run != null) {
-            return json.error(400, "give before or run, not both");
+            return json.error(ErrorCode.REQUEST_INVALID, "give before or run, not both");
         }
         TraceQuery query = engine.queries().trace();
         Principal user = WebJson.currentUser();
@@ -52,21 +52,21 @@ public class TraceController {
         if (run != null) {
             RunId target = run.isBlank() ? null : new RunId(run);
             if (target == null || target.seq() < 0) {
-                return json.error(400, "invalid run id");
+                return json.error(ErrorCode.REQUEST_INVALID, "invalid run id");
             }
             if (!target.session().map(id.get()::equals).orElse(false)) {
-                return json.error(404, "no such run");
+                return json.error(ErrorCode.RUN_NOT_FOUND, "no such run");
             }
             page = query.through(user, id.get(), target);
         } else {
             Long cursor = position(before);
             if (before != null && cursor == null) {
-                return json.error(400, "invalid page position");
+                return json.error(ErrorCode.REQUEST_INVALID, "invalid page position");
             }
             page = query.page(user, id.get(), cursor);
         }
         if (page.isEmpty()) {
-            return json.error(404, run != null ? "no such run" : "no such session");
+            return run != null ? json.error(ErrorCode.RUN_NOT_FOUND, "no such run") : json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
         return json.json(200, page.get().toMap(engine.codec().mapper()));
     }
@@ -76,17 +76,17 @@ public class TraceController {
     ResponseEntity<String> call(@PathVariable String session, @PathVariable String command) {
         Optional<SessionId> id = ApiController.sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "invalid session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "invalid session id");
         }
         return engine.queries().trace().call(WebJson.currentUser(), id.get(), new CommandId(command))
                 .map(found -> json.json(200, found))
-                .orElseGet(() -> json.error(404, "no such call"));
+                .orElseGet(() -> json.error(ErrorCode.TRACE_NOT_FOUND, "no such call"));
     }
 
     @ExceptionHandler(SessionQueries.SessionUnreadable.class)
     ResponseEntity<String> unreadable(SessionQueries.SessionUnreadable failure) {
         LOG.error("session unreadable", failure);
-        return json.error(500, "session unreadable");
+        return json.error(ErrorCode.SESSION_UNREADABLE, "session unreadable");
     }
 
     /** 不是非负整数时为空。 */

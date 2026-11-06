@@ -15,11 +15,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.cli.CliText;
 
 /**
  * Playwright 驱动（web-tools 设计“{@code BrowserDriver}”）：第一次用时把 jar 里的驱动解压到 {@code <数据目录>/browser/driver-<版本>/}，
@@ -144,15 +146,15 @@ public final class BrowserDriver {
      * {@code browser install}：先 {@link #ensure}，再用驱动的命令行装 Chromium headless shell（约 200 MB）到 Playwright 的默认位置；
      * {@code withDeps} 时同时装 Linux 的系统库（要 root）。返回命令的退出码。
      */
-    public int install(boolean withDeps, PrintStream out) throws IOException, InterruptedException {
+    public int install(boolean withDeps, PrintStream out, CliText text) throws IOException, InterruptedException {
         Path dir = ensure();
         ProcessBuilder builder = new ProcessBuilder(installCommand(dir, withDeps)).inheritIO();
         builder.environment().remove("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD");
-        out.println("Installing Chromium headless shell for Playwright " + version + " ...");
+        out.println(text.say(CliText.Key.BROWSER_INSTALLING, Map.of("version", version)));
         long started = System.nanoTime();
         int code = builder.start().waitFor();
-        out.println(code == 0 ? "done in " + Duration.ofNanos(System.nanoTime() - started).toSeconds() + " s"
-                : "the installer exited with code " + code);
+        out.println(code == 0 ? text.say(CliText.Key.BROWSER_DONE, Map.of("seconds", Duration.ofNanos(System.nanoTime() - started).toSeconds()))
+                : text.say(CliText.Key.BROWSER_FAILED, Map.of("code", code)));
         return code;
     }
 

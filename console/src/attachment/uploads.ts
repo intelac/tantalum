@@ -14,8 +14,8 @@ export interface Pending {
   status: PendingStatus;
   /** 已发送的字节数。 */
   sent: number;
-  /** 上传失败的原因，原样显示。 */
-  error?: string;
+  /** 上传失败的原因；显示时才变成文字（text/errors.ts），切换语言也跟着换。 */
+  error?: unknown;
   /** 上传完成（或从对话里拖回来）后才有。 */
   ref?: AttachmentRef;
   /** 图片的本地预览地址（`URL.createObjectURL`）；拖回来的图片没有，直接用服务器地址。 */
@@ -165,7 +165,7 @@ export class UploadQueue {
       },
       (failure: unknown) => {
         if (!live()) return;
-        entry.pending = { ...entry.pending, status: "failed", error: failure instanceof Error ? failure.message : String(failure) };
+        entry.pending = { ...entry.pending, status: "failed", error: failure };
         this.finished(entry);
       },
     );

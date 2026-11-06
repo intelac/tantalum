@@ -22,6 +22,7 @@ import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.Workspace;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
+import tantalum.value.text.LocalText;
 
 /** A4：工具审批在对话页上问用户用的问题板。问题按用户和会话分开，回答只认自己的、还在的问题和它的选项。 */
 class OpenQuestionsTest {
@@ -29,9 +30,9 @@ class OpenQuestionsTest {
     private static final Principal ALICE = new Principal("alice");
     private static final Principal BOB = new Principal("bob");
     private static final SessionId S1 = new SessionId("s1");
-    private static final Question APPROVE = new Question("approval-c1", "允许调用 bash 吗？", "{\"command\":\"ls\"}",
-            List.of(new Question.Choice("once", "允许这一次"), new Question.Choice("session", "这个会话里一直允许"),
-                    new Question.Choice("deny", "拒绝")));
+    private static final Question APPROVE = new Question("approval-c1", LocalText.of("允许调用 bash 吗？"), LocalText.of("{\"command\":\"ls\"}"),
+            List.of(new Question.Choice("once", LocalText.of("允许这一次")), new Question.Choice("session", LocalText.of("这个会话里一直允许")),
+                    new Question.Choice("deny", LocalText.of("拒绝"))));
 
     @TempDir
     Path dir;
@@ -119,7 +120,7 @@ class OpenQuestionsTest {
 
     @Test
     void aQuestionNeedsAChoice() {
-        assertThrows(IllegalArgumentException.class, () -> new Question("q", "t", "", List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new Question("q", LocalText.of("t"), LocalText.empty(), List.of()));
     }
 
     /** 测试里可以往前拨的时钟。 */

@@ -3,9 +3,10 @@
 // 用户选的存在服务器上；浏览器里另存一份，只为刷新时第一帧就用对语言。
 // index.html 里有一段同样规则的内联脚本，测试拿同一组输入比对两边。
 
+import type { Language } from "../api/types";
 import { localArea, readStored, removeStored, writeStored } from "../ui/storage";
 
-export type Language = "zh" | "en" | "ja";
+export type { Language };
 
 /** 设置页的顺序。 */
 export const LANGUAGES: readonly Language[] = ["zh", "en", "ja"];

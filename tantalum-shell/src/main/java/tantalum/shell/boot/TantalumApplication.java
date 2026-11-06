@@ -15,6 +15,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -32,6 +34,7 @@ import tantalum.shell.auth.AdminBootstrap;
 import tantalum.shell.auth.UserCommand;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.browser.BrowserCommand;
+import tantalum.shell.cli.CliText;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.local.LocalEndpoint;
 import tantalum.shell.model.ClaudeClient;
@@ -59,18 +62,29 @@ public class TantalumApplication {
     private static final Duration LIST_TIMEOUT = Duration.ofSeconds(5);
 
     public static void main(String[] args) throws Exception {
-        if (args.length > 0 && args[0].equals("users")) {
-            String[] command = Arrays.copyOfRange(args, 1, args.length);
-            System.exit(UserCommand.run(command, dataDirFromEnvironment(),
-                    new BufferedReader(new InputStreamReader(System.in)), System.out));
-        }
-        if (args.length > 0 && args[0].equals("check")) {
-            System.exit(RecordCheckCommand.run(Arrays.copyOfRange(args, 1, args.length), System.out));
-        }
-        if (args.length > 0 && args[0].equals("browser")) {
-            System.exit(BrowserCommand.run(Arrays.copyOfRange(args, 1, args.length), dataDirFromEnvironment(), System.out));
+        if (args.length > 0 && SUBCOMMANDS.contains(args[0])) {
+            System.exit(subcommand(args));
         }
         SpringApplication.run(TantalumApplication.class, args);
+    }
+
+    private static final List<String> SUBCOMMANDS = List.of("users", "check", "browser");
+
+    /** 子命令先取出 {@code --lang}（console-i18n I13），再分派；服务器本身的日志不翻译，不看它。 */
+    private static int subcommand(String[] args) throws Exception {
+        Optional<CliText.Parsed> parsed = CliText.parse(Arrays.copyOfRange(args, 1, args.length), System.getenv(), Locale.getDefault());
+        if (parsed.isEmpty()) {
+            System.out.println(CliText.BAD_LANGUAGE);
+            return 2;
+        }
+        String[] command = parsed.get().args();
+        CliText text = parsed.get().text();
+        return switch (args[0]) {
+            case "users" -> UserCommand.run(command, dataDirFromEnvironment(), new BufferedReader(new InputStreamReader(System.in)),
+                    System.out, text);
+            case "check" -> RecordCheckCommand.run(command, System.out, text);
+            default -> BrowserCommand.run(command, dataDirFromEnvironment(), System.out, text);
+        };
     }
 
     /** 命令行工具不启动 Spring，所以和服务共用同一个环境变量。 */

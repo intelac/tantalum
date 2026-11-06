@@ -17,6 +17,7 @@ import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.text.Language;
 
 /** compaction-threshold T5、需求 2.3、2.4：每个用户一份，存在 users.db，四个值之外拒绝。 */
 class UserSettingsTest {
@@ -77,6 +78,32 @@ class UserSettingsTest {
         try (UserSettings reopened = UserSettings.open(data, CLOCK)) {
             assertEquals(100, reopened.compactionPercent(ALICE));
             assertEquals(100, reopened.compactionPercent(BOB));
+        }
+    }
+
+    /** console-i18n I3、需求 1.4、1.5：语言按用户存，空就删掉这一行；读不懂的当没选过（NFR Reliability）。 */
+    @Test
+    void theLanguageIsPerUserAndClearingDeletesIt() throws Exception {
+        try (UserSettings settings = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.empty(), settings.language(ALICE));
+            settings.setLanguage(ALICE, Optional.of(Language.JA));
+            settings.setLanguage(BOB, Optional.of(Language.EN));
+        }
+        try (UserSettings reopened = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.of(Language.JA), reopened.language(ALICE));
+            reopened.setLanguage(ALICE, Optional.empty());
+            assertEquals(Optional.empty(), reopened.language(ALICE));
+            assertEquals(Optional.of(Language.EN), reopened.language(BOB));
+        }
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + data.resolve(UserStore.FILE));
+             var statement = connection.createStatement();
+             var rows = statement.executeQuery("SELECT count(*) FROM user_settings WHERE user = 'alice' AND name = 'language'")) {
+            rows.next();
+            assertEquals(0, rows.getInt(1), "跟随浏览器就是没有这一行");
+            statement.executeUpdate("UPDATE user_settings SET value = 'xx' WHERE user = 'bob' AND name = 'language'");
+        }
+        try (UserSettings reopened = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.empty(), reopened.language(BOB));
         }
     }
 

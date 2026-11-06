@@ -4,6 +4,7 @@ import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { formatBytes } from "../text/format";
 import type { Pending } from "./uploads";
+import { errorLine } from "../text/errors";
 
 interface Props {
   items: readonly Pending[];
@@ -24,7 +25,7 @@ export function AttachmentTray({ items, onRemove, onRetry }: Props) {
             <button
               type="button"
               aria-label={t.attachment.retry(item.name)}
-              title={item.error ?? t.attachment.uploadFailed}
+              title={item.error === undefined ? t.attachment.uploadFailed : errorLine(item.error)}
               onClick={() => onRetry(item.key)}
               className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg bg-danger-soft/90 text-[11px] text-danger"
             >

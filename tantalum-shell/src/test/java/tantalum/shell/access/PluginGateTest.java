@@ -30,6 +30,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.state.KernelState;
+import tantalum.value.text.LocalText;
 
 /** core-tools C13、C16 和需求 8 第 3 条。 */
 class PluginGateTest {
@@ -64,7 +65,7 @@ class PluginGateTest {
     static final class CitationHook implements KernelHook {
         @Override public String name() { return "citationCheck"; }
         @Override public String plugin() { return "citations"; }
-        @Override public String description() { return "checks citations"; }
+        @Override public LocalText description() { return LocalText.of("checks citations"); }
         @Override public HookResult beforeRunEnd(KernelState state, HookContext context) { return Allow.PLAIN; }
     }
 
@@ -179,8 +180,8 @@ class PluginGateTest {
     @Test
     void pluginsAreGroupedByTheirPluginName() {
         assertEquals(List.of(
-                new PluginGate.Plugin("citations", "checks citations", List.of("beforeRunEnd", "afterToolExecution", "work:citation"), false, true),
-                new PluginGate.Plugin("quota", "", List.of("beforeModelCall"), true, true)), gate.plugins());
+                new PluginGate.Plugin("citations", LocalText.of("checks citations"), List.of("beforeRunEnd", "afterToolExecution", "work:citation"), false, true),
+                new PluginGate.Plugin("quota", LocalText.empty(), List.of("beforeModelCall"), true, true)), gate.plugins());
     }
 
     /** 策略插件默认关（2026-11-06 Yi 定，A2）：用户没设置过时不开，在插件页打开后才生效，只对他自己。 */

@@ -6,6 +6,7 @@ import { useOrder, usePaging } from "../store/hooks";
 import { groupBlocks } from "./blocks";
 import { EmptyState } from "./EmptyState";
 import { MessageList } from "./MessageList";
+import { errorLine } from "../text/errors";
 
 interface Props {
   store: ConversationStore;
@@ -17,7 +18,7 @@ export function ConversationPage({ store, session }: Props) {
   const order = useOrder(store, session);
   const paging = usePaging(store, session);
   const { connects } = useConnection();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   // 打开会话和每次重新连上都重新拉最近一页，和 journal 对齐。
   useEffect(() => {
@@ -27,8 +28,8 @@ export function ConversationPage({ store, session }: Props) {
       .then((page) => {
         if (!cancelled) store.loadLatest(session, page);
       })
-      .catch((failure: Error) => {
-        if (!cancelled) setError(failure.message);
+      .catch((failure: unknown) => {
+        if (!cancelled) setError(failure);
       });
     return () => {
       cancelled = true;
@@ -40,7 +41,7 @@ export function ConversationPage({ store, session }: Props) {
     try {
       store.loadOlder(session, from, await listMessages(session, from));
     } catch (failure) {
-      setError((failure as Error).message);
+      setError(failure);
     }
   }, [store, session]);
 
@@ -50,7 +51,7 @@ export function ConversationPage({ store, session }: Props) {
     <div className="min-h-0 flex-1">
       {error !== null && (
         <p role="alert" className="mx-auto mt-4 max-w-[var(--content-width)] px-4 text-sm text-danger">
-          {error}
+          {errorLine(error)}
         </p>
       )}
       {blocks.length === 0 ? <EmptyState /> : <MessageList store={store} blocks={blocks} hasMore={paging.hasMore} onLoadOlder={loadOlder} />}

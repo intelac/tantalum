@@ -46,12 +46,16 @@ import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.value.text.Language;
 
 /**
  * local-workspace 需求 8.1：同一个 JVM 里起真的服务器和真的连接程序，中间隔一个能剪断的 TCP 转发，模拟断网。
  * 服务器这边直接调 {@link LocalLinks#call}，绕过以后的开关和可用性判断，证明电脑这边自己会拒。
  */
 class LinkIT {
+
+    /** 已有的断言是中文的：固定用中文跑（console-i18n 任务 12）。 */
+    private static final Words ZH = new Words(Language.ZH);
 
     @TempDir
     static Path temp;
@@ -98,13 +102,13 @@ class LinkIT {
     private Main.Setup setup(String token, String... flags) throws Exception {
         List<String> args = new ArrayList<>(List.of("--server", "http://127.0.0.1:" + proxy.port(), "--allow", work.toString()));
         args.addAll(List.of(flags));
-        return Main.setup(Main.Options.parse(args.toArray(String[]::new)), Map.of("TANTALUM_TOKEN", token), question -> null);
+        return Main.setup(Main.Options.parse(args.toArray(String[]::new), ZH), Map.of("TANTALUM_TOKEN", token), question -> null, ZH);
     }
 
     private CompletableFuture<Integer> start(Main.Setup setup, List<LocalTool> tools) {
         Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(),
                 new Journal(out, Clock.systemDefaultZone()), tools);
-        Link link = new Link(setup.socket(), setup.token(), setup.hello(), calls, out, List.of(Duration.ofMillis(100)), Link.SILENCE);
+        Link link = new Link(setup.socket(), setup.token(), setup.hello(), calls, out, ZH, List.of(Duration.ofMillis(100)), Link.SILENCE);
         started.add(link);
         CompletableFuture<Integer> exit = new CompletableFuture<>();
         Thread.ofVirtual().start(() -> {

@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -110,7 +111,7 @@ public final class AttachmentStore {
             if (imageType.isPresent()) {
                 name = FileNames.clean(rawName, true);
                 if (Files.size(part) > limits.maxImageBytes()) {
-                    throw tooLarge("图片", limits.maxImageBytes());
+                    throw tooLarge(Reason.IMAGE_FILE_TOO_LARGE, "image", limits.maxImageBytes());
                 }
                 Normalized image = normalizer.normalize(part);
                 Files.write(part, image.bytes());
@@ -120,11 +121,11 @@ public final class AttachmentStore {
             } else {
                 name = FileNames.clean(rawName, false);
                 if (rawName != null && ImageNormalizer.claimsImage(name)) {
-                    throw new AttachmentRejected(Reason.INVALID_IMAGE, "文件名是图片，但内容不是 PNG、JPEG、WebP 或 GIF 图片");
+                    throw new AttachmentRejected(Reason.INVALID_IMAGE, "the file name says image, but the content is not a PNG, JPEG, WebP or GIF image");
                 }
                 long size = Files.size(part);
                 if (size > limits.maxFileBytes()) {
-                    throw tooLarge("文件", limits.maxFileBytes());
+                    throw tooLarge(Reason.TOO_LARGE, "file", limits.maxFileBytes());
                 }
                 Integer pages = pdfPages(part);
                 String type = pages != null ? "application/pdf" : displayType(mediaType);
@@ -277,7 +278,7 @@ public final class AttachmentStore {
             for (int read = body.read(buffer); read >= 0; read = body.read(buffer)) {
                 total += read;
                 if (total > limit) {
-                    throw tooLarge("文件", limit);
+                    throw tooLarge(Reason.TOO_LARGE, "file", limit);
                 }
                 out.write(buffer, 0, read);
             }
@@ -372,13 +373,12 @@ public final class AttachmentStore {
         return HEX.formatHex(sha256().digest(bytes));
     }
 
-    private static AttachmentRejected tooLarge(String what, long limit) {
-        long mib = 1024 * 1024;
-        String shown = limit % mib == 0 ? limit / mib + " MiB" : limit + " 字节";
-        return new AttachmentRejected(Reason.TOO_LARGE, what + "超过 " + shown + " 上限");
+    /** 上限的字节数作为参数，不预先格式化：控制台按看的人的语言写成“50 MB”。 */
+    private static AttachmentRejected tooLarge(Reason reason, String what, long limit) {
+        return new AttachmentRejected(reason, "the " + what + " is larger than the limit of " + limit + " bytes", Map.of("limit", limit));
     }
 
     private static AttachmentRejected quotaFull() {
-        return new AttachmentRejected(Reason.QUOTA_FULL, "附件配额已满");
+        return new AttachmentRejected(Reason.QUOTA_FULL, "the attachment quota is full");
     }
 }

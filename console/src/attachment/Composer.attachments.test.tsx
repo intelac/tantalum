@@ -127,14 +127,14 @@ describe("Composer attachments", () => {
   });
 
   it("a rejected submission keeps the text and the attachments", async () => {
-    submit.mockRejectedValue(new ApiError(400, "当前模型不支持图片"));
+    submit.mockRejectedValue(new ApiError(400, "attachment/model-no-images", {}, "the chosen model does not accept images"));
     mount();
     await userEvent.upload(screen.getByTestId("attachment-picker"), file("notes.txt"));
     await act(async () => {
       finishers[0]?.(ref("notes.txt"));
     });
     await userEvent.type(screen.getByRole("textbox"), "look{Enter}");
-    expect(screen.getByRole("alert").textContent).toBe("当前模型不支持图片");
+    expect(screen.getByRole("alert").textContent).toBe("当前选的模型不支持图片");
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("look");
     expect(screen.getByRole("list", { name: "待发送附件" }).textContent).toContain("notes.txt");
   });

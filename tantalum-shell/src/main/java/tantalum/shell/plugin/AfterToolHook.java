@@ -1,6 +1,7 @@
 package tantalum.shell.plugin;
 
 import tantalum.value.json.Json;
+import tantalum.value.text.LocalText;
 
 /** 处理器钩子 {@code afterToolExecution}：可以做 I/O，只能修改数据，不能改变流程。 */
 @FunctionalInterface
@@ -18,7 +19,8 @@ public interface AfterToolHook {
         return lambda > 0 ? name.substring(0, lambda) : name;
     }
 
-    default String description() {
-        return "";
+    /** 插件页上的一句说明，写法同 {@code KernelHook.description()}。 */
+    default LocalText description() {
+        return LocalText.empty();
     }
 }

@@ -81,7 +81,7 @@
 
 服务器记用户的语言，错误改成代码加参数，插件作者的文字改成 `LocalText`；沙箱原因改成代码；连接程序和命令行的终端文字放进三种语言的资源文件。控制台这一阶段只把新字段的类型接上，显示还是中文。阶段结束时 `tantalum-connect --lang ja` 能用。
 
-- [ ] 6. `tantalum.value.text`：`Language`、`LocalText`、`Bundle`
+- [x] 6. `tantalum.value.text`：`Language`、`LocalText`、`Bundle`
   - File: value/text/Language.java、LocalText.java、Bundle.java（新），valuetest/text/LanguageTest.java、LocalTextTest.java、BundleTest.java、BundleChecks.java（新，测试辅助，放进 test-jar 给别的模块用），shelltest/ArchitectureTest.java（改）
   - `Language`：`id`、`parse`、`fromTags`、`fromEnvironment(env, Locale)`（`LC_ALL` → `LC_MESSAGES` → `LANG`，去掉 `.`、`@` 后面，`C`/`POSIX`/空当没设，再看系统语言，最后 `EN`）；`LocalText`：`of(String)`、`of(en, zh, ja)`、`isEmpty`、`in(Language)`、JSON 两种写法；`Bundle.load(baseName, language)` 用 `getNoFallbackControl(FORMAT_PROPERTIES)`，`text(key, params)` 替换 `{name}`；`BundleChecks.assertComplete(baseName, Class<? extends Enum<?>>)`。ArchitectureTest：`java.util.ResourceBundle` 只在 `Bundle` 里用
   - 测试：`fromEnvironment` 表驱动；JVM 默认语言设成 `ja` 时 `Bundle.load(…, EN)` 拿到英文（回退被关掉的回归）；`{name}` 替换、缺参数留原样；`LocalText` 的 JSON；变异：在 shell 里临时用一次 `ResourceBundle.getBundle`，规则抓到后删掉
@@ -89,7 +89,7 @@
   - _Requirements: I10, I12, I14, 需求 5.2, 5.5_
   - _Prompt: Role: Java 开发 | Task: 写三个模块共用的语言、多语言文字和资源文件读取 | Restrictions: 不加依赖；不用 MessageFormat；Bundle 只读类路径，不做别的 I/O | Success: 测试和 ArchitectureTest 全过_
 
-- [ ] 7. 用户的语言：设置和登录接口
+- [x] 7. 用户的语言：设置和登录接口
   - File: shell/settings/UserSettings.java、shell/web/SettingsController.java、AuthController.java（改），shelltest/settings/UserSettingsTest.java、shelltest/web/SettingsApiTest.java、AuthApiTest.java（改），console/api/types.ts、console/api/client.ts（改）
   - `UserSettings.language`/`setLanguage`（空就删行，读不懂当没有，缓存同压缩点）；`GET /api/settings` 加 `language`；`PUT /api/settings/language`，只收 `zh`/`en`/`ja`/`null`；登录和 `me` 返回 `language`。控制台：`User.language`、`UserSettingsView.language`、`client.setLanguage`（这一步不接到界面）。和 `model-picker` 同改 `SettingsController` 时，各加各的字段
   - 测试：默认 `null`；存 `ja` 再取是 `ja`，另一个用户还是 `null`（1.5）；存 `null` 删掉（1.4）；`fr` 回 400（错误代码在任务 8 接上，这里先断言状态码）（1.9）；数据库里写一个 `xx`，读出来是 `null`（NFR Reliability）；登录和 `me` 带 `language`；未登录 401
@@ -97,7 +97,7 @@
   - _Requirements: I3, I18, 需求 1.3–1.5, 1.9_
   - _Prompt: Role: Java 后端开发 | Task: 按用户存语言并在设置、登录接口里返回 | Restrictions: 不改表结构；只收三个值 | Success: 测试全过_
 
-- [ ] 8. 错误代码
+- [x] 8. 错误代码
   - File: shell/web/ErrorCode.java（新）、shell/web/WebJson.java、ApiController.java、AttachmentController.java、QuestionController.java、PluginController.java、SettingsController.java、LocalController.java、MemoryController.java、TraceController.java、RunTraceController.java、AuthController.java（改），console/api/errorCodes.json（新），shelltest/web/ErrorCodeTest.java（新）、shelltest/web/*ApiTest.java（改）
   - `ErrorCode` 枚举照设计“错误代码”表（`wire()`、默认状态码）；`WebJson.error(code, diagnostic[, params])` 返回 `error`、`code`、`params`；删掉旧的 `error(status, message)`，所有调用改过来；只有写错的客户端会碰到的约 20 种统一 `request/invalid`，诊断照旧具体；现在是中文的消息（`ApiController.java:165,175,283,286`、`AttachmentController.java:59,64`、`QuestionController.java:57`）改成英文诊断；`AuthController` 的 `error` 值保留、加 `code`。`errorCodes.json` 先写 `errors` 一组（`sandbox` 一组任务 11 加）
   - 测试：`ErrorCodeTest`：`ErrorCode` 的 `wire()` 集合等于 `errorCodes.json`，代码都是 `领域/原因` 的小写连字符形式；每个代码至少有一个接口测试触发，断言状态码和 `code`，`error` 里没有中文字符；现有断言中文消息的测试改成断言代码（不是放宽：断言的是同一件事，换成不随语言变的形式）
@@ -105,7 +105,7 @@
   - _Requirements: I9, 需求 4.1, 4.4_
   - _Prompt: Role: Java 后端开发 | Task: 给所有接口错误加代码，消息改成英文诊断 | Restrictions: 错误的状态码不变；params 不放路径、令牌、用户内容 | Success: ErrorCodeTest 和全部接口测试通过_
 
-- [ ] 9. 附件、记忆、插件的带参数错误
+- [x] 9. 附件、记忆、插件的带参数错误
   - File: shell/attachment/AttachmentRejected.java、AttachmentStore.java、ImageNormalizer.java、AttachmentLimits.java、shell/memory/MemoryFormat.java、MemoryStore.java、CredentialGuard.java、shell/access/PluginGate.java、相关控制器（改），对应的测试（改）
   - `AttachmentRejected` 加 `code()`、`params()`，消息改英文诊断（上限字节数、像素、张数作为参数，不预先格式化成“50 MiB”）；`AttachmentLimits` 的张数超限同样；记忆的拒绝原因加代码和参数，`MemoryWriteTool` 给模型的仍是英文原因；`PluginGate` 的未知插件、必须开启的插件带名字
   - 测试：每种拒绝的 `code` 和 `params` 正确（超大文件带 `limit` 字节数、图片边长带 `width`/`height`/`limit`、张数带 `max`/`count`）；`ToolImages` 给模型的错误结果是英文；`MemoryWriteToolTest` 给模型的文字不变
@@ -113,7 +113,7 @@
   - _Requirements: I8, I9, 需求 4.1, 4.2_
   - _Prompt: Role: Java 后端开发 | Task: 让附件、记忆、插件的拒绝带代码和参数 | Restrictions: 给模型的文字不变；状态码不变 | Success: 测试全过_
 
-- [ ] 10. 插件作者的文字：`LocalText`
+- [x] 10. 插件作者的文字：`LocalText`
   - File: tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java、shell/plugin/AfterToolHook.java、WorkType.java、Question.java、shell/access/PluginGate.java、shell/web/PluginController.java、QuestionController.java、问题的推送（改），examples/ 下 8 个插件和 `ApprovalWork`（改），console/api/types.ts（改），相关测试（改）
   - `description()` 返回 `LocalText`，默认空；`Question` 的 `title`、`detail`、`Choice.label` 改 `LocalText`；`PluginGate` 合并说明时用 `isEmpty()`；接口里 `LocalText` 写成字符串或对象。例子插件写齐英、中、日（照术语表，日文用です・ます体）。控制台类型 `LocalText`，显示先只取 `zh`（任务 14 接 `pick`）
   - 测试：`/api/plugins` 里例子插件的说明是带三种语言的对象，`KernelHook` 默认的是空字符串；审批问题的推送和 `GET` 里标题是对象；`hook-coverage` 的钩子矩阵照过
@@ -121,7 +121,7 @@
   - _Requirements: I10, 需求 4.5_
   - _Prompt: Role: Java 后端开发 | Task: 把插件说明和问题改成多语言文字 | Restrictions: Stop.reason 不改；会话文件不改 | Success: 测试和钩子矩阵全过_
 
-- [ ] 11. 沙箱用不了的原因改成代码
+- [x] 11. 沙箱用不了的原因改成代码
   - File: local/sandbox/Unavailable.java（新）、local/sandbox/Mxc.java、Sandbox.java、Status.java、local/wire/Hello.java、connect/Main.java（`NO_SHELL_FLAG`）、shell/web/LocalController.java（改），console/api/errorCodes.json、console/api/types.ts（改），对应测试（改）
   - `Unavailable(Code, params)`，代码照设计的表；`Mxc.firstLine` 的两句改英文（拼进 `detail`）；给模型的那句（`Mxc.java:133`）由英文表生成；`Hello.Shell` 加可选的 `code`、`params`，`reason` 写英文诊断；`/api/local` 的 `link.shell` 转出 `code`、`params`；`errorCodes.json` 加 `sandbox` 一组
   - 测试：非 macOS 条件下 `sandbox/not-macos`；`--mxc` 指向不存在的文件 `sandbox/mxc-invalid` 带 `path`；没有 `--allow-shell` 时 `shell/not-allowed`；老格式的 `Hello`（没有 `code`）照样能连上、`/api/local` 里 `code` 为空；`ErrorCodeTest` 比对 `sandbox` 一组；给模型的那句是英文
@@ -129,7 +129,7 @@
   - _Requirements: I12, 需求 4.7, NFR Reliability_
   - _Prompt: Role: Java 开发 | Task: 把沙箱的原因从中文句子改成代码加参数 | Restrictions: 连接协议版本号不变，新字段可选；detail 原样保留 MXC 和系统的输出 | Success: 测试全过，MxcIT 在 Yi 的 Mac 上照过_
 
-- [ ] 12. 连接程序的终端文字和 `--lang`
+- [x] 12. 连接程序的终端文字和 `--lang`
   - File: connect/Words.java（新）、tantalum-connect/src/main/resources/tantalum/connect/Text.properties、Text_zh.properties、Text_ja.properties（新）、connect/Main.java、Link.java（改），connecttest/WordsTest.java（新）、connecttest/MainTest.java（改）
   - 键的枚举和 `say`；把 `HELP`、`Refused` 的消息、令牌提示、启动摘要、`Link` 的重连/连上/关闭消息、沙箱原因搬进资源文件，中文照现在的原文，英文和日文照术语表新写；`Main` 先解析 `--lang`，值不对用英文提示并以 1 退出；没给就 `Language.fromEnvironment`；`HELP` 加 `--lang`。不搬：`Journal` 的记录行、给模型的工具结果
   - 测试：`BundleChecks.assertComplete`；`--lang ja --help` 是日文、`LANG=ja_JP.UTF-8` 时同样（5.2）；`--lang fr` 退出码 1、英文提示（5.3）；没有令牌时的报错三种语言各一遍（5.1）；现有 `MainTest` 中文断言加 `--lang zh` 照过；变异：删掉 `Text_ja` 的一个键，确认失败后恢复
@@ -137,7 +137,7 @@
   - _Requirements: I12, I14, I15, 需求 5.1–5.3, 5.5_
   - _Prompt: Role: Java 开发 | Task: 连接程序的终端文字放进三种语言的资源文件，加 --lang | Restrictions: 令牌提示仍不回显；Journal 行格式不变；给模型的文字不变 | Success: 测试全过，Yi 的 Mac 上 tantalum-connect --lang ja --help 是日文_
 
-- [ ] 13. 命令行子命令的文字
+- [x] 13. 命令行子命令的文字
   - File: shell/boot/CliText.java（新）、tantalum-shell/src/main/resources/tantalum/shell/boot/Text.properties、Text_zh.properties、Text_ja.properties（新）、shell/boot/TantalumApplication.java、shell/auth/UserCommand.java、shell/boot/RecordCheckCommand.java、shell/store/RecordCheck.java、shell/browser/BrowserCommand.java、BrowserDriver.java（改），shelltest/boot/CliTextTest.java（新）、相关测试（改）
   - 同任务 12：`TantalumApplication.main` 分派前解析 `--lang`；`users`、`check`、`browser install` 的输出改用 `CliText`；`UserStore` 的异常由 `UserCommand` 按种类换成文字；启动失败和日志不动。`BrowserCommand` 先看 web-tools 那边的现状，只换输出文字
   - 测试：`BundleChecks.assertComplete`；`users add` 缺密码时 `--lang ja` 是日文（5.4）；`check` 的结果行三种语言各一遍；日志里没有中日文字符（5.6）
@@ -149,7 +149,7 @@
 
 控制台接上错误代码和 `LocalText`，写英文和日文两份字典，另一个 agent 审校，然后加设置页的“语言”一栏和登录、退出时的切换，最后写端到端。阶段结束时 8091 上能在三种语言之间切换。
 
-- [ ] 14. 控制台：错误代码、`LocalText`、沙箱原因
+- [x] 14. 控制台：错误代码、`LocalText`、沙箱原因
   - File: console/text/errors.ts、console/text/localText.ts（新）、console/api/client.ts、console/text/zh.ts、设计“`errors.ts`”里列的 12 处显示错误的组件、console/plugins/PluginsDialog.tsx、console/composer/QuestionCard.tsx、console/plugins/LocalWorkspaceCard.tsx（改），console/text/errors.test.ts、localText.test.ts（新）
   - `ApiError` 带 `status`、`code`、`params`、诊断；`errorText`：429/503、认得的代码（参数经 `format.ts`）、认不得的代码退回“请求失败（状态码）”加诊断小字；`zh.errors` 按 `errorCodes.json` 的 `errors` 写齐，`zh.plugins.local.sandbox` 按 `sandbox` 写齐（中文照现在服务器上的原文）；显示错误的地方都在渲染时调 `errorText`；插件说明和问题用 `pick`；`LocalWorkspaceCard.refusal` 按 `code`，没有时退回 `reason`
   - 测试：`errors.test.ts`（4.2、4.3）；`localText.test.ts`（4.5）；`zh.errors` 的键等于 `errorCodes.json`；上传超大图片时显示“单张图片不能超过 50 MB”（字节数格式化）；老格式 `link.shell` 只有 `reason` 时照原样显示

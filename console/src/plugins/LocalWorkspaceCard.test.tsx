@@ -123,6 +123,14 @@ describe("LocalWorkspaceCard", () => {
     expect(calls.some((call) => call.method === "PUT" && call.path === "/api/plugins/local/shell" && call.body === '{"enabled":false}')).toBe(true);
   });
 
+  // console-i18n I12：新版连接程序送代码和参数，按看的人的语言说；上面那条只有 reason 的是老版本连接程序，照原样显示。
+  it("says the sandbox reason from its code, keeping the MXC output as written", async () => {
+    const shell = { available: false, reason: "MXC could not start the sandbox: denied", code: "sandbox/start-failed", params: { detail: "denied" } };
+    fakeBackend({ switches: ALL_ON, link: link({ shell }) });
+    open();
+    expect(await within(await card()).findByText("这台电脑不支持隔离执行命令：MXC 不能启动沙箱：denied")).toBeTruthy();
+  });
+
   it("says when the link has expired", async () => {
     fakeBackend({ switches: ALL_ON, link: link({ expiresAt: new Date(Date.now() - 1000).toISOString() }) });
     open();

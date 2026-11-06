@@ -74,9 +74,10 @@ describe("UploadQueue", () => {
     const { upload, calls } = controlledUploader();
     const queue = new UploadQueue(upload, options);
     queue.add([file("a.txt")]);
-    calls[0].reject(new Error("附件配额已满"));
+    const quota = new Error("quota full");
+    calls[0].reject(quota);
     await queue.settled();
-    expect(queue.items()[0]).toMatchObject({ status: "failed", error: "附件配额已满" });
+    expect(queue.items()[0]).toMatchObject({ status: "failed", error: quota });
     expect(queue.refs()).toBeNull();
     queue.retry(queue.items()[0].key);
     expect(calls).toHaveLength(2);

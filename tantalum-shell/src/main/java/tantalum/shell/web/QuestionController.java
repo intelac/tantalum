@@ -35,7 +35,7 @@ public class QuestionController {
     ResponseEntity<String> open(@PathVariable String session) {
         Optional<SessionId> id = ApiController.sessionId(session);
         if (id.isEmpty()) {
-            return json.error(400, "bad session id");
+            return json.error(ErrorCode.REQUEST_INVALID, "bad session id");
         }
         List<Map<String, Object>> questions = engine.questions().open(WebJson.currentUser(), id.get()).stream()
                 .map(QuestionController::view).toList();
@@ -49,22 +49,22 @@ public class QuestionController {
         Optional<JsonNode> parsed = json.read(body);
         String choice = parsed.map(node -> WebJson.text(node, "choice")).orElse(null);
         if (id.isEmpty() || WebJson.blank(choice)) {
-            return json.error(400, "body must be {\"choice\": \"...\"}");
+            return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"choice\": \"...\"}");
         }
         OpenQuestions.Answer answer = engine.questions().answer(WebJson.currentUser(), id.get(), question, choice);
         return switch (answer) {
             case ACCEPTED -> json.json(200, Map.of("question", question, "choice", choice));
-            case GONE -> json.error(404, "这个问题已经不用回答了");
-            case NOT_A_CHOICE -> json.error(400, "no such choice: " + choice);
+            case GONE -> json.error(ErrorCode.QUESTION_GONE, "the question no longer needs an answer");
+            case NOT_A_CHOICE -> json.error(ErrorCode.REQUEST_INVALID, "no such choice: " + choice);
         };
     }
 
     private static Map<String, Object> view(Question question) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", question.id());
-        view.put("title", question.title());
-        view.put("detail", question.detail());
-        view.put("choices", question.choices().stream().map(choice -> Map.of("id", choice.id(), "label", choice.label())).toList());
+        view.put("title", question.title().wire());
+        view.put("detail", question.detail().wire());
+        view.put("choices", question.choices().stream().map(choice -> Map.of("id", choice.id(), "label", choice.label().wire())).toList());
         return view;
     }
 }

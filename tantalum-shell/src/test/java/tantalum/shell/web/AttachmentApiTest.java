@@ -71,8 +71,10 @@ class AttachmentApiTest {
         }
     }
 
-    private static String error(HttpResponse<String> response) throws Exception {
-        return JSON.readTree(response.body()).get("error").asString();
+    /** 错误的代码和参数（console-i18n I9）：{@code attachment/too-large {"limit":1000}}；诊断是英文，不在这里比。 */
+    private static String code(HttpResponse<String> response) throws Exception {
+        JsonNode body = JSON.readTree(response.body());
+        return body.path("code").asString() + (body.has("params") ? " " + body.get("params") : "");
     }
 
     @Test
@@ -143,11 +145,11 @@ class AttachmentApiTest {
 
         HttpResponse<String> tooLarge = upload("alice", "big.txt", new byte[1001]);
         assertEquals(413, tooLarge.statusCode());
-        assertTrue(error(tooLarge).contains("文件超过"), tooLarge.body());
+        assertEquals("attachment/too-large {\"limit\":1000}", code(tooLarge));
 
         HttpResponse<String> notImage = upload("alice", "cat.png", small);
         assertEquals(422, notImage.statusCode());
-        assertTrue(error(notImage).contains("不是 PNG"), notImage.body());
+        assertEquals("attachment/invalid-image", code(notImage));
 
         byte[] jpeg = sample("clean.jpg");
         HttpResponse<String> broken = upload("alice", "half.jpg", Arrays.copyOf(jpeg, jpeg.length / 2));
@@ -161,6 +163,6 @@ class AttachmentApiTest {
         assertEquals(200, upload("alice", "a.txt", "12345".getBytes(StandardCharsets.UTF_8)).statusCode());
         HttpResponse<String> full = upload("alice", "b.txt", "abcde".getBytes(StandardCharsets.UTF_8));
         assertEquals(413, full.statusCode());
-        assertEquals("附件配额已满", error(full));
+        assertEquals("attachment/quota-full", code(full));
     }
 }
