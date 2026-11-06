@@ -531,3 +531,11 @@ record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之�
 | `bash true` 往返（20 次，参考） | P50 28 ms，P95 32 ms | |
 
 `bash` 的往返主要花在 MXC 每次起沙箱（设计时实测跑 `/usr/bin/true` 一次 10–20 ms）和 bash 自己启动上。
+
+### 示例插件上部署、策略插件默认关、工具审批“一直允许”、Git 按路径找仓库（2026-11-06，BACKLOG“示例钩子插件上 8091”）
+
+- **加载**：示例插件单独一个 jar（`tantalum-examples-<版本>.jar`，只有示例插件和自动配置 `tantalum.examples.boot.ExamplePlugins`）。可执行 jar 不改：用它自带的 `PropertiesLauncher`（`java -cp exec.jar -Dloader.path=examples.jar org.springframework.boot.loader.launch.PropertiesLauncher`）加 `--tantalum.examples.enabled=true`。`-cp` 启动时清单里的 `Enable-Native-Access` 不生效，要自己加 `--enable-native-access=ALL-UNNAMED`。`ExamplesJarIT` 用打好的两个 jar 按这条命令起服务，核对插件页。
+- **默认关**：SDK 加 `KernelHook.defaultEnabled()`（用户没设置过时开不开）和 `failClosed()`（出错按拦截，默认同 `mandatory()`）。`plugin_settings` 表加 `enabled` 列，开和关都记（旧行是关，意思不变）。`mandatory()` 不变；管理员 `tantalum.hooks.required` 把插件设成必须开启，`PluginGate` 和 `HookChain` 都按它，名字不认识拒绝启动。
+- **引用核对**：不读文件。依据是会话里 `read_file` 读到的行（`offset` 起，按结果行数或 “Showing lines a-b”）和 `grep` 结果的 `路径:行号:`，判断全在钩子里；`CitationWork` 只把更正要求作为 `continueText` 交回模型（钩子不能追加消息）。改过 2 次还不对就 `Stop`。
+- **一直允许**：`WorkDone` 加可选的 `note`（对象），内核在 `workDone` 里先并进 `SessionState.notes[工作类型]` 再跑钩子；结果行加 `notes`，没变不写，旧行逐字节不变。问用户的是新的 `tantalum.shell.question.OpenQuestions`（SDK `Questions`，经 `ToolContext.questions()`），只在内存里：每次等 `answer-wait`，没回答就回“待定”、钩子再要一轮（问题 id 按调用不变，两次询问之间的回答也算），没人再问 5 秒后撤下。参照 DSH 和 pi：两边的工具审批都没有“一直允许”（DSH `user-approval/README.md:165` 只有一次性的；pi `permission-gate.ts:25` 每次都问），DSH 电脑操作插件按应用记“这个会话里允许”但存在内存（`cua/src/application-access.ts:154-182`）；我们按工具名记、记进 journal。
+- **Git**：连接协议 2：`hello.roots[].git` 换成 `hello.git`（电脑上 `git --version` 能跑通）。意思变了所以加版本：旧的连接程序被拒绝并提示下载新的，不会悄悄少了 Git 工具。每次调用按路径找仓库，仓库顶层必须在允许目录里这条不变。连接程序拒绝把家目录或 `/` 当允许目录（按真实路径比较）。
