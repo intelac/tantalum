@@ -33,6 +33,7 @@ import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
+import tantalum.shell.route.ChoiceCheck;
 import tantalum.shell.route.ModelInfo;
 import tantalum.shell.route.Route;
 import tantalum.shell.route.RouteSettings;
@@ -46,6 +47,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.state.Ended;
 import tantalum.value.state.RunState;
+import tantalum.value.state.SessionState;
 import tools.jackson.databind.JsonNode;
 
 /** 会话、提交、压缩、取消和配置。只校验和转发，不等待模型结果。回放视图在 {@link RunTraceController}，推送在 {@link EventStreamController}。 */
@@ -102,6 +104,10 @@ public class ApiController {
         response.put("start", page.start());
         response.put("hasMore", page.hasMore());
         response.put("followUps", found.get().state().followUps().size());
+        // 这个会话现在的选择（本 spec 之前的会话为 null）和有没有工具变化（不支持的 Claude 模型灰掉，M11）
+        SessionState state = found.get().state();
+        response.put("model", state == null ? null : ModelJson.view(state.model()));
+        response.put("toolChangesInHistory", state != null && state.toolChangesInHistory());
         return json.json(200, response);
     }
 
@@ -173,17 +179,42 @@ public class ApiController {
         if (WebJson.blank(content) && attachments.isEmpty()) {
             return json.error(400, "missing text");
         }
+        // 插话并进当前运行，不换模型（M8）：带了也不用
+        ModelChoice model;
+        try {
+            model = mode.equals("steer") ? null : ModelJson.read(request.get().get("model"));
+        } catch (IllegalArgumentException invalid) {
+            return json.error(400, invalid.getMessage());
+        }
         Optional<String> violation = properties.attachmentLimits().violation(attachments);
         if (violation.isPresent()) {
             return json.error(400, violation.get());
         }
-        boolean vision = engine.routes().describe(engine.routes().defaultChoice()).map(ModelInfo::vision).orElse(false);
-        if (!vision && attachments.stream().anyMatch(ImageRef.class::isInstance)) {
-            return json.error(400, "当前模型不支持图片");
+        boolean images = attachments.stream().anyMatch(ImageRef.class::isInstance);
+        Optional<String> problem = problem(user, id.get(), model, images);
+        if (problem.isPresent()) {
+            return json.error(400, problem.get());
         }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
-                content == null ? "" : content, attachments);
+                content == null ? "" : content, attachments, model);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), "submission rejected");
+    }
+
+    /**
+     * 提交里的选择能不能用（model-picker M14、M15、M11），不合格的不进 journal。没带选择时只查图片：按这次会用的模型
+     * （会话现在的 → 上次的选择 → 默认），和组装上下文时的取法一样。
+     */
+    private Optional<String> problem(Principal user, SessionId session, ModelChoice model, boolean images) {
+        ChoiceCheck check = new ChoiceCheck(engine.routes());
+        Optional<SessionState> state = engine.queries().session(user, session).map(SessionQueries.SessionView::state);
+        if (model != null) {
+            return check.problem(model, state.map(SessionState::toolChangesInHistory).orElse(false), images);
+        }
+        if (!images) {
+            return Optional.empty();
+        }
+        ModelChoice used = check.fallback(state.map(SessionState::model).orElse(null), engine.userSettings().modelChoice(user));
+        return engine.routes().describe(used).map(ModelInfo::vision).orElse(false) ? Optional.empty() : Optional.of("当前选的模型不支持图片");
     }
 
     /**

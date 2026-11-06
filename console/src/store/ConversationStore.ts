@@ -1,6 +1,6 @@
 // 按条目 ID 保存不可变对象，组件只订阅自己的条目：一个分片只重绘一个条目。不依赖 React。
 
-import type { Item, Messages } from "../api/types";
+import type { Item, Messages, ModelChoice } from "../api/types";
 
 export interface Live {
   text: string;
@@ -17,6 +17,14 @@ export interface Paging {
 }
 
 const NO_PAGING: Paging = Object.freeze({ start: 0, hasMore: false });
+
+/** 会话现在的模型选择和有没有工具变化（model-picker），来自会话视图，换了模型的条目推过来时跟着换。 */
+export interface SessionModel {
+  model: ModelChoice | null;
+  toolChangesInHistory: boolean;
+}
+
+const NO_MODEL: SessionModel = Object.freeze({ model: null, toolChangesInHistory: false });
 
 type Listener = () => void;
 
@@ -35,6 +43,8 @@ export class ConversationStore {
   private readonly order = new Map<string, readonly string[]>();
   /** 会话到翻页位置。 */
   private readonly paging = new Map<string, Paging>();
+  /** 会话到现在的模型选择。 */
+  private readonly models = new Map<string, SessionModel>();
   /** 运行到流式分片；结算后清掉。 */
   private readonly live = new Map<string, Live>();
   private readonly listeners = new Map<string, Set<Listener>>();
@@ -84,6 +94,21 @@ export class ConversationStore {
     return this.paging.get(session) ?? NO_PAGING;
   }
 
+  static modelKey(session: string): string {
+    return `model:${session}`;
+  }
+
+  getModel(session: string): SessionModel {
+    return this.models.get(session) ?? NO_MODEL;
+  }
+
+  private setModel(session: string, next: SessionModel): void {
+    const current = this.models.get(session);
+    if (current !== undefined && JSON.stringify(current) === JSON.stringify(next)) return;
+    this.models.set(session, next);
+    this.notify(ConversationStore.modelKey(session));
+  }
+
   /**
    * SSE `item`：同一 ID 覆盖，位置不变；新 ID 追加到会话末尾。
    * {@code seq} 是产生这条推送的事件序号；比已有版本旧的推送（重连补读时会有）不覆盖。
@@ -93,6 +118,10 @@ export class ConversationStore {
     if (!isNew && seq !== undefined && (this.versions.get(item.id) ?? -1) > seq) return;
     this.items.set(item.id, item);
     if (seq !== undefined) this.versions.set(item.id, seq);
+    if (item.kind === "modelChange") {
+      const model = { route: item.route, model: item.model, effort: item.effort ?? null };
+      this.setModel(item.session, { ...this.getModel(item.session), model });
+    }
     if (isNew) {
       this.order.set(item.session, [...this.getOrder(item.session), item.id]);
       this.notify(ConversationStore.orderKey(item.session));
@@ -150,6 +179,7 @@ export class ConversationStore {
     }
     for (const id of changed) this.notify(ConversationStore.itemKey(id));
     if (older.length === 0) this.setPaging(session, { start: page.start, hasMore: page.hasMore });
+    if (page.model !== undefined) this.setModel(session, { model: page.model, toolChangesInHistory: page.toolChangesInHistory ?? false });
   }
 
   /**

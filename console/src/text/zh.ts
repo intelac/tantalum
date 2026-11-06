@@ -1,5 +1,17 @@
 // 全部界面文案。组件里不写死中文，改文案只改这里。
 
+/** 思考档位的中文名（model-picker M5），和服务器 ChoiceCheck 里的一致。 */
+const LEVEL_NAMES: Record<string, string> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  xhigh: "很高",
+  max: "最高",
+  minimal: "极低",
+  off: "关",
+  on: "开",
+};
+
 export const zh = {
   app: {
     name: "Tantalum",
@@ -50,6 +62,7 @@ export const zh = {
     queued: "排队中",
     jumpToBottom: "回到底部",
     toolsChanged: "工具变化",
+    modelChanged: (label: string) => `换成 ${label}`,
     toolsAdded: (names: string) => `新增 ${names}`,
     toolsDisabled: (names: string) => `不再可用 ${names}（已在插件页关闭）`,
     toolsLocalOff: (names: string) => `不再可用 ${names}（本机工作区没有连上或没有允许）`,
@@ -105,6 +118,7 @@ export const zh = {
     restarted: "服务重启，这次运行已中断。可以接着提问",
     stopped: "被钩子停止",
     dropped: "命令丢失，运行失败",
+    switchCompaction: (label: string) => `换到 ${label} 之前压缩失败，请重试或换窗口更大的模型`,
   },
   composer: {
     placeholder: "给 Tantalum 发消息",
@@ -119,6 +133,17 @@ export const zh = {
     model: "模型",
     cloud: "云端",
     local: "本地",
+    // 输入框旁的模型和思考档位选择器（model-picker）。档位名照 DSH 的说法；不认识的档位照原样显示。
+    picker: {
+      label: "模型和思考档位",
+      search: "搜索模型",
+      levels: "思考档位",
+      nextTurn: "下一次提问生效",
+      unavailable: (reason: string) => (reason === "" ? "暂时连不上" : `暂时连不上（${reason}）`),
+      toolChangesUnsupported: "这个会话中途改过工具，这个模型不支持",
+      empty: "没有匹配的模型",
+      level: (level: string) => LEVEL_NAMES[level] ?? level,
+    },
   },
   // 附件。和 DSH `ui-conversation` zh 词典里 attachment.* / image.* / file.* 的说法一致；灯箱的缩放、汇总等是自定的。
   attachment: {
@@ -481,6 +506,12 @@ export const zh = {
     compactionUnknown: "不知道模型的窗口大小，不做自动压缩。",
     compactionFailed: "没能保存，已恢复原来的选择。",
     appearanceHint: "选择在刷新后保留。",
+    models: "能选的模型",
+    modelsHint: "在输入框旁选模型和思考档位，每个会话各自记着，从下一次提问生效。换模型后缓存会重新建立。",
+    routeUnavailable: (reason: string) => (reason === "" ? "暂时连不上" : `暂时连不上（${reason}）`),
+    imagesYes: "收图片",
+    imagesNo: "不收图片",
+    compactionFor: (name: string) => `压缩点按 ${name} 计算`,
   },
   connection: {
     offline: "连接已断开，正在重连…",

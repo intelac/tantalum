@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Item, RunStatusItem } from "../api/types";
-import { ConversationStore, type Live, type Paging } from "./ConversationStore";
+import { ConversationStore, type Live, type Paging, type SessionModel } from "./ConversationStore";
 
 export function useItem(store: ConversationStore, id: string): Item | undefined {
   const subscribe = useCallback((listener: () => void) => store.subscribe(ConversationStore.itemKey(id), listener), [store, id]);
@@ -68,6 +68,16 @@ export function useRunStatus(store: ConversationStore, run: string | null): RunS
 export function useRunVersion(store: ConversationStore, run: string | null): string {
   const status = useRunStatus(store, run);
   return status === undefined ? "" : `${status.phase}@${status.updatedAt}`;
+}
+
+/** 会话现在的模型选择和有没有工具变化（model-picker）。 */
+export function useSessionModel(store: ConversationStore, session: string): SessionModel {
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(ConversationStore.modelKey(session), listener),
+    [store, session],
+  );
+  const get = useCallback(() => store.getModel(session), [store, session]);
+  return useSyncExternalStore(subscribe, get, get);
 }
 
 /** 会话里最近的运行，以及它是否还没结束。 */

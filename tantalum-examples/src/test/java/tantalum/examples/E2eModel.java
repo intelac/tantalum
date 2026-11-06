@@ -46,6 +46,8 @@ import tantalum.value.model.ToolResultBlock;
 public final class E2eModel implements ModelClient {
 
     static final String MODEL = "scripted-e2e";
+    /** 本地路线上没有思考档位的那个模型名（model-picker 端到端），同一个剧本。 */
+    static final String PLAIN = "scripted-plain";
     static final Duration SLOW_STEP = Duration.ofMillis(250);
     static final int SLOW_STEPS = 40;
 

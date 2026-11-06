@@ -30,7 +30,8 @@ import tantalum.value.state.EndReason;
     @JsonSubTypes.Type(value = TranscriptItem.ToolStep.class, name = "tool"),
     @JsonSubTypes.Type(value = TranscriptItem.RunStatus.class, name = "run"),
     @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction"),
-    @JsonSubTypes.Type(value = TranscriptItem.ToolChange.class, name = "toolChange")
+    @JsonSubTypes.Type(value = TranscriptItem.ToolChange.class, name = "toolChange"),
+    @JsonSubTypes.Type(value = TranscriptItem.ModelChange.class, name = "modelChange")
 })
 public sealed interface TranscriptItem {
 
@@ -185,6 +186,23 @@ public sealed interface TranscriptItem {
      * （插件删了或没加载、MCP 服务器不在了）。{@code sources} 是这几个工具各自的来源（{@code ContextAssembled.toolSources}），
      * 画面据此写原因，如来源为 {@code local} 时写“本机工作区没有连上或没有允许”（local-workspace）。
      */
+    /**
+     * 这轮换了模型（model-picker M12，需求 8.4）：会话的选择和上一轮不同，路线、模型或档位哪个变了都算；本 spec 之前的会话第一次
+     * 记下选择不算。画面写“换成 {显示名} · {档位}”，显示名由画面按模型列表给出。{@code effort} 为 null 表示这个模型没有档位。
+     */
+    record ModelChange(String id, SessionId session, RunId run, Instant at, String route, String model, String effort)
+            implements TranscriptItem {
+
+        public ModelChange {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(route, "route");
+            Objects.requireNonNull(model, "model");
+        }
+    }
+
     record ToolChange(String id, SessionId session, RunId run, Instant at, List<String> added, List<String> disabled,
                       List<String> gone, Map<String, String> sources) implements TranscriptItem {
 

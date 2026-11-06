@@ -9,12 +9,14 @@ import java.sql.DriverManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
+import tantalum.value.model.ModelChoice;
 
 /** compaction-threshold T5、需求 2.3、2.4：每个用户一份，存在 users.db，四个值之外拒绝。 */
 class UserSettingsTest {
@@ -85,6 +87,39 @@ class UserSettingsTest {
             settings.setCompactionPercent(ALICE, 70);
             assertFalse(switches.enabled(ALICE, Kind.TOOL, "write_file"));
             assertEquals(70, settings.compactionPercent(ALICE));
+        }
+    }
+
+    /** model-picker M7、需求 4.1、4.4：上次的选择存在同一张表，重启后还在，每个用户一份；没有档位的模型存成没有 effort。 */
+    @Test
+    void theLastModelChoiceSurvivesARestartPerUser() throws Exception {
+        ModelChoice opus = new ModelChoice("claude", "claude-opus-5-5", "high");
+        try (UserSettings settings = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.empty(), settings.modelChoice(ALICE));
+            settings.setModelChoice(ALICE, opus);
+            settings.setModelChoice(BOB, new ModelChoice("local", "plain", null));
+        }
+        try (UserSettings reopened = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.of(opus), reopened.modelChoice(ALICE));
+            assertEquals(Optional.of(new ModelChoice("local", "plain", null)), reopened.modelChoice(BOB));
+            assertEquals(100, reopened.compactionPercent(ALICE), "the compaction point is a separate row");
+        }
+    }
+
+    /** 读不懂的当没有（同压缩点），新会话就用管理员的默认。 */
+    @Test
+    void anUnreadableModelChoiceIsNone() throws Exception {
+        try (UserSettings settings = UserSettings.open(data, CLOCK)) {
+            settings.compactionPercent(ALICE);
+        }
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + data.resolve(UserStore.FILE));
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("INSERT INTO user_settings VALUES ('alice', 'model_choice', '{oops', '2026-11-04')");
+            statement.executeUpdate("INSERT INTO user_settings VALUES ('bob', 'model_choice', '{\"route\":\"claude\"}', '2026-11-04')");
+        }
+        try (UserSettings reopened = UserSettings.open(data, CLOCK)) {
+            assertEquals(Optional.empty(), reopened.modelChoice(ALICE));
+            assertEquals(Optional.empty(), reopened.modelChoice(BOB));
         }
     }
 }

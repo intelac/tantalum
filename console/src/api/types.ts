@@ -98,6 +98,8 @@ export type EndReason = "COMPLETED" | "FAILED" | "CANCELLED" | "STOPPED";
 
 /** 服务重启时没结束的运行以 CANCELLED 收尾，detail 是这个固定值（内核 CancelSteps.INTERRUPTED_BY_RESTART）。 */
 export const INTERRUPTED_BY_RESTART = "interrupted by restart";
+/** 换到窗口更小的模型之前压缩失败时运行的 detail，后面接 `路线/模型`（内核 RunEnd.SWITCH_COMPACTION_FAILED，model-picker M10）。 */
+export const SWITCH_COMPACTION_FAILED = "compaction failed before switching to ";
 export type FailureReason =
   | "CONTEXT_OVERFLOW"
   | "REFUSAL"
@@ -184,7 +186,16 @@ export interface ToolChangeItem extends ItemBase {
   sources?: Record<string, string>;
 }
 
-export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem;
+/** 这轮换了模型（model-picker 需求 8.4）：画面写“换成 {显示名} · {档位}”。没有档位的模型没有 effort。 */
+export interface ModelChangeItem extends ItemBase {
+  kind: "modelChange";
+  run: string;
+  route: string;
+  model: string;
+  effort?: string | null;
+}
+
+export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem | ModelChangeItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */
@@ -194,6 +205,10 @@ export interface Messages {
   start: number;
   /** 前面还有更早的条目。 */
   hasMore: boolean;
+  /** 这个会话现在的模型选择；本 spec 之前的会话、旧服务为 null 或没有。 */
+  model?: ModelChoice | null;
+  /** 会话中途改过工具：不支持的 Claude 模型在选择器里灰掉（M11）。 */
+  toolChangesInHistory?: boolean;
 }
 
 export interface RunView {
@@ -581,10 +596,53 @@ export interface CompactionPoint {
   tokens: number;
 }
 
-/** 当前登录用户自己的设置。窗口未知时 `points` 为空。 */
+/** 当前登录用户自己的设置。窗口未知时 `points` 为空。`model` 是上次在选择器里选的，现在不可用时为 null。 */
 export interface UserSettingsView {
   compaction: {
     percent: number;
     points: CompactionPoint[];
   };
+  model?: ModelChoice | null;
+}
+
+// ---- 模型路线（`/api/models`，model-picker）----
+
+/** 一次提问用哪个模型：路线、模型、思考档位；没有档位的模型 effort 为 null。 */
+export interface ModelChoice {
+  route: string;
+  model: string;
+  effort: string | null;
+}
+
+/** 一个模型能做什么；`points` 是这个用户的四个压缩点在这个模型上的 token 数。 */
+export interface ModelInfo {
+  id: string;
+  name: string;
+  window: number;
+  windowSource: "model" | "config";
+  maxTokens: number;
+  vision: boolean;
+  levels: string[];
+  defaultLevel: string | null;
+  toolChanges: boolean;
+  points: CompactionPoint[];
+}
+
+/** 一条路线和它最近一次读到的列表；`unavailable` 是一次也没读到，`error` 只写类别（连不上、401、超时）。 */
+export interface RouteView {
+  name: string;
+  displayName: string;
+  kind: "claude" | "openai";
+  cloud: boolean;
+  status: "ok" | "stale" | "unavailable";
+  error: string | null;
+  models: ModelInfo[];
+}
+
+export interface ModelsResponse {
+  routes: RouteView[];
+  default: ModelChoice;
+  mine: ModelChoice | null;
+  /** 这个用户选的压缩点百分比。 */
+  percent: number;
 }

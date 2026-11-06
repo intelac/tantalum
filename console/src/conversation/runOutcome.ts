@@ -1,6 +1,6 @@
 // 运行怎么结束的，界面上的两处说法都从这里来：过程区标题和结束说明行。
 
-import { INTERRUPTED_BY_RESTART, type RunStatusItem } from "../api/types";
+import { INTERRUPTED_BY_RESTART, type RunStatusItem, SWITCH_COMPACTION_FAILED } from "../api/types";
 import { formatDuration } from "../text/time";
 import { zh } from "../text/zh";
 
@@ -32,6 +32,7 @@ export function runOutcome(status: RunStatusItem | undefined): RunOutcome {
 }
 
 function failure(status: RunStatusItem): string {
+  if (status.detail?.startsWith(SWITCH_COMPACTION_FAILED)) return zh.failure.switchCompaction(status.detail.slice(SWITCH_COMPACTION_FAILED.length));
   if (status.failure !== undefined) return zh.failure[status.failure] ?? zh.failure.UNKNOWN;
   if (status.detail?.includes("output ring full")) return zh.failure.dropped;
   return zh.failure.generic;

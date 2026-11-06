@@ -24,7 +24,7 @@ test.describe("自动压缩点", () => {
   test("模型页显示窗口来源和四个选项；选了刷新后还在，另一个账号不受影响", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     const dialog = await openModelPane(page);
-    await expect(dialog.getByText("来自配置（没能从模型读到）")).toBeVisible();
+    await expect(dialog.getByText("来自配置（没能从模型读到）").first()).toBeVisible();
     const radios = dialog.getByRole("radiogroup", { name: "自动压缩" }).getByRole("radio");
     await expect(radios).toHaveCount(4);
     await expect(dialog.getByRole("radio", { name: "用满" })).toHaveAttribute("aria-checked", "true");

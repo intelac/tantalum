@@ -15,13 +15,15 @@ interface Props {
   /** 运行状态变化时变，触发重新读取用量。 */
   version: string;
   contextWindow: number | undefined;
+  /** 这个用户的压缩点在当前会话的模型上是多少 token（model-picker）；不知道时按设置接口的（默认模型）。 */
+  point?: number;
 }
 
 /**
  * 输入栏下方：轮数、token、上下文占比，右侧是手动压缩按钮。数据来自 journal 回放的模型调用，运行结束后才有最后一次的用量。
  * 到用户选的自动压缩点的 90% 时变色提示（还没读到设置时按窗口的 80%）。窄屏只留占比。
  */
-export function StatusBar({ session, run, running, version, contextWindow }: Props) {
+export function StatusBar({ session, run, running, version, contextWindow, point }: Props) {
   const turns = useQuery({
     queryKey: ["turns", run, version],
     enabled: run !== null,
@@ -33,9 +35,9 @@ export function StatusBar({ session, run, running, version, contextWindow }: Pro
     },
   });
   const compact = useMutation({ mutationFn: () => compactSession(session) });
-  const settings = useSettings(contextWindow !== undefined);
+  const settings = useSettings(contextWindow !== undefined && point === undefined);
 
-  const parts = statusParts(turns.data?.count ?? 0, turns.data?.usage, contextWindow, compactionPoint(settings.data));
+  const parts = statusParts(turns.data?.count ?? 0, turns.data?.usage, contextWindow, point ?? compactionPoint(settings.data));
   const segments = [
     { key: "turns", text: parts.turns, narrow: false },
     { key: "tokens", text: parts.tokens, narrow: false },

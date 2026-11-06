@@ -120,35 +120,35 @@
 
 提交带选择、存“上次的选择”、模型列表接口；控制台的选择器、对话页一行、设置页和状态栏。阶段结束时 8091 上能在画面上选模型和档位。
 
-- [ ] 12. 接口
+- [x] 12. 接口
   - File: shell/loop/Intake.java、shell/web/ApiController.java、SettingsController.java、ModelController.java（新）、shell/settings/UserSettings.java、会话视图的 Controller 和 `TranscriptPass`（改），shelltest/web/ModelApiTest.java（新）、SubmitApiTest、SettingsApiTest（改）、shelltest/settings/UserSettingsTest.java（改）
   - 提交读 `model`，`ChoiceCheck.problem` 不为空回 400，图片检查按选的模型；`Intake.submit` 带选择；`UserSettings.modelChoice`；`GET /api/settings` 加 `model`、`PUT /api/settings/model`；`GET /api/models` 照设计“数据模型”；会话视图加 `model`、`toolChangesInHistory`，消息列表加 `modelChange` 项；`/api/config` 的模型字段改成默认选择的
   - 测试：设计 Error Handling 表每一种 400（需求 5.6、5.7）；`/api/models` 里没有 `base-url`、密钥变量名（1.6）；两个用户的 `model_choice` 互不影响（4.4）；上次的选择不可用时 `mine` 为空（4.3）；`steer` 带了 `model` 不进 journal；未登录 401
   - _Requirements: M6, M7, M11, M14, M15, 需求 1.6, 4.1–4.4, 5.6, 5.7_
   - _Prompt: Role: Java 后端开发 | Task: 提供选模型的接口并检查提交里的选择 | Restrictions: 不返回地址和密钥变量名；不合格的提交不进 journal | Success: 接口测试全过_
 
-- [ ] 13. 控制台的数据层
+- [x] 13. 控制台的数据层
   - File: console/api/types.ts、console/api/client.ts、console/composer/useModels.ts（新）、console/composer/drafts.ts（改），console/composer/useModels.test.ts（新）
   - 类型照设计；`getModels`、`setModelChoice`；提交函数带 `model`；`useModels`（`staleTime` 1 分钟）；`useSessionChoice(session)`：没发出的选择（存在 drafts 里）→ 会话的当前选择 → `mine` → `default`，选了就存成上次的选择，提交成功后清掉没发出的；换模型时档位的取法照 M5
   - 测试：四级取值顺序；换到没有当前档位的模型取默认档位、有就留着（需求 3.4）；刷新后没发出的选择还在；提交成功后清掉
   - _Requirements: M5, M6, M7, 需求 3.4, 4.1, 4.2_
   - _Prompt: Role: 前端开发 | Task: 做选模型的数据层 | Restrictions: 不轮询 /api/models | Success: vitest 全过_
 
-- [ ] 14. `ModelPicker`
+- [x] 14. `ModelPicker`
   - File: console/composer/ModelPicker.tsx（新）、console/composer/Composer.tsx、ComposerDock.tsx、console/text/zh.ts（改），console/composer/ModelPicker.test.tsx（新）、Composer.test.tsx（改）
   - 照设计“控制台 → `ModelPicker`”：按钮“模型 · 档位”；两栏，模型按路线分组、多于 8 个有搜索；没有档位不显示右栏；“暂时连不上”的一组灰色带原因；`toolChangesInHistory` 时 `toolChanges` 为假的模型灰掉带原因；选择与会话已生效的不同时写“下一次提问生效”；运行中能改；全部文字在 `zh.composer.picker`
   - 测试：上面每一条各一例（需求 3.1–3.7）；200 个模型时打开到能点 ≤ 100 ms（NFR，vitest 里用 `performance.now` 粗测）
   - _Requirements: M2, M5, M8, M11, M18, 需求 3.1–3.7_
   - _Prompt: Role: 前端开发 | Task: 做输入框旁的模型和档位选择器 | Restrictions: 照现有输入框样式；文字放 zh.ts | Success: vitest 全过_
 
-- [ ] 15. 对话页、状态栏和设置页
+- [x] 15. 对话页、状态栏和设置页
   - File: console/conversation/ModelChangeNotice.tsx（新）、MessageList.tsx、console/composer/StatusBar.tsx、console/settings/ModelPane.tsx、CompactionPicker.tsx、console/text/zh.ts（改），console/conversation/ModelChangeNotice.test.tsx（新）、console/settings/settings.test.tsx、compaction.test.tsx（改）
   - 对话页 `modelChange` 项显示“换成 {显示名} · {档位}”；状态栏的窗口和压缩点按当前会话选择的模型；设置页按路线列出模型（名字、窗口和来源、图片），压缩点 token 数按当前会话的模型的 `points`
   - 测试：换了模型的那一轮上面有一行（需求 8.4）；只换档位时也显示新档位；状态栏占比按 qwen 的 131072 算（8.3）；设置页列出两条路线、来源写对（8.1）；压缩点的 token 数随模型变（8.2）
   - _Requirements: M4, M10, M12, 需求 8.1–8.4_
   - _Prompt: Role: 前端开发 | Task: 在对话页、状态栏和设置页显示模型选择 | Restrictions: 不改压缩点选项本身 | Success: vitest 全过_
 
-- [ ] 16. 控制台端到端
+- [x] 16. 控制台端到端
   - File: e2e/model-picker.spec.ts（新）、examples/E2eServer.java（改）
   - `E2eServer` 配两条脚本化路线（一条 Claude 协议，含一个不在 `TOOL_CHANGE_MODELS` 里的模型名；一条 OpenAI 协议，`thinking=chat-template`）。用例：照设计“End-to-End Testing → Playwright”的五条
   - _Requirements: 需求 3, 4, 8.4_

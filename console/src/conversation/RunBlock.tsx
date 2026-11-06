@@ -2,6 +2,7 @@ import { ProcessGroup } from "../process/ProcessGroup";
 import type { ConversationStore } from "../store/ConversationStore";
 import { AssistantText } from "./AssistantText";
 import { LiveReply } from "./LiveReply";
+import { ModelChangeNotice } from "./ModelChangeNotice";
 import { RunStatusRow } from "./RunStatusRow";
 import { ToolChangeNotice } from "./ToolChangeNotice";
 
@@ -12,7 +13,7 @@ interface Props {
   process: readonly string[];
   /** 结尾的回复文本。 */
   reply: readonly string[];
-  /** 这轮开始时的工具变化。 */
+  /** 这轮开始时换了模型、工具变了。 */
   notices?: readonly string[];
 }
 
@@ -20,9 +21,13 @@ interface Props {
 export function RunBlock({ store, run, process, reply, notices = [] }: Props) {
   return (
     <div className="py-1">
-      {notices.map((id) => (
-        <ToolChangeNotice key={id} store={store} id={id} />
-      ))}
+      {notices.map((id) =>
+        store.getItem(id)?.kind === "modelChange" ? (
+          <ModelChangeNotice key={id} store={store} id={id} />
+        ) : (
+          <ToolChangeNotice key={id} store={store} id={id} />
+        ),
+      )}
       <ProcessGroup store={store} run={run} ids={process} />
       {reply.map((id, index) => (
         <AssistantText key={id} store={store} id={id} last={index === reply.length - 1} />

@@ -99,4 +99,27 @@ describe("Composer", () => {
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("给 a 的草稿");
     expect(sessionStorage.getItem("tantalum.draft.b")).toBe("给 b 的");
   });
+
+  /** model-picker M6、M8：选择随开始新运行的提交发出（提问和排队都是），发出后告诉选择器。 */
+  it("sends the chosen model with a prompt and a follow-up", async () => {
+    const choice = { route: "local", model: "qwen3.8", effort: "on" };
+    const onSubmitted = vi.fn();
+    const view = render(<Composer session="s1" activeRun={null} modelName="qwen" cloud={false} choice={choice} onSubmitted={onSubmitted} />);
+    await userEvent.type(screen.getByRole("textbox"), "问{Enter}");
+    expect(submit.mock.calls[0]?.[5]).toEqual(choice);
+    expect(onSubmitted).toHaveBeenCalledWith(choice);
+    view.rerender(<Composer session="s1" activeRun="run-1" modelName="qwen" cloud={false} choice={choice} onSubmitted={onSubmitted} />);
+    await userEvent.type(screen.getByRole("textbox"), "再问{Enter}");
+    expect(submit.mock.calls[1]?.[1]).toBe("follow-up");
+    expect(submit.mock.calls[1]?.[5]).toEqual(choice);
+  });
+
+  it("does not report a choice as sent when the submission fails", async () => {
+    submit.mockRejectedValueOnce(new ApiError(400, "模型 x 现在不提供，请换一个"));
+    const onSubmitted = vi.fn();
+    render(<Composer session="s1" activeRun={null} modelName="qwen" cloud={false} choice={{ route: "claude", model: "x", effort: "low" }} onSubmitted={onSubmitted} />);
+    await userEvent.type(screen.getByRole("textbox"), "问{Enter}");
+    expect((await screen.findByRole("alert")).textContent).toBe("模型 x 现在不提供，请换一个");
+    expect(onSubmitted).not.toHaveBeenCalled();
+  });
 });
