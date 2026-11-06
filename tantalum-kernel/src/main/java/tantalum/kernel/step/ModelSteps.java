@@ -20,6 +20,7 @@ import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
@@ -71,7 +72,7 @@ public final class ModelSteps {
                     }
                     run = out.run(run.ref());
                 }
-                Prompt prompt = PromptProjection.project(out.session(run.ref()), allow.patch());
+                Prompt prompt = PromptProjection.project(out.session(run.ref()), allow.patch()).withModel(model(out, run));
                 CommandId id = emitCall(out, run.ref(), prompt);
                 out.await(run, AWAITING_MODEL, Set.of(id));
             }
@@ -92,7 +93,7 @@ public final class ModelSteps {
             out.report(List.of(new ImagesOmitted(run, applied.newlyOmitted())));
         }
         CommandId id = out.nextCommandId();
-        out.emit(new CallModel(id, run, new Prompt(prompt.system(), prompt.tools(), applied.messages(), prompt.output()),
+        out.emit(new CallModel(id, run, new Prompt(prompt.system(), prompt.tools(), applied.messages(), prompt.output(), prompt.model()),
                 applied.omitted()));
         return id;
     }
@@ -102,6 +103,10 @@ public final class ModelSteps {
         Outcome out = new Outcome(context);
         // 收到回复就越过了模型调用前这个等待点，工作轮数清零。
         RunState run = context.run().withRetries(0).withOverflowRecovered(false).withWorkRounds(0);
+        // 新模型回复了：压缩前的摘要不再需要换掉的那个模型（model-picker M10）
+        if (run.modelBefore() != null) {
+            run = run.withModel(run.model(), null);
+        }
         out.put(run);
         out.append(run.ref(), new Message(Role.ASSISTANT, event.content(), false));
         out.addUsage(run.ref(), event.usage());
@@ -141,6 +146,11 @@ public final class ModelSteps {
             RunEnd.finish(out, run, EndReason.CANCELLED, "model call interrupted");
         }
         return out.decision();
+    }
+
+    /** 这次调用用的模型：运行定下的；手动压缩这种不组装上下文的运行用会话现在的（M13）。都没有时为 null，用默认路线。 */
+    static ModelChoice model(Outcome out, RunState run) {
+        return run.model() != null ? run.model() : out.session(run.ref()).model();
     }
 
     /** 规则 1 的锚点：有实测用量就记下 prompt 加输出和此刻的消息数，没有就清空，之后全部估算。 */

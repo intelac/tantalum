@@ -29,8 +29,9 @@ import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
-import tantalum.shell.model.ContextWindow;
-import tantalum.shell.model.WindowSource;
+import tantalum.shell.route.RouteClients;
+import tantalum.shell.route.RouteSettings;
+import tantalum.shell.route.Routes;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.settings.CompactionPolicy;
@@ -46,6 +47,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.json.Json;
 import tantalum.value.model.Prompt;
 import tantalum.value.state.CompactionSettings;
@@ -113,7 +115,7 @@ class ContextHandlerTest {
     }
 
     private ContextHandler handler(Workspaces workspaces, KnowledgeBase knowledge) {
-        return new ContextHandler(local, "Base prompt.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(workspaces), knowledge, "", noCompaction());
+        return new ContextHandler(local, "Base prompt.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(workspaces), knowledge, "", noCompaction(), NO_WINDOW, NOBODY);
     }
 
     private ContextHandler shared() {
@@ -124,18 +126,34 @@ class ContextHandlerTest {
         return assertInstanceOf(ContextAssembled.class, handler.handle(command));
     }
 
-    private static final CompactionPolicy.Limits LIMITS = new CompactionPolicy.Limits(64_000, 20_000, 32_768, 4_096, 8_192, 1.5);
+    private static final CompactionPolicy.Limits LIMITS = new CompactionPolicy.Limits(16_384, 20_000, 32_768, 4_096, 8_192);
+    private static final ModelChoice SONNET = new ModelChoice("claude", "claude-sonnet-5-5", "medium");
+    private static final ModelChoice OPUS = new ModelChoice("claude", "claude-opus-5-5", "high");
 
-    private static CompactionPolicy policy(long window, UserSettings users) {
-        return new CompactionPolicy(new ContextWindow(WindowSource.NONE, window, LIMITS.reserve(), Duration.ofHours(1)), users, LIMITS);
+    /** 一条 Claude 路线，客户端换成替身，列表按配置：允许 Sonnet 5.5 和 Opus 5.5，读不到窗口时用 {@code window}。 */
+    private static Routes routes(long window) {
+        RouteSettings claude = new RouteSettings("claude", "Claude", RouteSettings.Kind.CLAUDE, "ANTHROPIC_API_KEY", "claude-sonnet-5-5",
+                List.of("claude-sonnet-5-5", "claude-opus-5-5"), 64_000, window, 1.5, 4, Duration.ofSeconds(300), Duration.ofSeconds(300),
+                "medium", false, null, true, null, null, true, java.util.Map.of());
+        return Routes.create(List.of(claude), "claude", (route, key) -> {
+            throw new AssertionError("no real client");
+        }, RouteClients.of("claude", (prompt, chunks) -> null), name -> null, true, Clock.systemUTC()).start(Duration.ofSeconds(2));
     }
 
-    private static CompactionPolicy noCompaction() {
+    private static final Routes NO_WINDOW = routes(0);
+    private static final Routes MILLION = routes(1_000_000);
+    private static final UserSettings NOBODY = inMemory();
+
+    private static UserSettings inMemory() {
         try {
-            return policy(0, UserSettings.inMemory(Clock.systemUTC()));
+            return UserSettings.inMemory(Clock.systemUTC());
         } catch (java.sql.SQLException failure) {
             throw new IllegalStateException(failure);
         }
+    }
+
+    private static CompactionPolicy noCompaction() {
+        return new CompactionPolicy(inMemory(), LIMITS);
     }
 
     /**
@@ -145,11 +163,44 @@ class ContextHandlerTest {
     @Test
     void compactionSettingsFollowTheUsersChoiceOnEveryAssembly() throws Exception {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", policy(1_000_000, users));
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
         assertEquals(new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 936_000, 1.5), assembled(handler, COMMAND).compaction());
         users.setCompactionPercent(COMMAND.run().principal(), 50);
         assertEquals(500_000, assembled(handler, COMMAND).compaction().threshold());
         assertNull(assembled(shared(), COMMAND).compaction());
+    }
+
+    private static AssembleContext assemble(ModelChoice requested, ModelChoice current) {
+        return new AssembleContext(new CommandId("c"), COMMAND.run(), requested, current);
+    }
+
+    /**
+     * model-picker 设计第 4 步：提交里带的 → 会话现在的 → 这个用户上次的 → 管理员的默认；不可用的跳过（M7、M14）。
+     * 选出的记进事件（“配上了什么”，M13）。
+     */
+    @Test
+    void theModelIsTheRequestedThenTheSessionsThenTheUsersThenTheDefault() throws Exception {
+        UserSettings users = UserSettings.inMemory(Clock.systemUTC());
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
+        ModelChoice gone = new ModelChoice("claude", "claude-opus-4-1", "high");
+        assertEquals(OPUS, assembled(handler, assemble(OPUS, SONNET)).model(), "what the submission asked for");
+        assertEquals(OPUS, assembled(handler, assemble(null, OPUS)).model(), "the session's current one");
+        assertEquals(SONNET, assembled(handler, assemble(null, null)).model(), "nobody chose: the administrator's default");
+        users.setModelChoice(COMMAND.run().principal(), OPUS);
+        assertEquals(OPUS, assembled(handler, assemble(null, gone)).model(), "the session's is gone: the user's last choice");
+        users.setModelChoice(COMMAND.run().principal(), gone);
+        assertEquals(SONNET, assembled(handler, assemble(null, gone)).model(), "the user's last choice is gone too");
+    }
+
+    /** M11：system 里不写模型名，换模型前后 system 和工具逐字节相同。 */
+    @Test
+    void systemAndToolsDoNotDependOnTheModel() throws Exception {
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
+        ContextAssembled sonnet = assembled(handler, assemble(SONNET, null));
+        ContextAssembled opus = assembled(handler, assemble(OPUS, SONNET));
+        assertEquals(sonnet.system(), opus.system());
+        assertEquals(sonnet.tools(), opus.tools());
+        assertFalse(sonnet.system().contains("claude-sonnet"));
     }
 
     @Test
@@ -254,7 +305,7 @@ class ContextHandlerTest {
         Files.writeString(mac.resolve("AGENTS.md"), "Agents rules.");
         connect();
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction());
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String system = assembled(handler, command(ALICE)).system();
 
@@ -275,7 +326,7 @@ class ContextHandlerTest {
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("alice-fact", "user", "alice likes tabs", "x");
         memories.of(BOB).write("bob-fact", "user", "bob likes spaces", "x");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction());
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String alice = assembled(handler, command(ALICE)).system();
         String bob = assembled(handler, command(BOB)).system();
@@ -289,7 +340,7 @@ class ContextHandlerTest {
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
         MemoryStores memories = memories(workspaces);
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction());
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
         ContextAssembled event = assembled(handler, command(ALICE));
 
         SessionState session = SessionState.start(new SessionId("s"), ALICE)
@@ -362,7 +413,7 @@ class ContextHandlerTest {
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
                 new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, true, false)), List.of(),
                         List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
-                noCompaction());
+                noCompaction(), NO_WINDOW, NOBODY);
 
         ContextAssembled assembled = assertInstanceOf(ContextAssembled.class, handler.handle(COMMAND));
 

@@ -13,13 +13,21 @@ import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.route.ChoiceCheck;
+import tantalum.shell.route.ModelInfo;
+import tantalum.shell.route.Route;
+import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
+import tantalum.shell.settings.UserSettings;
 import tantalum.shell.tool.ToolCatalog;
+import tantalum.value.command.AssembleContext;
 import tantalum.value.command.Command;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
+import tantalum.value.model.ModelChoice;
+import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
 /**
@@ -48,16 +56,23 @@ public final class ContextHandler implements Handler {
     private final KnowledgeBase knowledge;
     private final String fixedNote;
     private final CompactionPolicy compaction;
+    private final Routes routes;
+    private final ChoiceCheck check;
+    private final UserSettings users;
 
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
-     * {@code compaction} 每次按这个用户当前选的压缩点和当前窗口算出压缩设置，随事件写进 journal（compaction-threshold T6）。
+     * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal（compaction-threshold T6、
+     * model-picker M10）。{@code routes}、{@code users} 用来定这次用哪个模型（M7、M14）。
      */
     public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
-                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction) {
+                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
         this.gate = gate;
         this.fixedNote = fixedNote;
         this.compaction = compaction;
+        this.routes = routes;
+        this.check = new ChoiceCheck(routes);
+        this.users = users;
         this.local = local;
         this.basePrompt = basePrompt;
         this.catalog = catalog;
@@ -89,9 +104,36 @@ public final class ContextHandler implements Handler {
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
+        // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效（M11），换模型的事只在内核追加的说明里
+        AssembleContext assemble = (AssembleContext) command;
+        ModelChoice model = choose(assemble, principal);
         // 全部工具加上这个用户现在开着的名单（core-tools C14、C16）：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction.settings(principal), sections,
-                gate.enabledTools(principal), gate.enabledPlugins(principal), sources());
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
+                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(), model);
+    }
+
+    /**
+     * 这次用哪个模型（model-picker 设计“一次提问怎么选模型”第 4 步）：提交里带了就用它（提交时已经查过；这之间路线掉线的话照用，
+     * 调用失败走现有的模型失败流程）；没带用会话现在的；那个不可用或为空，用这个用户上次的选择；也不可用就用管理员的默认（M7、M14）。
+     */
+    private ModelChoice choose(AssembleContext assemble, Principal principal) {
+        if (assemble.requested() != null) {
+            return assemble.requested();
+        }
+        if (assemble.current() != null && check.usable(assemble.current())) {
+            return assemble.current();
+        }
+        return users.modelChoice(principal).filter(check::usable).orElseGet(routes::defaultChoice);
+    }
+
+    /** 按这个模型的窗口和输出上限、这条路线的估算系数算；路线不在了（调用会失败）时为 null，内核留着原来的。 */
+    private CompactionSettings compaction(Principal principal, ModelChoice model) {
+        Optional<Route> route = routes.route(model.route());
+        Optional<ModelInfo> info = routes.describe(model);
+        if (route.isEmpty() || info.isEmpty()) {
+            return null;
+        }
+        return compaction.settings(principal, info.get(), route.get().settings().bytesPerToken());
     }
 
     /** 每个工具从哪来（one-line-journal J5），由 {@link PluginGate#source} 决定：{@code builtin}、{@code local}、{@code web} 或 {@code mcp:<服务器>}。 */

@@ -2,6 +2,7 @@ package tantalum.shell.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
@@ -47,6 +48,8 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
@@ -393,5 +396,104 @@ class ClaudeRequestTest {
         assertFalse(failed.retryable());
         assertTrue(failed.detail().contains(notes.id()) && failed.detail().contains("s1"), failed.detail());
         assertEquals(before, server.requests.size());
+    }
+
+    // ---- 按会话的选择发（model-picker 任务 8）：claude-model-requests.txt，只加新用例，上面的期望文件不变 ----
+
+    private static final Path MODEL_EXPECTED = Path.of("src/test/resources/model/claude-model-requests.txt");
+    private static final ModelChoice OPUS_HIGH = new ModelChoice("claude", "claude-opus-5-5", "high");
+
+    private static ReasoningBlock thinking(String text, String signature, String model) {
+        Map<String, Json> raw = new LinkedHashMap<>();
+        raw.put("type", new Json.Str("thinking"));
+        raw.put("thinking", new Json.Str(text));
+        raw.put("signature", new Json.Str(signature));
+        return new ReasoningBlock("claude", new Json.Obj(raw), model == null ? null : "claude", model);
+    }
+
+    /** Sonnet 写的一轮、Opus 写的一轮、本地 qwen 写的一轮，然后换到 Opus 再问。 */
+    private static Prompt switchedHistory() {
+        return new Prompt("sys", List.of(), List.of(
+                Message.user("q1"),
+                new Message(Role.ASSISTANT, List.of(thinking("sonnet thought", "SIG-S", "claude-sonnet-5-5"), new TextBlock("a1")), false),
+                Message.user("q2"),
+                new Message(Role.ASSISTANT, List.of(thinking("old thought", "SIG-OLD", null), new TextBlock("a2")), false),
+                Message.user("q3"),
+                new Message(Role.ASSISTANT, List.of(new ReasoningBlock("openai", new Json.Str("qwen thought"), "local", "qwen3.8"),
+                        new TextBlock("a3")), false),
+                Message.user("q4"),
+                new Message(Role.SYSTEM, List.of(new ModelChangeBlock("local/qwen3.8", "claude/claude-opus-5-5")), false)),
+                Prompt.Output.DEFAULT, OPUS_HIGH);
+    }
+
+    private static List<Sample> modelSamples() {
+        ClaudeClient.Settings defaults = settings(8192, "medium", true, false);
+        return List.of(
+                new Sample("the choice picks the model and effort", defaults,
+                        new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, OPUS_HIGH)),
+                new Sample("every Claude model's thinking goes back, other providers' does not; the notice opens the question", defaults,
+                        switchedHistory()),
+                new Sample("the notice comes before a tool change on a model that supports it", model("claude-sonnet-5-5", false),
+                        new Prompt(switched().system(), switched().tools(), List.of(Message.user("q1"),
+                                new Message(Role.ASSISTANT, List.of(new TextBlock("a1")), false), Message.user("q2"),
+                                new Message(Role.SYSTEM, List.of(new ModelChangeBlock("claude/claude-opus-5-5", "claude/claude-sonnet-5-5")), false),
+                                switched().messages().getLast()), Prompt.Output.DEFAULT, new ModelChoice("claude", "claude-sonnet-5-5", "low"))));
+    }
+
+    /** 需求 6.1、6.3：期望文件。 */
+    @Test
+    void modelChoiceRequestBodies() throws IOException {
+        StringBuilder actual = new StringBuilder();
+        for (Sample sample : modelSamples()) {
+            actual.append(sent(sample));
+        }
+        if (Boolean.getBoolean("claude.record")) {
+            Files.writeString(MODEL_EXPECTED, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(MODEL_EXPECTED, StandardCharsets.UTF_8), actual.toString(), "request changed; see the class comment");
+    }
+
+    @Test
+    void theChoiceDecidesModelEffortAndToolChanges() {
+        ClaudeRequest request = new ClaudeRequest(settings(8192, "medium", true, false));
+        RequestOptions chosen = request.options(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, OPUS_HIGH));
+        assertEquals("claude-opus-5-5", chosen.model());
+        assertTrue(JsonText.toText(chosen.extra()).contains("\"effort\":\"high\""));
+        RequestOptions plain = request.options(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
+        assertEquals("claude-sonnet-5-5", plain.model(), "no choice: the route's default");
+        assertTrue(JsonText.toText(plain.extra()).contains("\"effort\":\"medium\""));
+        // 会话中途工具变化按选的模型判断，不按默认模型
+        Prompt onSonnet5 = new Prompt(switched().system(), switched().tools(), switched().messages(), Prompt.Output.DEFAULT,
+                new ModelChoice("claude", "claude-sonnet-5", "medium"));
+        assertFalse(new ClaudeRequest(model("claude-sonnet-5-5", true)).options(onSonnet5).extra().toString()
+                .contains(ClaudeRequest.TOOL_CHANGE_BETA));
+    }
+
+    /** 需求 6.1、M9：回复里的思考块记下路线和实际回复的模型；备用模型接手时是备用模型。 */
+    @Test
+    void thinkingRecordsTheRouteAndTheModelThatReplied() {
+        server.body = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\","
+                + "\"role\":\"assistant\",\"model\":\"claude-opus-5\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,"
+                + "\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"
+                + "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
+                + "\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n"
+                + "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"hmm\"}}\n\n"
+                + "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,"
+                + "\"delta\":{\"type\":\"signature_delta\",\"signature\":\"SIG\"}}\n\n"
+                + "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+                + "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},"
+                + "\"usage\":{\"output_tokens\":1}}\n\n"
+                + "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+        ModelOutcome.Replied chosen = assertInstanceOf(ModelOutcome.Replied.class, client(settings(8192, "medium", true, false))
+                .call(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, OPUS_HIGH), IGNORE));
+        ReasoningBlock block = assertInstanceOf(ReasoningBlock.class, chosen.content().getFirst());
+        assertEquals("claude", block.route());
+        assertEquals("claude-opus-5", block.model(), "the fallback model wrote it");
+
+        ModelOutcome.Replied old = assertInstanceOf(ModelOutcome.Replied.class, client(settings(8192, "medium", true, false))
+                .call(new Prompt("sys", List.of(), List.of(Message.user("hi"))), IGNORE));
+        ReasoningBlock unnamed = assertInstanceOf(ReasoningBlock.class, old.content().getFirst());
+        assertEquals(null, unnamed.route(), "no choice, nothing recorded: the journal line stays as before");
     }
 }

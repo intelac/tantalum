@@ -82,35 +82,35 @@
 
 内核搬运选择并在变化时追加说明；两个客户端按选择发请求；`Engine` 换成 `Routes`。阶段结束时服务器按会话路由模型（还没有画面，提交不带 `model` 时用默认），8091 行为和现在一样。
 
-- [ ] 7. 内核：选择怎么生效
+- [x] 7. 内核：选择怎么生效
   - File: kernel/step/SubmitSteps.java、ContextSteps.java、CompactSteps.java、RunEnd.java、kernel/projection/PromptProjection.java（改），value/ 下状态视图（改，`toolChangesInHistory`），kerneltest/step/ModelChoiceStepsTest.java（新）
   - 照设计“一次提问怎么选模型”第 3、5、6 步和“换到窗口更小的模型”：运行记下 `requested`；`AssembleContext` 带 `requested`、`current`；路线或模型变了追加 `ModelChangeBlock`，只换档位不追加，旧的为空不追加；`modelBefore` 只给这个运行第一次调用前的自动压缩用，第一次正常回复后清掉；摘要失败时 `RunEnd` 还原并追加反方向的说明；`toolChangesInHistory` 按设计的定义。先确认 follow-up 怎样开始新运行（`SubmitSteps`），据此决定它的选择在哪里生效
   - 测试（零 mock）：设计“Unit Testing → 内核”的四条；`steer` 不改选择（需求 5.2）；已有消息逐字节不变（5.3）
   - _Requirements: M8, M10, M11, M12, M13, 需求 5.1–5.5, 7.4_
   - _Prompt: Role: Java 内核开发 | Task: 让会话的模型选择在每次提问时生效并追加说明 | Restrictions: 只追加，不改已有消息；内核不读 shell；不升语义版本 | Success: 新测试和全部内核测试全过_
 
-- [ ] 8. Claude 请求按选择发
+- [x] 8. Claude 请求按选择发
   - File: shell/model/ClaudeRequest.java、ClaudeClient.java（改），shelltest/model/ClaudeRequestTest.java（改）、期望文件（改，只加新用例）
   - `model`、`effort` 从 `prompt.model()` 取，为空用默认；`Settings` 改名照设计；回复里的推理块填 `route`、`model`（实际模型）；`ModelChangeBlock` 写成这次用户消息的第一个文字块；思考块照旧凡是 `claude` 的都发
   - 测试：`claude-requests.txt` 里原有的请求体逐字节不变；`effort` 跟着选择变；历史里两个 Claude 模型的思考块都发、OpenAI 的不发（需求 6.1、6.3）；`ModelChangeBlock` 的样子；推理块记下实际模型（备用模型接手时是备用模型）
   - _Requirements: M9, M12, 需求 6.1, 6.3_
   - _Prompt: Role: Java 后端开发 | Task: 让 Claude 请求按会话的选择发 | Restrictions: 不删改历史里的思考块；默认选择的请求体不变 | Success: 测试全过_
 
-- [ ] 9. OpenAI 兼容请求按选择发
+- [x] 9. OpenAI 兼容请求按选择发
   - File: shell/model/OpenAiClient.java（改），shelltest/model/OpenAiClientTest.java（改）
   - 模型名从 `prompt.model()` 取；构造参数加“模型 → `OpenAiThinking`”的函数，按档位写思考参数，`options().extra` 里带上；`reasoning_content` 只发同路线同模型的，`route` 为空不发；推理块填 `route`、`model`；`ModelChangeBlock` 照工具变化写成文字放进这次用户消息开头
   - 测试：四种思考写法的请求体（任务 3 的期望文件）；路线 A 模型 X、路线 A 模型 Y、路线 B 模型 X 的推理块只发第一个（需求 6.2）；旧块不发；`vision=false` 时历史图片换成文字（M15，现有断言照跑）
   - _Requirements: M5, M9, M12, M15, 需求 6.2, 6.3_
   - _Prompt: Role: Java 后端开发 | Task: 让 OpenAI 兼容请求按会话的选择发 | Restrictions: model 包不依赖 route 包 | Success: 测试和 ArchitectureTest 全过_
 
-- [ ] 10. 接线：`Engine` 换成 `Routes`
+- [x] 10. 接线：`Engine` 换成 `Routes`
   - File: shell/boot/TantalumApplication.java、Engine.java、TantalumProperties.java、shell/handler/ContextHandler.java、ModelHandler.java、shell/settings/CompactionPolicy.java（改），删 shell/model/ClaudeWindow.java、OpenAiWindow.java、WindowSource.java、ContextWindow.java，测试里注入模型的地方（改，加 `TestRoutes`）
   - `createRoutes` 照设计；`Engine(Routes)`；`ContextHandler` 第 4 步（`requested` → `current` → 用户默认 → 管理员默认，按 `ModelInfo` 算压缩设置）；`ModelHandler` 按路线找客户端和 `CallLimiter`，超长时 `refreshSoon(route)`；`CompactionPolicy.settings(Principal, ModelInfo)`；删掉 `TantalumProperties` 里按 `usesClaude()` 分支的方法；启动日志每条路线一行
   - 测试：两条脚本化路线，`Prompt.model` 指哪条就调哪条；一条路线并发上限 1 时另一条照常并行（需求 5.8）；压缩点按选的模型的窗口算（M10）；现有测试注入改成 `TestRoutes` 后断言不变
   - _Requirements: M7, M10, M14, M16, 需求 5.1, 5.8_
   - _Prompt: Role: Java 后端开发 | Task: 把服务器从一个模型客户端改成按路线调用 | Restrictions: 不改压缩规则本身；回放不经过 Routes | Success: mvn -o verify 全过_
 
-- [ ] 11. `ModelSwitchReplayTest`
+- [x] 11. `ModelSwitchReplayTest`
   - File: examples/ModelSwitchReplayTest.java（新），tantalum-examples/src/test/resources/ 下一个本 spec 之前的会话文件（新，从现有资源里挑一个带思考块的）
   - 照设计“Integration Testing → `ModelSwitchReplayTest`”：两条脚本化路线（Claude 协议 1M、OpenAI 协议 8000），一个会话里换三次，其中一次换到小窗口触发压缩，摘要调用到了上一个模型；system 和工具定义每次逐字节相同；重启后回放 prompt 与实时逐个相同，路线全部下线后回放照样成功；旧会话文件打开逐字节不变，继续提问不追加说明
   - _Requirements: M10, M11, M13, 需求 5.4, 6.4, 7.2, 7.3, 7.4_

@@ -14,6 +14,7 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -25,24 +26,29 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), Message.user(event.text(), event.attachments()));
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments()), event.model());
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
         return submit(context, new OwnerRef.OfSession(context.envelope().session()),
-                Message.user(event.text(), event.attachments()));
+                Message.user(event.text(), event.attachments()), event.model());
     }
 
-    private static Decision submit(StepContext context, OwnerRef owner, Message message) {
+    /**
+     * 空闲时开新运行，用提交里带的选择；运行中排队，带了选择就记下，排队的提问开始运行时用它（model-picker M6），
+     * 正在跑的运行不受影响（M8）。
+     */
+    private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model) {
         Outcome out = new Outcome(context);
         if (context.run() == null || context.run().isEnded()) {
-            startRun(out, owner, message);
+            startRun(out, owner, message, model);
         } else {
             SessionState session = out.session(context.run().ref());
             List<Message> queued = new ArrayList<>(session.followUps());
             queued.add(message);
-            out.put(session.withFollowUps(queued));
+            SessionState next = session.withFollowUps(queued);
+            out.put(model == null ? next : next.withFollowUpModel(model));
         }
         return out.decision();
     }
@@ -53,7 +59,8 @@ public final class SubmitSteps {
         RunState run = context.run();
         Message message = Message.user(event.text(), event.attachments());
         if (run == null || run.isEnded()) {
-            startRun(out, new OwnerRef.OfSession(context.envelope().session()), message);
+            // 插话不带选择：空闲时开的运行用会话现在的模型
+            startRun(out, new OwnerRef.OfSession(context.envelope().session()), message, null);
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());
             steers.add(message);
@@ -62,8 +69,10 @@ public final class SubmitSteps {
         return out.decision();
     }
 
-    /** 新运行：追加用户消息，请求组装上下文。 */
-    static void startRun(Outcome out, OwnerRef owner, Message message) {
+    /**
+     * 新运行：追加用户消息，请求组装上下文。{@code requested} 是开始它的提交里带的选择，和会话现在的选择一起交给 shell 定这次用哪个模型。
+     */
+    static void startRun(Outcome out, OwnerRef owner, Message message, ModelChoice requested) {
         EventEnvelope envelope = out.envelope;
         SessionState session = out.state().sessions().get(envelope.session());
         if (session == null) {
@@ -71,7 +80,7 @@ public final class SubmitSteps {
         }
         RunState run = newRun(out, session.append(message), owner);
         CommandId id = out.nextCommandId();
-        out.emit(new AssembleContext(id, run.ref()));
+        out.emit(new AssembleContext(id, run.ref(), requested, session.model()));
         out.await(run, ContextSteps.AWAITING_CONTEXT, Set.of(id));
     }
 

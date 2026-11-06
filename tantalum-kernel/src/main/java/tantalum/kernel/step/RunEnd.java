@@ -12,6 +12,8 @@ import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Role;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
@@ -21,6 +23,9 @@ import tantalum.value.state.SessionState;
 
 /** 运行的结束路径：结束前的钩子、工具配对、取下一条 {@code follow-up}。 */
 public final class RunEnd {
+
+    /** 换模型前压缩失败时运行的详情，后面接新模型的 {@code 路线/模型}；画面据此写“换到 … 之前压缩失败”。 */
+    public static final String SWITCH_COMPACTION_FAILED = "compaction failed before switching to ";
 
     private RunEnd() {}
 
@@ -52,6 +57,18 @@ public final class RunEnd {
     }
 
     /**
+     * 换到窗口更小的模型之前的压缩没成（model-picker M10）：这个运行失败，会话的模型退回上一个。已经追加的换模型说明不能删，
+     * 再追加一条反方向的，下一次调用时模型看到的说明和实际一致。纯函数，回放结果相同。
+     */
+    static void switchFailed(Outcome out, RunState run) {
+        ModelChoice now = run.model();
+        ModelChoice back = run.modelBefore();
+        SessionState session = out.session(run.ref());
+        out.put(session.append(new Message(Role.SYSTEM, List.of(new ModelChangeBlock(now.label(), back.label())), false)).withModel(back));
+        finish(out, run.withModel(now, null), EndReason.FAILED, SWITCH_COMPACTION_FAILED + now.label());
+    }
+
+    /**
      * 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。
      * {@code compacting} 原样保留：在等摘要时结束的运行，迟到的摘要回复据此不进历史。
      */
@@ -70,8 +87,9 @@ public final class RunEnd {
         out.put(session);
         if (!session.followUps().isEmpty()) {
             Message next = session.followUps().getFirst();
-            out.put(session.withFollowUps(session.followUps().subList(1, session.followUps().size())));
-            SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next);
+            ModelChoice requested = session.followUpModel();
+            out.put(session.withFollowUps(session.followUps().subList(1, session.followUps().size())).withFollowUpModel(null));
+            SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next, requested);
         }
     }
 }

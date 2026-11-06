@@ -13,6 +13,8 @@ import tantalum.value.decision.Decision;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.id.CommandId;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChangeBlock;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Role;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
@@ -35,10 +37,39 @@ public final class ContextSteps {
         // 压缩刚把上下文清空：这次组装之后的调用不再判断（规则 3.1）。
         SessionState before = out.session(run.ref());
         boolean justCompacted = before.context() == null && before.compaction() != null;
-        // 先冻结进会话，之后调模型和判断压缩都从会话取 system 和工具。
+        // 先定下这个运行的模型（换模型的说明要在工具变化之前），再冻结进会话，之后调模型和判断压缩都从会话取 system 和工具。
+        run = chooseModel(out, run, event);
         freezeContext(out, run, event);
-        ModelSteps.callModel(out, run, null, !justCompacted);
+        ModelSteps.callModel(out, out.run(run.ref()), null, !justCompacted);
         return out.decision();
+    }
+
+    /**
+     * 这次用的模型（model-picker M8、M12）：运行第一次组装上下文时定下，整个运行不变；压缩后重新组装时不再换。路线或模型和会话上一次的
+     * 不同时追加一条换模型的说明（只换档位不算，会话没记过模型的旧会话也不算，M13），记下换掉的那个给压缩前的摘要用（M10）。
+     * 旧事件没有选择，什么都不做。
+     */
+    private static RunState chooseModel(Outcome out, RunState run, ContextAssembled event) {
+        ModelChoice chosen = event.model();
+        if (chosen == null || run.model() != null) {
+            return run;
+        }
+        SessionState session = out.session(run.ref());
+        ModelChoice previous = session.model();
+        boolean switched = previous != null && !previous.sameModel(chosen);
+        SessionState next = session;
+        if (switched) {
+            next = next.append(new Message(Role.SYSTEM, List.of(new ModelChangeBlock(previous.label(), chosen.label())), false));
+        }
+        if (!chosen.equals(previous)) {
+            next = next.withModel(chosen);
+        }
+        if (next != session) {
+            out.put(next);
+        }
+        RunState updated = run.withModel(chosen, switched ? previous : null);
+        out.put(updated);
+        return updated;
     }
 
     /**
@@ -108,7 +139,8 @@ public final class ContextSteps {
     /** 压缩后重新组装 system 和工具（规则 5），新的记忆索引和 MCP 工具在此生效。 */
     static void reassemble(Outcome out, RunState run) {
         CommandId id = out.nextCommandId();
-        out.emit(new AssembleContext(id, run.ref()));
+        // 这个运行已经定下的模型照用（M8）
+        out.emit(new AssembleContext(id, run.ref(), run.model(), out.session(run.ref()).model()));
         out.await(run, AWAITING_CONTEXT, Set.of(id));
     }
 }

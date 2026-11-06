@@ -1,5 +1,6 @@
 package tantalum.shell.boot;
 
+import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
@@ -40,6 +41,12 @@ import tantalum.shell.model.OverflowRules;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.route.ClaudeModels;
+import tantalum.shell.route.OpenAiModels;
+import tantalum.shell.route.Route;
+import tantalum.shell.route.RouteClients;
+import tantalum.shell.route.RouteSettings;
+import tantalum.shell.route.Routes;
 
 /** Spring Boot 入口和装配。Spring 只出现在这里和 {@code web} 包。 */
 @SpringBootApplication
@@ -48,6 +55,8 @@ import tantalum.shell.plugin.WorkType;
 public class TantalumApplication {
 
     private static final Logger LOG = LoggerFactory.getLogger(TantalumApplication.class);
+    /** 读模型列表的单次请求最多等多久（compaction-threshold T2，同 DSH {@code listing-config.ts:9}）。 */
+    private static final Duration LIST_TIMEOUT = Duration.ofSeconds(5);
 
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && args[0].equals("users")) {
@@ -79,14 +88,16 @@ public class TantalumApplication {
     }
 
     @Bean(destroyMethod = "close")
-    Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<Tool> tools,
-                  ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
+    Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<RouteClients> injected,
+                  ObjectProvider<Tool> tools, ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
                   ObjectProvider<AfterToolHook> afterHooks, Environment environment) throws IOException {
-        boolean claude = properties.provider().equals("claude");
-        Duration wait = claude ? properties.claude().firstChunkTimeout() : properties.defaultOpenAiRoute().firstChunkTimeout();
-        int concurrency = claude ? properties.claude().concurrency() : properties.defaultOpenAiRoute().concurrency();
-        ModelClient client = model.getIfAvailable(() -> createClient(properties));
-        Engine engine = new Engine(properties, client, wait, concurrency, List.copyOf(tools.orderedStream().toList()),
+        // 测试和嵌入使用：给了 RouteClients 就按路线换客户端；只给一个 ModelClient 时它就是默认路线的客户端
+        RouteClients clients = injected.getIfAvailable(() -> {
+            ModelClient single = model.getIfAvailable();
+            return single == null ? null : RouteClients.of(properties.provider(), single);
+        });
+        Routes routes = createRoutes(properties, clients);
+        Engine engine = new Engine(properties, routes, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
                 EventCodec.withBuiltins(), Clock.systemUTC());
         // 停用或删掉的账号不能再连电脑（local-workspace L3）：握手时查，之后每次心跳再查
@@ -139,29 +150,32 @@ public class TantalumApplication {
         });
     }
 
-    private static ModelClient createClient(TantalumProperties properties) {
+    /**
+     * 每条路线一个客户端和一张模型列表（model-picker 设计“boot/TantalumApplication”）：Claude 的密钥按 {@code api-key-env} 读，
+     * 客户端和 Models 接口共用一个 SDK 客户端；OpenAI 兼容的有 {@code api-key-env} 才读、才发认证头。密钥只在这里经过，不记日志。
+     * 云端路线照旧提示 prompt 会发出去（tech.md）。
+     */
+    static Routes createRoutes(TantalumProperties properties, RouteClients injected) {
         OverflowRules rules = OverflowRules.defaults();
-        switch (properties.provider()) {
-            case TantalumProperties.CLAUDE_ROUTE -> {
-                String variable = properties.claude().apiKeyEnv();
-                String key = System.getenv(variable);
-                if (key == null || key.isBlank()) {
-                    throw new IllegalStateException(variable + " is not set. Set it, for example by loading "
-                            + "~/.config/tantalum/env, or make a local route the default with --tantalum.provider=<route>.");
-                }
-                LOG.warn("Using Claude: complete prompts, which may contain customer code, are sent to Anthropic. "
-                        + "Use --tantalum.provider=<route> for a local model.");
-                TantalumProperties.Claude claude = properties.claude();
-                return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(key).maxRetries(0).build(),
-                        new ClaudeClient.Settings(claude.model(), claude.maxTokens(), claude.effort(), claude.fallbacks(),
-                                claude.firstChunkTimeout(), claude.betweenChunkTimeout(), rules, false));
+        List<RouteSettings> settings = properties.routeSettings();
+        Routes routes = Routes.create(settings, properties.provider(), (route, key) -> switch (route.kind()) {
+            case CLAUDE -> {
+                AnthropicClient sdk = AnthropicOkHttpClient.builder().apiKey(key).maxRetries(0).build();
+                yield new Routes.Built(new ClaudeClient(sdk, new ClaudeClient.Settings(route.defaultModel(), route.maxTokens(),
+                        route.defaultEffort(), route.fallbacks(), route.firstChunkTimeout(), route.betweenChunkTimeout(), rules, false)),
+                        new ClaudeModels(sdk, route.name(), route.allow(), route.defaultEffort(), route.fallbacks(), route.maxTokens(),
+                                LIST_TIMEOUT));
             }
-            default -> {
-                TantalumProperties.OpenAiRoute openai = properties.defaultOpenAiRoute();
-                String key = openai.apiKeyEnv() == null ? null : System.getenv(openai.apiKeyEnv());
-                return new OpenAiClient(openai.baseUrl(), openai.model(), key == null || key.isBlank() ? null : key,
-                        openai.maxTokens(), openai.firstChunkTimeout(), openai.betweenChunkTimeout(), rules, openai.vision());
+            case OPENAI -> new Routes.Built(new OpenAiClient(route.baseUrl(), route.defaultModel(), key, (int) route.maxTokens(),
+                    route.firstChunkTimeout(), route.betweenChunkTimeout(), rules, route::vision, route::thinking),
+                    new OpenAiModels(route, key, LIST_TIMEOUT));
+        }, injected, System::getenv, properties.windowFromModel(), Clock.systemUTC());
+        for (Route route : routes.all()) {
+            if (route.settings().cloud()) {
+                LOG.warn("Route {}: complete prompts, which may contain customer code, are sent to {}.", route.name(),
+                        route.settings().kind() == RouteSettings.Kind.CLAUDE ? "Anthropic" : "a hosted service");
             }
         }
+        return routes;
     }
 }

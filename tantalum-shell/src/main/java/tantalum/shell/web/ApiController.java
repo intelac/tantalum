@@ -33,7 +33,9 @@ import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
-import tantalum.shell.model.ContextWindow;
+import tantalum.shell.route.ModelInfo;
+import tantalum.shell.route.Route;
+import tantalum.shell.route.RouteSettings;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
@@ -41,6 +43,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.state.Ended;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.JsonNode;
@@ -115,17 +118,18 @@ public class ApiController {
     @GetMapping("/api/config")
     ResponseEntity<String> config() {
         Map<String, Object> response = new LinkedHashMap<>();
-        // 默认路线的种类，兼容旧画面（model-picker 之前只有一个供应商）
-        boolean claude = properties.defaultOpenAiRoute() == null;
-        response.put("provider", claude ? "claude" : "openai");
-        response.put("model", properties.model());
-        response.put("cloud", claude);
-        ContextWindow.Reading window = engine.compaction().window();
-        if (window.tokens() > 0) {
-            response.put("contextWindow", window.tokens());
-            response.put("windowSource", window.source() == ContextWindow.Source.MODEL ? "model" : "config");
+        // 管理员的默认选择，兼容旧画面（model-picker 之前只有一个模型）；控制台按会话的选择显示模型，不再用这几项
+        ModelChoice choice = engine.routes().defaultChoice();
+        Route route = engine.routes().route(choice.route()).orElseThrow();
+        Optional<ModelInfo> model = engine.routes().describe(choice);
+        response.put("provider", route.settings().kind() == RouteSettings.Kind.CLAUDE ? "claude" : "openai");
+        response.put("model", choice.model());
+        response.put("cloud", route.settings().cloud());
+        if (model.isPresent() && model.get().window() > 0) {
+            response.put("contextWindow", model.get().window());
+            response.put("windowSource", model.get().windowSource() == ModelInfo.Source.MODEL ? "model" : "config");
         }
-        response.put("vision", properties.vision());
+        response.put("vision", model.map(ModelInfo::vision).orElse(false));
         AttachmentLimits limits = properties.attachmentLimits();
         Map<String, Object> attachments = new LinkedHashMap<>();
         attachments.put("maxImagesPerMessage", limits.maxImagesPerMessage());
@@ -173,7 +177,8 @@ public class ApiController {
         if (violation.isPresent()) {
             return json.error(400, violation.get());
         }
-        if (!properties.vision() && attachments.stream().anyMatch(ImageRef.class::isInstance)) {
+        boolean vision = engine.routes().describe(engine.routes().defaultChoice()).map(ModelInfo::vision).orElse(false);
+        if (!vision && attachments.stream().anyMatch(ImageRef.class::isInstance)) {
             return json.error(400, "当前模型不支持图片");
         }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,

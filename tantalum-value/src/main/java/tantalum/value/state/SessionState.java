@@ -13,6 +13,8 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.model.ToolChangeBlock;
+import tantalum.value.model.ToolSpec;
 
 /** 一个会话。{@code messages} 是完整历史，只追加；模型看到的是 {@link #view()}。{@code activeRun} 没有运行时为空；
  * {@code lastRun} 是最近一次开始的运行，运行结束后仍保留，用来判断迟到的结果是否还能进历史。
@@ -132,6 +134,18 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
             updated.put(workType, new Json.Obj(Collections.unmodifiableMap(new LinkedHashMap<>(merged))));
         }
         return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModel);
+    }
+
+    /**
+     * 这个会话有没有工具变化（model-picker M11）：一开始就有关着的工具，或者模型看到的历史里有工具变化消息。有的话，不支持会话中途工具变化的
+     * Claude 模型不能选：它们看到的历史和支持的模型不一样，换回来时思考签名会失效。
+     */
+    public boolean toolChangesInHistory() {
+        if (context != null && context.initialTools() != null
+                && !context.initialTools().containsAll(context.tools().stream().map(ToolSpec::name).toList())) {
+            return true;
+        }
+        return view().stream().anyMatch(message -> message.content().stream().anyMatch(ToolChangeBlock.class::isInstance));
     }
 
     /** 该运行是否仍是会话历史的末尾：它正在进行，或它结束后没有开始过新运行。 */

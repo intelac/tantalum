@@ -24,6 +24,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
 
@@ -102,6 +103,15 @@ public final class Intake {
     /** 带附件的提交。附件引用已由调用方按本人目录里的元数据组成并查过限制。 */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments) {
+        return submit(principal, session, request, mode, text, attachments, null);
+    }
+
+    /**
+     * 带模型选择的提交（model-picker M6）：{@code model} 已由调用方查过，可以为 null（用会话现在的）。它跟着开始新运行的提交进
+     * journal（{@code prompt}、{@code follow-up}）；插话并进当前运行，不换模型，所以不带（M8）。
+     */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments, ModelChoice model) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -118,8 +128,8 @@ public final class Intake {
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
             case "steer" -> new SteerSubmitted(submission, request, text, attachments);
-            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments);
+            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model);
         });
     }
 

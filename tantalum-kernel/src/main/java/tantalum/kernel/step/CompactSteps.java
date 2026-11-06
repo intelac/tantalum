@@ -23,6 +23,7 @@ import tantalum.value.hook.PromptPatch;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
 import tantalum.value.model.Message;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.Compacting;
@@ -106,7 +107,9 @@ public final class CompactSteps {
         }
         List<Message> messages = new ArrayList<>(head.messages());
         messages.add(SummaryPrompt.instruction(head.dropped(), instructions));
-        Prompt prompt = new Prompt(base.system(), base.tools(), messages, new Prompt.Output(false, settings.summaryMaxTokens()));
+        // 换到窗口更小的模型之前：上一个模型装得下现在的历史，摘要由它写（model-picker M10）
+        ModelChoice writer = run.modelBefore() != null ? run.modelBefore() : ModelSteps.model(out, run);
+        Prompt prompt = new Prompt(base.system(), base.tools(), messages, new Prompt.Output(false, settings.summaryMaxTokens()), writer);
 
         CommandId id = ModelSteps.emitCall(out, run.ref(), prompt);
         out.await(run.withCompacting(compacting), AWAITING_SUMMARY, Set.of(id));
@@ -196,7 +199,7 @@ public final class CompactSteps {
     /**
      * 规则 8：摘要没有用上。先看能否改用裁剪（DSH：进展不依赖摘要）——钩子拒绝时不裁剪，手动压缩只在摘要没发出时裁剪。
      * 不能裁剪时报告失败，再按触发方式：自动 → 本运行不再自动压缩，继续原调用（摘要发出过就在这里调，否则交回调用方）；
-     * 超长恢复 → 以原始错误失败；手动 → 以原因失败。
+     * 超长恢复 → 以原始错误失败；手动 → 以原因失败。换模型后第一次调用之前的压缩没成时运行失败、模型退回（{@link RunEnd#switchFailed}）。
      */
     private static Start notAdopted(Outcome out, RunState run, Compacting compacting, String reason, Stage how) {
         SessionState session = out.session(run.ref());
@@ -211,6 +214,17 @@ public final class CompactSteps {
             return Start.TOOK_OVER;
         }
         out.report(List.of(new CompactionFailed(run.ref(), compacting.trigger(), reason)));
+        // 换到窗口更小的模型、第一次调用之前：摘要发出了却没用上，或者超长恢复没成，新模型装不下，这个运行失败，会话的模型退回上一个
+        // （model-picker M10）。摘要没发出（钩子拒绝、内容太少）时照旧调新模型，装不下会走超长恢复。
+        boolean beforeSwitch = run.modelBefore() != null && switch (compacting.cause()) {
+            case Compacting.Auto auto -> how == Stage.NOT_ADOPTED;
+            case Compacting.Overflow overflow -> true;
+            case Compacting.Manual manual -> false;
+        };
+        if (beforeSwitch) {
+            RunEnd.switchFailed(out, run.withCompacting(null));
+            return Start.TOOK_OVER;
+        }
         switch (compacting.cause()) {
             case Compacting.Auto auto -> {
                 if (how != Stage.NOT_ADOPTED) {
