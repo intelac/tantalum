@@ -188,9 +188,9 @@
   - _Requirements: 需求 7.2_
   - _Prompt: Role: 技术写作 | Task: 写说明 | Success: Yi 照着能装起来_
 
-- [-] 24. 测量和 8091 演示
+- [x] 24. 测量和 8091 演示
   - File: tantalum-connect/src/test/java/tantalum/connect/LinkBench.java（新）
   - `read_file` 经过连接程序和直接执行各 1000 次，比 P95（≤ 20 ms）；连接程序空闲内存（≤ 150 MB）。8091 上用 Yi 的 Mac 和真实 Claude，在一个小 Maven 项目里修一个失败的测试：读代码、改代码、跑 `mvn -q test` 通过；截图给 Yi；报告 Claude 用量
   - _Requirements: NFR Performance, 需求 8.4_
   - _Prompt: Role: 测试开发 | Task: 测量并做真实演示 | Success: 数字达标，演示成功_
-  - 进度（2026-11-06）：`LinkBench` 已做，数字达标（P95 多花 0.94 ms，空闲 114 MB，见 tech.md）；8091 的真实演示还没做。
+  - 进度（2026-11-06）：`LinkBench` 已做，数字达标（P95 多花 0.94 ms，空闲 114 MB，见 tech.md）。8091 演示已做：打包好的连接程序（`--allow demo-shop --allow-write --allow-shell --allow-read ~/.m2 --env JAVA_HOME`），claude-sonnet-5-5 一轮 11 步，用 `bash` 跑测试、`read_file` + `edit_file` 修好 `Cart.java` 两处 bug（加号改乘号、`>` 改 `>=`），没动测试，沙箱内外 `mvn -o -q test` 都通过；上下文 17k、输出 1.9k、缓存命中 88.5%、31 秒。发现：沙箱里 `HOME` 是空目录，Maven 要 `-Dmaven.repo.local`（README 已写）。
