@@ -166,7 +166,7 @@ class AnswerStepsTest {
         assertEquals(List.of("approval-c1"), facts(loop, QuestionAsked.class).stream().map(f -> f.question().id()).toList());
         assertEquals("approval", facts(loop, QuestionAsked.class).getFirst().askedBy());
         assertEquals(HookDecided.Kind.ASK, facts(loop, HookDecided.class).getFirst().kind());
-        assertEquals("approval-c1", facts(loop, HookDecided.class).getFirst().reason());
+        assertEquals("approval-c1", facts(loop, HookDecided.class).getFirst().questionId());
     }
 
     // 需求 1.3：允许这一次 → 工具发出

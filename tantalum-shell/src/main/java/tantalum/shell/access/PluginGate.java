@@ -1,6 +1,7 @@
 package tantalum.shell.access;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
@@ -18,9 +20,11 @@ import tantalum.shell.plugin.WorkResult;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.value.hook.HookContext;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.state.KernelState;
+import tantalum.value.text.Failures;
 import tantalum.value.text.LocalText;
 
 /**
@@ -33,8 +37,8 @@ public final class PluginGate {
     private static final Logger LOG = LoggerFactory.getLogger(PluginGate.class);
 
     public static final String TOOL_OFF = "This tool was turned off in the plugin page and is not available.";
-    static final List<String> HOOK_POINTS =
-            List.of("beforeModelCall", "beforeToolCall", "onFailure", "beforeRunEnd", "onWorkResult", "beforeCompact");
+    /** 钩子位置对应的回调名，从 {@link HookPoint} 派生（review-fixes 需求 12.7）：加一个位置不用再改这里。 */
+    static final List<String> HOOK_POINTS = Arrays.stream(HookPoint.values()).map(PluginGate::callback).toList();
 
     /**
      * 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项（C13）。
@@ -186,7 +190,10 @@ public final class PluginGate {
         return tool.run(context, arguments);
     }
 
-    /** 只跑开着的插件的工具后处理；一个出错记日志，结果保持上一个。 */
+    /**
+     * 只跑开着的插件的工具后处理。一个出错：fail-closed 的（自己声明，或所在插件必须开启）让这次调用以错误结束，模型只看到类名；
+     * 其余记日志、结果保持上一个（review-fixes 需求 12.7）。
+     */
     public ToolOutput afterTool(ToolContext context, Tool tool, Json arguments, ToolOutput first) {
         ToolOutput output = first;
         for (AfterToolHook hook : afterHooks) {
@@ -196,7 +203,11 @@ public final class PluginGate {
             try {
                 output = hook.afterToolExecution(context, tool.name(), arguments, output);
             } catch (Exception failure) {
-                LOG.error("afterToolExecution hook failed for tool {}", tool.name(), failure);
+                LOG.error("afterToolExecution hook of {} failed for tool {}", hook.plugin(), tool.name(), failure);
+                Plugin plugin = plugins.get(hook.plugin());
+                if (hook.failClosed() || plugin != null && plugin.mandatory()) {
+                    return ToolOutput.error("The plugin " + hook.plugin() + " rejected this tool's output: " + Failures.describe(failure));
+                }
             }
         }
         return output;
@@ -288,13 +299,11 @@ public final class PluginGate {
                     list.add(point);
                 }
             }
-            descriptions.merge(hook.plugin(), hook.description(), PluginGate::first);
-            mandatory.merge(hook.plugin(), hook.mandatory(), Boolean::logicalOr);
-            byDefault.merge(hook.plugin(), hook.defaultEnabled(), Boolean::logicalAnd);
+            info(hook, hook.plugin(), descriptions, mandatory, byDefault);
         }
         for (AfterToolHook hook : afterHooks) {
             points.computeIfAbsent(hook.plugin(), ignored -> new ArrayList<>()).add("afterToolExecution");
-            descriptions.merge(hook.plugin(), hook.description(), PluginGate::first);
+            info(hook, hook.plugin(), descriptions, mandatory, byDefault);
         }
         for (WorkType type : workTypes) {
             points.computeIfAbsent(type.plugin(), ignored -> new ArrayList<>()).add("work:" + type.name());
@@ -310,6 +319,31 @@ public final class PluginGate {
                 points.get(name).stream().distinct().toList(), mandatory.getOrDefault(name, false) || required.contains(name),
                 byDefault.getOrDefault(name, true))));
         return grouped;
+    }
+
+    /** 插件页要的说明和开关策略只从实现了 {@link PluginInfo} 的成员取；没实现的什么都不说。 */
+    private static void info(Object member, String plugin, Map<String, LocalText> descriptions, Map<String, Boolean> mandatory,
+                             Map<String, Boolean> byDefault) {
+        if (member instanceof PluginInfo info) {
+            descriptions.merge(plugin, info.description(), PluginGate::first);
+            mandatory.merge(plugin, info.mandatory(), Boolean::logicalOr);
+            byDefault.merge(plugin, info.defaultEnabled(), Boolean::logicalAnd);
+        }
+    }
+
+    /** {@code BEFORE_MODEL_CALL} → {@code beforeModelCall}：{@link KernelHook} 的回调就按这个规律命名。 */
+    static String callback(HookPoint point) {
+        StringBuilder name = new StringBuilder();
+        boolean upper = false;
+        for (char c : point.name().toCharArray()) {
+            if (c == '_') {
+                upper = true;
+            } else {
+                name.append(upper ? Character.toUpperCase(c) : Character.toLowerCase(c));
+                upper = false;
+            }
+        }
+        return name.toString();
     }
 
     private static LocalText first(LocalText earlier, LocalText later) {

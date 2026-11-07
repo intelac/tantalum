@@ -43,6 +43,7 @@ class PluginBoundaryTest {
 
     private static final List<String> PURE = List.of(
             "tantalum.value", "tantalum.kernel.hook", "java.lang", "java.util", "java.time", "java.math");
+    private static final String PLUGIN_INFO = "tantalum.shell.plugin.PluginInfo";
 
     /** 插件只用插件 SDK；把它们注册成 Spring bean 的自动配置在 {@code tantalum.examples.boot}，只有那里碰 Spring。 */
     @ArchTest
@@ -104,7 +105,9 @@ class PluginBoundaryTest {
                         target = target.getBaseComponentType();
                     }
                     String pkg = target.getPackageName();
-                    boolean pure = target.isPrimitive() || PURE.stream().anyMatch(p -> pkg.equals(p) || pkg.startsWith(p + "."));
+                    // PluginInfo 只是插件页的说明和开关策略（纯数据接口，review-fixes 需求 12.6），钩子可以实现它
+                    boolean pure = target.isPrimitive() || target.getName().equals(PLUGIN_INFO)
+                            || PURE.stream().anyMatch(p -> pkg.equals(p) || pkg.startsWith(p + "."));
                     if (!pure && !outermost(target).equals(outermost(hook))) {
                         events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
                     }

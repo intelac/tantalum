@@ -13,6 +13,7 @@ import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.ReadFile;
 import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.tool.ToolArguments.Param;
@@ -31,7 +32,8 @@ public final class ReadAttachmentTool implements Tool {
 
     /** 附件的只读路径前缀，和 {@link AttachmentRef#readonlyPath()} 一致。这个前缀只读：没有任何工具能往这里写。 */
     public static final String ATTACHMENTS = "/attachments/sha256-";
-    private static final int CONCURRENCY = 16;
+    /** 附件库是本地文件，读可以并行。 */
+    static final ToolDispatch DISPATCH = ToolDispatch.parallel("read_attachment", "attachments", 16);
     private static final byte[] PDF = {'%', 'P', 'D', 'F', '-'};
 
     private final AttachmentStore attachments;
@@ -40,7 +42,7 @@ public final class ReadAttachmentTool implements Tool {
         this.attachments = attachments;
     }
 
-    @Override public String name() { return "read_attachment"; }
+    @Override public String name() { return DISPATCH.name(); }
     @Override public String description() {
         return "Read a file the user attached, by its read-only path (/attachments/sha256-...). Images are shown to you. "
                 + "Text is cut at 2000 lines or 50 KB, whichever comes first; read in parts with offset and limit.";
@@ -51,9 +53,10 @@ public final class ReadAttachmentTool implements Tool {
                 Param.optional("offset", "integer", "Line number to start from, 1-based. Default 1."),
                 Param.optional("limit", "integer", "Maximum number of lines to return, at most 2000.")));
     }
-    @Override public String server() { return "attachments"; }
-    @Override public int serverConcurrency() { return CONCURRENCY; }
-    @Override public boolean isConcurrencySafe(Json arguments) { return true; }
+    @Override public String server() { return DISPATCH.server(); }
+    @Override public int serverConcurrency() { return DISPATCH.serverConcurrency(); }
+    @Override public boolean isConcurrencySafe(Json arguments) { return DISPATCH.concurrencySafe().test(arguments); }
+    @Override public ToolDispatch dispatch() { return DISPATCH; }
 
     /** 只在本人的附件目录里找；别人的哈希、不存在的、不是附件路径的都是同一句话。错误信息不带服务器上的路径。 */
     @Override

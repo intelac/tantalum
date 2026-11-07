@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.value.model.ToolSpec;
 
 /** 已注册的工具。同一服务端的工具必须声明相同的并发上限。动态工具（如 MCP）来自 {@link ToolSource}，同名时已注册的工具优先。 */
@@ -89,10 +90,8 @@ public final class ToolCatalog {
     }
 
     /** 给内核用的判断。未注册的工具按独占处理；工具抛的异常由内核按独占处理。 */
+    /** 登记的工具的调度规则；没登记的按独占。MCP 工具恒为独占，来源里的不用进来。 */
     public ToolSafety safety() {
-        return (name, arguments) -> {
-            Tool tool = tools.get(name);
-            return tool != null && tool.isConcurrencySafe(arguments);
-        };
+        return ToolDispatch.safety(tools.values().stream().map(Tool::dispatch).toList());
     }
 }

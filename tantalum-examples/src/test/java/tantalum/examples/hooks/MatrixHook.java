@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Allow;
 import tantalum.value.text.LocalText;
@@ -24,7 +25,7 @@ import tantalum.value.state.KernelState;
  * 自己要的工作做完后再被问到时放行（{@code forever} 时接着要）。{@code onWorkResult} 只对 {@link MatrixWork#SOURCE} 的工作出结果，
  * 那份工作由另一个 {@code source} 钩子要。纯函数：只看状态和上下文。
  */
-final class MatrixHook implements KernelHook {
+final class MatrixHook implements KernelHook, PluginInfo {
 
     enum Result { ALLOW, PATCH, STOP, WORK_OK, WORK_FAIL, WORK_TIMEOUT, WORK_HOLD, WORK_CONTINUE, ASK, THROW, NULL }
 
@@ -74,6 +75,12 @@ final class MatrixHook implements KernelHook {
 
     @Override
     public boolean mandatory() {
+        return mandatory;
+    }
+
+    /** 必须开启的钩子出错按拦截处理：钩子自己声明，回放时建的裸 HookChain 和服务器里的结果才一样。 */
+    @Override
+    public boolean failClosed() {
         return mandatory;
     }
 

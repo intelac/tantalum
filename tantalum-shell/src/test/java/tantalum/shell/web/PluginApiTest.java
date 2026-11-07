@@ -41,7 +41,7 @@ class PluginApiTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** 一个必须开启的策略钩子：用户不能关。 */
-    static final class Quota implements KernelHook {
+    static final class Quota implements KernelHook, tantalum.shell.plugin.PluginInfo {
         @Override public String name() { return "dailyQuota"; }
         @Override public LocalText description() { return LocalText.of("daily limit"); }
         @Override public boolean mandatory() { return true; }

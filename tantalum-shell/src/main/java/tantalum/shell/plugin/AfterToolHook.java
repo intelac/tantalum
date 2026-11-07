@@ -1,7 +1,6 @@
 package tantalum.shell.plugin;
 
 import tantalum.value.json.Json;
-import tantalum.value.text.LocalText;
 
 /** 处理器钩子 {@code afterToolExecution}：可以做 I/O，只能修改数据，不能改变流程。 */
 @FunctionalInterface
@@ -19,8 +18,11 @@ public interface AfterToolHook {
         return lambda > 0 ? name.substring(0, lambda) : name;
     }
 
-    /** 插件页上的一句说明，写法同 {@code KernelHook.description()}。 */
-    default LocalText description() {
-        return LocalText.empty();
+    /**
+     * 抛异常时这次工具调用以错误结束，而不是记日志、结果保持上一个（review-fixes 需求 12.7）。默认 false；必须开启的插件
+     * （自己声明或管理员配置）一律按 true。插件页的说明另见 {@link PluginInfo}。
+     */
+    default boolean failClosed() {
+        return false;
     }
 }

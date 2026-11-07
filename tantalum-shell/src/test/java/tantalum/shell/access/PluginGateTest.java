@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
@@ -62,14 +63,14 @@ class PluginGateTest {
     }
 
     /** 一个插件：一个钩子、一个工作类型、一个工具后处理，plugin() 都是 citations。 */
-    static final class CitationHook implements KernelHook {
+    static final class CitationHook implements KernelHook, PluginInfo {
         @Override public String name() { return "citationCheck"; }
         @Override public String plugin() { return "citations"; }
         @Override public LocalText description() { return LocalText.of("checks citations"); }
         @Override public HookResult beforeRunEnd(KernelState state, HookContext context) { return Allow.PLAIN; }
     }
 
-    static final class QuotaHook implements KernelHook {
+    static final class QuotaHook implements KernelHook, PluginInfo {
         @Override public String name() { return "quota"; }
         @Override public boolean mandatory() { return true; }
         @Override public HookResult beforeModelCall(KernelState state, HookContext context) { return Allow.PLAIN; }
@@ -185,7 +186,7 @@ class PluginGateTest {
     }
 
     /** 策略插件默认关（2026-11-06 Yi 定，A2）：用户没设置过时不开，在插件页打开后才生效，只对他自己。 */
-    static final class ReadOnlyPolicy implements KernelHook {
+    static final class ReadOnlyPolicy implements KernelHook, PluginInfo {
         @Override public String name() { return "readOnly"; }
         @Override public boolean defaultEnabled() { return false; }
         @Override public HookResult beforeToolCall(KernelState state, HookContext context) { return Allow.PLAIN; }
@@ -248,5 +249,41 @@ class PluginGateTest {
             @Override public WorkResult run(ToolContext context, Json input) { return new WorkResult(new Json.Null(), null); }
         };
         assertThrows(IllegalStateException.class, () -> gate.runWork(context(ALICE), stray, new Json.Null()));
+    }
+
+    /** review-fixes 需求 12.7：钩子位置的名字从枚举派生，onAnswer 也在；工具后处理 fail-closed 时出错让这次调用以错误结束。 */
+    @Test
+    void hookPointsComeFromTheEnumAndFailClosedAfterToolHooksTurnFailuresIntoErrors() throws Exception {
+        assertEquals(List.of("beforeModelCall", "beforeToolCall", "onFailure", "beforeRunEnd", "onWorkResult", "beforeCompact", "onAnswer"),
+                PluginGate.HOOK_POINTS);
+        KernelHook answering = new KernelHook() {
+            @Override public String name() { return "answers"; }
+            @Override public HookResult onAnswer(KernelState state, HookContext context) { return Allow.PLAIN; }
+        };
+        AfterToolHook strict = new AfterToolHook() {
+            @Override public String plugin() { return "strict"; }
+            @Override public boolean failClosed() { return true; }
+            @Override public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
+                throw new IllegalStateException("/secret/path");
+            }
+        };
+        AfterToolHook lax = new AfterToolHook() {
+            @Override public String plugin() { return "lax"; }
+            @Override public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
+                throw new IllegalStateException("boom");
+            }
+        };
+        PluginGate strictGate = new PluginGate(catalog, switches, List.of(), List.of(answering), List.of(lax, strict, marker()), List.of());
+        assertEquals(List.of("onAnswer"), strictGate.overview(ALICE).plugins().stream()
+                .filter(p -> p.name().equals("answers")).findFirst().orElseThrow().points());
+        ToolOutput output = strictGate.afterTool(context(ALICE), tool("read_file", "workspace"), new Json.Obj(java.util.Map.of()), ToolOutput.ok("text"));
+        assertTrue(output.error());
+        assertTrue(output.text().contains("strict") && output.text().contains("IllegalStateException"), output.text());
+        assertFalse(output.text().contains("/secret/path"), "only the class name reaches the model");
+        assertEquals(0, afterRuns.get(), "the hook after the failing one did not run");
+
+        PluginGate laxGate = new PluginGate(catalog, switches, List.of(), List.of(), List.of(lax, marker()), List.of());
+        ToolOutput kept = laxGate.afterTool(context(ALICE), tool("read_file", "workspace"), new Json.Obj(java.util.Map.of()), ToolOutput.ok("text"));
+        assertEquals("text +marked", kept.text(), "a lax hook's failure keeps the previous output and the rest run");
     }
 }

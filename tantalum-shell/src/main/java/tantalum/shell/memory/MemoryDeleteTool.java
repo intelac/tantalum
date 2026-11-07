@@ -2,6 +2,7 @@ package tantalum.shell.memory;
 
 import java.util.List;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.tool.ToolArguments;
@@ -16,12 +17,15 @@ public final class MemoryDeleteTool implements Tool {
         this.stores = stores;
     }
 
-    @Override public String name() { return "memory_delete"; }
+    static final String NAME = "memory_delete";
+
+    @Override public String name() { return NAME; }
     @Override public String description() { return "Delete one of your memory entries by name, for example when the user asks you to forget something."; }
     @Override public Json schema() { return ToolArguments.schema(List.of("name"), List.of()); }
     @Override public String server() { return MemoryTools.SERVER; }
     @Override public int serverConcurrency() { return MemoryTools.CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
+    @Override public ToolDispatch dispatch() { return MemoryTools.dispatch(NAME); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

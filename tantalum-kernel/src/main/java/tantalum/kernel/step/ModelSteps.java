@@ -51,7 +51,8 @@ public final class ModelSteps {
 
     /**
      * 调用模型前经过 {@code beforeModelCall}；待处理的 {@code steer} 在这里并入消息。
-     * 放行后先看要不要自动压缩（规则 2）；{@code compactionAllowed} 为 false 是压缩刚结束后的那次调用，不再判断（规则 3.1）。
+     * 放行后先看要不要自动压缩（规则 2）；{@code compactionAllowed} 为 false 是压缩刚结束后的那次调用，不再判断（规则 3.1）；
+     * 调用方在冻结上下文之前用 {@code SessionState.justCompacted()} 算出它。
      */
     static void callModel(Outcome out, RunState pending, WorkDone work, boolean compactionAllowed) {
         RunState run = pending;

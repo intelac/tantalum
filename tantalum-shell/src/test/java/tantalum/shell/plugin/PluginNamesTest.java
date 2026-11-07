@@ -1,6 +1,8 @@
 package tantalum.shell.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import tantalum.kernel.hook.KernelHook;
@@ -17,7 +19,11 @@ class PluginNamesTest {
             @Override public WorkResult run(ToolContext context, tantalum.value.json.Json input) { return null; }
         };
         assertEquals("quota", hook.plugin());
-        assertEquals(LocalText.empty(), hook.description());
+        // 说明、必须开启、默认开不开在 PluginInfo 上，默认是“无说明、可以关、默认开”（review-fixes 需求 12.6）
+        PluginInfo info = new PluginInfo() { };
+        assertEquals(LocalText.empty(), info.description());
+        assertFalse(info.mandatory());
+        assertTrue(info.defaultEnabled());
         assertEquals("lookup", work.plugin());
         assertEquals(LocalText.empty(), work.description());
     }

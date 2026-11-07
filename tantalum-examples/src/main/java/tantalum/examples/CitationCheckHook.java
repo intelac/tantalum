@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tantalum.kernel.hook.HookMessages;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
@@ -40,7 +41,7 @@ import tantalum.value.text.LocalText;
  * 改过 {@value #MAX_CORRECTIONS} 次还不对 → {@code Stop}，回答留着，结束原因写明哪几个引用没有根据。核对工作本身失败也 {@code Stop}：
  * “检查”钩子不能在检查没做成时当作通过。
  */
-public final class CitationCheckHook implements KernelHook {
+public final class CitationCheckHook implements KernelHook, PluginInfo {
 
     static final int MAX_CORRECTIONS = 2;
 

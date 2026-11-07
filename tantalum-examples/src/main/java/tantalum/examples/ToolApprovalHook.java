@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookContext;
@@ -30,7 +31,7 @@ import tantalum.value.text.LocalText;
  * <p>结果：列出的工具 → {@code Ask}；这个会话里一直允许的 → 放行；同意 → 放行；拒绝、期限到没人答 → {@code Stop}，只拦这一个调用。
  * 默认关（策略插件），开着时出错按拦截处理。
  */
-public final class ToolApprovalHook implements KernelHook {
+public final class ToolApprovalHook implements KernelHook, PluginInfo {
 
     /** 会话记录的键，也是问题 id 的前缀。 */
     public static final String NOTE = "approval";
