@@ -87,12 +87,11 @@ public final class ClaudeClient implements ModelClient {
         StringBuilder visible = new StringBuilder();
         Map<Long, Pending> blocks = new TreeMap<>();
         Reply reply = new Reply();
-        StreamResponse<?>[] open = new StreamResponse<?>[1];
-        try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks, () -> closeQuietly(open))) {
+        try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks)) {
             try {
                 StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(
                         ClaudeRequest.params(prompt, options(prompt), media));
-                open[0] = stream;
+                watchdog.watch(stream);
                 try (stream) {
                     stream.stream().forEach(event -> {
                         watchdog.activity();
@@ -100,16 +99,18 @@ public final class ClaudeClient implements ModelClient {
                     });
                 }
                 return finish(blocks, reply, visible, watchdog, prompt.model() == null ? null : prompt.model().route());
-            } catch (AnthropicServiceException failure) {
-                return ModelFailures.http(failure.statusCode(), failure.getMessage(),
-                        failure.headers().values("retry-after").stream().findFirst().orElse(null), visible.toString(), overflow);
             } catch (RuntimeException failure) {
-                closeQuietly(open);
+                watchdog.abandon();
+                // 先看中断和看门狗，再按异常类型分（review-fixes 需求 10.6）
                 if (ModelFailures.isInterrupt(failure)) {
                     return new ModelOutcome.Interrupted(visible.toString());
                 }
                 if (watchdog.expired()) {
                     return ModelFailures.timeout(visible.toString());
+                }
+                if (failure instanceof AnthropicServiceException service) {
+                    return ModelFailures.http(service.statusCode(), service.getMessage(),
+                            service.headers().values("retry-after").stream().findFirst().orElse(null), visible.toString(), overflow);
                 }
                 if (failure instanceof AnthropicIoException) {
                     return ModelFailures.connection(visible.toString(), Failures.describe(failure));
@@ -119,14 +120,6 @@ public final class ClaudeClient implements ModelClient {
         }
     }
 
-    private static void closeQuietly(StreamResponse<?>[] open) {
-        if (open[0] != null) {
-            open[0].close();
-        }
-    }
-
-
-    /** 从事件累积出的回复头信息。 */
     private static final class Reply {
         String actualModel;
         long input;
@@ -149,9 +142,19 @@ public final class ClaudeClient implements ModelClient {
                 chunks.onToolInput("");
             }
         });
-        // 没有 start 就来 delta 的块按文本块处理，不让一个异常分片把整次回复变成失败。
-        event.contentBlockDelta().ifPresent(delta ->
-                onDelta(delta.delta(), blocks.computeIfAbsent(delta.index(), index -> new Pending("text")), visible, chunks));
+        // 没有 start 就来的 delta：只有文字 delta 补一个文本块，不让一个异常分片把整次回复变成失败；思考、签名、参数的孤立分片丢弃
+        //（它们单独没有意义，当文字发回去还会丢签名，review-fixes 需求 10.2）
+        event.contentBlockDelta().ifPresent(delta -> {
+            Pending block = blocks.get(delta.index());
+            if (block == null) {
+                if (delta.delta().text().isEmpty()) {
+                    return;
+                }
+                block = new Pending("text");
+                blocks.put(delta.index(), block);
+            }
+            onDelta(delta.delta(), block, visible, chunks);
+        });
         event.messageDelta().ifPresent(delta -> onMessageDelta(delta, reply));
         if (event.isMessageStop()) {
             reply.stopped = true;
@@ -183,7 +186,11 @@ public final class ClaudeClient implements ModelClient {
             tool.name = block.asToolUse().name();
             return tool;
         }
-        return new Pending("text");
+        if (block.isText()) {
+            return new Pending("text");
+        }
+        // 没见过的块类型（server_tool_use、web_search_tool_result……）：不产生内容块，发回空文字块会被拒（需求 10.2）
+        return new Pending("ignored");
     }
 
     private static void onDelta(RawContentBlockDelta delta, Pending block, StringBuilder visible, ChunkListener chunks) {
@@ -226,7 +233,12 @@ public final class ClaudeClient implements ModelClient {
                     "refused: " + reply.refusal);
         }
         List<ContentBlock> content = new ArrayList<>();
-        blocks.values().forEach(block -> content.add(toBlock(block, route, route == null ? null : reply.actualModel)));
+        for (Pending block : blocks.values()) {
+            ContentBlock made = toBlock(block, route, route == null ? null : reply.actualModel);
+            if (made != null) {
+                content.add(made);
+            }
+        }
         TokenUsage usage = reply.hasUsage ? new TokenUsage(reply.input, reply.output, reply.cacheRead, reply.cacheWrite) : null;
         return new ModelOutcome.Replied(content, stopReason(reply.stop), reply.actualModel, usage);
     }
@@ -245,7 +257,13 @@ public final class ClaudeClient implements ModelClient {
         return StopReason.OTHER;
     }
 
+    /** 没签名的思考块、空的文字块和不认识的块都不产生内容块（发回去会被拒，需求 10.2）。 */
     private static ContentBlock toBlock(Pending block, String route, String model) {
+        boolean dropped = block.kind.equals("ignored") || (block.kind.equals("thinking") && block.signature.isEmpty())
+                || (block.kind.equals("text") && block.text.isEmpty());
+        if (dropped) {
+            return null;
+        }
         return switch (block.kind) {
             case "thinking" -> {
                 Map<String, Json> raw = new LinkedHashMap<>();

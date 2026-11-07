@@ -538,4 +538,23 @@ class ClaudeRequestTest {
         ReasoningBlock unnamed = assertInstanceOf(ReasoningBlock.class, old.content().getFirst());
         assertEquals(null, unnamed.route(), "no choice, nothing recorded: the journal line stays as before");
     }
+
+    /** review-fixes 需求 10.3：全空白的文字块不发，空的工具结果有占位，字段缺失的思考块不发。 */
+    @Test
+    void blankTextEmptyResultsAndBrokenThinkingAreNotSent() {
+        Map<String, Json> half = new LinkedHashMap<>();
+        half.put("type", new Json.Str("thinking"));
+        half.put("thinking", new Json.Str("no signature"));
+        Prompt prompt = new Prompt("sys", List.of(), List.of(
+                Message.user("q"),
+                new Message(Role.ASSISTANT, List.of(new ReasoningBlock("claude", new Json.Obj(half)), new TextBlock("   "),
+                        new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(Map.of()))), false),
+                new Message(Role.USER, List.of(new ToolResultBlock("t1", "  ", false, null)), false)));
+        client(settings(4096, "low", false, false)).call(prompt, IGNORE);
+        String sent = server.requests.getLast();
+        assertFalse(sent.contains("\"text\":\"   \""), sent);
+        assertFalse(sent.contains("no signature"), sent);
+        assertTrue(sent.contains("\"content\":\"" + ClaudeRequest.NO_OUTPUT + "\""), sent);
+        assertTrue(sent.contains("\"tool_use\""), sent);
+    }
 }

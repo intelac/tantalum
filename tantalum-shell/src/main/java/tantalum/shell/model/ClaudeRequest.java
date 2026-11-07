@@ -358,10 +358,15 @@ final class ClaudeRequest {
                 .data(BASE64.encodeToString(image.bytes())).build()).build();
     }
 
-    /** 没出错的工具结果：文字和图片都在结果里（需求 3.7）。图片的说明行已经在工具输出的文字里，不再重复。 */
+    /** 工具结果没有文字时的占位：接口不收空的内容（review-fixes 需求 10.3）。 */
+    static final String NO_OUTPUT = "(no output)";
+
+    /** 没出错的工具结果：文字和图片都在结果里（需求 3.7）。图片的说明行已经在工具输出的文字里，不再重复；文字空白时只发图片。 */
     private static ContentBlockParam toolResultWithImages(ToolResultBlock result, AttachmentMedia media) {
         List<ToolResultBlockParam.Content.Block> content = new ArrayList<>();
-        content.add(ToolResultBlockParam.Content.Block.ofText(TextBlockParam.builder().text(result.text()).build()));
+        if (!result.text().isBlank()) {
+            content.add(ToolResultBlockParam.Content.Block.ofText(TextBlockParam.builder().text(result.text()).build()));
+        }
         for (ImageRef image : result.images()) {
             content.add(ToolResultBlockParam.Content.Block.ofImage(imageParam(image, media)));
         }
@@ -375,7 +380,8 @@ final class ClaudeRequest {
      */
     private static ContentBlockParam param(ContentBlock block) {
         return switch (block) {
-            case TextBlock text -> text.text().isEmpty() ? null : ContentBlockParam.ofText(
+            // 全空白的文字块接口也拒绝，和 blocks() 的判断一致（review-fixes 需求 10.3）
+            case TextBlock text -> text.text().isBlank() ? null : ContentBlockParam.ofText(
                     TextBlockParam.builder().text(text.text()).build());
             case ReasoningBlock reasoning -> reasoningParam(reasoning);
             case ToolCallBlock call -> {
@@ -387,7 +393,7 @@ final class ClaudeRequest {
                         .id(call.id()).name(call.name()).input(input.build()).build());
             }
             case ToolResultBlock result -> ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                    .toolUseId(result.toolCallId()).content(result.text()).isError(result.error()).build());
+                    .toolUseId(result.toolCallId()).content(result.text().isBlank() ? NO_OUTPUT : result.text()).isError(result.error()).build());
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
             case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
@@ -399,12 +405,15 @@ final class ClaudeRequest {
         if (!reasoning.provider().equals(PROVIDER) || !(reasoning.raw() instanceof Json.Obj raw)) {
             return null;
         }
+        // 字段缺失或不是字符串的思考块不发（记录损坏或别家写的），不抛异常让整次调用失败（review-fixes 需求 10.3）
         if (raw.fields().get("type") instanceof Json.Str type && type.value().equals("redacted_thinking")) {
-            return ContentBlockParam.ofRedactedThinking(RedactedThinkingBlockParam.builder()
-                    .data(((Json.Str) raw.fields().get("data")).value()).build());
+            return raw.fields().get("data") instanceof Json.Str data
+                    ? ContentBlockParam.ofRedactedThinking(RedactedThinkingBlockParam.builder().data(data.value()).build()) : null;
         }
-        return ContentBlockParam.ofThinking(ThinkingBlockParam.builder()
-                .thinking(((Json.Str) raw.fields().get("thinking")).value())
-                .signature(((Json.Str) raw.fields().get("signature")).value()).build());
+        if (!(raw.fields().get("thinking") instanceof Json.Str thinking) || !(raw.fields().get("signature") instanceof Json.Str signature)
+                || signature.value().isEmpty()) {
+            return null;
+        }
+        return ContentBlockParam.ofThinking(ThinkingBlockParam.builder().thinking(thinking.value()).signature(signature.value()).build());
     }
 }
