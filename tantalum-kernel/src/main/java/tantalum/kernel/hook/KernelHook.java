@@ -4,7 +4,6 @@ import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
 import tantalum.value.state.KernelState;
-import tantalum.value.text.LocalText;
 
 /**
  * 内核钩子。在内核的单线程上运行，回放时会被再次调用，所以必须是纯函数：同样的状态和上下文给出同样的结果，时间只取 {@code context.at()}。
@@ -24,42 +23,19 @@ public interface KernelHook {
 
     /**
      * 所属插件，插件页按它分组、按它开关（core-tools C13）。同一个插件的钩子、工作类型和工具后处理要返回同一个名字，默认是
-     * {@link #name()}。{@link #mandatory()} 的钩子所在的插件不能被用户关掉。
+     * {@link #name()}。插件页的说明、必须开启、默认开不开这些展示和开关策略不在这里：shell 的 {@code PluginInfo} 接口另说
+     * （review-fixes 需求 12.6），内核只认回调和出错规则。
      */
     default String plugin() {
         return name();
     }
 
     /**
-     * 插件页上的一句说明，可以为空。写 {@code LocalText.of("…")} 照原样显示；写 {@code LocalText.en("…").zh("…").ja("…")}
-     * 控制台按看的人的语言选，没有那种就用英文（console-i18n I10）。
-     */
-    default LocalText description() {
-        return LocalText.empty();
-    }
-
-    /**
-     * 必须开启：插件页上不能关，抛异常时按 {@code Stop} 处理（同 {@link #failClosed()}）。管理员也可以用配置
-     * {@code tantalum.hooks.required} 把任何插件设成必须开启，效果相同。
-     */
-    default boolean mandatory() {
-        return false;
-    }
-
-    /**
-     * 抛异常时按 {@code Stop} 处理；返回 false 的跳过并上报（{@code beforeToolCall} 例外，抛异常一律拦截）。默认同 {@link #mandatory()}。
-     * 用户能关的策略插件（如工具审批）也该返回 true：开着时出了错不能当作放行。
+     * 抛异常时按 {@code Stop} 处理；返回 false 的跳过并上报（{@code beforeToolCall} 例外，抛异常一律拦截）。默认 false。
+     * 用户能关的策略插件（如工具审批）该返回 true：开着时出了错不能当作放行。必须开启的插件由 shell 包成 fail-closed 再交给内核。
      */
     default boolean failClosed() {
-        return mandatory();
-    }
-
-    /**
-     * 用户没在插件页设置过时开不开，默认开。策略类插件（只读、工具审批、每日额度）返回 false，由用户自己打开（2026-11-06 Yi 定）。
-     * 同一个插件里有一个钩子返回 false，整个插件默认就关。必须开启的插件不看这一项。
-     */
-    default boolean defaultEnabled() {
-        return true;
+        return false;
     }
 
     /** 调模型前。放行时补丁生效（追加 system、工具）；{@code Stop} 结束运行；工作做完后再问一次，{@code context.work()} 是结果。 */

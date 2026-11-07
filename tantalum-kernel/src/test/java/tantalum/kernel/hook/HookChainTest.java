@@ -54,10 +54,10 @@ class HookChainTest {
 
     private final List<String> calls = new ArrayList<>();
 
-    private KernelHook hook(String name, boolean mandatory, HookResult result) {
+    private KernelHook hook(String name, boolean failClosed, HookResult result) {
         return new KernelHook() {
             @Override public String name() { return name; }
-            @Override public boolean mandatory() { return mandatory; }
+            @Override public boolean failClosed() { return failClosed; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
                 calls.add(name);
                 return result;
@@ -69,10 +69,10 @@ class HookChainTest {
         };
     }
 
-    private KernelHook throwing(String name, boolean mandatory) {
+    private KernelHook throwing(String name, boolean failClosed) {
         return new KernelHook() {
             @Override public String name() { return name; }
-            @Override public boolean mandatory() { return mandatory; }
+            @Override public boolean failClosed() { return failClosed; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
                 throw new IllegalStateException("boom");
             }
@@ -137,18 +137,18 @@ class HookChainTest {
      * A2：默认关、用户能关的策略插件（failClosed）和管理员设成必须开启的插件（tantalum.hooks.required），出错都按拦截处理，
      * 和声明了 mandatory 的一样；否则审批钩子出一次错就等于放行。
      */
+    /** 出错拦不拦只看钩子自己说的 failClosed；管理员要求必须开启的插件由 shell 包成 fail-closed（KernelFactoryTest）。 */
     @Test
-    void failClosedAndAdminRequiredHooksStopOnException() {
+    void failClosedHooksStopOnException() {
         KernelHook approval = new KernelHook() {
             @Override public String name() { return "approval"; }
             @Override public boolean failClosed() { return true; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) { throw new IllegalStateException("boom"); }
         };
         assertInstanceOf(Stop.class, modelCall(approval, hook("b", false, Allow.PLAIN)).result());
-        HookOutcome required = new HookChain(List.of(throwing("metrics", false), hook("b", false, Allow.PLAIN)), java.util.Set.of("metrics"))
-                .run(HookPoint.BEFORE_MODEL_CALL, KernelState.empty(), CONTEXT);
-        assertInstanceOf(Stop.class, required.result());
         assertEquals(List.of(), calls);
+        assertInstanceOf(Allow.class, modelCall(throwing("metrics", false), hook("b", false, Allow.PLAIN)).result(), "not fail-closed: skipped");
+        assertEquals(List.of("b"), calls);
     }
 
     /** 返回 null 违反契约：不能当作放行，也不能让后面的钩子被跳过而无人知道。 */
@@ -186,10 +186,10 @@ class HookChainTest {
     // ---- HookDecided：每个钩子的决定报一条，只放行、没有补丁时不报 ----
 
     /** 六个位置都返回同一个结果的钩子。 */
-    private static KernelHook everywhere(String name, boolean mandatory, HookResult result) {
+    private static KernelHook everywhere(String name, boolean failClosed, HookResult result) {
         return new KernelHook() {
             @Override public String name() { return name; }
-            @Override public boolean mandatory() { return mandatory; }
+            @Override public boolean failClosed() { return failClosed; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) { return result; }
             @Override public HookResult beforeToolCall(KernelState state, HookContext context) { return result; }
             @Override public HookResult onFailure(KernelState state, HookContext context) { return result; }
@@ -218,7 +218,7 @@ class HookChainTest {
                         new HookDecided(RUN, "h", point, HookDecided.Kind.NEED_WORK, null, 0, List.of(), callAt(point), "citation")),
                 Arguments.of(point, new Allow(new PromptPatch("cite sources", List.of(CITE, LOOKUP))),
                         new HookDecided(RUN, "h", point, HookDecided.Kind.PATCH, null, 12, List.of("cite", "lookup"), callAt(point), null)),
-                // 问用户（waiting-state）：reason 位放问题 id
+                // 问用户（waiting-state）：问题 id 放 reason 位，questionId() 读
                 Arguments.of(point, new tantalum.value.hook.Ask(new tantalum.value.question.Question("q-1",
                                 tantalum.value.text.LocalText.of("Allow?"), null,
                                 List.of(new tantalum.value.question.Question.Choice("yes", tantalum.value.text.LocalText.of("Yes"))))),

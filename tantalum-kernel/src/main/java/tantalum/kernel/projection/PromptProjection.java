@@ -9,6 +9,7 @@ import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.Role;
+import tantalum.value.model.SystemUpdates;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.SessionContext;
@@ -75,10 +76,9 @@ public final class PromptProjection {
         return out;
     }
 
-    /** 工具变化或钩子说明的系统消息；换模型的说明不算，它由各客户端并进用户消息。 */
+    /** 工具变化或钩子说明的系统消息；换模型的说明不算，它由各客户端并进用户消息。规则在 {@link SystemUpdates}。 */
     public static boolean isSystemUpdate(Message message) {
-        return message.role() == Role.SYSTEM && !message.content().isEmpty()
-                && message.content().stream().allMatch(block -> block instanceof ToolChangeBlock || block instanceof HookTextBlock);
+        return SystemUpdates.isSystemUpdate(message);
     }
 
     private static void flush(List<Message> out, List<HookTextBlock> texts, Set<String> added, Set<String> removed) {

@@ -35,6 +35,11 @@ public interface Tool {
         return standard;
     }
 
+    /** 调度要的描述：名字、服务端、并发、能不能并行。默认从上面几个方法取；能不靠依赖给出的工具另有静态的一份。 */
+    default ToolDispatch dispatch() {
+        return ToolDispatch.of(this);
+    }
+
     /** 在虚拟线程上执行，要响应中断。抛异常等同于错误结果。 */
     ToolOutput run(ToolContext context, Json arguments) throws Exception;
 }

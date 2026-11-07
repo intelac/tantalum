@@ -159,4 +159,12 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
     public boolean isLatestRun(RunId run) {
         return run != null && run.equals(lastRun);
     }
+
+    /**
+     * 压缩刚换过视图、上下文还没重新冻结：压缩采用后 {@code context} 清空而 {@code compaction} 有值，直到下一次组装上下文。
+     * 那次组装之后的模型调用不再判断自动压缩（压缩规则 3.1），由调用方在冻结之前看这一项（review-fixes 需求 12.8）。
+     */
+    public boolean justCompacted() {
+        return context() == null && compaction() != null;
+    }
 }

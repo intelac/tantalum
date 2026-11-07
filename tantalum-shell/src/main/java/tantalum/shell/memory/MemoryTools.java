@@ -3,6 +3,7 @@ package tantalum.shell.memory;
 import java.io.UncheckedIOException;
 import java.util.List;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 
@@ -13,6 +14,15 @@ public final class MemoryTools {
     static final int CONCURRENCY = 16;
 
     private MemoryTools() {}
+
+    /** 记忆是本地数据库，三个工具都可以并行；不用打开记忆库就能给出。 */
+    public static List<ToolDispatch> dispatch() {
+        return List.of(dispatch(MemoryWriteTool.NAME), dispatch(MemoryReadTool.NAME), dispatch(MemoryDeleteTool.NAME));
+    }
+
+    static ToolDispatch dispatch(String name) {
+        return ToolDispatch.parallel(name, SERVER, CONCURRENCY);
+    }
 
     public static List<Tool> all(MemoryStores stores) {
         return List.of(new MemoryWriteTool(stores), new MemoryReadTool(stores), new MemoryDeleteTool(stores));

@@ -37,6 +37,7 @@ import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
+import tantalum.value.model.SystemUpdates;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
@@ -318,7 +319,7 @@ public final class OpenAiClient implements ModelClient {
         messages.add(system);
         // 换模型的说明并进这次的用户消息（M12）
         boolean images = vision.test(model(prompt));
-        ModelChanges.fold(prompt.messages()).forEach(message -> addMessage(messages, message, media, images, prompt.model()));
+        Folding.fold(prompt.messages(), false).forEach(message -> addMessage(messages, message, media, images, prompt.model()));
         body.put("messages", messages);
         // 这边没有追加式的工具变化：直接发现在开着的工具，变化在历史里另有文字说明
         List<ToolSpec> tools = ToolChanges.active(prompt);
@@ -361,8 +362,8 @@ public final class OpenAiClient implements ModelClient {
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
                 case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
-                case HookTextBlock note -> append(text, ToolChanges.PREFIX + note.text());
-                case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
+                case HookTextBlock note -> append(text, SystemUpdates.HEADER + note.text());
+                case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);
                     parts.add(textPart(AttachmentText.image(image)));

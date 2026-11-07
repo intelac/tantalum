@@ -6,14 +6,12 @@ import java.util.Set;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
+import tantalum.value.model.SystemUpdates;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 
 /** 会话中途的工具变化（core-tools C14），给不支持追加式工具变化的客户端用：把历史里的变化折算成现在开着的工具。 */
 final class ToolChanges {
-
-    /** 给模型看的文字，开头和上下文更新消息相同：它不是用户写的。 */
-    static final String PREFIX = "[Context update, not written by the user. These changes apply on top of what you were given earlier.]\n\n";
 
     private ToolChanges() {}
 
@@ -39,7 +37,7 @@ final class ToolChanges {
     }
 
     static String describe(ToolChangeBlock change) {
-        StringBuilder text = new StringBuilder(PREFIX).append("Your tools changed.");
+        StringBuilder text = new StringBuilder(SystemUpdates.HEADER).append("Your tools changed.");
         if (!change.added().isEmpty()) {
             text.append(" Now available: ").append(String.join(", ", change.added())).append('.');
         }

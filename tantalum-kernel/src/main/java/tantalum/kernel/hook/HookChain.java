@@ -4,7 +4,6 @@ import tantalum.value.text.Failures;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.HookReported;
@@ -21,21 +20,15 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 
-/** 按注册顺序遍历钩子，并执行异常规则：{@code failClosed} 的钩子、必须开启的插件和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
+/** 按注册顺序遍历钩子，并执行异常规则：{@code failClosed} 的钩子和 {@code beforeToolCall} 失败时关闭，其余跳过并上报；
  * 返回 null 违反契约，一律按 {@code Stop} 处理。每个钩子的决定报一条 {@link HookDecided}，只放行、没有补丁的不报。 */
 public final class HookChain {
 
     private final List<KernelHook> hooks;
-    /** 管理员设成必须开启的插件（{@code tantalum.hooks.required}）：它们的钩子出错同样按拦截处理。 */
-    private final Set<String> required;
 
+    /** 钩子出错时拦不拦只看它自己的 {@link KernelHook#failClosed()}：管理员要求必须开启的插件由 shell 包成 fail-closed 再交进来（review-fixes 需求 12.4）。 */
     public HookChain(List<KernelHook> hooks) {
-        this(hooks, Set.of());
-    }
-
-    public HookChain(List<KernelHook> hooks, Set<String> required) {
         this.hooks = List.copyOf(hooks);
-        this.required = Set.copyOf(required);
     }
 
     public HookOutcome run(HookPoint point, KernelState state, HookContext context) {
@@ -55,7 +48,7 @@ public final class HookChain {
             } catch (RuntimeException failure) {
                 // 只记类名：消息可能带路径或密钥，事实进 journal 和推送（review-fixes 需求 6.1）
                 facts.add(new HookReported(context.run(), hook.name(), Failures.describe(failure)));
-                if (hook.failClosed() || required.contains(hook.plugin()) || point == HookPoint.BEFORE_TOOL_CALL) {
+                if (hook.failClosed() || point == HookPoint.BEFORE_TOOL_CALL) {
                     return stopped(new Stop("hook failed: " + hook.name()), facts, hook.name(), point, context);
                 }
                 continue;
@@ -101,7 +94,7 @@ public final class HookChain {
                     0, List.of(), toolCall, null);
             case NeedWork work -> new HookDecided(context.run(), hook, point, HookDecided.Kind.NEED_WORK, null,
                     0, List.of(), toolCall, work.workType());
-            // 问用户：reason 位放问题 id（waiting-state），不给 HookDecided 加字段，旧记录的形状不变
+            // 问用户：问题 id 放 reason 位（HookDecided.questionId）；不加字段，旧会话重写后的行才和原来相同
             case Ask ask -> new HookDecided(context.run(), hook, point, HookDecided.Kind.ASK, ask.question().id(),
                     0, List.of(), toolCall, null);
             case Allow allow when allow.patch().systemAppend().isEmpty() && allow.patch().addTools().isEmpty() -> null;

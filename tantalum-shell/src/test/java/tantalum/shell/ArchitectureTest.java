@@ -203,6 +203,7 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule onlyTheHookChainRunsHooks = noClasses()
             .that().doNotHaveFullyQualifiedName("tantalum.kernel.hook.HookChain")
+            .and().doNotHaveFullyQualifiedName("tantalum.kernel.hook.FailClosed")
             .should().callMethodWhere(callTo(KernelHook.class,
                     "beforeModelCall|beforeToolCall|onFailure|beforeRunEnd|onWorkResult|beforeCompact"));
 

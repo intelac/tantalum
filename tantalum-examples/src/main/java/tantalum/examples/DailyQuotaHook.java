@@ -3,6 +3,7 @@ package tantalum.examples;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
@@ -13,7 +14,7 @@ import tantalum.value.state.PrincipalState;
 import tantalum.value.text.LocalText;
 
 /** 每日额度：超过当天的 token 上限就停止。数据从事件投影到状态，时间取自事件，所以钩子是纯函数。 */
-public final class DailyQuotaHook implements KernelHook {
+public final class DailyQuotaHook implements KernelHook, PluginInfo {
 
     private final long dailyTokens;
 

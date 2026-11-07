@@ -90,23 +90,23 @@
 
 - [x] 20. 阶段 3 收尾：全量回归、8091 部署、tech.md、提交
 
-- [ ] 21. 阶段 4：消息分类和折叠
+- [x] 21. 阶段 4：消息分类和折叠
   - File: `tantalum-value/.../model/SystemUpdates.java`（新）、`kernel/projection/{ContextUpdate,PromptProjection}.java`、`shell/model/{ToolChanges,HookTexts,ModelChanges,Folding(新),ClaudeRequest,OpenAiClient}.java`
   - _Requirements: 12.1, 12.2_
 
-- [ ] 22. 阶段 4：工具的描述和实现
+- [x] 22. 阶段 4：工具的描述和实现
   - File: `shell/plugin/{Tool,ToolDispatch(新)}.java`、`shell/tool/ToolCatalog.java`、`shell/boot/KernelFactory.java`、各工具类的静态 dispatch 工厂
   - _Requirements: 12.3_
 
-- [ ] 23. 阶段 4：插件开关只在一处、SPI 拆分
+- [x] 23. 阶段 4：插件开关只在一处、SPI 拆分
   - File: `kernel/hook/{HookChain,KernelHook}.java`、`shell/plugin/{PluginInfo(新),AfterToolHook}.java`、`shell/access/PluginGate.java`、`shell/boot/KernelFactory.java`、示例钩子
   - _Requirements: 12.4, 12.6, 12.7_
 
-- [ ] 24. 阶段 4：事实和状态的归位
+- [x] 24. 阶段 4：事实和状态的归位
   - File: `value/decision/HookDecided.java`、`value/state/{Compacting,RunState}.java`、`kernel/hook/HookChain.java`、`kernel/step/{CompactSteps,ContextSteps,ModelSteps}.java`、`shell/journal/{EventCodec,RecordCodec}.java`、`shell/fetch/Fetcher.java`
   - _Requirements: 12.5, 12.8_
 
-- [ ] 25. 阶段 4 收尾：全量回归、8091 部署、tech.md、提交
+- [x] 25. 阶段 4 收尾：全量回归、8091 部署、tech.md、提交
 
 - [ ] 26. 阶段 5：`RecordCodec` 四拆
   - _Requirements: 13.1_

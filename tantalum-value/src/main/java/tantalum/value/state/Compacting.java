@@ -5,7 +5,8 @@ import tantalum.value.hook.PromptPatch;
 
 /**
  * 运行正在等摘要：为什么压缩、压缩计划。运行在等摘要时被取消也保留它，迟到的摘要回复据此不进历史。
- * {@code patch} 是 hook-patch 之前钩子拼进 prompt 的内容；现在钩子的补丁在历史里，这里总是 {@link PromptPatch#NONE}，字段留着是为了读旧行。
+ * {@code patch} 是 hook-patch 之前钩子拼进 prompt 的内容；现在钩子的补丁在历史里，这里总是 {@link PromptPatch#NONE}。
+ * 字段留着：旧会话重写后的行要和原来逐字节相同（journal 的硬规则），删掉就不同了（review-fixes 需求 12.5 的折中）。
  */
 public record Compacting(Cause cause, Plan plan, PromptPatch patch) {
 

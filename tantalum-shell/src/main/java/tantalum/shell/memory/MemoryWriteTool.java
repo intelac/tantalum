@@ -2,6 +2,7 @@ package tantalum.shell.memory;
 
 import java.util.List;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.tool.ToolArguments;
@@ -16,7 +17,9 @@ public final class MemoryWriteTool implements Tool {
         this.stores = stores;
     }
 
-    @Override public String name() { return "memory_write"; }
+    static final String NAME = "memory_write";
+
+    @Override public String name() { return NAME; }
     @Override public String description() {
         return "Save a long-term memory for this user (new, or overwrite the entry with the same name). "
                 + "name: [a-z0-9-]; type: " + MemoryType.keys() + "; description: one line shown in the index; content: Markdown body.";
@@ -25,6 +28,7 @@ public final class MemoryWriteTool implements Tool {
     @Override public String server() { return MemoryTools.SERVER; }
     @Override public int serverConcurrency() { return MemoryTools.CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
+    @Override public ToolDispatch dispatch() { return MemoryTools.dispatch(NAME); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

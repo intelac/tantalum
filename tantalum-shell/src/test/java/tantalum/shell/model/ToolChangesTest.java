@@ -11,9 +11,9 @@ class ToolChangesTest {
 
     @Test
     void theTextRepeatsToolsThatAreStillUnavailable() {
-        assertEquals(ToolChanges.PREFIX + "Your tools changed. No longer available: read_file. Still unavailable: write_file.",
+        assertEquals(tantalum.value.model.SystemUpdates.HEADER + "Your tools changed. No longer available: read_file. Still unavailable: write_file.",
                 ToolChanges.describe(new ToolChangeBlock(List.of(), List.of("read_file"), List.of("write_file"))));
-        assertEquals(ToolChanges.PREFIX + "Your tools changed. Now available: grep.",
+        assertEquals(tantalum.value.model.SystemUpdates.HEADER + "Your tools changed. Now available: grep.",
                 ToolChanges.describe(new ToolChangeBlock(List.of("grep"), List.of())));
     }
 }

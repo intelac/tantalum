@@ -34,9 +34,8 @@ public final class ContextSteps {
         ContextAssembled event = (ContextAssembled) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
-        // 压缩刚把上下文清空：这次组装之后的调用不再判断（规则 3.1）。
-        SessionState before = out.session(run.ref());
-        boolean justCompacted = before.context() == null && before.compaction() != null;
+        // 压缩刚换过视图：这次组装之后的调用不再判断压缩（规则 3.1）。要在冻结上下文之前看。
+        boolean justCompacted = out.session(run.ref()).justCompacted();
         // 先定下这个运行的模型（换模型的说明要在工具变化之前），再冻结进会话，之后调模型和判断压缩都从会话取 system 和工具。
         run = chooseModel(out, run, event);
         freezeContext(out, run, event);

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
@@ -21,7 +22,7 @@ import tantalum.value.text.LocalText;
  * 结果：限流且要等的比 {@code maxWait} 久 → {@code Stop}；服务端错误、连接错误 → {@code NeedWork}（{@link ProviderStatusWork} 等提供方恢复）；
  * 其余放行。上下文超长必须放行：这里要求工作会跳过内核内置的超长恢复。
  */
-public final class ProviderBackoffHook implements KernelHook {
+public final class ProviderBackoffHook implements KernelHook, PluginInfo {
 
     private final Duration maxWait;
 

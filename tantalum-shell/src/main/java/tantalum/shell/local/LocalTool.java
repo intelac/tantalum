@@ -8,6 +8,7 @@ import tantalum.local.tool.Tools;
 import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
 
@@ -39,6 +40,15 @@ public final class LocalTool implements Tool {
         return Tools.all().stream().<Tool>map(definition -> new LocalTool(definition, links, images, standard)).toList();
     }
 
+    /** 全部转发工具的调度描述，不用连电脑。 */
+    public static List<ToolDispatch> dispatches() {
+        return Tools.all().stream().map(LocalTool::dispatch).toList();
+    }
+
+    private static ToolDispatch dispatch(tantalum.local.tool.LocalTool definition) {
+        return new ToolDispatch(definition.name(), SERVER, SERVER_CONCURRENCY, definition::isConcurrencySafe);
+    }
+
     public tantalum.local.tool.LocalTool.Kind kind() {
         return definition.kind();
     }
@@ -49,6 +59,7 @@ public final class LocalTool implements Tool {
     @Override public String server() { return SERVER; }
     @Override public int serverConcurrency() { return SERVER_CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return definition.isConcurrencySafe(arguments); }
+    @Override public ToolDispatch dispatch() { return dispatch(definition); }
     @Override public Duration timeout(Json arguments, Duration standard) { return definition.timeout(arguments, standard); }
 
     /** 不认 {@code /attachments/} 路径：附件用 {@code read_attachment} 读（L7），旧会话不做兼容（Yi 2026-11-06 定）。 */

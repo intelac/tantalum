@@ -168,8 +168,10 @@ final class ClaudeRequest {
         }
         // 换模型的说明并进这次的用户消息（M12），所有 Claude 模型看到的一样；不支持中途 system 消息的模型把钩子的说明也并进用户消息，
         // 工具变化丢掉（hook-patch 需求 3.2）
-        List<Message> messages = ModelChanges.fold(prompt.messages());
-        messages = systemMessages ? messages : HookTexts.fold(messages).stream().filter(message -> message.role() != Role.SYSTEM).toList();
+        List<Message> messages = Folding.fold(prompt.messages(), !systemMessages);
+        if (!systemMessages) {
+            messages = messages.stream().filter(message -> message.role() != Role.SYSTEM).toList();
+        }
         int cachedMessage = lastIndexOf(messages, message -> message.role() != Role.SYSTEM);
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
@@ -396,7 +398,7 @@ final class ClaudeRequest {
                     .toolUseId(result.toolCallId()).content(result.text().isBlank() ? NO_OUTPUT : result.text()).isError(result.error()).build());
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
-            case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
+            case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");
             case HookTextBlock note -> throw new IllegalStateException("hook texts are system messages, see systemMessage()");
         };
     }

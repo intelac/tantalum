@@ -2,6 +2,7 @@ package tantalum.examples;
 
 import java.util.Set;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
@@ -10,7 +11,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.text.LocalText;
 
 /** 只读策略：只放行列出的工具，其余拦截，模型会收到错误结果。 */
-public final class ReadOnlyHook implements KernelHook {
+public final class ReadOnlyHook implements KernelHook, PluginInfo {
 
     private final Set<String> readOnlyTools;
 

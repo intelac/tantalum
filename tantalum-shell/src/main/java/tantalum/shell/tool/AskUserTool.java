@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
@@ -53,7 +54,11 @@ public final class AskUserTool implements Tool {
         return new Json.Obj(property);
     }
 
-    @Override public String server() { return "questions"; }
+    /** 由内核处理，不真的执行；独占。 */
+    static final ToolDispatch DISPATCH = ToolDispatch.exclusive(AskUser.NAME, "questions", 1);
+
+    @Override public String server() { return DISPATCH.server(); }
+    @Override public ToolDispatch dispatch() { return DISPATCH; }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

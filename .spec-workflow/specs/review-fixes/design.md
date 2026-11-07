@@ -161,12 +161,14 @@
 - `PluginGate.HOOK_POINTS` 从 `HookPoint` 枚举派生（`BEFORE_MODEL_CALL` → `beforeModelCall`），`overrides` 按派生出的方法名查；`ON_ANSWER` 也进插件页的位置列表。
 - `afterTool`：`AfterToolHook` 加 `default boolean failClosed()`；钩子抛异常时，`failClosed()` 或管理员要求必须开启的插件让这次工具调用以错误结束（`ToolOutput` 的错误文字只给类名），其余照旧记日志、结果保持上一个。
 
-### 4. 事实和状态的归位（任务 24）
+### 4. 事实和状态的归位（任务 24，实施时折中）
 
-- `HookDecided` 加 `question` 字段（`ASK` 时问题 id，其余 null，不写出）；`reason` 回到只在 `STOP` 时有值。读旧行：`questionId()` 取 `question`，为空且 `kind == ASK` 时取 `reason`，不改写字段，旧行重编码逐字节相同。
-- `Compacting.patch` 删掉：记录变成 `Compacting(cause, plan)`；journal 读到 `patch` 时忽略（`EventCodec` 的 mapper 对这个记录关掉“未知字段报错”或加 `@JsonIgnoreProperties("patch")`）。写出的新行少一个字段，旧行只读。
-- `RunState.compactionJustDone`（布尔，默认 false，`NON_DEFAULT` 不写出）：`CompactSteps` 采用摘要或裁剪时记 true，`ContextSteps.contextAssembled` 读它决定要不要跳过压缩判断并清掉；`ModelSteps.callModel` 的 `compactionAllowed` 参数去掉。旧行读出来是 false。
-- `CompactSteps.notAdopted` 拆成 `refused`、`notSent`、`notAdopted` 三个小函数，共用 `trimOrFail(out, run, compacting, reason, mayTrim, beforeSwitch)`。
+实施时发现 journal 的硬规则（旧会话用新版本重写后的行逐字节相同，`ModelChoiceCodecTest`）不允许改运行状态和事实的形状，所以：
+
+- `HookDecided` 不加字段：加 `questionId()`（`ASK` 时从 `reason` 位取），`reason` 字段的注释写明两种含义。
+- `Compacting.patch` 留着（永远 `NONE`），注释写明留着的原因。
+- “压缩刚结束”不进 `RunState`：`SessionState.justCompacted()`（`context == null && compaction != null`）给这个判断一个名字，`ContextSteps` 在冻结上下文前算出来传给 `ModelSteps.callModel(…, compactionAllowed)`。
+- `CompactSteps.notAdopted` 拆成 `refused`、`notSent`、`notAdopted` 三个小函数，共用 `failed(out, run, compacting, reason, mayTrim, failsSwitch, summarySent)`，`Stage` 枚举删掉。
 - `Fetcher.precheck` 返回 `Lookup`（`RESOLVED`、`UNRESOLVED`）而不是布尔；`get` 和 `failure` 按它分支。
 
 ### 测试
@@ -174,10 +176,46 @@
 - `SystemUpdatesTest`（value）、`FoldingTest`（合并后的用例来自两个旧测试）、`ToolDispatchTest`/`KernelFactoryTest`（safety 不造对象且答案和真目录一致）、`HookChainTest`（FailClosed 包装）、`PluginGateTest`（位置从枚举派生、after-tool failClosed）、`HookDecided` 的编解码测试（新行带 `question`、旧行 `reason` 读出来一样）、`EventCodecTest`（`Compacting` 旧行带 `patch` 能读）、`CompactStepsTest`/`ContextStepsTest`（`compactionJustDone`）、`FetcherTest`。
 - 请求期望文件和 trace 期望文件逐字节不变。
 
-## 阶段 5 设计：拆大类与清注释（需求 13，开始前再细化）
+## 阶段 5 设计：拆大类与清注释（需求 13）
 
-- `RecordCodec` 拆成包内类 `SessionDelta`、`RunDelta`、`TextSlices`、`RunRefs`，`RecordCodec` 只编排；期望文件逐字节不变。
-- `Engine` 装配分成 `Stores`、`Toolbox`、`Pipeline`、`Queries` 四步（各一个包内类返回一个记录），`Engine` 串起来、持有 `opened` 列表。
-- `RunState` 按阶段分组成 `Flow`（phase、tools、pendingSteers、retries、workOrigin、workRounds、endWorkRounds）、`CompactionState`（compacting、autoCompactionFailed、overflowRecovered、compactionJustDone）、`ModelState`（model、modelBefore）；journal 里的字段名不变（差量按扁平字段写）。
-- spec 编号注释逐包换成规则本身，编号只留在 `tech.md`；每包一个任务。
+### 1. `RecordCodec` 拆分（任务 26）
 
+`journal` 包内新增五个包内类，都拿同一个 `JsonMapper`（结果行的 mapper）和 `RecordMemo`：
+
+- `Deltas`：`delta(now, before, keep)` 和 `merge(delta, before, what)`，会话上下文和运行都用；
+- `SessionDelta`：`encode(SessionChange, seq, memo)`、`decode(JsonNode, seq, memo)`，含 `context`、`notes`、`changed`、`changedList`；
+- `RunDelta`：`encode(now, before)`（`toolSlots`/`toolCount`/`toolsChecked`）和 `merge(delta, before)`；
+- `RequestDelta`：`CallModel` 的编解码（system、工具下标、消息下标、`keep`/`add`、模型选择、指纹）；
+- `TextSlices`：`shrink`/`expand`（内容块引用、长字符串引用、切片、转义）；
+- `RunRefs`：`sameRun`/`restoreRun`。
+
+`RecordCodec` 只留 mixin、mapper 的构造、`encode`/`decode`/`encodeTree`/`decode(tree)`、`see`、`parse`、`fingerprint` 和事实的编解码（`fact`），按原来的顺序调上面几个。常量（标记、阈值）跟着搬到用它的类里。期望文件逐字节不变（`RecordCodecTest`、journal 和 trace 的期望文件都在回归里）。
+
+### 2. `Engine` 装配分步（任务 27）
+
+`boot` 包内四个包内记录，各有一个静态 `open(...)`：
+
+- `Stores(storage, localTokens, switches, userSettings, memories)`：打开的数据文件和数据库；
+- `Toolbox(catalog, localLinks, localWorkspace, addressRules, egress, browsers, webAccess, mcp, gate, routes, compaction)`：工具、插件和联网；
+- `Pipeline(cleanroomRing, lanes, inFlight, input, deadlines, handlers, output, cleanroom, intake, receipts)`：环、通道和处理器；
+- `Queries(view, hub, queries)`：读取端。
+
+每一步打开的东西都加进 `Engine` 的 `opened` 列表（传进 `open`），失败时 `Engine` 倒序关。`Engine` 的字段改成这四个记录加 `clock`、`codec`、`shutdownWait`、`closing`；原来的访问器照旧（委托给记录）。`close()` 的关闭顺序不变。
+
+### 3. `RunState` 按阶段分组（任务 28）
+
+journal 里的运行状态是扁平字段，老行要能读、新行逐字节不变，所以记录本身不动，分组做成视图：
+
+- `RunState.Work(phase, tools, pendingSteers, retries, workOrigin, workRounds, endWorkRounds)`、`RunState.Compaction(compacting, autoCompactionFailed, overflowRecovered, compactionJustDone)`、`RunState.Models(model, modelBefore)`，各有 `withX`；
+- `run.work()`、`run.compaction()`、`run.models()` 返回视图，`run.withWork(work)` 等整组替换；原来的 `withPhase` 这些保留（委托）。
+- 记录分组真正落到存储要改 journal 形状，留给 BACKLOG 的 RunState/SessionState 重构。
+
+### 4. spec 编号注释（任务 29）
+
+主代码里 374 处全角括号引用（如“（model-picker M10）”）和 28 处裸提及。做法：
+
+- 引用只跟在一句已经说明了规则的话后面（绝大多数）：去掉括号里的引用，句子保留；括号里还带别的内容（DSH/pi 文件行号、日期、人名）的，只删编号、留其余；
+- 整条注释只有引用、没有规则的：改写成规则本身（一句话）；
+- 类注释里的“这是哪个 spec 做的”改成“这是做什么的”；
+- `tech.md` 已经按 spec 记了每条规则的出处，编号只留在那里。
+- 逐包做，一个包一个提交点（都在同一次提交里），每包改完跑该包的测试，最后全量回归。测试代码里的引用不动（测试名就是需求编号的索引）。

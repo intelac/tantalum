@@ -74,8 +74,8 @@ public final class Fetcher {
         long deadline = System.nanoTime() + DEADLINE.toNanos();
         URI current = url;
         for (int redirects = 0; ; redirects++) {
-            boolean resolved = precheck(current, deadline);
-            Response response = get(current, deadline, resolved);
+            Lookup lookup = precheck(current, deadline);
+            Response response = get(current, deadline, lookup);
             Optional<String> location = response.redirect();
             if (location.isEmpty()) {
                 return read(current, response);
@@ -101,7 +101,10 @@ public final class Fetcher {
     /**
      * 解析网址里的主机，按地址规则先查一遍，给模型清楚的原因。解析不了时返回 false、不报错：有上游代理时由代理解析，出口会兜底。
      */
-    private boolean precheck(URI url, long deadline) throws FetchFailed, InterruptedException {
+    /** 本机解析主机名的结果（review-fixes 需求 12.8）：解析不了不是错误——有上游代理时由代理解析，出口会兜底。 */
+    enum Lookup { RESOLVED, UNRESOLVED }
+
+    private Lookup precheck(URI url, long deadline) throws FetchFailed, InterruptedException {
         String host = url.getHost();
         int port = port(url);
         List<InetAddress> addresses;
@@ -112,7 +115,7 @@ public final class Fetcher {
             addresses = List.of(lookup.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS));
         } catch (ExecutionException failed) {
             if (failed.getCause() instanceof UnknownHostException) {
-                return false;
+                return Lookup.UNRESOLVED;
             }
             throw new FetchFailed("Could not fetch " + url + ": " + egressReason("unresolved"));
         } catch (TimeoutException slow) {
@@ -123,7 +126,7 @@ public final class Fetcher {
         if (blocked.isPresent()) {
             throw new FetchFailed(AddressRules.describe(host, port, blocked.get().address(), blocked.get().reason()));
         }
-        return true;
+        return Lookup.RESOLVED;
     }
 
     private static int port(URI url) {
@@ -155,7 +158,7 @@ public final class Fetcher {
 
     private record Body(byte[] bytes, boolean cut) {}
 
-    private Response get(URI url, long deadline, boolean resolved) throws FetchFailed, InterruptedException {
+    private Response get(URI url, long deadline, Lookup lookup) throws FetchFailed, InterruptedException {
         long left = deadline - System.nanoTime();
         if (left <= 0) {
             throw timedOut(url);
@@ -178,7 +181,7 @@ public final class Fetcher {
             pending.cancel(true);
             throw interrupted;
         } catch (ExecutionException failed) {
-            throw failure(url, failed.getCause(), resolved);
+            throw failure(url, failed.getCause(), lookup);
         }
         if (plain && response.statusCode() == 403 && response.headers().firstValue(Egress.BLOCKED_HEADER).isPresent()) {
             // 出口拦下的（跳转后、DNS 换了地址）：当错误，不当网站的 403。正文是出口自己写的原因。
@@ -186,7 +189,7 @@ public final class Fetcher {
         }
         Optional<String> egressError = plain ? response.headers().firstValue(Egress.ERROR_HEADER) : Optional.empty();
         if (egressError.isPresent()) {
-            String reason = !resolved && egressError.get().equals("unreachable") ? "unresolved" : egressError.get();
+            String reason = lookup == Lookup.UNRESOLVED && egressError.get().equals("unreachable") ? "unresolved" : egressError.get();
             throw new FetchFailed("Could not fetch " + url + ": " + egressReason(reason) + ".");
         }
         return new Response(response.statusCode(), response.headers(), response.body());
@@ -301,10 +304,10 @@ public final class Fetcher {
     }
 
     /** 原因只写类别：连接被拒、超时、TLS 失败、被出口拦下。 */
-    private static FetchFailed failure(URI url, Throwable cause, boolean resolved) {
+    private static FetchFailed failure(URI url, Throwable cause, Lookup lookup) {
         String message = cause == null || cause.getMessage() == null ? "" : cause.getMessage();
         String reason;
-        if (!resolved && (message.contains("Tunnel failed, got: 502") || cause instanceof ConnectException)) {
+        if (lookup == Lookup.UNRESOLVED && (message.contains("Tunnel failed, got: 502") || cause instanceof ConnectException)) {
             // 本机解析不了、出口也连不上：多半是名字写错了（有上游代理时本机解析不了是正常的，别的错误照实写）
             reason = "the host name could not be resolved";
         } else if (cause instanceof HttpConnectTimeoutException) {

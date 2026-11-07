@@ -3,6 +3,7 @@ package tantalum.shell.memory;
 import java.util.List;
 import java.util.Optional;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.tool.ToolArguments;
@@ -17,12 +18,15 @@ public final class MemoryReadTool implements Tool {
         this.stores = stores;
     }
 
-    @Override public String name() { return "memory_read"; }
+    static final String NAME = "memory_read";
+
+    @Override public String name() { return NAME; }
     @Override public String description() { return "Read the full body of one of your memory entries by name (see the memory index)."; }
     @Override public Json schema() { return ToolArguments.schema(List.of("name"), List.of()); }
     @Override public String server() { return MemoryTools.SERVER; }
     @Override public int serverConcurrency() { return MemoryTools.CONCURRENCY; }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
+    @Override public ToolDispatch dispatch() { return MemoryTools.dispatch(NAME); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

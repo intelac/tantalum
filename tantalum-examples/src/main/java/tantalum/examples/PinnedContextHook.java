@@ -3,6 +3,7 @@ package tantalum.examples;
 import java.util.List;
 import tantalum.kernel.hook.HookMessages;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
@@ -21,7 +22,7 @@ import tantalum.value.text.LocalText;
  * 结果：要被总结的头部里有钉住的用户消息，且是自动或手动压缩 → {@code Stop}；超长恢复放行（拒绝会让运行失败，宁可钉住的内容进摘要）；
  * 其余放行。自动压缩被拒只是这次不压，手动压缩被拒会告诉用户原因。
  */
-public final class PinnedContextHook implements KernelHook {
+public final class PinnedContextHook implements KernelHook, PluginInfo {
 
     private final String marker;
 

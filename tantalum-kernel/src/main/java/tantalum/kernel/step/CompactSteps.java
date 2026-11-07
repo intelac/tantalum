@@ -57,12 +57,6 @@ public final class CompactSteps {
     }
 
     /** 规则 8 里摘要走到了哪一步：被钩子拒绝、没有发出（内容太少或放不下）、发出后没有采用。 */
-    private enum Stage {
-        REFUSED,
-        NOT_SENT,
-        NOT_ADOPTED
-    }
-
     /** 调模型前的压缩判断。自动压缩在本运行已经失败过就不再尝试；没有可压缩的计划时不接管。 */
     static Start tryStart(Outcome out, RunState run, Cause cause) {
         if (cause instanceof Compacting.Auto && run.autoCompactionFailed()) {
@@ -81,13 +75,13 @@ public final class CompactSteps {
         out.report(hook.facts());
         if (!(hook.result() instanceof Allow)) {
             String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work or a question, which is not supported";
-            return notAdopted(out, run, compacting, reason, Stage.REFUSED);
+            return refused(out, run, compacting, reason);
         }
         if (!Compactor.summaryCanHelp(compacting.plan(), session.context().compaction())) {
-            return notAdopted(out, run, compacting, cause instanceof Compacting.Manual ? NOTHING_TO_COMPACT : TOO_LITTLE, Stage.NOT_SENT);
+            return notSent(out, run, compacting, cause instanceof Compacting.Manual ? NOTHING_TO_COMPACT : TOO_LITTLE);
         }
         if (!sendSummary(out, run, compacting)) {
-            return notAdopted(out, run, compacting, NOTHING_FITS, Stage.NOT_SENT);
+            return notSent(out, run, compacting, NOTHING_FITS);
         }
         return Start.TOOK_OVER;
     }
@@ -147,7 +141,7 @@ public final class CompactSteps {
         long request = plan.request() == null ? 0 : estimate.ofMessage(plan.request());
         String reason = SummaryPrompt.validate(event.content(), event.stop(), plan.headEstimate(), request, estimate);
         if (reason != null) {
-            notAdopted(out, run, compacting, reason, Stage.NOT_ADOPTED);
+            notAdopted(out, run, compacting, reason);
             return out.decision();
         }
 
@@ -172,6 +166,7 @@ public final class CompactSteps {
         if (compacting.cause() instanceof Compacting.Manual) {
             RunEnd.finish(out, resumed, EndReason.COMPLETED, COMPACTED);
         } else {
+            // 视图刚换、上下文清空：重新组装后的那次调用不再判断压缩（SessionState.justCompacted）
             ContextSteps.reassemble(out, resumed);
         }
     }
@@ -182,7 +177,7 @@ public final class CompactSteps {
         Outcome out = new Outcome(context);
         RunState run = context.run();
         if (!event.retryable() || !RetrySteps.scheduleRetry(out, run, event.retryAfter(), AWAITING_SUMMARY_RETRY)) {
-            notAdopted(out, run, run.compacting(), "summary call failed: " + event.reason() + " " + event.detail(), Stage.NOT_ADOPTED);
+            notAdopted(out, run, run.compacting(), "summary call failed: " + event.reason() + " " + event.detail());
         }
         return out.decision();
     }
@@ -191,43 +186,51 @@ public final class CompactSteps {
         Outcome out = new Outcome(context);
         // 重试时摘要已经发过一次，计划没变，放不下的情况按“没有采用”处理。
         if (!sendSummary(out, context.run(), context.run().compacting())) {
-            notAdopted(out, context.run(), context.run().compacting(), NOTHING_FITS, Stage.NOT_ADOPTED);
+            notAdopted(out, context.run(), context.run().compacting(), NOTHING_FITS);
         }
         return out.decision();
     }
 
     /**
-     * 规则 8：摘要没有用上。先看能否改用裁剪（DSH：进展不依赖摘要）——钩子拒绝时不裁剪，手动压缩只在摘要没发出时裁剪。
-     * 不能裁剪时报告失败，再按触发方式：自动 → 本运行不再自动压缩，继续原调用（摘要发出过就在这里调，否则交回调用方）；
-     * 超长恢复 → 以原始错误失败；手动 → 以原因失败。换模型后第一次调用之前的压缩没成时运行失败、模型退回（{@link RunEnd#switchFailed}）。
+     * 规则 8 的三种“摘要没有用上”，按原因分开（review-fixes 需求 12.8）：
+     * 钩子拒绝——不裁剪；超长恢复在换模型前被拒时运行失败、模型退回，其余按触发方式结束或继续。
      */
-    private static Start notAdopted(Outcome out, RunState run, Compacting compacting, String reason, Stage how) {
+    private static Start refused(Outcome out, RunState run, Compacting compacting, String reason) {
+        return failed(out, run, compacting, reason, false, compacting.cause() instanceof Compacting.Overflow, false);
+    }
+
+    /** 摘要没发出（内容太少、什么都放不下）——能裁剪就裁剪；超长恢复在换模型前没成时运行失败。 */
+    private static Start notSent(Outcome out, RunState run, Compacting compacting, String reason) {
+        return failed(out, run, compacting, reason, true, compacting.cause() instanceof Compacting.Overflow, false);
+    }
+
+    /** 摘要发出了但没用上（回复不合格、调用失败、重试时放不下）——手动压缩不裁剪；换模型前的自动压缩和超长恢复都让运行失败。 */
+    private static Start notAdopted(Outcome out, RunState run, Compacting compacting, String reason) {
+        boolean manual = compacting.cause() instanceof Compacting.Manual;
+        return failed(out, run, compacting, reason, !manual, !manual, true);
+    }
+
+    /**
+     * 先看能否改用裁剪（DSH：进展不依赖摘要）。不能裁剪时报告失败，再按触发方式：自动 → 本运行不再自动压缩，继续原调用
+     * （摘要发出过就在这里调，否则交回调用方）；超长恢复 → 以原始错误失败；手动 → 以原因失败。
+     * {@code failsSwitch}：换模型后第一次调用之前的压缩没成时运行失败、模型退回（{@link RunEnd#switchFailed}，model-picker M10）。
+     */
+    private static Start failed(Outcome out, RunState run, Compacting compacting, String reason, boolean mayTrim, boolean failsSwitch,
+                                boolean summarySent) {
         SessionState session = out.session(run.ref());
         CompactionSettings settings = session.context().compaction();
-        boolean mayTrim = switch (compacting.cause()) {
-            case Compacting.Manual manual -> how == Stage.NOT_SENT;
-            case Compacting.Auto auto -> how != Stage.REFUSED;
-            case Compacting.Overflow overflow -> how != Stage.REFUSED;
-        };
         if (mayTrim && Compactor.trimHelps(session.view(), settings)) {
             adoptTrim(out, run, compacting, settings);
             return Start.TOOK_OVER;
         }
         out.report(List.of(new CompactionFailed(run.ref(), compacting.trigger(), reason)));
-        // 换到窗口更小的模型、第一次调用之前：摘要发出了却没用上，或者超长恢复没成，新模型装不下，这个运行失败，会话的模型退回上一个
-        // （model-picker M10）。摘要没发出（钩子拒绝、内容太少）时照旧调新模型，装不下会走超长恢复。
-        boolean beforeSwitch = run.modelBefore() != null && switch (compacting.cause()) {
-            case Compacting.Auto auto -> how == Stage.NOT_ADOPTED;
-            case Compacting.Overflow overflow -> true;
-            case Compacting.Manual manual -> false;
-        };
-        if (beforeSwitch) {
+        if (run.modelBefore() != null && failsSwitch) {
             RunEnd.switchFailed(out, run.withCompacting(null));
             return Start.TOOK_OVER;
         }
         switch (compacting.cause()) {
             case Compacting.Auto auto -> {
-                if (how != Stage.NOT_ADOPTED) {
+                if (!summarySent) {
                     out.put(run.withAutoCompactionFailed(true));
                     return Start.PROCEED;
                 }
