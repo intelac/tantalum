@@ -18,18 +18,25 @@ import tantalum.value.state.SessionState;
  */
 public final class Evictor {
 
-    /** 配置项 {@code tantalum.residency}。{@code idle} 为 null 时不按时间回收。 */
-    public record Settings(Duration idle, int maxResident, Duration sweepInterval) {
+    /**
+     * 配置项 {@code tantalum.residency}。{@code idle} 为 null 时不按时间回收。{@code loadRetry} 是载入失败后多久再试
+     * （ops-hardening-2 D5，没写就是 1 分钟），归 {@link Residency}，放在这里只因为同属 {@code tantalum.residency}。
+     */
+    public record Settings(Duration idle, int maxResident, Duration sweepInterval, Duration loadRetry) {
 
         public Settings {
             if (maxResident <= 0) {
                 throw new IllegalArgumentException("maxResident must be positive but was " + maxResident);
             }
+            loadRetry = loadRetry == null ? Duration.ofMinutes(1) : loadRetry;
+            if (loadRetry.isNegative()) {
+                throw new IllegalArgumentException("tantalum.residency.load-retry must not be negative but was " + loadRetry);
+            }
         }
 
-        /** 空闲 30 分钟或超过 1000 个常驻时回收。 */
+        /** 空闲 30 分钟或超过 1000 个常驻时回收；载入失败 1 分钟后再试。 */
         public static Settings defaults() {
-            return new Settings(Duration.ofMinutes(30), 1000, Duration.ofSeconds(1));
+            return new Settings(Duration.ofMinutes(30), 1000, Duration.ofSeconds(1), Duration.ofMinutes(1));
         }
     }
 

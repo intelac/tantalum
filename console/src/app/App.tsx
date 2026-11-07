@@ -66,16 +66,17 @@ export function App() {
   if (loading) return null;
   if (user === null) return <LoginPage onLoggedIn={setUser} />;
   if (route.page !== "session" && route.page !== "trace" && route.page !== "stats") return null;
-  return <Workspace route={route} username={user.username} onLogout={() => void logout()} />;
+  return <Workspace route={route} username={user.username} admin={user.admin === true} onLogout={() => void logout()} />;
 }
 
 interface WorkspaceProps {
   route: Extract<Route, { page: "session" | "trace" | "stats" }>;
   username: string;
+  admin: boolean;
   onLogout: () => void;
 }
 
-function Workspace({ route, username, onLogout }: WorkspaceProps) {
+function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
   const t = useText();
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
@@ -141,6 +142,7 @@ function Workspace({ route, username, onLogout }: WorkspaceProps) {
           config={config.data}
           choice={settingsChoice}
           username={username}
+          admin={admin}
           onLogout={onLogout}
         />
         <PluginsDialog open={pluginsOpen} onClose={() => setPluginsOpen(false)} />

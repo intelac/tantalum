@@ -23,7 +23,7 @@ import tantalum.value.state.PrincipalState;
 public final class LoopFixtures {
 
     /** 从不回收。 */
-    public static final Evictor.Settings NEVER = new Evictor.Settings(null, Integer.MAX_VALUE, Duration.ofSeconds(1));
+    public static final Evictor.Settings NEVER = new Evictor.Settings(null, Integer.MAX_VALUE, Duration.ofSeconds(1), null);
 
     public static final Projection NO_PROJECTION = (envelope, decision) -> List.of();
 
@@ -77,7 +77,12 @@ public final class LoopFixtures {
 
     /** 不载入冷会话的分发器，下游只看事件。 */
     public static LaneDispatcher dispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
-        return new LaneDispatcher(capacity, sequence, writer, (envelope, usage, load) -> cleanroom.test(envelope), NO_LOADER, new Residency());
+        return dispatcher(capacity, capacity, sequence, writer, cleanroom);
+    }
+
+    /** {@code perUser} 是每个用户的上限（ops-hardening-2 需求 4）。 */
+    public static LaneDispatcher dispatcher(int capacity, int perUser, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
+        return new LaneDispatcher(capacity, perUser, sequence, writer, (envelope, usage, load) -> cleanroom.test(envelope), NO_LOADER, new Residency());
     }
 
     /** 建环时就接好消费者。 */

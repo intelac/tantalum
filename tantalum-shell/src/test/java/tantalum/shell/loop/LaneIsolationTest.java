@@ -48,7 +48,7 @@ class LaneIsolationTest {
         }, envelope -> {
             // 像 cleanroom 一样：处理完交回通道写成一行，落盘后才算放行
             holder[0].release(envelope, new StepRecord(envelope.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
-                    () -> reached.add(envelope), holder[0]::released);
+                    () -> reached.add(envelope), () -> holder[0].released(envelope));
             return true;
         });
         holder[0] = dispatcher;

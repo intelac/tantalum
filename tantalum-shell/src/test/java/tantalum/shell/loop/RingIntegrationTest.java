@@ -91,7 +91,7 @@ class RingIntegrationTest {
             List<String> writtenEarly = java.util.Collections.synchronizedList(new ArrayList<>());
             Projections projections = new Projections(LoopFixtures.NO_PROJECTION, new tantalum.shell.trace.Trace());
             Cleanroom cleanroom = new Cleanroom(kernel, journal::halted, output::tryPublish, projections, (seq, index, fact) -> { },
-                    view, publisher, LoopFixtures.NO_STEPS, LoopFixtures.never(projections), journal, envelope -> journal.released());
+                    view, publisher, LoopFixtures.NO_STEPS, LoopFixtures.never(projections), journal, envelope -> journal.released(envelope));
             ring.connect((slot, seq, end) -> {
                 EventEnvelope envelope = slot.envelope;
                 if (reader.readAll(paths.sessionFile(envelope.principal(), envelope.session())).stream().anyMatch(envelope::equals)) {

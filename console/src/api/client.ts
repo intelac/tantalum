@@ -2,6 +2,7 @@
 
 import { reportHalted } from "./connection";
 import type {
+  Account,
   AttachmentRef,
   Config,
   ErrorParam,
@@ -105,6 +106,28 @@ export async function me(): Promise<User | null> {
     if (failure instanceof ApiError && failure.status === 401) return null;
     throw failure;
   }
+}
+
+/** 自己改密码（ops-hardening-2 需求 2.6）：要当前密码；改后别处的登录失效，这里的保留。 */
+export function changePassword(current: string, next: string): Promise<{ changed: boolean }> {
+  return call("/api/auth/password", { method: "PUT", body: JSON.stringify({ current, next }) });
+}
+
+// 用户管理（管理员；需求 2.4）
+export function listUsers(): Promise<{ users: Account[] }> {
+  return call("/api/users");
+}
+
+export function createUser(user: { name: string; password: string; admin: boolean }): Promise<Account> {
+  return call("/api/users", { method: "POST", body: JSON.stringify(user) });
+}
+
+export function updateUser(name: string, change: { disabled?: boolean; admin?: boolean }): Promise<Account> {
+  return call(`/api/users/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(change) });
+}
+
+export function resetUserPassword(name: string, password: string): Promise<{ name: string; reset: boolean }> {
+  return call(`/api/users/${encodeURIComponent(name)}/password`, { method: "PUT", body: JSON.stringify({ password }) });
 }
 
 export function getConfig(): Promise<Config> {

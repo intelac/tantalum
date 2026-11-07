@@ -51,7 +51,8 @@ class TantalumPropertiesTest {
     void changingOneResidencySettingKeepsTheOtherDefaults() throws Exception {
         assertEquals(Evictor.Settings.defaults(), bind().residency());
         Evictor.Settings residency = bind("tantalum.residency.idle", "2s").residency();
-        assertEquals(new Evictor.Settings(Duration.ofSeconds(2), 1000, Duration.ofSeconds(1)), residency);
+        assertEquals(new Evictor.Settings(Duration.ofSeconds(2), 1000, Duration.ofSeconds(1), Duration.ofMinutes(1)), residency);
+        assertEquals(Duration.ofSeconds(5), bind("tantalum.residency.load-retry", "5s").residency().loadRetry());
     }
 
     @Test
@@ -62,26 +63,36 @@ class TantalumPropertiesTest {
         assertEquals(1024, loop.outputRingSize());
         assertEquals(1024, loop.inputRingSize());
         assertEquals(640, loop.internalReserve());
+        assertEquals(256, loop.maxUserPermits(), "a quarter of the input ring by default (ops-hardening-2 D4)");
+    }
+
+    /** ops-hardening-2 需求 4.2：每个用户的名额上限在 max-user-in-flight 和 input-ring-size 之间。 */
+    @Test
+    void userPermitsAreBoundedByUserInFlightAndTheRing() {
+        assertEquals(8, new Loop(64, 10, 8, 256, 1024, 1024, 8).maxUserPermits());
+        IllegalArgumentException low = assertThrows(IllegalArgumentException.class, () -> new Loop(64, 10, 8, 256, 1024, 1024, 4));
+        assertTrue(low.getMessage().contains("max-user-permits") && low.getMessage().contains("max-user-in-flight"), low.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> new Loop(64, 10, 8, 256, 1024, 1024, 2048));
     }
 
     @Test
     void outputRingMustHoldEveryCommand() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> new Loop(64, 10, 8, 256, 1024, 512));
+                () -> new Loop(64, 10, 8, 256, 1024, 512, 0));
         assertTrue(failure.getMessage().contains("outputRingSize"));
     }
 
     @Test
     void inputRingMustHoldInternalResultsAndExternalLimit() {
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
-                () -> new Loop(64, 10, 8, 256, 512, 1024));
+                () -> new Loop(64, 10, 8, 256, 512, 1024, 0));
         assertTrue(failure.getMessage().contains("inputRingSize"));
     }
 
     @Test
     void ringSizesMustBePowersOfTwo() {
-        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1000, 1024));
-        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1024, 1000));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1000, 1024, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 1, 1024, 1000, 0));
     }
 
     @Test
@@ -202,9 +213,9 @@ class TantalumPropertiesTest {
 
     @Test
     void limitsMustBePositive() {
-        assertThrows(IllegalArgumentException.class, () -> new Loop(0, 1, 1, 1, 1024, 1024));
-        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024));
-        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 0, 1, 1024, 1024));
-        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 0, 1024, 1024));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(0, 1, 1, 1, 1024, 1024, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 0, 1, 1024, 1024, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 0, 1024, 1024, 0));
     }
 }

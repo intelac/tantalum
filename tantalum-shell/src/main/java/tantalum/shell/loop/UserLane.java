@@ -61,8 +61,8 @@ public final class UserLane {
         /** 写入失败，进程停止处理事件。 */
         void failed(Throwable failure);
 
-        /** 这些事件不会再被放行。 */
-        void discarded(int count);
+        /** 这些事件不会再被放行：归还它们的名额。 */
+        void discarded(List<EventEnvelope> events);
     }
 
     private final Principal principal;
@@ -131,7 +131,7 @@ public final class UserLane {
             }
         }
         if (exit.halted()) {
-            exit.discarded(batch.size());
+            exit.discarded(batch);
             released.forEach(step -> step.done().run());
             return;
         }
@@ -148,7 +148,7 @@ public final class UserLane {
             }
             exit.failed(failure);
             batch.forEach(envelope -> residency.unpin(envelope.session()));
-            exit.discarded(batch.size());
+            exit.discarded(batch);
             released.forEach(step -> step.done().run());
             return;
         }
@@ -169,7 +169,7 @@ public final class UserLane {
         } catch (RuntimeException failure) {
             exit.failed(failure);
             batch.forEach(envelope -> residency.unpin(envelope.session()));
-            exit.discarded(batch.size());
+            exit.discarded(batch);
             return;
         }
         if (numbered.isEmpty()) {
@@ -186,7 +186,7 @@ public final class UserLane {
             if (!exit.publish(envelope, usage, load)) {
                 exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
                 numbered.subList(i, numbered.size()).forEach(left -> residency.unpin(left.session()));
-                exit.discarded(numbered.size() - i);
+                exit.discarded(numbered.subList(i, numbered.size()));
                 return;
             }
             usage = null;
@@ -238,9 +238,13 @@ public final class UserLane {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            LOG.error("cannot load session {}; refusing it until restart", session.value(), failure);
             String reason = failure.toString();
-            residency.fail(session, reason);
+            // 第一次记错误和堆栈；重试再失败只记一条警告，不刷屏（ops-hardening-2 需求 5.3）
+            if (residency.fail(session, reason)) {
+                LOG.error("cannot load session {}; refusing it for a while, then trying again", session.value(), failure);
+            } else {
+                LOG.warn("still cannot load session {}: {}", session.value(), reason);
+            }
             return Optional.of(new CleanroomRing.Failed(reason));
         }
     }

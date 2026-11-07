@@ -32,13 +32,13 @@
 
 ## 阶段 2：名额和自愈
 
-- [ ] 4. 按用户名额
+- [x] 4. 按用户名额
   - File: shell/loop/UserPermits.java（新）；shell/loop/LaneDispatcher.java（取名额先取用户的；`released(Principal)`、`discarded` 按用户归还）；shell/loop/UserLane.java（`Exit.discarded` 带用户或改为 `discarded(List<EventEnvelope>)`）；shell/boot/Engine.java（`lanes.released(envelope.principal())`）；shell/boot/TantalumProperties.java（`Loop.maxUserPermits`，默认 `inputRingSize / 4`，校验 `maxUserInFlight ≤ maxUserPermits ≤ inputRingSize`）；application.properties
-  - 测试：shelltest/loop/LaneDispatcherTest（新）：A 在途数到上限时 A 的下一个事件等、B 的照常通过；A 归还一个后 A 继续；`discarded` 归还；`awaitIdle` 不变；TantalumPropertiesTest 加配置校验；MultiUserTest 加真实服务用例（A 的工具挂起到上限，B 的提交在 5 秒内完成）
+  - 测试：shelltest/loop/LaneDispatcherTest（新）：A 在途数到上限时 A 的下一个事件等、B 的照常通过；A 归还一个后 A 继续；`discarded` 归还；`awaitIdle` 不变；TantalumPropertiesTest 加配置校验；真实服务用例不加：“在途”只是进 cleanroom 前的一瞬，真实服务里凑不出稳定的“到上限”，4.3 由分发器单元测试覆盖；停住的事件等总名额的边角用 UserPermitsTest 直接测
   - _Requirements: 4.1–4.4_
   - _Prompt: Role: 管线 | Task: 每个用户的放行名额上限 | Restrictions: 总名额逻辑不变；不加锁的热路径不变 | Success: 新测试过，MultiUserTest 全过_
 
-- [ ] 5. 载入失败自愈
+- [x] 5. 载入失败自愈
   - File: shell/loop/Residency.java（`Clock`、`retry`、失败时刻；过期后 `pin` 返回 COLD、`failure` 返回 null；`fail` 返回是否第一次）；shell/loop/UserLane.java（第一次 error、之后 warn）；shell/loop/Intake.java 和 shell/web 的 500 文字；shell/boot/TantalumProperties.java（`Residency.loadRetry` 默认 1m）；shell/boot/Engine.java（传入）
   - 测试：shelltest/loop/ResidencyTest（新）：失败后 retry 内 FAILED、之后 COLD；UserLaneTest 加：第一次载入失败、过了 retry 第二次成功；RestartInterruptTest 里“载入失败的会话不拦住启动”照过
   - _Requirements: 5.1–5.4_
@@ -48,7 +48,7 @@
 
 ## 阶段 3：控制台、端到端、文档
 
-- [ ] 6. 控制台：修改密码、用户页
+- [-] 6. 控制台：修改密码、用户页
   - File: console/src/settings/PasswordForm.tsx、UsersPane.tsx（新，各带 test）；console/src/settings/AccountPane.tsx（挂改密码）；console/src/settings/SettingsDialog.tsx（按 `me.admin` 显示“用户”）；console/src/api/types.ts（`User.admin`、`Account`）、client.ts（`changePassword`、`listUsers`、`createUser`、`updateUser`、`resetUserPassword`）；console/src/text/{zh,en,ja}.ts、errors.ts（`auth/forbidden`、`user/*`）
   - 测试：vitest：改密码成功/当前密码错；用户页列表、新建、对自己的两个按钮禁用、最后一个管理员的错误提示；非管理员没有“用户”页
   - _Requirements: 3.1–3.4_
