@@ -143,7 +143,7 @@ public final class E2eServer {
     private static void adminOffServer(int port, Path root) throws Exception {
         Path data = root.resolve("data");
         try (UserStore store = UserStore.open(data)) {
-            store.add(USER, PASSWORD);
+            store.add(USER, PASSWORD, true);
         }
         new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(context -> ((GenericApplicationContext) context).registerBean(ModelClient.class, E2eModel::new))
@@ -157,9 +157,10 @@ public final class E2eServer {
                         "--tantalum.web.browser.enabled=false");
     }
 
+    /** 第一个账号 {@value #USER} 是管理员（ops-hardening-2），users.spec.ts 用它管用户。 */
     private static void seed(Path data, Path workspace) throws Exception {
         try (UserStore store = UserStore.open(data)) {
-            store.add(USER, PASSWORD);
+            store.add(USER, PASSWORD, true);
             store.add(OTHER_USER, PASSWORD);
             store.add(LOCAL_USER, PASSWORD);
             store.add(I18N_USER, PASSWORD);

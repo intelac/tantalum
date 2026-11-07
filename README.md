@@ -167,7 +167,7 @@ export TANTALUM_ADMIN_USER=yi TANTALUM_ADMIN_PASSWORD='...'
 java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar ...
 ```
 
-这个账号是**管理员**。管理员可以在接口上管用户（`GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`；设置页的“用户”一页在做），每个人都能改自己的密码（`PUT /api/auth/password`，要当前密码）。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
+这个账号是**管理员**。管理员在设置页的“用户”一页加人、停用/启用、设/取消管理员、重置密码（接口 `GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`）；每个人在“账号”页改自己的密码（`PUT /api/auth/password`，要当前密码；改后别处的登录失效，当前这个保留）。被重置密码或停用的人，所有登录立即失效。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
 
 命令行也能管，密码从标准输入读取；`TANTALUM_DATA_DIR` 指向数据目录（默认 `~/.local/share/tantalum`）：
 
@@ -314,6 +314,8 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 | `tantalum.residency.idle` | `30m` | 空闲多久移出内存 |
 | `tantalum.residency.max-resident` | `1000` | 常驻会话上限 |
 | `tantalum.residency.sweep-interval` | `1s` | 两次回收检查的最小间隔 |
+| `tantalum.residency.load-retry` | `1m` | 会话载入失败后多久再试；在这之前这个会话回 500，别的会话不受影响 |
+| `tantalum.loop.max-user-permits` | `256`（输入环的四分之一） | 一个用户同时在处理管线里的事件上限；到上限后他的事件排队等，别的用户照常。不能小于 `max-user-in-flight` |
 
 **关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后关索引和文件。被中断的运行下次启动按上面的规则收尾。
 
@@ -735,7 +737,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 操作系统级沙箱 | 无 | 有（`sandbox-local`：Seatbelt、受限令牌、bwrap） | 有，只用于电脑上的 `bash`（macOS 用微软 MXC 的 Seatbelt 后端）；服务器上不再有读写文件、跑命令的工具 | Windows 上换 MXC 的 Windows 后端 |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |
-| 用户管理界面 | 不适用 | 不适用 | 管理员接口和命令行有了，设置页的“用户”一页在做；登录存在数据库里，重启不掉 | 做完控制台这项就齐 |
+| 用户管理界面 | 不适用 | 不适用 | **有**：设置页“用户”（管理员）、“账号”页改密码、命令行；登录存在数据库里，重启不掉 | — |
 | 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
 
 顺序（Yi 决定）：`memory`、`mcp-client`、`context-compaction` 已完成；其余顺序待定。

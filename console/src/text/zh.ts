@@ -709,6 +709,7 @@ export const zh = {
       read_attachment: ["读附件", "读你上传的附件，图片也能看。"],
       memory_read: ["读记忆", "读取长期记忆的正文。"],
       memory_write: ["写记忆", "新建或更新一条长期记忆。"],
+      ask_user: ["问用户", "运行停下来问你一个问题，等你在对话页回答后再继续；等多久都行，重启也不丢。"],
       memory_delete: ["删记忆", "删除一条长期记忆。"],
     } satisfies Record<string, readonly [string, string]>,
     states: {

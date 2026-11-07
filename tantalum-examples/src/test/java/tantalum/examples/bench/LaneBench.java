@@ -67,7 +67,7 @@ public final class LaneBench {
                     if (request.startsWith("0-")) {
                         firstSecond.add(TimeUnit.NANOSECONDS.toMicros(now - start));
                     }
-                }, holder[0]::released);
+                }, () -> holder[0].released(envelope));
                 return true;
             });
             InputRing input = LoopFixtures.inputRing(1024, holder[0]);
