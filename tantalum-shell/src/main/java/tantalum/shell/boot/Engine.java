@@ -260,15 +260,15 @@ public final class Engine implements AutoCloseable {
         output.start();
         cleanroomRing.start();
         input.start();
-        interrupt(unfinished);
+        int interrupted = interrupt(unfinished);
         try {
             deadlines.arm(storage.index.awaitingWithDeadline());
         } catch (SQLException failure) {
             throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
         }
         Warmup.start(codec);
-        LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
-                properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
+        LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted, {} waiting for an answer",
+                properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), interrupted, unfinished.size() - interrupted);
     }
 
     /** 固定说明：MCP 的那段加联网的那段（W9），都不随用户开关变化。 */
@@ -402,11 +402,11 @@ public final class Engine implements AutoCloseable {
      * 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。
      * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
      */
-    private void interrupt(List<SessionIndex.Session> all) {
+    private int interrupt(List<SessionIndex.Session> all) {
         // 等用户回答的运行没有在途命令，不收尾，照旧等（waiting-state 需求 3.1）
         List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())).toList();
         if (unfinished.isEmpty()) {
-            return;
+            return 0;
         }
         try {
             for (SessionIndex.Session session : unfinished) {
@@ -423,6 +423,7 @@ public final class Engine implements AutoCloseable {
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
         }
+        return unfinished.size();
     }
 
     /**
