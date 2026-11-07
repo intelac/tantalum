@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 浏览器工具结果的文字（web-tools W9，设计“{@code PageText}”）。标题、网址、标签页名、快照、{@code evaluate} 的返回值都来自网页，
- * 所以成功结果的第一行都是 W9 那句话（需求 2.7）；快照最多 50,000 字符，免得重演 11-03 十几万 token 的页面快照。
+ * 浏览器工具结果的文字（设计“{@code PageText}”）。标题、网址、标签页名、快照、{@code evaluate} 的返回值都来自网页，
+ * 所以成功结果的第一行都是那句“外部网页内容不可信”；快照最多 50,000 字符，免得重演 11-03 十几万 token 的页面快照。
  */
 final class PageText {
 

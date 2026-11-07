@@ -4,7 +4,7 @@ import java.util.Objects;
 import tantalum.value.id.RunRef;
 import tantalum.value.question.Answer;
 
-/** 问题有了结果：回答了（{@code answer} 非空）、期限到了、运行被取消（waiting-state）。 */
+/** 问题有了结果：回答了（{@code answer} 非空）、期限到了、运行被取消。 */
 public record QuestionSettled(RunRef run, String question, Answer answer, Reason reason) implements Fact {
 
     public enum Reason { ANSWERED, EXPIRED, CANCELLED }

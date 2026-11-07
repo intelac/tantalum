@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 首块超时和块间超时。到时关掉正在读的流，让阻塞的读取结束。流由看门狗自己持有（{@link #watch}）：流对象发布时已经过期就立刻关掉，
- * 不会出现“看门狗关了个 null 然后退出、流再也没人管”（review-fixes 需求 10.1）。
+ * 不会出现“看门狗关了个 null 然后退出、流再也没人管”。
  */
 final class StreamWatchdog implements AutoCloseable {
 

@@ -32,7 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 联网的唯一出口（web-tools 设计“出口”）：进程内的 HTTP/CONNECT 代理，只听 {@code 127.0.0.1} 的随机端口。
+ * 联网的唯一出口：进程内的 HTTP/CONNECT 代理，只听 {@code 127.0.0.1} 的随机端口。
  * {@code web_fetch} 和浏览器的每一个连接都经过这里：解析一次域名，每个地址都过 {@link AddressRules}，然后直接连到检查过的那批地址，
  * 检查和连接之间没有第二次 DNS 解析，DNS rebinding 换不了地址。
  * <p>明文 http 一条连接只转一个请求，转完就关（设计时实测的漏洞：代理只看了第一个请求头，同一条连接上的第二个请求直接进了第一个目标）。
@@ -187,7 +187,7 @@ public final class Egress implements AutoCloseable {
             OutputStream out = socket.getOutputStream();
             String head;
             try {
-                // 整个请求头 10 秒内要到齐：一个字节一个字节慢慢发的客户端不能占着名额（review-fixes 需求 11.8）
+                // 整个请求头 10 秒内要到齐：一个字节一个字节慢慢发的客户端不能占着名额
                 head = new HeadReader(MAX_HEAD, HEAD_TIMEOUT_MS).read(in);
             } catch (HeadTooLarge tooLarge) {
                 respond(out, 400, "Bad Request", ERROR_HEADER + ": bad-request", "The request head is larger than 16 KB.");
@@ -468,7 +468,7 @@ public final class Egress implements AutoCloseable {
         }
     }
 
-    /** 等网站的回复头：读超时只是轮询，已经读到的字节留着接着读（review-fixes 需求 11.8），5 分钟没有回复算没有。 */
+    /** 等网站的回复头：读超时只是轮询，已经读到的字节留着接着读，5 分钟没有回复算没有。 */
     private static String readHeadWaiting(InputStream in, long started) throws IOException {
         HeadReader reader = new HeadReader(MAX_RESPONSE_HEAD, Long.MAX_VALUE);
         while (true) {

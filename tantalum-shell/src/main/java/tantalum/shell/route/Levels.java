@@ -6,7 +6,7 @@ import java.util.List;
 import tantalum.shell.model.OpenAiThinking;
 
 /**
- * 一个模型的思考档位和默认档位（model-picker M5）。档位名只是标识，画面上的中文名在控制台的 {@code zh.ts}。
+ * 一个模型的思考档位和默认档位。档位名只是标识，画面上的中文名在控制台的 {@code zh.ts}。
  * 没有档位时 {@code names} 为空、{@code defaultLevel} 为 null，画面上不显示档位那一栏。
  */
 public record Levels(List<String> names, String defaultLevel) {
@@ -33,7 +33,7 @@ public record Levels(List<String> names, String defaultLevel) {
 
     /**
      * Claude 模型的档位：五档里 Models 接口说支持的（{@code capabilities.effort.<档位>.supported}），按顺序。默认档位：路线的
-     * {@code preferred} 在里面就用它，否则取离 {@code medium} 最近的，一样近取低的。不提供“关”（M5）。
+     * {@code preferred} 在里面就用它，否则取离 {@code medium} 最近的，一样近取低的。不提供“关”。
      */
     public static Levels claude(Collection<String> supported, String preferred) {
         List<String> names = CLAUDE.stream().filter(supported::contains).toList();
@@ -57,7 +57,7 @@ public record Levels(List<String> names, String defaultLevel) {
     }
 
     /**
-     * OpenAI 兼容模型的档位，由管理员写的思考写法定（M5）：{@code none} 没有档位；{@code reasoning-effort} 用 {@code efforts}
+     * OpenAI 兼容模型的档位，由管理员写的思考写法定：{@code none} 没有档位；{@code reasoning-effort} 用 {@code efforts}
      * （没写是 low、medium、high），默认 {@code preferred}（没写是 medium，没有 medium 时是第一档）；三种开关是 off、on，默认 on。
      * 档位为空、默认档位不在档位里都抛出，消息写明可以写什么。
      */

@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 登录记录（ops-hardening-2 需求 1）：{@code users.db} 里的 {@code logins} 表，代替 Tomcat 的内存会话，重启、崩溃都不丢。
+ * 登录记录：{@code users.db} 里的 {@code logins} 表，代替 Tomcat 的内存会话，重启、崩溃都不丢。
  * Cookie 里只放随机令牌（32 字节，Base64url），表里只存它的 SHA-256；{@code id} 就是这个哈希，也是 SSE 按登录断开用的登录 id。
- * 有效期按最后访问时间算（{@link #check}），再加一个从创建起算的绝对上限（review-fixes 需求 11.2），调用方控制多久写一次最后访问时间。
+ * 有效期按最后访问时间算（{@link #check}），再加一个从创建起算的绝对上限，调用方控制多久写一次最后访问时间。
  */
 public final class Logins {
 

@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 一种语言的资源文件（console-i18n I14）：每个模块一组 UTF-8 的 {@code Text.properties}（英文）、{@code Text_zh}、{@code Text_ja}。
+ * 一种语言的资源文件：每个模块一组 UTF-8 的 {@code Text.properties}（英文）、{@code Text_zh}、{@code Text_ja}。
  * 读的时候关掉 Java 按系统语言的回退，否则日文里找不到的键会拿系统语言那份；找不到的键用英文，英文也没有就显示键名。
  * 占位符写 {@code {name}}，不用 {@code MessageFormat}：它要把英文里的 {@code '} 写成 {@code ''}，一不小心整句就错。
  * 只读类路径上的资源文件，不做别的 I/O。别处一律经这里读 {@link ResourceBundle}（ArchitectureTest 管着）。

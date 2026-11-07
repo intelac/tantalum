@@ -42,12 +42,12 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .securityContext(context -> context.securityContextRepository(contexts))
-                // 不存“登录前被拒的请求”：没有跳转登录页的流程用得上它（windows-server 任务 13 的 Playwright 实测）
+                // 不存“登录前被拒的请求”：没有跳转登录页的流程用得上它（Playwright 实测）
                 .requestCache(cache -> cache.disable())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, failure) -> {
                             // 401 不动 Cookie：同一浏览器里刚登录的新令牌可能和带旧令牌的请求并行，清掉会把新登录一起清掉
-                            // （windows-server 任务 13 的实测）；浏览器收到 401 自己回登录页
+                            // （实测）；浏览器收到 401 自己回登录页
                             response.setStatus(401);
                             response.setContentType("application/json");
                             // 代码同 web.ErrorCode.AUTH_NOT_AUTHENTICATED（auth 不依赖 web，这里写字面值；ErrorCodeTest 比对）
@@ -62,10 +62,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(rules -> rules
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
-                        // 连接程序的 WebSocket 握手：不用登录会话，由端点自己查令牌（local-workspace 设计“Spring Security”）。
+                        // 连接程序的 WebSocket 握手：不用登录会话，由端点自己查令牌。
                         // 路径同 LocalEndpoint.PATH，这里写字面值，免得 auth 和 local 两个包互相依赖。
                         .requestMatchers("/api/local/connect").permitAll()
-                        // 用户管理只有管理员（ops-hardening-2 需求 2.4）
+                        // 用户管理只有管理员
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
@@ -108,7 +108,7 @@ public class SecurityConfig {
 
     /**
      * 写操作如果带 {@code Origin}，必须和请求的主机一致；不带 {@code Origin} 时看浏览器的 {@code Sec-Fetch-Site}，
-     * 标明跨站的也拒（review-fixes 需求 11.5）。拒绝回 JSON，控制台能按代码显示。
+     * 标明跨站的也拒。拒绝回 JSON，控制台能按代码显示。
      */
     static final class OriginFilter extends OncePerRequestFilter {
         @Override

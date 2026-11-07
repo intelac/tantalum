@@ -10,7 +10,7 @@ import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.PropertySource;
 
 /**
- * 已经改名的配置还在时拒绝启动（model-picker M17）：Spring 会悄悄忽略多余的键，管理员以为本地模型配好了，其实没有生效。
+ * 已经改名的配置还在时拒绝启动：Spring 会悄悄忽略多余的键，管理员以为本地模型配好了，其实没有生效。
  * 在读完配置文件之后运行，命令行、环境变量、配置文件里的都查。
  */
 public final class RemovedKeys implements EnvironmentPostProcessor, Ordered {

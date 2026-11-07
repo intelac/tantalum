@@ -701,3 +701,10 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **事实和状态归位（折中）**：做到一半发现 journal 的硬规则——旧会话用新版本重写后的行要逐字节相同（`ModelChoiceCodecTest.withoutAChoiceTheOldSessionIsWrittenByteForByte`）——不允许改运行状态和事实的形状：删 `Compacting.patch` 会让重写后的行少一个字段，`RunState` 加 `compactionJustDone` 会让压缩那一步多一个字段，`HookDecided` 加 `question` 会让 ASK 行换字段。所以：`HookDecided` 不加字段，只加 `questionId()`（ASK 时从 `reason` 位取）给读的人一个名字；`Compacting.patch` 留着（永远 NONE，注释写明为什么）；“压缩刚结束”不进状态，改成 `SessionState.justCompacted()`（`context == null && compaction != null`）这个有名字的判断，`ContextSteps` 在冻结前算、`ModelSteps.callModel` 的 `compactionAllowed` 参数保留。`CompactSteps.notAdopted` 拆成 `refused`、`notSent`、`notAdopted`，共用 `failed(…, mayTrim, failsSwitch, summarySent)`，`Stage` 枚举删掉；`Fetcher.precheck` 返回 `Lookup`（`RESOLVED`/`UNRESOLVED`）。需求 12.5 的两条和 12.8 的“并进 RunState”按上面的折中算完成，要真改形状得等 journal 格式升版。
 - **没做**：`WorkType.description()` 没挪到 `PluginInfo`（shell 自己的 SPI，不碍内核）；`TantalumProperties` 的默认值两处写的问题留给以后。
 
+### review-fixes 阶段 5（2026-11-07）：拆大类与清注释
+
+- **`RecordCodec` 拆分**：927 行拆成编排（299 行）加六个包内类——`Deltas`（只写变了的字段、合并回去）、`SessionDelta`（会话的变化、上下文差量、notes）、`RunDelta`（运行的变化、工具槽位差量）、`RequestDelta`（模型调用的 system/工具/消息下标、`keep`/`add`、模型选择、指纹）、`TextSlices`（内容块和长字符串的引用、切片、转义）、`RunRefs`（重复的运行引用）。代码逐行搬过去，常量跟着用它的类走；`RecordCodecTest`、`ModelChoiceCodecTest`（旧会话重写逐字节相同）和 trace 期望文件都没动。
+- **`Engine` 装配分步**：`Stores.open`（journal、令牌、开关、设置、记忆）→ `Toolbox.open`（工具目录、连接、出口、浏览器、MCP、路线、插件入口）→ `Queries.open`（视图、投影、推送、查询）→ `Pipeline.open`（内核、环、通道、处理器、入口）；`Engine` 只串起来、启动环、收尾上次的运行、关机，536 行变 324 行。`opened` 列表穿过四步，失败时倒序关。`Pipeline` 里“一个事件走完全程”的回调要用后建的入口，经一个槽位取。
+- **`RunState` 分组**：journal 里的运行状态是扁平字段，旧行要能读、新行逐字节不变，所以记录本身不分组，加三组视图 `Flow`（阶段、工具轮、插话、重试、工作来源和轮数）、`Recovery`（等摘要、不再自动压缩、超长恢复过）、`Models`（模型和换掉的上一个）和整组替换的 `withFlow`/`withRecovery`/`withModels`；这些方法不是记录成员，不进 journal（`RunStateViewsTest`、`ModelChoiceCodecTest`）。真分组要等 journal 格式升版（BACKLOG 的 RunState/SessionState 重构）。
+- **spec 编号注释**：主代码里 374 处“（spec X12）”、152 处裸编号“（M10）”“（需求 2.4）”和 28 处裸提及全部去掉或改写成规则本身；引用里带 DSH/pi 文件行号、日期、实测说明的只删编号、留其余；指向设计章节的“（xx 设计“…”）”整个去掉，类注释改成“这是做什么的”。只动注释（`git diff` 里没有非注释行的改动），测试代码里的编号不动（测试名就是需求编号的索引）。编号的出处从此只在 `tech.md` 和各 spec 里。
+

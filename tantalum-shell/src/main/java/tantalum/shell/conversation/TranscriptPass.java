@@ -131,7 +131,7 @@ final class TranscriptPass {
         List<String> offered = assembled.tools().stream().map(ToolSpec::name).toList();
         List<Message> appended = now.messages().subList(earlier.messages().size(), now.messages().size());
         int index = 0;
-        // 换了模型的那一轮上面一行（model-picker 需求 8.4）；只换档位也写，告诉用户这轮用的档位
+        // 换了模型的那一轮上面一行；只换档位也写，告诉用户这轮用的档位
         ModelChoice was = earlier.model();
         ModelChoice is = now.model();
         if (was != null && is != null && !was.equals(is)) {
@@ -179,7 +179,7 @@ final class TranscriptPass {
         }
     }
 
-    /** 问题有了结果（waiting-state 需求 7.1）：同一条目改状态，带上回答和时间。 */
+    /** 问题有了结果：同一条目改状态，带上回答和时间。 */
     private void questionSettled(QuestionSettled settled) {
         if (!(get(Question.idOf(settled.question())) instanceof Question question)) {
             return;

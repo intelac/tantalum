@@ -26,7 +26,7 @@ public final class ReadOnlyHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Only tools on the list may run; every other call is blocked.")
                 .zh("只放行名单里的工具，其余调用一律拦下。")
                 .ja("リストにあるツールだけを通し、それ以外の呼び出しはすべてブロックします。");

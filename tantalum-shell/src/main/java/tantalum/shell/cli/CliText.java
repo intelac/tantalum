@@ -8,7 +8,7 @@ import tantalum.value.text.Bundle;
 import tantalum.value.text.Language;
 
 /**
- * 命令行子命令 {@code users}、{@code check}、{@code browser install} 的输出（console-i18n I13）：三种语言的资源文件
+ * 命令行子命令 {@code users}、{@code check}、{@code browser install} 的输出：三种语言的资源文件
  * {@code tantalum/shell/cli/Text*.properties}。语言：{@code --lang} → {@code LC_ALL}、{@code LC_MESSAGES}、{@code LANG} → 系统语言 → 英文，
  * 同连接程序。服务器日志和启动失败的日志不经这里，一律英文。
  */

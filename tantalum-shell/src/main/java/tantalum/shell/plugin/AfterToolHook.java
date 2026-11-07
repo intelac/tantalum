@@ -19,7 +19,7 @@ public interface AfterToolHook {
     }
 
     /**
-     * 抛异常时这次工具调用以错误结束，而不是记日志、结果保持上一个（review-fixes 需求 12.7）。默认 false；必须开启的插件
+     * 抛异常时这次工具调用以错误结束，而不是记日志、结果保持上一个。默认 false；必须开启的插件
      * （自己声明或管理员配置）一律按 true。插件页的说明另见 {@link PluginInfo}。
      */
     default boolean failClosed() {

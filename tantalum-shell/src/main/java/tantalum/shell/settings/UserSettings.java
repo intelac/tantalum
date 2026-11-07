@@ -24,13 +24,13 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 每个用户自己的设置（compaction-threshold T5）。存在 {@code users.db} 的 {@code user_settings} 表里，一行一项，不进 journal：
- * 压缩点，“上次的选择”（model-picker M7，键 {@code model_choice}，值是 JSON），和控制台的语言（console-i18n I3，键 {@code language}，
+ * 每个用户自己的设置。存在 {@code users.db} 的 {@code user_settings} 表里，一行一项，不进 journal：
+ * 压缩点，“上次的选择”（键 {@code model_choice}，值是 JSON），和控制台的语言（键 {@code language}，
  * 值是 {@code zh}、{@code en}、{@code ja}，没有这一行就是“跟随浏览器”）。按用户缓存在内存里，改的时候先写库再更新缓存。
  */
 public final class UserSettings implements AutoCloseable {
 
-    /** 压缩点能选的百分比，100 就是“用满”（T4）。 */
+    /** 压缩点能选的百分比，100 就是“用满”。 */
     public static final List<Integer> COMPACTION_PERCENTS = List.of(50, 70, 85, 100);
     public static final int DEFAULT_COMPACTION_PERCENT = 100;
 
@@ -102,7 +102,7 @@ public final class UserSettings implements AutoCloseable {
         percents.put(user, percent);
     }
 
-    /** 这个用户上次在选择器里选的（M7）；没选过、或者存的读不懂时为空。能不能用由调用方按现在的模型列表判断。 */
+    /** 这个用户上次在选择器里选的；没选过、或者存的读不懂时为空。能不能用由调用方按现在的模型列表判断。 */
     public Optional<ModelChoice> modelChoice(Principal user) {
         Optional<ModelChoice> cached = choices.get(user);
         if (cached != null) {

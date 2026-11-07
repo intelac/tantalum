@@ -38,7 +38,7 @@ import tantalum.value.state.SessionState;
 public final class Intake {
 
     /**
-     * 提交的结果。{@code status} 对应 HTTP 状态。{@code saved} 在提交那一步落盘后完成（one-line-journal J4），
+     * 提交的结果。{@code status} 对应 HTTP 状态。{@code saved} 在提交那一步落盘后完成，
      * 接口等它再回“已接受”；被拒绝的提交没有回执，为 null。
      */
     public record Submission(int status, SubmissionId submission, boolean duplicate, CompletableFuture<Void> saved) {
@@ -110,8 +110,8 @@ public final class Intake {
     }
 
     /**
-     * 带模型选择的提交（model-picker M6）：{@code model} 已由调用方查过，可以为 null（用会话现在的）。它跟着开始新运行的提交进
-     * journal（{@code prompt}、{@code follow-up}）；插话并进当前运行，不换模型，所以不带（M8）。
+     * 带模型选择的提交：{@code model} 已由调用方查过，可以为 null（用会话现在的）。它跟着开始新运行的提交进
+     * journal（{@code prompt}、{@code follow-up}）；插话并进当前运行，不换模型，所以不带。
      */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments, ModelChoice model) {
@@ -137,7 +137,7 @@ public final class Intake {
     }
 
     /**
-     * 回答运行问的问题（waiting-state 需求 6.2）。和提交一样：别人的会话 404、落盘后才回“已接受”；没有活动运行回 409，
+     * 回答运行问的问题。和提交一样：别人的会话 404、落盘后才回“已接受”；没有活动运行回 409，
      * 调用方当作“问题已经不在”。问题是不是当前的、回答合不合法，由内核按记录再验一次，不合法的只记事实。
      */
     public Submission answer(Principal principal, SessionId session, RequestId request, String question, Answer answer) {
@@ -194,8 +194,8 @@ public final class Intake {
     }
 
     /**
-     * 回执和认领在同一个临界区里登记（review-fixes 需求 1.1），所以重复提交要么看不到认领、要么拿到的是同一张还在途的回执；
-     * 原提交被拒、没进环或中途抛异常时回执以失败完成，名额、新运行计数和认领全部退回（需求 1.2、1.5）。
+     * 回执和认领在同一个临界区里登记，所以重复提交要么看不到认领、要么拿到的是同一张还在途的回执；
+     * 原提交被拒、没进环或中途抛异常时回执以失败完成，名额、新运行计数和认领全部退回。
      */
     private Submission publish(Principal principal, SessionId session, RequestId request, boolean needsNewRun,
                                Function<SubmissionId, Event> event) {

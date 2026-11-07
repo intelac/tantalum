@@ -20,7 +20,7 @@ import tantalum.value.text.LocalText;
 
 /**
  * 工具审批（{@code beforeToolCall} + {@code onAnswer}）：调用列出的工具前在对话页上问用户“允许调用这个工具吗”，三个选项：
- * 允许这一次、这个会话里一直允许、拒绝。问了就等（waiting-state）：人几小时后回答也接着跑，服务器重启问题还在。
+ * 允许这一次、这个会话里一直允许、拒绝。问了就等：人几小时后回答也接着跑，服务器重启问题还在。
  *
  * <p>“这个会话里一直允许”：放行时带一条会话记录（{@code Allow.withNote("approval", {"工具名": true})}），内核记进
  * {@code SessionState.note("approval")}，随结果行进 journal；之后这个会话里看到就不再问，别的会话照样问。
@@ -55,7 +55,7 @@ public final class ToolApprovalHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Before a listed tool is called, asks you on the conversation page and waits as long as needed: allow once, always allow in this session, or deny.")
                 .zh("调用列出的工具前先在对话页上问你，等多久都行：允许这一次、这个会话里一直允许，或者拒绝。")
                 .ja("リストにあるツールを呼び出す前に会話ページで確認し、回答まで待ちます。今回だけ許可、このセッションでは常に許可、または拒否を選べます。");

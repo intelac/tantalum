@@ -19,7 +19,7 @@ import java.util.UUID;
 import tantalum.local.fs.PrivateFiles;
 
 /**
- * 文件工具共用的文本处理：判断二进制、严格 UTF-8 逐行读、换行风格和 BOM、原子写（需求 C3、C4、C6、C7）。
+ * 文件工具共用的文本处理：判断二进制、严格 UTF-8 逐行读、换行风格和 BOM、原子写。
  * 换行判断和原子写的做法照 DSH {@code fs-local/src/fsio.ts:618-702,731-751}。
  */
 final class TextFiles {

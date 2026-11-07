@@ -25,7 +25,7 @@ import tantalum.value.text.Language;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/** 登录、退出和当前用户。失败时不透露是用户名还是密码错了。登录记在用户库里，重启不丢（ops-hardening-2 需求 1）。 */
+/** 登录、退出和当前用户。失败时不透露是用户名还是密码错了。登录记在用户库里，重启不丢。 */
 @RestController
 public class AuthController {
 
@@ -101,8 +101,8 @@ public class AuthController {
     }
 
     /**
-     * 自己改密码（ops-hardening-2 需求 2.6）：要当前密码；改后别处的登录失效、推送连接断开，当前这个保留（D3）。当前密码错计入登录限速。
-     * 请求体 {@code {"current", "next"}}，新密码至少 {@value UserStore#MIN_PASSWORD} 位（review-fixes 需求 11.13）。
+     * 自己改密码：要当前密码；改后别处的登录失效、推送连接断开，当前这个保留。当前密码错计入登录限速。
+     * 请求体 {@code {"current", "next"}}，新密码至少 {@value UserStore#MIN_PASSWORD} 位。
      */
     @PutMapping("/api/auth/password")
     ResponseEntity<String> changePassword(@RequestBody String body, HttpServletRequest request) throws SQLException {
@@ -140,8 +140,8 @@ public class AuthController {
     }
 
     /**
-     * {@code {"username", "language", "admin"}}：控制台登录后、刷新后立即用这个用户的语言，{@code null} 是跟随浏览器（console-i18n I3）；
-     * {@code admin} 决定设置页有没有“用户”一页（ops-hardening-2 需求 2.3）。
+     * {@code {"username", "language", "admin"}}：控制台登录后、刷新后立即用这个用户的语言，{@code null} 是跟随浏览器；
+     * {@code admin} 决定设置页有没有“用户”一页。
      */
     private ObjectNode user(Principal user) throws SQLException {
         ObjectNode view = json.object();

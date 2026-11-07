@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 插件作者写给人看的文字（console-i18n I10，照 DSH {@code LocalizedText}）：一个字符串，或者英、中、日三种，英文必填。
+ * 插件作者写给人看的文字（照 DSH {@code LocalizedText}）：一个字符串，或者英、中、日三种，英文必填。
  * 控制台按“用户的语言 → 英文”选；只写了一个字符串的不知道是哪种语言，照原样显示。
  * 写成 JSON 时一个字符串就是字符串，带语言的是 {@code {"en": …, "zh": …, "ja": …}}，见 {@link #wire()}。
  */

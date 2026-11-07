@@ -108,16 +108,16 @@
 
 - [x] 25. 阶段 4 收尾：全量回归、8091 部署、tech.md、提交
 
-- [ ] 26. 阶段 5：`RecordCodec` 四拆
+- [x] 26. 阶段 5：`RecordCodec` 四拆
   - _Requirements: 13.1_
 
-- [ ] 27. 阶段 5：`Engine` 装配分步
+- [x] 27. 阶段 5：`Engine` 装配分步
   - _Requirements: 13.2_
 
-- [ ] 28. 阶段 5：`RunState` 按阶段分组
+- [x] 28. 阶段 5：`RunState` 按阶段分组
   - _Requirements: 13.3_
 
-- [ ] 29. 阶段 5：spec 编号注释逐包换成规则本身
+- [x] 29. 阶段 5：spec 编号注释逐包换成规则本身
   - _Requirements: 13.4_
 
-- [ ] 30. 阶段 5 收尾：全量回归、8091 部署、tech.md、提交
+- [x] 30. 阶段 5 收尾：全量回归、8091 部署、tech.md、提交

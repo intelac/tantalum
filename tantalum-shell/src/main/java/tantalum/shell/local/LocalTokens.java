@@ -24,7 +24,7 @@ import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 
 /**
- * 连接这台电脑用的令牌（local-workspace L2、L3）。存在 {@code users.db} 的 {@code local_tokens} 表里，只存 SHA-256，
+ * 连接这台电脑用的令牌。存在 {@code users.db} 的 {@code local_tokens} 表里，只存 SHA-256，
  * 原始令牌只在 {@link #issue} 的返回值里出现一次。有效期只认四种；到期或撤销后不能再用。到期超过 7 天的行在启动时删掉。
  * 令牌不进日志：这里不写日志，报错也不带令牌。
  */
@@ -33,7 +33,7 @@ public final class LocalTokens implements AutoCloseable {
     /** 插件页能选的有效期：半小时、1 小时、4 小时、1 天（Yi 2026-11-06 定）。 */
     public static final Set<Duration> VALIDITIES = Set.of(Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofHours(4), Duration.ofDays(1));
 
-    /** 令牌的前缀，连接程序据此认出“像令牌的参数”并拒绝（L2）。 */
+    /** 令牌的前缀，连接程序据此认出“像令牌的参数”并拒绝。 */
     public static final String PREFIX = "tc_";
 
     /** 到期多久之后删掉。留几天是为了让旧令牌重连时报“已到期”而不是“无效”。 */

@@ -5,7 +5,7 @@ import tantalum.local.fs.AllowedDirs;
 
 /**
  * 写工具的路径规则：在某个允许的目录里（{@link AllowedDirs#resolveForWrite}）。服务器上原来还禁止写 {@code memory/}，那是服务器上
- * 记忆目录的规则；记忆留在服务器（L6），用户电脑上的 {@code memory/} 只是普通目录，这里不再拦。
+ * 记忆目录的规则；记忆留在服务器，用户电脑上的 {@code memory/} 只是普通目录，这里不再拦。
  */
 final class WritePaths {
 

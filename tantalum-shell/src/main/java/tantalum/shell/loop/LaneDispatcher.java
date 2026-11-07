@@ -72,7 +72,7 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
                 }
             }
         } catch (InterruptedException stopping) {
-            // 关机：这个用户的名额退回，事件不进通道（review-fixes 需求 2.5）
+            // 关机：这个用户的名额退回，事件不进通道
             users.giveBack(envelope);
             throw stopping;
         }
@@ -130,7 +130,7 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
     public void failed(Throwable failure) {
         halted = true;
         LOG.error("journal write failed; the process stops handling events and must be reopened", failure);
-        // 停在用户上限外的事件不会再被放进去：丢弃并归还名额，awaitIdle 不再空转（需求 2.6）
+        // 停在用户上限外的事件不会再被放进去：丢弃并归还名额，awaitIdle 不再空转
         users.discardAll(this::discarded);
         onHalt.run();
     }

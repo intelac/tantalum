@@ -19,7 +19,7 @@ import tantalum.value.event.TimerFired;
 import tantalum.value.id.Principal;
 
 /**
- * 每个用户在途事件的上限（ops-hardening-2 需求 4、D4）。在途是指取了放行名额、还没过 cleanroom 的事件。到上限后这个用户之后的事件
+ * 每个用户在途事件的上限。在途是指取了放行名额、还没过 cleanroom 的事件。到上限后这个用户之后的事件
  * 停在这里，不占放行名额，输入环的消费者继续取别人的；他每处理完一个事件，就按原顺序放一个进去。重启收尾（{@link RunInterrupted}）
  * 和定时器（{@link TimerFired}）不计入上限、只占放行名额，但排在停住的事件后面，保持这个用户的事件顺序。
  * 一个用户的锁只在他自己的事件进出时拿，不同用户互不等待。
@@ -116,7 +116,7 @@ final class UserPermits {
         return parked.get();
     }
 
-    /** 管线停住：停在上限外的事件不会再被放进去，全部交给 {@code discard}（review-fixes 需求 2.6）。 */
+    /** 管线停住：停在上限外的事件不会再被放进去，全部交给 {@code discard}。 */
     void discardAll(Consumer<List<EventEnvelope>> discard) {
         List<EventEnvelope> dropped = new ArrayList<>();
         for (Principal principal : List.copyOf(parkedUsers)) {

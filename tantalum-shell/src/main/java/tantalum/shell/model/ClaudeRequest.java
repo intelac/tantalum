@@ -58,7 +58,7 @@ final class ClaudeRequest {
     static final String PROVIDER = "claude";
     private static final String FALLBACK_BETA = "server-side-fallback-2026-07-01";
     private static final String BINDING_BETA = "thinking-binding-controls-2026-08-01";
-    /** 会话中途增减工具（core-tools C14）：工具列表不改，用追加的系统消息 {@code tool_addition}、{@code tool_removal}。 */
+    /** 会话中途增减工具：工具列表不改，用追加的系统消息 {@code tool_addition}、{@code tool_removal}。 */
     static final String TOOL_CHANGE_BETA = "mid-conversation-tool-changes-2026-07-01";
     /**
      * 支持会话中途工具变化的模型（官方文档 platform-availability，2026-11 核对；Claude Sonnet 5 不支持）。不在名单里的模型不发
@@ -91,7 +91,7 @@ final class ClaudeRequest {
 
     /**
      * {@code extra} 的键名和请求体一致；{@code betas} 是请求头，只在打开时出现，{@code fallbacks} 同理。模型和档位取 prompt 里的选择
-     * （model-picker M6），没有选择时用设置里的默认；选择里没有档位（模型不支持 effort）时不发 {@code output_config}。
+     *，没有选择时用设置里的默认；选择里没有档位（模型不支持 effort）时不发 {@code output_config}。
      */
     RequestOptions options(Prompt prompt) {
         String model = prompt.model() == null ? this.model : prompt.model().model();
@@ -166,8 +166,8 @@ final class ClaudeRequest {
         for (int i = 0; i < tools.size(); i++) {
             params.addTool(tool(tools.get(i), i == cachedTool));
         }
-        // 换模型的说明并进这次的用户消息（M12），所有 Claude 模型看到的一样；不支持中途 system 消息的模型把钩子的说明也并进用户消息，
-        // 工具变化丢掉（hook-patch 需求 3.2）
+        // 换模型的说明并进这次的用户消息，所有 Claude 模型看到的一样；不支持中途 system 消息的模型把钩子的说明也并进用户消息，
+        // 工具变化丢掉
         List<Message> messages = Folding.fold(prompt.messages(), !systemMessages);
         if (!systemMessages) {
             messages = messages.stream().filter(message -> message.role() != Role.SYSTEM).toList();
@@ -216,7 +216,7 @@ final class ClaudeRequest {
     }
 
     /**
-     * 一条会话中途的系统消息：钩子的说明是文字块（hook-patch）；工具变化每个新增、移除的工具一个块，按名字引用（工具定义已在列表里，
+     * 一条会话中途的系统消息：钩子的说明是文字块；工具变化每个新增、移除的工具一个块，按名字引用（工具定义已在列表里，
      * 标了 defer_loading）。SDK 的系统消息只有文字内容，块用它留给任意 JSON 的口子写。
      */
     @SuppressWarnings("unchecked")
@@ -347,7 +347,7 @@ final class ClaudeRequest {
         };
     }
 
-    /** 图片前面一行说明，再是图片本身（需求 3.3）。 */
+    /** 图片前面一行说明，再是图片本身。 */
     private static List<ContentBlockParam> image(ImageRef ref, AttachmentMedia media) {
         return List.of(ContentBlockParam.ofText(TextBlockParam.builder().text(AttachmentText.image(ref)).build()),
                 ContentBlockParam.ofImage(imageParam(ref, media)));
@@ -360,10 +360,10 @@ final class ClaudeRequest {
                 .data(BASE64.encodeToString(image.bytes())).build()).build();
     }
 
-    /** 工具结果没有文字时的占位：接口不收空的内容（review-fixes 需求 10.3）。 */
+    /** 工具结果没有文字时的占位：接口不收空的内容。 */
     static final String NO_OUTPUT = "(no output)";
 
-    /** 没出错的工具结果：文字和图片都在结果里（需求 3.7）。图片的说明行已经在工具输出的文字里，不再重复；文字空白时只发图片。 */
+    /** 没出错的工具结果：文字和图片都在结果里。图片的说明行已经在工具输出的文字里，不再重复；文字空白时只发图片。 */
     private static ContentBlockParam toolResultWithImages(ToolResultBlock result, AttachmentMedia media) {
         List<ToolResultBlockParam.Content.Block> content = new ArrayList<>();
         if (!result.text().isBlank()) {
@@ -378,11 +378,11 @@ final class ClaudeRequest {
 
     /**
      * 其他供应商的推理内容和空文本不发送。Claude 的思考块不管是哪个 Claude 模型写的都原样发回：读不了的由服务端丢掉、不计费，
-     * 换回原来的模型时还能读到；自己去掉反而可能 400（model-picker M9，Claude 文档 {@code shared/model-migration.md}）。
+     * 换回原来的模型时还能读到；自己去掉反而可能 400（Claude 文档 {@code shared/model-migration.md}）。
      */
     private static ContentBlockParam param(ContentBlock block) {
         return switch (block) {
-            // 全空白的文字块接口也拒绝，和 blocks() 的判断一致（review-fixes 需求 10.3）
+            // 全空白的文字块接口也拒绝，和 blocks() 的判断一致
             case TextBlock text -> text.text().isBlank() ? null : ContentBlockParam.ofText(
                     TextBlockParam.builder().text(text.text()).build());
             case ReasoningBlock reasoning -> reasoningParam(reasoning);
@@ -407,7 +407,7 @@ final class ClaudeRequest {
         if (!reasoning.provider().equals(PROVIDER) || !(reasoning.raw() instanceof Json.Obj raw)) {
             return null;
         }
-        // 字段缺失或不是字符串的思考块不发（记录损坏或别家写的），不抛异常让整次调用失败（review-fixes 需求 10.3）
+        // 字段缺失或不是字符串的思考块不发（记录损坏或别家写的），不抛异常让整次调用失败
         if (raw.fields().get("type") instanceof Json.Str type && type.value().equals("redacted_thinking")) {
             return raw.fields().get("data") instanceof Json.Str data
                     ? ContentBlockParam.ofRedactedThinking(RedactedThinkingBlockParam.builder().data(data.value()).build()) : null;

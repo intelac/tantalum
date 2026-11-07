@@ -24,7 +24,7 @@ public final class AdminBootstrap {
         if (password.length() < UserStore.MIN_PASSWORD) {
             throw new IllegalStateException(PASSWORD + " must be at least " + UserStore.MIN_PASSWORD + " characters.");
         }
-        // 第一个账号是管理员（ops-hardening-2 需求 2.1）
+        // 第一个账号是管理员
         store.add(name, password, true);
     }
 }

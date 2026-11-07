@@ -34,7 +34,7 @@ public final class StoreLock implements AutoCloseable {
         } catch (OverlappingFileLockException held) {
             lock = null;
         } catch (IOException | RuntimeException failure) {
-            // 加锁前的任何失败都不能漏掉通道（review-fixes 需求 3.5）
+            // 加锁前的任何失败都不能漏掉通道
             channel.close();
             throw failure;
         }

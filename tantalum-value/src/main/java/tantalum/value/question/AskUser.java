@@ -8,7 +8,7 @@ import tantalum.value.json.Json;
 import tantalum.value.text.LocalText;
 
 /**
- * 内置工具 {@code ask_user}（waiting-state 需求 5）：内核认它的名字，不发命令，把它变成一个等人的问题；回答写成工具结果。
+ * 内置工具 {@code ask_user}：内核认它的名字，不发命令，把它变成一个等人的问题；回答写成工具结果。
  * 接口只放静态方法（value 模块的规则：只有 record、interface、enum）。参数：{@code question}（必填）、{@code choices}（可选，1–{@value #MAX_CHOICES} 个不重复的字符串）、{@code allow_text}（默认 true）、
  * {@code timeout_seconds}（可选，正整数）。这里只有纯函数，shell 里的 {@code AskUserTool} 负责给模型的定义。
  */

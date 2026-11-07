@@ -4,8 +4,8 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 /**
- * 连接程序和服务器之间的一条消息：一个 JSON 文本帧，{@code type} 说明是哪一种（local-workspace 设计“tantalum.local.wire”）。
- * 令牌只在握手的 {@code Authorization} 头里，任何消息都没有令牌字段（L18）。
+ * 连接程序和服务器之间的一条消息：一个 JSON 文本帧，{@code type} 说明是哪一种。
+ * 令牌只在握手的 {@code Authorization} 头里，任何消息都没有令牌字段。
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
 @JsonSubTypes({

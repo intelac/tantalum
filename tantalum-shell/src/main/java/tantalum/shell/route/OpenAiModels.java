@@ -17,10 +17,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * OpenAI 兼容路线的模型列表：{@code GET {base-url}/models} 的 {@code data[].id}（model-picker M2，照 DSH
+ * OpenAI 兼容路线的模型列表：{@code GET {base-url}/models} 的 {@code data[].id}（照 DSH
  * {@code packages/llm/llm-pi-ai/src/discovery.ts:1-46}）。有密钥时带 {@code Authorization: Bearer}，5 秒超时，不跟跳转。
  * 窗口按模型单独配置的 → llama.cpp 的 {@code meta.n_ctx}、vLLM 的 {@code max_model_len}、LM Studio 等的 {@code context_length}
- * （compaction-threshold T1）→ 路线配置的；后两种之外的来源算“来自配置”。{@code list-models=false} 时不发请求，列表就是允许列表
+ * → 路线配置的；后两种之外的来源算“来自配置”。{@code list-models=false} 时不发请求，列表就是允许列表
  * （没写就是默认模型）。日志和错误只写类别和状态码，不写地址、请求头和响应体。
  */
 public final class OpenAiModels implements ModelList {

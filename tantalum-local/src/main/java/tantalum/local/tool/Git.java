@@ -21,7 +21,7 @@ import tantalum.local.fs.AllowedDirs;
 import tantalum.value.json.Json;
 
 /**
- * 五个 Git 工具共用的执行（local-workspace L5、需求 3.2）：调本机的 {@code git}，参数是固定的 argv，不经过 shell；模型只能给路径、提交号、
+ * 五个 Git 工具共用的执行：调本机的 {@code git}，参数是固定的 argv，不经过 shell；模型只能给路径、提交号、
  * 行范围、条数这些字段，以 {@code -} 开头的提交号一律拒绝，免得被当成选项。只读：
  * <ul>
  *   <li>比较改动只用不写索引的底层命令（见 {@link GitDiff}）；另设 {@code GIT_OPTIONAL_LOCKS=0}，别的命令也不顺手刷新索引；</li>

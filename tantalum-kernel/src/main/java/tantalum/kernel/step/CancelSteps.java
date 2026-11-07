@@ -18,7 +18,7 @@ public final class CancelSteps {
 
     /**
      * 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。
-     * 等用户回答的运行没有在途命令，不收尾，照旧等（waiting-state 需求 3.1；shell 启动时也不会给它发这个事件）。
+     * 等用户回答的运行没有在途命令，不收尾，照旧等（shell 启动时也不会给它发这个事件）。
      */
     public static Decision interrupted(StepContext context) {
         RunState run = context.run();
@@ -34,7 +34,7 @@ public final class CancelSteps {
         return end(context, EndReason.CANCELLED, null);
     }
 
-    /** 只有运行正在等的命令被丢才算失败；别的命令（迟到的、别的阶段的）被丢时运行不变（review-fixes 需求 5.2）。 */
+    /** 只有运行正在等的命令被丢才算失败；别的命令（迟到的、别的阶段的）被丢时运行不变。 */
     public static Decision commandDropped(StepContext context) {
         CommandDropped event = (CommandDropped) context.envelope().event();
         RunState run = context.run();

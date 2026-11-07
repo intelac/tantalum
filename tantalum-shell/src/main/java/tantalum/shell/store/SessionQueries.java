@@ -89,7 +89,7 @@ public final class SessionQueries {
         }
     }
 
-    /** 这个会话正在等用户回答的问题（waiting-state 需求 6.1）：活动运行停在 {@code AwaitingAnswer} 时有；不在内存的会话从文件读。 */
+    /** 这个会话正在等用户回答的问题：活动运行停在 {@code AwaitingAnswer} 时有；不在内存的会话从文件读。 */
     public Optional<AwaitingAnswer> openQuestion(Principal principal, SessionId session) {
         return session(principal, session).flatMap(found -> {
             RunId active = found.state().activeRun();

@@ -21,7 +21,7 @@ import tantalum.shell.auth.UserStore;
 import tantalum.value.id.Principal;
 
 /**
- * 每个用户自己的插件开关（core-tools C12、C15）。存在 {@code users.db} 的 {@code plugin_settings} 表里，不进 journal；
+ * 每个用户自己的插件开关。存在 {@code users.db} 的 {@code plugin_settings} 表里，不进 journal；
  * 只存用户动过的项（开或关），没动过的用这一项的默认值：一般是开，策略类插件是关（{@code KernelHook.defaultEnabled()}）。
  * 加 {@code enabled} 列之前的库里只有关掉的项，新加的列对旧行默认为 0，意思不变。按用户缓存在内存里，改的时候同时更新。
  */

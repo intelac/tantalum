@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * 给人看的文字用哪种语言（console-i18n I1）：中文（简体）、英文、日文。
+ * 给人看的文字用哪种语言：中文（简体）、英文、日文。
  * 控制台的规则在 {@code console/src/text/language.ts}，这里是同样的规则，给服务器、连接程序、命令行用。
  */
 public enum Language {
@@ -39,7 +39,7 @@ public enum Language {
         return Optional.empty();
     }
 
-    /** 先比整个标签、再只比主语言（{@code zh-TW} 算 {@code zh}），第一个对上的就用；都对不上是英文（I2）。 */
+    /** 先比整个标签、再只比主语言（{@code zh-TW} 算 {@code zh}），第一个对上的就用；都对不上是英文。 */
     public static Language fromTags(List<String> tags) {
         for (String tag : tags) {
             Optional<Language> found = ofTag(tag);
@@ -51,7 +51,7 @@ public enum Language {
     }
 
     /**
-     * 终端里的语言（I12，照 pi chord {@code launcher.ts:472-481}）：依次看 {@code LC_ALL}、{@code LC_MESSAGES}、{@code LANG}，
+     * 终端里的语言（照 pi chord {@code launcher.ts:472-481}）：依次看 {@code LC_ALL}、{@code LC_MESSAGES}、{@code LANG}，
      * 取 {@code .} 和 {@code @} 之前的部分（{@code ja_JP.UTF-8} 是日文），{@code C}、{@code POSIX} 和空的当没设；
      * 第一个设了的就定了，不是三种之一时用英文。都没设时看 Java 的系统语言，也不是三种之一时用英文。
      */

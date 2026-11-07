@@ -104,7 +104,7 @@ public final class Compactor {
                 .orElse(false);
     }
 
-    /** 规则 1：有锚点用实测加新增估算，否则全部估算。省略过的图片按省略说明算，和实际发送的一致（A11）。 */
+    /** 规则 1：有锚点用实测加新增估算，否则全部估算。省略过的图片按省略说明算，和实际发送的一致。 */
     public static long size(SessionState session, String system, List<ToolSpec> tools) {
         CompactionSettings settings = session.context() == null ? null : session.context().compaction();
         TokenEstimate estimate = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
@@ -131,7 +131,7 @@ public final class Compactor {
 
     /**
      * 规则 6.2、6.3：头部去推理块、截工具结果；连同 system、工具和指令仍超过模型能收的量（窗口减预留）时从最早的单元丢起。
-     * 用的不是用户选的压缩点：压缩点只决定什么时候压缩，摘要调用能收多少由模型定（compaction-threshold）。
+     * 用的不是用户选的压缩点：压缩点只决定什么时候压缩，摘要调用能收多少由模型定。
      * {@code fixedEstimate} 是 system、工具和指令的估算。
      */
     public static Head headForSummary(Plan plan, List<Message> view, CompactionSettings settings, long fixedEstimate) {
@@ -182,7 +182,7 @@ public final class Compactor {
     }
 
     /**
-     * 用户亲笔的消息：第一块是文字，其余只能是文字或附件（带图片、文件提问也算，review-fixes 需求 5.8），不是上下文更新，也不是摘要。
+     * 用户亲笔的消息：第一块是文字，其余只能是文字或附件（带图片、文件提问也算），不是上下文更新，也不是摘要。
      * 插件经 {@code HookMessages} 用同一条规则。
      */
     public static boolean isUserText(Message message) {

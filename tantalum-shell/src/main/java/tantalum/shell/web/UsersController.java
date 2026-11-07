@@ -18,7 +18,7 @@ import tantalum.value.id.Principal;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 管理员管用户（ops-hardening-2 需求 2.4、2.5）：列出、新建、停用/启用、设/取消管理员、重置密码。只有管理员能到这里
+ * 管理员管用户：列出、新建、停用/启用、设/取消管理员、重置密码。只有管理员能到这里
  * （{@code SecurityConfig} 对 {@code /api/users/**} 要 {@code ROLE_ADMIN}，否则 403）。不能停用或取消自己；系统至少留一个启用的管理员。
  * 重置密码或停用后，那个人的全部登录立即失效、推送连接断开。密码不进日志。
  */
@@ -92,7 +92,7 @@ public class UsersController {
         return json.json(200, view(account(name)));
     }
 
-    /** 请求体 {@code {"password"}}，至少 {@value UserStore#MIN_PASSWORD} 位。重置后那个人的全部登录失效（D3）。 */
+    /** 请求体 {@code {"password"}}，至少 {@value UserStore#MIN_PASSWORD} 位。重置后那个人的全部登录失效。 */
     @PutMapping("/api/users/{name}/password")
     ResponseEntity<String> resetPassword(@PathVariable String name, @RequestBody String body) throws SQLException {
         Optional<JsonNode> input = json.read(body);

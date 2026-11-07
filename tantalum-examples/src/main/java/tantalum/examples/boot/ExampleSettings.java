@@ -22,7 +22,7 @@ public record ExampleSettings(boolean enabled, @DefaultValue ReadOnly readOnly, 
                                    "git_diff", "git_blame", "git_branches", "memory_read", "memory_write", "memory_delete"})
                            List<String> tools) {}
 
-    /** 工具审批：调用 {@code tools} 前在对话页上问，等多久都行（waiting-state）。以前的 {@code answer-wait}、{@code max-polls} 已删除。 */
+    /** 工具审批：调用 {@code tools} 前在对话页上问，等多久都行。以前的 {@code answer-wait}、{@code max-polls} 已删除。 */
     public record ToolApproval(@DefaultValue("true") boolean enabled,
                                @DefaultValue({"write_file", "edit_file", "bash"}) List<String> tools) {}
 

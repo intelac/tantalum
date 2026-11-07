@@ -21,7 +21,7 @@ import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.tool.BuiltinTools;
 import tantalum.shell.tool.Workspaces;
 
-/** 建内核：服务器和检查工具用同一份，两边的转移表、钩子、工具调度规则和上限相同（record-results R12）。 */
+/** 建内核：服务器和检查工具用同一份，两边的转移表、钩子、工具调度规则和上限相同。 */
 final class KernelFactory {
 
     private KernelFactory() {}
@@ -35,7 +35,7 @@ final class KernelFactory {
 
     /**
      * 必须开启的插件（自己声明 {@link PluginInfo#mandatory()} 或管理员配置 {@code tantalum.hooks.required}）的钩子出错按拦截处理：
-     * 内核只认钩子自己的 {@code failClosed()}，所以在这里包一层再交给内核（review-fixes 需求 12.4）。
+     * 内核只认钩子自己的 {@code failClosed()}，所以在这里包一层再交给内核。
      */
     static List<KernelHook> failClosed(List<KernelHook> hooks, Set<String> required) {
         Set<String> mandatory = new HashSet<>(required);
@@ -54,7 +54,7 @@ final class KernelFactory {
 
     /**
      * 只回答调度问题的规则：和服务器注册同样的内置工具、转发工具、记忆工具、{@code web_fetch} 和插件工具的调度描述，
-     * 不打开附件库、不连电脑、不起出口、不开记忆库（review-fixes 需求 12.3）。
+     * 不打开附件库、不连电脑、不起出口、不开记忆库。
      * MCP 工具恒为独占（{@code McpTool}），没有它们时答案相同，所以不用连 MCP 服务器；浏览器工具同样独占，不用登记。
      */
     static ToolSafety safety(TantalumProperties properties, List<Tool> plugins) {

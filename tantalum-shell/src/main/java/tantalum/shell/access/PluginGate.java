@@ -28,7 +28,7 @@ import tantalum.value.text.Failures;
 import tantalum.value.text.LocalText;
 
 /**
- * 插件的唯一入口（core-tools C16）：组装上下文时给出这个用户开着的工具和钩子插件；执行工具、工具后处理和插件工作前再按当前开关查一次。
+ * 插件的唯一入口：组装上下文时给出这个用户开着的工具和钩子插件；执行工具、工具后处理和插件工作前再按当前开关查一次。
  * 除了这里，没有代码调用 {@link Tool#run}、{@link AfterToolHook#afterToolExecution}、{@link WorkType#run}（ArchUnit 规则钉住）。
  * 内核钩子在内核里运行，由 {@code HookChain} 按会话记下的插件名单过滤。
  */
@@ -37,11 +37,11 @@ public final class PluginGate {
     private static final Logger LOG = LoggerFactory.getLogger(PluginGate.class);
 
     public static final String TOOL_OFF = "This tool was turned off in the plugin page and is not available.";
-    /** 钩子位置对应的回调名，从 {@link HookPoint} 派生（review-fixes 需求 12.7）：加一个位置不用再改这里。 */
+    /** 钩子位置对应的回调名，从 {@link HookPoint} 派生：加一个位置不用再改这里。 */
     static final List<String> HOOK_POINTS = Arrays.stream(HookPoint.values()).map(PluginGate::callback).toList();
 
     /**
-     * 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项（C13）。
+     * 一个钩子插件：{@link KernelHook#plugin()} 等返回同一个名字的钩子、工具后处理和插件工作，在插件页上是一项。
      * {@code mandatory} 是钩子声明的或管理员配置的必须开启；{@code defaultEnabled} 是用户没设置过时开不开。
      */
     public record Plugin(String name, LocalText description, List<String> points, boolean mandatory, boolean defaultEnabled) {}
@@ -62,7 +62,7 @@ public final class PluginGate {
 
     /**
      * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code groups} 是本机工作区、联网这些开关组：
-     * 组里的工具不看单个工具的开关，只问自己的组（local-workspace L17、web-tools W10）。{@code required} 是管理员设成必须开启的插件
+     * 组里的工具不看单个工具的开关，只问自己的组。{@code required} 是管理员设成必须开启的插件
      * （{@code tantalum.hooks.required}），名字不认识时抛 {@link IllegalArgumentException}：拼错了等于策略没生效，不能悄悄放过。
      */
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups, List<String> mcpServers,
@@ -103,7 +103,7 @@ public final class PluginGate {
     }
 
     /**
-     * 这个工具从哪来（one-line-journal J5，写进 {@code ContextAssembled.toolSources}）：开关组的写组的来源（{@code local}、
+     * 这个工具从哪来（写进 {@code ContextAssembled.toolSources}）：开关组的写组的来源（{@code local}、
      * {@code web}），内置的写 {@code builtin}，MCP 的写 {@code mcp:} 加配置里的服务器名；不写地址、令牌、电脑名和目录。
      */
     public String source(Tool tool) {
@@ -192,7 +192,7 @@ public final class PluginGate {
 
     /**
      * 只跑开着的插件的工具后处理。一个出错：fail-closed 的（自己声明，或所在插件必须开启）让这次调用以错误结束，模型只看到类名；
-     * 其余记日志、结果保持上一个（review-fixes 需求 12.7）。
+     * 其余记日志、结果保持上一个。
      */
     public ToolOutput afterTool(ToolContext context, Tool tool, Json arguments, ToolOutput first) {
         ToolOutput output = first;
@@ -266,7 +266,7 @@ public final class PluginGate {
             this.name = name;
         }
 
-        /** 插件、工具或服务器的名字，控制台的错误文字要用（console-i18n I9）。 */
+        /** 插件、工具或服务器的名字，控制台的错误文字要用。 */
         public String name() {
             return name;
         }

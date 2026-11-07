@@ -7,8 +7,8 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
 
 /**
- * 附件的各项上限。图片的默认值照 DSH（{@code packages/attachment/attachment-local/src/index.ts:33-60}，需求 A4）；
- * 文件和配额是多用户服务器自定的（A5、需求 2.7）。
+ * 附件的各项上限。图片的默认值照 DSH（{@code packages/attachment/attachment-local/src/index.ts:33-60}）；
+ * 文件和配额是多用户服务器自定的。
  *
  * @param maxImagesPerMessage 一条消息最多几张图片
  * @param maxImageBytesPerMessage 一条消息里图片的合计字节
@@ -38,7 +38,7 @@ public record AttachmentLimits(int maxImagesPerMessage, long maxImageBytesPerMes
         return new AttachmentLimits(20, 200 * MIB, 50 * MIB, 64_000_000, 65_535, 20, 50 * MIB, 5 * 1024 * MIB, 2);
     }
 
-    /** 一条消息里的附件超出哪条限制（A4、A5、需求 2.1）；都没超出时为空。按服务器的元数据算，不看客户端报的。 */
+    /** 一条消息里的附件超出哪条限制（A5、需求 2.1）；都没超出时为空。按服务器的元数据算，不看客户端报的。 */
     public Optional<Violation> violation(List<AttachmentRef> attachments) {
         long images = attachments.stream().filter(ImageRef.class::isInstance).count();
         long imageBytes = attachments.stream().filter(ImageRef.class::isInstance).mapToLong(AttachmentRef::bytes).sum();
@@ -61,7 +61,7 @@ public record AttachmentLimits(int maxImagesPerMessage, long maxImageBytesPerMes
         return Optional.empty();
     }
 
-    /** 超了哪一条：英文诊断，加上控制台说给人听时要的数字（console-i18n I9）。 */
+    /** 超了哪一条：英文诊断，加上控制台说给人听时要的数字。 */
     public record Violation(Kind kind, String diagnostic, Map<String, Object> params) {
         public enum Kind { TOO_MANY_IMAGES, IMAGES_TOO_LARGE, TOO_MANY_FILES }
     }

@@ -8,6 +8,6 @@ public enum HookPoint {
     BEFORE_RUN_END,
     ON_WORK_RESULT,
     BEFORE_COMPACT,
-    /** 用户回答了钩子问的问题，或期限到了（waiting-state）。 */
+    /** 用户回答了钩子问的问题，或期限到了。 */
     ON_ANSWER
 }

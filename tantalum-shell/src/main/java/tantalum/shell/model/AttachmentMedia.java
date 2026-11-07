@@ -5,7 +5,7 @@ import tantalum.value.attachment.ImageRef;
 
 /**
  * 发请求时附件的内容。prompt 里只有引用，客户端组请求时按引用来这里取：图片是请求用的版本（设计第 4 节），文件是原样的字节。
- * 取不到或哈希不符时抛 {@link Unavailable}，这次模型调用失败且不重试，别的会话不受影响（需求 4.2）。
+ * 取不到或哈希不符时抛 {@link Unavailable}，这次模型调用失败且不重试，别的会话不受影响。
  */
 public interface AttachmentMedia {
 

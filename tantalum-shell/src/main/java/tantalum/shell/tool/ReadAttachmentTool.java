@@ -24,7 +24,7 @@ import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 
 /**
- * 读本人的附件（{@code /attachments/sha256-<哈希>}，local-workspace L7）。这是服务器上唯一读文件的工具（Yi 2026-11-06 定），
+ * 读本人的附件（{@code /attachments/sha256-<哈希>}）。这是服务器上唯一读文件的工具（Yi 2026-11-06 定），
  * 只读附件目录，不受本机工作区开关影响。代码从原来 {@code read_file} 的附件部分拆出来：图片交给模型看；PDF 只给说明；
  * 文本按行窗口读，规则和电脑上的 {@code read_file} 是同一份（{@link ReadFile#window}）。
  */

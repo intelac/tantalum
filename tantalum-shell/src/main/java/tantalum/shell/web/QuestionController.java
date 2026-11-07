@@ -22,7 +22,7 @@ import tantalum.value.state.AwaitingAnswer;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 运行停下来问用户的问题（waiting-state 需求 6）：取这个会话正在等回答的问题（0 或 1 个），回答一个。
+ * 运行停下来问用户的问题：取这个会话正在等回答的问题（0 或 1 个），回答一个。
  * 只看得到、只答得了自己的；别人的和不存在的一样 404。回答和提交一样经 Intake 落盘后才回 200。
  */
 @RestController

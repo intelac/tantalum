@@ -23,7 +23,7 @@ final class McpTool implements Tool {
     private final Json schema;
     private final ToolImages images;
 
-    /** {@code images} 把返回的图片存进调用者本人的附件（W8）。 */
+    /** {@code images} 把返回的图片存进调用者本人的附件。 */
     McpTool(McpSettings.Server server, McpConnection connection, String publicName, String remoteName, String description,
             Json schema, ToolImages images) {
         this.server = server;
@@ -53,7 +53,7 @@ final class McpTool implements Tool {
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
         }
-        // 图片存进调用者本人的附件（W8），名字 <服务器>-<工具>.<扩展名>
+        // 图片存进调用者本人的附件，名字 <服务器>-<工具>.<扩展名>
         String name = server.name() + "-" + remoteName + extension(result.images().getFirst().mediaType());
         return images.output(context.principal(), result.text(), result.error(), result.images(), name);
     }

@@ -13,7 +13,7 @@ import tantalum.value.id.RunRef;
 public record HookDecided(RunRef run, String hook, HookPoint point, Kind kind, String reason,
                           int systemChars, List<String> tools, String toolCall, String workType) implements Fact {
 
-    /** {@code ASK}：问用户（waiting-state），问题 id 放在 {@code reason} 位，用 {@link #questionId()} 读。 */
+    /** {@code ASK}：问用户，问题 id 放在 {@code reason} 位，用 {@link #questionId()} 读。 */
     public enum Kind { STOP, NEED_WORK, PATCH, ASK }
 
     public HookDecided {
@@ -26,7 +26,7 @@ public record HookDecided(RunRef run, String hook, HookPoint point, Kind kind, S
 
     /**
      * 问的问题 id，不是 {@code ASK} 时为 null。它和 STOP 的原因共用 {@code reason} 字段：加一个字段会让旧会话重写后的行和原来不同
-     * （journal 的硬规则），所以只给读的人一个明确的名字（review-fixes 需求 12.5 的折中）。
+     * （journal 的硬规则），所以只给读的人一个明确的名字。
      */
     public String questionId() {
         return kind == Kind.ASK ? reason : null;

@@ -70,7 +70,7 @@ public final class ModelSteps {
             case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Ask ask -> AnswerSteps.ask(out, run, ask, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Allow allow -> {
-                // 钩子的补丁先进历史（hook-patch）：压缩看到的历史已经带着它，摘要调用和正常调用都从同一份会话投影
+                // 钩子的补丁先进历史：压缩看到的历史已经带着它，摘要调用和正常调用都从同一份会话投影
                 HookPatches.Applied patched = HookPatches.apply(out.session(run.ref()), hook.facts(), allow.patch(), run.ref());
                 if (patched.session() != out.session(run.ref())) {
                     out.put(patched.session());
@@ -90,7 +90,7 @@ public final class ModelSteps {
     }
 
     /**
-     * 按图片预算省略后发出模型调用（A10），普通调用和摘要调用都走这里。新省略的图片记进会话（只增不减），报一条
+     * 按图片预算省略后发出模型调用，普通调用和摘要调用都走这里。新省略的图片记进会话（只增不减），报一条
      * {@link ImagesOmitted}；回放时重新算出同样的省略。
      */
     static CommandId emitCall(Outcome out, RunRef run, Prompt prompt) {
@@ -113,7 +113,7 @@ public final class ModelSteps {
         Outcome out = new Outcome(context);
         // 收到回复就越过了模型调用前这个等待点，工作轮数清零。
         RunState run = context.run().withRetries(0).withOverflowRecovered(false).withWorkRounds(0);
-        // 新模型回复了：压缩前的摘要不再需要换掉的那个模型（model-picker M10）
+        // 新模型回复了：压缩前的摘要不再需要换掉的那个模型
         if (run.modelBefore() != null) {
             run = run.withModel(run.model(), null);
         }
@@ -125,7 +125,7 @@ public final class ModelSteps {
         List<ToolCallBlock> calls = event.content().stream()
                 .filter(ToolCallBlock.class::isInstance).map(ToolCallBlock.class::cast).toList();
         if (calls.isEmpty() || event.stop() == StopReason.MAX_TOKENS) {
-            // 回复因输出上限被截断：运行照常完成，但带标记，界面据此提示。带着工具调用被截断时参数多半不完整，不执行（review-fixes 需求 5.4）
+            // 回复因输出上限被截断：运行照常完成，但带标记，界面据此提示。带着工具调用被截断时参数多半不完整，不执行
             RunEnd.beforeEnd(out, run, null, event.stop() == StopReason.MAX_TOKENS ? TRUNCATED : null);
         } else {
             ToolSteps.start(out, run, calls);
@@ -158,7 +158,7 @@ public final class ModelSteps {
         return out.decision();
     }
 
-    /** 这次调用用的模型：运行定下的；手动压缩这种不组装上下文的运行用会话现在的（M13）。都没有时为 null，用默认路线。 */
+    /** 这次调用用的模型：运行定下的；手动压缩这种不组装上下文的运行用会话现在的。都没有时为 null，用默认路线。 */
     static ModelChoice model(Outcome out, RunState run) {
         return run.model() != null ? run.model() : out.session(run.ref()).model();
     }

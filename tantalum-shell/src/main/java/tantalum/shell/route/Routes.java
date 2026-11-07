@@ -17,11 +17,10 @@ import tantalum.shell.model.ModelClient;
 import tantalum.value.model.ModelChoice;
 
 /**
- * 全部模型路线（model-picker M1、M2）。每条路线一个客户端和一张模型列表：启动时每条路线一个虚拟线程并行读，总共最多等
- * {@code wait}，没读完的先是“暂时连不上”，读完再换上；之后每 10 分钟后台再读，失败时保留上次的（照 compaction-threshold T2 和
- * DSH {@code .agents/notes/implemented/architecture/2026-10-22-deepseek-official-model-listing.md:13-15}）。取列表只读内存。
+ * 全部模型路线。每条路线一个客户端和一张模型列表：启动时每条路线一个虚拟线程并行读，总共最多等
+ * {@code wait}，没读完的先是“暂时连不上”，读完再换上；之后每 10 分钟后台再读，失败时保留上次的（照 DSH {@code .agents/notes/implemented/architecture/2026-10-22-deepseek-official-model-listing.md:13-15}）。取列表只读内存。
  * 存密钥的环境变量没设的路线不建，日志写变量名不写值；默认路线的密钥变量没设时 {@link #create} 抛出，启动失败（列表读不到不算）。
- * 回放不经过这里：每次调用用哪个模型在 journal 里（M13）。
+ * 回放不经过这里：每次调用用哪个模型在 journal 里。
  */
 public final class Routes implements AutoCloseable {
 
@@ -63,8 +62,7 @@ public final class Routes implements AutoCloseable {
     }
 
     /**
-     * 缺密钥时说怎么设。Windows 上没有 {@code ~/.config/tantalum/env} 的习惯：设成用户环境变量，计划任务启动的服务也读得到
-     * （windows-server 设计“TantalumApplication”）。
+     * 缺密钥时说怎么设。Windows 上没有 {@code ~/.config/tantalum/env} 的习惯：设成用户环境变量，计划任务启动的服务也读得到。
      */
     static String keyHint(String env, boolean windows) {
         return windows
@@ -136,7 +134,7 @@ public final class Routes implements AutoCloseable {
         routes.values().forEach(route -> Thread.ofVirtual().name("model-list-" + route.name()).start(() -> read(route)));
     }
 
-    /** 模型报上下文超长时：这条路线的窗口可能变了，马上再读一次（compaction-threshold T2）。正在读时不再排。 */
+    /** 模型报上下文超长时：这条路线的窗口可能变了，马上再读一次。正在读时不再排。 */
     public void refreshSoon(String route) {
         Route found = routes.get(route);
         if (found != null && !refresher.isShutdown()) {
@@ -209,7 +207,7 @@ public final class Routes implements AutoCloseable {
                 .orElseGet(() -> ConfigModels.info(route.settings(), choice.model())));
     }
 
-    /** 管理员的默认（M7）：默认路线、它的默认模型和这个模型的默认档位。 */
+    /** 管理员的默认：默认路线、它的默认模型和这个模型的默认档位。 */
     public ModelChoice defaultChoice() {
         Route route = routes.get(defaultRoute);
         ModelChoice bare = new ModelChoice(defaultRoute, route.settings().defaultModel(), null);

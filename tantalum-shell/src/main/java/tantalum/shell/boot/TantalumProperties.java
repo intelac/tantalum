@@ -18,7 +18,7 @@ import tantalum.shell.route.RouteSettings;
 import tantalum.shell.settings.CompactionPolicy;
 
 /**
- * 全部配置，默认值在 {@code application.properties}。模型是几条路线（model-picker M1）：{@code claude} 一条，加上
+ * 全部配置，默认值在 {@code application.properties}。模型是几条路线：{@code claude} 一条，加上
  * {@code openai-routes} 下任意条 OpenAI 兼容的；{@code provider} 是默认路线的名字。
  */
 @ConfigurationProperties("tantalum")
@@ -32,7 +32,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     public static final String CLAUDE_ROUTE = "claude";
     /** Claude 的思考档位（{@code output_config.effort}），按这个顺序。 */
     public static final List<String> CLAUDE_EFFORTS = Levels.CLAUDE;
-    /** 路线名只用小写字母、数字、{@code -}，最长 32（M1）。 */
+    /** 路线名只用小写字母、数字、{@code -}，最长 32。 */
     private static final Pattern ROUTE_NAME = Pattern.compile("[a-z0-9-]{1,32}");
 
     public TantalumProperties {
@@ -63,7 +63,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 联网（web-tools W6、W10）：内网限制、“抓网页”、“浏览器”。管理员关掉的那一项不注册工具；两项都关时不起出口。
+     * 联网：内网限制、“抓网页”、“浏览器”。管理员关掉的那一项不注册工具；两项都关时不起出口。
      * 默认值在 {@code application.properties}，没有这一段时（嵌入使用和测试）用 {@link #defaults()}。
      */
     public record Web(boolean blockPrivateNetwork, Fetch fetch, Browser browser) {
@@ -129,7 +129,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
 
     /**
      * 上下文压缩。窗口在各供应商下配置；这里是预留、保留量、工具结果上限和摘要长度。{@code windowFromModel} 为 false 时不向模型
-     * 读窗口，只用配置的值：测试要用小窗口让压缩尽快发生（compaction-threshold）。
+     * 读窗口，只用配置的值：测试要用小窗口让压缩尽快发生。
      */
     public record Compaction(long reserveTokens, long keepRecentTokens, int maxKeptToolResultBytes,
                              int maxSummarizedToolResultBytes, long summaryMaxTokens, boolean windowFromModel) {
@@ -176,7 +176,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 环的容量。约束见 design 的“容量”一节，不满足时启动失败。{@code maxUserPermits} 是每个用户在途事件的上限（ops-hardening-2 D4），
+     * 环的容量。约束见 design 的“容量”一节，不满足时启动失败。{@code maxUserPermits} 是每个用户在途事件的上限，
      * 没写（0）就是 {@code inputRingSize / 4}；不能小于 {@code maxUserInFlight}，不能大于 {@code inputRingSize}。
      */
     public record Loop(int maxActiveRuns, int maxParallelTools, int maxUserInFlight, int maxExternalInFlight,
@@ -225,8 +225,8 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /**
      * Claude 路线（名字固定 {@code claude}）。密钥只从 {@code apiKeyEnv} 指的环境变量读（默认 {@code ANTHROPIC_API_KEY}），
      * 不在这里。{@code model}、{@code effort} 是默认模型和默认档位，{@code effort} 只能是 {@link #CLAUDE_EFFORTS} 之一；
-     * {@code models} 是允许列表，空表示 Models 接口里支持 adaptive 思考的全部（M2、M3）。{@code contextWindow} 是从 Models
-     * 接口读不到窗口时用的值，0 表示未知：不压缩，控制台不显示占比（compaction-threshold T1）。{@code bytesPerToken} 是估算系数（T7）。
+     * {@code models} 是允许列表，空表示 Models 接口里支持 adaptive 思考的全部。{@code contextWindow} 是从 Models
+     * 接口读不到窗口时用的值，0 表示未知：不压缩，控制台不显示占比。{@code bytesPerToken} 是估算系数。
      */
     public record Claude(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunkTimeout,
                          Duration betweenChunkTimeout, int concurrency, long contextWindow, double bytesPerToken,
@@ -245,10 +245,10 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 一条 OpenAI 兼容路线（{@code tantalum.openai-routes.{名字}.*}，M1）。{@code apiKeyEnv} 是存密钥的环境变量名，不写就不发认证头
+     * 一条 OpenAI 兼容路线（{@code tantalum.openai-routes.{名字}.*}）。{@code apiKeyEnv} 是存密钥的环境变量名，不写就不发认证头
      * （本机服务）；{@code model} 是默认模型，{@code models} 是允许列表；{@code listModels} 为 false 时不读 {@code /models}，
      * 列表就是允许列表（没写就是默认模型）。{@code thinking} 是思考参数的写法（{@code OpenAiThinking}），{@code efforts}、
-     * {@code defaultEffort} 是 {@code reasoning-effort} 的档位和默认档位；{@code vision} 表示收图片（A7）。{@code overrides}
+     * {@code defaultEffort} 是 {@code reasoning-effort} 的档位和默认档位；{@code vision} 表示收图片。{@code overrides}
      * 按模型名单独写这几项和窗口。没写的项用默认值：输出上限 16384、首块超时 300 秒、块间 60 秒、并发 1、窗口未知、系数 1.75。
      */
     public record OpenAiRoute(String displayName, String baseUrl, String apiKeyEnv, String model, List<String> models,
@@ -291,7 +291,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    /** 一条路线里某个模型单独的设置（M5）；没写的项跟路线。写了 {@code thinking} 时档位也按它重新取默认值。 */
+    /** 一条路线里某个模型单独的设置；没写的项跟路线。写了 {@code thinking} 时档位也按它重新取默认值。 */
     public record ModelOverride(String thinking, List<String> efforts, String defaultEffort, Boolean vision, Long contextWindow) {
 
         public ModelOverride {
@@ -305,7 +305,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 写法、档位和默认档位，检查过的（M5）。{@code none} 没有档位；{@code reasoning-effort} 的档位默认 low、medium、high，默认 medium；
+     * 写法、档位和默认档位，检查过的。{@code none} 没有档位；{@code reasoning-effort} 的档位默认 low、medium、high，默认 medium；
      * 三种开关的档位是 off、on，默认 on。写法不认识、档位为空、默认档位不在档位里都抛出。
      */
     public record ThinkingLevels(String thinking, List<String> efforts, String defaultEffort) {
@@ -348,7 +348,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 全部路线的配置，Claude 在前，其余按名字（model-picker M1）。配置的窗口（读不到时用）不大于预留
+     * 全部路线的配置，Claude 在前，其余按名字。配置的窗口（读不到时用）不大于预留
      * {@code max(reserve-tokens, 这条路线的输出上限)} 时抛出：启动失败（context-compaction 需求 9）。
      */
     public List<RouteSettings> routeSettings() {

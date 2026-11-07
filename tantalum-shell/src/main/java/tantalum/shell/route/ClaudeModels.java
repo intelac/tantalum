@@ -22,8 +22,8 @@ import tantalum.shell.model.ClaudeClient;
 /**
  * Claude 路线的模型列表：Models 接口（{@code GET /v1/models}，翻完所有页）。只留支持 {@code adaptive} 思考的（M3：我们的请求
  * 总是发 adaptive，只收 {@code budget_tokens} 的老模型会 400）；有允许列表时只留列表里的。窗口是 {@code max_input_tokens}，
- * 开着备用模型时再取 {@code allowed_fallback_models} 里各模型的窗口中最小的（compaction-threshold T3）；输出上限取模型报的和路线配置的
- * 较小者；收不收图片看 {@code image_input}；档位见 {@link Levels#claude}；能不能中途增减工具来自 {@code ClaudeClient}（M11）。
+ * 开着备用模型时再取 {@code allowed_fallback_models} 里各模型的窗口中最小的；输出上限取模型报的和路线配置的
+ * 较小者；收不收图片看 {@code image_input}；档位见 {@link Levels#claude}；能不能中途增减工具来自 {@code ClaudeClient}。
  * 日志只写模型 id 和错误类别。
  */
 public final class ClaudeModels implements ModelList {
@@ -137,7 +137,7 @@ public final class ClaudeModels implements ModelList {
         return supported;
     }
 
-    /** 备用模型可能接手，窗口取它们中最小的；读不到备用模型的窗口时只用主模型的（同 compaction-threshold T3）。 */
+    /** 备用模型可能接手，窗口取它们中最小的；读不到备用模型的窗口时只用主模型的。 */
     private long withFallbacks(String id, long window, Map<String, com.anthropic.models.models.ModelInfo> listed) {
         try {
             BetaModelInfo info = client.beta().models().retrieve(id,

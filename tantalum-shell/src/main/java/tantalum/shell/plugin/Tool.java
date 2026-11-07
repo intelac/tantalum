@@ -30,7 +30,7 @@ public interface Tool {
         return false;
     }
 
-    /** 这次调用最长能跑多久，等名额的时间也算在内。默认用服务器的标准超时；{@code bash} 这类工具按参数给更长的（local-workspace L14）。 */
+    /** 这次调用最长能跑多久，等名额的时间也算在内。默认用服务器的标准超时；{@code bash} 这类工具按参数给更长的。 */
     default Duration timeout(Json arguments, Duration standard) {
         return standard;
     }

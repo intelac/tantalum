@@ -7,7 +7,7 @@ import java.util.Optional;
 import tantalum.shell.cli.CliText;
 
 /**
- * 命令行 {@code browser install [--with-deps]}（web-tools 设计“{@code BrowserDriver}”）：不启动 Spring，解压驱动，装 Chromium headless shell。
+ * 命令行 {@code browser install [--with-deps]}：不启动 Spring，解压驱动，装 Chromium headless shell。
  * {@code --with-deps} 在 Linux 上同时装浏览器要的系统库（要 root）。
  */
 public final class BrowserCommand {

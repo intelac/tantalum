@@ -31,7 +31,7 @@ import tantalum.value.id.SessionId;
 
 /**
  * 附件的上传和读取（设计第 2 节）。上传的请求体是原始字节；读取只在当前用户自己的目录里找，别人的和不存在一样返回 404。
- * 下载的内容一律 {@code nosniff} 加沙箱 CSP，非图片一律当二进制下载，HTML、SVG 不会在页面里执行（需求 5.3）。
+ * 下载的内容一律 {@code nosniff} 加沙箱 CSP，非图片一律当二进制下载，HTML、SVG 不会在页面里执行。
  */
 @RestController
 public class AttachmentController {

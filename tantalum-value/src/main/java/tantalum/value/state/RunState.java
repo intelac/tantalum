@@ -12,9 +12,9 @@ import tantalum.value.model.ModelChoice;
  * {@code autoCompactionFailed} 为真后本运行不再自动压缩；{@code overflowRecovered} 为真后再超长就直接失败；
  * {@code workRounds} 是当前等待点连续做了几轮插件工作，{@code endWorkRounds} 是本运行在结束前一共做了几轮，
  * 两者都由事件算出，回放得到同样的值。
- * {@code model} 是这个运行用的模型，第一次组装上下文时定下，整个运行不变（model-picker M8）；本 spec 之前的运行为 null。
+ * {@code model} 是这个运行用的模型，第一次组装上下文时定下，整个运行不变；本 spec 之前的运行为 null。
  * {@code modelBefore} 是这个运行换掉的上一个模型：换到窗口更小的模型时，第一次调用前的压缩摘要用它写，压缩失败时会话退回它；
- * 第一次正常回复后清掉（M10）。 */
+ * 第一次正常回复后清掉。 */
 public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, ToolRound tools, List<Message> pendingSteers, int retries,
                        HookPoint workOrigin, Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered,
                        int workRounds, int endWorkRounds, ModelChoice model, ModelChoice modelBefore) {
@@ -84,6 +84,52 @@ public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, ToolRound too
     public RunState withModel(ModelChoice newModel, ModelChoice before) {
         return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered, workRounds, endWorkRounds, newModel, before);
+    }
+
+    /**
+     * 三组视图：流程、恢复、模型。journal 里的运行状态是扁平字段，旧行要能读、新行逐字节不变，
+     * 所以记录本身不分组，分组只是看和改的角度；整组替换用 {@link #withFlow}、{@link #withRecovery}、{@link #withModels}。
+     * 这些方法不是记录的成员，不进 journal 和接口。
+     */
+    public record Flow(RunPhase phase, ToolRound tools, List<Message> pendingSteers, int retries, HookPoint workOrigin,
+                       int workRounds, int endWorkRounds) {
+        public Flow {
+            Objects.requireNonNull(phase, "phase");
+            pendingSteers = List.copyOf(pendingSteers);
+        }
+    }
+
+    /** 压缩和超长恢复的状态：等摘要、本运行不再自动压缩、超长恢复过一次。 */
+    public record Recovery(Compacting compacting, boolean autoCompactionFailed, boolean overflowRecovered) {}
+
+    /** 这个运行用的模型和它换掉的上一个。 */
+    public record Models(ModelChoice model, ModelChoice modelBefore) {}
+
+    public Flow flow() {
+        return new Flow(phase, tools, pendingSteers, retries, workOrigin, workRounds, endWorkRounds);
+    }
+
+    public Recovery recovery() {
+        return new Recovery(compacting, autoCompactionFailed, overflowRecovered);
+    }
+
+    public Models models() {
+        return new Models(model, modelBefore);
+    }
+
+    public RunState withFlow(Flow flow) {
+        return new RunState(ref, owner, flow.phase(), flow.tools(), flow.pendingSteers(), flow.retries(), flow.workOrigin(),
+                compacting, autoCompactionFailed, overflowRecovered, flow.workRounds(), flow.endWorkRounds(), model, modelBefore);
+    }
+
+    public RunState withRecovery(Recovery recovery) {
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
+                recovery.compacting(), recovery.autoCompactionFailed(), recovery.overflowRecovered(), workRounds, endWorkRounds, model, modelBefore);
+    }
+
+    public RunState withModels(Models models) {
+        return new RunState(ref, owner, phase, tools, pendingSteers, retries, workOrigin,
+                compacting, autoCompactionFailed, overflowRecovered, workRounds, endWorkRounds, models.model(), models.modelBefore());
     }
 
     public boolean isEnded() {

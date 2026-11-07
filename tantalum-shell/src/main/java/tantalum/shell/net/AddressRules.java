@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 联网的地址规则（web-tools W6，检查方式照 OpenClaw {@code src/infra/net/ssrf.ts:192-195,266-363}）。按 DNS 解析后的真实地址判断，
+ * 联网的地址规则（检查方式照 OpenClaw {@code src/infra/net/ssrf.ts:192-195,266-363}）。按 DNS 解析后的真实地址判断，
  * 不看主机名。
  * <ul>
  *   <li>不论开关：Tantalum 自己的端口加本机地址一律拦下，免得模型用用户的身份调服务器接口。服务器绑在 {@code 0.0.0.0} 时，
@@ -55,7 +55,7 @@ public final class AddressRules {
     private final Interfaces nics;
     private volatile int serverPort = -1;
     private volatile int egressPort = -1;
-    /** 本机网卡上的地址；null 表示读不到（review-fixes 需求 11.7：读不到时自端口守卫把任何地址都算本机）。 */
+    /** 本机网卡上的地址；null 表示读不到（读不到时自端口守卫把任何地址都算本机）。 */
     private volatile Set<InetAddress> interfaceAddresses;
     private volatile long interfacesReadAt;
     private volatile boolean interfacesRead;
@@ -85,7 +85,7 @@ public final class AddressRules {
 
     public Optional<Reason> blocked(InetAddress address, int port) {
         InetAddress plain = unmapped(address);
-        // 内嵌 IPv4 的 IPv6 写法对自端口守卫同样算数：64:ff9b::7f00:1 经 NAT64 网关就是 127.0.0.1（review-fixes 需求 11.7）
+        // 内嵌 IPv4 的 IPv6 写法对自端口守卫同样算数：64:ff9b::7f00:1 经 NAT64 网关就是 127.0.0.1
         if ((port == serverPort || port == egressPort) && (isLocal(plain) || embedded(plain).map(this::isLocal).orElse(false))) {
             return Optional.of(Reason.OWN_PORT);
         }

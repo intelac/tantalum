@@ -11,7 +11,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.RunState;
 
-/** 比较用内核重放和用结果行折叠得到的每一步（检查工具，record-results R12）。不一致说明内核或钩子的行为变了。 */
+/** 比较用内核重放和用结果行折叠得到的每一步（检查工具）。不一致说明内核或钩子的行为变了。 */
 public final class ReplayCompare {
 
     private ReplayCompare() {}

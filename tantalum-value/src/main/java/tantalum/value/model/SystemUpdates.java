@@ -1,7 +1,7 @@
 package tantalum.value.model;
 
 /**
- * 不是用户写的、告诉模型“有东西变了”的消息怎么认（review-fixes 需求 12.1）。内核写这类消息，shell 的模型客户端决定怎么发，
+ * 不是用户写的、告诉模型“有东西变了”的消息怎么认。内核写这类消息，shell 的模型客户端决定怎么发，
  * 规则只在这里一份：
  * <ul>
  *   <li>上下文更新：一条用户消息，文字以 {@link #PREFIX} 开头（内核的 {@code ContextUpdate}）；</li>

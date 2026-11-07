@@ -15,7 +15,7 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.store.RecordCheck;
 
 /**
- * {@code java -jar tantalum.jar check [--tantalum.data-dir=…]}：用这个版本的内核检查数据目录里的会话（record-results R12）。
+ * {@code java -jar tantalum.jar check [--tantalum.data-dir=…]}：用这个版本的内核检查数据目录里的会话。
  * 读和服务器相同的配置、用相同的钩子插件，但不建模型客户端、不连 MCP、不开端口，也不取存储锁，服务器运行时也能跑。
  * 嵌入 Tantalum 的应用有自己的插件时，用自己的 Spring 配置调 {@link RecordCheck#run}。
  */

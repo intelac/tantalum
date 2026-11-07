@@ -10,7 +10,7 @@ import tantalum.local.tool.ToolArguments.Param;
 import tantalum.value.json.Json;
 
 /**
- * 新建或整个替换用户电脑上允许的目录里的文本文件（需求 2、C6）。覆盖已有文件前这个会话必须读过它且之后没被改过（C5）。
+ * 新建或整个替换用户电脑上允许的目录里的文本文件。覆盖已有文件前这个会话必须读过它且之后没被改过。
  * 建上级目录（pi {@code write.ts}；DSH {@code fsio.ts:630}），先写临时文件再改名（DSH {@code fsio.ts:618-702}），内容原样写入。
  */
 public final class WriteFile implements LocalTool {

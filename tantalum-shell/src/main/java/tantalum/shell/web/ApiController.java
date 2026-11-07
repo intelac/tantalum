@@ -63,7 +63,7 @@ public class ApiController {
     private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
     /** 运行 ID 是会话 ID 加下划线加序号（{@code RunId}）。 */
     private static final Pattern RUN_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}_[0-9]{1,18}");
-    /** 提交的 requestId 进 journal 和推送：只收这些字符、限长（review-fixes 需求 11.13）。 */
+    /** 提交的 requestId 进 journal 和推送：只收这些字符、限长。 */
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private final Engine engine;
     private final TantalumProperties properties;
@@ -109,7 +109,7 @@ public class ApiController {
         response.put("start", page.start());
         response.put("hasMore", page.hasMore());
         response.put("followUps", found.get().state().followUps().size());
-        // 这个会话现在的选择（本 spec 之前的会话为 null）和有没有工具变化（不支持的 Claude 模型灰掉，M11）
+        // 这个会话现在的选择（本 spec 之前的会话为 null）和有没有工具变化（不支持的 Claude 模型灰掉）
         SessionState state = found.get().state();
         response.put("model", state == null ? null : ModelJson.view(state.model()));
         response.put("toolChangesInHistory", state != null && state.toolChangesInHistory());
@@ -129,7 +129,7 @@ public class ApiController {
     @GetMapping("/api/config")
     ResponseEntity<String> config() {
         Map<String, Object> response = new LinkedHashMap<>();
-        // 管理员的默认选择，兼容旧画面（model-picker 之前只有一个模型）；控制台按会话的选择显示模型，不再用这几项
+        // 管理员的默认选择，兼容旧画面（以前只有一个模型）；控制台按会话的选择显示模型，不再用这几项
         ModelChoice choice = engine.routes().defaultChoice();
         Route route = engine.routes().route(choice.route()).orElseThrow();
         Optional<ModelInfo> model = engine.routes().describe(choice);
@@ -189,7 +189,7 @@ public class ApiController {
         if (WebJson.blank(content) && attachments.isEmpty()) {
             return json.error(ErrorCode.REQUEST_INVALID, "missing text");
         }
-        // 插话并进当前运行，不换模型（M8）：带了也不用
+        // 插话并进当前运行，不换模型：带了也不用
         ModelChoice model;
         try {
             model = mode.equals("steer") ? null : ModelJson.read(request.get().get("model"));
@@ -211,7 +211,7 @@ public class ApiController {
     }
 
     /**
-     * 提交里的选择能不能用（model-picker M14、M15、M11），不合格的不进 journal。没带选择时只查图片：按这次会用的模型
+     * 提交里的选择能不能用，不合格的不进 journal。没带选择时只查图片：按这次会用的模型
      * （会话现在的 → 上次的选择 → 默认），和组装上下文时的取法一样。
      */
     private Optional<ChoiceCheck.Problem> problem(Principal user, SessionId session, ModelChoice model, boolean images) {
@@ -333,7 +333,7 @@ public class ApiController {
     }
 
     /**
-     * 等提交那一步落盘再回“已接受”（one-line-journal J4）：写不进去回 500，{@code wait} 内没写完回 504。
+     * 等提交那一步落盘再回“已接受”：写不进去回 500，{@code wait} 内没写完回 504。
      * 不用 503：控制台把 503 当作“服务已停止处理事件”。
      * 超时之后如果还是写进去了，用同一个 requestId 重发会按重复提交处理，不会处理两次。
      */
@@ -373,7 +373,7 @@ public class ApiController {
         view.put("title", summary.title());
         view.put("lastActivity", summary.lastActivity().toString());
         view.put("runStatus", summary.runStatus());
-        // 侧栏的“待回答”标记（waiting-state 需求 7.3）：从索引里的阶段名来，不载入会话
+        // 侧栏的“待回答”标记：从索引里的阶段名来，不载入会话
         view.put("awaitingAnswer", AwaitingAnswer.NAME.equals(summary.runStatus()));
         return view;
     }

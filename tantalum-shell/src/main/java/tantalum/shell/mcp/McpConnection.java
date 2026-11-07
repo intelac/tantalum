@@ -58,7 +58,7 @@ final class McpConnection implements AutoCloseable {
         this(server, policy, onTools, AttachmentLimits.defaults().maxImagesPerMessage());
     }
 
-    /** {@code maxImages}：一个结果最多收几张图片，多的换成一行说明（web-tools W8）。 */
+    /** {@code maxImages}：一个结果最多收几张图片，多的换成一行说明。 */
     McpConnection(McpSettings.Server server, Policy policy, Consumer<List<McpSchema.Tool>> onTools, int maxImages) {
         this.server = server;
         this.maxImages = maxImages;

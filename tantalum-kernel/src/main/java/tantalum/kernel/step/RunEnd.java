@@ -59,7 +59,7 @@ public final class RunEnd {
     }
 
     /**
-     * 换到窗口更小的模型之前的压缩没成（model-picker M10）：这个运行失败，会话的模型退回上一个。已经追加的换模型说明不能删，
+     * 换到窗口更小的模型之前的压缩没成：这个运行失败，会话的模型退回上一个。已经追加的换模型说明不能删，
      * 再追加一条反方向的，下一次调用时模型看到的说明和实际一致。纯函数，回放结果相同。
      */
     static void switchFailed(Outcome out, RunState run) {

@@ -15,7 +15,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
 
 /**
- * 只有本人能读的文件和目录：创建、收紧、替换、目录落盘（windows-server N2、N6、N7）。所有 POSIX 权限代码都经过这里，
+ * 只有本人能读的文件和目录：创建、收紧、替换、目录落盘。所有 POSIX 权限代码都经过这里，
  * {@code ArchitectureTest} 拦住绕过它的代码。
  *
  * <p>文件系统支持 POSIX 权限时（macOS、Linux）和原来的写法逐个系统调用一样：新文件 600、新目录 700，已有的收紧。
@@ -27,7 +27,7 @@ public final class PrivateFiles {
 
     /** 目录落盘和替换重试是平台行为，不是文件系统属性，所以只有这两处按系统判断。 */
     static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
-    /** 替换被占用时最多等这么久（N7）。 */
+    /** 替换被占用时最多等这么久。 */
     static final long REPLACE_BUDGET_MILLIS = 1000;
 
     private static final Set<PosixFilePermission> FILE_MODE = PosixFilePermissions.fromString("rw-------");
@@ -149,7 +149,7 @@ public final class PrivateFiles {
 
     /**
      * 目录项落盘：新建、改名的文件崩溃后还在。Windows 上跳过：不能只读打开目录（{@code AccessDeniedException}），
-     * NTFS 的元数据有日志，进程崩溃不受影响，断电可能丢最新的目录项（N6，照 DSH {@code storage/storage-json/src/atomic.ts:42-56}）。
+     * NTFS 的元数据有日志，进程崩溃不受影响，断电可能丢最新的目录项（照 DSH {@code storage/storage-json/src/atomic.ts:42-56}）。
      */
     public static void syncDirectory(Path dir) throws IOException {
         if (WINDOWS) {

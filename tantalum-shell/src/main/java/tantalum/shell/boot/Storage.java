@@ -96,7 +96,7 @@ final class Storage implements AutoCloseable {
     }
 
     /**
-     * 用户通道载入冷会话和用户用量的来源：按结果行折叠，不调内核（record-results）。读完文件的 memo 交给写入方，
+     * 用户通道载入冷会话和用户用量的来源：按结果行折叠，不调内核。读完文件的 memo 交给写入方，
      * 之后的结果行能引用文件里已有的内容。
      */
     UserLane.Loader loader() {
@@ -115,7 +115,7 @@ final class Storage implements AutoCloseable {
         };
     }
 
-    /** 提交去重时内存里没有的请求 ID 查这里。查不了时抛出，入口回 503：当作新提交会让一次重试执行两遍（review-fixes 需求 1.4）。 */
+    /** 提交去重时内存里没有的请求 ID 查这里。查不了时抛出，入口回 503：当作新提交会让一次重试执行两遍。 */
     Optional<SubmissionId> findSubmission(Principal principal, RequestId request) {
         try {
             return index.submission(principal, request);

@@ -127,7 +127,7 @@ public sealed interface TraceRecord {
     /** 一段可变上下文的变化；新增时 {@code before} 为空，移除时 {@code after} 为空。 */
     record Section(String name, String before, String after) {}
 
-    /** {@code toolsAdded}、{@code toolsRemoved} 是这次组装时用户开关带来的工具变化（core-tools C14），没有时不写出。 */
+    /** {@code toolsAdded}、{@code toolsRemoved} 是这次组装时用户开关带来的工具变化，没有时不写出。 */
     record ContextChange(Head head, List<Section> sections,
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsAdded,
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsRemoved) implements TraceRecord {
@@ -167,7 +167,7 @@ public sealed interface TraceRecord {
                         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> omittedImages) implements TraceRecord {
         public enum Purpose { NORMAL, SUMMARY }
 
-        /** {@code omittedImages}：这次请求里因超出图片预算省略的附件 ID（需求 5.7），没有时不写出。 */
+        /** {@code omittedImages}：这次请求里因超出图片预算省略的附件 ID，没有时不写出。 */
         public ModelRequest {
             omittedImages = omittedImages == null ? List.of() : List.copyOf(omittedImages);
         }
@@ -247,7 +247,7 @@ public sealed interface TraceRecord {
     }
 
     /**
-     * 运行停下来等用户回答（waiting-state 需求 7.4）：问了什么、谁问的（钩子名或 {@code ask_user}）、答了什么。
+     * 运行停下来等用户回答：问了什么、谁问的（钩子名或 {@code ask_user}）、答了什么。
      * {@code head.at} 是问的时刻，{@code head.end} 是有结果的时刻；等人的这段不算进模型或工具的时长。
      */
     record Question(Head head, String question, String askedBy, Object title, Status status, String choice, String text)

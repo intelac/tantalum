@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 先读后写（需求 C5，照 DSH 的观察记录 {@code tool-fs/src/error.ts:29-42}）：按会话记下每个文件最后一次读到或写下时的版本。
+ * 先读后写（照 DSH 的观察记录 {@code tool-fs/src/error.ts:29-42}）：按会话记下每个文件最后一次读到或写下时的版本。
  * 覆盖或修改已有文件前，这个会话必须读过它，而且之后没被改过。记录只在连接程序的内存里：连接程序重启后要重新读。
  * 一个连接程序只服务一个用户，所以只按会话分。连接程序不知道会话什么时候结束，所以只记最近用过的 {@value #MAX_SESSIONS} 个会话，
  * 更早的忘掉：被忘掉的会话要改文件时得先重新读，这是保守的方向，内存也不随会话数增长。
@@ -77,7 +77,7 @@ public final class Observations {
         return known.equals(Version.of(file)) ? Check.OK : Check.CHANGED;
     }
 
-    /** 同一个文件的“检查版本、写入、记下新版本”在进程内互斥，两个会话同时改只有一个成功（C8）。 */
+    /** 同一个文件的“检查版本、写入、记下新版本”在进程内互斥，两个会话同时改只有一个成功。 */
     <T> T locked(Path file, Locked<T> action) throws IOException {
         ReentrantLock lock = locks[Math.floorMod(file.hashCode(), LOCK_STRIPES)];
         lock.lock();

@@ -21,7 +21,7 @@ import tools.jackson.databind.node.NullNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * 插件页的本机工作区卡片（local-workspace L2、L17，需求 1.1、6.4）：连接状态和开关、生成令牌、撤销。只看、只改当前登录用户自己的；
+ * 插件页的本机工作区卡片：连接状态和开关、生成令牌、撤销。只看、只改当前登录用户自己的；
  * 登录和 {@code Origin} 由 {@code SecurityConfig} 统一查。开关照用 {@code PUT /api/plugins/local/{name}}。
  * 令牌只在生成它的那次响应里出现，不进日志。
  */
@@ -52,7 +52,7 @@ public class LocalController {
 
     /**
      * 请求体 {@code {"validity": "30m" | "1h" | "4h" | "1d"}}。返回令牌、一行启动命令和到期时间。命令里的地址是浏览器访问的这个服务器；
-     * 令牌放在环境变量里，不放在参数里（L2）。
+     * 令牌放在环境变量里，不放在参数里。
      */
     @PostMapping("/api/local/tokens")
     ResponseEntity<String> issue(@RequestBody String body, HttpServletRequest request) {
@@ -69,7 +69,7 @@ public class LocalController {
         return json.secret(200, response);
     }
 
-    /** 撤销这个用户的全部令牌，断开连接（需求 1.4）。 */
+    /** 撤销这个用户的全部令牌，断开连接。 */
     @DeleteMapping("/api/local/tokens")
     ResponseEntity<String> revoke() {
         engine.localLinks().revoke(WebJson.currentUser());

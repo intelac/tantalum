@@ -32,7 +32,7 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Stops a user's runs after the daily token limit.")
                 .zh("每个用户每天的 token 用量上限，超过就停止。")
                 .ja("ユーザーごとの 1 日のトークン上限です。超えると実行を止めます。");

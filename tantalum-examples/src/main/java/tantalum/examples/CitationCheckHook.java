@@ -59,7 +59,7 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("File:line citations in an answer must point to lines read in this session; otherwise the model is asked to fix them.")
                 .zh("回答里引用的 文件:行号 必须是这个会话里读到过的那一行，否则让模型改正。")
                 .ja("回答で引用した ファイル:行番号 は、このセッションで読んだ行でなければなりません。違う場合はモデルに直させます。");

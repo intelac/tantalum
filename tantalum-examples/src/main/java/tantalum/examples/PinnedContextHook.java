@@ -40,7 +40,7 @@ public final class PinnedContextHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Marked content in messages is kept out of automatic and manual compaction summaries.")
                 .zh("消息里带标记的内容不被自动或手动压缩总结掉。")
                 .ja("メッセージ内のマークした内容は、自動・手動の圧縮で要約されません。");

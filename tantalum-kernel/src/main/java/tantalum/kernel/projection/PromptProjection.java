@@ -23,8 +23,8 @@ public final class PromptProjection {
 
     /**
      * 会话冻结的 system 和工具；普通调用和摘要调用都从这里取，两者前缀相同。会话开始时没开的工具标为 deferred：
-     * 定义照发、模型看不见，等历史里的工具变化把它加进来（core-tools C14）。钩子加的工具接在后面，永远 deferred，同样靠历史里的
-     * 工具变化出现（hook-patch）。钩子的说明在消息里，system 字符串就是冻结的那份。
+     * 定义照发、模型看不见，等历史里的工具变化把它加进来。钩子加的工具接在后面，永远 deferred，同样靠历史里的
+     * 工具变化出现。钩子的说明在消息里，system 字符串就是冻结的那份。
      */
     public static Prompt project(SessionState session) {
         SessionContext context = session.context();

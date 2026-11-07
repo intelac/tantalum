@@ -13,9 +13,9 @@ import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
 
 /**
- * 转发工具（local-workspace 设计“一次调用”）：定义取自 {@code tantalum-local}，执行全部交给用户连着的电脑，自己不读写任何文件
+ * 转发工具：定义取自 {@code tantalum-local}，执行全部交给用户连着的电脑，自己不读写任何文件
  * （ArchitectureTest 钉住）。电脑送回的图片经 {@link ToolImages} 照附件规则规范化、存进本人的附件目录，再交给模型。
- * 名额：这里的 64 只是全体用户合起来的上限；每个用户的电脑同时最多 4 个，由 {@link LocalLinks} 管（L11）。
+ * 名额：这里的 64 只是全体用户合起来的上限；每个用户的电脑同时最多 4 个，由 {@link LocalLinks} 管。
  */
 public final class LocalTool implements Tool {
 
@@ -62,7 +62,7 @@ public final class LocalTool implements Tool {
     @Override public ToolDispatch dispatch() { return dispatch(definition); }
     @Override public Duration timeout(Json arguments, Duration standard) { return definition.timeout(arguments, standard); }
 
-    /** 不认 {@code /attachments/} 路径：附件用 {@code read_attachment} 读（L7），旧会话不做兼容（Yi 2026-11-06 定）。 */
+    /** 不认 {@code /attachments/} 路径：附件用 {@code read_attachment} 读，旧会话不做兼容（Yi 2026-11-06 定）。 */
     @Override
     public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException, IOException {
         LocalResult result = links.call(context.principal(), context.session().value(), name(), arguments,

@@ -54,7 +54,7 @@ final class TraceHooks {
     }
 
     /** 补丁只在模型调用前生效：这个决定发出了模型调用就是用上了（摘要调用也用同一个补丁），否则未采用。 */
-    /** 运行停下来问用户（waiting-state）：一条记录，等人的这段从问到答。归发起位置所在的步；ask_user 归工具调用那一步。 */
+    /** 运行停下来问用户：一条记录，等人的这段从问到答。归发起位置所在的步；ask_user 归工具调用那一步。 */
     void asked(int index, QuestionAsked fact) {
         RunId run = fact.run().run();
         HookPoint point = pass.state.runs().get(run) instanceof RunState current && current.phase() instanceof AwaitingAnswer waiting

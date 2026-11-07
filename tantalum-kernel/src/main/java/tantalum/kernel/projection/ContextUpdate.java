@@ -6,7 +6,7 @@ import tantalum.value.model.SystemUpdates;
 /** 告诉模型“可变内容变了”的用户消息。它不是用户写的：压缩时靠开头认出它。 */
 public final class ContextUpdate {
 
-    /** 所有上下文更新消息的开头；字面量在 value 里只有一份（review-fixes 需求 12.1）。 */
+    /** 所有上下文更新消息的开头；字面量在 value 里只有一份。 */
     public static final String PREFIX = SystemUpdates.PREFIX;
 
     private ContextUpdate() {}

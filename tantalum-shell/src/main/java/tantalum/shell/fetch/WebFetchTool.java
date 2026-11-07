@@ -16,7 +16,7 @@ import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
 
 /**
- * {@code web_fetch}：服务器下载一个网页，转成文字给模型（web-tools W1–W5、W9、W13）。只有一个参数 {@code url}（照 DSH
+ * {@code web_fetch}：服务器下载一个网页，转成文字给模型。只有一个参数 {@code url}（照 DSH
  * {@code web/tool-web/src/fetch.ts:460-462}，格式、超时这些由产品统一定）。
  * <p>它是参数的纯函数，内核回放时答案不变，所以同一轮里的几个抓取能并行；全服务器同时最多 16 个（自定）。
  */
@@ -63,7 +63,7 @@ public final class WebFetchTool implements WebTool {
     @Override public boolean isConcurrencySafe(Json arguments) { return DISPATCH.concurrencySafe().test(arguments); }
     @Override public ToolDispatch dispatch() { return DISPATCH; }
 
-    /** 网址不合格、连不上、类型不收、被拦下都是错误结果；网站的 404、500 是正常结果（W13）。 */
+    /** 网址不合格、连不上、类型不收、被拦下都是错误结果；网站的 404、500 是正常结果。 */
     @Override
     public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException {
         String url = arguments instanceof Json.Obj object && object.fields().get("url") instanceof Json.Str value ? value.value() : null;
@@ -83,7 +83,7 @@ public final class WebFetchTool implements WebTool {
         }
     }
 
-    /** 第一行 W9 那句话，然后网址、状态码、类型和正文；正文超过 50,000 字符只留开头，写明原长度（W5）。 */
+    /** 第一行 W9 那句话，然后网址、状态码、类型和正文；正文超过 50,000 字符只留开头，写明原长度。 */
     static String text(Fetched page) {
         StringBuilder out = new StringBuilder(UNTRUSTED).append('\n')
                 .append("URL: ").append(page.finalUrl()).append('\n')

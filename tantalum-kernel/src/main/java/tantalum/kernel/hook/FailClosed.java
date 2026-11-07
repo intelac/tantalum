@@ -5,7 +5,7 @@ import tantalum.value.hook.HookResult;
 import tantalum.value.state.KernelState;
 
 /**
- * 把一个钩子包成出错一律拦截的（review-fixes 需求 12.4）：回调一个不少地转给原钩子，只有 {@link #failClosed()} 恒真。
+ * 把一个钩子包成出错一律拦截的：回调一个不少地转给原钩子，只有 {@link #failClosed()} 恒真。
  * 哪些插件必须开启由 shell 决定（自己声明的或管理员配置的），内核只认钩子自己说的 failClosed。
  */
 public record FailClosed(KernelHook inner) implements KernelHook {

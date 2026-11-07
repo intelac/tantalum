@@ -7,17 +7,17 @@ import tantalum.value.model.ToolSpec;
 
 /**
  * 会话第一次发给模型的 system 和工具，之后固定不变：thinking 签名绑定它们，一改旧块就失效。
- * {@code sections} 是最近告知模型的可变内容；{@code compaction} 是压缩设置，为空表示这个会话不压缩；每次提问时换成 shell 按用户当前选择算出的那份（compaction-threshold T6）。
+ * {@code sections} 是最近告知模型的可变内容；{@code compaction} 是压缩设置，为空表示这个会话不压缩；每次提问时换成 shell 按用户当前选择算出的那份。
  * {@code tools} 是全集。{@code initialTools} 是会话开始时开着的工具，其余的发给模型时标为 deferred；{@code activeTools}、
- * {@code activePlugins} 是现在开着的工具和钩子插件（core-tools C14）。三者为 null 表示全部开着（旧会话）。
- * {@code hooks} 是钩子补丁的状态（hook-patch）：说明和工具都以追加的 system 消息告诉模型，这里记下上次告诉过什么；
+ * {@code activePlugins} 是现在开着的工具和钩子插件。三者为 null 表示全部开着（旧会话）。
+ * {@code hooks} 是钩子补丁的状态：说明和工具都以追加的 system 消息告诉模型，这里记下上次告诉过什么；
  * null 表示钩子还没追加过东西（旧会话、压缩后重新冻结）。
  */
 public record SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
                              List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks) {
 
     /**
-     * 钩子补丁的状态。{@code texts} 是上次发给模型的每个钩子的说明（按注册顺序），按钩子比较变没变（review-fixes 需求 7.1）；
+     * 钩子补丁的状态。{@code texts} 是上次发给模型的每个钩子的说明（按注册顺序），按钩子比较变没变；
      * {@code tools} 是钩子加过的所有工具定义，按第一次出现的顺序只增不减，发请求时接在全集后面、永远 deferred；
      * {@code active} 是现在由钩子开着的工具名，用来算 {@code tool_addition}/{@code tool_removal}。
      */
@@ -63,7 +63,7 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
         return new SessionContext(system, tools, compaction, newSections, initialTools, activeTools, activePlugins, hooks);
     }
 
-    /** 换压缩设置（compaction-threshold T6）；不影响发给模型的内容。 */
+    /** 换压缩设置；不影响发给模型的内容。 */
     public SessionContext withCompaction(CompactionSettings newCompaction) {
         return new SessionContext(system, tools, newCompaction, sections, initialTools, activeTools, activePlugins, hooks);
     }
@@ -73,7 +73,7 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
         return new SessionContext(system, this.tools, compaction, sections, initialTools, tools, plugins, hooks);
     }
 
-    /** 换钩子补丁的状态（hook-patch）。 */
+    /** 换钩子补丁的状态。 */
     public SessionContext withHooks(HookState newHooks) {
         return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, newHooks);
     }

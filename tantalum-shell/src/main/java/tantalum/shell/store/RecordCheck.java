@@ -20,7 +20,7 @@ import tantalum.value.state.PrincipalState;
 import tantalum.value.text.Language;
 
 /**
- * 回归检查（record-results R12）：用当前的内核把数据目录里的每个会话重放一遍，和结果行逐步比较，
+ * 回归检查：用当前的内核把数据目录里的每个会话重放一遍，和结果行逐步比较，
  * 列出每个不一致会话的第一处差异。部署前用新代码跑一遍，就知道它会不会改变旧会话的行为。
  * 只读：不取存储锁、不打开索引库、不写任何文件。钩子要的累计用量从结果行里算。
  */
@@ -84,7 +84,7 @@ public final class RecordCheck {
         return print(report, out, CliText.of(Language.EN));
     }
 
-    /** 按 {@code text} 的语言打印结果（console-i18n I13）；每个不一致的说明（会话、seq、字段）是给人查的固定写法，不翻译。 */
+    /** 按 {@code text} 的语言打印结果；每个不一致的说明（会话、seq、字段）是给人查的固定写法，不翻译。 */
     public static int print(Report report, PrintStream out, CliText text) {
         for (String problem : report.problems()) {
             out.println(text.say(Key.CHECK_DIFFERENT, Map.of("problem", problem)));

@@ -10,7 +10,7 @@ import tantalum.value.model.SystemUpdates;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 
-/** 会话中途的工具变化（core-tools C14），给不支持追加式工具变化的客户端用：把历史里的变化折算成现在开着的工具。 */
+/** 会话中途的工具变化，给不支持追加式工具变化的客户端用：把历史里的变化折算成现在开着的工具。 */
 final class ToolChanges {
 
     private ToolChanges() {}

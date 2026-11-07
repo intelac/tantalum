@@ -78,7 +78,7 @@ public final class LoginThrottle {
         windows.get(key).failures++;
     }
 
-    /** 表满了先清过期的，还满再按最早加进来的淘汰（review-fixes 需求 11.4）：过期的留着挤掉还在计数的，等于白白放行。 */
+    /** 表满了先清过期的，还满再按最早加进来的淘汰：过期的留着挤掉还在计数的，等于白白放行。 */
     private void evictOldest() {
         if (windows.size() <= MAX_KEYS) {
             return;

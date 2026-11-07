@@ -3,7 +3,7 @@ package tantalum.shell.plugin;
 import tantalum.value.text.LocalText;
 
 /**
- * 插件页要知道的事（review-fixes 需求 12.6）：说明、能不能关、默认开不开。钩子、工具后处理和插件工作里想在插件页上说点什么的
+ * 插件页要知道的事：说明、能不能关、默认开不开。钩子、工具后处理和插件工作里想在插件页上说点什么的
  * 另外实现这个接口；没实现的按“无说明、可以关、默认开”。所属插件仍由 {@code KernelHook.plugin()}、{@code AfterToolHook.plugin()} 说。
  * 内核的 {@code KernelHook} 不带这些：改文案不动内核 SDK。
  */
@@ -11,7 +11,7 @@ public interface PluginInfo {
 
     /**
      * 插件页上的一句说明，可以为空。写 {@code LocalText.of("…")} 照原样显示；写 {@code LocalText.en("…").zh("…").ja("…")}
-     * 控制台按看的人的语言选，没有那种就用英文（console-i18n I10）。
+     * 控制台按看的人的语言选，没有那种就用英文。
      */
     default LocalText description() {
         return LocalText.empty();

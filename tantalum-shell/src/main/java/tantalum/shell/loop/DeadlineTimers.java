@@ -12,7 +12,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.TimerFired;
 
 /**
- * 重启后替等用户回答的运行把期限的定时器重新起来（waiting-state 需求 3.4）。运行中进入等人的定时器是 {@code StartTimer} 命令，
+ * 重启后替等用户回答的运行把期限的定时器重新起来。运行中进入等人的定时器是 {@code StartTimer} 命令，
  * 由 {@code TimerHandler} 的线程等；进程换过以后那些线程没了，这里按索引里记的到期时刻再等一次，到时发 {@code TimerFired}：
  * 内核认出它是那个问题的定时器就按“没有回答”结算，已经答过的被忽略。已经过期的立刻发。
  */

@@ -8,7 +8,7 @@ import java.util.Locale;
 import tantalum.value.json.Json;
 
 /**
- * 终端里的调用记录（local-workspace L15、需求 2.5）：每个调用一行，时间、会话、工具、路径或命令、结果，比如
+ * 终端里的调用记录：每个调用一行，时间、会话、工具、路径或命令、结果，比如
  * {@code 10:02:13 s-1a2b read_file src/Order.java ok}。用户随时能看到服务器让电脑做了什么。不写文件内容，不写令牌
  * （这里拿不到令牌）。
  */

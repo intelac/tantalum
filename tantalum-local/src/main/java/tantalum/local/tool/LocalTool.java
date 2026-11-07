@@ -4,7 +4,7 @@ import java.time.Duration;
 import tantalum.value.json.Json;
 
 /**
- * 在用户电脑上执行的工具（local-workspace 设计“模块 tantalum-local”）。定义部分（名字、说明、参数）固定，服务器用它注册转发工具；
+ * 在用户电脑上执行的工具。定义部分（名字、说明、参数）固定，服务器用它注册转发工具；
  * 连接程序用 {@link #run} 执行。
  */
 public interface LocalTool {

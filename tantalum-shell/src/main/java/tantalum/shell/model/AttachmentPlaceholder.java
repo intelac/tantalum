@@ -5,7 +5,7 @@ import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 
-/** 附件只发文字时的样子：文件给说明和只读路径，图片给“不支持图片”的占位（需求 A6、A7）。 */
+/** 附件只发文字时的样子：文件给说明和只读路径，图片给“不支持图片”的占位。 */
 final class AttachmentPlaceholder {
 
     private AttachmentPlaceholder() {}

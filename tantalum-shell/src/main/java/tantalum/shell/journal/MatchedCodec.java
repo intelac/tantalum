@@ -10,7 +10,7 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * 组装上下文（{@link ContextAssembled}）的载荷：这个会话配上了什么，只在变化时记（one-line-journal J6）。
+ * 组装上下文（{@link ContextAssembled}）的载荷：这个会话配上了什么，只在变化时记。
  * 会话第一次组装、压缩之后、写入方不知道前文时写全文，和别的事件一样；其余时候写 {@code "diff": true}，
  * 只带和上一次相比变了的字段，{@code command} 和 {@code compaction} 总是写。工具按名字比较：工具名单变了写 {@code toolNames}
  * （新的顺序），新增的和定义变了的写进 {@code toolSpecs}，其余的从上一次取。读的时候套回上一次的全文，得到完整的事件。

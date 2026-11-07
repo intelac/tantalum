@@ -36,8 +36,8 @@ public final class SubmitSteps {
     }
 
     /**
-     * 空闲时开新运行，用提交里带的选择；运行中排队，带了选择就记下，排队的提问开始运行时用它（model-picker M6），
-     * 正在跑的运行不受影响（M8）。
+     * 空闲时开新运行，用提交里带的选择；运行中排队，带了选择就记下，排队的提问开始运行时用它，
+     * 正在跑的运行不受影响。
      */
     private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model) {
         Outcome out = new Outcome(context);
@@ -45,7 +45,7 @@ public final class SubmitSteps {
             startRun(out, owner, message, model);
         } else {
             SessionState session = out.session(context.run().ref());
-            // 每条排队的提问各自带自己的选择（review-fixes 需求 5.5）
+            // 每条排队的提问各自带自己的选择
             List<Message> queued = new ArrayList<>(session.followUps());
             queued.add(message);
             List<ModelChoice> models = new ArrayList<>(session.followUpModels());

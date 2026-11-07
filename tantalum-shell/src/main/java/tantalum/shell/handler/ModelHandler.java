@@ -36,7 +36,7 @@ public final class ModelHandler implements Handler {
 
     private static final Logger LOG = LoggerFactory.getLogger(ModelHandler.class);
 
-    /** 一条路线：客户端、它自己的并发上限、等名额最多多久、超长时让它重读列表（model-picker M16）。 */
+    /** 一条路线：客户端、它自己的并发上限、等名额最多多久、超长时让它重读列表。 */
     private record Lane(ModelClient client, CallLimiter limiter, Duration waitTimeout, Runnable onOverflow) {}
 
     /** 按 prompt 里的路线名找；没有选择时是 null，用默认路线。找不到时为 null。 */
@@ -69,9 +69,9 @@ public final class ModelHandler implements Handler {
     }
 
     /**
-     * 按路线调用（model-picker 设计“一次提问怎么选模型”第 7 步）：{@code prompt.model().route()} 指哪条就用哪条的客户端，
-     * 每条路线自己的并发上限，一条路线忙不影响别的（M16）；等名额最多等这条路线的首块超时。没有选择的 prompt 用默认路线。
-     * 超长时只让这一条路线重读列表（compaction-threshold T2）。
+     * 按路线调用：{@code prompt.model().route()} 指哪条就用哪条的客户端，
+     * 每条路线自己的并发上限，一条路线忙不影响别的；等名额最多等这条路线的首块超时。没有选择的 prompt 用默认路线。
+     * 超长时只让这一条路线重读列表。
      */
     public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media) {
         Map<String, Lane> byRoute = new HashMap<>();
@@ -108,7 +108,7 @@ public final class ModelHandler implements Handler {
                 try {
                     outcome = client.call(call.prompt(), media.apply(call.run()), chunks(call.run(), firstToken));
                 } catch (AttachmentMedia.Unavailable missing) {
-                    // 附件不在了或被改过：这次调用失败，不重试，原因写明附件（需求 4.2）。别的会话不受影响。
+                    // 附件不在了或被改过：这次调用失败，不重试，原因写明附件。别的会话不受影响。
                     LOG.warn("model call {} failed: {}", call.id().value(), missing.getMessage());
                     return new ModelFailed(call.id(), FailureReason.INVALID_REQUEST, false, null, "", missing.getMessage(),
                             startedAt, null, options);
@@ -175,7 +175,7 @@ public final class ModelHandler implements Handler {
         };
     }
 
-    /** 事件进 journal 和推送，只记异常类名；完整异常记日志（review-fixes 需求 6.1）。 */
+    /** 事件进 journal 和推送，只记异常类名；完整异常记日志。 */
     @Override
     public Event failed(Command command, Exception failure) {
         LOG.error("model call {} failed outside the client", command.id().value(), failure);

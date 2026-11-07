@@ -12,7 +12,7 @@ import tantalum.local.tool.ToolArguments.Param;
 import tantalum.value.json.Json;
 
 /**
- * 列一个目录的一层（需求 4、C9，照 pi {@code ls.ts:61,108}）：按名字排序不分大小写，目录名后加 {@code /}，包括以 {@code .} 开头的项。
+ * 列一个目录的一层（C9，照 pi {@code ls.ts:61,108}）：按名字排序不分大小写，目录名后加 {@code /}，包括以 {@code .} 开头的项。
  * 符号链接按它本身列出，不跟过去看是不是目录。
  */
 public final class ListDir implements LocalTool {

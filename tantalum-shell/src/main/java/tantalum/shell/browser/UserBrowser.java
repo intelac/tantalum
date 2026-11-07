@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.value.id.SessionId;
 
 /**
- * 一个用户的浏览器（web-tools W7，设计“{@code UserBrowser}”）：自己的 {@code Playwright}（带一个驱动进程）、一个无头 Chromium、
+ * 一个用户的浏览器（设计“{@code UserBrowser}”）：自己的 {@code Playwright}（带一个驱动进程）、一个无头 Chromium、
  * 一个内存里的浏览器环境。标签页、Cookie、登录状态都不和别人共用，也不写服务器磁盘；不允许下载。
  * <p>Playwright for Java 不能多线程同时调用，所以每个浏览器一把锁：所有 Playwright 调用都在持锁时进行（{@link Browsers} 负责加锁）。
  * 同一用户的几个会话共用这个环境，每个会话有自己的“当前标签页”。最多 10 个标签页，再开新的时关掉最久没用的。
@@ -95,7 +95,7 @@ final class UserBrowser implements AutoCloseable {
             context.setDefaultNavigationTimeout(NAVIGATION_MS);
             return new UserBrowser(playwright, browser, context, clock);
         } catch (RuntimeException failed) {
-            // 不只 PlaywrightException：别的运行时异常也不能把驱动进程留下（review-fixes 需求 11.11）
+            // 不只 PlaywrightException：别的运行时异常也不能把驱动进程留下
             String reason = failed instanceof PlaywrightException ? firstLine(failed.getMessage()) : failed.getClass().getSimpleName();
             closeQuietly(playwright);
             if (reason.contains("Executable doesn't exist")) {

@@ -24,7 +24,7 @@ import tantalum.local.wire.Wire;
 import tantalum.shell.local.LocalTokens.Verdict;
 
 /**
- * 连接程序连进来的 WebSocket 端点 {@value #PATH}（local-workspace 设计“LocalEndpoint”）。握手时读 {@code Authorization: Bearer}
+ * 连接程序连进来的 WebSocket 端点 {@value #PATH}。握手时读 {@code Authorization: Bearer}
  * 查令牌，令牌本身不留下；不通过就在连上后立即带关闭码关掉（4401 无效、4403 到期或撤销）。第一条消息必须是 {@code hello}，
  * 协议版本不对用 4400 关；之后的消息交给 {@link LocalLinks}。每条连接一个实例。
  */
@@ -44,7 +44,7 @@ public final class LocalEndpoint extends Endpoint {
     private long verifiedAt;
     private SessionPeer peer;
     private ScheduledFuture<?> helloTimer;
-    /** {@code hello} 到了正在接、或者等 {@code hello} 已经超时：两者只能发生一个（review-fixes 需求 11.9）。 */
+    /** {@code hello} 到了正在接、或者等 {@code hello} 已经超时：两者只能发生一个。 */
     private final AtomicBoolean attaching = new AtomicBoolean();
     private volatile LocalLinks.Link link;
 

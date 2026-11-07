@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.shell.cli.CliText;
 
 /**
- * Playwright 驱动（web-tools 设计“{@code BrowserDriver}”）：第一次用时把 jar 里的驱动解压到 {@code <数据目录>/browser/driver-<版本>/}，
+ * Playwright 驱动：第一次用时把 jar 里的驱动解压到 {@code <数据目录>/browser/driver-<版本>/}，
  * 之后每次 {@code Playwright.create} 都直接用它（实测 195 ms；不预先解压时每次把 130 MB 解到临时目录，要 1.6–1.8 s）。
  * 内容是 {@code driver} jar 里的 {@code driver/package/**} 加 {@code driver-bundle} 里本平台的 Node，解压交给 Playwright 自己的
  * {@link DriverJar#installDriverTo}（它认得 Spring Boot 可执行 jar 里的嵌套 jar）。
@@ -98,7 +98,7 @@ public final class BrowserDriver {
                 Files.move(part, target, StandardCopyOption.ATOMIC_MOVE);
             } catch (FileSystemException other) {
                 // 另一个进程刚解压好同一个版本，用它的。目标目录已存在时 macOS、Linux 报 FileAlreadyExists 或
-                // DirectoryNotEmpty，Windows 报 AccessDenied（windows-server N11），都按目标是否完整判断。
+                // DirectoryNotEmpty，Windows 报 AccessDenied，都按目标是否完整判断。
                 if (!complete(target)) {
                     throw other;
                 }

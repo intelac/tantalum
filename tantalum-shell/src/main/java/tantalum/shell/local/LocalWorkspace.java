@@ -12,8 +12,8 @@ import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
 
 /**
- * 本机工作区（local-workspace 设计“LocalWorkspace”）：哪些工具现在能用、给模型的“本机工作区”一段、电脑上的 {@code AGENTS.md}。
- * 一个工具能用要四样都满足：总开关开、它那一类的子开关开、电脑连着、连接程序允许这一类（L4、L17）。
+ * 本机工作区：哪些工具现在能用、给模型的“本机工作区”一段、电脑上的 {@code AGENTS.md}。
+ * 一个工具能用要四样都满足：总开关开、它那一类的子开关开、电脑连着、连接程序允许这一类。
  */
 public final class LocalWorkspace implements ToolGroup {
 
@@ -95,7 +95,7 @@ public final class LocalWorkspace implements ToolGroup {
 
     /**
      * 给模型的“本机工作区”一段（英文，会变的 system 段）：电脑、主目录、其他允许的目录、能不能改文件和跑命令。
-     * 目录和权限不写进工具说明，工具定义才不随电脑变（L9）。没连上、总开关关着时没有这一段。
+     * 目录和权限不写进工具说明，工具定义才不随电脑变。没连上、总开关关着时没有这一段。
      */
     public Optional<String> section(Principal user) {
         if (!switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)) {

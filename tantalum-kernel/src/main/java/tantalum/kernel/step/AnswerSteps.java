@@ -27,7 +27,7 @@ import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.RunState;
 
 /**
- * 等用户回答（waiting-state）。钩子返回 {@code Ask}、或模型调用 {@code ask_user}，运行就停在 {@link AwaitingAnswer}：没有在途命令，
+ * 等用户回答。钩子返回 {@code Ask}、或模型调用 {@code ask_user}，运行就停在 {@link AwaitingAnswer}：没有在途命令，
  * 不计工作轮数，不超时。回答（{@link Answered}）或期限到（{@link TimerFired}）后结算：钩子的问题调 {@code onAnswer} 再回到原处
  * （{@link Resume}），{@code ask_user} 的问题把回答写成工具结果。问题和回答都在这一步的结果里，回放不问任何人。
  */

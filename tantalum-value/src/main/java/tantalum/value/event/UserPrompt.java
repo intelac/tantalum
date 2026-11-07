@@ -9,7 +9,7 @@ import tantalum.value.state.OwnerRef;
 
 /**
  * 用户提问，也是运行的创建事件。{@code attachments} 按上传顺序，旧行读出来是空列表。
- * {@code model} 是提交里带的选择（“要用什么”，model-picker M13），没带或旧行为 null。
+ * {@code model} 是提交里带的选择（“要用什么”），没带或旧行为 null。
  */
 public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text,
                          List<AttachmentRef> attachments, ModelChoice model) implements Submitted {

@@ -4,7 +4,7 @@ import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.dsl.ProducerType;
 import tantalum.value.command.Command;
 
-/** 输出环，只放命令。生产者是各用户的写入通道：结果行落盘后才放行（record-results R3）。分发器抛出时那条命令没有发出去，对应运行会等到超时。 */
+/** 输出环，只放命令。生产者是各用户的写入通道：结果行落盘后才放行。分发器抛出时那条命令没有发出去，对应运行会等到超时。 */
 public final class OutputRing extends Ring<OutputRing.Slot> {
 
     /** 环上的一格。 */

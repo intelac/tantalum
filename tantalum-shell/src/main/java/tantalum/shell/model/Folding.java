@@ -12,11 +12,11 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolResultBlock;
 
 /**
- * 历史里的系统消息怎么并进用户消息发出去（review-fixes 需求 12.2，合并自原来的 {@code ModelChanges.fold} 和 {@code HookTexts.fold}）。
+ * 历史里的系统消息怎么并进用户消息发出去（合并自原来的 {@code ModelChanges.fold} 和 {@code HookTexts.fold}）。
  * <ul>
- *   <li>换模型的说明（model-picker M12）：并进前面那条用户消息、写成开头的一段文字，所有模型都这样。同一条用户消息前面有几条说明时
+ * <li>换模型的说明：并进前面那条用户消息、写成开头的一段文字，所有模型都这样。同一条用户消息前面有几条说明时
  *       按发生的顺序排；前面那条用户消息带工具结果时（工具结果要在最前面）写在末尾；前面不是用户消息时单独成一条用户消息。</li>
- *   <li>钩子的说明（hook-patch 需求 3.2），只在 {@code hookTexts} 为真时：并进前面那条用户消息的末尾，每段前面加“不是用户写的”前缀；
+ * <li>钩子的说明，只在 {@code hookTexts} 为真时：并进前面那条用户消息的末尾，每段前面加“不是用户写的”前缀；
  *       同一条消息里的工具变化丢掉。前面不是用户消息时单独成一条。为假时这些系统消息原样留着，由客户端按 system 发。</li>
  * </ul>
  * 纯函数，每次发出的字节相同。

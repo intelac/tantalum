@@ -32,7 +32,7 @@ public final class McpRegistry implements ToolCatalog.ToolSource, AutoCloseable 
     private volatile Map<String, Tool> visible = Map.of();
     private final ToolImages images;
 
-    /** MCP 工具返回的图片经 {@code images} 存进调用者本人的附件，交给模型（web-tools W8）。 */
+    /** MCP 工具返回的图片经 {@code images} 存进调用者本人的附件，交给模型。 */
     public McpRegistry(McpSettings settings, ToolImages images) {
         this(settings, McpConnection.Policy.defaults(), images);
     }

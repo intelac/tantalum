@@ -5,7 +5,7 @@ import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
 
 /**
- * 一组不看单个工具开关、只看自己的总开关和子开关的工具（local-workspace L17、web-tools W10）：本机工作区（{@code local} 包的
+ * 一组不看单个工具开关、只看自己的总开关和子开关的工具：本机工作区（{@code local} 包的
  * {@code LocalWorkspace}）和联网（{@link WebAccess}）。接口定义在这里，{@link PluginGate} 就不依赖实现它的包（那边要用这里的开关，
  * 反过来会成环）。
  */

@@ -37,7 +37,7 @@ import tantalum.shell.net.Egress;
 import tantalum.shell.net.WebUrl;
 
 /**
- * 下载一个网页（web-tools 设计“一次 {@code web_fetch}”1–7）：每一跳先过 {@link WebUrl} 和 {@link AddressRules}（只为给模型一句清楚的原因，
+ * 下载一个网页：每一跳先过 {@link WebUrl} 和 {@link AddressRules}（只为给模型一句清楚的原因，
  * 真正拦的是出口），经 {@link Egress#client()} 发 {@code GET}，最多跟 5 次跳转，按 {@code Content-Type} 分成 HTML、文本和拒绝，
  * 流式读满 5 MB 就停，整次（含跳转）30 秒。
  * <p>常量由产品统一定，不做配置（DSH 也刻意不给这些参数，web-capability-seam note:212、311-313）。不记日志：网址的路径、正文都不进日志。
@@ -101,14 +101,14 @@ public final class Fetcher {
     /**
      * 解析网址里的主机，按地址规则先查一遍，给模型清楚的原因。解析不了时返回 false、不报错：有上游代理时由代理解析，出口会兜底。
      */
-    /** 本机解析主机名的结果（review-fixes 需求 12.8）：解析不了不是错误——有上游代理时由代理解析，出口会兜底。 */
+    /** 本机解析主机名的结果：解析不了不是错误——有上游代理时由代理解析，出口会兜底。 */
     enum Lookup { RESOLVED, UNRESOLVED }
 
     private Lookup precheck(URI url, long deadline) throws FetchFailed, InterruptedException {
         String host = url.getHost();
         int port = port(url);
         List<InetAddress> addresses;
-        // DNS 没有超时参数，放到自己的线程上等，最多等到这次抓取的时限（review-fixes 需求 11.8）
+        // DNS 没有超时参数，放到自己的线程上等，最多等到这次抓取的时限
         FutureTask<InetAddress[]> lookup = new FutureTask<>(() -> InetAddress.getAllByName(host));
         Thread.ofVirtual().name("fetch-dns").start(lookup);
         try {

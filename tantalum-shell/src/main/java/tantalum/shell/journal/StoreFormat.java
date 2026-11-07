@@ -16,12 +16,12 @@ import tantalum.value.json.Json;
 
 /**
  * 数据目录的 {@code format.json}。{@code storage} 是文件格式，比程序新就拒绝启动，不改动数据。
- * 以前还有 {@code semantics}（内核语义）：重放旧会话可能和当时不同时记警告。record-results 之后恢复只读结果行，不再重放，
+ * 以前还有 {@code semantics}（内核语义）：重放旧会话可能和当时不同时记警告。恢复改成只读结果行之后不再重放，
  * 这个字段不再写，读到也忽略。
  */
 public record StoreFormat(int storage) {
 
-    /** 3：会话文件一步一行（one-line-journal）。更早的会话文件不再读，见 {@link #check}。 */
+    /** 3：会话文件一步一行。更早的会话文件不再读，见 {@link #check}。 */
     public static final int STORAGE = 3;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);

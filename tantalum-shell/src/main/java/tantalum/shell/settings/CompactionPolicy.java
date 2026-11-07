@@ -6,7 +6,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.state.CompactionSettings;
 
 /**
- * 把这次用的模型的窗口、用户选的百分比和配置合成一份压缩设置（compaction-threshold T4、T7，model-picker M10）：压缩点
+ * 把这次用的模型的窗口、用户选的百分比和配置合成一份压缩设置：压缩点
  * {@code T = min(floor(W × 百分比 / 100), W − R)}，W 是这个模型的窗口，R 是给回复留的预算 {@code max(reserve-tokens, 这个模型的输出上限)}。
  * 每次提问组装上下文时调用，换了模型就按新模型算。
  */
@@ -33,7 +33,7 @@ public final class CompactionPolicy {
     }
 
     /**
-     * 这个用户这次提问的压缩设置；窗口未知或不大于预留时为 null（不自动压缩）。{@code bytesPerToken} 是这条路线的估算系数（T7）。
+     * 这个用户这次提问的压缩设置；窗口未知或不大于预留时为 null（不自动压缩）。{@code bytesPerToken} 是这条路线的估算系数。
      */
     public CompactionSettings settings(Principal user, ModelInfo model, double bytesPerToken) {
         long tokens = model.window();

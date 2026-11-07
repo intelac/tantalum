@@ -44,7 +44,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         RunId active = activeRun(after, envelope.session());
         RunId previous = activeRun(before, envelope.session());
         RunPhase phase = active == null ? null : after.runs().get(active).phase();
-        // 等用户回答且有期限：记下期限和定时器，重启后 shell 据此重新起定时器（waiting-state 需求 3.4）
+        // 等用户回答且有期限：记下期限和定时器，重启后 shell 据此重新起定时器
         AwaitingAnswer timed = phase instanceof AwaitingAnswer waiting && waiting.timer() != null ? waiting : null;
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
                 text == null ? "" : SessionSummary.titleOf(text),

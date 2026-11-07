@@ -81,7 +81,7 @@ public final class EventCodec {
         boolean deferred();
     }
 
-    /** 旧规则的设置（没有压缩点和系数）不写出这两个字段，和加字段之前的行逐字节相同；旧行读出来是 0（compaction-threshold）。 */
+    /** 旧规则的设置（没有压缩点和系数）不写出这两个字段，和加字段之前的行逐字节相同；旧行读出来是 0。 */
     private interface CompactionSettingsMixin {
         @JsonInclude(JsonInclude.Include.NON_DEFAULT)
         long point();
@@ -128,14 +128,14 @@ public final class EventCodec {
     })
     private interface OwnerRefMixin {}
 
-    /** {@code LocalText.byLanguage} 是无序的 Map：按 en、zh、ja 固定顺序写出，同样的问题写成同样的字节（waiting-state 需求 2.3）。 */
+    /** {@code LocalText.byLanguage} 是无序的 Map：按 en、zh、ja 固定顺序写出，同样的问题写成同样的字节。 */
     private interface LocalTextMixin {
         @JsonSerialize(converter = OrderedLanguages.class)
         Map<Language, String> byLanguage();
     }
 
     static final class OrderedLanguages extends StdConverter<Map<Language, String>, Map<Language, String>> {
-        /** 已有的顺序固定：英文、中文、日文；以后加的语言按枚举顺序跟在后面，已有的字节不变，也不会被丢掉（review-fixes 需求 3.6）。 */
+        /** 已有的顺序固定：英文、中文、日文；以后加的语言按枚举顺序跟在后面，已有的字节不变，也不会被丢掉。 */
         static final List<Language> FIRST = List.of(Language.EN, Language.ZH, Language.JA);
 
         @Override
@@ -194,7 +194,7 @@ public final class EventCodec {
         codec.register(FollowUpSubmitted.TYPE, 1, FollowUpSubmitted.class);
         codec.register(Cancel.TYPE, 1, Cancel.class);
         codec.register(Answered.TYPE, 1, Answered.class);
-        // 第 1 版没有工具来源，读出来是空表：one-line-journal 第 1 步写的会话还要能读
+        // 第 1 版没有工具来源，读出来是空表：早期版本写的会话还要能读
         codec.register(ContextAssembled.TYPE, 1, ContextAssembled.class);
         codec.register(ContextAssembled.TYPE, 2, ContextAssembled.class);
         codec.register(ModelReplied.TYPE, 1, ModelReplied.class);
