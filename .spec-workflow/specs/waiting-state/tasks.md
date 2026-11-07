@@ -118,7 +118,7 @@
   - _Requirements: 10.1, 10.2_
   - _Prompt: Role: 文档 | Task: 说明和对照 | Restrictions: 说人话；不写过程 | Success: 三处都改到_
 
-- [ ] 15. 8091 真实 Claude 演示
+- [x] 15. 8091 真实 Claude 演示
   - 步骤：开 toolApproval（插件页），让 Sonnet 5.5 调一个要审批的工具，不回答，`up.sh` 重启，回到会话回答“允许这一次”，运行完成；再让它用 `ask_user` 问一次，选项 + 文本回答。记两次的用量、等待时长、重启后页面上问题是否还在，写进 tech.md 和本任务日志
   - _Requirements: 10.3_
   - _Prompt: Role: 验收 | Task: 8091 演示 | Restrictions: 一次真实模型两轮，不重跑 | Success: 两轮都完成，用量记下_
