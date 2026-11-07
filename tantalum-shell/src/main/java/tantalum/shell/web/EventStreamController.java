@@ -1,7 +1,6 @@
 package tantalum.shell.web;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -14,8 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import tantalum.shell.auth.LoginCheck;
-import tantalum.shell.auth.UserStore;
+import tantalum.shell.auth.LoginContextRepository;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
@@ -26,12 +24,12 @@ import tantalum.value.id.Principal;
 public class EventStreamController {
 
     private final Engine engine;
-    private final UserStore users;
+    private final LoginContextRepository logins;
     private final Duration heartbeat;
 
-    public EventStreamController(Engine engine, UserStore users, @Value("${tantalum.sse-heartbeat:15s}") Duration heartbeat) {
+    public EventStreamController(Engine engine, LoginContextRepository logins, @Value("${tantalum.sse-heartbeat:15s}") Duration heartbeat) {
         this.engine = engine;
-        this.users = users;
+        this.logins = logins;
         this.heartbeat = heartbeat;
     }
 
@@ -39,8 +37,8 @@ public class EventStreamController {
     SseEmitter events(@RequestHeader(name = "Last-Event-ID", required = false) String lastEventId, HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(0L);
         Principal user = WebJson.currentUser();
-        HttpSession login = request.getSession(false);
-        SseHub.Subscription subscription = engine.hub().subscribe(user, login == null ? null : login.getId(), lastEventId);
+        String login = LoginContextRepository.currentLogin(request);
+        SseHub.Subscription subscription = engine.hub().subscribe(user, login, lastEventId);
         emitter.onCompletion(subscription::close);
         emitter.onTimeout(subscription::close);
         emitter.onError(failure -> subscription.close());
@@ -49,10 +47,10 @@ public class EventStreamController {
     }
 
     /**
-     * 每个心跳周期检查一次登录是否还有效（过期、停用、改密码），不管连接忙不忙：停用和改密码可能来自另一个进程的命令行，
+     * 每个心跳周期查一次登录表：登录是否还在、没过期，账号没停用、没改过密码。停用和改密码可能来自另一个进程的命令行，
      * 这边收不到通知。无论怎么退出，订阅都要注销。
      */
-    private void pump(Principal user, HttpSession login, SseHub.Subscription subscription, SseEmitter emitter) {
+    private void pump(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter) {
         try {
             stream(user, login, subscription, emitter);
         } catch (IOException | SQLException | IllegalStateException gone) {
@@ -66,9 +64,8 @@ public class EventStreamController {
         }
     }
 
-    private void stream(Principal user, HttpSession login, SseHub.Subscription subscription, SseEmitter emitter)
+    private void stream(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter)
             throws IOException, SQLException, InterruptedException {
-        LoginCheck check = new LoginCheck(users);
         long nextCheck = System.currentTimeMillis() + heartbeat.toMillis();
         while (!subscription.closed()) {
             SseMessage message = subscription.poll(Math.max(1, nextCheck - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
@@ -77,7 +74,7 @@ public class EventStreamController {
             }
             long now = System.currentTimeMillis();
             if (now >= nextCheck) {
-                if (!check.stillValid(user.value(), login, now)) {
+                if (!logins.stillValid(user.value(), login, now)) {
                     subscription.close();
                     break;
                 }

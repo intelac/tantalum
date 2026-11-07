@@ -153,7 +153,7 @@ public class TantalumApplication {
         return event -> engine.getObject().addressRules().ownPort(event.getWebServer().getPort());
     }
 
-    /** 读不了用户表时当作还能用：心跳里查失败一次就撤销全部令牌，代价太大；登录本身照常由 {@code LoginCheck} 把关。 */
+    /** 读不了用户表时当作还能用：心跳里查失败一次就撤销全部令牌，代价太大；登录本身照常由 {@code LoginContextRepository} 把关。 */
     private static boolean usable(UserStore users, String name) {
         try {
             return users.status(name).map(status -> !status.disabled()).orElse(false);

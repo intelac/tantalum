@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.http.HttpResponse;
+import java.util.Optional;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
@@ -231,5 +232,40 @@ class AuthApiTest {
     @Test
     void passwordNeverAppearsInResponses() throws Exception {
         assertFalse(server.attemptLogin("alice", "alice-password", null).body().contains("alice-password"));
+    }
+
+    /** ops-hardening-2 需求 1.3：登录在用户库里，关掉服务、同一个数据目录重开，Cookie 照样有效。 */
+    @Test
+    void aLoginSurvivesARestart() throws Exception {
+        String cookie = cookieOf(server.attemptLogin("alice", "alice-password", null));
+        assertTrue(cookie.startsWith(tantalum.shell.auth.LoginContextRepository.COOKIE + "="), cookie);
+        server.close();
+        server = new TestServer(temp.resolve("data"), temp.resolve("workspace"),
+                (prompt, chunks) -> new ModelOutcome.Interrupted(""), "--tantalum.sse-heartbeat=100ms");
+        HttpResponse<String> me = getWith(cookie, "/api/auth/me");
+        assertEquals(200, me.statusCode(), me.body());
+        assertTrue(me.body().contains("\"username\":\"alice\""), me.body());
+    }
+
+    /** 需求 1.2：无效的令牌当作没登录；不动 Cookie（带旧令牌的请求可能和新登录并行，清掉会误伤），退出时才清。 */
+    @Test
+    void anUnknownTokenIsRefusedWithoutTouchingTheCookie() throws Exception {
+        HttpResponse<String> me = getWith(tantalum.shell.auth.LoginContextRepository.COOKIE + "=not-a-real-token", "/api/auth/me");
+        assertEquals(401, me.statusCode());
+        assertEquals(Optional.empty(), me.headers().firstValue("set-cookie"));
+    }
+
+    /** 需求 2.3、2.4：me 带 admin；非管理员访问用户管理是 403，管理员不是。 */
+    @Test
+    void onlyAdminsReachTheUserApi() throws Exception {
+        server.users().add("root", "root-password", true);
+        String alice = cookieOf(server.attemptLogin("alice", "alice-password", null));
+        String root = cookieOf(server.attemptLogin("root", "root-password", null));
+        assertTrue(getWith(alice, "/api/auth/me").body().contains("\"admin\":false"));
+        assertTrue(getWith(root, "/api/auth/me").body().contains("\"admin\":true"));
+        HttpResponse<String> denied = getWith(alice, "/api/users");
+        assertEquals(403, denied.statusCode());
+        assertTrue(denied.body().contains("\"code\":\"auth/forbidden\""), denied.body());
+        assertNotEquals(403, getWith(root, "/api/users").statusCode());
     }
 }

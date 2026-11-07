@@ -610,6 +610,13 @@ export const zh = {
     "auth/invalid-credentials": "用户名或密码错误",
     "auth/too-many-attempts": "尝试次数过多，请稍后再试",
     "auth/not-authenticated": "请先登录",
+    "auth/forbidden": "只有管理员能做这个操作",
+    "user/bad-name": "用户名只能用 a-z、0-9、- 和 _",
+    "user/reserved-name": "这个名字是 Windows 保留的设备名，不能用",
+    "user/exists": "已经有这个用户了",
+    "user/not-found": "没有这个用户",
+    "user/self": "不能对自己做这个操作",
+    "user/last-admin": "这是最后一个管理员，不能停用或取消",
   },
   // 相对时间（“5 分钟前”）用 Intl.RelativeTimeFormat，不在字典里（text/format.ts）。
   time: {

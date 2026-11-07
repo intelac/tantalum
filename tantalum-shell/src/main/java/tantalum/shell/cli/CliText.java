@@ -27,6 +27,8 @@ public final class CliText {
         USERS_RESERVED_NAME,
         USERS_EXISTS,
         USERS_NO_SUCH,
+        USERS_LAST_ADMIN,
+        USERS_LIST_HEADER,
         CHECK_DIFFERENT,
         CHECK_ALL_OK,
         CHECK_SOME_DIFFER,

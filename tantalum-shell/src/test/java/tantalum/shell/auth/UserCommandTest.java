@@ -86,4 +86,24 @@ class UserCommandTest {
         run("a-password\n", "add", "alice");
         assertNotEquals(0, run("another\n", "add", "alice"));
     }
+
+    /** ops-hardening-2 需求 2.2：--admin、admin/user、enable、list；最后一个管理员不能取消。 */
+    @Test
+    void adminSubcommandsAndList() throws Exception {
+        assertEquals(0, run("pw\n", "add", "--admin", "root"));
+        assertEquals(0, run("pw\n", "add", "alice"));
+        out.reset();
+        assertEquals(1, run("", "user", "root"));
+        assertEquals("root is the last administrator and cannot be disabled or demoted", out.toString(StandardCharsets.UTF_8).strip());
+        assertEquals(0, run("", "admin", "alice"));
+        assertEquals(0, run("", "user", "root"));
+        assertEquals(0, run("", "disable", "root"));
+        assertEquals(0, run("", "enable", "root"));
+        out.reset();
+        assertEquals(0, run("", "list"));
+        String listed = out.toString(StandardCharsets.UTF_8);
+        assertTrue(listed.contains("root\tuser\tenabled\t"), listed);
+        assertTrue(listed.contains("alice\tadmin\tenabled\t"), listed);
+        assertEquals(2, run("", "list", "extra"));
+    }
 }
