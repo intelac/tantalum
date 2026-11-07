@@ -48,19 +48,19 @@
 
 ## 阶段 3：控制台、端到端、文档
 
-- [-] 6. 控制台：修改密码、用户页
+- [x] 6. 控制台：修改密码、用户页
   - File: console/src/settings/PasswordForm.tsx、UsersPane.tsx（新，各带 test）；console/src/settings/AccountPane.tsx（挂改密码）；console/src/settings/SettingsDialog.tsx（按 `me.admin` 显示“用户”）；console/src/api/types.ts（`User.admin`、`Account`）、client.ts（`changePassword`、`listUsers`、`createUser`、`updateUser`、`resetUserPassword`）；console/src/text/{zh,en,ja}.ts、errors.ts（`auth/forbidden`、`user/*`）
   - 测试：vitest：改密码成功/当前密码错；用户页列表、新建、对自己的两个按钮禁用、最后一个管理员的错误提示；非管理员没有“用户”页
   - _Requirements: 3.1–3.4_
   - _Prompt: Role: 前端 | Task: 改密码和用户页 | Restrictions: 文字全部走 useText；密码框 type=password、不回显 | Success: vitest 过，tsc、pnpm build 过_
 
-- [ ] 7. 端到端
+- [x] 7. 端到端
   - File: console/e2e/users.spec.ts（新）；console/e2e/app.ts（如需加管理员账号常量；E2eServer 的第一个账号本来就是管理员）
   - 测试：管理员新建用户、用新用户登录、非管理员看不到“用户”页；管理员重置密码后旧密码登不上；自己改密码后用新密码登录；现有登录相关 e2e 照过
   - _Requirements: 3.1–3.3, 2.5, 2.6_
   - _Prompt: Role: 端到端 | Task: Playwright 用例 | Restrictions: 结束时把改过的密码改回去，别影响别的用例 | Success: 全部 e2e 过_
 
-- [ ] 8. 文档和 8091
+- [-] 8. 文档和 8091
   - File: README.md（“登录和用户”改写；“运维”加两个配置项）；README.en.md（一句）；.spec-workflow/steering/tech.md（结果）；.spec-workflow/BACKLOG.md（第 0 节这项完成；第 4 节两条缺口标完成；第 5 节删“登录会话不持久化、没有用户管理界面”）
   - 8091：Yi 是管理员；加一个测试用户 `demo`、改密码、停用、再启用；页面上截一张“用户”页
   - _Requirements: 6.1, 6.2_

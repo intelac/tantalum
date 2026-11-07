@@ -9,7 +9,7 @@
 | spec | 要做什么 | 性质 |
 |---|---|---|
 | `waiting-state` | 完成（2026-11-07，15 个任务，结果见 tech.md）。内核阶段 `AwaitingAnswer`：钩子 `Ask`/`onAnswer`、内置工具 `ask_user`、问题和回答进 journal、重启保持、等人的会话可回收、可选期限；工具审批插件改用它，`answer-wait`/`max-polls` 删除；对话页问题条目、侧栏“待回答”、轨迹记录 | 完成；Super-agent 调研候选 ① 完成 |
-| `ops-hardening-2` | ① 登录会话不随重启丢（现在是 Tomcat 内存会话，`HttpSessionSecurityContextRepository`）；② 网页上管用户（增删、重置密码，现在只有 `users add` 命令行）；③ 放行名额按用户限（`LaneDispatcher` 是一个全局信号量）；④ 载入失败的会话过一会自动重试（现在 `UserLane` 记成 `Failed`，“refusing it until restart”） | ①③④ 是 bug，② 缺功能。合并了第 4 节 `ops-hardening` 阶段 2、阶段 5 两条 |
+| `ops-hardening-2` | 完成（2026-11-07，8 个任务，结果见 tech.md）。① 登录存进 `users.db` 的 `logins` 表，Cookie 只有令牌，重启不掉；② 管理员列、设置页“用户”页、“账号”页改密码、命令行新子命令；③ `UserPermits` 每用户在途上限；④ 载入失败 `load-retry` 后再试 | 完成；合并了第 4 节 `ops-hardening` 阶段 2、阶段 5 两条 |
 | `hook-patch` | `beforeModelCall` 的 `Allow` 补丁改成追加 `role: system` 消息和 `tool_addition`，不再拼进 system 和工具列表（`HookChain`、`PromptProjection`、`ClaudeRequest`）。现在补丁一变，Claude 路线整个会话的思考签名失效。示例插件都没用会变的补丁，所以还没踩到 | bug，1.0 前锁插件 SDK 要先改 |
 | 内网默认拦（待 Yi） | `tantalum.web.block-private-network` 默认改 `true`。2026-11-03 定“同 DSH 默认放行”，但 DSH 是单用户本机程序；我们对外定位是多用户企业底座，一个用户就能让 agent 扫内网、拿云元数据凭据 | 改默认值 |
 
@@ -70,8 +70,8 @@
 | `spec-audit-fixes` | A8 重试范围比需求窄 | 未排期 |
 | `spec-audit-fixes` | A7 “在途调用走完”只对普通失败成立；MCP 会话被服务端终止时在途调用会一起失败（SDK 2.1.0 行为） | 未排期，受 SDK 限制 |
 | `spec-audit-fixes` | 需求 5.4 没有在连接层用两个账号验证 | 未排期 |
-| `ops-hardening` 阶段 2 | 放行名额没有按用户限额：一个磁盘卡住的用户，如果有大量运行的工具结果在途，理论上能占满全部名额，拖住其他用户。现有测试只覆盖在途事件少于名额的情况 | 并入第 0 节 `ops-hardening-2` |
-| `ops-hardening` 阶段 5 | 载入失败的会话到重启前一直拒绝（500），不在进程内重试；临时性失败（如索引库短暂不可用）也要重启才恢复。重启后那次提交的运行显示“被重启中断”，不是“失败” | 并入第 0 节 `ops-hardening-2` |
+| `ops-hardening` 阶段 2 | 放行名额没有按用户限额 | 完成（`ops-hardening-2` 任务 4，2026-11-07：`UserPermits`，`tantalum.loop.max-user-permits`） |
+| `ops-hardening` 阶段 5 | 载入失败的会话到重启前一直拒绝 | 完成（`ops-hardening-2` 任务 5，2026-11-07：`tantalum.residency.load-retry` 后再试）。“重启后那次提交显示被重启中断而不是失败”照旧 |
 | `ops-hardening` 阶段 6 | SSE 补读对该用户末尾序号不早于位置的会话整个文件重放（不用快照，因为要逐个事件的内容）；一个用户的长会话多时补读仍会慢 | 记录。record-results 之后改为按结果行折叠，仍要读整个文件 |
 | `ops-hardening` 阶段 8 | 关闭时不响应中断的 Handler 最多再等 2 秒就不管了，它之后产生的结果不会落盘，下次启动这个运行按 H9 收尾 | 记录 |
 | `ops-hardening` 任务 49 | 快照只省约 37% 的冷载入时间（402 → 254 ms），快照文件比会话文件大 60%（5.6 MB 对 3.5 MB）。2026-11-03 Yi 决定去掉，冷会话只重放会话文件 | 已完成 |
@@ -83,4 +83,4 @@
 
 ## 5. 长期限制
 
-不是任务，记在 `steering/tech.md` 的 Known Limitations：Disruptor 未针对 Java 25 正式声明支持（全套测试天天在 Java 25 上跑，换成有界队列收益小，排最后）、SQLite 原生访问警告、模型并发默认为 1、strata 与其他任务共用、可执行 jar 约 300 MB（Playwright 浏览器驱动，可拆成可选包）、JDK 25 + Spring Boot 4.1 对保守的客户环境偏新。登录会话不持久化、没有用户管理界面已移到第 0 节。另有一条写在 README“回放能保证什么”：内核语义变化后旧会话回放可能不再逐字节相同。
+不是任务，记在 `steering/tech.md` 的 Known Limitations：Disruptor 未针对 Java 25 正式声明支持（全套测试天天在 Java 25 上跑，换成有界队列收益小，排最后）、SQLite 原生访问警告、模型并发默认为 1、strata 与其他任务共用、可执行 jar 约 300 MB（Playwright 浏览器驱动，可拆成可选包）、JDK 25 + Spring Boot 4.1 对保守的客户环境偏新。登录会话不持久化、没有用户管理界面已在 `ops-hardening-2` 解决。另有一条写在 README“回放能保证什么”：内核语义变化后旧会话回放可能不再逐字节相同。

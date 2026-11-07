@@ -638,3 +638,12 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **内核里两处容易漏的**：`Kernel.isAwaited` 原来只认 `Awaiting` 的在途命令，等人阶段的定时器事件会被当成“没人等的结果”丢掉；`HookChain` 合并多个 `Allow` 时原来新建一个 `Allow`，会把 `withNote` 丢掉。都有测试钉住。
 - **8091 演示**（任务 15，2026-11-07，会话 `s-waitdemo1`，Sonnet 5.5 低档）：开工具审批（审批名单临时加了 `web_fetch`），让模型抓 example.com → 对话页出现“允许调用 web_fetch 吗？”；不回答，`up.sh` 重启；36 秒后重新打开，问题还在（索引从版本 2 重建后 `run_status` 是 `AwaitingAnswer`，启动没给它发 `RunInterrupted`）；答“允许这一次”→ 工具执行 → 运行 COMPLETED。第二轮让模型用 `ask_user` 问“删除还是保留？”，模型自己把 `allow_text` 关了，带文字的回答被接口按 `request/invalid` 拒绝（正确），只选“保留”后模型复述并照做。两轮合计 Claude 用量：输出 359、缓存读 11611、缓存写 4173，约 0.05 美元。顺带发现 8091 上 `web_fetch` 这次返回“无法解析主机名”（和等人无关，待查）。
 - **测试**：`AnswerStepsTest` 19 个（五个位置、回答四种去向、期限、取消、重启不变、`ask_user` 的槽位和顺序），`HookChainTest` 加 `onAnswer` 和 `Ask` 行，`ExampleHooksPipelineTest` 的审批改经回答接口，`QuestionApiTest`、`WaitingRestartTest`、`IndexUpgradeTest`、`EvictorTest`；控制台 vitest `QuestionItem` 5 个；Playwright `question.spec`（刷新还在、另一个浏览器同账号、取消）和 `approval.spec` 照过。8091 演示见任务 15。
+
+### ops-hardening-2（2026-11-07）：登录不随重启丢、管理员、按用户名额、载入失败自愈
+
+- **登录**：`users.db` 加 `logins` 表（令牌 SHA-256、用户、口令戳、创建和最后访问时间），Cookie `tantalum.login` 只有 32 字节随机令牌；`LoginContextRepository` 实现 Spring Security 的 `SecurityContextRepository`，每个请求查一次表（在、没过期、没停用、口令戳没变），角色（`ROLE_ADMIN`）也每次从表里读。最后访问时间最多每分钟写一次；过期按 `server.servlet.session.timeout`（12h）。401 不动 Cookie（带旧令牌的请求可能和新登录并行到达，清掉会误伤）；退出时才清。不再有 `HttpSession`。
+- **管理员**：`users` 表 `user_version` 1→2 加 `admin` 列；升级时没有管理员就把最早的账号设为管理员并记日志（8091 上 yi 就是这样成的）。`/api/users/**` 要 `ROLE_ADMIN`，否则 403 `auth/forbidden`。规则：不能停用或取消自己（`user/self`），至少留一个启用的管理员（`user/last-admin`）；管理员重置密码或停用 → 那个人的全部登录失效、SSE 断开；自己改密码 → 别处失效、当前保留（口令戳记到当前登录上）。
+- **按用户名额**：`UserPermits`。到上限（`tantalum.loop.max-user-permits`，默认 `input-ring-size/4`）后这个用户之后的事件停在分发器里、不占总名额，输入环的消费者继续取别人的；每处理完一个按原顺序放一个进去；任何人归还总名额也替停住的用户试一次（归还那一刻总名额被消费者抢走的边角）。定时器和重启收尾不计入上限但排在停住的事件后面。真实服务里凑不出稳定的“到上限”（在途只是进 cleanroom 前的一瞬），所以 4.3 由分发器单元测试覆盖。
+- **载入失败自愈**：`Residency` 记失败时刻，`tantalum.residency.load-retry`（默认 1m）内 `pin` 返回 FAILED、接口 500 `session/unavailable`（文案本就是“暂时不可用，请稍后重试”）；过了时间 `pin` 返回 COLD 让通道重新载入，条目留着，再失败只记一条警告。
+- **8091**：部署阶段 1 后登录 → 重启服务 → 原 Cookie 仍有效，`me` 返回 `admin:true`。
+

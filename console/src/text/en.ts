@@ -691,6 +691,7 @@ export const en: Text = {
       read_attachment: ["Read attachments", "Reads files you uploaded, images included."],
       memory_read: ["Read memory", "Reads the content of a long-term memory."],
       memory_write: ["Write memory", "Creates or updates a long-term memory."],
+      ask_user: ["Ask the user", "Pauses the run to ask you a question and continues once you answer in the conversation; it can wait indefinitely, even across restarts."],
       memory_delete: ["Delete memory", "Deletes a long-term memory."],
     },
     states: {
