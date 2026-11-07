@@ -594,6 +594,13 @@ export const en: Text = {
     "auth/invalid-credentials": "Wrong username or password",
     "auth/too-many-attempts": "Too many attempts. Try again later",
     "auth/not-authenticated": "Please sign in",
+    "auth/forbidden": "Only an administrator can do this",
+    "user/bad-name": "User names may only contain a-z, 0-9, - and _",
+    "user/reserved-name": "This name is reserved by Windows",
+    "user/exists": "This user already exists",
+    "user/not-found": "No such user",
+    "user/self": "You cannot do this to your own account",
+    "user/last-admin": "This is the last administrator and cannot be disabled or demoted",
   },
   time: {
     duration: {

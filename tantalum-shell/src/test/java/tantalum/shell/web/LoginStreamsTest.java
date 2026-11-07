@@ -147,24 +147,16 @@ class LoginStreamsTest {
         }
     }
 
-    /** 连接本身不刷新会话；没有其他请求时，会话到期后一个心跳内断开，不等容器的后台清理。 */
+    /** 连接本身不刷新登录；没有其他请求时，登录到期后一个心跳内断开（ops-hardening-2：过期按登录表的最后访问时间算）。 */
     @Test
     void anExpiredLoginLosesTheStreamWithinAHeartbeat() throws Exception {
-        // Tomcat 的会话超时以分钟为单位，配置里的 2s 会变成 1 分钟，所以直接给新会话设 2 秒。
-        Files.createDirectories(temp.resolve("workspace"));
-        try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("workspace"), model,
-                context -> context.registerBean("shortSessions", jakarta.servlet.http.HttpSessionListener.class,
-                        () -> new jakarta.servlet.http.HttpSessionListener() {
-                            @Override
-                            public void sessionCreated(jakarta.servlet.http.HttpSessionEvent event) {
-                                event.getSession().setMaxInactiveInterval(2);
-                            }
-                        }), HEARTBEAT)) {
+        try (TestServer server = server("--server.servlet.session.timeout=2s")) {
             String alice = login(server, "alice");
             long opened = System.currentTimeMillis();
             Stream stream = new Stream(server, alice);
             assertFalse(stream.endsWithin(1_000), "still within the timeout");
             assertTrue(stream.endsWithin(2_000 + WITHIN), "ended " + (System.currentTimeMillis() - opened) + " ms after opening");
+            assertEquals(401, get(server, alice, "/api/sessions").statusCode(), "the expired login is refused");
         }
     }
 }

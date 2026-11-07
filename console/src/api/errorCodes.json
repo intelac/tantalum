@@ -45,7 +45,14 @@
     "settings/invalid",
     "auth/invalid-credentials",
     "auth/too-many-attempts",
-    "auth/not-authenticated"
+    "auth/not-authenticated",
+    "auth/forbidden",
+    "user/bad-name",
+    "user/reserved-name",
+    "user/exists",
+    "user/not-found",
+    "user/self",
+    "user/last-admin"
   ],
   "sandbox": [
     "sandbox/not-macos",

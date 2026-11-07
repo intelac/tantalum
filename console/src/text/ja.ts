@@ -589,6 +589,13 @@ export const ja: Text = {
     "auth/invalid-credentials": "ユーザー名またはパスワードが違います",
     "auth/too-many-attempts": "試行回数が多すぎます。しばらくしてからお試しください",
     "auth/not-authenticated": "ログインしてください",
+    "auth/forbidden": "この操作は管理者だけができます",
+    "user/bad-name": "ユーザー名に使えるのは a-z、0-9、-、_ だけです",
+    "user/reserved-name": "この名前は Windows の予約名なので使えません",
+    "user/exists": "このユーザーはすでにいます",
+    "user/not-found": "そのユーザーはいません",
+    "user/self": "自分のアカウントにはこの操作はできません",
+    "user/last-admin": "最後の管理者なので、停止も降格もできません",
   },
   time: {
     duration: {

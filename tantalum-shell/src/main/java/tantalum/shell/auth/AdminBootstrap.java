@@ -3,7 +3,7 @@ package tantalum.shell.auth;
 import java.sql.SQLException;
 import java.util.Map;
 
-/** 没有任何用户时，由环境变量创建第一个用户。没有内置的默认密码。 */
+/** 没有任何用户时，由环境变量创建第一个用户，它是管理员。没有内置的默认密码。 */
 public final class AdminBootstrap {
 
     public static final String USER = "TANTALUM_ADMIN_USER";
@@ -21,6 +21,7 @@ public final class AdminBootstrap {
             throw new IllegalStateException("No users exist yet. Set " + USER + " and " + PASSWORD
                     + " to create the first user.");
         }
-        store.add(name, password);
+        // 第一个账号是管理员（ops-hardening-2 需求 2.1）
+        store.add(name, password, true);
     }
 }

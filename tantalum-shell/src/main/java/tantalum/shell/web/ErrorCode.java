@@ -77,7 +77,17 @@ public enum ErrorCode {
     SETTINGS_INVALID("settings/invalid", 400),
     AUTH_INVALID_CREDENTIALS("auth/invalid-credentials", 401),
     AUTH_TOO_MANY_ATTEMPTS("auth/too-many-attempts", 429),
-    AUTH_NOT_AUTHENTICATED("auth/not-authenticated", 401);
+    AUTH_NOT_AUTHENTICATED("auth/not-authenticated", 401),
+    /** 登录了但不是管理员（ops-hardening-2 需求 2.4）。 */
+    AUTH_FORBIDDEN("auth/forbidden", 403),
+    USER_BAD_NAME("user/bad-name", 400),
+    USER_RESERVED_NAME("user/reserved-name", 400),
+    USER_EXISTS("user/exists", 409),
+    USER_NOT_FOUND("user/not-found", 404),
+    /** 管理员不能停用或取消自己（ops-hardening-2 D2）。 */
+    USER_SELF("user/self", 400),
+    /** 系统至少保留一个启用的管理员。 */
+    USER_LAST_ADMIN("user/last-admin", 409);
 
     private final String wire;
     private final int status;

@@ -167,15 +167,19 @@ export TANTALUM_ADMIN_USER=yi TANTALUM_ADMIN_PASSWORD='...'
 java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar ...
 ```
 
-之后用命令行管理用户，密码从标准输入读取；`TANTALUM_DATA_DIR` 指向数据目录（默认 `~/.local/share/tantalum`）：
+这个账号是**管理员**。管理员可以在接口上管用户（`GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`；设置页的“用户”一页在做），每个人都能改自己的密码（`PUT /api/auth/password`，要当前密码）。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
+
+命令行也能管，密码从标准输入读取；`TANTALUM_DATA_DIR` 指向数据目录（默认 `~/.local/share/tantalum`）：
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users add alice
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users reset alice
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users disable alice
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users add alice          # 加 --admin 建管理员
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users reset alice        # 重置密码，她的登录全部失效
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users disable alice      # 停用；enable 启用
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users admin alice        # 设为管理员；user 取消
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users list
 ```
 
-口令用 Argon2id 哈希存储。登录后身份放在 `HttpOnly`、`SameSite=Strict` 的会话 Cookie 里，会话在内存中，重启后要重新登录；写操作还会校验 `Origin`。每个用户的工作目录隔离在 `<workspace>/<用户名>`（`tantalum.workspace-mode=per-user`），会话、运行、回放和 SSE 都只能看到自己的。登录连续失败会被限速。
+口令用 Argon2id 哈希存储。登录记在数据目录的 `users.db` 里，Cookie `tantalum.login` 里只有一个随机令牌（`HttpOnly`、`SameSite=Strict`；服务器只存它的哈希），所以服务器重启、崩溃都不用重新登录；12 小时不活动过期（`server.servlet.session.timeout`），退出、改密码、被停用立即失效。写操作还会校验 `Origin`。每个用户的工作目录隔离在 `<workspace>/<用户名>`（`tantalum.workspace-mode=per-user`），会话、运行、回放和 SSE 都只能看到自己的。登录连续失败会被限速。
 
 ## 语言
 
@@ -731,7 +735,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | 操作系统级沙箱 | 无 | 有（`sandbox-local`：Seatbelt、受限令牌、bwrap） | 有，只用于电脑上的 `bash`（macOS 用微软 MXC 的 Seatbelt 后端）；服务器上不再有读写文件、跑命令的工具 | Windows 上换 MXC 的 Windows 后端 |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能、计划、定时任务 | 部分 | 有 | **没有** | 未规划 |
-| 用户管理界面 | 不适用 | 不适用 | **没有**，只有命令行；会话在内存里，重启后要重新登录 | 未规划 |
+| 用户管理界面 | 不适用 | 不适用 | 管理员接口和命令行有了，设置页的“用户”一页在做；登录存在数据库里，重启不掉 | 做完控制台这项就齐 |
 | 终端、文件树、浏览器面板 | 无 | 有 | **没有**，`console-ui` 时明确排除 | 未规划 |
 
 顺序（Yi 决定）：`memory`、`mcp-client`、`context-compaction` 已完成；其余顺序待定。
