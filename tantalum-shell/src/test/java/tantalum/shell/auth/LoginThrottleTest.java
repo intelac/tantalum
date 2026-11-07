@@ -1,5 +1,6 @@
 package tantalum.shell.auth;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,5 +97,23 @@ class LoginThrottleTest {
             throttle.tryBegin("user" + i, "ip" + i);
         }
         assertTrue(throttle.trackedKeys() <= LoginThrottle.MAX_KEYS);
+    }
+
+    /** review-fixes 需求 11.4：表满时过期的窗口一次清光，还在计数的账号留下。 */
+    @Test
+    void expiredWindowsAreClearedWhenTheTableIsFull() {
+        LoginThrottle throttle = throttle();
+        for (int i = 0; i < LoginThrottle.MAX_KEYS / 2 - 1; i++) {
+            throttle.tryBegin("old" + i, "ip-old" + i);
+        }
+        now = now.plus(Duration.ofMinutes(10));
+        for (int i = 0; i < 3; i++) {
+            assertTrue(throttle.tryBegin("alice", "1.1.1.1"));
+        }
+        assertEquals(LoginThrottle.MAX_KEYS, throttle.trackedKeys());
+        now = now.plus(Duration.ofMinutes(6));
+        assertTrue(throttle.tryBegin("bob", "2.2.2.2"), "the table is full: the expired windows go, all of them");
+        assertEquals(4, throttle.trackedKeys(), "alice's and bob's account and source windows");
+        assertFalse(throttle.tryBegin("alice", "2.2.2.2"), "alice's three failures are still counted");
     }
 }

@@ -50,6 +50,9 @@ public class UsersController {
         if (WebJson.blank(name) || name.length() > AuthController.MAX_USERNAME || !validPassword(password)) {
             return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"name\": \"...\", \"password\": \"...\", \"admin\": true|false}");
         }
+        if (password.length() < AuthController.MIN_PASSWORD) {
+            return tooShort();
+        }
         try {
             users.add(name, password, admin);
         } catch (UserStore.Refused refused) {
@@ -79,30 +82,26 @@ public class UsersController {
             return json.error(ErrorCode.USER_NOT_FOUND, "no such user");
         }
         try {
-            if (admin != null) {
-                users.setAdmin(name, admin);
-            }
-            if (disabled != null) {
-                if (disabled) {
-                    users.disable(name);
-                    signOut(name);
-                } else {
-                    users.enable(name);
-                }
-            }
+            users.change(name, admin, disabled);
         } catch (UserStore.Refused refused) {
             return refused(refused);
+        }
+        if (Boolean.TRUE.equals(disabled)) {
+            signOut(name);
         }
         return json.json(200, view(account(name)));
     }
 
-    /** 请求体 {@code {"password"}}。重置后那个人的全部登录失效（D3）。 */
+    /** 请求体 {@code {"password"}}，至少 {@value UserStore#MIN_PASSWORD} 位。重置后那个人的全部登录失效（D3）。 */
     @PutMapping("/api/users/{name}/password")
     ResponseEntity<String> resetPassword(@PathVariable String name, @RequestBody String body) throws SQLException {
         Optional<JsonNode> input = json.read(body);
         String password = input.map(node -> WebJson.text(node, "password")).orElse(null);
         if (!validPassword(password)) {
             return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"password\": \"...\"}");
+        }
+        if (password.length() < AuthController.MIN_PASSWORD) {
+            return tooShort();
         }
         if (users.status(name).isEmpty()) {
             return json.error(ErrorCode.USER_NOT_FOUND, "no such user");
@@ -120,6 +119,10 @@ public class UsersController {
 
     private static boolean validPassword(String password) {
         return password != null && !password.isEmpty() && password.length() <= AuthController.MAX_PASSWORD;
+    }
+
+    private ResponseEntity<String> tooShort() {
+        return json.error(ErrorCode.AUTH_PASSWORD_TOO_SHORT, "password must be at least " + AuthController.MIN_PASSWORD + " characters");
     }
 
     private UserStore.Account account(String name) throws SQLException {

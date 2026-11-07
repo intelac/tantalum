@@ -89,7 +89,7 @@ class MainTest {
     void helpListsEveryOption() {
         assertEquals(0, Main.run(new String[] {"--help"}, Map.of(), answering(null), out));
         for (String option : List.of("--server", "--allow", "--allow-write", "--allow-shell", "--allow-read", "--env", "--no-network",
-                "--name", "--mxc", "--help", "TANTALUM_TOKEN")) {
+                "--insecure", "--name", "--mxc", "--help", "TANTALUM_TOKEN")) {
             assertTrue(printed().contains(option), option);
         }
         assertTrue(asked.isEmpty(), "help does not ask for a token");
@@ -226,6 +226,38 @@ class MainTest {
         assertEquals(URI.create("wss://tantalum.example.com/api/local/connect"),
                 setup("--allow", work.toString(), "--server", "https://tantalum.example.com/").socket());
         assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--server", "ftp://example.com"));
+    }
+
+    /** review-fixes 需求 11.10：{@code --allow-read} 和 {@code --allow} 一样不能是家目录或根目录。 */
+    @Test
+    void allowReadFollowsTheSameRulesAsAllow() throws Exception {
+        Path home = Files.createDirectory(temp.resolve("home"));
+        Map<String, String> env = Map.of("TANTALUM_TOKEN", TOKEN, "HOME", home.toString());
+        Refused refused = assertThrows(Refused.class, () -> Main.setup(
+                Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", home.toString()}, ZH), env, answering(null), ZH));
+        assertTrue(refused.getMessage().contains("不能是家目录"), refused.getMessage());
+        Refused root = assertThrows(Refused.class, () -> Main.setup(
+                Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", "/"}, ZH), env, answering(null), ZH));
+        assertTrue(root.getMessage().contains("不能是根目录"), root.getMessage());
+        Path extra = Files.createDirectory(home.resolve("extra"));
+        assertEquals(List.of(extra), Main.setup(Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", extra.toString()}, ZH),
+                env, answering(null), ZH).options().read());
+    }
+
+    /** review-fixes 需求 11.10：不在本机的服务器用明文 http 时令牌会明文经过网络，除非明确给 {@code --insecure}。 */
+    @Test
+    void aPlainHttpServerOffThisComputerNeedsInsecure() throws Exception {
+        Refused refused = assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--server", "http://tantalum.example.com"));
+        assertTrue(refused.getMessage().contains("--insecure"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("https://"), refused.getMessage());
+        assertEquals(URI.create("ws://tantalum.example.com/api/local/connect"),
+                setup("--allow", work.toString(), "--server", "http://tantalum.example.com", "--insecure").socket());
+        assertEquals(URI.create("ws://localhost:8091/api/local/connect"),
+                setup("--allow", work.toString(), "--server", "http://localhost:8091").socket());
+        assertEquals(URI.create("ws://[::1]:8091/api/local/connect"),
+                setup("--allow", work.toString(), "--server", "http://[::1]:8091").socket());
+        assertEquals(URI.create("wss://tantalum.example.com/api/local/connect"),
+                setup("--allow", work.toString(), "--server", "https://tantalum.example.com").socket());
     }
 
     /** 启动说明：连到哪、允许什么、命令行为什么不能用。 */

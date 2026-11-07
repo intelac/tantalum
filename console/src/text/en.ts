@@ -635,6 +635,8 @@ export const en: Text = {
     "auth/too-many-attempts": "Too many attempts. Try again later",
     "auth/not-authenticated": "Please sign in",
     "auth/forbidden": "Only an administrator can do this",
+    "auth/bad-origin": "The request came from another site and was refused",
+    "auth/password-too-short": "The password must be at least 8 characters",
     "user/bad-name": "User names may only contain a-z, 0-9, - and _",
     "user/reserved-name": "This name is reserved by Windows",
     "user/exists": "This user already exists",

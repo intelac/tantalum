@@ -37,6 +37,9 @@ class AdminBootstrapTest {
         try (UserStore store = UserStore.open(dir)) {
             assertThrows(IllegalStateException.class, () -> AdminBootstrap.ensure(store, Map.of(AdminBootstrap.USER, "admin")));
             assertThrows(IllegalStateException.class, () -> AdminBootstrap.ensure(store, Map.of(AdminBootstrap.USER, "admin", AdminBootstrap.PASSWORD, " ")));
+            assertThrows(IllegalStateException.class, () -> AdminBootstrap.ensure(store, Map.of(AdminBootstrap.USER, "admin", AdminBootstrap.PASSWORD, "short")),
+                    "review-fixes 需求 11.13：首个管理员的密码也至少 8 位");
+            assertEquals(0, store.count());
         }
     }
 

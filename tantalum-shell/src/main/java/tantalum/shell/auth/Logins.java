@@ -8,15 +8,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 
 /**
  * 登录记录（ops-hardening-2 需求 1）：{@code users.db} 里的 {@code logins} 表，代替 Tomcat 的内存会话，重启、崩溃都不丢。
  * Cookie 里只放随机令牌（32 字节，Base64url），表里只存它的 SHA-256；{@code id} 就是这个哈希，也是 SSE 按登录断开用的登录 id。
- * 有效期按最后访问时间算（{@link #check}），调用方控制多久写一次最后访问时间。
+ * 有效期按最后访问时间算（{@link #check}），再加一个从创建起算的绝对上限（review-fixes 需求 11.2），调用方控制多久写一次最后访问时间。
  */
 public final class Logins {
 
@@ -74,21 +77,33 @@ public final class Logins {
         return new Issued(token, id);
     }
 
-    /** 令牌对应的登录：不存在或最后访问距今超过 {@code timeout} 为空。不查用户状态，那是调用方的事。 */
-    public synchronized Optional<Login> check(String token, long now, Duration timeout) throws SQLException {
-        return byId(hash(token), now, timeout);
+    /**
+     * 令牌对应的登录：不存在、最后访问距今超过 {@code timeout}、或创建距今超过 {@code maxAge} 都为空。
+     * 不查用户状态，那是调用方的事。
+     */
+    public synchronized Optional<Login> check(String token, long now, Duration timeout, Duration maxAge) throws SQLException {
+        return byId(hash(token), now, timeout, maxAge);
     }
 
     /** 同 {@link #check}，按登录 id（SSE 的心跳用，手里只有 id）。 */
-    public synchronized Optional<Login> byId(String id, long now, Duration timeout) throws SQLException {
-        try (PreparedStatement query = connection.prepareStatement("SELECT name, stamp, last_seen FROM logins WHERE id = ?")) {
+    public synchronized Optional<Login> byId(String id, long now, Duration timeout, Duration maxAge) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("SELECT name, stamp, last_seen, created_at FROM logins WHERE id = ?")) {
             query.setString(1, id);
             try (ResultSet row = query.executeQuery()) {
-                if (!row.next() || now - row.getLong(3) > timeout.toMillis()) {
+                if (!row.next() || now - row.getLong(3) > timeout.toMillis() || tooOld(row.getString(4), now, maxAge)) {
                     return Optional.empty();
                 }
                 return Optional.of(new Login(id, row.getString(1), row.getLong(2), row.getLong(3)));
             }
+        }
+    }
+
+    /** 创建时间读不出来也算过期：这条记录不可信。 */
+    private static boolean tooOld(String createdAt, long now, Duration maxAge) {
+        try {
+            return now - Instant.parse(createdAt).toEpochMilli() > maxAge.toMillis();
+        } catch (DateTimeException unreadable) {
+            return true;
         }
     }
 
@@ -116,13 +131,26 @@ public final class Logins {
         }
     }
 
-    /** 这个用户除 {@code keepId} 以外的登录（自己改密码：别处失效、当前保留）。 */
-    public synchronized int deleteOthers(String name, String keepId) throws SQLException {
-        try (PreparedStatement delete = connection.prepareStatement("DELETE FROM logins WHERE name = ? AND id <> ?")) {
-            delete.setString(1, name);
-            delete.setString(2, keepId);
-            return delete.executeUpdate();
+    /**
+     * 这个用户除 {@code keepId} 以外的登录（自己改密码：别处失效、当前保留），返回删掉的登录 id，调用方按它们断开推送连接。
+     * {@code keepId} 为 null 时全删。
+     */
+    public synchronized List<String> deleteOthers(String name, String keepId) throws SQLException {
+        List<String> ids = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement("SELECT id FROM logins WHERE name = ?")) {
+            query.setString(1, name);
+            try (ResultSet row = query.executeQuery()) {
+                while (row.next()) {
+                    if (!row.getString(1).equals(keepId)) {
+                        ids.add(row.getString(1));
+                    }
+                }
+            }
         }
+        for (String id : ids) {
+            delete(id);
+        }
+        return ids;
     }
 
     /** 自己改密码后当前这个登录保留：记上新的口令戳。 */
@@ -134,12 +162,26 @@ public final class Logins {
         }
     }
 
-    /** 清掉过期的，返回删了几条。 */
-    public synchronized int sweep(long now, Duration timeout) throws SQLException {
+    /** 清掉过期的（最后访问太久以前，或创建太久以前），返回删了几条。 */
+    public synchronized int sweep(long now, Duration timeout, Duration maxAge) throws SQLException {
+        int deleted;
         try (PreparedStatement delete = connection.prepareStatement("DELETE FROM logins WHERE last_seen < ?")) {
             delete.setLong(1, now - timeout.toMillis());
-            return delete.executeUpdate();
+            deleted = delete.executeUpdate();
         }
+        List<String> old = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement("SELECT id, created_at FROM logins");
+                ResultSet row = query.executeQuery()) {
+            while (row.next()) {
+                if (tooOld(row.getString(2), now, maxAge)) {
+                    old.add(row.getString(1));
+                }
+            }
+        }
+        for (String id : old) {
+            delete(id);
+        }
+        return deleted + old.size();
     }
 
     public synchronized long count(String name) throws SQLException {

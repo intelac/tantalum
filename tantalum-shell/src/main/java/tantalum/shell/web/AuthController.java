@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import tantalum.shell.auth.AuthBodyLimitFilter;
 import tantalum.shell.auth.LoginContextRepository;
 import tantalum.shell.auth.LoginThrottle;
 import tantalum.shell.auth.UserStore;
@@ -28,9 +29,10 @@ import tools.jackson.databind.node.ObjectNode;
 @RestController
 public class AuthController {
 
-    static final int MAX_BODY = 8 * 1024;
+    static final int MAX_BODY = AuthBodyLimitFilter.MAX_BODY;
     static final int MAX_USERNAME = 64;
     static final int MAX_PASSWORD = 1024;
+    static final int MIN_PASSWORD = UserStore.MIN_PASSWORD;
 
     private final UserStore users;
     private final LoginThrottle throttle;
@@ -99,8 +101,8 @@ public class AuthController {
     }
 
     /**
-     * 自己改密码（ops-hardening-2 需求 2.6）：要当前密码；改后别处的登录失效，当前这个保留（D3）。当前密码错计入登录限速。
-     * 请求体 {@code {"current", "next"}}。
+     * 自己改密码（ops-hardening-2 需求 2.6）：要当前密码；改后别处的登录失效、推送连接断开，当前这个保留（D3）。当前密码错计入登录限速。
+     * 请求体 {@code {"current", "next"}}，新密码至少 {@value UserStore#MIN_PASSWORD} 位（review-fixes 需求 11.13）。
      */
     @PutMapping("/api/auth/password")
     ResponseEntity<String> changePassword(@RequestBody String body, HttpServletRequest request) throws SQLException {
@@ -113,7 +115,11 @@ public class AuthController {
         if (current == null || next == null || next.isEmpty() || next.length() > MAX_PASSWORD || current.length() > MAX_PASSWORD) {
             return json.error(ErrorCode.REQUEST_INVALID, "body must be {\"current\": \"...\", \"next\": \"...\"}");
         }
-        String name = WebJson.currentUser().value();
+        if (next.length() < MIN_PASSWORD) {
+            return json.error(ErrorCode.AUTH_PASSWORD_TOO_SHORT, "next must be at least " + MIN_PASSWORD + " characters");
+        }
+        Principal user = WebJson.currentUser();
+        String name = user.value();
         String source = request.getRemoteAddr();
         if (!throttle.tryBegin(name, source)) {
             return json.error(ErrorCode.AUTH_TOO_MANY_ATTEMPTS, "too_many_attempts");
@@ -122,12 +128,8 @@ public class AuthController {
             return json.error(ErrorCode.AUTH_INVALID_CREDENTIALS, "invalid_credentials");
         }
         throttle.succeeded(name, source);
-        users.resetPassword(name, next);
-        String login = LoginContextRepository.currentLogin(request);
-        if (login != null) {
-            long stamp = users.status(name).map(UserStore.Status::stamp).orElse(-1L);
-            users.logins().restamp(login, stamp);
-            users.logins().deleteOthers(name, login);
+        for (String login : users.changePassword(name, next, LoginContextRepository.currentLogin(request))) {
+            engine.hub().closeLogin(user, login);
         }
         return json.json(200, Map.of("changed", true));
     }

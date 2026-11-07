@@ -416,4 +416,45 @@ class EgressTest {
         context.init(keyManagers.getKeyManagers(), trust.getTrustManagers(), null);
         return context;
     }
+
+    /** review-fixes 需求 11.8：读回复头时超时只是轮询，已经读到的字节不能丢；请求头有总时限。 */
+    @Test
+    void theHeadReaderKeepsWhatItReadAcrossTimeoutsAndHasADeadline() throws Exception {
+        byte[] bytes = "HTTP/1.1 200 OK\r\nX-A: 1\r\n\r\nbody".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        java.io.InputStream flaky = new java.io.InputStream() {
+            int calls;
+            int at;
+            @Override public int read() throws java.io.IOException {
+                // 第 10 次和第 20 次读超时，字节一个不少
+                if (++calls == 10 || calls == 20) {
+                    throw new java.net.SocketTimeoutException("poll");
+                }
+                return at < bytes.length ? bytes[at++] & 0xff : -1;
+            }
+        };
+        Egress.HeadReader reader = new Egress.HeadReader(1024, Long.MAX_VALUE);
+        String head = null;
+        int timeouts = 0;
+        while (head == null) {
+            try {
+                head = reader.read(flaky);
+            } catch (java.net.SocketTimeoutException quiet) {
+                timeouts++;
+            }
+        }
+        assertEquals(2, timeouts);
+        assertEquals("HTTP/1.1 200 OK\r\nX-A: 1", head);
+
+        java.io.InputStream slow = new java.io.InputStream() {
+            @Override public int read() throws java.io.IOException {
+                try {
+                    Thread.sleep(30);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                return 'x';
+            }
+        };
+        assertThrows(java.net.SocketTimeoutException.class, () -> new Egress.HeadReader(1024, 100).read(slow), "one byte every 30 ms: 100 ms total is up");
+    }
 }

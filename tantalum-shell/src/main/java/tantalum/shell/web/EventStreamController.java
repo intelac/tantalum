@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
@@ -18,10 +20,13 @@ import tantalum.shell.boot.Engine;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
 import tantalum.value.id.Principal;
+import tantalum.value.text.Failures;
 
 /** 每个登录一条 SSE 连接：条目变化、流式分片和事实都从这里推给浏览器。断线后按 {@code Last-Event-ID} 补读。 */
 @RestController
 public class EventStreamController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EventStreamController.class);
 
     private final Engine engine;
     private final LoginContextRepository logins;
@@ -53,14 +58,27 @@ public class EventStreamController {
     private void pump(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter) {
         try {
             stream(user, login, subscription, emitter);
-        } catch (IOException | SQLException | IllegalStateException gone) {
-            // 客户端走了，或容器已经结束这次响应。
+        } catch (IOException | SQLException gone) {
+            // 客户端走了，或登录表读不了：这条连接到此为止，浏览器会重连
+        } catch (IllegalStateException done) {
+            LOG.debug("event stream of {} was already completed by the container: {}", user.value(), Failures.describe(done));
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
         } catch (RuntimeException failure) {
-            emitter.completeWithError(failure);
+            LOG.error("event stream of {} failed: {}", user.value(), Failures.describe(failure), failure);
+            try {
+                emitter.completeWithError(failure);
+            } catch (RuntimeException alreadyDone) {
+                LOG.debug("event stream of {}: cannot report the failure: {}", user.value(), Failures.describe(alreadyDone));
+            }
         } finally {
+            // 订阅注销、响应结束，无论上面怎么退出（review-fixes 需求 11.3）；已经结束的响应再结束一次会抛，忽略
             subscription.close();
+            try {
+                emitter.complete();
+            } catch (RuntimeException alreadyDone) {
+                LOG.debug("event stream of {}: already completed: {}", user.value(), Failures.describe(alreadyDone));
+            }
         }
     }
 
@@ -92,7 +110,6 @@ public class EventStreamController {
             }
             emitter.send(event);
         }
-        emitter.complete();
     }
 
     /** 在 Web 服务器开始停止之前断开 SSE，否则关闭时要等这些长连接结束。 */

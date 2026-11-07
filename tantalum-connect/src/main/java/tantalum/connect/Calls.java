@@ -38,6 +38,7 @@ final class Calls {
     static final String NO_WRITE = "This computer does not allow file changes.";
     static final String NO_SHELL = "This computer does not allow shell commands.";
     static final String AGENTS_FILE = "AGENTS.md";
+    static final String DUPLICATE = "A call with this id is already running.";
 
     private final AllowedDirs dirs;
     private final boolean write;
@@ -88,6 +89,8 @@ final class Calls {
         LocalTool tool = tools.get(call.tool());
         Thread worker = Thread.ofVirtual().name("call-" + call.id()).unstarted(() -> execute(call, tool, reply));
         if (running.putIfAbsent(call.id(), worker) != null) {
+            // 同一个 id 还在跑：不悄悄丢掉，回一个错误，服务器那边等的人知道这次没执行
+            reply.accept(new Result(call.id(), DUPLICATE, true, List.of()));
             return;
         }
         worker.start();
@@ -118,8 +121,9 @@ final class Calls {
         } catch (InterruptedException stopped) {
             result = null;
             outcome = Outcome.CANCELLED;
-        } catch (Exception failure) {
-            // 发给服务器的是固定文字：本机的异常消息可能带路径（review-fixes 需求 6.3）；细节只在本地终端
+        } catch (Throwable failure) {
+            // 发给服务器的是固定文字：本机的异常消息可能带路径（review-fixes 需求 6.3）；细节只在本地终端。
+            // Error 也接住：否则这个 id 永远留在 running 里，服务器那边等到超时
             System.err.println("[tantalum-connect] " + call.tool() + " failed: " + failure);
             result = LocalResult.error("Tool failed on the computer; see the connector's output.");
             outcome = Outcome.ERROR;
@@ -130,7 +134,11 @@ final class Calls {
             return;
         }
         journal.call(call.session(), call.tool(), call.arguments(), outcome);
-        reply.accept(Result.of(call.id(), result));
+        try {
+            reply.accept(Result.of(call.id(), result));
+        } catch (RuntimeException failure) {
+            System.err.println("[tantalum-connect] could not send the result of " + call.tool() + ": " + failure.getClass().getSimpleName());
+        }
     }
 
     /**

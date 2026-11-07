@@ -38,7 +38,8 @@ final class UserBrowser implements AutoCloseable {
     /** WebRTC 不走代理就发不了 UDP，绕不过出口。 */
     static final String WEBRTC = "--force-webrtc-ip-handling-policy=disable_non_proxied_udp";
     /** 驱动和 Chromium 继承服务器的环境变量；名字像密钥、口令、代理的都清空，浏览器进程里读不到。 */
-    private static final Pattern SECRET = Pattern.compile("(?i)KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH|_PROXY$|^PROXY");
+    private static final Pattern SECRET = Pattern.compile(
+            "(?i)KEY|TOKEN|SECRET|PASSW|PASSPHRASE|CREDENTIAL|CREDS|AUTH|COOKIE|PRIVATE|SIGNING|DATABASE_URL|_DSN$|_PROXY$|^PROXY");
 
     static final String NOT_INSTALLED = "The browser is not installed on this server. Ask the administrator to run: "
             + "java -jar tantalum.jar browser install";
@@ -93,8 +94,9 @@ final class UserBrowser implements AutoCloseable {
             context.setDefaultTimeout(ACTION_MS);
             context.setDefaultNavigationTimeout(NAVIGATION_MS);
             return new UserBrowser(playwright, browser, context, clock);
-        } catch (PlaywrightException failed) {
-            String reason = firstLine(failed.getMessage());
+        } catch (RuntimeException failed) {
+            // 不只 PlaywrightException：别的运行时异常也不能把驱动进程留下（review-fixes 需求 11.11）
+            String reason = failed instanceof PlaywrightException ? firstLine(failed.getMessage()) : failed.getClass().getSimpleName();
             closeQuietly(playwright);
             if (reason.contains("Executable doesn't exist")) {
                 LOG.error("browser: Chromium headless shell is not installed; run: java -jar tantalum.jar browser install");
@@ -154,7 +156,11 @@ final class UserBrowser implements AutoCloseable {
         oldest.remove(keep);
         oldest.sort((a, b) -> Long.compare(touched.getOrDefault(a, 0L), touched.getOrDefault(b, 0L)));
         for (int i = 0; i < excess && i < oldest.size(); i++) {
-            oldest.get(i).close();
+            try {
+                oldest.get(i).close();
+            } catch (PlaywrightException gone) {
+                // 这一页已经没了（网页自己关的）：接着关下一页
+            }
         }
     }
 

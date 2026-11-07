@@ -21,6 +21,9 @@ public final class AdminBootstrap {
             throw new IllegalStateException("No users exist yet. Set " + USER + " and " + PASSWORD
                     + " to create the first user.");
         }
+        if (password.length() < UserStore.MIN_PASSWORD) {
+            throw new IllegalStateException(PASSWORD + " must be at least " + UserStore.MIN_PASSWORD + " characters.");
+        }
         // 第一个账号是管理员（ops-hardening-2 需求 2.1）
         store.add(name, password, true);
     }

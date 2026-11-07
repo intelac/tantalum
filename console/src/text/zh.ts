@@ -651,6 +651,8 @@ export const zh = {
     "auth/too-many-attempts": "尝试次数过多，请稍后再试",
     "auth/not-authenticated": "请先登录",
     "auth/forbidden": "只有管理员能做这个操作",
+    "auth/bad-origin": "请求来自别的站点，已拒绝",
+    "auth/password-too-short": "密码至少 8 个字符",
     "user/bad-name": "用户名只能用 a-z、0-9、- 和 _",
     "user/reserved-name": "这个名字是 Windows 保留的设备名，不能用",
     "user/exists": "已经有这个用户了",

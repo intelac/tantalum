@@ -69,7 +69,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
-                .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class);
+                .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class)
+                .addFilterBefore(new AuthBodyLimitFilter(), OriginFilter.class);
         return http.build();
     }
 
@@ -105,17 +106,30 @@ public class SecurityConfig {
         return new LoginThrottle(5, 50, Duration.ofMinutes(15), Clock.systemUTC());
     }
 
-    /** 写操作如果带 {@code Origin}，必须和请求的主机一致。 */
-    private static final class OriginFilter extends OncePerRequestFilter {
+    /**
+     * 写操作如果带 {@code Origin}，必须和请求的主机一致；不带 {@code Origin} 时看浏览器的 {@code Sec-Fetch-Site}，
+     * 标明跨站的也拒（review-fixes 需求 11.5）。拒绝回 JSON，控制台能按代码显示。
+     */
+    static final class OriginFilter extends OncePerRequestFilter {
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
                 throws ServletException, IOException {
-            String origin = request.getHeader("Origin");
-            if (origin != null && !SAFE_METHODS.contains(request.getMethod()) && !sameHost(origin, request)) {
+            if (!SAFE_METHODS.contains(request.getMethod()) && crossSite(request)) {
                 response.setStatus(403);
+                response.setContentType("application/json");
+                // 代码同 web.ErrorCode.AUTH_BAD_ORIGIN（ErrorCodeTest 比对）
+                response.getWriter().write("{\"error\":\"bad_origin\",\"code\":\"auth/bad-origin\"}");
                 return;
             }
             chain.doFilter(request, response);
+        }
+
+        private static boolean crossSite(HttpServletRequest request) {
+            String origin = request.getHeader("Origin");
+            if (origin != null) {
+                return !sameHost(origin, request);
+            }
+            return "cross-site".equalsIgnoreCase(request.getHeader("Sec-Fetch-Site"));
         }
 
         private static boolean sameHost(String origin, HttpServletRequest request) {

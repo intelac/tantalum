@@ -135,4 +135,24 @@ class AddressRulesTest {
         assertEquals("Blocked: [::1]:8091 is the Tantalum server itself.",
                 AddressRules.describe("::1", OWN, InetAddress.getByName("::1"), Reason.OWN_PORT));
     }
+
+    /** review-fixes 需求 11.7：内嵌 IPv4 的写法对自端口守卫同样算数；网卡读不到时任何地址到自己的端口都拦。 */
+    @Test
+    void ownPortGuardSeesEmbeddedIpv4AndFailsClosedWithoutInterfaces() throws Exception {
+        AddressRules rules = new AddressRules(false);
+        rules.ownPort(OWN);
+        assertEquals(Optional.of(Reason.OWN_PORT), rules.blocked(InetAddress.getByName("64:ff9b::7f00:1"), OWN), "NAT64 loopback");
+        assertEquals(Optional.of(Reason.OWN_PORT), rules.blocked(InetAddress.getByName("2002:7f00:1::1"), OWN), "6to4 loopback");
+        assertEquals(Optional.empty(), rules.blocked(InetAddress.getByName("64:ff9b::808:808"), OWN), "NAT64 public");
+
+        AddressRules blind = new AddressRules(false, () -> {
+            throw new java.net.SocketException("no interfaces");
+        });
+        blind.ownPort(OWN);
+        assertEquals(Optional.of(Reason.OWN_PORT), blind.blocked(InetAddress.getByName("8.8.8.8"), OWN), "unreadable interfaces: fail closed");
+        assertEquals(Optional.empty(), blind.blocked(InetAddress.getByName("8.8.8.8"), OWN + 1), "other ports are not affected");
+        AddressRules none = new AddressRules(false, () -> null);
+        none.ownPort(OWN);
+        assertEquals(Optional.of(Reason.OWN_PORT), none.blocked(InetAddress.getByName("8.8.8.8"), OWN), "null enumeration: fail closed");
+    }
 }

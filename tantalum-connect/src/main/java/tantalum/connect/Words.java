@@ -31,6 +31,7 @@ final class Words {
         REFUSED_HOME,
         REFUSED_SERVER_SCHEME,
         REFUSED_SERVER_ADDRESS,
+        REFUSED_SERVER_INSECURE,
         TOKEN_PROMPT,
         REFUSED_NO_TOKEN,
         REFUSED_NOT_A_TOKEN,

@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -120,7 +121,8 @@ public final class LocalLinks implements AutoCloseable {
         LocalTokens.Verdict verdict = tokens.verify(token);
         if (verdict.valid() && !accounts.test(verdict.principal())) {
             LOG.info("local connect for {}: the account is disabled or gone; revoking its tokens", verdict.principal().value());
-            tokens.revokeAll(verdict.principal());
+            // 走完整的撤销：记下撤销时刻、断开已有的连接，正在握手的也接不上（review-fixes 需求 11.9）
+            revoke(verdict.principal());
             return new LocalTokens.Verdict(LocalTokens.Status.REVOKED, verdict.principal(), verdict.expiresAt());
         }
         return verdict;
@@ -130,21 +132,13 @@ public final class LocalLinks implements AutoCloseable {
      * 握手通过、收到 {@code hello} 之后由端点调用：这个用户已有连接时让旧的退出（L10），安排到期时刻断开（L3），回 {@code welcome}。
      * 返回的 {@link Link} 接收这条连接上后续的消息。{@code verifiedAt}（{@link System#nanoTime()}）是握手查令牌的时刻：
      * 那之后用户撤销过，就不接这条连接，返回空。
+     * <p>先在锁里登记、安排到期，再发 {@code welcome}（review-fixes 需求 11.9）：登记之后 {@link #revoke} 一定看得到这条连接；
+     * 调用在 {@code welcome} 发出之前先等着（{@link #call}），电脑不会在知道自己连的是谁之前收到调用。
      */
     public Optional<Link> attach(Principal principal, Instant expiresAt, long verifiedAt, Hello hello, Peer peer) {
         Link link = new Link(principal, hello, clock.instant(), expiresAt, peer);
-        if (revokedSince(principal, verifiedAt)) {
-            return Optional.empty();
-        }
-        // 先回 welcome 再登记：登记以后别人才看得到这条连接、才会发调用过来，电脑一定先知道自己连的是谁；反过来时调用可能抢在
-        // welcome 前面，电脑按“连的是别的用户”拒绝（windows-latest 上的 LinkIT 抓到过）
-        if (!link.send(new Welcome(principal.value(), expiresAt))) {
-            // 发不出去：连接已经按断开处理了，不登记
-            return Optional.of(link);
-        }
         Link old;
         synchronized (this) {
-            // 发 welcome 的时候用户撤销了：revoke 还看不到这条连接，由这里不接，端点照旧以“已撤销”关掉
             if (revokedSince(principal, verifiedAt)) {
                 return Optional.empty();
             }
@@ -159,6 +153,10 @@ public final class LocalLinks implements AutoCloseable {
             LOG.info("local link for {} expired", principal.value());
             link.end(Bye.Reason.EXPIRED, Wire.CLOSE_EXPIRED);
         }), delay, TimeUnit.MILLISECONDS);
+        if (link.send(new Welcome(principal.value(), expiresAt))) {
+            link.welcomed.countDown();
+        }
+        // 发不出去时 send 已经按断开处理（摘掉登记、取消到期），返回的 Link 只是让端点关闭时有东西可报
         return Optional.of(link);
     }
 
@@ -202,7 +200,8 @@ public final class LocalLinks implements AutoCloseable {
         }
         String id = "c-" + ids.incrementAndGet();
         try {
-            if (link.over.get()) {
+            // welcome 还没发出去就等：电脑要先知道连的是谁，否则它按“连的是别的用户”拒绝
+            if (!link.welcomed.await(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS) || link.over.get()) {
                 return LocalResult.error(NOT_CONNECTED);
             }
             CompletableFuture<Result> reply = new CompletableFuture<>();
@@ -307,6 +306,8 @@ public final class LocalLinks implements AutoCloseable {
         private final Map<String, CompletableFuture<Result>> calls = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<ContextResult>> contexts = new ConcurrentHashMap<>();
         private final AtomicBoolean over = new AtomicBoolean();
+        /** {@code welcome} 发出去了（或者连接已经断了，不会再发）。 */
+        private final CountDownLatch welcomed = new CountDownLatch(1);
         private volatile long lastPong = System.nanoTime();
         private volatile ScheduledFuture<?> expiry;
 
@@ -351,6 +352,7 @@ public final class LocalLinks implements AutoCloseable {
                 return;
             }
             links.remove(principal, this);
+            welcomed.countDown();
             ScheduledFuture<?> timer = expiry;
             if (timer != null) {
                 timer.cancel(false);

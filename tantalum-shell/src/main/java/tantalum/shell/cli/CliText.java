@@ -22,6 +22,7 @@ public final class CliText {
     public enum Key {
         USERS_USAGE,
         USERS_PASSWORD_REQUIRED,
+        USERS_PASSWORD_TOO_SHORT,
         USERS_DONE,
         USERS_BAD_NAME,
         USERS_RESERVED_NAME,

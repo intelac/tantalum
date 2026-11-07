@@ -50,7 +50,7 @@ public class TraceController {
         Principal user = WebJson.currentUser();
         Optional<TracePage> page;
         if (run != null) {
-            RunId target = run.isBlank() ? null : new RunId(run);
+            RunId target = ApiController.runId(run).orElse(null);
             if (target == null || target.seq() < 0) {
                 return json.error(ErrorCode.REQUEST_INVALID, "invalid run id");
             }

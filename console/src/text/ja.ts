@@ -630,6 +630,8 @@ export const ja: Text = {
     "auth/too-many-attempts": "試行回数が多すぎます。しばらくしてからお試しください",
     "auth/not-authenticated": "ログインしてください",
     "auth/forbidden": "この操作は管理者だけができます",
+    "auth/bad-origin": "別のサイトからのリクエストのため拒否しました",
+    "auth/password-too-short": "パスワードは 8 文字以上にしてください",
     "user/bad-name": "ユーザー名に使えるのは a-z、0-9、-、_ だけです",
     "user/reserved-name": "この名前は Windows の予約名なので使えません",
     "user/exists": "このユーザーはすでにいます",

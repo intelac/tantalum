@@ -56,6 +56,6 @@ public class RunTraceController {
     }
 
     private boolean owns(Principal user, String run) {
-        return engine.queries().run(user, new RunId(run)).isPresent();
+        return ApiController.runId(run).flatMap(id -> engine.queries().run(user, id)).isPresent();
     }
 }

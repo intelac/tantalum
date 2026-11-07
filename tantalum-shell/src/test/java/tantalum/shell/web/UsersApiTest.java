@@ -62,10 +62,13 @@ class UsersApiTest {
         // 新建：名字规则、重复
         assertEquals(200, send(root, "POST", "/api/users", "{\"name\":\"bob\",\"password\":\"bob-password\",\"admin\":false}").statusCode());
         assertEquals(200, cookie("bob", "bob-password").length() > 0 ? 200 : 0);
-        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"bob\",\"password\":\"x\"}").body().contains("user/exists"));
-        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"Bad Name!\",\"password\":\"x\"}").body().contains("user/bad-name"));
-        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"nul\",\"password\":\"x\"}").body().contains("user/reserved-name"));
+        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"bob\",\"password\":\"x-password\"}").body().contains("user/exists"));
+        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"Bad Name!\",\"password\":\"x-password\"}").body().contains("user/bad-name"));
+        assertTrue(send(root, "POST", "/api/users", "{\"name\":\"nul\",\"password\":\"x-password\"}").body().contains("user/reserved-name"));
         assertEquals(400, send(root, "POST", "/api/users", "{\"name\":\"carol\"}").statusCode(), "password required");
+        HttpResponse<String> weak = send(root, "POST", "/api/users", "{\"name\":\"carol\",\"password\":\"1234567\"}");
+        assertEquals(400, weak.statusCode());
+        assertTrue(weak.body().contains("auth/password-too-short"), "review-fixes 需求 11.13: " + weak.body());
 
         // 设管理员、取消；不存在
         assertTrue(send(root, "PUT", "/api/users/alice", "{\"admin\":true}").body().contains("\"admin\":true"));
@@ -101,7 +104,8 @@ class UsersApiTest {
         assertTrue(send(root, "PUT", "/api/users/alice", "{\"disabled\":false}").body().contains("\"disabled\":false"));
         assertEquals(200, server.attemptLogin("alice", "new-password", null).statusCode());
         assertEquals(400, send(root, "PUT", "/api/users/alice/password", "{}").statusCode());
-        assertEquals(404, send(root, "PUT", "/api/users/nobody/password", "{\"password\":\"x\"}").statusCode());
+        assertEquals(404, send(root, "PUT", "/api/users/nobody/password", "{\"password\":\"x-password\"}").statusCode());
+        assertTrue(send(root, "PUT", "/api/users/alice/password", "{\"password\":\"short\"}").body().contains("auth/password-too-short"));
     }
 
     /** 需求 2.6、D3：自己改密码要当前密码；改后别处失效、当前保留。 */
@@ -109,16 +113,19 @@ class UsersApiTest {
     void aUserChangesTheirOwnPassword() throws Exception {
         String laptop = cookie("alice", "alice-password");
         String phone = cookie("alice", "alice-password");
-        HttpResponse<String> wrong = send(laptop, "PUT", "/api/auth/password", "{\"current\":\"nope\",\"next\":\"n2\"}");
+        HttpResponse<String> wrong = send(laptop, "PUT", "/api/auth/password", "{\"current\":\"nope\",\"next\":\"n2-password\"}");
         assertEquals(401, wrong.statusCode());
         assertTrue(wrong.body().contains("auth/invalid-credentials"), wrong.body());
         assertEquals(400, send(laptop, "PUT", "/api/auth/password", "{\"current\":\"alice-password\",\"next\":\"\"}").statusCode());
+        HttpResponse<String> weak = send(laptop, "PUT", "/api/auth/password", "{\"current\":\"alice-password\",\"next\":\"alice-2\"}");
+        assertEquals(400, weak.statusCode());
+        assertTrue(weak.body().contains("auth/password-too-short"), weak.body());
 
-        assertEquals(200, send(laptop, "PUT", "/api/auth/password", "{\"current\":\"alice-password\",\"next\":\"alice-2\"}").statusCode());
+        assertEquals(200, send(laptop, "PUT", "/api/auth/password", "{\"current\":\"alice-password\",\"next\":\"alice-22\"}").statusCode());
         assertEquals(200, send(laptop, "GET", "/api/auth/me", null).statusCode(), "the login that changed it stays");
         assertEquals(401, send(phone, "GET", "/api/auth/me", null).statusCode(), "other logins are out");
         assertEquals(401, server.attemptLogin("alice", "alice-password", null).statusCode());
-        assertEquals(200, server.attemptLogin("alice", "alice-2", null).statusCode());
+        assertEquals(200, server.attemptLogin("alice", "alice-22", null).statusCode());
     }
 
     @Test

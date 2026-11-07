@@ -35,6 +35,8 @@ public final class LoginContextRepository implements SecurityContextRepository {
     /** 请求属性：登录成功时新发的令牌，{@link #saveContext} 写进 Cookie。 */
     static final String ISSUED_TOKEN = "tantalum.login.issued";
     static final Duration TOUCH_EVERY = Duration.ofMinutes(1);
+    /** 一次登录从创建起最多活这么久，不管用得多勤（review-fixes 需求 11.2）。 */
+    public static final Duration MAX_LIFETIME = Duration.ofDays(30);
     private static final Logger LOG = LoggerFactory.getLogger(LoginContextRepository.class);
 
     private final UserStore users;
@@ -48,7 +50,7 @@ public final class LoginContextRepository implements SecurityContextRepository {
         this.secure = secure;
         this.clock = clock;
         try {
-            int swept = users.logins().sweep(clock.millis(), timeout);
+            int swept = users.logins().sweep(clock.millis(), timeout, MAX_LIFETIME);
             if (swept > 0) {
                 LOG.info("removed {} expired login(s)", swept);
             }
@@ -75,13 +77,17 @@ public final class LoginContextRepository implements SecurityContextRepository {
             return context;
         }
         try {
-            Optional<Logins.Login> login = valid(token, clock.millis());
+            long now = clock.millis();
+            Optional<Logins.Login> login = valid(token, now);
             if (login.isEmpty()) {
                 // 不清 Cookie：带旧令牌的请求可能和刚登录的新令牌并行到达，清掉会把新登录一起清掉；只在退出时清
                 return context;
             }
             request.setAttribute(LOGIN_ID, login.get().id());
             context.setAuthentication(authentication(login.get().name()));
+            if (now - login.get().lastSeen() >= TOUCH_EVERY.toMillis()) {
+                touch(login.get().id(), token, now, holder.getResponse());
+            }
         } catch (SQLException failure) {
             // 用户库读不了：这次请求当作没登录，不发令牌、不清 Cookie
             LOG.warn("cannot read the login table: {}", failure.getMessage());
@@ -89,16 +95,29 @@ public final class LoginContextRepository implements SecurityContextRepository {
         return context;
     }
 
-    /** 令牌对应的有效登录；顺手刷新最后访问时间。 */
+    /** 令牌对应的有效登录。 */
     private Optional<Logins.Login> valid(String token, long now) throws SQLException {
-        Optional<Logins.Login> login = users.logins().check(token, now, timeout);
+        Optional<Logins.Login> login = users.logins().check(token, now, timeout, MAX_LIFETIME);
         if (login.isEmpty() || !accountValid(login.get())) {
             return Optional.empty();
         }
-        if (now - login.get().lastSeen() >= TOUCH_EVERY.toMillis()) {
-            users.logins().touch(login.get().id(), now);
-        }
         return login;
+    }
+
+    /**
+     * 刷新最后访问时间，并用同一个令牌重发 Cookie，让浏览器那边的有效期和服务器的滑动窗口一致（review-fixes 需求 11.2）。
+     * 写不进去只记日志：登录本身还有效，这次请求照常。
+     */
+    private void touch(String loginId, String token, long now, HttpServletResponse response) {
+        try {
+            users.logins().touch(loginId, now);
+        } catch (SQLException failure) {
+            LOG.debug("cannot record the last access of a login: {}", failure.getMessage());
+            return;
+        }
+        if (response != null && !response.isCommitted()) {
+            response.addHeader(HttpHeaders.SET_COOKIE, cookie(token).toString());
+        }
     }
 
     /** 账号没停用、口令戳没变。 */
@@ -112,18 +131,25 @@ public final class LoginContextRepository implements SecurityContextRepository {
         if (loginId == null) {
             return false;
         }
-        Optional<Logins.Login> login = users.logins().byId(loginId, now, timeout);
+        Optional<Logins.Login> login = users.logins().byId(loginId, now, timeout, MAX_LIFETIME);
         return login.isPresent() && login.get().name().equals(name) && accountValid(login.get());
     }
 
-    /** 登录成功：发一条新登录，令牌经 {@link #saveContext} 写进 Cookie。顺手清掉过期的登录，表不随历史增长（需求 1.5）。 */
+    /**
+     * 登录成功：发一条新登录，令牌经 {@link #saveContext} 写进 Cookie。顺手清掉过期的登录，表不随历史增长（需求 1.5）；
+     * 清不掉只记日志，登录已经发出去了（review-fixes 需求 11.2）。
+     */
     public Logins.Issued issue(HttpServletRequest request, String name) throws SQLException {
         long now = clock.millis();
-        users.logins().sweep(now, timeout);
         long stamp = users.status(name).map(UserStore.Status::stamp).orElse(-1L);
         Logins.Issued issued = users.logins().create(name, stamp, now);
         request.setAttribute(ISSUED_TOKEN, issued.token());
         request.setAttribute(LOGIN_ID, issued.id());
+        try {
+            users.logins().sweep(now, timeout, MAX_LIFETIME);
+        } catch (SQLException failure) {
+            LOG.warn("cannot sweep expired logins: {}", failure.getMessage());
+        }
         return issued;
     }
 

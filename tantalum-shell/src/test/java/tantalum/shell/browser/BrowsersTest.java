@@ -2,6 +2,7 @@ package tantalum.shell.browser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -182,6 +183,31 @@ class BrowsersTest {
         assertEquals("The browser is not installed on this server. Ask the administrator to run: java -jar tantalum.jar browser install",
                 failed.getMessage());
         assertEquals(0, browsers.openCount());
+    }
+
+    /** review-fixes 需求 11.11：起浏览器时冒出来的不是 Unavailable 也不能把名额占死；调用里任何运行时异常都先看浏览器还在不在。 */
+    @Test
+    void launchAndActionFailuresFreeTheSlot() throws Exception {
+        browsers = new Browsers(new Browsers.Settings(1, Duration.ofMinutes(10), true), null, null, clock, () -> {
+            throw new IllegalStateException("driver exploded");
+        }, Duration.ofHours(1));
+        Browsers.Unavailable failed = assertThrows(Browsers.Unavailable.class,
+                () -> browsers.use(new Principal("alice"), SESSION, (browser, session) -> null));
+        assertEquals(UserBrowser.CANNOT_START, failed.getMessage());
+        assertEquals(0, browsers.openCount());
+        browsers.close();
+
+        // 空壳浏览器“没连上”：动作抛任何运行时异常都按崩溃处理，关掉、名额空出来、这次返回崩溃说明
+        Browsers pool = browsers(1);
+        Browsers.Unavailable crashed = assertThrows(Browsers.Unavailable.class,
+                () -> pool.use(new Principal("alice"), SESSION, (browser, session) -> {
+                    throw new IllegalStateException("not a PlaywrightException");
+                }));
+        assertEquals(Browsers.CRASHED, crashed.getMessage());
+        assertEquals(0, pool.openCount());
+        assertTrue(launched.getFirst().isClosed());
+        assertNull(pool.use(new Principal("alice"), SESSION, (browser, session) -> null), "a new one opens next time");
+        assertEquals(1, pool.openCount());
     }
 
     /** 需求 2.8：关机关掉全部浏览器，之后的调用得到错误。 */
