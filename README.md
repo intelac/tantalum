@@ -4,6 +4,12 @@
 
 **企业 Agent 的底座，事件驱动。** 公司自己部署一台服务器，很多人在网页上和 agent 干活；每一步都记下来，事后能原样查、原样恢复；加功能写插件，不用改内核。下一步要往 DeepSeek 提出的 Super-Agent 方向走：agent 不只等人叫，而是听着团队的消息、评论、CI 结果，按团队定的规则主动接活（见下面“方向”）。
 
+当前版本 **0.1**：[下载](https://github.com/intelac/tantalum/releases/latest)（一个 jar，macOS、Linux、Windows 通用，需要 JDK 25）。
+
+| 对话页 | 轨迹页：每一次模型调用、工具调用和钩子决定 |
+|---|---|
+| ![对话页](docs/images/conversation.png) | ![轨迹页](docs/images/trace.png) |
+
 ## 为什么适合做企业底座
 
 - **自己部署，数据不出门**：会话、journal、记忆都在自己的服务器上，默认只听 `127.0.0.1`。模型可以用 Claude，也可以用公司内部或本机的 OpenAI 兼容模型（llama.cpp、vLLM 等），每个会话自己选。
@@ -74,7 +80,9 @@ DeepSeek 在 2026 年 10 月底开源了研究原型 [dsh-superagent](https://gi
 
 ## 运行
 
-需要 JDK 25、Maven 3.9、Node 25 和 pnpm。
+**直接下载**：[Releases](https://github.com/intelac/tantalum/releases/latest) 里的 `tantalum-0.1.0.jar` 在 macOS、Linux、Windows 上都能跑，只需要 JDK 25（例如 Temurin 25）；示例插件是 `tantalum-examples-0.1.0.jar`，连接程序（macOS，Apple 芯片）是 `tantalum-connect-0.1.0-macos-arm64.zip`。下面从源码构建的 `tantalum-shell/target/tantalum-shell-0.1.0-exec.jar` 就是同一个文件。
+
+**从源码构建**：需要 JDK 25、Maven 3.9、Node 25 和 pnpm。
 
 ```sh
 (cd console && pnpm install && pnpm build)   # 先构建控制台，它会被打进 jar
@@ -85,13 +93,13 @@ mvn clean package -DskipTests
 
 ```sh
 export ANTHROPIC_API_KEY=...
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar
 ```
 
 不能外发代码时，配一条本地的 OpenAI 兼容路线并设成默认（见下面“模型路线”），例如本机 llama.cpp：
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.provider=local \
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar --tantalum.provider=local \
   --tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1 \
   --tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl \
   --tantalum.openai-routes.local.thinking=chat-template
@@ -164,7 +172,7 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalu
 
 ```sh
 export TANTALUM_ADMIN_USER=yi TANTALUM_ADMIN_PASSWORD='...'
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar ...
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar ...
 ```
 
 这个账号是**管理员**。管理员在设置页的“用户”一页加人、停用/启用、设/取消管理员、重置密码（接口 `GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`）；每个人在“账号”页改自己的密码（`PUT /api/auth/password`，要当前密码；改后别处的登录失效，当前这个保留）。被重置密码或停用的人，所有登录立即失效。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
@@ -172,11 +180,11 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar ...
 命令行也能管，密码从标准输入读取；`TANTALUM_DATA_DIR` 指向数据目录（默认 `~/.local/share/tantalum`）：
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users add alice          # 加 --admin 建管理员
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users reset alice        # 重置密码，她的登录全部失效
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users disable alice      # 停用；enable 启用
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users admin alice        # 设为管理员；user 取消
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar users list
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar users add alice          # 加 --admin 建管理员
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar users reset alice        # 重置密码，她的登录全部失效
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar users disable alice      # 停用；enable 启用
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar users admin alice        # 设为管理员；user 取消
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar users list
 ```
 
 口令用 Argon2id 哈希存储。登录记在数据目录的 `users.db` 里，Cookie `tantalum.login` 里只有一个随机令牌（`HttpOnly`、`SameSite=Strict`；服务器只存它的哈希），所以服务器重启、崩溃都不用重新登录；12 小时不活动过期（`server.servlet.session.timeout`），退出、改密码、被停用立即失效。写操作还会校验 `Origin`。每个用户的工作目录隔离在 `<workspace>/<用户名>`（`tantalum.workspace-mode=per-user`），会话、运行、回放和 SSE 都只能看到自己的。登录连续失败会被限速。
@@ -329,7 +337,7 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 # 从源码构建（只运行打好的 jar 时跳过）
 cd console; pnpm install; pnpm build; cd ..
 mvn clean package "-DskipTests"
-Copy-Item tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar C:\tantalum\tantalum.jar
+Copy-Item tantalum-shell\target\tantalum-shell-0.1.0-exec.jar C:\tantalum\tantalum.jar
 ```
 
 **API 密钥放在用户环境变量里**，不写进文件和计划任务。设好后重新打开 PowerShell：
@@ -531,7 +539,7 @@ sudo java -jar tantalum.jar browser install --with-deps   # Linux：同时装浏
 
 | 配置 | 默认 | 意思 |
 |---|---|---|
-| `tantalum.web.block-private-network` | `false` | 打开后拦回环（`127.0.0.0/8`、`::1`）、私网（`10/8`、`172.16/12`、`192.168/16`、`fc00::/7`）、运营商级 NAT（`100.64/10`，含阿里云元数据地址 `100.100.100.200`）、链路本地（`169.254/16`，含云服务器元数据地址 `169.254.169.254`；`fe80::/10`）和 `0.0.0.0`。对 `web_fetch` 和浏览器里的每个请求（包括跳转、页面里的图片和脚本）都有效 |
+| `tantalum.web.block-private-network` | `true` | 拦回环（`127.0.0.0/8`、`::1`）、私网（`10/8`、`172.16/12`、`192.168/16`、`fc00::/7`）、运营商级 NAT（`100.64/10`，含阿里云元数据地址 `100.100.100.200`）、链路本地（`169.254/16`，含云服务器元数据地址 `169.254.169.254`；`fe80::/10`）和 `0.0.0.0`。对 `web_fetch` 和浏览器里的每个请求（包括跳转、页面里的图片和脚本）都有效 |
 | `tantalum.web.fetch.enabled` | `true` | 关掉后所有用户都没有 `web_fetch`，插件页写“管理员已关闭” |
 | `tantalum.web.browser.enabled` | `true` | 关掉后所有用户都没有浏览器工具，同上 |
 | `tantalum.web.browser.max-open` | `4` | 全服务器同时开着的浏览器（每个用户一个）上限；满了新用户得到 “All browsers on this server are in use (4 of 4). Try again in a few minutes.”，不挤掉别人的 |
@@ -546,7 +554,7 @@ sudo java -jar tantalum.jar browser install --with-deps   # Linux：同时装浏
 
 两样工具的每个网络连接都经过服务器进程里的出口 `Egress`：它只听 `127.0.0.1` 的随机端口，解析域名，按上面的规则检查**解析出来的每个地址**（有一个被拦就整个拦下），再直接连到检查过的地址。检查和连接之间没有第二次解析，DNS rebinding 换不了地址。明文 http 一条连接只转一个请求，免得复用连接绕过检查。日志只记主机、端口和原因，不记路径、正文、快照和截图。
 
-- **内网默认能访问**（Yi 决定，同 DSH）：服务器能访问的内部服务、云服务器元数据地址，模型也能访问，可能借此拿到云上的临时凭据。**多用户的服务器建议打开 `block-private-network`。**
+- **内网默认拦**（2026-11-07 改；之前同 DSH 默认放行，但 DSH 是单人本机程序，我们是多用户服务器，一个用户就能让 agent 扫内网、拿云服务器的临时凭据）。单人用、或者确实要抓内网页面时设 `tantalum.web.block-private-network=false`，插件页“联网”一块会写明现在拦不拦。
 - **Tantalum 自己的端口永远拦**，不论开关：免得模型用用户的身份调服务器接口。服务器绑在 `0.0.0.0` 时，用本机的局域网地址也绕不过去；出口自己的端口也算。
 - **打开限制后仍然拦不住的：**
   - 配了上游代理时，DNS 由代理解析，出口只能按本机的解析结果检查，两边可能不同（DSH 也一样）。
@@ -648,8 +656,8 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 可执行 jar 里没有示例插件。`mvn package` 另外打出 `tantalum-examples/target/tantalum-examples-<版本>.jar`，里面只有示例插件和一个自动配置（`tantalum.examples.boot.ExamplePlugins`）。部署不改可执行 jar：用 jar 里自带的 `PropertiesLauncher` 启动，`loader.path` 指向示例 jar，再打开总开关（`ExamplesJarIT` 按这条命令测）：
 
 ```sh
-java --enable-native-access=ALL-UNNAMED -Dloader.path=/path/to/tantalum-examples-0.1.0-SNAPSHOT.jar \
-  -cp tantalum-shell-0.1.0-SNAPSHOT-exec.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+java --enable-native-access=ALL-UNNAMED -Dloader.path=/path/to/tantalum-examples-0.1.0.jar \
+  -cp tantalum-shell-0.1.0-exec.jar org.springframework.boot.loader.launch.PropertiesLauncher \
   --tantalum.examples.enabled=true   # 其余参数照旧
 ```
 

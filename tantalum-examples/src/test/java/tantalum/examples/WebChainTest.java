@@ -97,7 +97,8 @@ class WebChainTest {
             exchange.close();
         });
         site.start();
-        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model);
+        // 测试站在 127.0.0.1 上：内网默认拦，这里要放开
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model, "--tantalum.web.block-private-network=false");
     }
 
     @AfterEach
@@ -177,7 +178,7 @@ class WebChainTest {
         server.close();
 
         ScriptedModelClient mustNotRun = new ScriptedModelClient(List.of());
-        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), mustNotRun);
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), mustNotRun, "--tantalum.web.block-private-network=false");
         String messages = server.get("alice", "/api/sessions/s1/messages").body();
         assertTrue(messages.contains(MARKER), messages);
         Thread.sleep(200);

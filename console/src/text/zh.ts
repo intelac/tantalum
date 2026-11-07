@@ -735,7 +735,7 @@ export const zh = {
       title: "联网",
       detail: "在服务器上抓网页、用浏览器。网页内容只当资料，不当指令。",
       privateAllowed: "可以访问服务器所在的内网",
-      privateBlocked: "管理员已禁止访问内网地址",
+      privateBlocked: "不能访问服务器所在的内网（默认拦，管理员可改）",
       adminOff: "管理员已关闭",
       switches: {
         "web-fetch": ["抓网页", "服务器下载网页、转成文字，快、省 token；不运行网页里的脚本。"],

@@ -170,7 +170,7 @@ class PluginApiTest {
         JsonNode web = plugins("alice").get("web");
         assertEquals("{\"web\":true,\"web-fetch\":true,\"browser\":true}", web.get("switches").toString());
         assertEquals("{\"web-fetch\":true,\"browser\":true}", web.get("admin").toString());
-        assertFalse(web.get("blockPrivateNetwork").asBoolean());
+        assertTrue(web.get("blockPrivateNetwork").asBoolean(), "blocked by default");
         assertEquals(3, web.size(), "no proxy or other server details: " + web);
 
         HttpResponse<String> off = put("alice", "/api/plugins/web/web-fetch", "{\"enabled\":false}");
@@ -186,12 +186,12 @@ class PluginApiTest {
     @Test
     void whatTheAdminTurnedOffIsMarked() throws Exception {
         try (TestServer restricted = new TestServer(temp.resolve("data2"), temp.resolve("ws2"), (prompt, chunks) -> null,
-                "--tantalum.web.browser.enabled=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.block-private-network=true")) {
+                "--tantalum.web.browser.enabled=false", "--tantalum.web.fetch.enabled=false", "--tantalum.web.block-private-network=false")) {
             HttpResponse<String> response = restricted.get("alice", "/api/plugins");
             assertEquals(200, response.statusCode(), response.body());
             JsonNode web = JSON.readTree(response.body()).get("web");
             assertEquals("{\"web-fetch\":false,\"browser\":false}", web.get("admin").toString());
-            assertTrue(web.get("blockPrivateNetwork").asBoolean());
+            assertFalse(web.get("blockPrivateNetwork").asBoolean(), "the administrator opened the private network");
             HttpResponse<String> saved = restricted.http.send(restricted.request("alice", "/api/plugins/web/browser")
                     .header("content-type", "application/json").PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(),
                     HttpResponse.BodyHandlers.ofString());

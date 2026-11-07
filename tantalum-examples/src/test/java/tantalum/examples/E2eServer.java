@@ -101,6 +101,8 @@ public final class E2eServer {
                         "--tantalum.provider=local",
                         "--tantalum.openai-routes.local.model=" + E2eModel.MODEL,
                         "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
+                        // 测试页在 127.0.0.1 上：内网默认拦，这里要放开
+                        "--tantalum.web.block-private-network=false",
                         // 32000 加上联网 12 个工具定义的约 3000 token（web-tools），压缩发生的轮次和摘要调用的余量都和以前一样
                         "--tantalum.openai-routes.local.context-window=35000",
                         "--tantalum.openai-routes.local.vision=true",
@@ -154,6 +156,7 @@ public final class E2eServer {
                         "--tantalum.openai-routes.local.model=" + E2eModel.MODEL,
                         "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                         "--tantalum.openai-routes.local.context-window=35000",
+                        "--tantalum.web.block-private-network=false",
                         "--tantalum.web.browser.enabled=false");
     }
 

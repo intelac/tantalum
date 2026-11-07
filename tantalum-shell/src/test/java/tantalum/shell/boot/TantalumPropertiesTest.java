@@ -161,9 +161,9 @@ class TantalumPropertiesTest {
     @Test
     void webDefaultsMatchTheDesignAndMaxOpenBelowOneFails() throws Exception {
         assertEquals(TantalumProperties.Web.defaults(), bind().webSettings());
-        assertFalse(bind().webSettings().blockPrivateNetwork());
+        assertTrue(bind().webSettings().blockPrivateNetwork(), "blocked by default: a multi-user server");
         assertEquals(Duration.ofMinutes(10), bind().webSettings().browser().idleClose());
-        assertTrue(bind("tantalum.web.block-private-network", "true").webSettings().blockPrivateNetwork());
+        assertFalse(bind("tantalum.web.block-private-network", "false").webSettings().blockPrivateNetwork());
         assertFalse(bind("tantalum.web.browser.enabled", "false").webSettings().browser().enabled());
         BindException failure = assertThrows(BindException.class, () -> bind("tantalum.web.browser.max-open", "0"));
         Throwable cause = failure;
