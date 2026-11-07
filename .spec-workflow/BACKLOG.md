@@ -10,7 +10,7 @@
 |---|---|---|
 | `waiting-state` | 完成（2026-11-07，15 个任务，结果见 tech.md）。内核阶段 `AwaitingAnswer`：钩子 `Ask`/`onAnswer`、内置工具 `ask_user`、问题和回答进 journal、重启保持、等人的会话可回收、可选期限；工具审批插件改用它，`answer-wait`/`max-polls` 删除；对话页问题条目、侧栏“待回答”、轨迹记录 | 完成；Super-agent 调研候选 ① 完成 |
 | `ops-hardening-2` | 完成（2026-11-07，8 个任务，结果见 tech.md）。① 登录存进 `users.db` 的 `logins` 表，Cookie 只有令牌，重启不掉；② 管理员列、设置页“用户”页、“账号”页改密码、命令行新子命令；③ `UserPermits` 每用户在途上限；④ 载入失败 `load-retry` 后再试 | 完成；合并了第 4 节 `ops-hardening` 阶段 2、阶段 5 两条 |
-| `hook-patch` | `beforeModelCall` 的 `Allow` 补丁改成追加 `role: system` 消息和 `tool_addition`，不再拼进 system 和工具列表（`HookChain`、`PromptProjection`、`ClaudeRequest`）。现在补丁一变，Claude 路线整个会话的思考签名失效。示例插件都没用会变的补丁，所以还没踩到 | bug，1.0 前锁插件 SDK 要先改 |
+| `hook-patch` | 完成（2026-11-07，8 个任务，结果见 tech.md）。`beforeModelCall` 的补丁改成追加 `role: system` 消息（每钩子一块 `HookTextBlock`）和 deferred 定义加 `tool_addition`；变化才发、只追加、压缩后重发；Sonnet 5 和 OpenAI 路线并进用户消息；轨迹页请求详情列出谁加了什么；真实 Claude 严格模式验证通过 | 完成 |
 | 内网默认拦（待 Yi） | `tantalum.web.block-private-network` 默认改 `true`。2026-11-03 定“同 DSH 默认放行”，但 DSH 是单用户本机程序；我们对外定位是多用户企业底座，一个用户就能让 agent 扫内网、拿云元数据凭据 | 改默认值 |
 
 0.1 之后按 Super-Agent 方向（见 README“方向”）：后台任务（慢工具立刻返回“已开始”，完成是事件）→ 外部事件来源（先接 GitHub：issue、评论、CI 结果；代码先筛，允许名单、团队规则、观察模式）→ 用它盯 Tantalum 自己的仓库接活、提 PR（这就是垂直验证，代替简报里的 COBOL 场景，Yi 2026-11-07 同意不把 COBOL 垂直 agent 排第一）→ 拆 `RunState`、`SessionState`（全是手写 `withX`），再做子 agent 和 Router/Worker → 定时事件和看门狗。

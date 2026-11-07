@@ -420,6 +420,7 @@ export const zh = {
       endReason: "结束原因",
       endDetail: "详情",
       segments: "分段来源",
+      hookTexts: "插件追加的说明（在消息里，system 不变）",
       chars: (count: number) => `${count} 字`,
       toolsChanged: "工具变化",
       added: "新增",

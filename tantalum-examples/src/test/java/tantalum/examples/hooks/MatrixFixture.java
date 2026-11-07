@@ -300,16 +300,20 @@ final class MatrixFixture implements AutoCloseable {
 
     static String prompt(Prompt prompt) {
         StringBuilder out = new StringBuilder(prompt.output().toolsAllowed() ? "" : "summary ");
-        out.append("msgs=").append(prompt.messages().size());
-        Message last = prompt.messages().getLast();
+        // 钩子的补丁是追加的 system 消息（hook-patch），不算在消息数里；"patched" 看历史里有没有它的说明和工具
+        List<Message> spoken = prompt.messages().stream().filter(message -> message.role() != Role.SYSTEM).toList();
+        out.append("msgs=").append(spoken.size());
+        Message last = spoken.getLast();
         ContentBlock block = last.content().getLast();
         out.append(" last=").append(switch (block) {
             case ToolResultBlock result -> "result" + (result.error() ? "!" : "") + ":" + result.text();
             case TextBlock text -> last.role() == Role.USER ? "user" : "assistant";
             default -> block.getClass().getSimpleName();
         });
-        boolean system = prompt.system().endsWith(MatrixHook.PATCH_TEXT);
-        boolean tool = prompt.tools().contains(MatrixHook.PATCH_TOOL);
+        boolean system = prompt.messages().stream().filter(message -> message.role() == Role.SYSTEM)
+                .flatMap(message -> message.content().stream())
+                .anyMatch(piece -> piece instanceof tantalum.value.model.HookTextBlock note && note.text().equals(MatrixHook.PATCH_TEXT));
+        boolean tool = prompt.tools().contains(MatrixHook.PATCH_TOOL.deferred(true));
         if (system || tool) {
             out.append(system && tool ? " patched" : " half-patched");
         }

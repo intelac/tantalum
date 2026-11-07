@@ -31,6 +31,7 @@ import tantalum.value.event.WorkDone;
 import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
@@ -69,7 +70,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = ToolResultBlock.class, name = "toolResult"),
         @JsonSubTypes.Type(value = AttachmentBlock.class, name = "attachment"),
         @JsonSubTypes.Type(value = ToolChangeBlock.class, name = "toolChange"),
-        @JsonSubTypes.Type(value = ModelChangeBlock.class, name = "modelChange")
+        @JsonSubTypes.Type(value = ModelChangeBlock.class, name = "modelChange"),
+        @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText")
     })
     private interface ContentBlockMixin {}
 

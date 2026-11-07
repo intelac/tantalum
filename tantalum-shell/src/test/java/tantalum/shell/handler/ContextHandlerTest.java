@@ -17,7 +17,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import tantalum.kernel.projection.PromptProjection;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.local.LocalLinks;
@@ -41,7 +40,6 @@ import tantalum.shell.tool.Workspaces;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
-import tantalum.value.hook.PromptPatch;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
@@ -332,22 +330,6 @@ class ContextHandlerTest {
         String bob = assembled(handler, command(BOB)).system();
         assertTrue(alice.contains("alice likes tabs") && !alice.contains("bob likes spaces"), alice);
         assertTrue(bob.contains("bob likes spaces") && !bob.contains("alice likes tabs"), bob);
-    }
-
-    /** 钩子追加的 system 文字落在索引之后：system 的前缀在整个运行里不变，缓存断点才稳定。 */
-    @Test
-    void hookAppendsLandAfterTheIndex() throws Exception {
-        Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
-        MemoryStores memories = memories(workspaces);
-        memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
-        ContextAssembled event = assembled(handler, command(ALICE));
-
-        SessionState session = SessionState.start(new SessionId("s"), ALICE)
-                .withContext(new SessionContext(event.system(), event.tools(), event.compaction(), event.sections()));
-        Prompt prompt = PromptProjection.project(session, new PromptPatch("\n\n## Quota\nhalf used", List.of()));
-        assertTrue(prompt.system().indexOf("Java 25 only") < prompt.system().indexOf("## Quota"));
-        assertTrue(prompt.system().startsWith(event.system()));
     }
 
     @Test

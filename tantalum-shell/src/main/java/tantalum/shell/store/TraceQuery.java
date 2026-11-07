@@ -23,6 +23,7 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ToolSpec;
@@ -45,7 +46,11 @@ public final class TraceQuery {
      */
     public record Call(String call, String system, List<Segment> segments, List<SourcedTool> tools, List<Message> messages,
                        Prompt.Output output, Previous previous,
-                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean fingerprintMismatch) {}
+                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean fingerprintMismatch,
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Addition> additions) {}
+
+    /** 这次请求的消息里钩子追加的一段说明（hook-patch 需求 4.1）。 */
+    public record Addition(String hook, String text) {}
 
     /** 命令 ID 是 {@code <会话>_<序号>-<下标>}（{@code CommandIds}）。 */
     private static final Pattern COMMAND_TAIL = Pattern.compile("(\\d{1,18})-\\d{1,9}");
@@ -126,8 +131,11 @@ public final class TraceQuery {
             tools.add(new SourcedTool(prompt.tools().get(i), source));
         }
         List<Segment> segments = split == null ? List.of(new Segment(prompt.system().length(), Source.UNKNOWN)) : split.system();
+        List<Addition> additions = prompt.messages().stream().flatMap(message -> message.content().stream())
+                .filter(HookTextBlock.class::isInstance).map(HookTextBlock.class::cast)
+                .map(note -> new Addition(note.hook(), note.text())).toList();
         return new Call(call.id().value(), prompt.system(), segments, tools, prompt.messages(), prompt.output(),
-                previous == null ? null : new Previous(previous.system(), previous.tools()), mismatch);
+                previous == null ? null : new Previous(previous.system(), previous.tools()), mismatch, additions);
     }
 
     @FunctionalInterface

@@ -288,6 +288,48 @@ class ClaudeRequestTest {
                         switched()));
     }
 
+    // ---- 钩子的说明（hook-patch 需求 3）：支持的模型发 role: system 文字块，不支持的并进用户消息 ----
+
+    private static final Path HOOK_TEXT_EXPECTED = Path.of("src/test/resources/model/claude-hook-text-requests.txt");
+
+    /** 第一问额度插件说“80%”，第二问变成“40%”并加了一个工具（定义 deferred 接在末尾）。 */
+    private static Prompt hooked(boolean withTool) {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        List<ToolSpec> tools = withTool
+                ? List.of(new ToolSpec("read_file", "read", schema), new ToolSpec("cite", "cite sources", schema, true))
+                : List.of(new ToolSpec("read_file", "read", schema));
+        List<ContentBlock> second = withTool
+                ? List.of(new tantalum.value.model.HookTextBlock("quota", "Quota: 40% left."), new ToolChangeBlock(List.of("cite"), List.of()))
+                : List.of(new tantalum.value.model.HookTextBlock("quota", "Quota: 40% left."));
+        return new Prompt("sys", tools, List.of(
+                Message.user("q1"),
+                new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("quota", "Quota: 80% left.")), false),
+                new Message(Role.ASSISTANT, List.of(new TextBlock("a1")), false),
+                Message.user("q2"),
+                new Message(Role.SYSTEM, second, false)));
+    }
+
+    private static List<Sample> hookTextSamples() {
+        return List.of(
+                new Sample("hook text only: role system text blocks, no tool-change beta", model("claude-sonnet-5-5", true), hooked(false)),
+                new Sample("hook text and a hook tool: one system message, deferred definition, tool-change beta", model("claude-sonnet-5-5", true),
+                        hooked(true)),
+                new Sample("model without mid-session system messages: texts folded into the user message, tool change left out",
+                        model("claude-sonnet-5", true), hooked(true)));
+    }
+
+    @Test
+    void hookTextRequestBodies() throws IOException {
+        StringBuilder actual = new StringBuilder();
+        for (Sample sample : hookTextSamples()) {
+            actual.append(sent(sample));
+        }
+        if (Boolean.getBoolean("claude.record")) {
+            Files.writeString(HOOK_TEXT_EXPECTED, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(HOOK_TEXT_EXPECTED, StandardCharsets.UTF_8), actual.toString(), "request changed; see the class comment");
+    }
+
     @Test
     void toolChangeRequestBodies() throws IOException {
         StringBuilder actual = new StringBuilder();

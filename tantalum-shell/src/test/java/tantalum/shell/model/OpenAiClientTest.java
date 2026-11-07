@@ -442,6 +442,31 @@ class OpenAiClientTest {
         assertEquals(java.nio.file.Files.readString(TOOL_CHANGE_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
     }
 
+    // ---- 钩子的说明（hook-patch 需求 3.3）：中途的 system 消息按用户消息发，前面加“不是用户写的”前缀 ----
+
+    private static final java.nio.file.Path HOOK_TEXT_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-hook-text-requests.txt");
+
+    @Test
+    void hookTextRequestBodies() throws Exception {
+        Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
+        List<ToolSpec> tools = List.of(new ToolSpec("read_file", "read", schema), new ToolSpec("cite", "cite sources", schema, true));
+        Prompt prompt = new Prompt("sys", tools, List.of(Message.user("q1"),
+                new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("quota", "Quota: 80% left.")), false),
+                new Message(Role.ASSISTANT, List.of(new TextBlock("a1")), false),
+                Message.user("q2"),
+                new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("quota", "Quota: 40% left."),
+                        new ToolChangeBlock(List.of("cite"), List.of())), false)));
+        OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                OverflowRules.defaults(), false);
+        server.body = finish("stop");
+        client.call(prompt, AttachmentMedia.NONE, listener);
+        String actual = "== hook text and a hook tool\n" + server.requests.getLast() + "\n";
+        if (Boolean.getBoolean("openai.record")) {
+            java.nio.file.Files.writeString(HOOK_TEXT_EXPECTED, actual);
+        }
+        assertEquals(java.nio.file.Files.readString(HOOK_TEXT_EXPECTED), actual, "request changed; rerun with -Dopenai.record=true");
+    }
+
     // ---- 按会话的选择发（model-picker 任务 9）：openai-model-requests.txt，只加新用例 ----
 
     private static final java.nio.file.Path MODEL_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-model-requests.txt");

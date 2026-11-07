@@ -219,4 +219,62 @@ class CoreToolsClaudeTest {
             assertEquals(0, invalid(journal), "strict thinking validation rejected a request");
         }
     }
+    /**
+     * hook-patch 需求 5：钩子的补丁以追加的 system 消息到模型，严格校验下历史里的思考一直有效。第 1 问钩子追加一句说明；第 2 问说明变了、
+     * 还加了一个工具（服务器上没有这个工具，调用会得到“未知工具”的错误结果，这里只验证模型看见并调用了它）；第 3 问说明再变、工具撤回。
+     * 判定：没有一次请求被拒；最后一次请求之前的回复里有思考块（否则最后那次请求没有要保护的签名）；第 2 问模型调用了钩子加的工具；
+     * 第 3 问模型说没有那个工具。
+     */
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.MINUTES)
+    void hookPatchesArriveAsSystemMessagesAndKeepTheThinkingValid() throws Exception {
+        Path workspace = temp.resolve("ws");
+        Path data = temp.resolve("data");
+        Files.createDirectories(workspace.resolve("alice"));
+        tantalum.value.model.ToolSpec stamp = new tantalum.value.model.ToolSpec("stamp_answer",
+                "Records the final numeric answer of this turn. Call it once with the answer before replying.",
+                new tantalum.value.json.Json.Obj(java.util.Map.of("type", new tantalum.value.json.Json.Str("object"),
+                        "properties", new tantalum.value.json.Json.Obj(java.util.Map.of("answer", new tantalum.value.json.Json.Obj(
+                                java.util.Map.of("type", new tantalum.value.json.Json.Str("string"))))),
+                        "required", new tantalum.value.json.Json.Arr(List.of(new tantalum.value.json.Json.Str("answer"))))));
+        KernelHook byTurn = new KernelHook() {
+            @Override public String name() { return "turnNotes"; }
+            @Override public tantalum.value.hook.HookResult beforeModelCall(tantalum.value.state.KernelState state,
+                    tantalum.value.hook.HookContext context) {
+                long turn = state.sessions().get(context.run().session()).messages().stream()
+                        .filter(message -> message.role() == tantalum.value.model.Role.USER
+                                && message.content().stream().noneMatch(tantalum.value.model.ToolResultBlock.class::isInstance)).count();
+                return switch ((int) turn) {
+                    case 1 -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                            "House rule for this turn: answer in at most two sentences.", List.of()));
+                    case 2 -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                            "House rule for this turn: you must call stamp_answer with the final number before you reply.", List.of(stamp)));
+                    default -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                            "House rule for this turn: stamp_answer is gone; if asked about it, say it is no longer available.", List.of()));
+                };
+            }
+        };
+        Consumer<GenericApplicationContext> beans = context -> context.registerBean("turnNotes", KernelHook.class, () -> byTurn);
+        try (TestServer server = new TestServer(data, workspace, strict("max"), beans)) {
+            String first = CompactionScenario.ask(server, "alice", "s1",
+                    "Let a1 = 5 and a(n+1) = 2*a(n) + 1. Find a closed form, prove it by induction, then compute a10 exactly and check it "
+                            + "against the recurrence. Do not use any tools.");
+            String second = CompactionScenario.ask(server, "alice", "s1", "Now a12, following the current house rule.");
+            String third = CompactionScenario.ask(server, "alice", "s1", "Is stamp_answer still available? Then give me a13.");
+            List<EventEnvelope> journal = journal(data);
+            usage("hook-patch", journal);
+            List<ModelReplied> replies = events(journal, ModelReplied.class);
+            System.out.println("[claude hook-patch] calls=" + calls(journal).stream().map(call -> call.name() + call.rawArguments()).toList()
+                    + " failures=" + events(journal, ModelFailed.class).stream().map(failure -> failure.reason() + ":" + failure.detail()).toList());
+            System.out.println("[claude hook-patch] first=" + first.replace("\n", " | ") + " second=" + second.replace("\n", " | ")
+                    + " third=" + third.replace("\n", " | "));
+            assertEquals(0, invalid(journal), "strict thinking validation rejected a request");
+            assertTrue(calls(journal).stream().anyMatch(call -> call.name().equals("stamp_answer")), "the hook tool was never called");
+            assertTrue(replies.subList(0, replies.size() - 1).stream()
+                    .anyMatch(reply -> reply.content().stream().anyMatch(ReasoningBlock.class::isInstance)), "no thinking to protect");
+            assertTrue(second.contains("12287") || calls(journal).stream().anyMatch(call -> call.rawArguments().contains("12287")), second);
+            assertTrue(third.toLowerCase().contains("no longer") || third.toLowerCase().contains("not available")
+                    || third.toLowerCase().contains("gone") || third.toLowerCase().contains("unavailable"), third);
+        }
+    }
 }

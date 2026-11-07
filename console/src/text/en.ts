@@ -407,6 +407,7 @@ export const en: Text = {
       endReason: "End reason",
       endDetail: "Details",
       segments: "Segment sources",
+      hookTexts: "Added by plugins (as messages; the system prompt is unchanged)",
       chars: (count) => plural(count, "char", "chars"),
       toolsChanged: "Tool changes",
       added: "Added",

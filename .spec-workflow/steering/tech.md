@@ -647,3 +647,12 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **载入失败自愈**：`Residency` 记失败时刻，`tantalum.residency.load-retry`（默认 1m）内 `pin` 返回 FAILED、接口 500 `session/unavailable`（文案本就是“暂时不可用，请稍后重试”）；过了时间 `pin` 返回 COLD 让通道重新载入，条目留着，再失败只记一条警告。
 - **8091**：部署阶段 1 后登录 → 重启服务 → 原 Cookie 仍有效，`me` 返回 `admin:true`。
 
+### hook-patch（2026-11-07）：钩子补丁改成追加的 system 消息
+
+- **为什么**：补丁拼进 system 和工具列表，补丁一变整个会话的思考签名失效（core-tools 设计里实测过 400）。官方做法（claude-api skill `prompt-caching.md` § Mid-conversation system messages、`preserved-thinking-migration.md:197`）：system 冻结，中途的说明用 `role: system` 消息追加（Opus 5/5.5/4.8、Fable、Mythos、Sonnet 5.5 不需要 beta；Sonnet 5 不支持），工具以 `defer_loading` 追加在列表末尾再 `tool_addition`。pi 的 `before_agent_start` 整段替换 systemPrompt 是因为它的系统提示词本来就是历史第一条消息；DSH 的 `developer` 消息（`llm-pi-ai/src/context.ts:170-203`）和我们现在的做法一样，不支持时降级成用户消息里的 system-reminder。
+- **做法**：新内容块 `HookTextBlock(hook, text)`（journal 里 `hookText`）；`SessionContext.hooks`（`HookState(text, tools, active)`，可空，旧行逐字节不变）；`HookPatches.apply`（纯函数）在 `ModelSteps.callModel` 放行后、判断压缩前把合并后的补丁按 `HookDecided` 的长度切回每个钩子的一段，和上次比：文字变了就追加一条 `Role.SYSTEM` 消息（文字块在前、`ToolChangeBlock` 在后），工具按“钩子现在想要的”算净增减；和服务器全集重名的工具忽略；最后一条是助手消息时不追加、报 `HookReported`。`PromptProjection.project(session)` 不再收补丁，钩子工具接在全集后永远 deferred；`placeToolChanges` 推广成 `placeSystemUpdates`（没等到回复的更新往后并成一条）。`Compacting.patch` 永远 `NONE`（留着读旧行）。
+- **路线**：`ClaudeRequest` 对 `TOOL_CHANGE_MODELS` 发 `role: system` 文字块（只有文字不带 beta 头）；别的 Claude 模型 `HookTexts.fold` 并进前一条用户消息（`ToolChanges.PREFIX`），工具变化照旧丢；OpenAI 路线按用户消息发、带前缀。请求期望文件新增 `claude-hook-text-requests.txt`、`openai-hook-text-requests.txt`，旧文件逐字节不变。
+- **轨迹**：system 行只在初始和压缩后出现（`TraceSystem.split` 不再按钩子切 system）；请求详情多 `additions: [{hook, text}]`，“系统提示词”页签在 system 下面列出；`trace.json`/`trace-sse.txt` 重录。对话页：钩子加的工具在第一次提问那一步会出“工具变化”条目（和用户开关工具走同一条路），之后几圈的变化不出条目（`TranscriptPass.toolChanges` 只看 `ContextAssembled`）；说明不显示。
+- **真实 Claude**（`CoreToolsClaudeTest.hookPatchesArriveAsSystemMessagesAndKeepTheThinkingValid`，claude-sonnet-5-5，严格校验）：三问里说明变三次、第 2 问加工具（服务器上没有，模型调用得到 Unknown tool）、第 3 问撤回。4 次模型调用，0 次 400，模型调用了钩子加的工具，第 3 问说工具已不可用。adaptive thinking 在简单题上常不思考，判定改成“最后一次请求之前有思考块”。
+- **没做**：对话页不显示钩子的说明；`clear_at` 和 `inline-tools` 两个 beta 不用；钩子加的工具必须是服务器上能找到的才执行得了（`ToolHandler` 按名字找 `ToolCatalog`），所以 `addTools` 实际只能加全集之外、模型只需看见不需执行的工具——这是老问题，这次没改。
+

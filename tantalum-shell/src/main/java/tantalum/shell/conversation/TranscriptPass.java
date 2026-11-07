@@ -40,6 +40,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ReasoningBlock;
@@ -236,6 +237,7 @@ final class TranscriptPass {
                 case AttachmentBlock ignored -> { } // 模型的回复里没有附件，附件只在用户消息里
                 case ToolChangeBlock ignored -> { } // 工具变化只在系统消息里
                 case ModelChangeBlock ignored -> { } // 换模型的说明也只在系统消息里
+                case HookTextBlock ignored -> { } // 钩子的说明也只在系统消息里
             }
         }
     }

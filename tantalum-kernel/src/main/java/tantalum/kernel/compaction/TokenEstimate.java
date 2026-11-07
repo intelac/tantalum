@@ -10,6 +10,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.TextBlock;
@@ -87,6 +88,7 @@ public record TokenEstimate(double bytesPerToken) {
             case ToolChangeBlock change -> ofText("Tools changed: added " + change.added() + "; removed " + change.removed()
                     + (change.unavailable().isEmpty() ? "." : "; still unavailable " + change.unavailable() + "."));
             case ModelChangeBlock change -> ofText(change.text());
+            case HookTextBlock note -> ofText(note.text());
         };
     }
 

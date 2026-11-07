@@ -108,6 +108,30 @@ class RecordCodecTest {
         assertFalse(codec.encode(appending(4, "x"), RecordMemo.writer()).contains("notes"));
     }
 
+    /** hook-patch：钩子补丁的状态随上下文记进 journal；没有钩子追加过东西时不写出，旧行逐字节不变。 */
+    @Test
+    void hookStateRoundTripsAndIsAbsentWhenNone() {
+        tantalum.value.model.ToolSpec cite = new tantalum.value.model.ToolSpec("cite", "cite sources", new tantalum.value.json.Json.Null());
+        tantalum.value.state.SessionContext plain = new tantalum.value.state.SessionContext("sys", List.of(), null, List.of());
+        tantalum.value.state.SessionContext.HookState hooks = new tantalum.value.state.SessionContext.HookState("be brief",
+                List.of(new tantalum.value.state.SessionContext.HookState.HookTool("style", cite)), List.of("cite"));
+        SessionChange first = new SessionChange(SESSION, USER, true, List.of(), null, null, null, new SessionChange.Changed<>(plain),
+                null, null, null, null, null);
+        SessionChange second = new SessionChange(SESSION, USER, false,
+                List.of(new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("style", "be brief")), false)),
+                null, null, null, new SessionChange.Changed<>(plain.withHooks(hooks)), null, null, null, null, null);
+        RecordMemo writer = RecordMemo.writer();
+        String one = codec.encode(new StepRecord(1, first, List.of(), List.of(), null, null, List.of(), List.of()), writer);
+        assertFalse(one.contains("hooks"), one);
+        StepRecord record = new StepRecord(2, second, List.of(), List.of(), null, null, List.of(), List.of());
+        String two = codec.encode(record, writer);
+        assertTrue(two.contains("\"hooks\":{\"text\":\"be brief\",\"tools\":[{\"hook\":\"style\",\"tool\":"), two);
+        assertTrue(two.contains("\"kind\":\"hookText\",\"hook\":\"style\",\"text\":\"be brief\""), two);
+        RecordMemo reader = RecordMemo.reader();
+        codec.decode(one, reader);
+        assertEquals(record, codec.decode(two, reader).record());
+    }
+
     @Test
     void aTextFromAnEventLineIsReferencedToo() {
         RecordMemo writer = RecordMemo.writer();

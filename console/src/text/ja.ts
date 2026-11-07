@@ -402,6 +402,7 @@ export const ja: Text = {
       endReason: "終了理由",
       endDetail: "詳細",
       segments: "区間ごとの出所",
+      hookTexts: "プラグインが追加した説明（メッセージとして。システムプロンプトは不変）",
       chars: (count) => `${count} 文字`,
       toolsChanged: "ツールの変更",
       added: "追加",

@@ -114,7 +114,22 @@ export interface ToolResultBlock {
   code?: string;
 }
 
-export type ContentBlock = TextBlock | ReasoningBlock | ToolCallBlock | ToolResultBlock;
+/** 钩子追加的说明（hook-patch），只在 SYSTEM 消息里。 */
+export interface HookTextBlock {
+  kind: "hookText";
+  hook: string;
+  text: string;
+}
+
+/** 会话中途的工具变化（core-tools C14），只在 SYSTEM 消息里。 */
+export interface ToolChangeBlock {
+  kind: "toolChange";
+  added: string[];
+  removed: string[];
+  unavailable?: string[];
+}
+
+export type ContentBlock = TextBlock | ReasoningBlock | ToolCallBlock | ToolResultBlock | HookTextBlock | ToolChangeBlock;
 
 export type StepStatus = "WAITING" | "RUNNING" | "DONE" | "FAILED" | "BLOCKED";
 export type EndReason = "COMPLETED" | "FAILED" | "CANCELLED" | "STOPPED";
@@ -486,6 +501,8 @@ export interface TraceCall {
   previous?: { system: string; tools: ToolSpec[] };
   /** 按结果行还原的请求和当时记下的指纹不一致（record-results 需求 4.2）；一致时不出现。 */
   fingerprintMismatch?: boolean;
+  /** 这次请求的消息里钩子追加的说明（hook-patch）；没有时不出现。 */
+  additions?: { hook: string; text: string }[];
 }
 
 export interface TurnSummary {
@@ -496,7 +513,7 @@ export interface TurnSummary {
 }
 
 export interface Message {
-  role: "USER" | "ASSISTANT";
+  role: "USER" | "ASSISTANT" | "SYSTEM";
   content: ContentBlock[];
   interrupted: boolean;
 }

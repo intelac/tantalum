@@ -37,6 +37,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
@@ -157,15 +158,18 @@ final class ClaudeRequest {
                     TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));
         }
         boolean toolChanges = extra.get("betas") instanceof Json.Arr list && list.items().contains(new Json.Str(TOOL_CHANGE_BETA));
+        // 会话中途的 system 消息（钩子的说明，不需要 beta）和工具变化是同一批模型支持（官方文档 platform-availability）
+        boolean systemMessages = TOOL_CHANGE_MODELS.contains(options.model());
         // 不发工具变化时：会话开始时没开的工具不发，历史里的变化也不发
         List<ToolSpec> tools = toolChanges ? prompt.tools() : prompt.tools().stream().filter(tool -> !tool.deferred()).toList();
         int cachedTool = lastIndexOf(tools, tool -> !tool.deferred());
         for (int i = 0; i < tools.size(); i++) {
             params.addTool(tool(tools.get(i), i == cachedTool));
         }
-        // 换模型的说明并进这次的用户消息（M12），所有 Claude 模型看到的一样
-        List<Message> messages = ModelChanges.fold(prompt.messages()).stream()
-                .filter(message -> toolChanges || message.role() != Role.SYSTEM).toList();
+        // 换模型的说明并进这次的用户消息（M12），所有 Claude 模型看到的一样；不支持中途 system 消息的模型把钩子的说明也并进用户消息，
+        // 工具变化丢掉（hook-patch 需求 3.2）
+        List<Message> messages = ModelChanges.fold(prompt.messages());
+        messages = systemMessages ? messages : HookTexts.fold(messages).stream().filter(message -> message.role() != Role.SYSTEM).toList();
         int cachedMessage = lastIndexOf(messages, message -> message.role() != Role.SYSTEM);
         for (int i = 0; i < messages.size(); i++) {
             Message message = messages.get(i);
@@ -210,16 +214,26 @@ final class ClaudeRequest {
     }
 
     /**
-     * 一条工具变化的系统消息：每个新增、移除的工具一个块，按名字引用（工具定义已在列表里，标了 defer_loading）。SDK 的系统消息
-     * 只有文字内容，块用它留给任意 JSON 的口子写。
+     * 一条会话中途的系统消息：钩子的说明是文字块（hook-patch）；工具变化每个新增、移除的工具一个块，按名字引用（工具定义已在列表里，
+     * 标了 defer_loading）。SDK 的系统消息只有文字内容，块用它留给任意 JSON 的口子写。
      */
     @SuppressWarnings("unchecked")
     private static SystemMessageParam systemMessage(Message message) {
         List<Object> content = new ArrayList<>();
         for (ContentBlock block : message.content()) {
-            ToolChangeBlock change = (ToolChangeBlock) block;
-            change.added().forEach(name -> content.add(toolReference("tool_addition", name)));
-            change.removed().forEach(name -> content.add(toolReference("tool_removal", name)));
+            switch (block) {
+                case HookTextBlock note -> {
+                    Map<String, Object> text = new LinkedHashMap<>();
+                    text.put("type", "text");
+                    text.put("text", note.text());
+                    content.add(text);
+                }
+                case ToolChangeBlock change -> {
+                    change.added().forEach(name -> content.add(toolReference("tool_addition", name)));
+                    change.removed().forEach(name -> content.add(toolReference("tool_removal", name)));
+                }
+                default -> throw new IllegalStateException("not a system update: " + block);
+            }
         }
         JsonField<?> raw = JsonValue.from(content);
         return SystemMessageParam.builder().content((JsonField<SystemMessageParam.Content>) raw).build();
@@ -377,6 +391,7 @@ final class ClaudeRequest {
             case AttachmentBlock attachment -> throw new IllegalStateException("attachments are expanded in blocks()");
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
             case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
+            case HookTextBlock note -> throw new IllegalStateException("hook texts are system messages, see systemMessage()");
         };
     }
 
