@@ -111,9 +111,10 @@ public final class Browsers implements AutoCloseable {
                 }
                 try {
                     return action.run(browser, session);
-                } catch (PlaywrightException failure) {
+                } catch (RuntimeException failure) {
+                    // 不只 PlaywrightException：驱动没了时别的运行时异常也可能冒出来，都先看浏览器还在不在（review-fixes 需求 11.11）
                     if (!browser.connected()) {
-                        LOG.warn("browser of {} crashed and was closed", user.value());
+                        LOG.warn("browser of {} crashed and was closed ({})", user.value(), failure.getClass().getSimpleName());
                         discard(user, browser);
                         throw new Unavailable(CRASHED);
                     }
@@ -193,48 +194,71 @@ public final class Browsers implements AutoCloseable {
     private void discard(Principal user, UserBrowser browser) {
         synchronized (this) {
             CompletableFuture<UserBrowser> slot = open.get(user);
-            if (slot != null && slot.getNow(null) == browser) {
+            if (slot != null && ready(slot) == browser) {
                 open.remove(user);
             }
         }
-        browser.close();
+        closeQuietly(user, browser);
     }
 
     private void sweepEvery(Duration interval) {
         try {
             while (true) {
                 Thread.sleep(interval);
-                sweep();
+                try {
+                    sweep();
+                } catch (RuntimeException failure) {
+                    // 一次清扫出错不能让清扫线程死掉，否则空闲的浏览器再也关不掉（review-fixes 需求 11.11）
+                    LOG.warn("browser sweep failed: {}", failure.getClass().getSimpleName(), failure);
+                }
             }
         } catch (InterruptedException stopped) {
             // 关机
         }
     }
 
+    /** 槽位里起好的浏览器；还在起、或者起失败了（{@code getNow} 抛 CompletionException）都算没有。 */
+    private static UserBrowser ready(CompletableFuture<UserBrowser> slot) {
+        try {
+            return slot.isCompletedExceptionally() ? null : slot.getNow(null);
+        } catch (RuntimeException failed) {
+            return null;
+        }
+    }
+
+    /** 关一个浏览器，失败只记日志：一个关不掉不影响其余的。 */
+    private static void closeQuietly(Principal user, UserBrowser browser) {
+        try {
+            browser.close();
+        } catch (RuntimeException failure) {
+            LOG.warn("browser of {} did not close cleanly: {}", user.value(), failure.getClass().getSimpleName());
+        }
+    }
+
     /** 空闲超过 {@code idleClose} 并且锁空着的关掉；正在用的不动。 */
     void sweep() {
-        List<UserBrowser> idle = new ArrayList<>();
+        List<Map.Entry<Principal, UserBrowser>> idle = new ArrayList<>();
         synchronized (this) {
             var entries = open.entrySet().iterator();
             while (entries.hasNext()) {
                 var entry = entries.next();
-                UserBrowser browser = entry.getValue().getNow(null);
-                if (browser == null || entry.getValue().isCompletedExceptionally()) {
+                UserBrowser browser = ready(entry.getValue());
+                if (browser == null) {
                     continue;
                 }
                 boolean expired = Duration.between(browser.lastUsed(), clock.instant()).compareTo(settings.idleClose()) > 0;
                 if (expired && browser.lock.tryLock()) {
                     entries.remove();
-                    idle.add(browser);
+                    idle.add(Map.entry(entry.getKey(), browser));
                     LOG.info("browser of {} closed after {} without use", entry.getKey().value(), settings.idleClose());
                 }
             }
         }
-        for (UserBrowser browser : idle) {
+        for (Map.Entry<Principal, UserBrowser> entry : idle) {
             try {
-                browser.close();
+                closeQuietly(entry.getKey(), entry.getValue());
             } finally {
-                browser.lock.unlock();
+                entry.getValue().lock.unlock();
             }
         }
     }
@@ -244,20 +268,20 @@ public final class Browsers implements AutoCloseable {
         return open.size();
     }
 
-    /** 关掉全部浏览器（需求 2.8）。正在用的最多等 5 秒，到时间也关。 */
+    /** 关掉全部浏览器（需求 2.8）。正在用的最多等 5 秒，到时间也关。一个关不掉不影响其余的（review-fixes 需求 11.11）。 */
     @Override
     public void close() {
-        List<CompletableFuture<UserBrowser>> all;
+        List<Map.Entry<Principal, CompletableFuture<UserBrowser>>> all;
         synchronized (this) {
             closed = true;
-            all = new ArrayList<>(open.values());
+            all = new ArrayList<>(open.entrySet());
             open.clear();
         }
         sweeper.interrupt();
-        for (CompletableFuture<UserBrowser> slot : all) {
-            UserBrowser browser = slot.getNow(null);
+        for (Map.Entry<Principal, CompletableFuture<UserBrowser>> entry : all) {
+            UserBrowser browser = ready(entry.getValue());
             if (browser == null) {
-                continue; // 还在起：起好后看到 closed 自己关
+                continue; // 还在起：起好后看到 closed 自己关；起失败的没有东西可关
             }
             boolean locked = false;
             try {
@@ -266,7 +290,7 @@ public final class Browsers implements AutoCloseable {
                 Thread.currentThread().interrupt();
             }
             try {
-                browser.close();
+                closeQuietly(entry.getKey(), browser);
             } finally {
                 if (locked) {
                     browser.lock.unlock();

@@ -152,4 +152,14 @@ class SubmitApiTest {
         int start = body.indexOf(session + "_");
         return body.substring(start, body.indexOf('"', start));
     }
+
+    /** review-fixes 需求 11.13：requestId 只收字母、数字和 . _ : -；运行 ID 格式不对按“没有这个运行”。 */
+    @Test
+    void requestIdsAndRunIdsAreValidated() throws Exception {
+        assertEquals(400, submit("alice", "s1", "bad id", "prompt", "hi").statusCode());
+        assertEquals(400, submit("alice", "s1", "x".repeat(129), "prompt", "hi").statusCode());
+        assertEquals(200, submit("alice", "s1", "ok.id:1_2-3", "prompt", "hi").statusCode());
+        assertEquals(404, server.post("alice", "/api/runs/not-a-run-id/cancel", "").statusCode());
+        assertEquals(404, server.get("alice", "/api/runs/s1_x/turns").statusCode());
+    }
 }

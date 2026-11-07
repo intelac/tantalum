@@ -47,6 +47,8 @@
     "auth/too-many-attempts",
     "auth/not-authenticated",
     "auth/forbidden",
+    "auth/bad-origin",
+    "auth/password-too-short",
     "user/bad-name",
     "user/reserved-name",
     "user/exists",

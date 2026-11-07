@@ -677,3 +677,19 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **OpenAI 流**：响应体 try-with-resources 关；200 之后流里的 `{"error":…}` 是一次不重试的失败（`stream error: …`）；没有 `index` 的并行调用按 `id` 分片；错误文字进 journal 前截到 1 KB、去掉控制字符（`OpenAiClient.detail`）。
 - 请求期望文件逐字节不变（阶段 2 没有改任何既有请求的字节）。
 
+### review-fixes 阶段 3（2026-11-07）：登录与安全加固
+
+- **改密码一个事务**：`UserStore.changePassword(name, next, keepLoginId)` 在一个事务里换哈希和口令戳、给当前登录记新戳、删其余登录，返回删掉的登录 id，`AuthController` 按它们 `closeLogin` 断开推送；用户表和登录表共用一条连接，事务拿两把锁（先用户表后登录表，到处都这个顺序）。`UserStore.change(name, admin, disabled)` 同样一个事务，`UsersController.update` 用它。最后一个管理员的检查并进 UPDATE 的 WHERE（`ANOTHER_ADMIN`），0 行时按 `find` 分 NO_SUCH 和 LAST_ADMIN，两个管理员互相取消不会双双成功。Argon2 的哈希和比对都在锁外。`UserStore.open` 建表失败关连接。
+- **登录寿命**：`Logins.check/byId/sweep` 多一个 `maxAge`（`LoginContextRepository.MAX_LIFETIME` 30 天，按 `created_at`），创建满 30 天的登录不管多勤都作废；`touch` 时用同一个令牌重发 Cookie（`loadContext` 里经 `holder.getResponse()` 加 `Set-Cookie`），浏览器那边的 Max-Age 跟服务器的滑动窗口一致；`touch` 和 `sweep` 失败只记日志，登录照常。
+- **SSE 收尾**：`EventStreamController.pump` 的 finally 一定 `emitter.complete()`（已完成的再完成一次会抛，吞掉记 debug）；`IllegalStateException` 单独记 debug；别的 RuntimeException 记 error 并 `completeWithError`。
+- **Origin**：没有 `Origin` 时看 `Sec-Fetch-Site`，`cross-site` 拒；拒绝回 JSON `auth/bad-origin`（新错误码，三语文案，`ErrorCodeTest` 钉住字面值）。
+- **请求体先看长度**：`AuthBodyLimitFilter`（`/api/auth/login`、`/api/auth/password`）：`Content-Length` 缺 411、超 8 KB 413，不读体；`AuthController.MAX_BODY` 指向它的常量，体读进来后的检查保留。
+- **密码至少 8 位**：`UserStore.MIN_PASSWORD`，在入口校验（改密码、新建、重置回 `auth/password-too-short`；命令行 `users add/reset` 退出码 2、`USERS_PASSWORD_TOO_SHORT`；首个管理员的环境变量太短启动失败）；存储层不管，测试和旧库里有更短的。
+- **接口校验**：`requestId` 只收 `[A-Za-z0-9._:-]{1,128}`；运行 ID 经 `ApiController.runId` 校验格式，`/api/runs/{run}/…` 格式不对按 404，`TraceController` 的 `run` 参数同样。`LoginThrottle` 表满时先清过期窗口再按最老淘汰。
+- **出口与地址**：自端口守卫对内嵌 IPv4 的 IPv6 写法（NAT64、6to4、IPv4 兼容）同样算数；网卡枚举为 null 或抛 `SocketException` 时自端口守卫把任何地址都算本机（fail-closed，`AddressRules(boolean, Interfaces)` 给测试换网卡来源）。`Egress.HeadReader` 替代 `readHead`：读超时不丢已读字节（等网站回复头时一直是这个洞），请求头从第一个字节起 10 秒内要到齐；转发请求体时近端 `SO_TIMEOUT` 改 `POLL_MS`，`copy` 把超时当轮询，由看门狗按 5 分钟没进展关；`track(socket)` 在登记后看到 `closed` 立即关，关闭和登记之间不漏连接。`Fetcher.precheck` 的 DNS 放到虚拟线程上，最多等到这次抓取的时限。
+- **本机工作区**：`LocalLinks.attach` 先在锁里登记（顶掉旧的）、安排到期，再发 welcome；`Link.welcomed` 闩让 `call` 在 welcome 发出前等着，电脑不会在知道自己连的是谁之前收到调用（`aCallWaitsUntilTheWelcomeIsOut`）。`verify` 发现账号停用走完整的 `revoke`（记撤销时刻、断开已有连接）。`LocalEndpoint` 的 hello 计时器和 attach 用 `attaching` 互斥。
+- **连接程序**：`Link.Session.onOpen` 拿到 WebSocket，连上前已经结束的立即 abort；`run()` 在 `current = session` 之后再查 `stopped`，`ended()` 也看 `stopped`；`send` 被中断时结束会话；`handle` 抛异常按 1011 结束（不是“不可读”）；读 AGENTS.md 的线程出错回空结果。`Calls` 重复 id 回 `DUPLICATE` 错误、`execute` 接 Throwable、`reply` 出错只记终端。`Main`：`--allow-read` 和 `--allow` 一样不能是家目录或根目录；`--server` 不在本机又是明文 http 时拒绝，除非 `--insecure`（新选项，三语帮助和提示）。`MxcPolicy` 的禁止目录写字面和真实两种路径。
+- **浏览器**：`Browsers.use` 对任何 RuntimeException 都先看浏览器还在不在；`close()`、`sweep()`、`discard()` 每个浏览器单独 try/catch，`ready(slot)` 把起失败的槽位当没有；清扫线程一次出错继续；`UserBrowser.open` 对 RuntimeException 也关驱动；`trimTabs` 关一页失败接着关下一页；驱动环境黑名单补 PASSPHRASE、COOKIE、CREDS、PRIVATE、SIGNING、DATABASE_URL、_DSN。
+- **装配与启动**：`Engine` 构造函数记 `opened` 列表，失败时倒序关、关不掉的挂到原异常上；环起来之后的部分失败走正常 `close()`；`interrupt()` 发布循环有上限（`DRAIN`）并看 `input.broken()`，`awaitDrained` 的结果记日志，被中断时抛出。
+- **没有单独测试的**：SSE 的 finally 收尾（靠 `LoginStreamsTest` 等现有用例和代码审查）、`Fetcher` 的 DNS 超时（没有慢解析器可用）、`Engine` 启动失败的清理（Engine 只由 Spring 装配，没有手工构造的测试；`ShutdownTest` 盖住关机顺序）、`Browsers.close` 对关不掉的浏览器的容忍（`UserBrowser` 是 final，空壳关不出异常）。
+

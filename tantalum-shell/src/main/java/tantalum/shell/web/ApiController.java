@@ -61,6 +61,10 @@ public class ApiController {
 
     private static final Set<String> MODES = Set.of("prompt", "steer", "follow-up");
     private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
+    /** 运行 ID 是会话 ID 加下划线加序号（{@code RunId}）。 */
+    private static final Pattern RUN_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}_[0-9]{1,18}");
+    /** 提交的 requestId 进 journal 和推送：只收这些字符、限长（review-fixes 需求 11.13）。 */
+    private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private final Engine engine;
     private final TantalumProperties properties;
     private final WebJson json;
@@ -163,6 +167,9 @@ public class ApiController {
         String content = WebJson.text(request.get(), "text");
         if (WebJson.blank(requestId)) {
             return json.error(ErrorCode.REQUEST_INVALID, "missing requestId");
+        }
+        if (!REQUEST_ID.matcher(requestId).matches()) {
+            return json.error(ErrorCode.REQUEST_INVALID, "requestId may only contain letters, digits, . _ : - and be at most 128 characters");
         }
         if (mode == null || !MODES.contains(mode)) {
             return json.error(ErrorCode.REQUEST_INVALID, "mode must be one of " + MODES);
@@ -281,7 +288,7 @@ public class ApiController {
     @PostMapping("/api/runs/{run}/cancel")
     ResponseEntity<String> cancel(@PathVariable String run) {
         Principal user = WebJson.currentUser();
-        Optional<RunState> found = engine.queries().run(user, new RunId(run));
+        Optional<RunState> found = runId(run).flatMap(id -> engine.queries().run(user, id));
         if (found.isEmpty()) {
             return json.error(ErrorCode.RUN_NOT_FOUND, "no such run");
         }
@@ -291,7 +298,7 @@ public class ApiController {
 
     @GetMapping("/api/runs/{run}")
     ResponseEntity<String> run(@PathVariable String run) {
-        return engine.queries().run(WebJson.currentUser(), new RunId(run))
+        return runId(run).flatMap(id -> engine.queries().run(WebJson.currentUser(), id))
                 .map(found -> json.json(200, describe(found)))
                 .orElseGet(() -> json.error(ErrorCode.RUN_NOT_FOUND, "no such run"));
     }
@@ -313,6 +320,11 @@ public class ApiController {
         response.put("runs", runs);
         response.put("followUps", found.get().state().followUps().size());
         return json.json(200, response);
+    }
+
+    /** 运行 ID 格式不对时为空，调用方按“没有这个运行”处理。 */
+    static Optional<RunId> runId(String raw) {
+        return raw != null && RUN_ID.matcher(raw).matches() ? Optional.of(new RunId(raw)) : Optional.empty();
     }
 
     /** 会话 ID 只允许字母、数字、下划线和连字符：它会成为文件名的一部分。 */

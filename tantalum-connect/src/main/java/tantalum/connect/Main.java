@@ -128,7 +128,7 @@ public final class Main {
 
     /** 解析后的启动参数。 */
     record Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
-                   boolean network, String name, Path mxc, boolean help) {
+                   boolean network, String name, Path mxc, boolean help, boolean insecure) {
 
         static Options parse(String[] args, Words words) throws Refused {
             for (String arg : args) {
@@ -143,13 +143,14 @@ public final class Main {
             boolean write = false;
             boolean shell = false;
             boolean network = true;
+            boolean insecure = false;
             String name = null;
             Path mxc = null;
             for (int i = 0; i < args.length; i++) {
                 String arg = args[i];
                 switch (arg) {
                     case "--help", "-h" -> {
-                        return new Options(server, List.of(), false, false, List.of(), List.of(), true, null, null, true);
+                        return new Options(server, List.of(), false, false, List.of(), List.of(), true, null, null, true, false);
                     }
                     case "--server" -> server = value(args, ++i, arg, words);
                     case "--allow" -> allow.add(Path.of(value(args, ++i, arg, words)));
@@ -162,13 +163,14 @@ public final class Main {
                     case "--allow-write" -> write = true;
                     case "--allow-shell" -> shell = true;
                     case "--no-network" -> network = false;
+                    case "--insecure" -> insecure = true;
                     default -> throw new Refused(words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
                 }
             }
             if (allow.isEmpty()) {
                 throw new Refused(words.say(Key.REFUSED_NO_ALLOW));
             }
-            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false);
+            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false, insecure);
         }
 
         /** 以 {@code tc_} 开头、在哪里带着一整个令牌、或者是 {@code --token}。报错时不回显这个参数。 */
@@ -199,6 +201,10 @@ public final class Main {
     /** 检查目录、取令牌、检查沙箱、算出 {@code hello}。 */
     static Setup setup(Options options, Map<String, String> env, Prompt prompt, Words words) throws Refused {
         URI socket = socket(options.server(), words);
+        if (!options.insecure() && socket.getScheme().equals("ws") && !loopback(socket.getHost())) {
+            // 令牌明文经过网络：只有本机的服务器才允许不加密，别的要 https，或者明确给 --insecure（review-fixes 需求 11.10）
+            throw new Refused(words.say(Key.REFUSED_SERVER_INSECURE, Map.of("server", options.server())));
+        }
         AllowedDirs dirs;
         try {
             for (Path dir : options.allow()) {
@@ -212,7 +218,13 @@ public final class Main {
             throw new Refused(words.say(Key.REFUSED_ALLOW_UNUSABLE, Map.of("detail", String.valueOf(failure.getMessage()))));
         }
         for (Path dir : options.read()) {
+            // --allow-read 和 --allow 一样：要是目录、不能是家目录或根目录（review-fixes 需求 11.10）
             if (!Files.isDirectory(dir)) {
+                throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
+            }
+            try {
+                refuseTooBroad(dir, env, words);
+            } catch (IOException unreadable) {
                 throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
             }
         }
@@ -276,6 +288,18 @@ public final class Main {
         } catch (URISyntaxException bad) {
             throw new Refused(words.say(Key.REFUSED_SERVER_ADDRESS, Map.of("server", server)));
         }
+    }
+
+    /** 本机地址：回环名字或回环 IP。{@code localhost} 不查 DNS，按名字认。 */
+    static boolean loopback(String host) {
+        if (host == null) {
+            return false;
+        }
+        String bare = host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+        if (bare.equalsIgnoreCase("localhost") || bare.equals("::1") || bare.startsWith("127.")) {
+            return true;
+        }
+        return bare.equalsIgnoreCase("0:0:0:0:0:0:0:1");
     }
 
     /** 令牌：环境变量优先，没有就问。只检查长相，不打印内容。 */

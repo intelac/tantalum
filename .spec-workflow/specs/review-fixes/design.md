@@ -142,3 +142,42 @@
 
 每个任务改到的类都有对应测试（`AuthApiTest`、`LoginsTest`、`UserStoreTest`、`LoginThrottleTest`、`EventStreamTest`、`SecurityConfig`/`OriginFilterTest`、`AddressRulesTest`、`EgressTest`、`FetcherTest`、`LocalLinksTest`、`LinkTest`、`CallsTest`、`MainTest`、`MxcPolicyTest`、`BrowsersTest`、`EngineTest`），只加新用例、改被影响的断言。
 
+## 阶段 4 设计：去重与归位（需求 12）
+
+### 1. 消息分类和折叠（任务 21）
+
+- value 新增 `tantalum.value.model.SystemUpdates`（接口，只有静态成员）：`PREFIX`（“不是用户写的”开头）、`HEADER`（带后半句和空行的整段）、`isSystemUpdate(Message)`（工具变化或钩子说明的 system 消息）、`isModelChange(Message)`、`isContextUpdate(String)`。内核 `ContextUpdate` 和 `PromptProjection.isSystemUpdate`、shell 的 `ToolChanges.PREFIX`、`HookTexts.isUpdate`、`ModelChanges.isModelChange` 都改成用它；字面量只剩一份。
+- `ModelChanges.fold` 和 `HookTexts.fold` 合成 `shell/model/Folding.fold(messages, foldHookTexts)`：一次遍历，system 消息里换模型的说明并到前一条用户消息的开头（有工具结果时末尾）、钩子说明（`foldHookTexts` 为真时）并到末尾、工具变化照旧丢；前面不是用户消息时单独成一条。两个客户端的调用点换成它。请求期望文件逐字节不变。
+
+### 2. 工具的描述和实现（任务 22）
+
+- `shell/plugin/ToolDispatch(name, server, serverConcurrency, Predicate<Json> concurrencySafe)`：调度要的全部信息，纯数据加一个按参数判断的函数。`Tool` 加 `default ToolDispatch dispatch()`（从现有方法取）。
+- 不用依赖就能给出调度信息的静态工厂：`BuiltinTools.dispatch()`、`LocalTool.dispatch(timeout)`、`WebFetchTool.DISPATCH`、`MemoryTools.dispatch()`、`BrowserTools.dispatch()`；`ToolCatalog.safety()` 改成从 `ToolDispatch` 列表建 `ToolSafety`；`KernelFactory.safety` 用这些工厂，不再 `new` 带 null 依赖的工具。
+
+### 3. 插件开关只在一处（任务 23）
+
+- `HookChain(List<KernelHook>)` 不再拿 `required`：“必须开启的插件出错按拦截处理”由 shell 决定——`PluginGate.kernelHooks()` 把管理员配置为必须开启的钩子包成 `FailClosed`（委托全部回调、`failClosed()` 恒真），`KernelFactory.kernel` 用它。内核放行与否只看 `SessionContext.activePlugins`（已经如此）。
+- `KernelHook` 只留 `name()`、`plugin()`、`failClosed()` 和七个回调；`description()`、`mandatory()`、`defaultEnabled()` 挪到 shell 的 `PluginInfo` 接口（`plugin()`、`description()`、`mandatory()`、`defaultEnabled()`），示例钩子同时实现两者；`AfterToolHook.description()` 同样挪走。`PluginGate` 的分组从 `instanceof PluginInfo` 取文案和开关策略，没有实现的按“无说明、非必须、默认开”。
+- `PluginGate.HOOK_POINTS` 从 `HookPoint` 枚举派生（`BEFORE_MODEL_CALL` → `beforeModelCall`），`overrides` 按派生出的方法名查；`ON_ANSWER` 也进插件页的位置列表。
+- `afterTool`：`AfterToolHook` 加 `default boolean failClosed()`；钩子抛异常时，`failClosed()` 或管理员要求必须开启的插件让这次工具调用以错误结束（`ToolOutput` 的错误文字只给类名），其余照旧记日志、结果保持上一个。
+
+### 4. 事实和状态的归位（任务 24）
+
+- `HookDecided` 加 `question` 字段（`ASK` 时问题 id，其余 null，不写出）；`reason` 回到只在 `STOP` 时有值。读旧行：`questionId()` 取 `question`，为空且 `kind == ASK` 时取 `reason`，不改写字段，旧行重编码逐字节相同。
+- `Compacting.patch` 删掉：记录变成 `Compacting(cause, plan)`；journal 读到 `patch` 时忽略（`EventCodec` 的 mapper 对这个记录关掉“未知字段报错”或加 `@JsonIgnoreProperties("patch")`）。写出的新行少一个字段，旧行只读。
+- `RunState.compactionJustDone`（布尔，默认 false，`NON_DEFAULT` 不写出）：`CompactSteps` 采用摘要或裁剪时记 true，`ContextSteps.contextAssembled` 读它决定要不要跳过压缩判断并清掉；`ModelSteps.callModel` 的 `compactionAllowed` 参数去掉。旧行读出来是 false。
+- `CompactSteps.notAdopted` 拆成 `refused`、`notSent`、`notAdopted` 三个小函数，共用 `trimOrFail(out, run, compacting, reason, mayTrim, beforeSwitch)`。
+- `Fetcher.precheck` 返回 `Lookup`（`RESOLVED`、`UNRESOLVED`）而不是布尔；`get` 和 `failure` 按它分支。
+
+### 测试
+
+- `SystemUpdatesTest`（value）、`FoldingTest`（合并后的用例来自两个旧测试）、`ToolDispatchTest`/`KernelFactoryTest`（safety 不造对象且答案和真目录一致）、`HookChainTest`（FailClosed 包装）、`PluginGateTest`（位置从枚举派生、after-tool failClosed）、`HookDecided` 的编解码测试（新行带 `question`、旧行 `reason` 读出来一样）、`EventCodecTest`（`Compacting` 旧行带 `patch` 能读）、`CompactStepsTest`/`ContextStepsTest`（`compactionJustDone`）、`FetcherTest`。
+- 请求期望文件和 trace 期望文件逐字节不变。
+
+## 阶段 5 设计：拆大类与清注释（需求 13，开始前再细化）
+
+- `RecordCodec` 拆成包内类 `SessionDelta`、`RunDelta`、`TextSlices`、`RunRefs`，`RecordCodec` 只编排；期望文件逐字节不变。
+- `Engine` 装配分成 `Stores`、`Toolbox`、`Pipeline`、`Queries` 四步（各一个包内类返回一个记录），`Engine` 串起来、持有 `opened` 列表。
+- `RunState` 按阶段分组成 `Flow`（phase、tools、pendingSteers、retries、workOrigin、workRounds、endWorkRounds）、`CompactionState`（compacting、autoCompactionFailed、overflowRecovered、compactionJustDone）、`ModelState`（model、modelBefore）；journal 里的字段名不变（差量按扁平字段写）。
+- spec 编号注释逐包换成规则本身，编号只留在 `tech.md`；每包一个任务。
+

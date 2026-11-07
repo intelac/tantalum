@@ -90,6 +90,16 @@ class MxcPolicyTest {
         assertEquals("deny", closed.get("network").get("ingress").get("hostLoopback").asString());
     }
 
+    /** review-fixes 需求 11.10：禁止的目录是符号链接时，真实路径也写进去，MXC 按真实路径判断也拦得住。 */
+    @Test
+    void deniedDirectoriesAreListedByTheirRealPathToo() throws Exception {
+        Path realSsh = Files.createDirectory(temp.toRealPath().resolve("real-ssh"));
+        Files.createSymbolicLink(home.resolve(".ssh"), realSsh);
+        MxcPolicy policy = new MxcPolicy(List.of(work), true, List.of(), true, Map.of(), home);
+        assertEquals(List.of(home + "/.ssh", realSsh.toString(), home + "/Library/Keychains"),
+                strings(config(policy).get("filesystem").get("deniedPaths")));
+    }
+
     /**
      * 环境变量只有 PATH、HOME（连接程序自己的目录）、TMPDIR（这次的临时目录）、LANG 和 --env 放行的；像密钥的名字和 TANTALUM_TOKEN
      * 就算被放行也不给，HOME 和 TMPDIR 不能被 --env 改掉。

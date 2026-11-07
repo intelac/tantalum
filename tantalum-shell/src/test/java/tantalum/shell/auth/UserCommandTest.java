@@ -40,13 +40,13 @@ class UserCommandTest {
         out.reset();
         run(Language.EN, "a-password\n", "add", "alice");
         out.reset();
-        assertEquals(1, run(Language.ZH, "another\n", "add", "alice"));
+        assertEquals(1, run(Language.ZH, "another-password\n", "add", "alice"));
         assertEquals("用户已经存在：alice", out.toString(StandardCharsets.UTF_8).strip());
         out.reset();
-        assertEquals(1, run(Language.EN, "x\n", "reset", "nobody"));
+        assertEquals(1, run(Language.EN, "x-password\n", "reset", "nobody"));
         assertEquals("no such user: nobody", out.toString(StandardCharsets.UTF_8).strip());
         out.reset();
-        assertEquals(1, run(Language.ZH, "pw\n", "add", "nul"));
+        assertEquals(1, run(Language.ZH, "pw-password\n", "add", "nul"));
         assertEquals("nul 是 Windows 保留的设备名，不能做用户名。", out.toString(StandardCharsets.UTF_8).strip());
     }
 
@@ -82,16 +82,16 @@ class UserCommandTest {
         assertNotEquals(0, run("", "nonsense"));
         assertNotEquals(0, run("", "add"));
         assertNotEquals(0, run("", "add", "alice"));
-        assertNotEquals(0, run("x\n", "reset", "nobody"));
+        assertNotEquals(0, run("x-password\n", "reset", "nobody"));
         run("a-password\n", "add", "alice");
-        assertNotEquals(0, run("another\n", "add", "alice"));
+        assertNotEquals(0, run("another-password\n", "add", "alice"));
     }
 
     /** ops-hardening-2 需求 2.2：--admin、admin/user、enable、list；最后一个管理员不能取消。 */
     @Test
     void adminSubcommandsAndList() throws Exception {
-        assertEquals(0, run("pw\n", "add", "--admin", "root"));
-        assertEquals(0, run("pw\n", "add", "alice"));
+        assertEquals(0, run("root-password\n", "add", "--admin", "root"));
+        assertEquals(0, run("alice-password\n", "add", "alice"));
         out.reset();
         assertEquals(1, run("", "user", "root"));
         assertEquals("root is the last administrator and cannot be disabled or demoted", out.toString(StandardCharsets.UTF_8).strip());
@@ -105,5 +105,20 @@ class UserCommandTest {
         assertTrue(listed.contains("root\tuser\tenabled\t"), listed);
         assertTrue(listed.contains("alice\tadmin\tenabled\t"), listed);
         assertEquals(2, run("", "list", "extra"));
+    }
+
+    /** review-fixes 需求 11.13：新建和重置的密码至少 8 位，按语言提示。 */
+    @Test
+    void shortPasswordsAreRefused() throws Exception {
+        assertEquals(2, run(Language.EN, "short1\n", "add", "alice"));
+        assertEquals("the password must be at least 8 characters", out.toString(StandardCharsets.UTF_8).strip());
+        out.reset();
+        assertEquals(0, run("long-enough\n", "add", "alice"));
+        out.reset();
+        assertEquals(2, run(Language.ZH, "1234567\n", "reset", "alice"));
+        assertEquals("密码至少 8 个字符", out.toString(StandardCharsets.UTF_8).strip());
+        try (UserStore store = UserStore.open(dir)) {
+            assertTrue(store.verify("alice", "long-enough"));
+        }
     }
 }

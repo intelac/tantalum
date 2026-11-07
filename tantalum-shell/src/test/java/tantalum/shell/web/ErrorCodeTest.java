@@ -75,5 +75,7 @@ class ErrorCodeTest {
     void theSecurityFilterWritesTheSameCode() throws Exception {
         String source = Files.readString(Path.of("src/main/java/tantalum/shell/auth/SecurityConfig.java"));
         assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_NOT_AUTHENTICATED.wire() + "\\\""), "SecurityConfig");
+        assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_BAD_ORIGIN.wire() + "\\\""), "OriginFilter");
+        assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_FORBIDDEN.wire() + "\\\""), "access denied");
     }
 }

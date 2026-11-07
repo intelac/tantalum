@@ -80,6 +80,10 @@ public enum ErrorCode {
     AUTH_NOT_AUTHENTICATED("auth/not-authenticated", 401),
     /** 登录了但不是管理员（ops-hardening-2 需求 2.4）。 */
     AUTH_FORBIDDEN("auth/forbidden", 403),
+    /** 写请求来自别的站（review-fixes 需求 11.5）。 */
+    AUTH_BAD_ORIGIN("auth/bad-origin", 403),
+    /** 新密码不到 {@code UserStore.MIN_PASSWORD} 位（review-fixes 需求 11.13）。 */
+    AUTH_PASSWORD_TOO_SHORT("auth/password-too-short", 400),
     USER_BAD_NAME("user/bad-name", 400),
     USER_RESERVED_NAME("user/reserved-name", 400),
     USER_EXISTS("user/exists", 409),

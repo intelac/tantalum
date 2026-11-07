@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,8 @@ public final class LocalEndpoint extends Endpoint {
     private long verifiedAt;
     private SessionPeer peer;
     private ScheduledFuture<?> helloTimer;
+    /** {@code hello} 到了正在接、或者等 {@code hello} 已经超时：两者只能发生一个（review-fixes 需求 11.9）。 */
+    private final AtomicBoolean attaching = new AtomicBoolean();
     private volatile LocalLinks.Link link;
 
     private LocalEndpoint(LocalLinks links) {
@@ -65,7 +68,7 @@ public final class LocalEndpoint extends Endpoint {
             return;
         }
         helloTimer = links.schedule(links.timing().hello(), () -> {
-            if (link == null) {
+            if (attaching.compareAndSet(false, true)) {
                 LOG.info("local connect for {}: no hello within {}", verdict.principal().value(), links.timing().hello());
                 peer.close(1008, "no hello");
             }
@@ -113,6 +116,10 @@ public final class LocalEndpoint extends Endpoint {
         if (hello.protocol() != Wire.PROTOCOL) {
             LOG.info("local connect for {}: protocol {} is not {}", verdict.principal().value(), hello.protocol(), Wire.PROTOCOL);
             peer.close(Wire.CLOSE_PROTOCOL, "protocol " + Wire.PROTOCOL + " required");
+            return;
+        }
+        if (!attaching.compareAndSet(false, true)) {
+            // 等 hello 的计时器刚好先到：连接已经在关了
             return;
         }
         helloTimer.cancel(false);

@@ -204,6 +204,24 @@ class CallsTest {
         assertEquals(0, calls.running());
     }
 
+    /** review-fixes 需求 11.10：同一个 id 还在跑时再来一次，回错误，不悄悄丢掉。 */
+    @Test
+    void aDuplicateCallIdIsRefusedWhileTheFirstRuns() throws Exception {
+        Blocking blocking = new Blocking();
+        Calls calls = new Calls(dirs, true, false, journal, List.of(blocking));
+        calls.welcome("alice");
+        calls.call(call("c-1", "alice", "block"), replies::add);
+        for (int i = 0; i < 50 && calls.running() < 1; i++) {
+            Thread.sleep(20);
+        }
+        assertEquals(1, calls.running());
+        calls.call(call("c-1", "alice", "block"), replies::add);
+        assertEquals(new Result("c-1", Calls.DUPLICATE, true, List.of()), reply());
+        assertEquals(1, calls.running(), "the first call is still the only one");
+        calls.stopAll();
+        assertEquals("c-1", blocking.interrupted.poll(5, TimeUnit.SECONDS));
+    }
+
     /** {@code AGENTS.md}：主目录里的那份；没有、或者是指向外面的符号链接时没有；超过 64 KB 截断并注明。 */
     @Test
     void contextReadsAgentsFromTheMainDirectory() throws Exception {

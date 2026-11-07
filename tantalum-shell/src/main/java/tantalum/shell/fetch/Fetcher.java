@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.net.ssl.SSLException;
@@ -73,7 +74,7 @@ public final class Fetcher {
         long deadline = System.nanoTime() + DEADLINE.toNanos();
         URI current = url;
         for (int redirects = 0; ; redirects++) {
-            boolean resolved = precheck(current);
+            boolean resolved = precheck(current, deadline);
             Response response = get(current, deadline, resolved);
             Optional<String> location = response.redirect();
             if (location.isEmpty()) {
@@ -100,14 +101,23 @@ public final class Fetcher {
     /**
      * 解析网址里的主机，按地址规则先查一遍，给模型清楚的原因。解析不了时返回 false、不报错：有上游代理时由代理解析，出口会兜底。
      */
-    private boolean precheck(URI url) throws FetchFailed {
+    private boolean precheck(URI url, long deadline) throws FetchFailed, InterruptedException {
         String host = url.getHost();
         int port = port(url);
         List<InetAddress> addresses;
+        // DNS 没有超时参数，放到自己的线程上等，最多等到这次抓取的时限（review-fixes 需求 11.8）
+        FutureTask<InetAddress[]> lookup = new FutureTask<>(() -> InetAddress.getAllByName(host));
+        Thread.ofVirtual().name("fetch-dns").start(lookup);
         try {
-            addresses = List.of(InetAddress.getAllByName(host));
-        } catch (UnknownHostException unresolved) {
-            return false;
+            addresses = List.of(lookup.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS));
+        } catch (ExecutionException failed) {
+            if (failed.getCause() instanceof UnknownHostException) {
+                return false;
+            }
+            throw new FetchFailed("Could not fetch " + url + ": " + egressReason("unresolved"));
+        } catch (TimeoutException slow) {
+            lookup.cancel(true);
+            throw new FetchFailed("Could not fetch " + url + ": the host name could not be resolved in time");
         }
         Optional<AddressRules.Blocked> blocked = rules.firstBlocked(addresses, port);
         if (blocked.isPresent()) {

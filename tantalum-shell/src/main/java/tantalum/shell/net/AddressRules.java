@@ -7,6 +7,7 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -45,15 +46,27 @@ public final class AddressRules {
 
     private static final long INTERFACE_CACHE_NANOS = 60_000_000_000L;
 
+    /** 本机网卡从哪里读；测试换成读不到的。 */
+    interface Interfaces {
+        Enumeration<NetworkInterface> list() throws SocketException;
+    }
+
     private final boolean blockPrivateNetwork;
+    private final Interfaces nics;
     private volatile int serverPort = -1;
     private volatile int egressPort = -1;
-    private volatile Set<InetAddress> interfaceAddresses = Set.of();
+    /** 本机网卡上的地址；null 表示读不到（review-fixes 需求 11.7：读不到时自端口守卫把任何地址都算本机）。 */
+    private volatile Set<InetAddress> interfaceAddresses;
     private volatile long interfacesReadAt;
     private volatile boolean interfacesRead;
 
     public AddressRules(boolean blockPrivateNetwork) {
+        this(blockPrivateNetwork, NetworkInterface::getNetworkInterfaces);
+    }
+
+    AddressRules(boolean blockPrivateNetwork, Interfaces nics) {
         this.blockPrivateNetwork = blockPrivateNetwork;
+        this.nics = nics;
     }
 
     public boolean blockPrivateNetwork() {
@@ -72,7 +85,8 @@ public final class AddressRules {
 
     public Optional<Reason> blocked(InetAddress address, int port) {
         InetAddress plain = unmapped(address);
-        if ((port == serverPort || port == egressPort) && isLocal(plain)) {
+        // 内嵌 IPv4 的 IPv6 写法对自端口守卫同样算数：64:ff9b::7f00:1 经 NAT64 网关就是 127.0.0.1（review-fixes 需求 11.7）
+        if ((port == serverPort || port == egressPort) && (isLocal(plain) || embedded(plain).map(this::isLocal).orElse(false))) {
             return Optional.of(Reason.OWN_PORT);
         }
         if (blockPrivateNetwork && isPrivate(plain)) {
@@ -184,24 +198,46 @@ public final class AddressRules {
         return true;
     }
 
-    private boolean isLocal(InetAddress address) {
-        return address.isLoopbackAddress() || address.isAnyLocalAddress() || interfaces().contains(withoutScope(address));
+    /** 内嵌在 IPv6 里的 IPv4，没有时为空。 */
+    private static Optional<InetAddress> embedded(InetAddress address) {
+        if (!(address instanceof Inet6Address)) {
+            return Optional.empty();
+        }
+        return embeddedV4(address.getAddress()).map(bytes -> {
+            try {
+                return InetAddress.getByAddress(bytes);
+            } catch (UnknownHostException impossible) {
+                throw new IllegalStateException(impossible);
+            }
+        });
     }
 
-    /** 本机网卡上的地址，缓存 60 秒：每个连接都枚举网卡太慢，网卡地址也很少变。 */
+    /** 网卡读不到时任何地址都算本机：宁可多拦，也不让模型用用户的身份调服务器接口。 */
+    private boolean isLocal(InetAddress address) {
+        if (address.isLoopbackAddress() || address.isAnyLocalAddress()) {
+            return true;
+        }
+        Set<InetAddress> addresses = interfaces();
+        return addresses == null || addresses.contains(withoutScope(address));
+    }
+
+    /** 本机网卡上的地址，缓存 60 秒：每个连接都枚举网卡太慢，网卡地址也很少变。读不到时为 null，下一次再读。 */
     private Set<InetAddress> interfaces() {
         long now = System.nanoTime();
         if (!interfacesRead || now - interfacesReadAt > INTERFACE_CACHE_NANOS) {
             Set<InetAddress> found = new HashSet<>();
             try {
-                for (NetworkInterface nic : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                Enumeration<NetworkInterface> all = nics.list();
+                if (all == null) {
+                    return null;
+                }
+                for (NetworkInterface nic : Collections.list(all)) {
                     for (InetAddress address : Collections.list(nic.getInetAddresses())) {
                         found.add(withoutScope(address));
                     }
                 }
             } catch (SocketException unreadable) {
-                // 读不到网卡时只认回环和 0.0.0.0，下一次再读。
-                return Set.of();
+                return null;
             }
             interfaceAddresses = Set.copyOf(found);
             interfacesReadAt = now;

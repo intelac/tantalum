@@ -23,10 +23,13 @@ import tantalum.value.id.ReservedName;
 /**
  * 用户表（{@code users.db}）：口令用 Argon2id 哈希；{@code admin} 列标管理员（ops-hardening-2 需求 2）；同一个库里还有登录表（{@link Logins}）。
  * 版本用 {@code PRAGMA user_version}：1 是只有 users 表的旧库，2 加 {@code admin} 列和 {@code logins} 表。用户库不能重建，只 {@code ALTER}。
+ * Argon2 慢（几十毫秒），哈希和比对都在锁外算，锁里只有读写库（review-fixes 需求 11.4）；改几件事要么全成要么全不成的用一个事务。
  */
 public final class UserStore implements AutoCloseable {
 
     public static final String FILE = "users.db";
+    /** 密码至少这么长（review-fixes 需求 11.13）。在入口（接口、命令行、首个管理员）校验，存储层不管：测试和旧库里有更短的。 */
+    public static final int MIN_PASSWORD = 8;
     static final int VERSION = 2;
     private static final Logger LOG = LoggerFactory.getLogger(UserStore.class);
 
@@ -62,6 +65,14 @@ public final class UserStore implements AutoCloseable {
             upgrade(statement);
             Logins.createTable(statement);
             statement.execute("PRAGMA user_version=" + VERSION);
+        } catch (SQLException | RuntimeException failure) {
+            // 建表失败时连接不能留着：文件句柄和锁会一直占到进程结束
+            try {
+                connection.close();
+            } catch (SQLException ignored) {
+                failure.addSuppressed(ignored);
+            }
+            throw failure;
         }
         return new UserStore(connection);
     }
@@ -130,41 +141,68 @@ public final class UserStore implements AutoCloseable {
         return logins;
     }
 
-    public synchronized void add(String name, String password) throws SQLException {
+    public void add(String name, String password) throws SQLException {
         add(name, password, false);
     }
 
-    public synchronized void add(String name, String password, boolean admin) throws SQLException {
+    public void add(String name, String password, boolean admin) throws SQLException {
         if (ReservedName.matches(name)) {
             throw new Refused(Refused.Kind.RESERVED_NAME, name, name + " is reserved by Windows and cannot be a user name.");
         }
         if (!Principal.isUsable(name)) {
             throw new Refused(Refused.Kind.BAD_NAME, name, "user name may only contain a-z, 0-9, - and _: " + name);
         }
-        if (find(name).isPresent()) {
-            throw new Refused(Refused.Kind.EXISTS, name, "user already exists: " + name);
-        }
-        try (PreparedStatement insert = connection.prepareStatement(
-                "INSERT INTO users (name, password_hash, created_at, admin) VALUES (?, ?, ?, ?)")) {
-            insert.setString(1, name);
-            insert.setString(2, encoder.encode(password));
-            insert.setString(3, Instant.now().toString());
-            insert.setInt(4, admin ? 1 : 0);
-            insert.executeUpdate();
+        String hash = encoder.encode(password);
+        synchronized (this) {
+            if (find(name).isPresent()) {
+                throw new Refused(Refused.Kind.EXISTS, name, "user already exists: " + name);
+            }
+            try (PreparedStatement insert = connection.prepareStatement(
+                    "INSERT INTO users (name, password_hash, created_at, admin) VALUES (?, ?, ?, ?)")) {
+                insert.setString(1, name);
+                insert.setString(2, hash);
+                insert.setString(3, Instant.now().toString());
+                insert.setInt(4, admin ? 1 : 0);
+                insert.executeUpdate();
+            }
         }
     }
 
     /** 用户不存在、已停用或密码错误都返回 false。 */
-    public synchronized boolean verify(String name, String password) throws SQLException {
-        Optional<Row> row = find(name);
+    public boolean verify(String name, String password) throws SQLException {
+        Optional<Row> row;
+        synchronized (this) {
+            row = find(name);
+        }
         // 用户不存在时也算一次哈希，响应时间不暴露用户名是否存在。
         boolean matches = encoder.matches(password, row.map(Row::hash).orElse(decoyHash));
         return matches && row.isPresent() && !row.get().disabled();
     }
 
     /** 口令戳随之变化，之前的登录在下一次请求或下一个心跳时失效。 */
-    public synchronized void resetPassword(String name, String password) throws SQLException {
-        update("UPDATE users SET password_hash = ?, password_stamp = password_stamp + 1 WHERE name = ?", encoder.encode(password), name);
+    public void resetPassword(String name, String password) throws SQLException {
+        String hash = encoder.encode(password);
+        synchronized (this) {
+            update("UPDATE users SET password_hash = ?, password_stamp = password_stamp + 1 WHERE name = ?", hash, name);
+        }
+    }
+
+    /**
+     * 自己改密码（review-fixes 需求 11.1）：换哈希和口令戳、{@code keepLoginId} 这条登录记上新戳、其余登录删掉，一个事务里完成；
+     * 返回删掉的登录 id，调用方按它们断开推送连接。{@code keepLoginId} 为 null 时全部登录都删。
+     */
+    public List<String> changePassword(String name, String password, String keepLoginId) throws SQLException {
+        String hash = encoder.encode(password);
+        synchronized (this) {
+            return transaction(() -> {
+                update("UPDATE users SET password_hash = ?, password_stamp = password_stamp + 1 WHERE name = ?", hash, name);
+                long stamp = find(name).map(Row::stamp).orElse(-1L);
+                if (keepLoginId != null) {
+                    logins.restamp(keepLoginId, stamp);
+                }
+                return logins.deleteOthers(name, keepLoginId);
+            });
+        }
     }
 
     /** 登录是否还有效要看的两件事，加上是不是管理员。{@code stamp} 每次改密码加一。 */
@@ -200,10 +238,16 @@ public final class UserStore implements AutoCloseable {
         return accounts;
     }
 
+    /**
+     * 除了这个账号以外还有一个启用的管理员，或者这个账号本来就不是启用的管理员，才改得动。写在同一条 UPDATE 里，
+     * 两个管理员互相取消时不会双双成功（review-fixes 需求 11.4）。
+     */
+    private static final String ANOTHER_ADMIN = " AND (admin = 0 OR disabled = 1"
+            + " OR EXISTS (SELECT 1 FROM users other WHERE other.admin = 1 AND other.disabled = 0 AND other.name <> users.name))";
+
     /** 停用。停用后不能让系统没有一个启用的管理员（需求 2.4）。 */
     public synchronized void disable(String name) throws SQLException {
-        requireAnotherActiveAdmin(name);
-        update("UPDATE users SET disabled = ? WHERE name = ?", "1", name);
+        guarded("UPDATE users SET disabled = 1 WHERE name = ?" + ANOTHER_ADMIN, name);
     }
 
     public synchronized void enable(String name) throws SQLException {
@@ -212,30 +256,42 @@ public final class UserStore implements AutoCloseable {
 
     /** 设为或取消管理员。取消时不能让系统没有一个启用的管理员。 */
     public synchronized void setAdmin(String name, boolean admin) throws SQLException {
-        if (!admin) {
-            requireAnotherActiveAdmin(name);
+        if (admin) {
+            update("UPDATE users SET admin = ? WHERE name = ?", "1", name);
+        } else {
+            guarded("UPDATE users SET admin = 0 WHERE name = ?" + ANOTHER_ADMIN, name);
         }
-        update("UPDATE users SET admin = ? WHERE name = ?", admin ? "1" : "0", name);
     }
 
-    /** 除了 {@code name} 以外还得有一个启用的管理员；{@code name} 不是启用的管理员时不限制。 */
-    private void requireAnotherActiveAdmin(String name) throws SQLException {
-        Optional<Row> row = find(name);
-        if (row.isEmpty()) {
-            throw new Refused(Refused.Kind.NO_SUCH, name, "no such user: " + name);
-        }
-        if (!row.get().admin() || row.get().disabled()) {
-            return;
-        }
-        try (PreparedStatement query = connection.prepareStatement("SELECT count(*) FROM users WHERE admin = 1 AND disabled = 0 AND name <> ?")) {
-            query.setString(1, name);
-            try (ResultSet count = query.executeQuery()) {
-                count.next();
-                if (count.getLong(1) == 0) {
-                    throw new Refused(Refused.Kind.LAST_ADMIN, name, name + " is the last administrator and cannot be disabled or demoted");
+    /** 接口的一次修改：给了哪个改哪个，一个事务，有一样不行就都不改。 */
+    public synchronized void change(String name, Boolean admin, Boolean disabled) throws SQLException {
+        transaction(() -> {
+            if (admin != null) {
+                setAdmin(name, admin);
+            }
+            if (disabled != null) {
+                if (disabled) {
+                    disable(name);
+                } else {
+                    enable(name);
                 }
             }
+            return null;
+        });
+    }
+
+    /** 带“还有别的管理员”条件的 UPDATE：0 行时分不存在和最后一个管理员。 */
+    private void guarded(String sql, String name) throws SQLException {
+        try (PreparedStatement update = connection.prepareStatement(sql)) {
+            update.setString(1, name);
+            if (update.executeUpdate() > 0) {
+                return;
+            }
         }
+        if (find(name).isEmpty()) {
+            throw new Refused(Refused.Kind.NO_SUCH, name, "no such user: " + name);
+        }
+        throw new Refused(Refused.Kind.LAST_ADMIN, name, name + " is the last administrator and cannot be disabled or demoted");
     }
 
     public synchronized long count() throws SQLException {
@@ -252,6 +308,35 @@ public final class UserStore implements AutoCloseable {
             update.setString(2, name);
             if (update.executeUpdate() == 0) {
                 throw new Refused(Refused.Kind.NO_SUCH, name, "no such user: " + name);
+            }
+        }
+    }
+
+    private interface Work<T> {
+        T run() throws SQLException;
+    }
+
+    /**
+     * 一个事务。连接是用户表和登录表共用的，所以两把锁都拿着（先用户表后登录表，到处都是这个顺序），别的线程的单条语句不会混进来。
+     * 抛出去的无论是 SQL 错误还是 {@link Refused} 都回滚。
+     */
+    private <T> T transaction(Work<T> work) throws SQLException {
+        synchronized (logins) {
+            connection.setAutoCommit(false);
+            boolean committed = false;
+            try {
+                T result = work.run();
+                connection.commit();
+                committed = true;
+                return result;
+            } finally {
+                try {
+                    if (!committed) {
+                        connection.rollback();
+                    }
+                } finally {
+                    connection.setAutoCommit(true);
+                }
             }
         }
     }

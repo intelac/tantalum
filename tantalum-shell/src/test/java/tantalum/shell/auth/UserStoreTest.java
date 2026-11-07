@@ -150,7 +150,7 @@ class UserStoreTest {
             assertEquals(java.util.List.of(true, false), store.list().stream().map(UserStore.Account::admin).toList());
             assertEquals("first", store.list().getFirst().name());
             assertTrue(store.status("first").orElseThrow().admin());
-            assertTrue(store.logins().check("x", 0, java.time.Duration.ofHours(1)).isEmpty(), "logins table exists");
+            assertTrue(store.logins().check("x", 0, java.time.Duration.ofHours(1), java.time.Duration.ofDays(30)).isEmpty(), "logins table exists");
         }
         // 再打开一次：幂等，不再改管理员
         try (UserStore store = UserStore.open(dir)) {
@@ -187,6 +187,58 @@ class UserStoreTest {
             // alice 现在是唯一启用的管理员：停用她也不行
             assertEquals(UserStore.Refused.Kind.LAST_ADMIN, assertThrows(UserStore.Refused.class, () -> store.disable("alice")).kind());
             assertEquals(UserStore.Refused.Kind.NO_SUCH, assertThrows(UserStore.Refused.class, () -> store.enable("nobody")).kind());
+        }
+    }
+
+    /** review-fixes 需求 11.1：改密码、保留当前登录、删掉其他登录是一个事务，返回删掉的登录 id。 */
+    @Test
+    void changingThePasswordKeepsOneLoginAndReturnsTheOthers() throws Exception {
+        try (UserStore store = UserStore.open(dir)) {
+            store.add("alice", "old-password");
+            Logins.Issued laptop = store.logins().create("alice", 0, 1_000);
+            Logins.Issued phone = store.logins().create("alice", 0, 1_000);
+            Logins.Issued tablet = store.logins().create("alice", 0, 1_000);
+            java.util.List<String> gone = store.changePassword("alice", "new-password", laptop.id());
+            assertEquals(java.util.Set.of(phone.id(), tablet.id()), java.util.Set.copyOf(gone));
+            assertTrue(store.verify("alice", "new-password"));
+            assertFalse(store.verify("alice", "old-password"));
+            long stamp = store.status("alice").orElseThrow().stamp();
+            assertEquals(1, stamp);
+            assertEquals(stamp, store.logins().byId(laptop.id(), 1_000, java.time.Duration.ofHours(1), java.time.Duration.ofDays(30)).orElseThrow().stamp(),
+                    "the kept login carries the new stamp");
+            assertEquals(1, store.logins().count("alice"));
+
+            // 不存在的用户：整个事务回滚，什么都没改、没删
+            Logins.Issued bob = store.logins().create("bob", 0, 1_000);
+            assertEquals(UserStore.Refused.Kind.NO_SUCH,
+                    assertThrows(UserStore.Refused.class, () -> store.changePassword("nobody", "whatever-1", bob.id())).kind());
+            assertEquals(1, store.logins().count("bob"));
+            assertTrue(store.verify("alice", "new-password"));
+        }
+    }
+
+    /** review-fixes 需求 11.4：一次修改两件事，有一件不行就都不改；最后一个管理员的检查和更新是同一条语句。 */
+    @Test
+    void aChangeIsAllOrNothingAndTheLastAdminCheckIsAtomic() throws Exception {
+        try (UserStore store = UserStore.open(dir)) {
+            store.add("root", "root-password", true);
+            store.add("alice", "alice-password");
+            // 取消 root 的管理员（最后一个）同时停用：取消被拒，停用也没发生
+            assertEquals(UserStore.Refused.Kind.LAST_ADMIN,
+                    assertThrows(UserStore.Refused.class, () -> store.change("root", false, true)).kind());
+            assertFalse(store.status("root").orElseThrow().disabled());
+            assertTrue(store.status("root").orElseThrow().admin());
+            // 给 alice 管理员并停用 root：两件都成
+            store.change("alice", true, null);
+            store.change("root", null, true);
+            assertTrue(store.status("root").orElseThrow().disabled());
+            // 现在只剩 alice：她既是最后一个管理员，条件 UPDATE 改不动，报 LAST_ADMIN；不存在的报 NO_SUCH
+            assertEquals(UserStore.Refused.Kind.LAST_ADMIN, assertThrows(UserStore.Refused.class, () -> store.setAdmin("alice", false)).kind());
+            assertEquals(UserStore.Refused.Kind.NO_SUCH, assertThrows(UserStore.Refused.class, () -> store.disable("nobody")).kind());
+            assertEquals(UserStore.Refused.Kind.NO_SUCH, assertThrows(UserStore.Refused.class, () -> store.change("nobody", true, null)).kind());
+            // 停用的管理员不受保护：root 已停用，取消他的管理员可以
+            store.setAdmin("root", false);
+            assertFalse(store.status("root").orElseThrow().admin());
         }
     }
 }

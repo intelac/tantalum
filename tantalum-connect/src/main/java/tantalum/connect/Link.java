@@ -21,6 +21,7 @@ import tantalum.local.wire.Bye;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Cancel;
 import tantalum.local.wire.Context;
+import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Message;
 import tantalum.local.wire.Welcome;
@@ -76,9 +77,12 @@ final class Link {
         while (!stopped.isDone()) {
             Session session = new Session();
             current = session;
+            if (stopped.isDone()) {
+                // stop() 和这里交错：它可能没看到这个 session，自己收尾
+                return 0;
+            }
             try {
-                session.socket = http.newWebSocketBuilder().header("Authorization", "Bearer " + token)
-                        .buildAsync(socket, session).get();
+                http.newWebSocketBuilder().header("Authorization", "Bearer " + token).buildAsync(socket, session).get();
             } catch (ExecutionException failure) {
                 Duration wait = wait(attempt++);
                 out.println(words.say(Words.Key.LINK_RETRY, Map.of("cause", describe(failure.getCause()), "seconds", wait.toSeconds())));
@@ -191,7 +195,9 @@ final class Link {
                 try {
                     return ended.get(1, TimeUnit.SECONDS);
                 } catch (TimeoutException waiting) {
-                    if (System.nanoTime() - heard > silence.toNanos()) {
+                    if (stopped.isDone()) {
+                        end(new Ended(1000, "stopped", bye));
+                    } else if (System.nanoTime() - heard > silence.toNanos()) {
                         end(new Ended(1006, "silent", bye));
                     }
                 } catch (ExecutionException impossible) {
@@ -209,6 +215,16 @@ final class Link {
             }
         }
 
+        /** 连上了：从这里拿到 WebSocket，之后才能发。连上之前就已经结束的（stop()、静默超时），立即断开。 */
+        @Override
+        public void onOpen(WebSocket webSocket) {
+            socket = webSocket;
+            webSocket.request(1);
+            if (ended.isDone()) {
+                webSocket.abort();
+            }
+        }
+
         void send(Message message) {
             WebSocket open = socket;
             if (open == null || ended.isDone()) {
@@ -217,8 +233,9 @@ final class Link {
             sending.lock();
             try {
                 open.sendText(Wire.encode(message), true).get(30, TimeUnit.SECONDS);
-            } catch (InterruptedException stopped) {
+            } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
+                end(new Ended(1006, "interrupted", bye));
             } catch (ExecutionException | TimeoutException failure) {
                 end(new Ended(1006, "send failed", bye));
             } finally {
@@ -233,12 +250,22 @@ final class Link {
             if (last) {
                 String text = partial.toString();
                 partial.setLength(0);
+                Message message;
                 try {
-                    handle(Wire.decode(text));
+                    message = Wire.decode(text);
                 } catch (IllegalArgumentException unreadable) {
                     out.println(words.say(Words.Key.LINK_UNREADABLE));
                     webSocket.sendClose(1003, "bad message");
                     end(new Ended(1003, "bad message", bye));
+                    webSocket.request(1);
+                    return null;
+                }
+                try {
+                    handle(message);
+                } catch (RuntimeException failure) {
+                    // 处理出错是这边的问题，不是消息不可读：按内部错误结束，重连
+                    System.err.println("[tantalum-connect] handling a " + message.getClass().getSimpleName() + " failed: " + failure);
+                    end(new Ended(1011, "handler failed", bye));
                 }
             }
             webSocket.request(1);
@@ -255,7 +282,16 @@ final class Link {
                 }
                 case Call call -> calls.call(call, this::send);
                 case Cancel cancel -> calls.cancel(cancel.id());
-                case Context context -> Thread.ofVirtual().start(() -> send(calls.context(context)));
+                case Context context -> Thread.ofVirtual().start(() -> {
+                    ContextResult result;
+                    try {
+                        result = calls.context(context);
+                    } catch (RuntimeException failure) {
+                        System.err.println("[tantalum-connect] reading AGENTS.md failed: " + failure);
+                        result = new ContextResult(context.id(), null);
+                    }
+                    send(result);
+                });
                 case Bye goodbye -> bye = goodbye.reason();
                 default -> { }
             }

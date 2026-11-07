@@ -1,5 +1,6 @@
 package tantalum.local.sandbox;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -98,7 +99,20 @@ public record MxcPolicy(List<Path> dirs, boolean write, List<Path> readDirs, boo
         }
         readDirs.forEach(dir -> readonly.add(dir.toString()));
         readonly.add(home.toString());
-        List<String> denied = DENIED.stream().map(name -> userHome.resolve(name).toString()).toList();
+        // 禁止的目录写两种：字面路径和真实路径。~/.ssh 是符号链接时 MXC 按真实路径判断，只写字面的拦不住（review-fixes 需求 11.10）
+        List<String> denied = new ArrayList<>();
+        for (String name : DENIED) {
+            Path literal = userHome.resolve(name);
+            denied.add(literal.toString());
+            try {
+                Path real = literal.toRealPath();
+                if (!real.equals(literal)) {
+                    denied.add(real.toString());
+                }
+            } catch (IOException | RuntimeException missing) {
+                // 不存在或读不到：字面路径就够了
+            }
+        }
 
         Map<String, Object> filesystem = new LinkedHashMap<>();
         filesystem.put("readwritePaths", readwrite);

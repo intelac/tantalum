@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -153,7 +154,11 @@ public final class Engine implements AutoCloseable {
         this.clock = clock;
         this.codec = codec;
         this.shutdownWait = properties.shutdownWait();
+        // 启动到一半失败时倒序关掉已经打开的（review-fixes 需求 11.12）：每打开一样就记一样
+        List<AutoCloseable> opened = new ArrayList<>();
+        opened.add(routes);
         this.storage = Storage.open(properties.dataDir(), codec, properties.index(), properties.attachmentLimits());
+        opened.add(storage);
         Loop loop = properties.loop();
         List<SessionIndex.Session> unfinished;
         try {
@@ -163,7 +168,9 @@ public final class Engine implements AutoCloseable {
                 LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());
             }
             localTokens = openLocalTokens(properties.dataDir(), clock);
+            opened.add(localTokens);
             localLinks = new LocalLinks(localTokens, clock, LocalLinks.Timing.DEFAULT);
+            opened.add(localLinks);
             // 本机工作区读到的图片、MCP 返回的图片、浏览器截图都照附件规则存进本人附件（web-tools W8）
             ToolImages toolImages = new ToolImages(storage.attachments);
             // 服务器上只读附件；读写文件、Git 都转发到用户的电脑（local-workspace L6）
@@ -175,6 +182,9 @@ public final class Engine implements AutoCloseable {
             TantalumProperties.Web web = properties.webSettings();
             addressRules = new AddressRules(web.blockPrivateNetwork());
             egress = web.any() ? Egress.start(addressRules, UpstreamProxy.fromEnvironment(System::getenv)) : null;
+            if (egress != null) {
+                opened.add(egress);
+            }
             if (web.fetch().enabled()) {
                 catalog.register(new WebFetchTool(new Fetcher(egress, addressRules)));
             }
@@ -183,16 +193,20 @@ public final class Engine implements AutoCloseable {
             browsers = browser.enabled() ? new Browsers(new Browsers.Settings(browser.maxOpen(), browser.idleClose(), browser.sandbox()),
                     egress, toolImages, clock, new BrowserDriver(properties.dataDir())) : null;
             if (browsers != null) {
+                opened.add(browsers);
                 BrowserTools.all(browsers).forEach(catalog::register);
             }
             McpSettings mcpSettings = McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv);
             mcp = new McpRegistry(mcpSettings, toolImages);
+            opened.add(mcp);
             catalog.setSource(mcp);
             switches = openSwitches(properties.dataDir(), clock);
+            opened.add(switches);
             localWorkspace = new LocalWorkspace(switches, localLinks);
             // 管理员关掉的那一项不注册工具；这一组照样进开关，插件页照样显示“联网”一块
             webAccess = new WebAccess(switches, web.fetch().enabled(), browser.enabled(), web.blockPrivateNetwork());
             userSettings = openUserSettings(properties.dataDir(), clock);
+            opened.add(userSettings);
             // 每个模型的窗口在它的路线的列表里，每次提问按这次用的模型算压缩设置（model-picker M10）
             this.routes = routes.start(LIST_STARTUP_WAIT);
             compaction = new CompactionPolicy(userSettings, properties.compactionLimits());
@@ -219,6 +233,7 @@ public final class Engine implements AutoCloseable {
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
             deadlines = new DeadlineTimers(clock, input::tryPublish);
+            opened.add(deadlines);
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
                     AssembleContext.class, new ContextHandler(localWorkspace, properties.systemPrompt(), catalog, gate, memories,
@@ -253,19 +268,28 @@ public final class Engine implements AutoCloseable {
             cleanroomRing.connect(cleanroom);
             lanes.onHalt(receipts::failAll);
         } catch (RuntimeException | IOException failure) {
-            routes.close();
-            closeWebQuietly();
-            Storage.closeQuietly(storage);
+            closeAll(opened, failure);
             throw failure;
         }
-        output.start();
-        cleanroomRing.start();
-        input.start();
-        int interrupted = interrupt(unfinished);
+        int interrupted;
         try {
-            deadlines.arm(storage.index.awaitingWithDeadline());
-        } catch (SQLException failure) {
-            throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
+            output.start();
+            cleanroomRing.start();
+            input.start();
+            interrupted = interrupt(unfinished);
+            try {
+                deadlines.arm(storage.index.awaitingWithDeadline());
+            } catch (SQLException failure) {
+                throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
+            }
+        } catch (RuntimeException failure) {
+            // 环已经起来了：按正常关机的顺序关，线程、文件锁、数据库都放掉
+            try {
+                close();
+            } catch (IOException | RuntimeException more) {
+                failure.addSuppressed(more);
+            }
+            throw failure;
         }
         Warmup.start(codec);
         LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted, {} waiting for an answer",
@@ -280,17 +304,14 @@ public final class Engine implements AutoCloseable {
         return mcpNote.isEmpty() ? WebAccess.NOTE : mcpNote + "\n\n" + WebAccess.NOTE;
     }
 
-    /** 启动到一半失败时：已经起来的出口和浏览器线程不能留着。 */
-    private void closeWebQuietly() {
-        try {
-            if (browsers != null) {
-                browsers.close();
+    /** 启动到一半失败时：已经打开的倒序关掉，关不掉的挂在原来的异常上，原来的异常更要紧。 */
+    private static void closeAll(List<AutoCloseable> opened, Throwable failure) {
+        for (int i = opened.size() - 1; i >= 0; i--) {
+            try {
+                opened.get(i).close();
+            } catch (Exception more) {
+                failure.addSuppressed(more);
             }
-            if (egress != null) {
-                egress.close();
-            }
-        } catch (RuntimeException ignored) {
-            // 启动本来就失败了，原来的异常更要紧
         }
     }
 
@@ -410,19 +431,30 @@ public final class Engine implements AutoCloseable {
             return 0;
         }
         try {
+            long deadline = System.nanoTime() + DRAIN.toNanos();
             for (SessionIndex.Session session : unfinished) {
                 EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(),
                         session.session(), session.activeRun(), new RunInterrupted());
+                // 环满了等一会儿再试，但有上限；环坏了或等太久不能一直转下去（review-fixes 需求 11.12）
                 while (!input.tryPublish(envelope)) {
+                    if (input.broken()) {
+                        throw new IllegalStateException("the input ring is broken; the runs left unfinished by the previous process cannot be closed");
+                    }
+                    if (System.nanoTime() - deadline > 0) {
+                        throw new IllegalStateException("the input ring did not accept the interruptions of the unfinished runs within " + DRAIN);
+                    }
                     Thread.sleep(INTERRUPT_RETRY.toMillis());
                 }
             }
-            input.awaitDrained(DRAIN);
+            if (!input.awaitDrained(DRAIN)) {
+                LOG.warn("the input ring did not drain the interruptions of {} unfinished runs within {}", unfinished.size(), DRAIN);
+            }
             if (!lanes.awaitIdle(DRAIN)) {
                 LOG.warn("{} unfinished runs were not closed within {}", unfinished.size(), DRAIN);
             }
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while closing the runs left unfinished by the previous process", stopping);
         }
         return unfinished.size();
     }

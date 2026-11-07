@@ -178,14 +178,17 @@ public final class Egress implements AutoCloseable {
     }
 
     private void handle(Socket socket) {
-        open.add(socket);
+        if (!track(socket)) {
+            return;
+        }
         try (socket) {
             socket.setSoTimeout(HEAD_TIMEOUT_MS);
             InputStream in = new BufferedInputStream(socket.getInputStream());
             OutputStream out = socket.getOutputStream();
             String head;
             try {
-                head = readHead(in, MAX_HEAD);
+                // 整个请求头 10 秒内要到齐：一个字节一个字节慢慢发的客户端不能占着名额（review-fixes 需求 11.8）
+                head = new HeadReader(MAX_HEAD, HEAD_TIMEOUT_MS).read(in);
             } catch (HeadTooLarge tooLarge) {
                 respond(out, 400, "Bad Request", ERROR_HEADER + ": bad-request", "The request head is larger than 16 KB.");
                 return;
@@ -213,6 +216,17 @@ public final class Egress implements AutoCloseable {
         } finally {
             open.remove(socket);
         }
+    }
+
+    /** 登记一条连接，{@link #close} 时一起关。关闭已经开始时登记不上，连接直接关掉：登记和关闭之间的空当不漏连接。 */
+    private boolean track(Socket socket) {
+        open.add(socket);
+        if (closed) {
+            open.remove(socket);
+            quietly(socket);
+            return false;
+        }
+        return true;
     }
 
     /** 目标：主机（IPv6 带方括号）、端口。 */
@@ -253,7 +267,7 @@ public final class Egress implements AutoCloseable {
                 far.setSoTimeout(CONNECT_TIMEOUT_MS);
                 String reply;
                 try {
-                    reply = readHead(farIn, MAX_RESPONSE_HEAD);
+                    reply = new HeadReader(MAX_RESPONSE_HEAD, CONNECT_TIMEOUT_MS).read(farIn);
                 } catch (HeadTooLarge | SocketTimeoutException bad) {
                     reply = null;
                 }
@@ -355,6 +369,8 @@ public final class Egress implements AutoCloseable {
             request.append("Connection: close\r\n\r\n");
             OutputStream farOut = far.getOutputStream();
             farOut.write(request.toString().getBytes(StandardCharsets.ISO_8859_1));
+            // 请求头已经到齐，正文按看门狗的空闲规则等：读超时只是轮询，不是结束
+            socket.setSoTimeout(POLL_MS);
             copy(in, farOut, length, progress);
             farOut.flush();
             far.setSoTimeout(POLL_MS);
@@ -452,10 +468,12 @@ public final class Egress implements AutoCloseable {
         }
     }
 
+    /** 等网站的回复头：读超时只是轮询，已经读到的字节留着接着读（review-fixes 需求 11.8），5 分钟没有回复算没有。 */
     private static String readHeadWaiting(InputStream in, long started) throws IOException {
+        HeadReader reader = new HeadReader(MAX_RESPONSE_HEAD, Long.MAX_VALUE);
         while (true) {
             try {
-                return readHead(in, MAX_RESPONSE_HEAD);
+                return reader.read(in);
             } catch (SocketTimeoutException quiet) {
                 if (System.nanoTime() - started > IDLE_NANOS) {
                     return null;
@@ -494,7 +512,9 @@ public final class Egress implements AutoCloseable {
             Socket socket = new Socket();
             try {
                 socket.connect(new InetSocketAddress(via.host(), via.port()), CONNECT_TIMEOUT_MS);
-                open.add(socket);
+                if (!track(socket)) {
+                    return Optional.empty();
+                }
                 return Optional.of(socket);
             } catch (IOException failure) {
                 socket.close();
@@ -511,7 +531,9 @@ public final class Egress implements AutoCloseable {
             Socket socket = new Socket();
             try {
                 socket.connect(new InetSocketAddress(address, target.port()), CONNECT_TIMEOUT_MS);
-                open.add(socket);
+                if (!track(socket)) {
+                    return Optional.empty();
+                }
                 return Optional.of(socket);
             } catch (IOException failure) {
                 socket.close();
@@ -600,7 +622,13 @@ public final class Egress implements AutoCloseable {
         byte[] buffer = new byte[16 * 1024];
         long left = length;
         while (left > 0) {
-            int n = in.read(buffer, 0, (int) Math.min(buffer.length, left));
+            int n;
+            try {
+                n = in.read(buffer, 0, (int) Math.min(buffer.length, left));
+            } catch (SocketTimeoutException quiet) {
+                // 等正文：5 分钟没进展由看门狗关连接，这里的读随之出错
+                continue;
+            }
             if (n < 0) {
                 throw new IOException("request body ended early");
             }
@@ -645,30 +673,50 @@ public final class Egress implements AutoCloseable {
         }
     }
 
-    /** 读到空行为止，返回不含空行的头；还没读到任何字节就结束时返回 null。 */
-    private static String readHead(InputStream in, int max) throws IOException {
-        ByteArrayOutputStream head = new ByteArrayOutputStream();
-        int matched = 0;
-        while (true) {
-            int b = in.read();
-            if (b < 0) {
-                if (head.size() == 0) {
-                    return null;
-                }
-                throw new IOException("head ended early");
+    /**
+     * 读到空行为止的请求头或回复头。读超时（{@link SocketTimeoutException}）抛出去，已经读到的字节留在这里，再调一次接着读；
+     * 从第一次读起超过 {@code totalMillis} 毫秒还没读完也算超时。读到空行返回不含空行的头；还没读到任何字节就结束时返回 null。
+     */
+    static final class HeadReader {
+        private final ByteArrayOutputStream head = new ByteArrayOutputStream();
+        private final int max;
+        private final long totalMillis;
+        private long started;
+        private int matched;
+
+        HeadReader(int max, long totalMillis) {
+            this.max = max;
+            this.totalMillis = totalMillis;
+        }
+
+        String read(InputStream in) throws IOException {
+            if (started == 0) {
+                started = System.nanoTime();
             }
-            head.write(b);
-            if (head.size() > max) {
-                throw new HeadTooLarge();
-            }
-            // 认 \r\n\r\n，也认 \n\n
-            if (b == '\n') {
-                matched++;
-                if (matched == 2) {
-                    return head.toString(StandardCharsets.ISO_8859_1).strip();
+            while (true) {
+                if (totalMillis != Long.MAX_VALUE && (System.nanoTime() - started) / 1_000_000 > totalMillis) {
+                    throw new SocketTimeoutException("head too slow");
                 }
-            } else if (b != '\r') {
-                matched = 0;
+                int b = in.read();
+                if (b < 0) {
+                    if (head.size() == 0) {
+                        return null;
+                    }
+                    throw new IOException("head ended early");
+                }
+                head.write(b);
+                if (head.size() > max) {
+                    throw new HeadTooLarge();
+                }
+                // 认 \r\n\r\n，也认 \n\n
+                if (b == '\n') {
+                    matched++;
+                    if (matched == 2) {
+                        return head.toString(StandardCharsets.ISO_8859_1).strip();
+                    }
+                } else if (b != '\r') {
+                    matched = 0;
+                }
             }
         }
     }

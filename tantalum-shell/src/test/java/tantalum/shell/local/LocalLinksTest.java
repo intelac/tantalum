@@ -86,24 +86,51 @@ class LocalLinksTest {
     }
 
     /**
-     * 先发 {@code welcome} 再让别人看得到这条连接：看得到就会有调用发过来，电脑那边要先知道连的是谁，否则它以“连的是别的用户”
-     * 拒绝（windows-latest 上 LinkIT 抓到过调用抢在 welcome 前面）。
+     * review-fixes 需求 11.9：先登记再发 {@code welcome}（撤销一定看得到这条连接），但调用要等 {@code welcome} 发出去才发：
+     * 电脑那边要先知道连的是谁，否则它以“连的是别的用户”拒绝（windows-latest 上 LinkIT 抓到过调用抢在 welcome 前面）。
      */
     @Test
-    void theWelcomeIsSentBeforeTheLinkCanBeUsed() throws Exception {
+    void aCallWaitsUntilTheWelcomeIsOut() throws Exception {
         List<Boolean> visibleWhenWelcomed = new java.util.concurrent.CopyOnWriteArrayList<>();
+        CompletableFuture<CompletableFuture<LocalResult>> pending = new CompletableFuture<>();
         FakePeer peer = new FakePeer() {
             @Override
             public void send(String text) {
                 if (Wire.decode(text) instanceof Welcome) {
                     visibleWhenWelcomed.add(links.status(ALICE).isPresent());
+                    // welcome 正在发：这时发起的调用要等它发完
+                    pending.complete(callAsync("s-1", Duration.ofSeconds(5)));
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
                 super.send(text);
             }
         };
+        Link link = attach(peer, HOUR_LATER);
+        assertEquals(List.of(true), visibleWhenWelcomed, "registered before the welcome goes out");
+        assertInstanceOf(Welcome.class, peer.next());
+        Call call = assertInstanceOf(Call.class, peer.next(), "the call went out only after the welcome");
+        link.receive(new Result(call.id(), "fine", false, List.of()));
+        assertEquals(LocalResult.ok("fine"), pending.get(2, TimeUnit.SECONDS).get(2, TimeUnit.SECONDS));
+    }
+
+    /** review-fixes 需求 11.9：握手时发现账号停用，不只作废令牌，已经连着的那条也断开。 */
+    @Test
+    void aDisabledAccountFoundAtTheHandshakeEndsTheExistingLink() throws Exception {
+        String token = tokens.issue(ALICE, Duration.ofHours(1)).token();
+        java.util.concurrent.atomic.AtomicBoolean usable = new java.util.concurrent.atomic.AtomicBoolean(true);
+        links.accounts(principal -> usable.get());
+        FakePeer peer = new FakePeer();
         attach(peer, HOUR_LATER);
-        assertEquals(List.of(false), visibleWhenWelcomed);
-        assertTrue(links.status(ALICE).isPresent());
+        assertInstanceOf(Welcome.class, peer.next());
+        usable.set(false);
+        assertEquals(LocalTokens.Status.REVOKED, links.verify(token).status());
+        assertEquals(new Bye(Bye.Reason.REVOKED), peer.next());
+        assertEquals(Wire.CLOSE_EXPIRED, peer.closed.get(2, TimeUnit.SECONDS));
+        assertEquals(Optional.empty(), links.status(ALICE));
     }
 
     /** L10：第二条连接顶替第一条，旧的收到 {@code bye replaced} 和 4409，旧连接上还在等的调用按断开处理。 */

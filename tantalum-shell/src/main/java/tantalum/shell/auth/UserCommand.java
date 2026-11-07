@@ -40,12 +40,20 @@ public final class UserCommand {
                         out.println(text.say(Key.USERS_PASSWORD_REQUIRED));
                         return 2;
                     }
+                    if (password.length() < UserStore.MIN_PASSWORD) {
+                        out.println(text.say(Key.USERS_PASSWORD_TOO_SHORT, Map.of("min", UserStore.MIN_PASSWORD)));
+                        return 2;
+                    }
                     store.add(name, password, admin);
                 }
                 case "reset" -> {
                     String password = readPassword(input);
                     if (password == null) {
                         out.println(text.say(Key.USERS_PASSWORD_REQUIRED));
+                        return 2;
+                    }
+                    if (password.length() < UserStore.MIN_PASSWORD) {
+                        out.println(text.say(Key.USERS_PASSWORD_TOO_SHORT, Map.of("min", UserStore.MIN_PASSWORD)));
                         return 2;
                     }
                     store.resetPassword(name, password);

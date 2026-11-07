@@ -68,30 +68,56 @@
 
 - [x] 14. 阶段 2 收尾：全量回归、8091 部署、tech.md、提交
 
-- [ ] 15. 阶段 3：登录、改密码、SSE、接口校验
+- [x] 15. 阶段 3：登录、改密码、SSE、接口校验
   - File: `auth/UserStore.java`、`auth/Logins.java`、`auth/LoginContextRepository.java`、`auth/SecurityConfig.java`、`auth/LoginThrottle.java`、`auth/UserCommand.java`、`web/AuthController.java`、`web/UsersController.java`、`web/EventStreamController.java`、`web/ApiController.java`、`web/ErrorCode.java`、控制台错误码与词典
   - _Requirements: 11.1–11.6, 11.13_
 
-- [ ] 16. 阶段 3：出口与地址
+- [x] 16. 阶段 3：出口与地址
   - File: `net/AddressRules.java`、`net/Egress.java`、`fetch/Fetcher.java`
   - _Requirements: 11.7, 11.8_
 
-- [ ] 17. 阶段 3：本机工作区与连接程序
+- [x] 17. 阶段 3：本机工作区与连接程序
   - File: `local/LocalLinks.java`、`local/LocalEndpoint.java`、`tantalum-connect/Link.java`、`Calls.java`、`Main.java`、`tantalum-local/sandbox/MxcPolicy.java`
   - _Requirements: 11.9, 11.10_
 
-- [ ] 18. 阶段 3：浏览器
+- [x] 18. 阶段 3：浏览器
   - File: `browser/Browsers.java`、`browser/UserBrowser.java`
   - _Requirements: 11.11_
 
-- [ ] 19. 阶段 3：装配与启动
+- [x] 19. 阶段 3：装配与启动
   - File: `boot/Engine.java`
   - _Requirements: 11.12_
 
-- [ ] 20. 阶段 3 收尾：全量回归、8091 部署、tech.md、提交
+- [x] 20. 阶段 3 收尾：全量回归、8091 部署、tech.md、提交
 
-- [ ] 21. 阶段 4：去重与归位（开始前细化）
-  - _Requirements: 12_
+- [ ] 21. 阶段 4：消息分类和折叠
+  - File: `tantalum-value/.../model/SystemUpdates.java`（新）、`kernel/projection/{ContextUpdate,PromptProjection}.java`、`shell/model/{ToolChanges,HookTexts,ModelChanges,Folding(新),ClaudeRequest,OpenAiClient}.java`
+  - _Requirements: 12.1, 12.2_
 
-- [ ] 22. 阶段 5：拆大类与清注释（开始前细化）
-  - _Requirements: 13_
+- [ ] 22. 阶段 4：工具的描述和实现
+  - File: `shell/plugin/{Tool,ToolDispatch(新)}.java`、`shell/tool/ToolCatalog.java`、`shell/boot/KernelFactory.java`、各工具类的静态 dispatch 工厂
+  - _Requirements: 12.3_
+
+- [ ] 23. 阶段 4：插件开关只在一处、SPI 拆分
+  - File: `kernel/hook/{HookChain,KernelHook}.java`、`shell/plugin/{PluginInfo(新),AfterToolHook}.java`、`shell/access/PluginGate.java`、`shell/boot/KernelFactory.java`、示例钩子
+  - _Requirements: 12.4, 12.6, 12.7_
+
+- [ ] 24. 阶段 4：事实和状态的归位
+  - File: `value/decision/HookDecided.java`、`value/state/{Compacting,RunState}.java`、`kernel/hook/HookChain.java`、`kernel/step/{CompactSteps,ContextSteps,ModelSteps}.java`、`shell/journal/{EventCodec,RecordCodec}.java`、`shell/fetch/Fetcher.java`
+  - _Requirements: 12.5, 12.8_
+
+- [ ] 25. 阶段 4 收尾：全量回归、8091 部署、tech.md、提交
+
+- [ ] 26. 阶段 5：`RecordCodec` 四拆
+  - _Requirements: 13.1_
+
+- [ ] 27. 阶段 5：`Engine` 装配分步
+  - _Requirements: 13.2_
+
+- [ ] 28. 阶段 5：`RunState` 按阶段分组
+  - _Requirements: 13.3_
+
+- [ ] 29. 阶段 5：spec 编号注释逐包换成规则本身
+  - _Requirements: 13.4_
+
+- [ ] 30. 阶段 5 收尾：全量回归、8091 部署、tech.md、提交
