@@ -135,7 +135,7 @@
   - _Requirements: N11, N14, 需求 5.1, 5.2_
   - _Prompt: Role: CI 工程师 | Task: 确认浏览器测试和 Windows 专用测试在 CI 上真的跑了 | Restrictions: 不改 web-tools 的断言 | Success: CI 上浏览器 IT 通过且没有跳过_
 
-- [-] 13. 控制台端到端
+- [x] 13. 控制台端到端
   - File: .github/workflows/windows.yml（改），按需 console/playwright.config.ts（改）
   - 加“Console end-to-end”一步：`pnpm exec playwright install chromium`、`pnpm e2e`（`E2eServer` 经 Maven 启动，vite 开发服务器）；失败时上传 `console/test-results/`
   - `playwright.config.ts` 的启动命令在 Windows 上要改时，只按平台改命令，不改测试
@@ -143,7 +143,7 @@
   - _Requirements: 需求 7.1_
   - _Prompt: Role: 测试开发 | Task: 在 Windows 上跑控制台端到端 | Restrictions: E2E 不访问外网；不改 e2e 用例的断言 | Success: CI 上 Playwright 全过_
 
-- [-] 14. 计划任务脚本
+- [x] 14. 计划任务脚本
   - File: docs/windows/tantalum-task.ps1（新）、.github/workflows/windows.yml（改）
   - 照设计“`docs/windows/tantalum-task.ps1`”：`install`、`status`、`uninstall`、`selftest`；`javaw.exe`、`--logging.file.name`、当前用户、登录时触发、不限时、`IgnoreNew`、1 分钟重启最多 10 次；不需要管理员、不存密码、不写密钥。工作流加“Scheduled task”一步跑 `selftest`
   - runner 上 `Interactive` 跑不起来时 `selftest` 改用 `S4U` 并写明原因；两种都不行就去掉这一步，只在任务 17 手工验证，原因记进日志
@@ -152,7 +152,7 @@
   - _Requirements: N10, N13, 需求 6.1, 6.2, 6.3, 6.4, 6.5_
   - _Prompt: Role: Windows 运维 | Task: 写登记计划任务的 PowerShell 脚本并在 CI 上自测 | Restrictions: 不要求管理员；不存密码；不删数据目录 | Success: selftest 在 CI 上通过，或写明为什么只能手工验证_
 
-- [-] 15. 说明文档
+- [x] 15. 说明文档
   - File: README.md、README.en.md、.spec-workflow/steering/tech.md、.spec-workflow/BACKLOG.md（改）
   - README 新的一节“在 Windows 上运行”，内容照需求 8.1、8.2：要装什么、启动和 `users`、默认数据目录、`browser install`（不需要 `--with-deps`，中文字体系统自带）、计划任务脚本、API 密钥放用户环境变量、`.properties` 里路径写 `/` 或 `\\`、防火墙、Ctrl+C 和结束任务的区别、风险（用户目录外的数据目录和 `icacls` 命令、断电可能丢最新建的文件、不支持网络共享、arm64 没测过）。“测试”一节加 Windows 工作流。README.en.md 的 Run 一节加一段
   - tech.md：测试表加 Windows CI；Decision Log 加四条：不写 ACL、不做 Windows 服务、不用 Jimfs、用户目录外只 WARN
@@ -161,15 +161,16 @@
   - _Requirements: 需求 8.1, 8.2, 8.3_
   - _Prompt: Role: 技术写作 | Task: 写 Windows 上的安装、运行和风险说明 | Restrictions: 不写真实的密钥；命令都在 Windows 上能直接粘贴运行 | Success: Yi 照着能在一台新的 Windows 电脑上装好_
 
-- [ ] 16. Windows 上的测量
+- [x] 16. Windows 上的测量
   - File: .spec-workflow/steering/tech.md（改），按需 docs/windows/tantalum-task.ps1（改，让 `selftest` 打印从启动到 200 的秒数）
   - 从 CI 记：有缓存和没缓存时整个工作流的时间、`mvn verify` 的时间、空数据目录从启动到能登录的时间（`selftest`）、`JarCrashIT` 重启后补齐的时间（它的日志）；和 NFR 比（≤ 45 分钟、≤ 20 秒），写进 tech.md，注明 runner 的规格
   - _Requirements: NFR Performance_
   - _Prompt: Role: 测试开发 | Task: 记下 Windows CI 上的时间 | Restrictions: 不和 macOS 的数字直接比 | Success: 数字达标并记进 tech.md；不达标时写明原因和下一步_
 
-- [ ] 17. 全部通过和手工检查
+- [x] 17. 全部通过和手工检查
   - `windows-latest` 上整个工作流全绿，把运行链接写进本任务的实现日志和 BACKLOG；macOS 全量回归照常通过
   - Yi 有 Windows 电脑时照设计“手工检查”1–5 跑一遍（中文控制台的中文密码、提问附件记忆插件开关重启、`browser install` 和截图、普通用户登记计划任务并注销再登录、`D:\` 下的数据目录和 `icacls`），每一条的结果写进日志，截图给 Yi；没有就写明“只有 CI”，并把任务 9 和任务 14 里只能手工验证的部分列为未验证
   - 主会话把 `windows-server` 合进 `main`，确认 `main` 上的工作流也跑通
   - _Requirements: N16, 需求 7.4, 需求 1.2, 2.2, 5.1, 6.1, 6.4_
+  - 结果（2026-11-07）：`windows-latest` 全绿 <https://github.com/intelac/tantalum/actions/runs/42318846814>；只有 CI，没有真实 Windows 电脑，CI 盖不到的几项列在任务 17 的实现日志里
   - _Prompt: Role: 测试开发 | Task: 以一次全绿的 Windows 运行收尾，有条件时在真实 Windows 电脑上手工检查 | Restrictions: 截图和日志里不出现密钥；提问用真实 Claude 一两轮即可，事后报用量 | Success: 运行链接和手工检查结果记进日志和 BACKLOG，Yi 收到截图_

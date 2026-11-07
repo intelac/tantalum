@@ -602,3 +602,26 @@ record-results 第 2 步测到的 573 ms 降到 320 ms，比 record-results 之�
 - **切换语言的时间**（生产构建 `vite preview`，Chromium，这台 Mac；1,000 条记录的轨迹页，时间概览 865 个标记，记录表虚拟滚动、DOM 里 29 行；在设置页“语言”里点选，从点击到新文字出现再过一帧）：5 次 18.7–37.2 ms，最大 37.2 ms；再跑一遍最大 30.9 ms（目标 ≤ 300 ms）。测量脚本在会话的 scratchpad（`i18n-nfr/switch.spec.ts`，接口全部由 `page.route` 假造），不进仓库。
 - **主包大小**（`vite build`，gzip）：改造前 231.31 kB（`model-picker` 收尾时）→ 第 1 步 231.97 kB → 第 2 步 234.07 kB → 三种语言都打进去 252.74 kB，增加 21.4 kB（目标 ≤ 30 KB）。
 - **和设计不同的几处**：中文的相对时间用 `Intl` 的写法（“5分钟前”，原来是“5 分钟前”，“刚刚”成了“现在”）；`CliText` 放在新包 `tantalum.shell.cli`（放 `boot` 会让 `auth`、`store`、`browser` 和 `boot` 成环）；`Bundle` 写成 record（`tantalum.value` 只放 record、接口、枚举）；任务 14（控制台按代码说错误）挪进第 2 步，否则服务器先改成英文诊断时中文界面会露出英文；错误代码比设计的表多了十来个（图片边长、像素、处理繁忙，消息里图片合计、文件个数，选模型的六种，记忆正文和索引超长，会话暂时不可用），`plugin/required` 状态码保持 400。
+
+### windows-server（2026-11-07）：服务器在 Windows 上
+
+不改设计的部分照 spec（`PrivateFiles`、保留设备名、数据目录检查、计划任务脚本），在 GitHub Actions `windows-latest` 上跑全部测试（`.github/workflows/windows.yml`，不用密钥）。全绿的运行：<https://github.com/intelac/tantalum/actions/runs/42318846814>。runner 是 GitHub 托管的 Windows Server 2025（公开仓库的标准规格 4 vCPU、16 GB），和 Mac Studio 不直接比。
+
+| 量什么 | Windows CI 上 | 要求 |
+|---|---|---|
+| 整个工作流（有 Maven、pnpm、Chromium 缓存） | 21 分 38 秒（控制台 1 分 15 秒、打包 24 秒、`mvn verify` 12 分 13 秒、冒烟 41 秒、计划任务 69 秒、Playwright 4 分 35 秒） | ≤ 45 分钟 |
+| 没有缓存时 | 没单独量全量；第一次运行打包多 25 秒（49 对 24 秒）、装 Chromium 多 6 秒（9 对 3 秒），其余依赖在 `mvn verify` 里下载 | — |
+| 空数据目录（只有一个账号）从计划任务启动到 HTTP 有回复 | 5.2 秒、5.3 秒、9 秒（三次） | ≤ 20 秒 |
+| 结束进程后计划任务把它再起来 | 60 秒（每分钟的触发器） | 1 分钟 |
+| `JarCrashIT` 整个用例（起 jar、杀掉、重启、补齐、继续） | 16.6–19.5 秒；重启补齐那一段的日志在子进程的文件里，没上传，没单独量 | — |
+
+CI 抓到、macOS 上看不到的问题（都已修，测试钉住）：
+
+- **出口隧道卡死：** 两个虚拟线程同时在一个套接字上等读、等写时，Windows 上等写的那个收不到“可写”的唤醒（`FetcherTlsIT` 抓 6 MB 页面 30 秒超时；线程转储里 `egress-relay` 停在 `NioSocketImpl.implWrite`，换平台线程 2.6 秒通过）。`Egress` 的连接线程在 Windows 上用平台线程。
+- **连接程序先收到调用、后收到 welcome：** `LocalLinks.attach` 先登记再发 welcome，调用可能抢在前面，电脑按“连的是别的用户”拒绝（`LinkIT`）。改成先发 welcome，所有平台都有这个竞争。
+- **401 发新 Cookie：** Spring Security 的请求缓存给每个 401 建会话，新 Cookie 顶掉同一浏览器刚登录拿到的 Cookie（Playwright `approval.spec`）。请求缓存关掉，所有平台。
+- **语言缓存晚写：** 选了语言要等服务器回了才写第一帧用的缓存，马上刷新还是原来的语言（`i18n.spec`）。改成和画面一起当场写，所有平台。
+- 计划任务的“失败后重启”不管运行中退出：改成每分钟触发一次（tech 决定 18）。
+- `MoveFileEx` 替换一个还有句柄开着的文件（NIO 的也算）照样拒绝：靠 `PrivateFiles.replace` 的 1 秒重试；`LockFileEx` 是强制锁，别的句柄读不了 `store.lock`；`destroyForcibly` 的退出码是 1；Java 按 ANSI 代码页解码命令行参数（英文系统上中文参数变成 `?`，环境变量和当前目录不受影响）。
+
+Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权限造读写失败的（Windows 的 ACL 由 `WindowsFilesTest` 查）；macOS 连接程序的（MXC、`Git.java` 的 `/dev/null`、路径用 `\`、`fileKey()` 为空，Playwright 里两个跑真连接程序工具的用例同理）；提交带不带模型的 P95 差值（每次提交都 fsync，runner 的磁盘偶尔停上百毫秒，两组都被拖到 100–250 ms）。控制台单元测试在 Windows 上一个文件一个文件地跑：ModelPicker 的 jsdom 计时和并行的测试文件抢 CPU 时量到 65–100.6 ms。
