@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -42,6 +43,7 @@ import tantalum.shell.journal.RecordCodec;
 import tantalum.shell.journal.TailSequence;
 import tantalum.shell.loop.Cleanroom;
 import tantalum.shell.loop.CleanroomRing;
+import tantalum.shell.loop.DeadlineTimers;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.loop.ExternalGate;
 import tantalum.shell.loop.HandlerDispatcher;
@@ -69,7 +71,6 @@ import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.route.Routes;
-import tantalum.shell.question.OpenQuestions;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
 import tantalum.shell.sse.SseHub;
@@ -90,6 +91,7 @@ import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 
 /** 把存储、环、Handler 和插件装配起来，负责启动和关闭。提交走 {@link #intake()}，读取走 {@link #queries()}。不依赖 Spring。 */
@@ -111,7 +113,6 @@ public final class Engine implements AutoCloseable {
     private final StateView view;
     private final SseHub hub;
     /** 插件工作在控制台上问用户的问题（如工具审批），页面经 {@code QuestionController} 取和回答。 */
-    private final OpenQuestions questions;
     private final MemoryStores memories;
     private final McpRegistry mcp;
     private final ToolCatalog catalog;
@@ -130,6 +131,7 @@ public final class Engine implements AutoCloseable {
     private final CompactionPolicy compaction;
     private final PluginGate gate;
     private final InputRing input;
+    private final DeadlineTimers deadlines;
     private final LaneDispatcher lanes;
     /** 提交的回执：那一步落盘后完成，接口才回“已接受”（one-line-journal J4）。 */
     private final Receipts receipts = new Receipts();
@@ -207,7 +209,6 @@ public final class Engine implements AutoCloseable {
             view = new StateView();
             TurnQuery turns = new TurnQuery(storage.paths, storage.records, codec.mapper());
             hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
-            questions = new OpenQuestions(clock, hub::question);
             queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths,
                     storage.records::read),
                     turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)));
@@ -217,6 +218,7 @@ public final class Engine implements AutoCloseable {
                     storage.files::append, cleanroomRing::tryPublish, storage.loader(), residency);
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
+            deadlines = new DeadlineTimers(clock, input::tryPublish);
             ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
             Map<Class<? extends Command>, Handler> byCommand = Map.of(
                     AssembleContext.class, new ContextHandler(localWorkspace, properties.systemPrompt(), catalog, gate, memories,
@@ -225,7 +227,7 @@ public final class Engine implements AutoCloseable {
                     CallModel.class, new ModelHandler(routes, hub::chunks, clock,
                             run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
                     RunTool.class, new ToolHandler(catalog, workspaces, gate, properties.toolTimeout(), clock),
-                    DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock, questions),
+                    DoWork.class, new WorkHandler(workspaces, gate, properties.toolTimeout(), clock),
                     StartTimer.class, new TimerHandler());
             handlers = new HandlerDispatcher(byCommand, inFlight, results);
             output = new OutputRing(loop.outputRingSize(), handlers);
@@ -259,6 +261,11 @@ public final class Engine implements AutoCloseable {
         cleanroomRing.start();
         input.start();
         interrupt(unfinished);
+        try {
+            deadlines.arm(storage.index.awaitingWithDeadline());
+        } catch (SQLException failure) {
+            throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
+        }
         Warmup.start(codec);
         LOG.info("store ready at {} in {} ms: {} runs left unfinished by the previous process closed as interrupted",
                 properties.dataDir(), Duration.ofNanos(System.nanoTime() - started).toMillis(), unfinished.size());
@@ -313,9 +320,6 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 插件工作问用户的、还没回答的问题。 */
-    public OpenQuestions questions() {
-        return questions;
-    }
 
     /** 插件开关和唯一的调用入口，插件页接口用它。 */
     public PluginGate plugins() {
@@ -398,7 +402,9 @@ public final class Engine implements AutoCloseable {
      * 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。
      * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
      */
-    private void interrupt(List<SessionIndex.Session> unfinished) {
+    private void interrupt(List<SessionIndex.Session> all) {
+        // 等用户回答的运行没有在途命令，不收尾，照旧等（waiting-state 需求 3.1）
+        List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())).toList();
         if (unfinished.isEmpty()) {
             return;
         }
@@ -432,6 +438,7 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("close event streams", hub::closeEveryone),
                 new Shutdown.Step("stop starting handlers", handlers::close),
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
+                new Shutdown.Step("stop answer deadline timers", deadlines),
                 new Shutdown.Step("close local links", localLinks),
                 new Shutdown.Step("close browsers", () -> {
                     if (browsers != null) {

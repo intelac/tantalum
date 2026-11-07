@@ -2,10 +2,11 @@
 
 import { FileText } from "lucide-react";
 import { attachmentUrl } from "../../api/client";
-import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, RunHead, TraceRecord, UserInput } from "../../api/types";
+import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, QuestionRecord, RunHead, TraceRecord, UserInput } from "../../api/types";
 import { formatBytes } from "../../text/format";
 import { Markdown } from "../../markdown/Markdown";
-import { currentText, type Text, useText } from "../../text";
+import { currentLanguage, currentText, type Text, useText } from "../../text";
+import { pick } from "../../text/localText";
 import { between, formatMs, formatTokens } from "../format";
 import { JsonTree } from "./JsonTree";
 import { LineDiff } from "../../ui/LineDiff";
@@ -218,6 +219,26 @@ function WorkPages(work: PluginWork, onOpen: (id: string) => void, t: Text["trac
   ];
 }
 
+/** 问用户（waiting-state）：谁问的、问了什么、结果和回答。 */
+function QuestionPages(question: QuestionRecord, t: Text["trace"]) {
+  return [
+    {
+      id: "summary",
+      label: t.tab.summary,
+      render: () => (
+        <Fields
+          rows={[
+            [t.details.askedBy, question.askedBy],
+            [t.details.questionText, pick(question.title, currentLanguage())],
+            [t.details.questionOutcome, t.questionStatus[question.status]],
+            [t.details.answer, [question.choice, question.text].filter((part) => part !== undefined && part !== "").join(" · ") || undefined],
+          ]}
+        />
+      ),
+    },
+  ];
+}
+
 function HookPages(hook: HookDecision, onOpen: (id: string) => void, t: Text["trace"]) {
   return [
     {
@@ -265,6 +286,8 @@ export function RecordTabs({ record, onOpen }: { record: Exclude<TraceRecord, { 
         return WorkPages(record, onOpen, t);
       case "hook":
         return HookPages(record, onOpen, t);
+      case "question":
+        return QuestionPages(record, t);
     }
   })();
   return <TabbedBody pages={pages} />;

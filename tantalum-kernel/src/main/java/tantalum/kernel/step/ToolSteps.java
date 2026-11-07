@@ -10,6 +10,7 @@ import tantalum.kernel.tool.ToolScheduler;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.ToolFinished;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
@@ -19,6 +20,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.Role;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.question.AskUser;
 import tantalum.value.state.RunState;
 import tantalum.value.state.ToolRound;
 import tantalum.value.state.ToolSlot;
@@ -32,7 +34,8 @@ public final class ToolSteps {
 
     static void start(Outcome out, RunState run, List<ToolCallBlock> calls) {
         List<ToolSlot> slots = calls.stream()
-                .map(call -> ToolSlot.pending(call, isConcurrencySafe(out, call))).toList();
+                .map(call -> AskUser.NAME.equals(call.name()) ? ToolSlot.waiting(call) : ToolSlot.pending(call, isConcurrencySafe(out, call)))
+                .toList();
         checkRemaining(out, run, new ToolRound(slots, 0));
     }
 
@@ -47,7 +50,7 @@ public final class ToolSteps {
         }
     }
 
-    /** 依次过 {@code beforeToolCall}。需要工作时暂停，工作完成后从下一个继续。 */
+    /** 依次过 {@code beforeToolCall}。需要工作或要问人时暂停，完成后从下一个继续。 */
     private static void checkRemaining(Outcome out, RunState run, ToolRound start) {
         ToolRound round = start;
         for (int i = round.checked(); i < round.slots().size(); i++) {
@@ -63,6 +66,9 @@ public final class ToolSteps {
                 round = block(round, i, "Tool call blocked: " + stop.reason());
             } else if (hook.result() instanceof NeedWork need) {
                 WorkSteps.start(out, run.withTools(round.withChecked(i)), need, hook.decidedBy(), HookPoint.BEFORE_TOOL_CALL);
+                return;
+            } else if (hook.result() instanceof Ask ask) {
+                AnswerSteps.ask(out, run.withTools(round.withChecked(i)), ask, hook.decidedBy(), HookPoint.BEFORE_TOOL_CALL);
                 return;
             }
         }
@@ -103,6 +109,18 @@ public final class ToolSteps {
         return out.decision();
     }
 
+    /** 用户回答了 {@code ask_user}（或期限到了）：回答就是这个槽位的结果，接着发剩下的（waiting-state 需求 5.3）。 */
+    static void answerSlot(Outcome out, RunState run, String toolCallId, String text) {
+        ToolRound round = run.tools();
+        for (int i = 0; i < round.slots().size(); i++) {
+            ToolSlot slot = round.slots().get(i);
+            if (slot.status() == ToolSlot.Status.WAITING && slot.call().id().equals(toolCallId)) {
+                round = round.withSlot(i, slot.done(new ToolResultBlock(toolCallId, text, false, null)));
+            }
+        }
+        dispatch(out, run.withTools(round));
+    }
+
     private static void dispatch(Outcome out, RunState pending) {
         RunState run = pending;
         ToolRound round = run.tools();
@@ -126,6 +144,32 @@ public final class ToolSteps {
                 sent.add(slot.command());
             }
         }
+        if (sent.isEmpty()) {
+            // 只剩 ask_user 的槽位：按顺序问第一个（一个运行同一时刻只有一个问题，需求 1.6）
+            askNext(out, run.withTools(round));
+            return;
+        }
         out.await(run.withTools(round), AWAITING_TOOLS, sent);
+    }
+
+    private static void askNext(Outcome out, RunState run) {
+        ToolRound round = run.tools();
+        for (int i = 0; i < round.slots().size(); i++) {
+            ToolSlot slot = round.slots().get(i);
+            if (slot.status() != ToolSlot.Status.WAITING) {
+                continue;
+            }
+            AskUser.Parsed parsed;
+            try {
+                parsed = AskUser.parse(slot.call().id(), slot.call().arguments());
+            } catch (IllegalArgumentException invalid) {
+                // 参数不合法：不问人，错误直接给模型
+                dispatch(out, run.withTools(round.withSlot(i, slot.done(new ToolResultBlock(slot.call().id(), invalid.getMessage(), true, null)))));
+                return;
+            }
+            AnswerSteps.askFromTool(out, run, parsed.question(), parsed.timeout(), slot.call().id());
+            return;
+        }
+        throw new IllegalStateException("tool round has nothing in flight and nothing waiting: " + round);
     }
 }

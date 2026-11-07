@@ -196,6 +196,7 @@ class HookChainTest {
             @Override public HookResult beforeRunEnd(KernelState state, HookContext context) { return result; }
             @Override public HookResult onWorkResult(KernelState state, HookContext context) { return result; }
             @Override public HookResult beforeCompact(KernelState state, HookContext context) { return result; }
+            @Override public HookResult onAnswer(KernelState state, HookContext context) { return result; }
         };
     }
 
@@ -216,7 +217,12 @@ class HookChainTest {
                 Arguments.of(point, new NeedWork("citation", new Json.Null()),
                         new HookDecided(RUN, "h", point, HookDecided.Kind.NEED_WORK, null, 0, List.of(), callAt(point), "citation")),
                 Arguments.of(point, new Allow(new PromptPatch("cite sources", List.of(CITE, LOOKUP))),
-                        new HookDecided(RUN, "h", point, HookDecided.Kind.PATCH, null, 12, List.of("cite", "lookup"), callAt(point), null))));
+                        new HookDecided(RUN, "h", point, HookDecided.Kind.PATCH, null, 12, List.of("cite", "lookup"), callAt(point), null)),
+                // 问用户（waiting-state）：reason 位放问题 id
+                Arguments.of(point, new tantalum.value.hook.Ask(new tantalum.value.question.Question("q-1",
+                                tantalum.value.text.LocalText.of("Allow?"), null,
+                                List.of(new tantalum.value.question.Question.Choice("yes", tantalum.value.text.LocalText.of("Yes"))))),
+                        new HookDecided(RUN, "h", point, HookDecided.Kind.ASK, "q-1", 0, List.of(), callAt(point), null))));
     }
 
     @ParameterizedTest

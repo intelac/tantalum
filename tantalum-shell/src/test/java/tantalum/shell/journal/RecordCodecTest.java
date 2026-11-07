@@ -64,6 +64,36 @@ class RecordCodecTest {
         assertEquals(appending(2, LONG), codec.decode(second, reader).record());
     }
 
+    /** waiting-state 需求 2.1、2.3：等人阶段（问题、位置、期限）和两个事实进结果行，读回相同；两次写出的字节相同。 */
+    @Test
+    void awaitingAnswerAndQuestionFactsRoundTrip() {
+        tantalum.value.question.Question question = new tantalum.value.question.Question("approval-c1",
+                tantalum.value.text.LocalText.en("Allow bash?").zh("允许调用 bash 吗？").ja("bash を許可しますか？"),
+                tantalum.value.text.LocalText.of("{\"command\":\"ls\"}"),
+                List.of(new tantalum.value.question.Question.Choice("once", tantalum.value.text.LocalText.of("Allow once")),
+                        new tantalum.value.question.Question.Choice("deny", tantalum.value.text.LocalText.en("Deny").zh("拒绝"))),
+                false, java.time.Instant.parse("2026-11-07T09:10:00Z"));
+        tantalum.value.state.RunState waiting = tantalum.value.state.RunState.start(RUN, new tantalum.value.state.OwnerRef.OfSession(SESSION))
+                .withPhase(new tantalum.value.state.AwaitingAnswer(question, tantalum.value.hook.HookPoint.BEFORE_TOOL_CALL, null,
+                        new CommandId("s_5-0")));
+        tantalum.value.state.RunState askUser = tantalum.value.state.RunState.start(RUN, new tantalum.value.state.OwnerRef.OfSession(SESSION))
+                .withPhase(new tantalum.value.state.AwaitingAnswer(new tantalum.value.question.Question("ask-a1",
+                        tantalum.value.text.LocalText.of("Delete?"), null, List.of(), true, null), null, "a1", null));
+        List<tantalum.value.decision.Fact> facts = List.of(
+                new tantalum.value.decision.QuestionAsked(RUN, "toolApproval", question),
+                new tantalum.value.decision.QuestionSettled(RUN, "approval-c1", new tantalum.value.question.Answer("once", null),
+                        tantalum.value.decision.QuestionSettled.Reason.ANSWERED),
+                new tantalum.value.decision.QuestionSettled(RUN, "ask-a1", null, tantalum.value.decision.QuestionSettled.Reason.EXPIRED));
+        StepRecord record = new StepRecord(5, null, List.of(waiting, askUser), List.of(), null, null, List.of(), facts);
+
+        String line = codec.encode(record, RecordMemo.writer());
+        assertEquals(line, codec.encode(record, RecordMemo.writer()));
+        assertTrue(line.contains("\"kind\":\"AwaitingAnswer\""), line);
+        assertTrue(line.contains("\"byLanguage\":{\"EN\":\"Allow bash?\",\"ZH\":\"允许调用 bash 吗？\",\"JA\":\"bash を許可しますか？\"}"), line);
+        assertTrue(line.contains("\"deadline\":\"2026-11-07T09:10:00Z\""), line);
+        assertEquals(record, codec.decode(line, RecordMemo.reader()).record());
+    }
+
     /** A4：插件工作记在会话里的东西（如“这个会话里一直允许”的工具）写进结果行，恢复时原样读回；没变时不写。 */
     @Test
     void sessionNotesRoundTrip() {

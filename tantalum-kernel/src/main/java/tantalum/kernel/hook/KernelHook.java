@@ -94,4 +94,13 @@ public interface KernelHook {
     default HookResult beforeCompact(KernelState state, HookContext context) {
         return Allow.PLAIN;
     }
+
+    /**
+     * 用户回答了钩子问的问题（waiting-state）：{@code context.question()} 是问题，{@code context.answer()} 是回答，期限到了没人答时为 null。
+     * 对所有钩子调用，包括别的插件问的，要先按 {@code question.id()} 过滤。放行回到问的位置（{@code Allow.withNote} 能记一条进会话状态）；
+     * {@code Stop} 在工具调用前只拦那个调用，其余位置结束运行；{@code NeedWork} 要一轮工作；再返回 {@code Ask} 是新问题。
+     */
+    default HookResult onAnswer(KernelState state, HookContext context) {
+        return Allow.PLAIN;
+    }
 }

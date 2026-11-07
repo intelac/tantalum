@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import tantalum.kernel.compaction.Compactor;
 import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
@@ -25,6 +26,7 @@ import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.question.Answer;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
 
@@ -131,6 +133,24 @@ public final class Intake {
             case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model);
             default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model);
         });
+    }
+
+    /**
+     * 回答运行问的问题（waiting-state 需求 6.2）。和提交一样：别人的会话 404、落盘后才回“已接受”；没有活动运行回 409，
+     * 调用方当作“问题已经不在”。问题是不是当前的、回答合不合法，由内核按记录再验一次，不合法的只记事实。
+     */
+    public Submission answer(Principal principal, SessionId session, RequestId request, String question, Answer answer) {
+        if (residency.failure(session) != null) {
+            return Submission.rejected(500);
+        }
+        Optional<SessionState> found = sessions.find(principal, session);
+        if (found.isEmpty()) {
+            return Submission.rejected(404);
+        }
+        if (found.get().activeRun() == null) {
+            return Submission.rejected(409);
+        }
+        return publish(principal, session, request, false, submission -> new Answered(submission, request, question, answer));
     }
 
     /**

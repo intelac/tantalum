@@ -13,6 +13,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.id.RunId;
 import tantalum.value.state.Awaiting;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -69,8 +70,15 @@ public final class Kernel {
         return table.find(run == null ? NEW_RUN : run.phase().name(), event.type());
     }
 
+    /** 等命令结果时认在途命令；等用户回答时只认期限的定时器（waiting-state）。 */
     private static boolean isAwaited(RunState run, ResultEvent result) {
-        return run != null && run.phase() instanceof Awaiting awaiting
-                && awaiting.commands().contains(result.command());
+        if (run == null) {
+            return false;
+        }
+        return switch (run.phase()) {
+            case Awaiting awaiting -> awaiting.commands().contains(result.command());
+            case AwaitingAnswer waiting -> result.command().equals(waiting.timer());
+            default -> false;
+        };
     }
 }

@@ -19,6 +19,8 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.local.fs.PrivateFiles;
+import tantalum.shell.loop.AnswerDeadline;
+import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
@@ -33,7 +35,7 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    static final int VERSION = 2;
+    static final int VERSION = 3;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /** 一个会话的元数据。只被认领、还没写过事件时 {@code lastActivity} 为 null；没有未结束的运行时 {@code activeRun} 为 null。 */
@@ -84,6 +86,7 @@ public final class SessionIndex implements AutoCloseable {
             empty = result.getInt(1) == 0;
         }
         if (!empty && version != VERSION) {
+            // 版本不符（waiting-state 加了两列，2 → 3）：open() 删掉文件重建，内容由 IndexCatchUp 从会话文件补回
             throw new IllegalStateException("index version " + version + " is not " + VERSION);
         }
         try (ResultSet result = statement.executeQuery("PRAGMA quick_check(1)")) {
@@ -103,7 +106,9 @@ public final class SessionIndex implements AutoCloseable {
                   last_activity TEXT,
                   run_status    TEXT NOT NULL,
                   active_run    TEXT,
-                  file_offset   INTEGER NOT NULL
+                  file_offset   INTEGER NOT NULL,
+                  answer_deadline TEXT,
+                  answer_timer    TEXT
                 )""");
         statement.execute("""
                 CREATE TABLE IF NOT EXISTS submissions (
@@ -157,14 +162,16 @@ public final class SessionIndex implements AutoCloseable {
 
     private void writeSessions(IndexBatch batch) throws SQLException {
         try (PreparedStatement upsert = connection.prepareStatement("""
-                INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset, answer_deadline, answer_timer)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (session) DO UPDATE SET
                   title = CASE WHEN title = '' THEN excluded.title ELSE title END,
                   last_activity = excluded.last_activity,
                   run_status = excluded.run_status,
                   active_run = excluded.active_run,
-                  file_offset = max(file_offset, excluded.file_offset)
+                  file_offset = max(file_offset, excluded.file_offset),
+                  answer_deadline = excluded.answer_deadline,
+                  answer_timer = excluded.answer_timer
                 WHERE principal = excluded.principal""")) {
             for (IndexBatch.Row row : batch.sessions.values()) {
                 upsert.setString(1, row.session.value());
@@ -174,6 +181,8 @@ public final class SessionIndex implements AutoCloseable {
                 upsert.setString(5, row.runStatus);
                 upsert.setString(6, row.activeRun == null ? null : row.activeRun.value());
                 upsert.setLong(7, row.fileOffset);
+                upsert.setString(8, row.answerDeadline == null ? null : row.answerDeadline.toString());
+                upsert.setString(9, row.answerTimer == null ? null : row.answerTimer.value());
                 upsert.addBatch();
             }
             upsert.executeBatch();
@@ -240,6 +249,20 @@ public final class SessionIndex implements AutoCloseable {
             }
         }
         return sessions;
+    }
+
+    /** 等用户回答且有期限的会话（waiting-state 需求 3.4）：启动时为它们重新起定时器。 */
+    public synchronized List<AnswerDeadline> awaitingWithDeadline() throws SQLException {
+        List<AnswerDeadline> deadlines = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT session, principal, active_run, answer_deadline, answer_timer FROM sessions WHERE answer_deadline IS NOT NULL ORDER BY session");
+                ResultSet result = select.executeQuery()) {
+            while (result.next()) {
+                deadlines.add(new AnswerDeadline(new SessionId(result.getString(1)), new Principal(result.getString(2)), new RunId(result.getString(3)),
+                        Instant.parse(result.getString(4)), new CommandId(result.getString(5))));
+            }
+        }
+        return deadlines;
     }
 
     /** 有未结束运行的会话：启动时要给这些运行收尾。 */

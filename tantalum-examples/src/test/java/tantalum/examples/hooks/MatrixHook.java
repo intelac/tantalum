@@ -6,6 +6,9 @@ import java.util.Map;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Allow;
+import tantalum.value.text.LocalText;
+import tantalum.value.question.Question;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.HookResult;
@@ -23,7 +26,7 @@ import tantalum.value.state.KernelState;
  */
 final class MatrixHook implements KernelHook {
 
-    enum Result { ALLOW, PATCH, STOP, WORK_OK, WORK_FAIL, WORK_TIMEOUT, WORK_HOLD, WORK_CONTINUE, THROW, NULL }
+    enum Result { ALLOW, PATCH, STOP, WORK_OK, WORK_FAIL, WORK_TIMEOUT, WORK_HOLD, WORK_CONTINUE, ASK, THROW, NULL }
 
     static final String PATCH_TEXT = "\nMATRIX-PATCH";
     static final ToolSpec PATCH_TOOL = new ToolSpec("matrix_extra", "Added by the matrix patch.",
@@ -127,6 +130,8 @@ final class MatrixHook implements KernelHook {
             case WORK_TIMEOUT -> work("timeout");
             case WORK_HOLD -> work("hold");
             case WORK_CONTINUE -> work("continue");
+            case ASK -> new Ask(new Question("matrix-" + session, LocalText.of("Go on?"), null,
+                    List.of(new Question.Choice("go", LocalText.of("Go")), new Question.Choice("stop", LocalText.of("Stop")))));
             case THROW -> throw new IllegalStateException("matrix hook failed");
             case NULL -> null;
         };

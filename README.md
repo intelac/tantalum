@@ -597,7 +597,7 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 
 | 想做什么 | 实现 |
 |---|---|
-| 在固定位置判断或拦截 | `KernelHook`，纯函数，返回 `Allow`、`Stop` 或 `NeedWork` |
+| 在固定位置判断或拦截 | `KernelHook`，纯函数，返回 `Allow`、`Stop`、`NeedWork` 或 `Ask`（问用户、等回答） |
 | 判断时需要 I/O | `KernelHook` 返回 `NeedWork`，再实现 `WorkType` |
 | 增加工具 | `Tool`，声明服务端和并发上限；未声明时上限为 1 |
 | 修改工具输出 | `AfterToolHook` |
@@ -609,28 +609,29 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 - `failClosed()`：钩子抛异常时按 `Stop` 处理，默认同 `mandatory()`。用户能关的策略插件也该返回 true，开着时出错不能当作放行。
 - `mandatory()`：必须开启，插件页上不能关，出错按拦截处理。管理员也可以不改代码、用 `tantalum.hooks.required=名字,…` 把任何插件设成必须开启，名字不认识时拒绝启动。
 
-两样给插件工作用的（`tantalum.shell.plugin`）：
-- **在对话页上问用户**：`context.questions().ask(context, new Question(id, 标题, 说明, 选项), 等多久)`（标题、说明和选项上的字是 `LocalText`），只能在 `WorkType.run` 里用，返回选项的 id，没回答返回空（问题留在页面上，下一次用同一个 id 再问是接着等）。等待受 `tantalum.tool-timeout` 约束，所以每次等的要比它短，没回答就回“待定”让钩子再要一轮（示例 `ApprovalWork`）。问题只在内存里，回答写进工作的结果。接口 `GET /api/sessions/{会话}/questions`、`POST /api/sessions/{会话}/questions/{问题}`（`{"choice": "选项 id"}`），SSE 推 `question` 让页面再取。
-- **记在会话里**：`new WorkResult(结果, 续写文字, note)`，`note` 是一个对象，按字段并进会话状态里这个工作类型的那一份（`SessionState.note(工作类型)`，值为 `null` 的字段删掉），随 `WorkDone` 记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
+问用户和记在会话里：
+- **问用户、等回答**（waiting-state）：钩子返回 `new Ask(new Question(id, 标题, 说明, 选项))`（文字是 `LocalText`，可以写三种语言），运行就停在“等回答”：没有在途命令，不计工作轮数，不超时；人几小时、几天后在对话页上点选都接着跑，服务器重启问题还在（问题和回答都在 journal 里）。回答从新钩子位置 `onAnswer` 回来：`context.question()` 是问题，`context.answer()` 是回答（`choice`、`text`），要先按 `question.id()` 过滤（所有钩子都会被调用）；放行回到问的位置，`Stop` 在工具调用前只拦那个调用、别处结束运行，`NeedWork` 要一轮工作，再返回 `Ask` 是新问题。`new Ask(question).after(Duration)` 给期限，到时 `answer()` 为 null。插件的问题只有选项，不收自由文本。模型自己也能问：内置工具 `ask_user`（选项加可选的一句话，可给 `timeout_seconds`），回答作为工具结果。
+- **记在会话里**：`onAnswer` 放行时 `Allow.PLAIN.withNote(键, 对象)`，或工作结果 `new WorkResult(结果, 续写文字, note)`。对象按字段并进会话状态里那一份（`SessionState.note(键)`，值为 `null` 的字段删掉），随结果行记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
 
-七个钩子（前 6 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略。
+八个钩子（前 7 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略；`Ask` 在前 5 个位置和 `onAnswer` 有效，`beforeCompact` 当作拒绝。
 
 | 钩子 | 能返回 | 结果怎么生效 | 补丁 | 示例插件 |
 |---|---|---|---|---|
-| `beforeModelCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束运行；工作做完后再问一次 | 生效 | `DailyQuotaHook` |
-| `beforeToolCall` | `Allow`、`Stop`、`NeedWork` | `Stop` 只拦这个调用，模型收到“被拦下”；工作做完后由 `onWorkResult` 决定，不再问这里 | 忽略 | `ReadOnlyHook`、`ToolApprovalHook` |
-| `onFailure` | `Allow`、`Stop`、`NeedWork` | 放行交给内核（超长恢复、退避重试）；`Stop` 运行失败；工作做完后重试一次，占用重试次数 | 忽略 | `ProviderBackoffHook` |
-| `beforeRunEnd` | `Allow`、`Stop`、`NeedWork` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook`（只拿会话里 `read_file`、`grep` 读到的行核对，不读服务器上的文件） |
-| `onWorkResult` | `Allow`、`Stop`、`NeedWork` | 放行回到原处；`Stop` 在工具调用前只拦那个调用，其余位置结束运行；`NeedWork` 再要一轮，记在原等待点 | 忽略 | `ToolApprovalHook` |
-| `beforeCompact` | `Allow`、`Stop`（`NeedWork` 当作拒绝） | 拒绝自动压缩：本运行不再自动压缩；拒绝手动压缩：以原因失败；拒绝超长恢复：运行失败 | 忽略 | `PinnedContextHook` |
+| `beforeModelCall` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 结束运行；工作做完后再问一次 | 生效 | `DailyQuotaHook` |
+| `beforeToolCall` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 只拦这个调用，模型收到“被拦下”；工作做完后由 `onWorkResult` 决定、回答后由 `onAnswer` 决定，不再问这里 | 忽略 | `ReadOnlyHook`、`ToolApprovalHook` |
+| `onFailure` | `Allow`、`Stop`、`NeedWork`、`Ask` | 放行交给内核（超长恢复、退避重试）；`Stop` 运行失败；工作做完后重试一次，占用重试次数 | 忽略 | `ProviderBackoffHook` |
+| `beforeRunEnd` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook`（只拿会话里 `read_file`、`grep` 读到的行核对，不读服务器上的文件） |
+| `onWorkResult` | `Allow`、`Stop`、`NeedWork`、`Ask` | 放行回到原处；`Stop` 在工具调用前只拦那个调用，其余位置结束运行；`NeedWork` 再要一轮，记在原等待点 | 忽略 | `CitationCheckHook` |
+| `onAnswer` | `Allow`（可带 `withNote`）、`Stop`、`NeedWork`、`Ask` | 用户回答了（或期限到，`answer()` 为 null）：放行回到问的位置；`Stop` 在工具调用前只拦那个调用，其余位置结束运行 | 忽略 | `ToolApprovalHook` |
+| `beforeCompact` | `Allow`、`Stop`（`NeedWork`、`Ask` 当作拒绝） | 拒绝自动压缩：本运行不再自动压缩；拒绝手动压缩：以原因失败；拒绝超长恢复：运行失败 | 忽略 | `PinnedContextHook` |
 | `afterToolExecution`（`AfterToolHook`） | 一个 `ToolOutput` | 返回新的就替换结果，原样返回就不变；抛异常时记日志，结果保持上一个 | — | `TruncateOutputHook` |
 
 写钩子时要注意五点：
 1. **I/O 只能经 `NeedWork`。** 钩子是纯函数，不读文件、不联网、不取时钟（时间用 `context.at()`）；要做 I/O 就返回 `NeedWork`，由有超时的 `WorkType` 去做。
-2. **`onWorkResult` 对所有工作都会调用。** 包括别的插件要的工作，钩子要先按 `work.workType()` 过滤（示例 `ToolApprovalHook`）。
-3. **失败的工作结果里没有原来的输入。** 超时、抛异常、连不上时，结果只有错误说明；下一轮要用的信息要由工作在成功结果里带回（示例 `ApprovalWork` 带回工具、参数和次数）。
+2. **`onWorkResult`、`onAnswer` 对所有工作、所有问题都会调用。** 包括别的插件要的，钩子要先按 `work.workType()`、`question.id()` 过滤（示例 `CitationCheckHook`、`ToolApprovalHook`）。
+3. **失败的工作结果里没有原来的输入。** 超时、抛异常、连不上时，结果只有错误说明；下一轮要用的信息要由工作在成功结果里带回。
 4. **`onFailure` 要求工作会跳过内置的超长恢复。** 所以上下文超长（`CONTEXT_OVERFLOW`）要放行（示例 `ProviderBackoffHook`）。
-5. **工作轮数有上限。** 一个等待点连续要求工作最多 `tantalum.hooks.max-work-rounds` 轮（默认 8，小于 1 拒绝启动），超过时运行以失败结束，原因写明钩子、位置和轮数。`onWorkResult` 接着要的工作记在原来的等待点上；`beforeRunEnd` 的轮数整个运行累计，不清零。插件自己的次数（如审批查询次数）要小于这个上限。
+5. **工作轮数有上限。** 一个等待点连续要求工作最多 `tantalum.hooks.max-work-rounds` 轮（默认 8，小于 1 拒绝启动），超过时运行以失败结束，原因写明钩子、位置和轮数。`onWorkResult` 接着要的工作记在原来的等待点上；`beforeRunEnd` 的轮数整个运行累计，不清零。等用户回答（`Ask`）不占轮数：要等人就问，不要用工作轮询。
 
 **钩子只能看当前用户的当前会话。** `KernelHook` 拿到的是整个 `KernelState`，但只能读当前运行、当前会话和当前用户的用量（`state.principals()` 里这个用户的那一项）。别的会话可能不在内存里，读它们会让钩子的决定取决于当时哪些会话恰好常驻，检查工具重放时就会报出差异。接口拦不住，靠这条约定；示例钩子都符合。
 
@@ -652,14 +653,13 @@ java --enable-native-access=ALL-UNNAMED -Dloader.path=/path/to/tantalum-examples
 | `<插件>.enabled` | `true` | 单个插件注册不注册，插件名用 `read-only`、`tool-approval`、`daily-quota`、`pinned-context`、`provider-backoff`、`citation-check`、`truncate-output` |
 | `read-only.tools` | 读文件、Git 查询、`read_attachment`、三个记忆工具 | 只读策略放行的工具 |
 | `tool-approval.tools` | `write_file,edit_file,bash` | 调用前在对话页上问的工具 |
-| `tool-approval.answer-wait` / `max-polls` | `50s` / `6` | 每次等多久、最多问几次（约 5 分钟）。`answer-wait` 要比 `tantalum.tool-timeout` 短，`max-polls` 要比 `tantalum.hooks.max-work-rounds` 少，否则拒绝启动 |
 | `daily-quota.tokens` | `2000000` | 每个用户每天（UTC）的 token 上限，输入（含缓存）加输出 |
 | `pinned-context.marker` | `#pin` | 用户消息里带它，这条消息不被自动或手动压缩总结掉 |
 | `provider-backoff.status-url` | 无 | 模型服务出错时轮询的状态地址，返回 2xx 就重试；不配就不注册这个插件。Claude 用 `https://status.claude.com/api/v2/status.json`（`status.anthropic.com` 是 301 跳转，不跟跳转所以永远不算恢复；2026-11-06 实测） |
 | `provider-backoff.max-wait` / `poll` | `60s` / `10s` | 限流要等得比它久就结束运行；轮询间隔 |
 | `truncate-output.max-chars` | `100000` | 工具结果超过就截断 |
 
-**工具审批**（`ToolApprovalHook` + `ApprovalWork`）：用户在插件页打开后，调用列出的工具前，对话页输入框上方出现一张卡片：“允许这一次”“这个会话里一直允许”“拒绝”。选“一直允许”后同一个会话里这个工具不再问（记进 journal，重启后还在），别的会话照样问；拒绝时模型收到 “the user denied this call to … Do not retry it or use another tool to get around this decision.”；问满次数没人回答就拦下这一次调用。参照：DSH 的工具审批只有一次性的“允许这一次”和整个会话的策略开关（`packages/interaction/user-approval/README.md:165`），按对象记“这个会话里允许”的是它的电脑操作插件（`packages/experimental/cua/src/application-access.ts:154-182`，存在内存）；pi 的示例 `permission-gate.ts:25` 每次都问 Yes / No。
+**工具审批**（`ToolApprovalHook`，`beforeToolCall` + `onAnswer`）：用户在插件页打开后，调用列出的工具前，对话页的这一轮里出现一个问题：“允许这一次”“这个会话里一直允许”“拒绝”。运行停在“等回答”，等多久都行，服务器重启问题还在；侧栏会话上标“待回答”。选“一直允许”后同一个会话里这个工具不再问（记进 journal，重启后还在），别的会话照样问；拒绝时模型收到 “the user denied this call to … Do not retry it or use another tool to get around this decision.”。参照：DSH 的工具审批只在一个 turn 里有效、重启不保留（`packages/interaction/user-approval/README.md:160-168`）；pi 的 `permission-gate.ts` 当场问、什么都不记。
 
 线程模型：`KernelHook` 在内核的单线程里运行，所有用户的状态只在这一个线程上相遇，钩子不需要考虑并发，但必须是纯函数：钩子的决定记在这一步的结果里，恢复时不再调用；检查工具用新版本重放时会再次调用，结果不同说明规则变了。`Tool`、`AfterToolHook`、`WorkType` 每个是一个单例，会被多个虚拟线程同时调用（不同用户、同一运行里的并行工具），所以它们不能保存可变状态；每次调用的身份和工作目录都在 `ToolContext` 里。
 
@@ -712,7 +712,8 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 |---|---|---|---|---|
 | agent 循环、流式、工具调用、并行工具 | 有 | 有 | 有 | |
 | 会话持久化、崩溃后恢复 | 有（文件，存消息本身） | 有（事件日志，折叠时不跑钩子） | 有：一步一行（事件和它的结果），恢复只读记下的结果、不重算，内核和钩子改了旧会话也不变；`check` 命令检查新版本会不会改变旧会话；重启后未结束的运行自动收尾（未配对的工具调用补“结果未知”），可在同一会话继续，不自动重新执行 | 不做自动续跑：写操作可能已生效 |
-| 钩子 / 扩展点 | 有 | 有 | 有，纯函数钩子 + `NeedWork` | |
+| 钩子 / 扩展点 | 有 | 有 | 有，纯函数钩子 + `NeedWork` + `Ask` | |
+| 问用户、等回答 | 扩展当场问（`ctx.ui.select`），不存，没界面就拦 | 审批只在一个 turn 里有效、重启不保留；`ask_user_question` 可阻塞或限时，问题从记录折叠出来 | 有：内核阶段 `AwaitingAnswer`，问题和回答进 journal，不占名额、不占工作轮数、不超时，重启保持，等人的会话可回收；钩子 `Ask`/`onAnswer`，内置工具 `ask_user`，可选期限，`waiting-state` spec | DSH 的限时模式（模型先做别的、回答晚到）随后台任务一起做 |
 | 多用户、登录、每用户目录、入口限额 | 无 | 无 | 有 | |
 | 轨迹回放、每次模型调用的完整 prompt | 部分 | 有 | 有：轨迹页（时间概览、记录表、检查器）和统计页签，和 DSH 对等，另加钩子决定和插件工作两类记录，`trace-view` spec | 嵌套子工具、`run_code` 源码视图等 sandbox 之后 |
 | prompt caching（Claude） | 有 | 经 pi | 有 | |

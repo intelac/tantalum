@@ -5,6 +5,7 @@ import tantalum.value.command.AbortCommands;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.state.Awaiting;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.RunState;
 
@@ -15,10 +16,13 @@ public final class CancelSteps {
 
     private CancelSteps() {}
 
-    /** 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。 */
+    /**
+     * 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。
+     * 等用户回答的运行没有在途命令，不收尾，照旧等（waiting-state 需求 3.1；shell 启动时也不会给它发这个事件）。
+     */
     public static Decision interrupted(StepContext context) {
         RunState run = context.run();
-        if (run == null || run.isEnded()) {
+        if (run == null || run.isEnded() || run.phase() instanceof AwaitingAnswer) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
@@ -43,6 +47,8 @@ public final class CancelSteps {
         Outcome out = new Outcome(context);
         if (run.phase() instanceof Awaiting awaiting && !awaiting.commands().isEmpty()) {
             out.emit(new AbortCommands(out.nextCommandId(), run.ref(), awaiting.commands()));
+        } else if (run.phase() instanceof AwaitingAnswer waiting) {
+            AnswerSteps.cancelled(out, run, waiting);
         }
         RunEnd.finish(out, run, reason, detail);
         return out.decision();

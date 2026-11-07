@@ -3,7 +3,8 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 import type { ModelRequest, TraceRecord } from "../api/types";
-import { currentText, useText } from "../text";
+import { currentLanguage, currentText, useText } from "../text";
+import { pick } from "../text/localText";
 import { cx } from "../ui/cx";
 import { between, formatMs, formatTokens } from "./format";
 import { toolLabel, type Row, type TurnSummary } from "./rows";
@@ -22,6 +23,7 @@ const TAG: Record<string, string> = {
   tool: "bg-bar-tool/30 text-fg",
   work: "bg-warning/15 text-warning",
   hook: "bg-accent-soft text-accent",
+  question: "bg-warning/15 text-warning",
 };
 
 /** 出错的记录：失败的请求、出错或被拦下的工具、失败的工作、出错的钩子、没采用的压缩。 */
@@ -104,6 +106,10 @@ export function contentOf(record: TraceRecord): string {
       const reason = record.reason === undefined ? "" : ` · ${line(record.reason)}`;
       const applied = record.applied === undefined ? "" : ` · ${t.hookApplied[record.applied]}`;
       return `${record.hook}${point} · ${t.hookResult[record.result]}${applied}${reason}`;
+    }
+    case "question": {
+      const answer = [record.choice, record.text].filter((part) => part !== undefined && part !== "").join(" · ");
+      return `${record.askedBy} · ${line(pick(record.title, currentLanguage()))} · ${t.questionStatus[record.status]}${answer === "" ? "" : ` · ${answer}`}`;
     }
   }
 }

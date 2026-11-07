@@ -1,13 +1,12 @@
-// 把 SSE 事件接到 store 和查询缓存上：item 覆盖条目，chunk 更新进行中的文本，PhaseChanged 结算分片并刷新侧栏和待回答的问题，
-// question 刷新待回答的问题，trace 交给轨迹。
+// 把 SSE 事件接到 store 和查询缓存上：item 覆盖条目，chunk 更新进行中的文本，PhaseChanged 结算分片并刷新侧栏，
+// question（问了、答了、撤了）刷新侧栏的“待回答”标记，trace 交给轨迹。问题本身是对话条目，随 item 来。
 
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { notifyUnauthorized } from "../api/client";
 import { reportConnection, resetConnection } from "../api/connection";
 import { connectEvents, type SseEvent } from "../api/sse";
-import type { Chunk, Item, PhaseChanged, QuestionChanged, TraceRecord } from "../api/types";
-import { questionsKey } from "../composer/QuestionCard";
+import type { Chunk, Item, PhaseChanged, TraceRecord } from "../api/types";
 import { SESSIONS_KEY } from "../shell/useSessions";
 import type { TraceStore } from "../trace/TraceStore";
 import { seqOf, type ConversationStore } from "./ConversationStore";
@@ -49,13 +48,11 @@ export function handleEvent(event: SseEvent, store: ConversationStore, queries: 
       // 离开模型调用后，以 journal 里结算的条目为准，瞬态分片作废。
       if (phase.phase !== "AwaitingModel") store.clearLive(phase.run);
       void queries.invalidateQueries({ queryKey: SESSIONS_KEY });
-      // 运行往前走了（审批之后、被取消），问题可能已经撤下
-      if (typeof phase.session === "string") void queries.invalidateQueries({ queryKey: questionsKey(phase.session) });
       break;
     }
     case "question": {
       if (!hasStrings(data, "session")) return;
-      void queries.invalidateQueries({ queryKey: questionsKey((data as QuestionChanged).session) });
+      void queries.invalidateQueries({ queryKey: SESSIONS_KEY });
       break;
     }
     case "trace": {

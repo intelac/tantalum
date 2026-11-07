@@ -31,7 +31,8 @@ import tantalum.value.state.EndReason;
     @JsonSubTypes.Type(value = TranscriptItem.RunStatus.class, name = "run"),
     @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction"),
     @JsonSubTypes.Type(value = TranscriptItem.ToolChange.class, name = "toolChange"),
-    @JsonSubTypes.Type(value = TranscriptItem.ModelChange.class, name = "modelChange")
+    @JsonSubTypes.Type(value = TranscriptItem.ModelChange.class, name = "modelChange"),
+    @JsonSubTypes.Type(value = TranscriptItem.Question.class, name = "question")
 })
 public sealed interface TranscriptItem {
 
@@ -217,6 +218,46 @@ public sealed interface TranscriptItem {
             sources = sources == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(sources));
         }
     }
+
+
+    /**
+     * 运行停下来问用户的问题（waiting-state 需求 7.1）。等回答时 {@code status} 是 OPEN，页面显示按钮；答过后带回答和时间；
+     * 期限到或取消后是 EXPIRED / CANCELLED。文字字段是接口的写法（字符串，或按语言的对象），同 {@code /questions} 接口。
+     * {@code askedBy} 是钩子名，或 {@code ask_user}。一个问题一条，id 是 {@code q:} 加问题 id。
+     */
+    record Question(String id, SessionId session, RunId run, Instant at, String askedBy, String questionId, Object title, Object detail,
+                    List<Map<String, Object>> choices, boolean freeText, Instant deadline, QuestionStatus status,
+                    String choice, String text, Instant settledAt) implements TranscriptItem {
+
+        public Question {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(askedBy, "askedBy");
+            Objects.requireNonNull(questionId, "questionId");
+            Objects.requireNonNull(status, "status");
+            choices = List.copyOf(choices);
+        }
+
+        public static String idOf(String questionId) {
+            return "q:" + questionId;
+        }
+
+        public static Question asked(SessionId session, RunId run, Instant at, String askedBy, tantalum.value.question.Question question) {
+            List<Map<String, Object>> choices = question.choices().stream()
+                    .map(choice -> Map.<String, Object>of("id", choice.id(), "label", choice.label().wire())).toList();
+            return new Question(idOf(question.id()), session, run, at, askedBy, question.id(), question.title().wire(),
+                    question.detail().wire(), choices, question.freeText(), question.deadline(), QuestionStatus.OPEN, null, null, null);
+        }
+
+        public Question settled(QuestionStatus newStatus, tantalum.value.question.Answer answer, Instant when) {
+            return new Question(id, session, run, at, askedBy, questionId, title, detail, choices, freeText, deadline, newStatus,
+                    answer == null ? null : answer.choice(), answer == null ? null : answer.text(), when);
+        }
+    }
+
+    enum QuestionStatus { OPEN, ANSWERED, EXPIRED, CANCELLED }
 
     /** 运行的状态，一个运行一条。{@code phase} 是内核状态名；结束后带原因；模型失败时带最近一次失败原因。 */
     record RunStatus(String id, SessionId session, RunId run, Instant at, Instant updatedAt, String phase,

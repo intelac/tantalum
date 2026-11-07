@@ -27,6 +27,8 @@ import tantalum.value.decision.Fact;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.HookReported;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.decision.QuestionAsked;
+import tantalum.value.decision.QuestionSettled;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
@@ -112,6 +114,8 @@ final class TracePass {
                 case ContextCompacted compacted -> requests.compacted(compacted.run().run(), compacted);
                 case CompactionFailed failed -> requests.compacted(failed.run().run(), failed);
                 case PhaseChanged phase -> phaseChanged(phase.run().run());
+                case QuestionAsked asked -> hooks.asked(i, asked);
+                case QuestionSettled settled -> hooks.settled(settled);
                 default -> { }
             }
         }

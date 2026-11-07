@@ -33,7 +33,8 @@ import tantalum.value.state.EndReason;
     @JsonSubTypes.Type(value = TraceRecord.ModelRequest.class, name = "request"),
     @JsonSubTypes.Type(value = TraceRecord.ToolCall.class, name = "tool"),
     @JsonSubTypes.Type(value = TraceRecord.PluginWork.class, name = "work"),
-    @JsonSubTypes.Type(value = TraceRecord.HookDecision.class, name = "hook")
+    @JsonSubTypes.Type(value = TraceRecord.HookDecision.class, name = "hook"),
+    @JsonSubTypes.Type(value = TraceRecord.Question.class, name = "question")
 })
 public sealed interface TraceRecord {
 
@@ -231,7 +232,7 @@ public sealed interface TraceRecord {
      */
     record HookDecision(Head head, String hook, HookPoint point, Result result, String reason, int systemChars, List<String> tools,
                         String workType, Applied applied, String tool, String work) implements TraceRecord {
-        public enum Result { STOP, NEED_WORK, PATCH, ERROR }
+        public enum Result { STOP, NEED_WORK, PATCH, ASK, ERROR }
 
         public enum Applied { APPLIED, NOT_ADOPTED, INEFFECTIVE }
 
@@ -242,6 +243,21 @@ public sealed interface TraceRecord {
         @Override
         public HookDecision withHead(Head newHead) {
             return new HookDecision(newHead, hook, point, result, reason, systemChars, tools, workType, applied, tool, work);
+        }
+    }
+
+    /**
+     * 运行停下来等用户回答（waiting-state 需求 7.4）：问了什么、谁问的（钩子名或 {@code ask_user}）、答了什么。
+     * {@code head.at} 是问的时刻，{@code head.end} 是有结果的时刻；等人的这段不算进模型或工具的时长。
+     */
+    record Question(Head head, String question, String askedBy, Object title, Status status, String choice, String text)
+            implements TraceRecord {
+
+        public enum Status { WAITING, ANSWERED, EXPIRED, CANCELLED }
+
+        @Override
+        public TraceRecord withHead(Head newHead) {
+            return new Question(newHead, question, askedBy, title, status, choice, text);
         }
     }
 }

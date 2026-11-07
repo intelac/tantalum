@@ -69,4 +69,9 @@ final class Scoped implements KernelHook {
     public HookResult beforeCompact(KernelState state, HookContext context) {
         return mine(context) ? inner.beforeCompact(state, context) : Allow.PLAIN;
     }
+
+    @Override
+    public HookResult onAnswer(KernelState state, HookContext context) {
+        return mine(context) ? inner.onAnswer(state, context) : Allow.PLAIN;
+    }
 }

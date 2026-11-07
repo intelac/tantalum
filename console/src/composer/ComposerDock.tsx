@@ -4,7 +4,6 @@ import { useLatestRun, useRunVersion, useSessionModel } from "../store/hooks";
 import { useText } from "../text";
 import { Composer } from "./Composer";
 import { ModelPicker } from "./ModelPicker";
-import { QuestionCards } from "./QuestionCard";
 import { QueueDock } from "./QueueDock";
 import { StatusBar } from "./StatusBar";
 import { findModel, findRoute, useModels, useSessionChoice } from "./useModels";
@@ -16,7 +15,7 @@ interface Props {
 }
 
 /**
- * 输入区：插件要你回答的问题、排队的提问、输入框和状态栏。最近的运行和排队的提交都从 store 自己取。
+ * 输入区：排队的提问、输入框和状态栏（问你的问题在对话里，waiting-state）。最近的运行和排队的提交都从 store 自己取。
  * 模型选择器显示这个会话的选择（model-picker）；状态栏的窗口和压缩点按这个会话的模型算（需求 8.3）。
  */
 export function ComposerDock({ store, session, config }: Props) {
@@ -32,7 +31,6 @@ export function ComposerDock({ store, session, config }: Props) {
   const point = info?.points.find((each) => each.percent === models.data?.percent)?.tokens;
   return (
     <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
-      <QuestionCards session={session} />
       <QueueDock store={store} session={session} />
       <Composer
         session={session}

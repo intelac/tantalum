@@ -7,6 +7,7 @@ import tantalum.kernel.table.StepContext;
 import tantalum.kernel.tool.ToolPairing;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.WorkDone;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
@@ -52,6 +53,7 @@ public final class RunEnd {
         switch (hook.result()) {
             case Stop stop -> finish(out, run, EndReason.STOPPED, stop.reason());
             case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_RUN_END);
+            case Ask ask -> AnswerSteps.ask(out, run, ask, hook.decidedBy(), HookPoint.BEFORE_RUN_END);
             default -> finish(out, run, EndReason.COMPLETED, detail);
         }
     }

@@ -34,6 +34,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code fetch:}（联网）：调用 web_fetch 抓 {@link E2eServer} 自带的本地测试页（{@link #webPage}），然后回答“抓到了网页。”；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
+ *   <li>{@code ask:}（waiting-state）：调用 ask_user 问“备份删还是留？”（删除 / 保留，允许补一句），然后回答“你选了：”加工具结果；</li>
  *   <li>{@code approve:}（工具审批，A4）：调用 write_file 写 {@code e2e/approve-<后面的词>.txt}，然后回答“结果：”加工具结果；
  *       用户打开 toolApproval 插件后，调用前在对话页上问；</li>
  *   <li>{@code readedit:}（本机工作区）：读电脑上的 {@code a.txt}，把 hello 改成 hi，回答“改好了：”加改动结果；</li>
@@ -108,6 +109,10 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("write:")) {
                 return write(word(text, "write:"), false, prompt, results, chunks);
+            }
+            if (text.contains("ask:")) {
+                // waiting-state：问用户两个选项，允许补一句；回答原样复述
+                return results == 0 ? reply(List.of(), askUser()) : answer(chunks, "你选了：" + lastResult(prompt));
             }
             if (text.contains("approve:")) {
                 String name = word(text, "approve:");
@@ -303,6 +308,15 @@ public final class E2eModel implements ModelClient {
             }
         }
         return new ModelOutcome.Replied(content, tools ? StopReason.TOOL_USE : StopReason.END_TURN, MODEL, usage(promptSize, Math.max(output, 20)));
+    }
+
+    /** ask_user 的调用：两个选项、允许补一句（参数里有数组，{@link #call} 只放字符串）。 */
+    private ToolCallBlock askUser() {
+        Map<String, Json> fields = new java.util.LinkedHashMap<>();
+        fields.put("question", new Json.Str("备份删还是留？"));
+        fields.put("choices", new Json.Arr(List.of(new Json.Str("删除"), new Json.Str("保留"))));
+        String raw = "{\"question\":\"备份删还是留？\",\"choices\":[\"删除\",\"保留\"]}";
+        return new ToolCallBlock("c" + callIds.incrementAndGet(), "ask_user", raw, new Json.Obj(fields));
     }
 
     private ToolCallBlock call(String tool, Map<String, String> arguments) {

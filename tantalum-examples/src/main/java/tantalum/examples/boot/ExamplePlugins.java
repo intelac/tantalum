@@ -7,14 +7,12 @@ import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
-import tantalum.examples.ApprovalWork;
 import tantalum.examples.CitationCheckHook;
 import tantalum.examples.CitationWork;
 import tantalum.examples.DailyQuotaHook;
@@ -45,19 +43,8 @@ public class ExamplePlugins {
 
     private final ExampleSettings settings;
 
-    /** 审批每次等的要比工具超时短、问的次数要比工作轮数上限少，否则先撞上限：启动时就拒绝，写明配置项。 */
-    public ExamplePlugins(ExampleSettings settings, @Value("${tantalum.tool-timeout}") Duration toolTimeout,
-                          @Value("${tantalum.hooks.max-work-rounds}") int maxWorkRounds) {
+    public ExamplePlugins(ExampleSettings settings) {
         this.settings = settings;
-        ExampleSettings.ToolApproval approval = settings.toolApproval();
-        if (approval.enabled() && approval.answerWait().compareTo(toolTimeout) >= 0) {
-            throw new IllegalArgumentException(PREFIX + "tool-approval.answer-wait (" + approval.answerWait() + ") must be shorter than tantalum.tool-timeout ("
-                    + toolTimeout + ")");
-        }
-        if (approval.enabled() && approval.maxPolls() >= maxWorkRounds) {
-            throw new IllegalArgumentException(PREFIX + "tool-approval.max-polls (" + approval.maxPolls()
-                    + ") must be less than tantalum.hooks.max-work-rounds (" + maxWorkRounds + ")");
-        }
         LOG.info("example plugins from tantalum-examples: {}", names(settings));
     }
 
@@ -88,13 +75,7 @@ public class ExamplePlugins {
     @Order(2)
     @ConditionalOnBooleanProperty(name = PREFIX + "tool-approval.enabled", matchIfMissing = true)
     KernelHook exampleToolApprovalHook() {
-        return new ToolApprovalHook(Set.copyOf(settings.toolApproval().tools()), settings.toolApproval().maxPolls());
-    }
-
-    @Bean
-    @ConditionalOnBooleanProperty(name = PREFIX + "tool-approval.enabled", matchIfMissing = true)
-    WorkType exampleApprovalWork() {
-        return new ApprovalWork(settings.toolApproval().answerWait());
+        return new ToolApprovalHook(Set.copyOf(settings.toolApproval().tools()));
     }
 
     @Bean

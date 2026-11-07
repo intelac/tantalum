@@ -6,6 +6,8 @@ import java.util.Map;
 import tantalum.kernel.compaction.SummaryPrompt;
 import tantalum.shell.conversation.TranscriptItem.CompactionMark;
 import tantalum.shell.conversation.TranscriptItem.ModelChange;
+import tantalum.shell.conversation.TranscriptItem.Question;
+import tantalum.shell.conversation.TranscriptItem.QuestionStatus;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
@@ -21,6 +23,8 @@ import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.decision.QuestionAsked;
+import tantalum.value.decision.QuestionSettled;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
@@ -97,8 +101,14 @@ final class TranscriptPass {
             }
         }
         for (Fact fact : decision.facts()) {
-            if (fact instanceof PhaseChanged phase && phase.run().session().equals(session)) {
-                phaseChanged(phase.run().run(), phase.phase());
+            if (!fact.run().session().equals(session)) {
+                continue;
+            }
+            switch (fact) {
+                case PhaseChanged phase -> phaseChanged(phase.run().run(), phase.phase());
+                case QuestionAsked asked -> put(Question.asked(session, asked.run().run(), at, asked.askedBy(), asked.question()));
+                case QuestionSettled settled -> questionSettled(settled);
+                default -> { }
             }
         }
         compaction();
@@ -166,6 +176,19 @@ final class TranscriptPass {
                     null, 0, 0, null, failed.reason()));
             case null, default -> { }
         }
+    }
+
+    /** 问题有了结果（waiting-state 需求 7.1）：同一条目改状态，带上回答和时间。 */
+    private void questionSettled(QuestionSettled settled) {
+        if (!(get(Question.idOf(settled.question())) instanceof Question question)) {
+            return;
+        }
+        QuestionStatus status = switch (settled.reason()) {
+            case ANSWERED -> QuestionStatus.ANSWERED;
+            case EXPIRED -> QuestionStatus.EXPIRED;
+            case CANCELLED -> QuestionStatus.CANCELLED;
+        };
+        put(question.settled(status, settled.answer(), at));
     }
 
     private void put(TranscriptItem item) {

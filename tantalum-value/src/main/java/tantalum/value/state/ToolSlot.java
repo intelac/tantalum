@@ -14,7 +14,9 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
         BLOCKED,
         PENDING,
         SENT,
-        DONE
+        DONE,
+        /** {@code ask_user}：不发命令，等别的槽位都完成后问用户，回答就是结果（waiting-state）。 */
+        WAITING
     }
 
     public ToolSlot {
@@ -28,6 +30,10 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
 
     public static ToolSlot blocked(ToolCallBlock call, ToolResultBlock result) {
         return new ToolSlot(call, Status.BLOCKED, false, null, result);
+    }
+
+    public static ToolSlot waiting(ToolCallBlock call) {
+        return new ToolSlot(call, Status.WAITING, false, null, null);
     }
 
     public ToolSlot sent(CommandId sentAs) {
