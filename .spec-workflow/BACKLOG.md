@@ -4,7 +4,7 @@
 
 ## 0. 离 0.1 还差什么
 
-第一个对外版本叫 0.1（Yi 2026-11-07 定，1.0 要等在企业里真用过、Super-Agent 方向做出来）。下面做完就发 0.1 Release（带 macOS、Linux、Windows 可直接下载的 jar，README 顶部加截图）。按顺序：
+第一个对外版本叫 0.1（Yi 2026-11-07 定，1.0 要等在企业里真用过、Super-Agent 方向做出来）。**0.1 的代码已于 2026-11-07 定稿**：版本 `0.1.0`、tag `v0.1.0` 已推送，README 顶部加了对话页和轨迹页截图，发布包（`tantalum-0.1.0.jar` 三平台通用、`tantalum-examples-0.1.0.jar`、`tantalum-connect-0.1.0-macos-arm64.zip`、`SHA256SUMS`）已打好；在 GitHub 上建 Release 这一步要 Yi 自己执行 `gh release create`（Claude 的权限不允许对外发布）。pom 版本停在 `0.1.0`，下一个版本开始时再改。下面是发布前做完的四项：
 
 | spec | 要做什么 | 性质 |
 |---|---|---|
