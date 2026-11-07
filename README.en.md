@@ -2,6 +2,12 @@
 
 **An event-driven foundation for enterprise agents, in Java.** A company runs one server; many people work with the agent in a web console; every step is recorded, so it can be inspected and restored exactly; new behavior comes as plugins, not kernel changes. The next step is the direction DeepSeek calls a Super-Agent: an agent that doesn't only wait to be asked, but listens to the team's messages, review comments and CI results and takes on work when the team's rules allow it (see [Direction](#direction-super-agent)). The detailed manual is in Chinese: [README.md](README.md).
 
+Current version **0.1**: [download](https://github.com/intelac/tantalum/releases/latest) (one jar for macOS, Linux and Windows; needs JDK 25).
+
+| Conversation | Trace: every model call, tool call and hook decision |
+|---|---|
+| ![Conversation](docs/images/conversation.png) | ![Trace](docs/images/trace.png) |
+
 ## Event-driven
 
 Everything that happens is an event: a user's message, a model reply, a tool result, the result of a plugin's work. The kernel is a pure function that only decides "given this event, what next"; it does no I/O and never waits. Handlers outside the kernel do the actual work and send the outcome back as a new event.
@@ -55,19 +61,21 @@ Dependencies point one way, `value ← kernel ← shell`, enforced by ArchUnit.
 
 ## Run
 
-Requires JDK 25, Maven 3.9, Node 25 and pnpm.
+**Download**: `tantalum-0.1.0.jar` from [Releases](https://github.com/intelac/tantalum/releases/latest) runs on macOS, Linux and Windows with JDK 25 (`java -jar tantalum-0.1.0.jar`); the example plugins are `tantalum-examples-0.1.0.jar` and the macOS connector is `tantalum-connect-0.1.0-macos-arm64.zip`. Building from source gives the same file as `tantalum-shell/target/tantalum-shell-0.1.0-exec.jar`.
+
+**Build from source**: requires JDK 25, Maven 3.9, Node 25 and pnpm.
 
 ```sh
 (cd console && pnpm install && pnpm build)
 mvn clean package -DskipTests
 export ANTHROPIC_API_KEY=...
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar
 ```
 
 To keep everything local, add an OpenAI-compatible route and make it the default, for example a local llama.cpp:
 
 ```sh
-java -jar tantalum-shell/target/tantalum-shell-0.1.0-SNAPSHOT-exec.jar --tantalum.provider=local \
+java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar --tantalum.provider=local \
   --tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1 \
   --tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl \
   --tantalum.openai-routes.local.thinking=chat-template

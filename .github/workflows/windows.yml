@@ -57,7 +57,7 @@ jobs:
           path: ~\AppData\Local\ms-playwright
           key: ms-playwright-java-1.64.0-windows
       - name: Install Chromium
-        run: java -jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar browser install
+        run: java -jar tantalum-shell\target\tantalum-shell-0.1.0-exec.jar browser install
       - name: Maven verify
         # 覆盖率门槛留在 macOS 的全量回归上：MXC 这类 macOS 连接程序的代码在这里跳过，比例会偏低（设计“windows.yml”）。
         run: mvn -B -ntp verify "-Djacoco.haltOnFailure=false"
@@ -75,11 +75,11 @@ jobs:
         # 设计“手工检查”里 CI 能做的部分：中文密码登录、重启后都还在、check、连接程序连上和被撤销、D:\ 下的 WARN 和 icacls、UNC 拒绝
         run: |
           mvn -B -ntp -q -pl tantalum-connect -am package dependency:build-classpath "-DskipTests" "-Djacoco.skip=true" "-Dmdep.outputFile=$env:RUNNER_TEMP\connect-cp.txt" "-Dmdep.includeScope=runtime"
-          $cp = (Resolve-Path tantalum-connect\target\tantalum-connect-0.1.0-SNAPSHOT.jar).Path + ';' + (Get-Content -Raw "$env:RUNNER_TEMP\connect-cp.txt").Trim()
-          ./.github/scripts/windows-smoke.ps1 -Jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar -ConnectorClasspath $cp
+          $cp = (Resolve-Path tantalum-connect\target\tantalum-connect-0.1.0.jar).Path + ';' + (Get-Content -Raw "$env:RUNNER_TEMP\connect-cp.txt").Trim()
+          ./.github/scripts/windows-smoke.ps1 -Jar tantalum-shell\target\tantalum-shell-0.1.0-exec.jar -ConnectorClasspath $cp
       - name: Scheduled task
         if: success() || failure()
-        run: ./docs/windows/tantalum-task.ps1 selftest -Jar tantalum-shell\target\tantalum-shell-0.1.0-SNAPSHOT-exec.jar
+        run: ./docs/windows/tantalum-task.ps1 selftest -Jar tantalum-shell\target\tantalum-shell-0.1.0-exec.jar
       - name: Console end-to-end
         if: success() || failure()
         working-directory: console

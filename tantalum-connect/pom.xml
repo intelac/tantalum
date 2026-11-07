@@ -7,7 +7,7 @@
   <parent>
     <groupId>dev.tantalum</groupId>
     <artifactId>tantalum</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </parent>
 
   <!-- 连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。运行时只依赖 tantalum-local 和 JDK。 -->

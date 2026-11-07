@@ -7,7 +7,7 @@
   <parent>
     <groupId>dev.tantalum</groupId>
     <artifactId>tantalum</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </parent>
 
   <!-- 用户电脑上执行的工具和连接用的消息格式，服务器和连接程序共用。不依赖 Spring，也不依赖 tantalum-shell。 -->
