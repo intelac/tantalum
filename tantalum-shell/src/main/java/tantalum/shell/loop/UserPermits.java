@@ -1,5 +1,11 @@
 package tantalum.shell.loop;
 
+import java.util.List;
+
+import java.util.ArrayList;
+
+import java.util.function.Consumer;
+
 import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Set;
@@ -108,6 +114,24 @@ final class UserPermits {
     /** 停住的事件数，{@code LaneDispatcher.awaitIdle} 用：它们还没占放行名额。 */
     int parkedCount() {
         return parked.get();
+    }
+
+    /** 管线停住：停在上限外的事件不会再被放进去，全部交给 {@code discard}（review-fixes 需求 2.6）。 */
+    void discardAll(Consumer<List<EventEnvelope>> discard) {
+        List<EventEnvelope> dropped = new ArrayList<>();
+        for (Principal principal : List.copyOf(parkedUsers)) {
+            Account account = account(principal);
+            synchronized (account) {
+                while (!account.waiting.isEmpty()) {
+                    dropped.add(account.waiting.poll());
+                    parked.decrementAndGet();
+                }
+                parkedUsers.remove(principal);
+            }
+        }
+        if (!dropped.isEmpty()) {
+            discard.accept(dropped);
+        }
     }
 
     private void drain(Principal principal, Account account) {

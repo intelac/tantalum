@@ -18,15 +18,19 @@ public final class Residency {
     /** 通道看到的会话状态。 */
     public enum State { COLD, RESIDENT, FAILED }
 
+    /** 钉住时看到的状态和（失败时的）原因：一次读出，通道不用再读第二次时钟（review-fixes 需求 4.1）。 */
+    public record Pinned(State state, String failure) {}
+
     private record Entry(int pins, State state, String failure, long failedAt) {
 
         Entry pinned(int delta) {
             return new Entry(pins + delta, state, failure, failedAt);
         }
 
-        /** 不在内存又没有在途事件时不留条目。 */
-        Entry orNone() {
-            return pins == 0 && state == State.COLD ? null : this;
+        /** 不在内存又没有在途事件时不留条目；失败已过重试时间的也不留（需求 4.2）。 */
+        Entry orNone(long now, long retryMillis) {
+            boolean gone = state == State.COLD || (state == State.FAILED && now - failedAt >= retryMillis);
+            return pins == 0 && gone ? null : this;
         }
     }
 
@@ -45,25 +49,35 @@ public final class Residency {
         this.retry = retry;
     }
 
-    /** 钉住一次，返回钉住前的状态。失败超过重试时间的会话算 {@link State#COLD}，通道会重新载入。 */
-    public State pin(SessionId session) {
-        AtomicReference<State> seen = new AtomicReference<>();
+    /** 钉住一次，返回钉住前的状态和失败原因。失败超过重试时间的会话算 {@link State#COLD}，通道会重新载入。 */
+    public Pinned pin(SessionId session) {
+        AtomicReference<Pinned> seen = new AtomicReference<>();
         long now = clock.millis();
         entries.compute(session, (key, entry) -> {
             Entry current = entry == null ? new Entry(0, State.COLD, null, 0) : entry;
             // 过了重试时间：报 COLD 让通道重新载入，条目仍是 FAILED，再失败就不算第一次
-            seen.set(expired(current, now) ? State.COLD : current.state());
+            seen.set(expired(current, now) ? new Pinned(State.COLD, null) : new Pinned(current.state(), current.failure()));
             return current.pinned(1);
         });
         return seen.get();
     }
 
     public void unpin(SessionId session) {
-        entries.computeIfPresent(session, (key, entry) -> entry.pins() == 0 ? entry.orNone() : entry.pinned(-1).orNone());
+        long now = clock.millis();
+        long retryMillis = retry.toMillis();
+        entries.computeIfPresent(session, (key, entry) ->
+                (entry.pins() == 0 ? entry : entry.pinned(-1)).orNone(now, retryMillis));
     }
 
     public void resident(SessionId session) {
         entries.compute(session, (key, entry) -> new Entry(entry == null ? 0 : entry.pins(), State.RESIDENT, null, 0));
+    }
+
+    /** 载入了却没能交给 cleanroom：回到冷状态，下一个事件重新载入（需求 4.3）。钉住数不变。 */
+    public void cold(SessionId session) {
+        long now = clock.millis();
+        long retryMillis = retry.toMillis();
+        entries.computeIfPresent(session, (key, entry) -> new Entry(entry.pins(), State.COLD, null, 0).orNone(now, retryMillis));
     }
 
     /** 载入失败：重试时间内这个会话都拒绝。返回是不是第一次失败（之前不是失败状态），日志按它分级别。 */

@@ -84,7 +84,14 @@ public final class SessionFiles implements AutoCloseable {
                     long offset = handle.file.appendLines(encoded);
                     listener.onDurable(principal, session, seq, offset);
                 } catch (IOException | RuntimeException failure) {
+                    // memo 可能已领先于文件，句柄可能带着残缺的尾部：都丢掉，下次重新打开（review-fixes 需求 3.1）
                     memos.remove(key);
+                    try {
+                        handle.file.close();
+                    } catch (IOException | RuntimeException cannotClose) {
+                        failure.addSuppressed(cannotClose);
+                    }
+                    handle.file = null;
                     throw failure;
                 }
             }

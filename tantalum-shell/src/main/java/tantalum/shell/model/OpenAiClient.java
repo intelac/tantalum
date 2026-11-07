@@ -1,5 +1,7 @@
 package tantalum.shell.model;
 
+import tantalum.value.text.Failures;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -155,7 +157,7 @@ public final class OpenAiClient implements ModelClient {
                 if (watchdog.expired()) {
                     return ModelFailures.timeout(text.toString());
                 }
-                return ModelFailures.connection(text.toString(), failure.toString());
+                return ModelFailures.connection(text.toString(), Failures.describe(failure));
             } catch (JacksonException malformed) {
                 // 畸形分片：流本身坏了，按连接错误重试，已收到的文本保留。
                 closeQuietly(open);

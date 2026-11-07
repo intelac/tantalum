@@ -23,7 +23,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                             Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
                             Changed<SessionContext> context, Changed<Compaction> compaction,
                             Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
-                            Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<ModelChoice> followUpModel) {
+                            Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<List<ModelChoice>> followUpModels) {
 
     /** 一个变了的字段的新值。 */
     public record Changed<T>(T value) {}
@@ -70,7 +70,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 changed(base.compaction(), after.compaction()), changed(base.anchor(), after.anchor()),
                 changed(base.omittedImages(), after.omittedImages()), changed(base.toolsSeen(), after.toolsSeen()),
                 changed(base.notes(), after.notes()), changed(base.model(), after.model()),
-                changed(base.followUpModel(), after.followUpModel()));
+                changed(base.followUpModels(), after.followUpModels()));
     }
 
     /** 套到处理前的状态上。{@code before} 为 null 时以新会话为底。 */
@@ -86,14 +86,14 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 pick(activeRun, base.activeRun()), pick(lastRun, base.lastRun()), pick(followUps, base.followUps()),
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
                 pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()),
-                pick(model, base.model()), pick(followUpModel, base.followUpModel()));
+                pick(model, base.model()), pick(followUpModels, base.followUpModels()));
     }
 
     /** 没有任何变化：可以不写。 */
     public boolean isEmpty() {
         return !created && appended.isEmpty() && activeRun == null && lastRun == null && followUps == null
                 && context == null && compaction == null && anchor == null && omittedImages == null && toolsSeen == null
-                && notes == null && model == null && followUpModel == null;
+                && notes == null && model == null && followUpModels == null;
     }
 
     /** 先比引用：内核追加时沿用原来的消息对象，长历史不用逐条深比较。 */

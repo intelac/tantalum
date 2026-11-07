@@ -100,7 +100,8 @@ public final class ToolSteps {
         ToolRound round = run.tools();
         for (int i = 0; i < round.slots().size(); i++) {
             ToolSlot slot = round.slots().get(i);
-            if (event.command().equals(slot.command())) {
+            // 只收已发出、还没结果的槽位：重复或迟到的结果不覆盖已有的（review-fixes 需求 5.3）
+            if (event.command().equals(slot.command()) && slot.status() == ToolSlot.Status.SENT) {
                 ToolResultBlock result = new ToolResultBlock(event.toolCallId(), event.text(), event.error(), null, event.images());
                 round = round.withSlot(i, slot.done(result));
             }

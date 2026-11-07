@@ -42,6 +42,7 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
     /** 消费者线程放事件，cleanroom 线程放处理完的步骤。 */
     private final Map<Principal, UserLane> lanes = new ConcurrentHashMap<>();
     private volatile boolean halted;
+    private volatile Runnable onHalt = () -> { };
 
     /** {@code capacity} 是放行名额总数，{@code maxUserPermits} 是每个用户的上限（{@code tantalum.loop.max-user-permits}）。 */
     public LaneDispatcher(int capacity, int maxUserPermits, Sequence sequence, UserLane.Writer writer, Downstream cleanroom,
@@ -63,11 +64,17 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
         if (!users.take(envelope)) {
             return;
         }
-        while (!halted) {
-            if (permits.tryAcquire(POLL_MILLIS, TimeUnit.MILLISECONDS)) {
-                lane(envelope.principal()).offer(envelope);
-                return;
+        try {
+            while (!halted) {
+                if (permits.tryAcquire(POLL_MILLIS, TimeUnit.MILLISECONDS)) {
+                    lane(envelope.principal()).offer(envelope);
+                    return;
+                }
             }
+        } catch (InterruptedException stopping) {
+            // 关机：这个用户的名额退回，事件不进通道（review-fixes 需求 2.5）
+            users.giveBack(envelope);
+            throw stopping;
         }
         users.giveBack(envelope);
     }
@@ -123,6 +130,14 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
     public void failed(Throwable failure) {
         halted = true;
         LOG.error("journal write failed; the process stops handling events and must be reopened", failure);
+        // 停在用户上限外的事件不会再被放进去：丢弃并归还名额，awaitIdle 不再空转（需求 2.6）
+        users.discardAll(this::discarded);
+        onHalt.run();
+    }
+
+    /** 管线停住时做的事（关掉在途回执等），只设一次；默认什么都不做。 */
+    public void onHalt(Runnable action) {
+        this.onHalt = action;
     }
 
     @Override

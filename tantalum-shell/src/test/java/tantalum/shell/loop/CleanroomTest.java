@@ -1,5 +1,17 @@
 package tantalum.shell.loop;
 
+import tantalum.value.decision.PhaseChanged;
+
+import tantalum.value.id.RunRef;
+
+import tantalum.value.id.RunId;
+
+import tantalum.value.id.CommandId;
+
+import tantalum.value.event.TimerFired;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -221,5 +233,18 @@ class CleanroomTest {
         assertEquals(1, view.current().runs().size());
         assertEquals(1, facts.size());
         ring.shutdown(Duration.ZERO);
+    }
+
+    /** review-fixes 需求 4.4：属于已有运行的事件载入失败时也报 LoadFailed，带着那个运行的 id。 */
+    @Test
+    void aLoadFailureForAnEventOfAnExistingRunIsReported() {
+        Cleanroom cleanroom = cleanroom();
+        SessionId session = new SessionId("s");
+        RunId run = new RunId("s_3");
+        CleanroomRing.Slot slot = new CleanroomRing.Slot();
+        slot.envelope = new EventEnvelope(9, Instant.EPOCH, new Principal("u"), session, run, new TimerFired(new CommandId("s_3-0")));
+        slot.load = new CleanroomRing.Failed("index locked");
+        cleanroom.onEvent(slot, 9, true);
+        assertEquals(List.of(new PhaseChanged(new RunRef(new Principal("u"), session, run), Cleanroom.LOAD_FAILED)), facts);
     }
 }

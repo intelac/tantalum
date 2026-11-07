@@ -185,6 +185,10 @@ class CompactorTest {
         assertNull(Compactor.request(List.of(update, summary, results)));
         assertFalse(Compactor.isUserText(new Message(Role.USER, List.of(new TextBlock("a"), new ToolResultBlock("t", "r", false, null)), false)));
         assertTrue(Compactor.isUserText(Message.user("steer")));
+        // review-fixes 需求 5.8：带附件的提问也是用户亲笔的
+        assertTrue(Compactor.isUserText(Message.user("look", List.of(new tantalum.value.attachment.ImageRef("sha256:" + "a".repeat(64), "a.png", "image/png", 10, 1, 1, null, null)))));
+        assertFalse(Compactor.isUserText(new Message(Role.USER, List.of(new tantalum.value.model.AttachmentBlock(
+                new tantalum.value.attachment.ImageRef("sha256:" + "a".repeat(64), "a.png", "image/png", 10, 1, 1, null, null))), false)), "a message that does not start with text");
     }
 
     @Test

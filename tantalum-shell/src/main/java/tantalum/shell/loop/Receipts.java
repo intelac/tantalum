@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,9 +34,19 @@ public final class Receipts {
         return found != null ? found : CompletableFuture.completedFuture(null);
     }
 
-    /** 发布失败，事件不会到内核。 */
-    void forget(SubmissionId submission) {
-        pending.remove(submission);
+    /** 发布失败，事件不会到内核：等着这张回执的（重复提交）也得到失败，不会永远等（review-fixes 需求 1.2）。 */
+    void fail(SubmissionId submission) {
+        CompletableFuture<Void> receipt = pending.remove(submission);
+        if (receipt != null) {
+            receipt.completeExceptionally(new NotSaved(submission));
+        }
+    }
+
+    /** 关机或管线停住：之后不会再有落盘，在途的回执全部以失败完成（需求 1.3）。 */
+    public void failAll() {
+        for (SubmissionId submission : List.copyOf(pending.keySet())) {
+            fail(submission);
+        }
     }
 
     /** 这一步已落盘。 */

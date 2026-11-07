@@ -148,7 +148,7 @@ class LoadTest {
             assertEquals(bad, item.load() instanceof CleanroomRing.Failed, item.envelope().session().value());
         }
         assertEquals(1, attempts.get());
-        assertTrue(residency.failure(new SessionId("bad")).contains("corrupt"));
+        assertTrue(residency.failure(new SessionId("bad")).contains("IllegalStateException"), "only the class name, not the message");
         assertNull(residency.failure(new SessionId("good")));
     }
 }

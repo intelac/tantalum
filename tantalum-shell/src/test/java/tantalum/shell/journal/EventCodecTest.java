@@ -344,4 +344,16 @@ class EventCodecTest {
     void corruptPayloadIsRejected() {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(Cancel.TYPE, 1, "{not json"));
     }
+
+    /** review-fixes 需求 3.6：语言表写出时一个值都不丢，已有三种的顺序不变。 */
+    @Test
+    void everyLanguageIsWrittenInAStableOrder() {
+        java.util.Map<tantalum.value.text.Language, String> texts = new java.util.EnumMap<>(tantalum.value.text.Language.class);
+        for (tantalum.value.text.Language language : tantalum.value.text.Language.values()) {
+            texts.put(language, language.name());
+        }
+        java.util.Map<tantalum.value.text.Language, String> ordered = new EventCodec.OrderedLanguages().convert(texts);
+        assertEquals(texts.keySet(), ordered.keySet());
+        assertEquals(EventCodec.OrderedLanguages.FIRST, List.copyOf(ordered.keySet()).subList(0, 3));
+    }
 }

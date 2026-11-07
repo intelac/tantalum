@@ -134,4 +134,14 @@ class ToolSwitchStepsTest {
         assertEquals(change(List.of(), List.of("write_file")), notReplies(loop).getLast());
         assertEquals(List.of("grep", "read_file"), loop.session().context().activeTools());
     }
+
+    /** review-fixes 需求 5.6：第一次冻结时开着的名单只认全集里有的名字。 */
+    @Test
+    void theFirstAssemblyKeepsOnlyToolsOfTheWholeSet() {
+        LoopFixture loop = new LoopFixture();
+        ask(loop, "q1", List.of("grep", "ghost"), List.of());
+        SessionContext context = loop.session().context();
+        assertEquals(List.of("grep"), context.initialTools());
+        assertEquals(List.of("grep"), context.activeTools());
+    }
 }

@@ -57,7 +57,7 @@ public final class SessionFileReader {
         if (!Files.exists(file)) {
             return memo;
         }
-        try (Lines in = new Lines(Files.newInputStream(file))) {
+        try (Lines in = new Lines(Files.newInputStream(file), MAX_LINE_BYTES)) {
             byte[] current = in.next();
             if (current == null) {
                 return memo;
@@ -109,15 +109,21 @@ public final class SessionFileReader {
     }
 
     /** 按块读、找换行符：比逐字节读快得多（长会话的结果行几十 KB）。没有换行符的尾部不是完整的记录，当作不存在。 */
-    private static final class Lines implements AutoCloseable {
+    /** 一行的上限：超过的不是我们写的文件，当作损坏，不把整个文件读进内存（review-fixes 需求 3.4）。 */
+    static final int MAX_LINE_BYTES = 64 * 1024 * 1024;
+
+    static final class Lines implements AutoCloseable {
         private final InputStream in;
         private byte[] buffer = new byte[64 * 1024];
         private int start;
         private int end;
         private boolean eof;
 
-        Lines(InputStream in) {
+        private final int maxLine;
+
+        Lines(InputStream in, int maxLine) {
             this.in = in;
+            this.maxLine = maxLine;
         }
 
         /** 下一行，不含换行符；没有完整的行时为 null。 */
@@ -126,10 +132,16 @@ public final class SessionFileReader {
             while (true) {
                 for (int i = scanned; i < end; i++) {
                     if (buffer[i] == '\n') {
+                        if (i - start > maxLine) {
+                            throw new SessionCorruptException("a line longer than " + maxLine + " bytes", null);
+                        }
                         byte[] line = java.util.Arrays.copyOfRange(buffer, start, i);
                         start = i + 1;
                         return line;
                     }
+                }
+                if (end - start > maxLine) {
+                    throw new SessionCorruptException("a line longer than " + maxLine + " bytes", null);
                 }
                 if (eof) {
                     return null;
@@ -141,7 +153,10 @@ public final class SessionFileReader {
                     start = 0;
                 }
                 if (end == buffer.length) {
-                    buffer = java.util.Arrays.copyOf(buffer, buffer.length * 2);
+                    if (buffer.length >= maxLine) {
+                        throw new SessionCorruptException("a line longer than " + maxLine + " bytes", null);
+                    }
+                    buffer = java.util.Arrays.copyOf(buffer, Math.min(maxLine, buffer.length * 2));
                 }
                 int read = in.read(buffer, end, buffer.length - end);
                 if (read < 0) {

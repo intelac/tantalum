@@ -1,5 +1,11 @@
 package tantalum.kernel;
 
+import tantalum.value.id.SubmissionId;
+
+import tantalum.value.event.UserPrompt;
+
+import tantalum.value.decision.StepFailed;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -125,5 +131,19 @@ class KernelTest {
         KernelState before = KernelState.empty();
         EventEnvelope cancel = new EventEnvelope(1, Instant.EPOCH, USER, SESSION, null, new Cancel(new RequestId("r")));
         assertSame(before, kernel(table).step(before, cancel).newState());
+    }
+
+    /** review-fixes 需求 5.1：没有运行可以结束时，步骤函数的异常变成一条 StepFailed 事实，状态不变。 */
+    @Test
+    void aStepFailureWithoutARunIsReportedAsAFact() {
+        TransitionTable table = new TransitionTable();
+        table.register(Kernel.NEW_RUN, "UserPrompt", context -> { throw new IllegalStateException("boom"); });
+        KernelState before = KernelState.empty();
+        EventEnvelope prompt = new EventEnvelope(5, Instant.EPOCH, USER, SESSION, null,
+                new UserPrompt(new SubmissionId("sub"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi"));
+        Decision decision = kernel(table).step(before, prompt);
+        assertSame(before, decision.newState());
+        assertEquals(List.of(new StepFailed(new RunRef(USER, SESSION, RunId.of(SESSION, 5)), "UserPrompt", "IllegalStateException")),
+                decision.facts());
     }
 }

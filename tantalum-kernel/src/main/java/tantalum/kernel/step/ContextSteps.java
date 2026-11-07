@@ -84,11 +84,14 @@ public final class ContextSteps {
         SessionState session = out.session(run.ref());
         SessionContext frozen = session.context();
         if (frozen == null) {
-            List<String> active = event.enabledTools() != null ? event.enabledTools() : event.tools().stream().map(ToolSpec::name).toList();
+            // 开着的名单只认全集里有的名字（review-fixes 需求 5.6），和之后每次组装的算法一样
+            List<String> all = event.tools().stream().map(ToolSpec::name).toList();
+            List<String> enabled = event.enabledTools() == null ? null : all.stream().filter(event.enabledTools()::contains).toList();
+            List<String> active = enabled != null ? enabled : all;
             List<String> gone = session.toolsSeen().stream().filter(name -> !active.contains(name)).toList();
             SessionState next = gone.isEmpty() ? session : session.append(ContextUpdate.message(ToolsGone.text(gone)));
             out.put(next.withContext(new SessionContext(event.system(), event.tools(), event.compaction(), event.sections(),
-                    event.enabledTools(), event.enabledTools(), event.enabledPlugins())).withToolsSeen(seen(session, active)));
+                    enabled, enabled, event.enabledPlugins())).withToolsSeen(seen(session, active)));
             return;
         }
         SessionState next = session;

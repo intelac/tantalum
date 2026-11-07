@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayDeque;
@@ -114,13 +115,13 @@ final class Storage implements AutoCloseable {
         };
     }
 
-    /** 提交去重时内存里没有的请求 ID 查这里。查不到时当作新提交：可用性优先，日志留痕。 */
+    /** 提交去重时内存里没有的请求 ID 查这里。查不了时抛出，入口回 503：当作新提交会让一次重试执行两遍（review-fixes 需求 1.4）。 */
     Optional<SubmissionId> findSubmission(Principal principal, RequestId request) {
         try {
             return index.submission(principal, request);
         } catch (SQLException failure) {
-            LOG.warn("index lookup failed, treating request as new: {}", failure.toString());
-            return Optional.empty();
+            LOG.warn("index lookup failed; refusing the submission for now: {}", failure.toString());
+            throw new UncheckedIOException(new IOException("index lookup failed", failure));
         }
     }
 

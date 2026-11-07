@@ -656,3 +656,16 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **真实 Claude**（`CoreToolsClaudeTest.hookPatchesArriveAsSystemMessagesAndKeepTheThinkingValid`，claude-sonnet-5-5，严格校验）：三问里说明变三次、第 2 问加工具（服务器上没有，模型调用得到 Unknown tool）、第 3 问撤回。4 次模型调用，0 次 400，模型调用了钩子加的工具，第 3 问说工具已不可用。adaptive thinking 在简单题上常不思考，判定改成“最后一次请求之前有思考块”。
 - **没做**：对话页不显示钩子的说明；`clear_at` 和 `inline-tools` 两个 beta 不用；钩子加的工具必须是服务器上能找到的才执行得了（`ToolHandler` 按名字找 `ToolCatalog`），所以 `addTools` 实际只能加全集之外、模型只需看见不需执行的工具——这是老问题，这次没改。
 
+### review-fixes 阶段 1（2026-11-07）：管线与 journal
+
+整体 review（`.spec-workflow/reviews/2026-11-07-architecture-review.md`）第 4 节的第一组，全部用脚本化模型，不花额度。
+
+- **回执不说谎**：`SubmissionLedger.claim(principal, request, onNew)` 在认领对别人可见之前、同一个临界区里登记回执（`Intake` 传 `receipts::expect`），重复提交看到认领时回执一定已在；原提交被拒、没进环或中途抛异常时 `Receipts.fail` 以 `NotSaved` 完成回执，名额、新运行计数、认领全部退回；关机（`Engine.close` 在 drain user lanes 之后）和管线停住（`LaneDispatcher.onHalt`）时 `Receipts.failAll`；去重的索引查不了时 `Storage.findSubmission` 抛 `UncheckedIOException`，入口回 503，不再当作新提交。
+- **用户通道不会死**：`UserLane.drain` 对 `process` 包一层 Throwable 兜底（停机、丢弃、done 跑完，线程留着）；pin 和写入在同一个受保护区里，异常时按真正钉住的解开；`afterDurable` 的 catch 改 Throwable；`exit.publish` 抛异常按拒绝处理，剩余解钉并丢弃、刚载入的会话 `Residency.cold`；分发器等名额被中断时归还用户名额；停机时 `UserPermits.discardAll` 丢掉停在上限外的事件。多会话并行写一部分失败仍整批失败并停机（既定做法，不改）。
+- **journal 写失败**：`SessionFile.appendLines` 失败时截回写入前的长度并作废（再写抛 IOException），`SessionFiles.append` 关掉并丢弃句柄，下次重新 `open` 走 `repairTail`；`RecordCodec` 编码用 `UnknownFact.raw().deepCopy()`，解码的任何 RuntimeException 都是“corrupt result line”；`SessionFileReader.Lines` 一行上限 64 MiB；`StoreLock.acquire` 加锁前失败关通道；`EventCodec.OrderedLanguages` 固定三种之后把其余 `Language` 值按枚举顺序补上。
+- **驻留**：`Residency.pin` 返回 `Pinned(state, failure)`；失败过期且无人钉住的条目回收；新 `cold(session)`；`Cleanroom.rejected` 对属于已有运行的事件也报 `PhaseChanged(LOAD_FAILED)`。
+- **内核**：新事实 `StepFailed(run, event, failure)`（`Kernel.step` 在没有运行可结束时报，journal 里 `"type":"StepFailed"`）；`CancelSteps.commandDropped` 只在丢的是正在等的命令时结束运行；`ToolSteps.toolFinished` 只收 SENT 的槽位；MAX_TOKENS 截断且带工具调用的回复不执行工具、按“截断”结束；排队的提问各自带模型选择（`SessionState.followUpModels` 和 `followUps` 等长，替代原来的单个 `followUpModel`——journal 里从没出现过那个字段，数据目录 grep 为 0）；第一次冻结上下文时开着的名单和全集求交；`Resume.continueWithText` 把 `work` 交给 `callModel`；`Compactor.isUserText` 接受带附件的提问。
+- **异常文字**：`tantalum.value.text.Failures.describe` 只给类名；`HookChain`、`UserLane.loadOne`、`ModelHandler.failed`、`ToolHandler`、两个模型客户端的连接失败都经它，原文记服务器日志；连接程序发给服务器的工具失败是固定文字，细节只打到本机终端。
+- **钩子说明按钩子比较**：`HookState.texts` 记每个钩子上次的说明，只有变了的钩子重发自己那块。
+- **没做**（留给后面阶段或不做）：`Outcome.enter` 的快照覆盖只有两个调用点、都在同一步内安全，不改；`HookPatches` 跳过时重复的 `HookReported` 不改（那条路径正常不会走到）。
+

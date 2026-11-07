@@ -34,8 +34,14 @@ public final class CancelSteps {
         return end(context, EndReason.CANCELLED, null);
     }
 
+    /** 只有运行正在等的命令被丢才算失败；别的命令（迟到的、别的阶段的）被丢时运行不变（review-fixes 需求 5.2）。 */
     public static Decision commandDropped(StepContext context) {
         CommandDropped event = (CommandDropped) context.envelope().event();
+        RunState run = context.run();
+        boolean awaited = run != null && run.phase() instanceof Awaiting awaiting && awaiting.commands().contains(event.command());
+        if (!awaited) {
+            return Decision.unchanged(context.state());
+        }
         return end(context, EndReason.FAILED, event.detail());
     }
 

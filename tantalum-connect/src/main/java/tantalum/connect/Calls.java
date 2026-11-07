@@ -119,7 +119,9 @@ final class Calls {
             result = null;
             outcome = Outcome.CANCELLED;
         } catch (Exception failure) {
-            result = LocalResult.error("Tool failed: " + failure.getMessage());
+            // 发给服务器的是固定文字：本机的异常消息可能带路径（review-fixes 需求 6.3）；细节只在本地终端
+            System.err.println("[tantalum-connect] " + call.tool() + " failed: " + failure);
+            result = LocalResult.error("Tool failed on the computer; see the connector's output.");
             outcome = Outcome.ERROR;
         }
         boolean cancelled = running.remove(call.id()) == null;

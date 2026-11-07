@@ -1,5 +1,7 @@
 package tantalum.shell.journal;
 
+import java.io.IOException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -173,5 +175,40 @@ class SessionFileTest {
         Files.write(path, "{\"seq\":2,\"at".getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);
         write(paths, event(ALICE, S1, 3, "c"));
         assertEquals(List.of(event(ALICE, S1, 1, "a"), event(ALICE, S1, 3, "c")), new SessionFileReader(codec).readAll(path));
+    }
+
+    /** review-fixes 需求 3.1：一次写入失败后句柄作废，下一次写入重新打开，文件里只有完整的行。 */
+    @Test
+    void aFailedAppendDropsTheHandleAndTheNextAppendReopens() throws Exception {
+        SessionPaths paths = new SessionPaths(dir);
+        try (SessionFiles files = files(paths)) {
+            files.append(ALICE, S1, lines(event(ALICE, S1, 1, "a")));
+            // 别人的事件进不了这个文件：编码阶段就失败，走失败路径
+            assertThrows(IllegalArgumentException.class, () -> files.append(ALICE, S1, lines(event(new Principal("bob"), S1, 2, "b"))));
+            files.append(ALICE, S1, lines(event(ALICE, S1, 3, "c")));
+        }
+        assertEquals(List.of(event(ALICE, S1, 1, "a"), event(ALICE, S1, 3, "c")), new SessionFileReader(codec).readAll(paths.sessionFile(ALICE, S1)));
+        assertEquals(3, Files.readAllLines(paths.sessionFile(ALICE, S1)).size(), "header and two complete lines");
+    }
+
+    /** 需求 3.1：写失败的文件对象不再接受写入。 */
+    @Test
+    void aBrokenFileRefusesFurtherWrites() throws Exception {
+        SessionPaths paths = new SessionPaths(dir);
+        SessionFile file = SessionFile.open(paths, ALICE, S1);
+        file.close();
+        assertThrows(IOException.class, () -> file.appendLines(List.of("{}")));
+        IOException refused = assertThrows(IOException.class, () -> file.appendLines(List.of("{}")));
+        assertTrue(refused.getMessage().contains("broken"), refused.getMessage());
+    }
+
+    /** 需求 3.4：超过上限的行当作损坏，不把文件整个读进内存。 */
+    @Test
+    void anOverlongLineIsCorruptNotAnOutOfMemory() throws Exception {
+        byte[] bytes = "{\"format\":3}\n0123456789012345678901234567890123456789\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try (SessionFileReader.Lines lines = new SessionFileReader.Lines(new java.io.ByteArrayInputStream(bytes), 16)) {
+            assertEquals("{\"format\":3}", new String(lines.next(), java.nio.charset.StandardCharsets.UTF_8));
+            assertThrows(SessionCorruptException.class, lines::next);
+        }
     }
 }

@@ -1,5 +1,10 @@
 package tantalum.shell.handler;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import tantalum.value.text.Failures;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,6 +27,8 @@ import tantalum.value.json.Json;
 
 /** 执行工具调用。失败和超时都变成错误结果交给模型；结果不明的调用不自动重试。 */
 public final class ToolHandler implements Handler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ToolHandler.class);
 
     private final ToolCatalog catalog;
     private final Workspaces workspaces;
@@ -86,7 +93,10 @@ public final class ToolHandler implements Handler {
         } catch (TimeoutException late) {
             return new Ran(ToolOutput.error("Tool timed out after " + timeout + ". Its outcome is unknown."), startedAt);
         } catch (ExecutionException failure) {
-            return new Ran(ToolOutput.error("Tool failed: " + failure.getCause()), startedAt);
+            // 结果给模型、进 journal：只给异常类名；完整异常记日志（review-fixes 需求 6.1）
+            Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+            LOG.error("tool {} failed", tool.name(), cause);
+            return new Ran(ToolOutput.error(Failures.describe(cause, "Tool failed")), startedAt);
         }
     }
 

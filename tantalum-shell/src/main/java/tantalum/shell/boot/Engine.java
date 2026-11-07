@@ -251,6 +251,7 @@ public final class Engine implements AutoCloseable {
                     (principal, session) -> queries.session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
             input.connect(lanes);
             cleanroomRing.connect(cleanroom);
+            lanes.onHalt(receipts::failAll);
         } catch (RuntimeException | IOException failure) {
             routes.close();
             closeWebQuietly();
@@ -453,6 +454,8 @@ public final class Engine implements AutoCloseable {
                 }),
                 new Shutdown.Step("drain input ring", () -> input.shutdown(DRAIN)),
                 new Shutdown.Step("drain user lanes", () -> lanes.awaitIdle(DRAIN)),
+                // 之后不会再有落盘：还在等的回执全部以失败完成，接口不再等（review-fixes 需求 1.3）
+                new Shutdown.Step("fail pending receipts", receipts::failAll),
                 new Shutdown.Step("drain cleanroom ring", () -> cleanroomRing.shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> output.shutdown(DRAIN)),
                 new Shutdown.Step("close mcp", mcp),

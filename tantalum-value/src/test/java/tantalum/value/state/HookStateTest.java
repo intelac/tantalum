@@ -35,14 +35,14 @@ class HookStateTest {
     void anOldContextHasNoHookStateAndReadsAsNone() {
         assertNull(PLAIN.hooks());
         assertSame(HookState.NONE, PLAIN.hookState());
-        assertEquals("", HookState.NONE.text());
+        assertEquals(List.of(), HookState.NONE.texts());
         assertEquals(List.of(), HookState.NONE.tools());
         assertEquals(List.of(), HookState.NONE.active());
     }
 
     @Test
     void theHookStateSurvivesTheOtherChanges() {
-        HookState hooks = new HookState("be brief", List.of(new HookTool("style", CITE)), List.of("cite"));
+        HookState hooks = new HookState(List.of(new HookTextBlock("style", "be brief")), List.of(new HookTool("style", CITE)), List.of("cite"));
         SessionContext context = PLAIN.withHooks(hooks);
         assertEquals(hooks, context.hookState());
         assertEquals(hooks, context.withSections(List.of()).hooks());

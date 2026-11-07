@@ -126,10 +126,9 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已写入、没有结果行，下次启动时和崩溃留下的尾部一样处理。 */
     private void rejected(EventEnvelope envelope, String reason) {
         LOG.warn("dropping seq {} for session {}: {}", envelope.seq(), envelope.session().value(), reason);
-        if (envelope.run() == null) {
-            RunRef run = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
-            notifyListener(envelope.seq(), 0, new PhaseChanged(run, LOAD_FAILED));
-        }
+        // 属于已有运行的事件也报一条：那个运行在等的结果丢了，界面要看得到（review-fixes 需求 4.4）
+        RunId run = envelope.run() != null ? envelope.run() : RunId.of(envelope.session(), envelope.seq());
+        notifyListener(envelope.seq(), 0, new PhaseChanged(new RunRef(envelope.principal(), envelope.session(), run), LOAD_FAILED));
     }
 
     private void merge(EventEnvelope envelope, CleanroomRing.Loaded loaded) {

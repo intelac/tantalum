@@ -1,5 +1,7 @@
 package tantalum.shell.loop;
 
+import tantalum.value.text.Failures;
+
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -109,7 +111,12 @@ public final class UserLane {
             if (batch.isEmpty()) {
                 return;
             }
-            process(batch);
+            try {
+                process(batch);
+            } catch (Throwable failure) {
+                // 兜底（review-fixes 需求 2.1）：process 里没接住的任何东西都按写失败处理，通道线程留着处理下一批（停机后只会丢弃）
+                abandon(batch, failure);
+            }
         }
     }
 
@@ -118,6 +125,21 @@ public final class UserLane {
         queue.clear();
         running = !batch.isEmpty();
         return batch;
+    }
+
+    /** process 之外的失败：停机、丢弃事件、让已落盘的步骤走完 done。钉住数不再准确，但停机后不会再有人读它。 */
+    private void abandon(List<Object> items, Throwable failure) {
+        LOG.error("lane of {} failed outside the guarded region; the process stops handling events", principal.value(), failure);
+        exit.failed(failure);
+        List<EventEnvelope> batch = new ArrayList<>();
+        for (Object item : items) {
+            if (item instanceof Released step) {
+                step.done().run();
+            } else {
+                batch.add((EventEnvelope) item);
+            }
+        }
+        exit.discarded(batch);
     }
 
     private void process(List<Object> items) {
@@ -135,19 +157,22 @@ public final class UserLane {
             released.forEach(step -> step.done().run());
             return;
         }
-        Map<SessionId, Residency.State> states = new HashMap<>();
-        for (EventEnvelope envelope : batch) {
-            Residency.State state = residency.pin(envelope.session());
-            states.putIfAbsent(envelope.session(), state);
-        }
+        // 钉住和写入在同一个受保护区域里：任一失败，已钉住的都解开（需求 2.2）
+        Map<SessionId, Residency.Pinned> states = new HashMap<>();
+        List<SessionId> pinned = new ArrayList<>(batch.size());
         try {
+            for (EventEnvelope envelope : batch) {
+                Residency.Pinned seen = residency.pin(envelope.session());
+                pinned.add(envelope.session());
+                states.putIfAbsent(envelope.session(), seen);
+            }
             write(released);
-        } catch (Exception | Error failure) {
+        } catch (Throwable failure) {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
             exit.failed(failure);
-            batch.forEach(envelope -> residency.unpin(envelope.session()));
+            pinned.forEach(residency::unpin);
             exit.discarded(batch);
             released.forEach(step -> step.done().run());
             return;
@@ -155,7 +180,8 @@ public final class UserLane {
         for (Released step : released) {
             try {
                 step.afterDurable().run();
-            } catch (RuntimeException failure) {
+            } catch (Throwable failure) {
+                // 一步的放行失败不影响其余已落盘的步骤（需求 2.3）
                 LOG.error("releasing the step of seq {} failed", step.envelope().seq(), failure);
             } finally {
                 step.done().run();
@@ -168,7 +194,7 @@ public final class UserLane {
             }
         } catch (RuntimeException failure) {
             exit.failed(failure);
-            batch.forEach(envelope -> residency.unpin(envelope.session()));
+            pinned.forEach(residency::unpin);
             exit.discarded(batch);
             return;
         }
@@ -183,10 +209,26 @@ public final class UserLane {
             if (load instanceof CleanroomRing.Loaded) {
                 loads.remove(envelope.session());
             }
-            if (!exit.publish(envelope, usage, load)) {
-                exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
-                numbered.subList(i, numbered.size()).forEach(left -> residency.unpin(left.session()));
-                exit.discarded(numbered.subList(i, numbered.size()));
+            boolean handed;
+            try {
+                handed = exit.publish(envelope, usage, load);
+            } catch (RuntimeException | Error failure) {
+                // 抛出和拒绝一样处理：剩下的解钉、丢弃（需求 2.4）
+                handed = false;
+                exit.failed(failure);
+            }
+            if (!handed) {
+                if (!exit.halted()) {
+                    exit.failed(new IllegalStateException("cleanroom ring refused an event although a permit was held"));
+                }
+                List<EventEnvelope> left = numbered.subList(i, numbered.size());
+                left.forEach(rest -> residency.unpin(rest.session()));
+                // 刚载入、没交出去的会话回到冷状态，下一个事件重新载入（需求 4.3）
+                loads.keySet().forEach(residency::cold);
+                if (load instanceof CleanroomRing.Loaded) {
+                    residency.cold(envelope.session());
+                }
+                exit.discarded(left);
                 return;
             }
             usage = null;
@@ -194,7 +236,7 @@ public final class UserLane {
     }
 
     /** 文件里只有处理完的步骤，序号都小于新事件。切片跟着这个会话的第一个事件走；失败的会话每个事件都带着失败。 */
-    private Map<SessionId, CleanroomRing.Load> load(List<EventEnvelope> numbered, Map<SessionId, Residency.State> states) {
+    private Map<SessionId, CleanroomRing.Load> load(List<EventEnvelope> numbered, Map<SessionId, Residency.Pinned> states) {
         Map<SessionId, CleanroomRing.Load> loads = new HashMap<>();
         Set<SessionId> visited = new HashSet<>();
         for (EventEnvelope envelope : numbered) {
@@ -202,9 +244,10 @@ public final class UserLane {
             if (!visited.add(session)) {
                 continue;
             }
-            switch (states.get(session)) {
+            Residency.Pinned seen = states.get(session);
+            switch (seen.state()) {
                 case RESIDENT -> { }
-                case FAILED -> loads.put(session, new CleanroomRing.Failed(residency.failure(session)));
+                case FAILED -> loads.put(session, new CleanroomRing.Failed(seen.failure()));
                 case COLD -> loadOne(session, envelope.seq()).ifPresent(load -> loads.put(session, load));
             }
         }
@@ -238,7 +281,8 @@ public final class UserLane {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            String reason = failure.toString();
+            // 原因进事件和接口，只给类名；完整异常在下面的日志里（review-fixes 需求 6.1）
+            String reason = Failures.describe(failure, "cannot load session");
             // 第一次记错误和堆栈；重试再失败只记一条警告，不刷屏（ops-hardening-2 需求 5.3）
             if (residency.fail(session, reason)) {
                 LOG.error("cannot load session {}; refusing it for a while, then trying again", session.value(), failure);

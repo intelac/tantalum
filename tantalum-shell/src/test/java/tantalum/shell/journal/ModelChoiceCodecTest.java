@@ -74,8 +74,9 @@ class ModelChoiceCodecTest {
                 "local", "qwen3.8"), new TextBlock("ok")), false);
         Message change = new Message(Role.SYSTEM, List.of(new ModelChangeBlock(SONNET.label(), QWEN.label())), false);
         RunState run = RunState.start(RUN, new OwnerRef.OfSession(SESSION)).withModel(QWEN, SONNET);
-        StepRecord record = new StepRecord(0, new SessionChange(SESSION, USER, true, List.of(change, reply), null, null, null, null, null,
-                null, null, null, null, new SessionChange.Changed<>(QWEN), new SessionChange.Changed<>(SONNET)),
+        StepRecord record = new StepRecord(0, new SessionChange(SESSION, USER, true, List.of(change, reply), null, null,
+                new SessionChange.Changed<>(List.of(Message.user("next"))), null, null,
+                null, null, null, null, new SessionChange.Changed<>(QWEN), new SessionChange.Changed<>(List.of(SONNET))),
                 List.of(run), List.of(), null, null,
                 List.of(new AssembleContext(new CommandId("c-0"), RUN, QWEN, SONNET),
                         new CallModel(new CommandId("c-1"), RUN, new Prompt("system", List.of(), List.of(change, reply)).withModel(QWEN))),

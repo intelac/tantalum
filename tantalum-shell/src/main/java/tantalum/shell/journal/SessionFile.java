@@ -34,6 +34,9 @@ public final class SessionFile implements AutoCloseable {
     /** 新建时新出现的目录项所在的目录：第一批行落盘后再 fsync，省掉单独为头部做的一次 fsync。 */
     private List<Path> unsyncedDirs;
 
+    /** 一次写入失败后为 true：之后的写入一律拒绝。 */
+    private boolean broken;
+
     private SessionFile(Principal principal, SessionId session, FileChannel channel) {
         this.principal = principal;
         this.session = session;
@@ -106,14 +109,34 @@ public final class SessionFile implements AutoCloseable {
         }
     }
 
-    /** 已经编码好的行（不含换行符），一次写完并 fsync，返回落盘后的文件大小。失败时尾部可能残缺，由下次 {@link #open} 截掉。 */
+    /**
+     * 已经编码好的行（不含换行符），一次写完并 fsync，返回落盘后的文件大小。失败时先尽力截回写入前的长度，然后这个对象作废：
+     * 再写就抛出，调用方要关掉它、下次重新 {@link #open}（走 {@code repairTail}），免得完整的行跟在残缺的字节后面（review-fixes 需求 3.1）。
+     */
     long appendLines(List<String> lines) throws IOException {
+        if (broken) {
+            throw new IOException("session file of " + principal.value() + "/" + session.value() + " is broken after a failed write");
+        }
         StringBuilder text = new StringBuilder();
         for (String line : lines) {
             text.append(line).append('\n');
         }
-        writeFully(channel, ByteBuffer.wrap(text.toString().getBytes(StandardCharsets.UTF_8)));
-        channel.force(true);
+        long before = -1;
+        try {
+            before = channel.size();
+            writeFully(channel, ByteBuffer.wrap(text.toString().getBytes(StandardCharsets.UTF_8)));
+            channel.force(true);
+        } catch (IOException | RuntimeException failure) {
+            broken = true;
+            if (before >= 0) {
+                try {
+                    channel.truncate(before);
+                } catch (IOException | RuntimeException cannotTruncate) {
+                    failure.addSuppressed(cannotTruncate);
+                }
+            }
+            throw failure;
+        }
         if (!unsyncedDirs.isEmpty()) {
             for (Path dir : unsyncedDirs) {
                 PrivateFiles.syncDirectory(dir);
