@@ -74,7 +74,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
 
         public static Web defaults() {
-            return new Web(false, new Fetch(true), Browser.defaults());
+            return new Web(true, new Fetch(true), Browser.defaults());
         }
 
         /** 两项里有一项开着，就要起出口。 */

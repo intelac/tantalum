@@ -32,7 +32,7 @@
       "web-fetch" : true,
       "browser" : true
     },
-    "blockPrivateNetwork" : false
+    "blockPrivateNetwork" : true
   },
   "plugins" : [ {
     "name" : "dailyQuota",

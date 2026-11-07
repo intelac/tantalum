@@ -70,7 +70,7 @@ describe("WebCard", () => {
 
   it("says when the administrator blocked private network addresses", () => {
     const { region } = show(web({ blockPrivateNetwork: true }));
-    expect(within(region).getByText("管理员已禁止访问内网地址")).toBeTruthy();
+    expect(within(region).getByText("不能访问服务器所在的内网（默认拦，管理员可改）")).toBeTruthy();
     expect(within(region).queryByText("可以访问服务器所在的内网")).toBeNull();
   });
 });

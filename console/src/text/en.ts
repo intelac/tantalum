@@ -717,7 +717,7 @@ export const en: Text = {
       title: "Web access",
       detail: "Fetch web pages and use a browser on the server. Web content is treated as information, never as instructions.",
       privateAllowed: "Can reach the server's private network",
-      privateBlocked: "The administrator blocked private network addresses",
+      privateBlocked: "Cannot reach the server's private network (blocked by default; the administrator can change it)",
       adminOff: "Turned off by the administrator",
       switches: {
         "web-fetch": ["Fetch web pages", "The server downloads a page and turns it into text. Fast and light on tokens; scripts on the page do not run."],
