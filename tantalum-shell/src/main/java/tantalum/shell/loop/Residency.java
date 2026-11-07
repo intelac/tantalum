@@ -11,14 +11,14 @@ import tantalum.value.id.SessionId;
 /**
  * 每个会话是否在内存，以及有多少事件还没过 cleanroom。通道判断前加一，cleanroom 处理完减一；
  * 只有计数为零才能回收，所以回收和载入不会竞争。不在内存又没有在途事件的会话没有条目，表不随历史增长。
- * 载入失败的会话在 {@code retry} 内拒绝（半截状态不能当新会话），过了这段时间下一个事件再试（ops-hardening-2 D5）。
+ * 载入失败的会话在 {@code retry} 内拒绝（半截状态不能当新会话），过了这段时间下一个事件再试。
  */
 public final class Residency {
 
     /** 通道看到的会话状态。 */
     public enum State { COLD, RESIDENT, FAILED }
 
-    /** 钉住时看到的状态和（失败时的）原因：一次读出，通道不用再读第二次时钟（review-fixes 需求 4.1）。 */
+    /** 钉住时看到的状态和（失败时的）原因：一次读出，通道不用再读第二次时钟。 */
     public record Pinned(State state, String failure) {}
 
     private record Entry(int pins, State state, String failure, long failedAt) {
@@ -27,7 +27,7 @@ public final class Residency {
             return new Entry(pins + delta, state, failure, failedAt);
         }
 
-        /** 不在内存又没有在途事件时不留条目；失败已过重试时间的也不留（需求 4.2）。 */
+        /** 不在内存又没有在途事件时不留条目；失败已过重试时间的也不留。 */
         Entry orNone(long now, long retryMillis) {
             boolean gone = state == State.COLD || (state == State.FAILED && now - failedAt >= retryMillis);
             return pins == 0 && gone ? null : this;
@@ -73,7 +73,7 @@ public final class Residency {
         entries.compute(session, (key, entry) -> new Entry(entry == null ? 0 : entry.pins(), State.RESIDENT, null, 0));
     }
 
-    /** 载入了却没能交给 cleanroom：回到冷状态，下一个事件重新载入（需求 4.3）。钉住数不变。 */
+    /** 载入了却没能交给 cleanroom：回到冷状态，下一个事件重新载入。钉住数不变。 */
     public void cold(SessionId session) {
         long now = clock.millis();
         long retryMillis = retry.toMillis();

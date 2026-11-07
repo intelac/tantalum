@@ -14,7 +14,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 一行会话文件与 {@link Line} 互转（one-line-journal J1）：事件的字段（{@code seq}、{@code at}、{@code type}、{@code version}、
+ * 一行会话文件与 {@link Line} 互转：事件的字段（{@code seq}、{@code at}、{@code type}、{@code version}、
  * {@code run}、{@code payload}）同以前的事件行，后面加一个 {@code result}，内容同以前的结果行、不含序号。
  * 先让 memo 看到事件，再编码结果，所以结果里的“来自本事件”引用的是同一行的正文。
  * 组装上下文的载荷只记和上一次相比的变化（{@link MatchedCodec}）；这一步压缩了，下一次组装写全文。

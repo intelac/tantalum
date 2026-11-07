@@ -6,7 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 沙箱用不了的原因（console-i18n I12）：代码加参数。连接程序的终端按它的语言说，插件页按看的人的语言说；
+ * 沙箱用不了的原因：代码加参数。连接程序的终端按它的语言说，插件页按看的人的语言说；
  * 给模型和老版本服务器的是 {@link #english()}，由下面这张英文表生成，不经资源文件，不随连接程序的语言变。
  * {@code detail} 是 MXC 或操作系统的输出，原样放进去。
  */

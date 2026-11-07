@@ -72,7 +72,7 @@ public class EventStreamController {
                 LOG.debug("event stream of {}: cannot report the failure: {}", user.value(), Failures.describe(alreadyDone));
             }
         } finally {
-            // 订阅注销、响应结束，无论上面怎么退出（review-fixes 需求 11.3）；已经结束的响应再结束一次会抛，忽略
+            // 订阅注销、响应结束，无论上面怎么退出；已经结束的响应再结束一次会抛，忽略
             subscription.close();
             try {
                 emitter.complete();

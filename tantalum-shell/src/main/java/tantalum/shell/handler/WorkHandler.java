@@ -18,7 +18,7 @@ import tantalum.value.event.Event;
 import tantalum.value.event.WorkDone;
 import tantalum.value.json.Json;
 
-/** 按类型执行插件工作。和工具一样有超时：一个阻塞的插件不能永久占住命令。要等人的事不在这里做，钩子返回 {@code Ask}（waiting-state）。 */
+/** 按类型执行插件工作。和工具一样有超时：一个阻塞的插件不能永久占住命令。要等人的事不在这里做，钩子返回 {@code Ask}。 */
 public final class WorkHandler implements Handler {
 
     private final Map<String, WorkType> types = new HashMap<>();

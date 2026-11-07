@@ -37,7 +37,7 @@ import tantalum.value.id.Principal;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 每个用户自己的附件目录（设计第 2 节，需求 A1、A5、2.7、4.2）：
+ * 每个用户自己的附件目录（设计第 2 节）：
  * <pre>
  * attachments/&lt;用户&gt;/
  *   objects/&lt;64 位哈希&gt;        存储的字节（图片是规范化后的，文件原样）
@@ -161,7 +161,7 @@ public final class AttachmentStore {
     }
 
     /**
-     * 发给模型前取字节。进程里第一次用到时核对哈希，之后不再核对（需求 4.2）。
+     * 发给模型前取字节。进程里第一次用到时核对哈希，之后不再核对。
      *
      * @throws NoSuchFileException 附件不在了
      * @throws IOException 哈希和 ID 不符
@@ -199,7 +199,7 @@ public final class AttachmentStore {
         }
     }
 
-    /** 附件的各项上限：工具结果里的图片也按“一条消息最多几张”收（web-tools W8）。 */
+    /** 附件的各项上限：工具结果里的图片也按“一条消息最多几张”收。 */
     public AttachmentLimits limits() {
         return limits;
     }

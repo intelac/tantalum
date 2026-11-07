@@ -14,7 +14,7 @@ import tantalum.local.fs.AllowedDirs;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 交给 {@code mxc-exec-mac} 的 JSON 规则（local-workspace 设计“Mxc.run 第 1 步”，L13、L14）。MXC 从“全部拒绝”开始，只放开系统目录
+ * 交给 {@code mxc-exec-mac} 的 JSON 规则。MXC 从“全部拒绝”开始，只放开系统目录
  * （{@code docs/backends/seatbelt/seatbelt-backend.md} “Always-on baseline”），这里再加：
  * <ul>
  *   <li>读写：有 {@code --allow-write} 时的允许目录，以及这次调用的临时目录（git 这类工具要可写的 {@code TMPDIR}，实测）；</li>
@@ -69,7 +69,7 @@ public record MxcPolicy(List<Path> dirs, boolean write, List<Path> readDirs, boo
         return new MxcPolicy(dirs.all(), write, readDirs, network, env, Path.of(System.getProperty("user.home")));
     }
 
-    /** 名字像密钥的环境变量（L14）：含 {@code KEY}、{@code TOKEN}、{@code SECRET}、{@code PASSWORD}，不分大小写；{@code TANTALUM_TOKEN} 也在内。 */
+    /** 名字像密钥的环境变量：含 {@code KEY}、{@code TOKEN}、{@code SECRET}、{@code PASSWORD}，不分大小写；{@code TANTALUM_TOKEN} 也在内。 */
     public static boolean secret(String name) {
         String upper = name.toUpperCase(Locale.ROOT);
         return upper.contains("KEY") || upper.contains("TOKEN") || upper.contains("SECRET") || upper.contains("PASSWORD");
@@ -99,7 +99,7 @@ public record MxcPolicy(List<Path> dirs, boolean write, List<Path> readDirs, boo
         }
         readDirs.forEach(dir -> readonly.add(dir.toString()));
         readonly.add(home.toString());
-        // 禁止的目录写两种：字面路径和真实路径。~/.ssh 是符号链接时 MXC 按真实路径判断，只写字面的拦不住（review-fixes 需求 11.10）
+        // 禁止的目录写两种：字面路径和真实路径。~/.ssh 是符号链接时 MXC 按真实路径判断，只写字面的拦不住
         List<String> denied = new ArrayList<>();
         for (String name : DENIED) {
             Path literal = userHome.resolve(name);

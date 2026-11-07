@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import tantalum.shell.cli.CliText;
 
 /**
- * 启动时检查数据目录的位置和卷（windows-server N3、N4）。只在 Windows 上查：网络共享拒绝启动（SQLite 的 WAL 不能用在网络文件系统上）；
+ * 启动时检查数据目录的位置和卷。只在 Windows 上查：网络共享拒绝启动（SQLite 的 WAL 不能用在网络文件系统上）；
  * 不在用户目录下、卷不支持 ACL 时各 WARN 一行，照常启动。按位置判断，不读 ACL：JDK 给的 ACL 条目只有本地化的账号名，拿不到 SID。
  * macOS、Linux 上什么都不做，权限照旧由 {@code PrivateFiles} 给 600/700。pi、DSH 都没有对应做法，自定。
  */

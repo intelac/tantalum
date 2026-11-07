@@ -3,7 +3,7 @@ package tantalum.shell.attachment;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 上传时浏览器报的文件名只用来显示和下载，存储路径只由哈希决定（需求 2.5）。清洗后的名字不含路径、
+ * 上传时浏览器报的文件名只用来显示和下载，存储路径只由哈希决定。清洗后的名字不含路径、
  * 控制字符和 Windows 不允许的字符，UTF-8 不超过 255 字节。
  */
 public final class FileNames {

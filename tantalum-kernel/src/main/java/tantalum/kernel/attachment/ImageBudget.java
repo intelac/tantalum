@@ -13,7 +13,7 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolResultBlock;
 
 /**
- * 一次请求里图片的预算（需求 A10，同 DSH {@code 2026-09-10-image-offload-events.md}）：从最新的消息往前累计图片的 base64 大小，
+ * 一次请求里图片的预算（同 DSH {@code 2026-09-10-image-offload-events.md}）：从最新的消息往前累计图片的 base64 大小，
  * 超过 20 MiB 后更早的图片全部省略，换成说明文字，模型要看可以用 {@code read_attachment} 读只读路径。已经省略过的图片不管新的累计结果
  * 如何都继续省略：前缀保持稳定，prompt 缓存不会反复失效。
  */

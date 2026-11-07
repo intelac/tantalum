@@ -5,7 +5,7 @@ import java.util.Map;
 import tantalum.value.model.ModelChoice;
 import tools.jackson.databind.JsonNode;
 
-/** 接口里的模型选择 {@code {"route", "model", "effort"}}（model-picker 设计“数据模型”）：{@code effort} 为 null 表示这个模型没有档位。 */
+/** 接口里的模型选择 {@code {"route", "model", "effort"}}：{@code effort} 为 null 表示这个模型没有档位。 */
 final class ModelJson {
 
     private ModelJson() {}

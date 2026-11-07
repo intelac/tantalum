@@ -3,7 +3,7 @@ package tantalum.value.id;
 import java.util.Locale;
 
 /**
- * Windows 保留的设备名（windows-server N5），名单照微软《Naming Files, Paths, and Namespaces》。这些名字带不带扩展名都指向设备：
+ * Windows 保留的设备名，名单照微软《Naming Files, Paths, and Namespaces》。这些名字带不带扩展名都指向设备：
  * 写进 {@code nul.jsonl} 的数据悄悄丢失。用户名、记忆名拒绝，会话文件名编码避开；所有平台同一条规则，数据目录换平台时文件名不变。
  * 带上标的 {@code COM¹} 这类也是保留名，但三种名字都只许 ASCII，不会出现，不列。pi、DSH 都没有专门处理，自定。
  */

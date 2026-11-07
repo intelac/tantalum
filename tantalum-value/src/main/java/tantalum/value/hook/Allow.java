@@ -7,7 +7,7 @@ import tantalum.value.json.Json;
 
 /**
  * 放行，可携带数据变更，不改变流程。{@code notes} 是要记进会话状态的记录（{@code SessionState.note(key)}），
- * 只在 {@code onAnswer} 的放行上生效（waiting-state D2：工具审批的“这个会话里一直允许”），别处忽略；通常为空。
+ * 只在 {@code onAnswer} 的放行上生效（工具审批的“这个会话里一直允许”），别处忽略；通常为空。
  */
 public record Allow(PromptPatch patch, List<SessionNote> notes) implements HookResult {
 

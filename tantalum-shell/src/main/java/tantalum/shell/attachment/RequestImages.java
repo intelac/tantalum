@@ -39,7 +39,7 @@ public final class RequestImages {
     }
 
     /**
-     * 这张图片按 {@code target} 的版本。附件不在了或哈希不符时抛出（需求 4.2），由调用方让这次模型调用失败。
+     * 这张图片按 {@code target} 的版本。附件不在了或哈希不符时抛出，由调用方让这次模型调用失败。
      *
      * @throws NoSuchFileException 附件不在了
      */

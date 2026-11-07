@@ -257,7 +257,7 @@ public final class SseHub implements FactListener {
         forEachSubscriber(run.principal(), subscription -> subscription.offer(message));
     }
 
-    /** 这个会话等用户回答的问题变了（问了、答了、撤了，waiting-state）：推一条 {@code question}，页面据此刷新侧栏标记。不进 journal，不能补读。 */
+    /** 这个会话等用户回答的问题变了（问了、答了、撤了）：推一条 {@code question}，页面据此刷新侧栏标记。不进 journal，不能补读。 */
     public void question(Principal user, SessionId session) {
         SseMessage message = new SseMessage(null, "question", mapper.writeValueAsString(Map.of("session", session.value())));
         forEachSubscriber(user, subscription -> subscription.offer(message));

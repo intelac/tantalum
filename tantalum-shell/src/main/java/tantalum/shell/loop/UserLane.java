@@ -29,7 +29,7 @@ import tantalum.value.state.PrincipalState;
 
 /**
  * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部工作，事件按到达顺序取号后放行给 cleanroom，
- * 不写文件；cleanroom 处理完的一步（{@link Released}）连同它的事件写成一行（one-line-journal J1、J2），
+ * 不写文件；cleanroom 处理完的一步（{@link Released}）连同它的事件写成一行，
  * 每个会话并行写、fsync 一次，全部落盘后才放行命令、推送和索引。所以同一用户内严格按序，不同用户互不等待；
  * 没处理完的事件不在文件里，崩溃时它的命令也没执行过。一个用户的文件只有这个通道在写。
  */
@@ -114,7 +114,7 @@ public final class UserLane {
             try {
                 process(batch);
             } catch (Throwable failure) {
-                // 兜底（review-fixes 需求 2.1）：process 里没接住的任何东西都按写失败处理，通道线程留着处理下一批（停机后只会丢弃）
+                // 兜底：process 里没接住的任何东西都按写失败处理，通道线程留着处理下一批（停机后只会丢弃）
                 abandon(batch, failure);
             }
         }
@@ -157,7 +157,7 @@ public final class UserLane {
             released.forEach(step -> step.done().run());
             return;
         }
-        // 钉住和写入在同一个受保护区域里：任一失败，已钉住的都解开（需求 2.2）
+        // 钉住和写入在同一个受保护区域里：任一失败，已钉住的都解开
         Map<SessionId, Residency.Pinned> states = new HashMap<>();
         List<SessionId> pinned = new ArrayList<>(batch.size());
         try {
@@ -181,7 +181,7 @@ public final class UserLane {
             try {
                 step.afterDurable().run();
             } catch (Throwable failure) {
-                // 一步的放行失败不影响其余已落盘的步骤（需求 2.3）
+                // 一步的放行失败不影响其余已落盘的步骤
                 LOG.error("releasing the step of seq {} failed", step.envelope().seq(), failure);
             } finally {
                 step.done().run();
@@ -213,7 +213,7 @@ public final class UserLane {
             try {
                 handed = exit.publish(envelope, usage, load);
             } catch (RuntimeException | Error failure) {
-                // 抛出和拒绝一样处理：剩下的解钉、丢弃（需求 2.4）
+                // 抛出和拒绝一样处理：剩下的解钉、丢弃
                 handed = false;
                 exit.failed(failure);
             }
@@ -223,7 +223,7 @@ public final class UserLane {
                 }
                 List<EventEnvelope> left = numbered.subList(i, numbered.size());
                 left.forEach(rest -> residency.unpin(rest.session()));
-                // 刚载入、没交出去的会话回到冷状态，下一个事件重新载入（需求 4.3）
+                // 刚载入、没交出去的会话回到冷状态，下一个事件重新载入
                 loads.keySet().forEach(residency::cold);
                 if (load instanceof CleanroomRing.Loaded) {
                     residency.cold(envelope.session());
@@ -281,9 +281,9 @@ public final class UserLane {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            // 原因进事件和接口，只给类名；完整异常在下面的日志里（review-fixes 需求 6.1）
+            // 原因进事件和接口，只给类名；完整异常在下面的日志里
             String reason = Failures.describe(failure, "cannot load session");
-            // 第一次记错误和堆栈；重试再失败只记一条警告，不刷屏（ops-hardening-2 需求 5.3）
+            // 第一次记错误和堆栈；重试再失败只记一条警告，不刷屏
             if (residency.fail(session, reason)) {
                 LOG.error("cannot load session {}; refusing it for a while, then trying again", session.value(), failure);
             } else {

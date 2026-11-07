@@ -16,8 +16,8 @@ import tantalum.shell.settings.CompactionPolicy;
 import tantalum.value.id.Principal;
 
 /**
- * 能选的模型（model-picker 需求 2）：按路线列出，每个模型带窗口和来源、输出上限、图片、档位，以及这个用户的压缩点在这个模型上
- * 是多少 token。只读内存里的列表，不调模型接口（需求 2.8）。不返回路线地址和存密钥的环境变量名（需求 1.6）。
+ * 能选的模型：按路线列出，每个模型带窗口和来源、输出上限、图片、档位，以及这个用户的压缩点在这个模型上
+ * 是多少 token。只读内存里的列表，不调模型接口。不返回路线地址和存密钥的环境变量名。
  */
 @RestController
 public class ModelController {

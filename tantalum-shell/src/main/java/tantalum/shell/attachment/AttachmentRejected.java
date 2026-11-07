@@ -3,7 +3,7 @@ package tantalum.shell.attachment;
 import java.util.Map;
 
 /**
- * 附件被拒绝。{@link Reason} 决定接口返回的状态码和错误代码，{@link #params()} 是控制台说给人听时要的数字（console-i18n I9）；
+ * 附件被拒绝。{@link Reason} 决定接口返回的状态码和错误代码，{@link #params()} 是控制台说给人听时要的数字；
  * 消息是英文诊断，给日志和模型看（{@code ToolImages} 把它写进工具结果）。
  */
 public final class AttachmentRejected extends Exception {

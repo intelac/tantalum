@@ -54,7 +54,7 @@ public final class Kernel {
             return step.get().apply(context);
         } catch (RuntimeException failure) {
             if (run == null) {
-                // 没有运行可以结束：留一条事实，不无痕返回（review-fixes 需求 5.1）
+                // 没有运行可以结束：留一条事实，不无痕返回
                 RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
                 return new Decision(state, List.of(), List.of(new StepFailed(where, envelope.event().type(), failure.getClass().getSimpleName())));
             }
@@ -78,7 +78,7 @@ public final class Kernel {
         return table.find(run == null ? NEW_RUN : run.phase().name(), event.type());
     }
 
-    /** 等命令结果时认在途命令；等用户回答时只认期限的定时器（waiting-state）。 */
+    /** 等命令结果时认在途命令；等用户回答时只认期限的定时器。 */
     private static boolean isAwaited(RunState run, ResultEvent result) {
         if (run == null) {
             return false;

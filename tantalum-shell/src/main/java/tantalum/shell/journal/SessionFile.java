@@ -20,12 +20,12 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
 /**
- * 一个会话的只追加文件。第一行是头部，之后每行是处理完的一步：事件和它的结果（one-line-journal J1）。
+ * 一个会话的只追加文件。第一行是头部，之后每行是处理完的一步：事件和它的结果。
  * {@link #appendLines} 返回才算落盘。调用方保证同一文件同时只有一个写入者。
  */
 public final class SessionFile implements AutoCloseable {
 
-    /** 3：一步一行。2（事件行之间夹着结果行）和 1（只有事件）不再读（one-line-journal J12）。 */
+    /** 3：一步一行。2（事件行之间夹着结果行）和 1（只有事件）不再读。 */
     public static final int FORMAT = 3;
 
     private final Principal principal;
@@ -111,7 +111,7 @@ public final class SessionFile implements AutoCloseable {
 
     /**
      * 已经编码好的行（不含换行符），一次写完并 fsync，返回落盘后的文件大小。失败时先尽力截回写入前的长度，然后这个对象作废：
-     * 再写就抛出，调用方要关掉它、下次重新 {@link #open}（走 {@code repairTail}），免得完整的行跟在残缺的字节后面（review-fixes 需求 3.1）。
+     * 再写就抛出，调用方要关掉它、下次重新 {@link #open}（走 {@code repairTail}），免得完整的行跟在残缺的字节后面。
      */
     long appendLines(List<String> lines) throws IOException {
         if (broken) {

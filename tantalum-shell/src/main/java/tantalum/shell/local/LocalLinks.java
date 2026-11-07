@@ -39,8 +39,8 @@ import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 
 /**
- * 每个用户最多一条连到电脑的连接（local-workspace L10、L11）。新连接顶替旧的；到期、撤销时发 {@link Bye} 并关掉（L3）。
- * {@link #call} 把一次工具调用发给电脑并等结果；连接断开时还没回来的调用都记成“结果不确定”，不重发（L8）。
+ * 每个用户最多一条连到电脑的连接。新连接顶替旧的；到期、撤销时发 {@link Bye} 并关掉。
+ * {@link #call} 把一次工具调用发给电脑并等结果；连接断开时还没回来的调用都记成“结果不确定”，不重发。
  * 连接本身由 {@link LocalEndpoint} 管，这里只通过 {@link Peer} 收发。
  */
 public final class LocalLinks implements AutoCloseable {
@@ -49,7 +49,7 @@ public final class LocalLinks implements AutoCloseable {
 
     public static final String NOT_CONNECTED = "The local workspace is not connected.";
     public static final String DISCONNECTED = "The computer disconnected. Whether this operation finished is unknown.";
-    /** 每条连接同时最多执行的调用数，多的排队，排队也计入超时（L11）。 */
+    /** 每条连接同时最多执行的调用数，多的排队，排队也计入超时。 */
     public static final int CONCURRENCY = 4;
 
     /**
@@ -121,7 +121,7 @@ public final class LocalLinks implements AutoCloseable {
         LocalTokens.Verdict verdict = tokens.verify(token);
         if (verdict.valid() && !accounts.test(verdict.principal())) {
             LOG.info("local connect for {}: the account is disabled or gone; revoking its tokens", verdict.principal().value());
-            // 走完整的撤销：记下撤销时刻、断开已有的连接，正在握手的也接不上（review-fixes 需求 11.9）
+            // 走完整的撤销：记下撤销时刻、断开已有的连接，正在握手的也接不上
             revoke(verdict.principal());
             return new LocalTokens.Verdict(LocalTokens.Status.REVOKED, verdict.principal(), verdict.expiresAt());
         }
@@ -129,10 +129,10 @@ public final class LocalLinks implements AutoCloseable {
     }
 
     /**
-     * 握手通过、收到 {@code hello} 之后由端点调用：这个用户已有连接时让旧的退出（L10），安排到期时刻断开（L3），回 {@code welcome}。
+     * 握手通过、收到 {@code hello} 之后由端点调用：这个用户已有连接时让旧的退出，安排到期时刻断开，回 {@code welcome}。
      * 返回的 {@link Link} 接收这条连接上后续的消息。{@code verifiedAt}（{@link System#nanoTime()}）是握手查令牌的时刻：
      * 那之后用户撤销过，就不接这条连接，返回空。
-     * <p>先在锁里登记、安排到期，再发 {@code welcome}（review-fixes 需求 11.9）：登记之后 {@link #revoke} 一定看得到这条连接；
+     * <p>先在锁里登记、安排到期，再发 {@code welcome}：登记之后 {@link #revoke} 一定看得到这条连接；
      * 调用在 {@code welcome} 发出之前先等着（{@link #call}），电脑不会在知道自己连的是谁之前收到调用。
      */
     public Optional<Link> attach(Principal principal, Instant expiresAt, long verifiedAt, Hello hello, Peer peer) {
@@ -165,7 +165,7 @@ public final class LocalLinks implements AutoCloseable {
         return revoked != null && revoked - verifiedAt >= 0;
     }
 
-    /** 撤销这个用户的全部令牌，并断开它的连接（L3）。正在握手、还没发 {@code hello} 的连接也接不上了。 */
+    /** 撤销这个用户的全部令牌，并断开它的连接。正在握手、还没发 {@code hello} 的连接也接不上了。 */
     public void revoke(Principal principal) {
         Link link;
         synchronized (this) {

@@ -8,7 +8,7 @@ import tantalum.value.model.ModelChoice;
 
 /**
  * 排队提交，运行结束后开始下一轮。{@code attachments} 按上传顺序，旧行读出来是空列表。
- * {@code model} 是提交里带的选择，排队后开始的运行用它（model-picker M6），没带或旧行为 null。
+ * {@code model} 是提交里带的选择，排队后开始的运行用它，没带或旧行为 null。
  */
 public record FollowUpSubmitted(SubmissionId submission, RequestId request, String text, List<AttachmentRef> attachments,
                                 ModelChoice model) implements Submitted {

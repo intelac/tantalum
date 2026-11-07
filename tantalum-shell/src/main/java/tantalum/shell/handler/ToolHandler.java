@@ -93,7 +93,7 @@ public final class ToolHandler implements Handler {
         } catch (TimeoutException late) {
             return new Ran(ToolOutput.error("Tool timed out after " + timeout + ". Its outcome is unknown."), startedAt);
         } catch (ExecutionException failure) {
-            // 结果给模型、进 journal：只给异常类名；完整异常记日志（review-fixes 需求 6.1）
+            // 结果给模型、进 journal：只给异常类名；完整异常记日志
             Throwable cause = failure.getCause() == null ? failure : failure.getCause();
             LOG.error("tool {} failed", tool.name(), cause);
             return new Ran(ToolOutput.error(Failures.describe(cause, "Tool failed")), startedAt);

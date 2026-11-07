@@ -61,7 +61,7 @@ import tantalum.shell.route.Routes;
 public class TantalumApplication {
 
     private static final Logger LOG = LoggerFactory.getLogger(TantalumApplication.class);
-    /** 读模型列表的单次请求最多等多久（compaction-threshold T2，同 DSH {@code listing-config.ts:9}）。 */
+    /** 读模型列表的单次请求最多等多久（同 DSH {@code listing-config.ts:9}）。 */
     private static final Duration LIST_TIMEOUT = Duration.ofSeconds(5);
 
     public static void main(String[] args) throws Exception {
@@ -73,7 +73,7 @@ public class TantalumApplication {
 
     private static final List<String> SUBCOMMANDS = List.of("users", "check", "browser");
 
-    /** 子命令先取出 {@code --lang}（console-i18n I13），再分派；服务器本身的日志不翻译，不看它。 */
+    /** 子命令先取出 {@code --lang}，再分派；服务器本身的日志不翻译，不看它。 */
     private static int subcommand(String[] args) throws Exception {
         Optional<CliText.Parsed> parsed = CliText.parse(Arrays.copyOfRange(args, 1, args.length), System.getenv(), Locale.getDefault());
         if (parsed.isEmpty()) {
@@ -97,7 +97,7 @@ public class TantalumApplication {
     }
 
     /**
-     * Windows 上在终端里输入时按控制台的编码读（windows-server N12）：中文 Windows 的控制台是 GBK（代码页 936），按 UTF-8 读会把
+     * Windows 上在终端里输入时按控制台的编码读：中文 Windows 的控制台是 GBK（代码页 936），按 UTF-8 读会把
      * 中文密码读错，和浏览器登录时的 UTF-8 对不上。管道和重定向时照旧 UTF-8；macOS、Linux 照旧 UTF-8（{@code LANG=C} 的终端报的是
      * US-ASCII，改成按控制台读反而把原来能用的中文密码读坏）。
      */
@@ -115,7 +115,7 @@ public class TantalumApplication {
                 : Path.of(System.getProperty("user.home"), ".local", "share", "tantalum");
     }
 
-    /** 第一个打开数据目录的地方：先检查数据目录的位置（windows-server N3、N4，只在 Windows 上查）。 */
+    /** 第一个打开数据目录的地方：先检查数据目录的位置（只在 Windows 上查）。 */
     @Bean(destroyMethod = "close")
     UserStore userStore(TantalumProperties properties) throws IOException, SQLException {
         DataDirCheck.atStartup(properties.dataDir());
@@ -137,9 +137,9 @@ public class TantalumApplication {
         Engine engine = new Engine(properties, routes, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
                 EventCodec.withBuiltins(), Clock.systemUTC());
-        // 停用或删掉的账号不能再连电脑（local-workspace L3）：握手时查，之后每次心跳再查
+        // 停用或删掉的账号不能再连电脑：握手时查，之后每次心跳再查
         engine.localLinks().accounts(principal -> usable(users, principal.value()));
-        // 联网访问自己永远被拦（W6）：先用配置的端口，Web 服务器起来后换成实际端口（见 ownPort）
+        // 联网访问自己永远被拦：先用配置的端口，Web 服务器起来后换成实际端口（见 ownPort）
         int configured = environment.getProperty("server.port", Integer.class, 8080);
         if (configured > 0) {
             engine.addressRules().ownPort(configured);
@@ -188,7 +188,7 @@ public class TantalumApplication {
     }
 
     /**
-     * 每条路线一个客户端和一张模型列表（model-picker 设计“boot/TantalumApplication”）：Claude 的密钥按 {@code api-key-env} 读，
+     * 每条路线一个客户端和一张模型列表：Claude 的密钥按 {@code api-key-env} 读，
      * 客户端和 Models 接口共用一个 SDK 客户端；OpenAI 兼容的有 {@code api-key-env} 才读、才发认证头。密钥只在这里经过，不记日志。
      * 云端路线照旧提示 prompt 会发出去（tech.md）。
      */

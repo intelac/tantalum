@@ -4,7 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * 命令输出只留末尾：最后 {@value #MAX_LINES} 行或 50 KB，先到哪个算哪个（L14，截断照 pi {@code CA/src/core/tools/bash.ts:283}、
+ * 命令输出只留末尾：最后 {@value #MAX_LINES} 行或 50 KB，先到哪个算哪个（截断照 pi {@code CA/src/core/tools/bash.ts:283}、
  * {@code truncate.ts:11-12}）。命令的结果和报错一般在最后，所以留尾不留头。内存只占上限的两倍，不随输出增长。
  */
 public final class Tail {

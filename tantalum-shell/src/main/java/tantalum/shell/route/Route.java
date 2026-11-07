@@ -5,7 +5,7 @@ import tantalum.shell.model.ModelClient;
 
 /**
  * 一条路线：配置、发请求的客户端、读列表的 {@link ModelList}，和最近一次读到的 {@link Listing}。列表在后台读，
- * 取的时候只读这个字段，不去调接口（需求 2.8）。并发上限在 {@code ModelHandler} 里按路线各管各的（M16）。
+ * 取的时候只读这个字段，不去调接口。并发上限在 {@code ModelHandler} 里按路线各管各的。
  */
 public final class Route {
 

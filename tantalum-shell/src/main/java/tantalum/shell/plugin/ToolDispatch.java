@@ -9,7 +9,7 @@ import tantalum.kernel.tool.ToolSafety;
 import tantalum.value.json.Json;
 
 /**
- * 调度一次工具调用要知道的事（review-fixes 需求 12.3）：名字、所属服务端和它的并发上限、这次调用能不能和别的重叠。
+ * 调度一次工具调用要知道的事：名字、所属服务端和它的并发上限、这次调用能不能和别的重叠。
  * 和工具的实现分开：检查工具（{@code check}）只要回答调度问题，用它就不必打开附件库、连电脑、起出口。
  *
  * @param concurrencySafe 必须是参数的纯函数；抛异常或返回 false 都按独占处理

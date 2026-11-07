@@ -8,7 +8,7 @@ import java.util.Objects;
 import tantalum.shell.model.OpenAiThinking;
 
 /**
- * 一条路线的配置（model-picker M1），由 {@code boot} 从 {@code tantalum.claude.*}、{@code tantalum.openai-routes.{名字}.*}
+ * 一条路线的配置，由 {@code boot} 从 {@code tantalum.claude.*}、{@code tantalum.openai-routes.{名字}.*}
  * 转来，这个包不读全局配置。{@code apiKeyEnv} 只是环境变量名，密钥本身不在这里。{@code allow} 是允许列表；
  * {@code contextWindow} 是读不到窗口时用的值（0 表示不知道）。Claude 的用 {@code defaultEffort}、{@code fallbacks}；
  * OpenAI 兼容的用 {@code baseUrl} 到 {@code overrides}。
@@ -22,7 +22,7 @@ public record RouteSettings(String name, String displayName, Kind kind, String a
         CLAUDE, OPENAI
     }
 
-    /** OpenAI 兼容路线里某个模型单独的设置，没写的项为 null，跟路线（M5）。 */
+    /** OpenAI 兼容路线里某个模型单独的设置，没写的项为 null，跟路线。 */
     public record Override(OpenAiThinking thinking, List<String> efforts, String defaultEffort, Boolean vision, Long contextWindow) {}
 
     public RouteSettings {
@@ -42,7 +42,7 @@ public record RouteSettings(String name, String displayName, Kind kind, String a
         return override != null && override.thinking() != null ? override.thinking() : thinking;
     }
 
-    /** OpenAI 兼容模型的档位（M5）。 */
+    /** OpenAI 兼容模型的档位。 */
     public Levels openAiLevels(String model) {
         Override override = overrides.get(model);
         if (override != null && override.thinking() != null) {

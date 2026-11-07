@@ -21,14 +21,14 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.ReservedName;
 
 /**
- * 用户表（{@code users.db}）：口令用 Argon2id 哈希；{@code admin} 列标管理员（ops-hardening-2 需求 2）；同一个库里还有登录表（{@link Logins}）。
+ * 用户表（{@code users.db}）：口令用 Argon2id 哈希；{@code admin} 列标管理员；同一个库里还有登录表（{@link Logins}）。
  * 版本用 {@code PRAGMA user_version}：1 是只有 users 表的旧库，2 加 {@code admin} 列和 {@code logins} 表。用户库不能重建，只 {@code ALTER}。
- * Argon2 慢（几十毫秒），哈希和比对都在锁外算，锁里只有读写库（review-fixes 需求 11.4）；改几件事要么全成要么全不成的用一个事务。
+ * Argon2 慢（几十毫秒），哈希和比对都在锁外算，锁里只有读写库；改几件事要么全成要么全不成的用一个事务。
  */
 public final class UserStore implements AutoCloseable {
 
     public static final String FILE = "users.db";
-    /** 密码至少这么长（review-fixes 需求 11.13）。在入口（接口、命令行、首个管理员）校验，存储层不管：测试和旧库里有更短的。 */
+    /** 密码至少这么长。在入口（接口、命令行、首个管理员）校验，存储层不管：测试和旧库里有更短的。 */
     public static final int MIN_PASSWORD = 8;
     static final int VERSION = 2;
     private static final Logger LOG = LoggerFactory.getLogger(UserStore.class);
@@ -188,7 +188,7 @@ public final class UserStore implements AutoCloseable {
     }
 
     /**
-     * 自己改密码（review-fixes 需求 11.1）：换哈希和口令戳、{@code keepLoginId} 这条登录记上新戳、其余登录删掉，一个事务里完成；
+     * 自己改密码：换哈希和口令戳、{@code keepLoginId} 这条登录记上新戳、其余登录删掉，一个事务里完成；
      * 返回删掉的登录 id，调用方按它们断开推送连接。{@code keepLoginId} 为 null 时全部登录都删。
      */
     public List<String> changePassword(String name, String password, String keepLoginId) throws SQLException {
@@ -240,12 +240,12 @@ public final class UserStore implements AutoCloseable {
 
     /**
      * 除了这个账号以外还有一个启用的管理员，或者这个账号本来就不是启用的管理员，才改得动。写在同一条 UPDATE 里，
-     * 两个管理员互相取消时不会双双成功（review-fixes 需求 11.4）。
+     * 两个管理员互相取消时不会双双成功。
      */
     private static final String ANOTHER_ADMIN = " AND (admin = 0 OR disabled = 1"
             + " OR EXISTS (SELECT 1 FROM users other WHERE other.admin = 1 AND other.disabled = 0 AND other.name <> users.name))";
 
-    /** 停用。停用后不能让系统没有一个启用的管理员（需求 2.4）。 */
+    /** 停用。停用后不能让系统没有一个启用的管理员。 */
     public synchronized void disable(String name) throws SQLException {
         guarded("UPDATE users SET disabled = 1 WHERE name = ?" + ANOTHER_ADMIN, name);
     }

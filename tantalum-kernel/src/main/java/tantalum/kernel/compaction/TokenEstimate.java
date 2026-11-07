@@ -21,7 +21,7 @@ import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 
 /**
- * 规则 1 的估算：UTF-8 字节数除以系数向上取整。系数按供应商定、宁可多算（compaction-threshold T7），随压缩设置写进 journal；
+ * 规则 1 的估算：UTF-8 字节数除以系数向上取整。系数按供应商定、宁可多算，随压缩设置写进 journal；
  * 旧事件没有系数，按 3 算（{@link #LEGACY}）。图片按像素、PDF 按页，不受系数影响。
  */
 public record TokenEstimate(double bytesPerToken) {
@@ -92,7 +92,7 @@ public record TokenEstimate(double bytesPerToken) {
         };
     }
 
-    /** 图片按像素算（A11）：{@code ceil(宽 × 高 / 750)}，加上前面那行说明。 */
+    /** 图片按像素算：{@code ceil(宽 × 高 / 750)}，加上前面那行说明。 */
     public long ofImage(ImageRef image) {
         return ((long) image.width() * image.height() + 749) / 750 + ofText(AttachmentText.image(image));
     }

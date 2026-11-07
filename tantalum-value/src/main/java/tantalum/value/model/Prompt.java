@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * 一次模型调用的完整输入。{@code output} 约束这次回复：摘要调用禁止工具并限制长度，普通调用用默认值。
- * {@code model} 是这次调用用的路线、模型和档位（model-picker M13），为 null 时用默认路线（旧记录和测试）。
+ * {@code model} 是这次调用用的路线、模型和档位，为 null 时用默认路线（旧记录和测试）。
  */
 public record Prompt(String system, List<ToolSpec> tools, List<Message> messages, Output output, ModelChoice model) {
 

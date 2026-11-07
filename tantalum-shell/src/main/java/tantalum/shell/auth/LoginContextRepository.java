@@ -23,7 +23,7 @@ import org.springframework.security.web.context.HttpRequestResponseHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 
 /**
- * 登录放在 {@code users.db} 的登录表里，不用 Tomcat 的内存会话（ops-hardening-2 需求 1）。Cookie {@value #COOKIE} 里只有令牌；
+ * 登录放在 {@code users.db} 的登录表里，不用 Tomcat 的内存会话。Cookie {@value #COOKIE} 里只有令牌；
  * 每个请求查一次表：登录在、没过期（最后访问距今不超过 {@code timeout}）、账号没停用、口令戳没变，才算登录了。
  * 无效的令牌一律当作没登录，不区分原因，也不动 Cookie（退出时才清）。最后访问时间最多每分钟写一次。
  */
@@ -35,7 +35,7 @@ public final class LoginContextRepository implements SecurityContextRepository {
     /** 请求属性：登录成功时新发的令牌，{@link #saveContext} 写进 Cookie。 */
     static final String ISSUED_TOKEN = "tantalum.login.issued";
     static final Duration TOUCH_EVERY = Duration.ofMinutes(1);
-    /** 一次登录从创建起最多活这么久，不管用得多勤（review-fixes 需求 11.2）。 */
+    /** 一次登录从创建起最多活这么久，不管用得多勤。 */
     public static final Duration MAX_LIFETIME = Duration.ofDays(30);
     private static final Logger LOG = LoggerFactory.getLogger(LoginContextRepository.class);
 
@@ -105,7 +105,7 @@ public final class LoginContextRepository implements SecurityContextRepository {
     }
 
     /**
-     * 刷新最后访问时间，并用同一个令牌重发 Cookie，让浏览器那边的有效期和服务器的滑动窗口一致（review-fixes 需求 11.2）。
+     * 刷新最后访问时间，并用同一个令牌重发 Cookie，让浏览器那边的有效期和服务器的滑动窗口一致。
      * 写不进去只记日志：登录本身还有效，这次请求照常。
      */
     private void touch(String loginId, String token, long now, HttpServletResponse response) {
@@ -136,8 +136,8 @@ public final class LoginContextRepository implements SecurityContextRepository {
     }
 
     /**
-     * 登录成功：发一条新登录，令牌经 {@link #saveContext} 写进 Cookie。顺手清掉过期的登录，表不随历史增长（需求 1.5）；
-     * 清不掉只记日志，登录已经发出去了（review-fixes 需求 11.2）。
+     * 登录成功：发一条新登录，令牌经 {@link #saveContext} 写进 Cookie。顺手清掉过期的登录，表不随历史增长；
+     * 清不掉只记日志，登录已经发出去了。
      */
     public Logins.Issued issue(HttpServletRequest request, String name) throws SQLException {
         long now = clock.millis();

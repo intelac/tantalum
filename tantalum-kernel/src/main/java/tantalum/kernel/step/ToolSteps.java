@@ -100,7 +100,7 @@ public final class ToolSteps {
         ToolRound round = run.tools();
         for (int i = 0; i < round.slots().size(); i++) {
             ToolSlot slot = round.slots().get(i);
-            // 只收已发出、还没结果的槽位：重复或迟到的结果不覆盖已有的（review-fixes 需求 5.3）
+            // 只收已发出、还没结果的槽位：重复或迟到的结果不覆盖已有的
             if (event.command().equals(slot.command()) && slot.status() == ToolSlot.Status.SENT) {
                 ToolResultBlock result = new ToolResultBlock(event.toolCallId(), event.text(), event.error(), null, event.images());
                 round = round.withSlot(i, slot.done(result));
@@ -110,7 +110,7 @@ public final class ToolSteps {
         return out.decision();
     }
 
-    /** 用户回答了 {@code ask_user}（或期限到了）：回答就是这个槽位的结果，接着发剩下的（waiting-state 需求 5.3）。 */
+    /** 用户回答了 {@code ask_user}（或期限到了）：回答就是这个槽位的结果，接着发剩下的。 */
     static void answerSlot(Outcome out, RunState run, String toolCallId, String text) {
         ToolRound round = run.tools();
         for (int i = 0; i < round.slots().size(); i++) {

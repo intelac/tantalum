@@ -14,7 +14,7 @@ import tantalum.value.state.Plan;
 /**
  * 钩子能看到的上下文，时间取自事件。{@code call}、{@code failure}、{@code work}、{@code plan}、{@code question} 只在对应的钩子位置有值；
  * {@code trigger} 和 {@code plan} 一起只在压缩前有值：拒绝超长恢复会让运行失败，拒绝自动压缩只是这次不压，钩子要分得清。
- * {@code onAnswer} 时 {@code question} 是问过的问题，{@code answer} 是回答，期限到了没人答时为 null（waiting-state）。
+ * {@code onAnswer} 时 {@code question} 是问过的问题，{@code answer} 是回答，期限到了没人答时为 null。
  */
 public record HookContext(RunRef run, Instant at, ToolCallBlock call, ModelFailed failure, WorkDone work,
                           Plan plan, Compacting.Trigger trigger, Question question, Answer answer) {

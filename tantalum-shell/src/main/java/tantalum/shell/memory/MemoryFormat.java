@@ -32,7 +32,7 @@ public final class MemoryFormat {
 
     // ---- 校验 ----
 
-    /** 名称、类型、描述、正文的检查；返回空表示通过，否则是拒绝：英文原因给模型和日志，种类和参数给控制台（console-i18n I9）。 */
+    /** 名称、类型、描述、正文的检查；返回空表示通过，否则是拒绝：英文原因给模型和日志，种类和参数给控制台。 */
     public static Optional<Rejected> validate(String name, String type, String description, String content, int maxEntryBytes) {
         if (name != null && NAME.matcher(name).matches() && ReservedName.matches(name)) {
             return rejected(Problem.RESERVED_NAME, name + " is a reserved device name on Windows; choose another name", Map.of());

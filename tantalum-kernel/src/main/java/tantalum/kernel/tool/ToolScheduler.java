@@ -10,7 +10,7 @@ public final class ToolScheduler {
 
     private ToolScheduler() {}
 
-    /** 返回现在可以发出的调用下标。等用户回答的 {@code ask_user} 槽位不发命令、不构成屏障，别的槽位都完成后再问（waiting-state）。 */
+    /** 返回现在可以发出的调用下标。等用户回答的 {@code ask_user} 槽位不发命令、不构成屏障，别的槽位都完成后再问。 */
     public static List<Integer> next(ToolRound round, int maxParallelTools) {
         List<ToolSlot> slots = round.slots();
         List<Integer> ready = new ArrayList<>();

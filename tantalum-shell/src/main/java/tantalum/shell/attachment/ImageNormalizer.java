@@ -28,14 +28,14 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import tantalum.shell.attachment.AttachmentRejected.Reason;
 
 /**
- * 上传的图片在存储前统一规范化（设计第 3 节，需求 A4、2.2、2.3）：先查头再解码；干净的原样保存；
+ * 上传的图片在存储前统一规范化（设计第 3 节）：先查头再解码；干净的原样保存；
  * 否则按 EXIF 方向转正、缩到目标以内、去掉元数据、重新编码。同样的输入总是得到同样的字节。
  */
 public final class ImageNormalizer {
 
     private static final long MIB = 1024 * 1024;
 
-    /** 存储版本的目标：两边都不超过 2048，不超过 4 MiB（A4）。 */
+    /** 存储版本的目标：两边都不超过 2048，不超过 4 MiB。 */
     public static final Target STORED = new Target(2048, 4 * MIB);
 
     private static final float[] JPEG_QUALITIES = {0.92f, 0.85f, 0.75f, 0.6f};
@@ -72,7 +72,7 @@ public final class ImageNormalizer {
         }
     }
 
-    /** 文件名后缀声称是图片。声称是但文件头不是的，上传时拒绝（需求 2.2）。 */
+    /** 文件名后缀声称是图片。声称是但文件头不是的，上传时拒绝。 */
     public static boolean claimsImage(String name) {
         int dot = name.lastIndexOf('.');
         return dot >= 0 && IMAGE_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase(Locale.ROOT));

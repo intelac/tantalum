@@ -101,7 +101,7 @@ public final class CompactSteps {
         }
         List<Message> messages = new ArrayList<>(head.messages());
         messages.add(SummaryPrompt.instruction(head.dropped(), instructions));
-        // 换到窗口更小的模型之前：上一个模型装得下现在的历史，摘要由它写（model-picker M10）
+        // 换到窗口更小的模型之前：上一个模型装得下现在的历史，摘要由它写
         ModelChoice writer = run.modelBefore() != null ? run.modelBefore() : ModelSteps.model(out, run);
         Prompt prompt = new Prompt(base.system(), base.tools(), messages, new Prompt.Output(false, settings.summaryMaxTokens()), writer);
 
@@ -192,7 +192,7 @@ public final class CompactSteps {
     }
 
     /**
-     * 规则 8 的三种“摘要没有用上”，按原因分开（review-fixes 需求 12.8）：
+     * 规则 8 的三种“摘要没有用上”，按原因分开：
      * 钩子拒绝——不裁剪；超长恢复在换模型前被拒时运行失败、模型退回，其余按触发方式结束或继续。
      */
     private static Start refused(Outcome out, RunState run, Compacting compacting, String reason) {
@@ -213,7 +213,7 @@ public final class CompactSteps {
     /**
      * 先看能否改用裁剪（DSH：进展不依赖摘要）。不能裁剪时报告失败，再按触发方式：自动 → 本运行不再自动压缩，继续原调用
      * （摘要发出过就在这里调，否则交回调用方）；超长恢复 → 以原始错误失败；手动 → 以原因失败。
-     * {@code failsSwitch}：换模型后第一次调用之前的压缩没成时运行失败、模型退回（{@link RunEnd#switchFailed}，model-picker M10）。
+     * {@code failsSwitch}：换模型后第一次调用之前的压缩没成时运行失败、模型退回（{@link RunEnd#switchFailed}）。
      */
     private static Start failed(Outcome out, RunState run, Compacting compacting, String reason, boolean mayTrim, boolean failsSwitch,
                                 boolean summarySent) {

@@ -10,7 +10,7 @@ import tantalum.local.tool.ToolArguments.Param;
 import tantalum.value.json.Json;
 
 /**
- * 把文件里的一段原文换成新文字（需求 3、C7），参数同 DSH {@code tool-fs/src/edit.ts:80-90}。逐字匹配，不做模糊匹配；默认必须正好
+ * 把文件里的一段原文换成新文字，参数同 DSH {@code tool-fs/src/edit.ts:80-90}。逐字匹配，不做模糊匹配；默认必须正好
  * 出现一次。文件和参数里的 CRLF 都换成 LF 再匹配，写回时按原来的换行还原、保留 BOM（pi {@code edit.ts:184-195}）。
  */
 public final class EditFile implements LocalTool {

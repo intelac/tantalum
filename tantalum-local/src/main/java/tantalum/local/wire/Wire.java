@@ -21,7 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
 
 /**
- * 消息的编码和解码（local-workspace 设计“tantalum.local.wire”）。不认识的字段忽略，以后加字段不用升版本；不认识的 {@code type}
+ * 消息的编码和解码。不认识的字段忽略，以后加字段不用升版本；不认识的 {@code type}
  * 解码失败，收到的一方关掉连接。不兼容的改动把 {@link #PROTOCOL} 加 1，服务器不认识的版本用 {@link #CLOSE_PROTOCOL} 拒绝。
  */
 public final class Wire {
@@ -38,7 +38,7 @@ public final class Wire {
     public static final int CLOSE_BAD_TOKEN = 4401;
     /** 关闭码：令牌已到期或已撤销。 */
     public static final int CLOSE_EXPIRED = 4403;
-    /** 关闭码：被同一用户的另一条连接替换（L10）。 */
+    /** 关闭码：被同一用户的另一条连接替换。 */
     public static final int CLOSE_REPLACED = 4409;
 
     private static final JsonMapper MAPPER = JsonMapper.builder()

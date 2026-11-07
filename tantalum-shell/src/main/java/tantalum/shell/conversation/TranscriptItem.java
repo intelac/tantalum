@@ -182,13 +182,13 @@ public sealed interface TranscriptItem {
     }
 
     /**
-     * 会话中途工具变了（one-line-journal J8）：从这里起新增了哪些工具、哪些不能用了。不能用的分两种：{@code disabled} 是
+     * 会话中途工具变了：从这里起新增了哪些工具、哪些不能用了。不能用的分两种：{@code disabled} 是
      * 服务器上还有、用户在插件页关了（本机工作区的工具也可能是电脑没连上或没允许）；{@code gone} 是服务器上已经没有
      * （插件删了或没加载、MCP 服务器不在了）。{@code sources} 是这几个工具各自的来源（{@code ContextAssembled.toolSources}），
-     * 画面据此写原因，如来源为 {@code local} 时写“本机工作区没有连上或没有允许”（local-workspace）。
+     * 画面据此写原因，如来源为 {@code local} 时写“本机工作区没有连上或没有允许”。
      */
     /**
-     * 这轮换了模型（model-picker M12，需求 8.4）：会话的选择和上一轮不同，路线、模型或档位哪个变了都算；本 spec 之前的会话第一次
+     * 这轮换了模型：会话的选择和上一轮不同，路线、模型或档位哪个变了都算；本 spec 之前的会话第一次
      * 记下选择不算。画面写“换成 {显示名} · {档位}”，显示名由画面按模型列表给出。{@code effort} 为 null 表示这个模型没有档位。
      */
     record ModelChange(String id, SessionId session, RunId run, Instant at, String route, String model, String effort)
@@ -221,7 +221,7 @@ public sealed interface TranscriptItem {
 
 
     /**
-     * 运行停下来问用户的问题（waiting-state 需求 7.1）。等回答时 {@code status} 是 OPEN，页面显示按钮；答过后带回答和时间；
+     * 运行停下来问用户的问题。等回答时 {@code status} 是 OPEN，页面显示按钮；答过后带回答和时间；
      * 期限到或取消后是 EXPIRED / CANCELLED。文字字段是接口的写法（字符串，或按语言的对象），同 {@code /questions} 接口。
      * {@code askedBy} 是钩子名，或 {@code ask_user}。一个问题一条，id 是 {@code q:} 加问题 id。
      */

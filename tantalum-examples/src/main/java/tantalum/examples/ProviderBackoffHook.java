@@ -40,7 +40,7 @@ public final class ProviderBackoffHook implements KernelHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("When the model service fails, checks its status first, then waits and retries or ends the run.")
                 .zh("模型服务出错时先查服务状态，再决定等待重试还是结束。")
                 .ja("モデルのサービスでエラーが起きたら、まず状態を確認し、待って再試行するか終了するかを決めます。");

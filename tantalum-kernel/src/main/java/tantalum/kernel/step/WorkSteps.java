@@ -65,7 +65,7 @@ public final class WorkSteps {
         RunState resumed = run.withWorkOrigin(null);
         out.put(resumed);
         if (hook.result() instanceof Ask ask) {
-            // 工作结果看完要问人（waiting-state）：问题挂在原来的位置上，回答后回到原处
+            // 工作结果看完要问人：问题挂在原来的位置上，回答后回到原处
             AnswerSteps.ask(out, resumed, ask, hook.decidedBy(), origin);
             return out.decision();
         }

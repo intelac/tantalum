@@ -12,7 +12,7 @@ import tantalum.value.json.Json;
 import tantalum.value.question.AskUser;
 
 /**
- * 内置工具 {@code ask_user}（waiting-state 需求 5）：只有给模型的定义。调用由内核截下，运行停在等人阶段，回答写成工具结果
+ * 内置工具 {@code ask_user}：只有给模型的定义。调用由内核截下，运行停在等人阶段，回答写成工具结果
  * （{@code tantalum.value.question.AskUser}）；这里永远不会被执行。插件页的开关和其他内置工具一样。
  */
 public final class AskUserTool implements Tool {

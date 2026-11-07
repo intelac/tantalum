@@ -18,7 +18,7 @@ import tantalum.local.tool.ToolArguments.Param;
 import tantalum.value.json.Json;
 
 /**
- * 按 glob 找文件（需求 4、C10）。不带 {@code /} 的模式匹配任意深度的文件名，带 {@code /} 时按相对 {@code path} 的路径匹配（DSH
+ * 按 glob 找文件。不带 {@code /} 的模式匹配任意深度的文件名，带 {@code /} 时按相对 {@code path} 的路径匹配（DSH
  * {@code glob.ts:323-325}）。跳过版本库目录和 {@code node_modules}，不读 {@code .gitignore}，不跟随符号链接，只返回普通文件。
  * 结果是相对主目录的路径（其他允许目录里的写绝对路径），按路径排序，可以直接交给 {@code read_file}。
  */

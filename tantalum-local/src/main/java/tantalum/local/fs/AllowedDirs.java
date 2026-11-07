@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 用户在连接程序上用 {@code --allow} 给的几个目录，第一个是主目录（local-workspace L4、L12）。规则同服务器上原来的
+ * 用户在连接程序上用 {@code --allow} 给的几个目录，第一个是主目录。规则同服务器上原来的
  * {@code Workspace}，逐条保留：相对路径按主目录解析；解析后（包括 {@code ..} 和符号链接）必须落在某个允许的目录里；
  * 越界和不存在用同一句话。这是路径校验不是沙箱：校验和随后的打开之间目录可能变化。
  */

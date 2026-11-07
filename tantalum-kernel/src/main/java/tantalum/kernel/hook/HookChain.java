@@ -26,7 +26,7 @@ public final class HookChain {
 
     private final List<KernelHook> hooks;
 
-    /** 钩子出错时拦不拦只看它自己的 {@link KernelHook#failClosed()}：管理员要求必须开启的插件由 shell 包成 fail-closed 再交进来（review-fixes 需求 12.4）。 */
+    /** 钩子出错时拦不拦只看它自己的 {@link KernelHook#failClosed()}：管理员要求必须开启的插件由 shell 包成 fail-closed 再交进来。 */
     public HookChain(List<KernelHook> hooks) {
         this.hooks = List.copyOf(hooks);
     }
@@ -46,7 +46,7 @@ public final class HookChain {
             try {
                 result = call(hook, point, state, context);
             } catch (RuntimeException failure) {
-                // 只记类名：消息可能带路径或密钥，事实进 journal 和推送（review-fixes 需求 6.1）
+                // 只记类名：消息可能带路径或密钥，事实进 journal 和推送
                 facts.add(new HookReported(context.run(), hook.name(), Failures.describe(failure)));
                 if (hook.failClosed() || point == HookPoint.BEFORE_TOOL_CALL) {
                     return stopped(new Stop("hook failed: " + hook.name()), facts, hook.name(), point, context);
@@ -72,7 +72,7 @@ public final class HookChain {
     }
 
     /**
-     * 只跑这个会话开着的插件（core-tools C16）。名单是运行开始组装上下文时记下的，运行中途不变：中途关掉的插件本次运行照跑
+     * 只跑这个会话开着的插件。名单是运行开始组装上下文时记下的，运行中途不变：中途关掉的插件本次运行照跑
      * （需求 8 第 5 条）。会话还没组装过上下文、或是加名单之前的会话，名单为空，全部照跑。
      */
     private static SessionContext sessionContext(KernelState state, HookContext context) {

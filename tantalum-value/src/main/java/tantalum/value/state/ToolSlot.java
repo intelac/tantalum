@@ -15,7 +15,7 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
         PENDING,
         SENT,
         DONE,
-        /** {@code ask_user}：不发命令，等别的槽位都完成后问用户，回答就是结果（waiting-state）。 */
+        /** {@code ask_user}：不发命令，等别的槽位都完成后问用户，回答就是结果。 */
         WAITING
     }
 

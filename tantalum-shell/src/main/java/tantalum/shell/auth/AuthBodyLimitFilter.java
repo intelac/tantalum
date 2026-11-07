@@ -9,7 +9,7 @@ import java.util.Set;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * 登录和改密码的请求体先看 {@code Content-Length} 再读（review-fixes 需求 11.6）：超过 {@value #MAX_BODY} 字节直接 413，
+ * 登录和改密码的请求体先看 {@code Content-Length} 再读：超过 {@value #MAX_BODY} 字节直接 413，
  * 没有长度（分块传输）411，都不读体、不解析。这两个入口一个不用登录、一个进 Argon2，不能让人先把体送进来。
  */
 public final class AuthBodyLimitFilter extends OncePerRequestFilter {

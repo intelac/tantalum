@@ -6,13 +6,13 @@ import java.util.Objects;
 import tantalum.value.text.LocalText;
 
 /**
- * 问用户的一个问题（waiting-state）。{@code id} 在一个运行里唯一，同一个问题再问一次用同一个 id；{@code detail} 可以为空；
+ * 问用户的一个问题。{@code id} 在一个运行里唯一，同一个问题再问一次用同一个 id；{@code detail} 可以为空；
  * {@code choices} 按钮按这个顺序显示，只有允许自由文本（{@code freeText}）时才可以没有选项；{@code deadline} 是到期时刻，
  * 没有期限为 null。标题、说明和按钮上的字是 {@link LocalText}，控制台按看的人的语言选。
  */
 public record Question(String id, LocalText title, LocalText detail, List<Choice> choices, boolean freeText, Instant deadline) {
 
-    /** 自由文本的上限（需求 5.5）。 */
+    /** 自由文本的上限。 */
     public static final int MAX_TEXT = 4000;
 
     /** 一个选项：{@code id} 是回答时交回来的值，{@code label} 是按钮上的字。 */

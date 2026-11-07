@@ -47,7 +47,7 @@ public final class SubmissionLedger {
 
     /**
      * 查索引不持锁，慢查询不会拖住其他提交；并发的相同请求最后在锁里只有一个胜出。{@code onNew} 在认领对别人可见之前、
-     * 同一个临界区里调用（review-fixes 需求 1.1：回执先登记，重复提交看到认领时回执一定已在）；它抛异常则不认领。
+     * 同一个临界区里调用（回执先登记，重复提交看到认领时回执一定已在）；它抛异常则不认领。
      * 查索引失败（{@link java.io.UncheckedIOException}）原样传出，调用方按“暂时不可用”处理，不当作新提交。
      */
     public Claim claim(Principal principal, RequestId request, Consumer<SubmissionId> onNew) {

@@ -11,7 +11,7 @@ import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
 
 /**
- * HTML 转 Markdown，在 jsoup 的 DOM 上自己写，不另引转换库（web-tools 设计“Technical Standards”）。规则照 DSH 的 turndown 设置
+ * HTML 转 Markdown，在 jsoup 的 DOM 上自己写，不另引转换库。规则照 DSH 的 turndown 设置
  * （{@code web/tool-web/src/fetch.ts:25-49}）：先删掉不显示的内容；标题用 {@code #}，代码块用 {@code ```}，列表用 {@code -}，
  * 链接和图片转成绝对网址，表格转成 GFM 管道表，连续空行压成一个。
  * <p>做法：先把每个块的文字整理好（压空白、去行首行尾空格），再给列表、引用加前缀。缩进和代码块里的空白、换行先换成私用区字符，

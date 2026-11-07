@@ -35,7 +35,7 @@ final class WebJson {
                 .body(mapper.writeValueAsString(body));
     }
 
-    /** 错误：{@code {"error": 英文诊断, "code": 代码, "params": {…}}}，没有参数时不写 {@code params}（console-i18n I9）。 */
+    /** 错误：{@code {"error": 英文诊断, "code": 代码, "params": {…}}}，没有参数时不写 {@code params}。 */
     ResponseEntity<String> error(ErrorCode code, String diagnostic) {
         return error(code.status(), code, diagnostic, Map.of());
     }

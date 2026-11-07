@@ -8,7 +8,7 @@ import tantalum.value.text.Bundle;
 import tantalum.value.text.Language;
 
 /**
- * 连接程序在终端里说的话（console-i18n I12）：中、英、日三份资源文件 {@code tantalum/connect/Text*.properties}。
+ * 连接程序在终端里说的话：中、英、日三份资源文件 {@code tantalum/connect/Text*.properties}。
  * 语言由 {@code --lang} 或系统决定（{@link Main}）。每次调用的记录行（{@link Journal}）和给模型的工具结果不经这里。
  */
 final class Words {

@@ -20,13 +20,13 @@ import tantalum.value.model.ToolSpec;
  * {@code lastRun} 是最近一次开始的运行，运行结束后仍保留，用来判断迟到的结果是否还能进历史。
  * {@code followUps} 是排队的用户消息（文字和附件），运行结束后依次开新运行。
  * {@code compaction} 是最近一次压缩的替换段，{@code anchor} 是上次回复的实测用量，两者都可为空。
- * {@code omittedImages} 是因超出请求的图片预算而省略过的附件 ID，只增不减，之后的请求里一直省略（A10）。
+ * {@code omittedImages} 是因超出请求的图片预算而省略过的附件 ID，只增不减，之后的请求里一直省略。
  * {@code toolsSeen} 是这个会话里开着过的工具名，按第一次出现的顺序，只增不减，压缩也不清空：压缩后据此告诉模型哪些工具
- * 已经不能用了（one-line-journal J7）。
+ * 已经不能用了。
  * {@code notes} 是插件工作记在会话里的东西，按工作类型分，每份是一个对象（{@link tantalum.value.event.WorkDone#note()} 按字段并进来），
  * 只来自事件，钩子读它就和读历史一样是纯的；压缩不清空。例如工具审批的“这个会话里一直允许”。
- * {@code model} 是会话现在的模型选择（model-picker M6），每次提问组装上下文时换成这次用的，压缩不清空；本 spec 之前的会话为 null。
- * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它（M6；review-fixes 需求 5.5）。 */
+ * {@code model} 是会话现在的模型选择，每次提问组装上下文时换成这次用的，压缩不清空；本 spec 之前的会话为 null。
+ * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它。 */
 public record SessionState(SessionId id, Principal principal, List<Message> messages,
                            RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
                            Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
@@ -113,7 +113,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels);
     }
 
-    /** 换会话的模型选择（model-picker M6、M10）。 */
+    /** 换会话的模型选择。 */
     public SessionState withModel(ModelChoice newModel) {
         return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels);
     }
@@ -144,7 +144,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
     }
 
     /**
-     * 这个会话有没有工具变化（model-picker M11）：一开始就有关着的工具，或者模型看到的历史里有工具变化消息。有的话，不支持会话中途工具变化的
+     * 这个会话有没有工具变化：一开始就有关着的工具，或者模型看到的历史里有工具变化消息。有的话，不支持会话中途工具变化的
      * Claude 模型不能选：它们看到的历史和支持的模型不一样，换回来时思考签名会失效。
      */
     public boolean toolChangesInHistory() {
@@ -162,7 +162,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
 
     /**
      * 压缩刚换过视图、上下文还没重新冻结：压缩采用后 {@code context} 清空而 {@code compaction} 有值，直到下一次组装上下文。
-     * 那次组装之后的模型调用不再判断自动压缩（压缩规则 3.1），由调用方在冻结之前看这一项（review-fixes 需求 12.8）。
+     * 那次组装之后的模型调用不再判断自动压缩（压缩规则 3.1），由调用方在冻结之前看这一项。
      */
     public boolean justCompacted() {
         return context() == null && compaction() != null;

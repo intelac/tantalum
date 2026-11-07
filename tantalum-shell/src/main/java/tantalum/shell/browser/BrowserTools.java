@@ -26,7 +26,7 @@ import tantalum.value.json.Json;
 
 /**
  * W7 的 11 个浏览器工具（设计“{@code BrowserTools.all}”）。名字和 {@code @playwright/mcp} 一样，模型熟悉这套名字。
- * 不提供上传文件、下载文件、拖放文件、执行任意 Playwright 代码（W7，同 8091 临时浏览器的 deny 列表）。
+ * 不提供上传文件、下载文件、拖放文件、执行任意 Playwright 代码（同 8091 临时浏览器的 deny 列表）。
  * 操作之后返回新的快照（同 {@code @playwright/mcp} 默认的 full 快照），少一轮“操作完再读一次”。
  */
 public final class BrowserTools {

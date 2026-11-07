@@ -33,7 +33,7 @@ import tantalum.value.state.ContextSection;
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
  * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → 本机工作区 → AGENTS.md → 该用户的记忆索引；每段只在有内容时加入。
- * 本机工作区一段和 {@code AGENTS.md} 都来自用户连着的电脑（local-workspace L6、L9），没连上就没有；服务器目录里的不再读。
+ * 本机工作区一段和 {@code AGENTS.md} 都来自用户连着的电脑，没连上就没有；服务器目录里的不再读。
  * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只比较这几段，把变化追加给模型，不再换 system。
  */
 public final class ContextHandler implements Handler {
@@ -62,8 +62,7 @@ public final class ContextHandler implements Handler {
 
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
-     * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal（compaction-threshold T6、
-     * model-picker M10）。{@code routes}、{@code users} 用来定这次用哪个模型（M7、M14）。
+     * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal。{@code routes}、{@code users} 用来定这次用哪个模型。
      */
     public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
                           KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
@@ -104,17 +103,17 @@ public final class ContextHandler implements Handler {
         append(system, MemoryGuidance.TEXT.strip());
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
-        // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效（M11），换模型的事只在内核追加的说明里
+        // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效，换模型的事只在内核追加的说明里
         AssembleContext assemble = (AssembleContext) command;
         ModelChoice model = choose(assemble, principal);
-        // 全部工具加上这个用户现在开着的名单（core-tools C14、C16）：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
+        // 全部工具加上这个用户现在开着的名单：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
                 gate.enabledTools(principal), gate.enabledPlugins(principal), sources(), model);
     }
 
     /**
-     * 这次用哪个模型（model-picker 设计“一次提问怎么选模型”第 4 步）：提交里带了就用它（提交时已经查过；这之间路线掉线的话照用，
-     * 调用失败走现有的模型失败流程）；没带用会话现在的；那个不可用或为空，用这个用户上次的选择；也不可用就用管理员的默认（M7、M14）。
+     * 这次用哪个模型：提交里带了就用它（提交时已经查过；这之间路线掉线的话照用，
+     * 调用失败走现有的模型失败流程）；没带用会话现在的；那个不可用或为空，用这个用户上次的选择；也不可用就用管理员的默认。
      */
     private ModelChoice choose(AssembleContext assemble, Principal principal) {
         if (assemble.requested() != null) {
@@ -133,7 +132,7 @@ public final class ContextHandler implements Handler {
         return compaction.settings(principal, info.get(), route.get().settings().bytesPerToken());
     }
 
-    /** 每个工具从哪来（one-line-journal J5），由 {@link PluginGate#source} 决定：{@code builtin}、{@code local}、{@code web} 或 {@code mcp:<服务器>}。 */
+    /** 每个工具从哪来，由 {@link PluginGate#source} 决定：{@code builtin}、{@code local}、{@code web} 或 {@code mcp:<服务器>}。 */
     private Map<String, String> sources() {
         Map<String, String> sources = new LinkedHashMap<>();
         for (Tool tool : catalog.tools()) {

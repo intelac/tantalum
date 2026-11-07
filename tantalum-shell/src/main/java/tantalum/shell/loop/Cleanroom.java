@@ -22,7 +22,7 @@ import tantalum.value.state.PrincipalState;
 
 /**
  * Cleanroom Ring 的消费者：按序调内核，算出这一步的结果行，交给 {@link Release}：结果行落盘后才发布命令、事实、条目和轨迹记录的变化
- * （record-results R3）。内存里的状态视图和投影立即更新。只看到已提交的事件，不做 I/O，不等待。
+ *。内存里的状态视图和投影立即更新。只看到已提交的事件，不做 I/O，不等待。
  */
 public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
 
@@ -126,7 +126,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     /** 不调内核：历史没载入，内核会把这个事件当成新会话的第一个。事件已写入、没有结果行，下次启动时和崩溃留下的尾部一样处理。 */
     private void rejected(EventEnvelope envelope, String reason) {
         LOG.warn("dropping seq {} for session {}: {}", envelope.seq(), envelope.session().value(), reason);
-        // 属于已有运行的事件也报一条：那个运行在等的结果丢了，界面要看得到（review-fixes 需求 4.4）
+        // 属于已有运行的事件也报一条：那个运行在等的结果丢了，界面要看得到
         RunId run = envelope.run() != null ? envelope.run() : RunId.of(envelope.session(), envelope.seq());
         notifyListener(envelope.seq(), 0, new PhaseChanged(new RunRef(envelope.principal(), envelope.session(), run), LOAD_FAILED));
     }

@@ -15,7 +15,7 @@ import java.util.stream.Stream;
 import tantalum.local.fs.PrivateFiles;
 
 /**
- * 用微软 MXC 的 {@code mxc-exec-mac} 在 macOS 自带的 Seatbelt 里跑命令（local-workspace 设计“Sandbox、Mxc”，L13、L14）。
+ * 用微软 MXC 的 {@code mxc-exec-mac} 在 macOS 自带的 Seatbelt 里跑命令。
  * <ul>
  *   <li>{@link #check()}：先用 {@code --dry-run} 检查这台电脑实际要用的规则，再真跑一次 {@code /usr/bin/true}；任何一步失败都算不可用，
  *       原因写清楚。结果记下来，之后每次 {@link #run} 都先看它，不可用就不跑。</li>

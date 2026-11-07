@@ -13,8 +13,8 @@ import tantalum.shell.cli.CliText.Key;
 
 /**
  * 用户管理命令行：{@code users add [--admin]|reset|disable|enable|admin|user <name>}，{@code users list}。密码从标准输入读，
- * 不走命令行参数，否则会出现在进程列表和 shell 历史里。输出按 {@link CliText} 的语言（console-i18n I13）。
- * 命令行允许停用或取消自己（服务器上的人有最终控制权），但和接口一样不能让系统没有管理员（ops-hardening-2 需求 2.2）。
+ * 不走命令行参数，否则会出现在进程列表和 shell 历史里。输出按 {@link CliText} 的语言。
+ * 命令行允许停用或取消自己（服务器上的人有最终控制权），但和接口一样不能让系统没有管理员。
  */
 public final class UserCommand {
 

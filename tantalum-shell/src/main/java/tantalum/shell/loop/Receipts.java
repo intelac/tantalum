@@ -9,7 +9,7 @@ import tantalum.value.event.Submitted;
 import tantalum.value.id.SubmissionId;
 
 /**
- * 提交的回执（one-line-journal J4）：提交那一步落盘后完成，接口这时才回“已接受”。没写进去（写失败、进程停止、
+ * 提交的回执：提交那一步落盘后完成，接口这时才回“已接受”。没写进去（写失败、进程停止、
  * 根本没交给内核）时以失败完成。完成后从表里删掉，所以表里只有还在途的提交。
  */
 public final class Receipts {
@@ -34,7 +34,7 @@ public final class Receipts {
         return found != null ? found : CompletableFuture.completedFuture(null);
     }
 
-    /** 发布失败，事件不会到内核：等着这张回执的（重复提交）也得到失败，不会永远等（review-fixes 需求 1.2）。 */
+    /** 发布失败，事件不会到内核：等着这张回执的（重复提交）也得到失败，不会永远等。 */
     void fail(SubmissionId submission) {
         CompletableFuture<Void> receipt = pending.remove(submission);
         if (receipt != null) {
@@ -42,7 +42,7 @@ public final class Receipts {
         }
     }
 
-    /** 关机或管线停住：之后不会再有落盘，在途的回执全部以失败完成（需求 1.3）。 */
+    /** 关机或管线停住：之后不会再有落盘，在途的回执全部以失败完成。 */
     public void failAll() {
         for (SubmissionId submission : List.copyOf(pending.keySet())) {
             fail(submission);

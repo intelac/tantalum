@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 出口后面的上游代理（web-tools W12，照 DSH {@code .agents/notes/implemented/architecture/2026-08-27-outbound-proxy-policy.md}）。
+ * 出口后面的上游代理（照 DSH {@code .agents/notes/implemented/architecture/2026-08-27-outbound-proxy-policy.md}）。
  * 启动时读一次 {@code HTTPS_PROXY}、{@code HTTP_PROXY}、{@code NO_PROXY}，大小写都认，小写优先；空值当没设（note:35）。
  * SOCKS 或解析不了的值记一行 WARN，这个协议改为直连，不改走别的代理（note:37）。回环地址永远不走代理。
  * 代理的用户名密码只在内存里：不进日志，{@link Via#toString} 也不带。

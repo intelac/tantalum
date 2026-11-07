@@ -6,7 +6,7 @@ import tantalum.value.id.CommandId;
 import tantalum.value.question.Question;
 
 /**
- * 等用户回答（waiting-state）。没有在途命令，不计工作轮数，不超时。{@code origin} 是返回 {@code Ask} 的钩子位置，
+ * 等用户回答。没有在途命令，不计工作轮数，不超时。{@code origin} 是返回 {@code Ask} 的钩子位置，
  * {@code toolCallId} 是 {@code ask_user} 的调用 id，二者恰好一个非空；{@code timer} 是期限的定时器命令，没有期限为 null。
  */
 public record AwaitingAnswer(Question question, HookPoint origin, String toolCallId, CommandId timer) implements RunPhase {

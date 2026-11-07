@@ -27,8 +27,8 @@ import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Result;
 
 /**
- * 在这台电脑上执行服务器发来的调用（local-workspace 设计“tantalum.connect.Calls”）。不信任服务器的判断，每个调用都查三件事
- * （L4、需求 2.3）：发给的用户是不是 {@code welcome} 里的这个人；工具类别是否被启动参数允许（改文件要 {@code --allow-write}，
+ * 在这台电脑上执行服务器发来的调用。不信任服务器的判断，每个调用都查三件事
+ * ：发给的用户是不是 {@code welcome} 里的这个人；工具类别是否被启动参数允许（改文件要 {@code --allow-write}，
  * 命令要 {@code --allow-shell}）；路径在不在允许的目录里（由工具经 {@link AllowedDirs} 查）。每个调用一个虚拟线程，
  * {@code cancel} 和断开时打断它。先读后写的记录只在内存里：连接程序重启后模型要先重新读。
  */
@@ -47,7 +47,7 @@ final class Calls {
     private final Journal journal;
     private final Map<String, LocalTool> tools;
     /**
-     * 先读后写的记录。按会话分开记，所以每个会话一份；整台电脑共用一个实例，是为了让两个会话同时改同一个文件时也互斥（C8）。
+     * 先读后写的记录。按会话分开记，所以每个会话一份；整台电脑共用一个实例，是为了让两个会话同时改同一个文件时也互斥。
      */
     private final Observations observations = new Observations();
     /** 在跑的调用。取消或断开时从这里拿走并打断；线程跑完时自己拿不到，就知道已被取消，不再回结果。 */
@@ -122,7 +122,7 @@ final class Calls {
             result = null;
             outcome = Outcome.CANCELLED;
         } catch (Throwable failure) {
-            // 发给服务器的是固定文字：本机的异常消息可能带路径（review-fixes 需求 6.3）；细节只在本地终端。
+            // 发给服务器的是固定文字：本机的异常消息可能带路径；细节只在本地终端。
             // Error 也接住：否则这个 id 永远留在 running 里，服务器那边等到超时
             System.err.println("[tantalum-connect] " + call.tool() + " failed: " + failure);
             result = LocalResult.error("Tool failed on the computer; see the connector's output.");
@@ -142,7 +142,7 @@ final class Calls {
     }
 
     /**
-     * 记录用：报错是不是因为路径在允许的目录外。给服务器的报错不区分越界和不存在（L12），终端是用户自己看的，分得清楚些。
+     * 记录用：报错是不是因为路径在允许的目录外。给服务器的报错不区分越界和不存在，终端是用户自己看的，分得清楚些。
      */
     private boolean outside(Call call) {
         String path = ToolArguments.string(call.arguments(), "path");
@@ -177,7 +177,7 @@ final class Calls {
         }
     }
 
-    /** 连接断了：这条连接上在跑的调用全部打断（L8）。 */
+    /** 连接断了：这条连接上在跑的调用全部打断。 */
     void stopAll() {
         for (String id : List.copyOf(running.keySet())) {
             cancel(id);

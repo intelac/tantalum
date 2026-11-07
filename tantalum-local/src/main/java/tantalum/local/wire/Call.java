@@ -9,7 +9,7 @@ import tantalum.value.json.Json;
  *
  * @param id 这次调用的编号，{@link Result} 和 {@link Cancel} 用它对应
  * @param user 替哪个用户执行，必须和 {@link Welcome#user()} 相同
- * @param session 哪个会话，连接程序的终端记录里写出来（L11、L15）
+ * @param session 哪个会话，连接程序的终端记录里写出来
  */
 public record Call(String id, String user, String session, String tool, Json arguments, long timeoutMs) implements Message {
 

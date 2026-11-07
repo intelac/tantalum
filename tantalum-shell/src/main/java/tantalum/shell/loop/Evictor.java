@@ -20,7 +20,7 @@ public final class Evictor {
 
     /**
      * 配置项 {@code tantalum.residency}。{@code idle} 为 null 时不按时间回收。{@code loadRetry} 是载入失败后多久再试
-     * （ops-hardening-2 D5，没写就是 1 分钟），归 {@link Residency}，放在这里只因为同属 {@code tantalum.residency}。
+     * （没写就是 1 分钟），归 {@link Residency}，放在这里只因为同属 {@code tantalum.residency}。
      */
     public record Settings(Duration idle, int maxResident, Duration sweepInterval, Duration loadRetry) {
 
@@ -112,7 +112,7 @@ public final class Evictor {
 
     /**
      * 内核不认识的会话也有条目（比如对不存在的会话取消），没有状态要保留。有活动运行的只有一种可以走：停在等用户回答的
-     * （waiting-state D3）——它没有在途命令，状态全在 journal 里，回答来了再载入；等命令结果的不能走。
+     * ——它没有在途命令，状态全在 journal 里，回答来了再载入；等命令结果的不能走。
      */
     private static boolean evictable(SessionState session, KernelState state) {
         if (session == null) {

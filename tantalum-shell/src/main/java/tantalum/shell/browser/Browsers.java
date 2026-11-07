@@ -18,12 +18,12 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 
 /**
- * 每个用户一个浏览器（web-tools W7，设计“{@code Browsers}”和“浏览器的生命周期”）：
+ * 每个用户一个浏览器（设计“{@code Browsers}”和“浏览器的生命周期”）：
  * <ul>
  *   <li>懒启动：用户第一次调浏览器工具时才起；同一用户同时来的几个调用只起一个。</li>
- *   <li>上限：开着的（含正在起的）到了 {@code maxOpen}，新用户得到“都在用”，不挤掉别人的（需求 2.5）。计数和占名额在同一把锁里，
+ * <li>上限：开着的（含正在起的）到了 {@code maxOpen}，新用户得到“都在用”，不挤掉别人的。计数和占名额在同一把锁里，
  *       起浏览器本身在锁外。</li>
- *   <li>空闲关闭：后台虚拟线程每 30 秒看一次，最后一次调用结束超过 {@code idleClose}、锁也空着的关掉（需求 2.4）。</li>
+ * <li>空闲关闭：后台虚拟线程每 30 秒看一次，最后一次调用结束超过 {@code idleClose}、锁也空着的关掉。</li>
  *   <li>崩溃：调用抛 {@link PlaywrightException} 并且浏览器断了，关掉这一组、名额空出来，这次返回崩溃的说明，下次重开；别人不受影响。</li>
  * </ul>
  * 所有 Playwright 调用都在这个用户的浏览器锁里，锁在 {@code finally} 里放掉，调用被取消、超时也一样。
@@ -112,7 +112,7 @@ public final class Browsers implements AutoCloseable {
                 try {
                     return action.run(browser, session);
                 } catch (RuntimeException failure) {
-                    // 不只 PlaywrightException：驱动没了时别的运行时异常也可能冒出来，都先看浏览器还在不在（review-fixes 需求 11.11）
+                    // 不只 PlaywrightException：驱动没了时别的运行时异常也可能冒出来，都先看浏览器还在不在
                     if (!browser.connected()) {
                         LOG.warn("browser of {} crashed and was closed ({})", user.value(), failure.getClass().getSimpleName());
                         discard(user, browser);
@@ -208,7 +208,7 @@ public final class Browsers implements AutoCloseable {
                 try {
                     sweep();
                 } catch (RuntimeException failure) {
-                    // 一次清扫出错不能让清扫线程死掉，否则空闲的浏览器再也关不掉（review-fixes 需求 11.11）
+                    // 一次清扫出错不能让清扫线程死掉，否则空闲的浏览器再也关不掉
                     LOG.warn("browser sweep failed: {}", failure.getClass().getSimpleName(), failure);
                 }
             }
@@ -268,7 +268,7 @@ public final class Browsers implements AutoCloseable {
         return open.size();
     }
 
-    /** 关掉全部浏览器（需求 2.8）。正在用的最多等 5 秒，到时间也关。一个关不掉不影响其余的（review-fixes 需求 11.11）。 */
+    /** 关掉全部浏览器。正在用的最多等 5 秒，到时间也关。一个关不掉不影响其余的。 */
     @Override
     public void close() {
         List<Map.Entry<Principal, CompletableFuture<UserBrowser>>> all;

@@ -33,7 +33,7 @@ import tantalum.value.model.TokenUsage;
  */
 public final class ClaudeClient implements ModelClient {
 
-    /** 这个模型能不能在会话中途增减工具（core-tools C14）；不能的话，中途打开的工具要等新会话。 */
+    /** 这个模型能不能在会话中途增减工具；不能的话，中途打开的工具要等新会话。 */
     public static boolean supportsToolChanges(String model) {
         return ClaudeRequest.TOOL_CHANGE_MODELS.contains(model);
     }
@@ -101,7 +101,7 @@ public final class ClaudeClient implements ModelClient {
                 return finish(blocks, reply, visible, watchdog, prompt.model() == null ? null : prompt.model().route());
             } catch (RuntimeException failure) {
                 watchdog.abandon();
-                // 先看中断和看门狗，再按异常类型分（review-fixes 需求 10.6）
+                // 先看中断和看门狗，再按异常类型分
                 if (ModelFailures.isInterrupt(failure)) {
                     return new ModelOutcome.Interrupted(visible.toString());
                 }
@@ -143,7 +143,7 @@ public final class ClaudeClient implements ModelClient {
             }
         });
         // 没有 start 就来的 delta：只有文字 delta 补一个文本块，不让一个异常分片把整次回复变成失败；思考、签名、参数的孤立分片丢弃
-        //（它们单独没有意义，当文字发回去还会丢签名，review-fixes 需求 10.2）
+        //（它们单独没有意义，当文字发回去还会丢签名）
         event.contentBlockDelta().ifPresent(delta -> {
             Pending block = blocks.get(delta.index());
             if (block == null) {
@@ -189,7 +189,7 @@ public final class ClaudeClient implements ModelClient {
         if (block.isText()) {
             return new Pending("text");
         }
-        // 没见过的块类型（server_tool_use、web_search_tool_result……）：不产生内容块，发回空文字块会被拒（需求 10.2）
+        // 没见过的块类型（server_tool_use、web_search_tool_result……）：不产生内容块，发回空文字块会被拒
         return new Pending("ignored");
     }
 
@@ -221,7 +221,7 @@ public final class ClaudeClient implements ModelClient {
         event.usage().cacheCreationInputTokens().ifPresent(value -> reply.cacheWrite = value);
     }
 
-    /** {@code route} 是这次调用的路线，和实际回复的模型一起记在思考块上（M9；备用模型接手时是备用模型）。 */
+    /** {@code route} 是这次调用的路线，和实际回复的模型一起记在思考块上（备用模型接手时是备用模型）。 */
     private ModelOutcome finish(Map<Long, Pending> blocks, Reply reply, StringBuilder visible, StreamWatchdog watchdog, String route) {
         boolean refused = com.anthropic.models.messages.StopReason.REFUSAL.equals(reply.stop);
         ModelOutcome cut = ModelFailures.afterStream(visible.toString(), watchdog, reply.stopped || refused);

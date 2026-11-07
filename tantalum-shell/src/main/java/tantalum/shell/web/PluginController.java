@@ -20,8 +20,8 @@ import tantalum.value.id.Principal;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 插件页（core-tools 需求 7）：当前登录用户自己的开关，看不到也改不了别人的。本机工作区的开关和连接在 {@code /api/local}，
- * 联网的开关在这里的 {@code web} 一项（web-tools W10），开关都用 {@code PUT /api/plugins/{kind}/{name}}。
+ * 插件页：当前登录用户自己的开关，看不到也改不了别人的。本机工作区的开关和连接在 {@code /api/local}，
+ * 联网的开关在这里的 {@code web} 一项，开关都用 {@code PUT /api/plugins/{kind}/{name}}。
  */
 @RestController
 public class PluginController {
@@ -54,7 +54,7 @@ public class PluginController {
             view.put("tools", server.tools().stream().map(PluginController::tool).toList());
             return view;
         }).toList());
-        // 联网这一组：两项都被管理员关掉时照样返回，页面照样显示（web-tools 设计“数据模型”）；不返回代理地址和凭据
+        // 联网这一组：两项都被管理员关掉时照样返回，页面照样显示；不返回代理地址和凭据
         Map<String, Object> web = new LinkedHashMap<>();
         web.put("switches", engine.webAccess().switches(user));
         web.put("admin", engine.webAccess().admin());

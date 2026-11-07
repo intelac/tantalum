@@ -28,9 +28,9 @@ import tantalum.local.wire.Welcome;
 import tantalum.local.wire.Wire;
 
 /**
- * 连到服务器的那条 WebSocket（local-workspace 设计“tantalum.connect.Link”）。握手带 {@code Authorization: Bearer}，连上先发
+ * 连到服务器的那条 WebSocket。握手带 {@code Authorization: Bearer}，连上先发
  * {@code hello}。断线按 1、2、4、8、16、30、30… 秒重连；令牌无效、到期、撤销、被替换、协议版本不对时说明原因并退出，
- * 退出码 2。断开时打断这条连接上在跑的调用（L8）。
+ * 退出码 2。断开时打断这条连接上在跑的调用。
  */
 final class Link {
 

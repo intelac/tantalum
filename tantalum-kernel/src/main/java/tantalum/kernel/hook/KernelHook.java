@@ -22,9 +22,9 @@ public interface KernelHook {
     String name();
 
     /**
-     * 所属插件，插件页按它分组、按它开关（core-tools C13）。同一个插件的钩子、工作类型和工具后处理要返回同一个名字，默认是
+     * 所属插件，插件页按它分组、按它开关。同一个插件的钩子、工作类型和工具后处理要返回同一个名字，默认是
      * {@link #name()}。插件页的说明、必须开启、默认开不开这些展示和开关策略不在这里：shell 的 {@code PluginInfo} 接口另说
-     * （review-fixes 需求 12.6），内核只认回调和出错规则。
+     *，内核只认回调和出错规则。
      */
     default String plugin() {
         return name();
@@ -72,7 +72,7 @@ public interface KernelHook {
     }
 
     /**
-     * 用户回答了钩子问的问题（waiting-state）：{@code context.question()} 是问题，{@code context.answer()} 是回答，期限到了没人答时为 null。
+     * 用户回答了钩子问的问题：{@code context.question()} 是问题，{@code context.answer()} 是回答，期限到了没人答时为 null。
      * 对所有钩子调用，包括别的插件问的，要先按 {@code question.id()} 过滤。放行回到问的位置（{@code Allow.withNote} 能记一条进会话状态）；
      * {@code Stop} 在工具调用前只拦那个调用，其余位置结束运行；{@code NeedWork} 要一轮工作；再返回 {@code Ask} 是新问题。
      */

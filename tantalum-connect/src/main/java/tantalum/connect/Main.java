@@ -27,9 +27,9 @@ import tantalum.local.wire.Wire;
 import tantalum.value.text.Language;
 
 /**
- * 连接程序的入口（local-workspace 设计“tantalum.connect.Main”）。允许什么只由这里的启动参数决定（L4）；令牌只从环境变量
- * {@code TANTALUM_TOKEN} 或不回显的终端输入读，不从命令行参数读，也不写进任何文件（L2）。
- * 提示按 {@code --lang} 或系统的语言说（{@link Words}，console-i18n I12）。
+ * 连接程序的入口。允许什么只由这里的启动参数决定；令牌只从环境变量
+ * {@code TANTALUM_TOKEN} 或不回显的终端输入读，不从命令行参数读，也不写进任何文件。
+ * 提示按 {@code --lang} 或系统的语言说（{@link Words}）。
  */
 public final class Main {
 
@@ -45,7 +45,7 @@ public final class Main {
     /** 参数里夹着一整个令牌（如 {@code --allow=tc_…}）。令牌的随机部分是 43 个 base64url 字符。 */
     private static final Pattern EMBEDDED_TOKEN = Pattern.compile(TOKEN_PREFIX + "[A-Za-z0-9_-]{40,}");
 
-    /** {@code --lang} 的值不对时，还不知道该用哪种语言，一律用英文（需求 5.3）。 */
+    /** {@code --lang} 的值不对时，还不知道该用哪种语言，一律用英文。 */
     static final String BAD_LANGUAGE = "--lang must be zh, en or ja";
 
     private Main() {}
@@ -202,7 +202,7 @@ public final class Main {
     static Setup setup(Options options, Map<String, String> env, Prompt prompt, Words words) throws Refused {
         URI socket = socket(options.server(), words);
         if (!options.insecure() && socket.getScheme().equals("ws") && !loopback(socket.getHost())) {
-            // 令牌明文经过网络：只有本机的服务器才允许不加密，别的要 https，或者明确给 --insecure（review-fixes 需求 11.10）
+            // 令牌明文经过网络：只有本机的服务器才允许不加密，别的要 https，或者明确给 --insecure
             throw new Refused(words.say(Key.REFUSED_SERVER_INSECURE, Map.of("server", options.server())));
         }
         AllowedDirs dirs;
@@ -218,7 +218,7 @@ public final class Main {
             throw new Refused(words.say(Key.REFUSED_ALLOW_UNUSABLE, Map.of("detail", String.valueOf(failure.getMessage()))));
         }
         for (Path dir : options.read()) {
-            // --allow-read 和 --allow 一样：要是目录、不能是家目录或根目录（review-fixes 需求 11.10）
+            // --allow-read 和 --allow 一样：要是目录、不能是家目录或根目录
             if (!Files.isDirectory(dir)) {
                 throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
             }
@@ -257,7 +257,7 @@ public final class Main {
     }
 
     /**
-     * 有 {@code --allow-shell} 时找 MXC 并检查（L13）。不可用时命令行不出现，原因写进启动说明和插件页，文件工具照常能用；
+     * 有 {@code --allow-shell} 时找 MXC 并检查。不可用时命令行不出现，原因写进启动说明和插件页，文件工具照常能用；
      * 不会退回到不隔离直接跑。
      */
     private static Sandbox sandbox(Options options, AllowedDirs dirs, Map<String, String> env) {

@@ -18,7 +18,7 @@ import tantalum.value.text.Language;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/** 每个用户自己的设置（compaction-threshold 需求 2）：只读写当前登录用户的，不接受用户名参数。 */
+/** 每个用户自己的设置：只读写当前登录用户的，不接受用户名参数。 */
 @RestController
 public class SettingsController {
 
@@ -32,7 +32,7 @@ public class SettingsController {
 
     /**
      * {@code {compaction: {percent, points: [{percent, tokens}]}, model, language}}；窗口未知时 {@code points} 为空，
-     * {@code language} 为 {@code null} 表示跟随浏览器（console-i18n I3）。
+     * {@code language} 为 {@code null} 表示跟随浏览器。
      */
     @GetMapping("/api/settings")
     ResponseEntity<String> get() {
@@ -56,7 +56,7 @@ public class SettingsController {
     }
 
     /**
-     * 请求体是一个模型选择 {@code {"route", "model", "effort"}}，存成这个用户“上次的选择”（model-picker M7），只改自己的；
+     * 请求体是一个模型选择 {@code {"route", "model", "effort"}}，存成这个用户“上次的选择”，只改自己的；
      * 现在不可用的回 400，消息写明是路线、模型还是档位的问题。
      */
     @PutMapping("/api/settings/model")
@@ -80,7 +80,7 @@ public class SettingsController {
         return json.json(200, view(user));
     }
 
-    /** 请求体 {@code {"language": "ja"}}，或者 {@code {"language": null}} 回到跟随浏览器；只收 zh、en、ja（需求 1.9）。 */
+    /** 请求体 {@code {"language": "ja"}}，或者 {@code {"language": null}} 回到跟随浏览器；只收 zh、en、ja。 */
     @PutMapping("/api/settings/language")
     ResponseEntity<String> setLanguage(@RequestBody String body) {
         Optional<JsonNode> parsed = json.read(body);
@@ -99,7 +99,7 @@ public class SettingsController {
         CompactionPolicy policy = engine.compaction();
         Map<String, Object> compaction = new LinkedHashMap<>();
         compaction.put("percent", engine.userSettings().compactionPercent(user));
-        // 管理员默认模型上的压缩点；按会话的模型算的在 /api/models 里（model-picker M10）
+        // 管理员默认模型上的压缩点；按会话的模型算的在 /api/models 里
         List<CompactionPolicy.Point> points = engine.routes().describe(engine.routes().defaultChoice()).map(policy::points).orElse(List.of());
         compaction.put("points", points.stream().map(SettingsController::point).toList());
         Map<String, Object> view = new LinkedHashMap<>();

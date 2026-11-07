@@ -10,7 +10,7 @@ import tantalum.local.tool.ToolArguments.Param;
 import tantalum.value.json.Json;
 
 /**
- * 在用户电脑上的沙箱里跑一条 bash 命令（local-workspace L14、需求 4）。参数 {@code command}、{@code timeout}（秒，默认 120，最多 600，
+ * 在用户电脑上的沙箱里跑一条 bash 命令。参数 {@code command}、{@code timeout}（秒，默认 120，最多 600，
  * 照 DSH {@code shell/bash-local/src/index.ts:102-106}，超过上限按上限算）、{@code workdir}（默认主目录，必须在允许的目录里）。
  * 标准输出和错误输出合在一起，只留最后 2000 行或 50 KB 并写明截断（照 pi {@code CA/src/core/tools/bash.ts:283}）；
  * 退出码不是 0 算错误结果，写明退出码。超时、取消、断开时沙箱结束整个进程树（{@link Sandbox#run}）。

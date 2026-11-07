@@ -3,7 +3,7 @@ package tantalum.shell.route;
 import java.io.IOException;
 import java.util.List;
 
-/** 读一条路线现在提供哪些模型（model-picker M2）。网络和协议错误抛 {@link Unreadable}，由 {@link Routes} 记日志、保留上次的结果。 */
+/** 读一条路线现在提供哪些模型。网络和协议错误抛 {@link Unreadable}，由 {@link Routes} 记日志、保留上次的结果。 */
 @FunctionalInterface
 public interface ModelList {
 

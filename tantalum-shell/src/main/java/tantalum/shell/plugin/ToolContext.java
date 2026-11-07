@@ -6,7 +6,7 @@ import tantalum.value.id.SessionId;
 
 /**
  * 一次工具或工作调用的上下文：替谁执行、在哪个会话里、能访问哪个目录。插件不用从参数里取身份。
- * 要问用户只能由钩子返回 {@code Ask}（waiting-state），工作里没有办法问人。
+ * 要问用户只能由钩子返回 {@code Ask}，工作里没有办法问人。
  */
 public record ToolContext(Principal principal, SessionId session, Workspace workspace) {
 

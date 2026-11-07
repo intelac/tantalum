@@ -22,7 +22,7 @@ import tantalum.value.state.SessionContext.HookState.HookTool;
 import tantalum.value.state.SessionState;
 
 /**
- * 模型调用前钩子放行带的补丁怎么到模型（hook-patch）：不拼进 system 和工具列表，而是追加一条 {@link Role#SYSTEM} 消息。
+ * 模型调用前钩子放行带的补丁怎么到模型：不拼进 system 和工具列表，而是追加一条 {@link Role#SYSTEM} 消息。
  * 说明变了才追加（每个钩子一块，按注册顺序）；钩子加的工具定义接在会话工具列表后面、永远 deferred，用 {@link ToolChangeBlock}
  * 告诉模型多了、少了哪些。会话的 system、已发出的消息一个字不动，历史里的思考签名才继续有效。纯函数，回放结果相同。
  */
@@ -49,7 +49,7 @@ public final class HookPatches {
         HookState state = context.hookState();
         List<ContentBlock> blocks = new ArrayList<>();
 
-        // 按钩子比较：只有说明变了的钩子重发自己那一块；一个钩子的说明变空不发（review-fixes 需求 7.1）
+        // 按钩子比较：只有说明变了的钩子重发自己那一块；一个钩子的说明变空不发
         List<HookTextBlock> now = patch.systemAppend().isEmpty() ? List.of() : split(patch.systemAppend(), facts);
         for (HookTextBlock piece : now) {
             boolean same = state.texts().stream().anyMatch(old -> old.hook().equals(piece.hook()) && old.text().equals(piece.text()));

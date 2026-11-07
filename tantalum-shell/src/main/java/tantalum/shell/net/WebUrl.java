@@ -6,7 +6,7 @@ import java.net.URISyntaxException;
 import java.util.Locale;
 
 /**
- * 联网工具能打开的网址（web-tools W2，照 DSH {@code web/web-fetch-http/src/policy.ts:26-55}）。{@code web_fetch} 的每一跳、
+ * 联网工具能打开的网址（照 DSH {@code web/web-fetch-http/src/policy.ts:26-55}）。{@code web_fetch} 的每一跳、
  * {@code browser_navigate} 都过这里，浏览器因此打不开 {@code file:}、{@code data:}、{@code javascript:}、{@code chrome:}。
  * 错误消息直接交给模型。
  * <p>中文、日文这类国际化域名先用 {@link IDN} 转成 {@code xn--} 写法，路径和查询里的非 ASCII 字符按 UTF-8 百分号编码，

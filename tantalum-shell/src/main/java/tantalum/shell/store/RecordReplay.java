@@ -22,9 +22,9 @@ import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
 
 /**
- * 读一个会话文件，用每一行记下的结果折叠出这个会话的内存状态（record-results R4）：每一步把结果套到处理前的状态上，
+ * 读一个会话文件，用每一行记下的结果折叠出这个会话的内存状态：每一步把结果套到处理前的状态上，
  * 得到和当时内核相同的决定，不调内核和钩子。回调和 {@link SessionReplay} 相同，所以投影、索引和查询照常运行。
- * 文件里只有处理完的步骤（one-line-journal J3），没有要配对或补写的。
+ * 文件里只有处理完的步骤，没有要配对或补写的。
  */
 public final class RecordReplay {
 

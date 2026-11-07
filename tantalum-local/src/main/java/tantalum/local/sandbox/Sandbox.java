@@ -6,13 +6,13 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
- * 隔离执行命令的地方（local-workspace 设计“Sandbox、Mxc”，L13）。保证不了隔离就不让跑：{@link #check()} 不可用时
+ * 隔离执行命令的地方。保证不了隔离就不让跑：{@link #check()} 不可用时
  * {@code bash} 不出现，{@link #run} 也拒绝执行，不会退回到不隔离直接跑（照 DSH {@code SANDBOX_UNAVAILABLE}，
  * {@code sandbox/sandbox/src/index.ts:132-152}）。
  */
 public interface Sandbox extends AutoCloseable {
 
-    /** 能不能用；不能用时 {@code why} 是原因的代码和参数（console-i18n I12）。 */
+    /** 能不能用；不能用时 {@code why} 是原因的代码和参数。 */
     record Status(boolean available, Unavailable why) {
 
         public static Status ok() {

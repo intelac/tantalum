@@ -4,7 +4,7 @@ import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 
 /**
- * cleanroom 处理完一步之后的去处（record-results R3）：结果行落盘后才运行 {@code afterDurable}（放行命令、推送变化），
+ * cleanroom 处理完一步之后的去处：结果行落盘后才运行 {@code afterDurable}（放行命令、推送变化），
  * 最后运行 {@code done}（归还放行名额和外部名额）。写入失败时只运行 {@code done}。
  */
 @FunctionalInterface

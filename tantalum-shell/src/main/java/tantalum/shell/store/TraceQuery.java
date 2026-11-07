@@ -42,14 +42,14 @@ public final class TraceQuery {
 
     /**
      * 一次尝试的完整输入：有效 system 和分段来源、工具、消息、输出约束，以及上一次请求的 system 和工具（第一次请求时为空）。
-     * {@code fingerprintMismatch} 为 true 时按结果行还原的请求和当时记下的指纹不一致（record-results 需求 4.2），false 不写出。
+     * {@code fingerprintMismatch} 为 true 时按结果行还原的请求和当时记下的指纹不一致，false 不写出。
      */
     public record Call(String call, String system, List<Segment> segments, List<SourcedTool> tools, List<Message> messages,
                        Prompt.Output output, Previous previous,
                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean fingerprintMismatch,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Addition> additions) {}
 
-    /** 这次请求的消息里钩子追加的一段说明（hook-patch 需求 4.1）。 */
+    /** 这次请求的消息里钩子追加的一段说明。 */
     public record Addition(String hook, String text) {}
 
     /** 命令 ID 是 {@code <会话>_<序号>-<下标>}（{@code CommandIds}）。 */
@@ -59,7 +59,7 @@ public final class TraceQuery {
     private final RecordReplay replay;
     private final RecordCodec codec;
 
-    /** 按结果行折叠，不调内核（record-results 第 2 步）。{@code codec} 用来核对请求指纹。 */
+    /** 按结果行折叠，不调内核。{@code codec} 用来核对请求指纹。 */
     public TraceQuery(SessionPaths paths, RecordReplay replay, RecordCodec codec) {
         this.paths = paths;
         this.replay = replay;

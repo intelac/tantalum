@@ -5,9 +5,9 @@ import java.util.Optional;
 import tantalum.value.model.ModelChoice;
 
 /**
- * 检查一次选择能不能用（model-picker M14、M15、M11），写明是路线、模型还是档位的问题。只读内存里的列表，
- * 不调接口。档位不就近换：不是这个模型列出来的就拒绝（M5，照 DSH {@code packages/llm/llm/src/index.ts:888-946}）。
- * 问题是种类加参数，由控制台按看的人的语言说（console-i18n I9）；诊断是英文，给日志和开发者看。
+ * 检查一次选择能不能用，写明是路线、模型还是档位的问题。只读内存里的列表，
+ * 不调接口。档位不就近换：不是这个模型列出来的就拒绝（照 DSH {@code packages/llm/llm/src/index.ts:888-946}）。
+ * 问题是种类加参数，由控制台按看的人的语言说；诊断是英文，给日志和开发者看。
  */
 public final class ChoiceCheck {
 
@@ -69,7 +69,7 @@ public final class ChoiceCheck {
     }
 
     /**
-     * 提交里没带选择时用哪个（M7、M14）：会话现在的能用就用它，否则这个用户上次的选择，也不能用就是管理员的默认。
+     * 提交里没带选择时用哪个：会话现在的能用就用它，否则这个用户上次的选择，也不能用就是管理员的默认。
      */
     public ModelChoice fallback(ModelChoice current, Optional<ModelChoice> mine) {
         if (current != null && usable(current)) {
@@ -78,7 +78,7 @@ public final class ChoiceCheck {
         return mine.filter(this::usable).orElseGet(routes::defaultChoice);
     }
 
-    /** 能不能拿来当新会话的默认（“上次的选择”，M7）。 */
+    /** 能不能拿来当新会话的默认（“上次的选择”）。 */
     public boolean usable(ModelChoice choice) {
         return problem(choice, false, false).isEmpty();
     }

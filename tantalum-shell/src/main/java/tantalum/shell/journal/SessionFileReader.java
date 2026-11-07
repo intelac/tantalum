@@ -50,7 +50,7 @@ public final class SessionFileReader {
 
     /**
      * 按文件顺序读每一行，返回读完后的 memo（读取方，{@link RecordMemo#toWriter} 后交给写入方接着用）。
-     * 每行只解析一次（one-line-journal J9），序号必须递增。
+     * 每行只解析一次，序号必须递增。
      */
     public RecordMemo forEachLine(Path file, Consumer<Line> consumer) throws IOException {
         RecordMemo memo = RecordMemo.reader();
@@ -109,7 +109,7 @@ public final class SessionFileReader {
     }
 
     /** 按块读、找换行符：比逐字节读快得多（长会话的结果行几十 KB）。没有换行符的尾部不是完整的记录，当作不存在。 */
-    /** 一行的上限：超过的不是我们写的文件，当作损坏，不把整个文件读进内存（review-fixes 需求 3.4）。 */
+    /** 一行的上限：超过的不是我们写的文件，当作损坏，不把整个文件读进内存。 */
     static final int MAX_LINE_BYTES = 64 * 1024 * 1024;
 
     static final class Lines implements AutoCloseable {

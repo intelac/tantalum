@@ -73,9 +73,9 @@ public final class OpenAiClient implements ModelClient {
     private final Duration betweenChunks;
     private final OverflowRules overflow;
     private final HttpClient http;
-    /** 每个模型收不收图片（A7、model-picker M15）。不收时图片只发占位文字。 */
+    /** 每个模型收不收图片。不收时图片只发占位文字。 */
     private final Predicate<String> vision;
-    /** 每个模型的思考参数写法（M5），由路线的配置给出；这个包不知道有几条路线。 */
+    /** 每个模型的思考参数写法，由路线的配置给出；这个包不知道有几条路线。 */
     private final Function<String, OpenAiThinking> thinking;
 
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
@@ -112,7 +112,7 @@ public final class OpenAiClient implements ModelClient {
     }
 
     /**
-     * 地址不记：可能带凭据。{@code extra} 是请求体里模型和消息之外的字段：流式选项，加上这个模型的思考参数（M5），
+     * 地址不记：可能带凭据。{@code extra} 是请求体里模型和消息之外的字段：流式选项，加上这个模型的思考参数，
      * 轨迹页看到的就是发出的。
      */
     @Override
@@ -169,7 +169,7 @@ public final class OpenAiClient implements ModelClient {
         }
     }
 
-    /** 错误响应体会进日志、SSE 和 journal：只保留开头一段，去掉控制字符（review-fixes 需求 10.5）。 */
+    /** 错误响应体会进日志、SSE 和 journal：只保留开头一段，去掉控制字符。 */
     private ModelOutcome httpFailure(HttpResponse<InputStream> response) throws IOException {
         String body;
         try (InputStream in = response.body()) {
@@ -193,7 +193,7 @@ public final class OpenAiClient implements ModelClient {
         String actualModel = model(prompt);
         TokenUsage usage = null;
 
-        // 响应体在这里关（正常读完、[DONE]、提前 return 都关，review-fixes 需求 10.4）；看门狗到期时由它关
+        // 响应体在这里关（正常读完、[DONE]、提前 return 都关）；看门狗到期时由它关
         try (BufferedReader lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
         String line;
         Map<String, Integer> indexById = new java.util.HashMap<>();
@@ -242,7 +242,7 @@ public final class OpenAiClient implements ModelClient {
                 chunks.onText(piece);
             }
             for (JsonNode call : delta.path("tool_calls")) {
-                // 没有 index 的服务按 id 分片：有 id 开新片段，id 和 index 都没有的接到最后一个（需求 10.4）
+                // 没有 index 的服务按 id 分片：有 id 开新片段，id 和 index 都没有的接到最后一个
                 int index;
                 if (call.hasNonNull("index")) {
                     index = call.get("index").asInt();
@@ -272,7 +272,7 @@ public final class OpenAiClient implements ModelClient {
         return new ModelOutcome.Replied(content(reasoning, text, tools, prompt), stop(finishReason), actualModel, usage);
     }
 
-    /** 推理块记下这次的路线和请求的模型名（M9），下次只发回给同一条路线、同一个模型；没有选择时不记（旧做法）。 */
+    /** 推理块记下这次的路线和请求的模型名，下次只发回给同一条路线、同一个模型；没有选择时不记（旧做法）。 */
     private static List<ContentBlock> content(StringBuilder reasoning, StringBuilder text, Map<Integer, ToolFragments> tools,
                                               Prompt prompt) {
         List<ContentBlock> content = new ArrayList<>();
@@ -317,7 +317,7 @@ public final class OpenAiClient implements ModelClient {
         system.put("role", "system");
         system.put("content", prompt.system());
         messages.add(system);
-        // 换模型的说明并进这次的用户消息（M12）
+        // 换模型的说明并进这次的用户消息
         boolean images = vision.test(model(prompt));
         Folding.fold(prompt.messages(), false).forEach(message -> addMessage(messages, message, media, images, prompt.model()));
         body.put("messages", messages);
@@ -345,7 +345,7 @@ public final class OpenAiClient implements ModelClient {
 
     /**
      * 一条消息。收图片时，带图片的用户消息改用内容数组：文字段加 {@code image_url}（data URL）；工具结果里的图片放进紧接着的
-     * 一条用户消息（pi {@code openai-completions.ts:1257-1272,1395-1462}）。不收图片时图片换成占位文字（A7）。
+     * 一条用户消息（pi {@code openai-completions.ts:1257-1272,1395-1462}）。不收图片时图片换成占位文字。
      * 文件和 PDF 都只给说明文字。
      */
     private static void addMessage(List<Object> messages, Message message, AttachmentMedia media, boolean vision, ModelChoice choice) {
@@ -418,7 +418,7 @@ public final class OpenAiClient implements ModelClient {
     }
 
     /**
-     * {@code reasoning_content} 只发回同一条路线、同一个模型写的（M9，照 pi {@code AI/src/api/transform-messages.ts:122-125}）。
+     * {@code reasoning_content} 只发回同一条路线、同一个模型写的（照 pi {@code AI/src/api/transform-messages.ts:122-125}）。
      * 没有选择的调用照旧全发；有选择时，升级前没记作者的旧块不发（判断不了是不是同一个模型）。
      */
     private static boolean sameWriter(ReasoningBlock block, ModelChoice choice) {

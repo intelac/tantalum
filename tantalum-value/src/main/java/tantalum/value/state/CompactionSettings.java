@@ -3,7 +3,7 @@ package tantalum.value.state;
 /**
  * 一次提问的压缩设置，组装上下文时由 shell 算好，随 {@code ContextAssembled} 写进 journal，回放时用同一份。
  * {@code window} 是模型的上下文窗口，{@code reserve} 是留给回复的部分。{@code point} 是用户选的压缩点
- * （compaction-threshold T4），{@code bytesPerToken} 是估算系数（T7）。这两个字段是后加的：旧事件里没有，解码为 0，
+ *，{@code bytesPerToken} 是估算系数。这两个字段是后加的：旧事件里没有，解码为 0，
  * 阈值照旧是 {@code window − reserve}，系数照旧是 3。
  */
 public record CompactionSettings(long window, long reserve, long keepRecent, int maxKeptResultBytes,

@@ -51,7 +51,7 @@ public final class SessionFiles implements AutoCloseable {
     }
 
     /**
-     * 同一会话处理完的几步按顺序追加，fsync 一次，返回时已落盘，然后通知监听器（one-line-journal J2）。
+     * 同一会话处理完的几步按顺序追加，fsync 一次，返回时已落盘，然后通知监听器。
      * 写失败时丢掉这个会话的 memo：它可能记下了没落盘的内容，之后的行不能引用它们。
      */
     public void append(Principal principal, SessionId session, List<Line> lines) throws IOException {
@@ -84,7 +84,7 @@ public final class SessionFiles implements AutoCloseable {
                     long offset = handle.file.appendLines(encoded);
                     listener.onDurable(principal, session, seq, offset);
                 } catch (IOException | RuntimeException failure) {
-                    // memo 可能已领先于文件，句柄可能带着残缺的尾部：都丢掉，下次重新打开（review-fixes 需求 3.1）
+                    // memo 可能已领先于文件，句柄可能带着残缺的尾部：都丢掉，下次重新打开
                     memos.remove(key);
                     try {
                         handle.file.close();

@@ -14,7 +14,7 @@ public interface Projection {
 
     List<TranscriptItem> apply(EventEnvelope envelope, Decision decision);
 
-    /** 带处理前的状态：要比较前后才知道这一步追加了什么（工具变化，one-line-journal J8）时用它。 */
+    /** 带处理前的状态：要比较前后才知道这一步追加了什么（工具变化）时用它。 */
     default List<TranscriptItem> apply(EventEnvelope envelope, KernelState before, Decision decision) {
         return apply(envelope, decision);
     }

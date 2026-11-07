@@ -18,7 +18,7 @@ import tantalum.value.id.SessionId;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 启动后预热读会话文件和还原的代码（one-line-journal J9）：服务刚启动时第一次打开长会话慢，主要是这些代码还没被 JIT 编译。
+ * 启动后预热读会话文件和还原的代码：服务刚启动时第一次打开长会话慢，主要是这些代码还没被 JIT 编译。
  * 把 jar 里的一个小会话（工具调用、压缩、工具变化都有）复制到临时目录，用 {@link RecordReplay} 折叠几遍，然后删掉。
  * 不碰数据目录、不进索引、不占名额；失败只记日志。文件由测试 {@code WarmupFileTest} 生成，格式变了那个测试会失败。
  */

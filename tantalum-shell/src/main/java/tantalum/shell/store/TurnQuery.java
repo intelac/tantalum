@@ -52,7 +52,7 @@ public final class TurnQuery {
     private final RecordReplay replay;
     private final JsonMapper mapper;
 
-    /** 按结果行折叠，不调内核（record-results 第 2 步）。还没写结果行的最后一步不出现，它也还没推送过。 */
+    /** 按结果行折叠，不调内核。还没写结果行的最后一步不出现，它也还没推送过。 */
     public TurnQuery(SessionPaths paths, RecordReplay replay, JsonMapper mapper) {
         this.paths = paths;
         this.replay = replay;

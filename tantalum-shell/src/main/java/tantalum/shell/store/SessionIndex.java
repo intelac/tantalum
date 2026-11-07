@@ -86,7 +86,7 @@ public final class SessionIndex implements AutoCloseable {
             empty = result.getInt(1) == 0;
         }
         if (!empty && version != VERSION) {
-            // 版本不符（waiting-state 加了两列，2 → 3）：open() 删掉文件重建，内容由 IndexCatchUp 从会话文件补回
+            // 版本不符（等人阶段加了两列，2 → 3）：open() 删掉文件重建，内容由 IndexCatchUp 从会话文件补回
             throw new IllegalStateException("index version " + version + " is not " + VERSION);
         }
         try (ResultSet result = statement.executeQuery("PRAGMA quick_check(1)")) {
@@ -251,7 +251,7 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
-    /** 等用户回答且有期限的会话（waiting-state 需求 3.4）：启动时为它们重新起定时器。 */
+    /** 等用户回答且有期限的会话：启动时为它们重新起定时器。 */
     public synchronized List<AnswerDeadline> awaitingWithDeadline() throws SQLException {
         List<AnswerDeadline> deadlines = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement(

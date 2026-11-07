@@ -26,7 +26,7 @@ public final class TruncateOutputHook implements AfterToolHook, PluginInfo {
 
     @Override
     public LocalText description() {
-        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文（console-i18n I10）
+        // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Truncates tool results over the limit and notes how many characters were cut.")
                 .zh("工具结果超过上限时截断，并注明截掉了多少字符。")
                 .ja("上限を超えたツール結果を切り詰め、削った文字数を書き添えます。");

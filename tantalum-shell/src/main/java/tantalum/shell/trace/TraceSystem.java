@@ -28,7 +28,7 @@ import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionContext.HookState.HookTool;
 import tantalum.value.state.SessionState;
 
-/** system 和工具的变化、它们各段的来源，以及上下文的变化（需求 4）。 */
+/** system 和工具的变化、它们各段的来源，以及上下文的变化。 */
 final class TraceSystem {
 
     private final TracePass pass;
@@ -59,7 +59,7 @@ final class TraceSystem {
     }
 
     /**
-     * system 就是会话冻结的那份（hook-patch 之后钩子的说明在消息里，不拼 system）；工具是全集加钩子加的工具（{@code PromptProjection}），
+     * system 就是会话冻结的那份（钩子的说明在消息里，不拼 system）；工具是全集加钩子加的工具（{@code PromptProjection}），
      * 后者标插件来源。对不上的标未记录来源。摘要重试不重跑钩子，沿用上一次摘要调用的切分。
      */
     Split split(Prompt prompt, RunId run, Track track) {

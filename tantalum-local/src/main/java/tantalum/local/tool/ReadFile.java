@@ -15,9 +15,9 @@ import tantalum.value.json.Json;
 
 /**
  * 读用户电脑上允许的目录里的文本文件。读到图片时（按文件头）把原始字节送回，由服务器规范化、存进附件再交给模型（同 pi
- * {@code read.ts:139-151}）；读到 PDF 时不把二进制当文字返回。附件在服务器上，改由服务器的 {@code read_attachment} 读（L7）。
+ * {@code read.ts:139-151}）；读到 PDF 时不把二进制当文字返回。附件在服务器上，改由服务器的 {@code read_attachment} 读。
  *
- * <p>文本按行窗口读取（core-tools 需求 1）：边读边数，只把窗口里的行放进结果；默认最多 2000 行或 50 KB（pi
+ * <p>文本按行窗口读取：边读边数，只把窗口里的行放进结果；默认最多 2000 行或 50 KB（pi
  * {@code truncate.ts:11-12}），没读完时结尾写明下一次的 {@code offset}（pi {@code read.ts:189-198}）。
  */
 public final class ReadFile implements LocalTool {
@@ -66,7 +66,7 @@ public final class ReadFile implements LocalTool {
             }
             Observations.Version before = Observations.Version.of(file);
             LocalResult output = text(file, path, window);
-            // 读任何一个窗口都算读过（C5）：模型拿到续读说明，知道文件还有别的部分。读的过程中被改过就不记，下次改之前要重读
+            // 读任何一个窗口都算读过：模型拿到续读说明，知道文件还有别的部分。读的过程中被改过就不记，下次改之前要重读
             if (!output.error() && before.equals(Observations.Version.of(file))) {
                 context.observations().record(context.session(), file, before);
             }
