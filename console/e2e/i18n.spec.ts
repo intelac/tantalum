@@ -41,6 +41,8 @@ test.describe("语言", () => {
     const dialog = ja.getByRole("dialog", { name: "設定" });
     await dialog.getByRole("button", { name: "言語" }).click();
     await expect(dialog.getByRole("radio", { name: "ブラウザーの言語に合わせる（日本語）" })).toHaveAttribute("aria-checked", "true");
+    // 存到服务器的那一下也等它回来：刷新太快会把还没发完的保存打断
+    const saved = ja.waitForResponse((response) => response.url().endsWith("/api/settings/language") && response.request().method() === "PUT");
     await dialog.getByRole("radio", { name: "English" }).click();
     // 当场换，设置窗口还开着
     await expect(ja.getByRole("dialog", { name: "Settings" })).toBeVisible();
@@ -52,6 +54,7 @@ test.describe("语言", () => {
     await expect(ja.getByRole("dialog", { name: "Settings" })).toBeHidden();
 
     // 刷新：index.html 的内联脚本在 React 起来前就写好 lang
+    expect((await saved).ok()).toBeTruthy();
     await ja.reload({ waitUntil: "domcontentloaded" });
     expect(await ja.evaluate(() => document.documentElement.lang)).toBe("en");
     await expect(ja.getByRole("textbox", { name: "Message Tantalum" })).toBeVisible();

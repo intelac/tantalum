@@ -192,6 +192,8 @@ try {
   Check ($code -eq 1 -and ($said -join "`n").Contains('is on a network share')) "users refuses the UNC data directory: $said"
   Check (-not (Test-Path "C:\tantalum-unc-$PID")) 'nothing was created on the share'
   'windows smoke passed'
+  # 最后一个原生命令是故意失败的 users add（UNC）：别让它的退出码变成这一步的结果
+  $global:LASTEXITCODE = 0
 } catch {
   # 失败时把各进程的日志尾巴打出来，临时目录随后就删
   Get-ChildItem $root -File -Filter '*.log*' -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 60 }

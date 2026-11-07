@@ -19,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 class ObservationsTest {
 
     /** 只在 Windows 上跳过的原因。 */
-    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上 fileKey() 为空，换掉的文件只按大小和时间认不出来，归 Windows 连接程序 spec";
+    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上 fileKey() 为空，修改时间按系统时钟的刻度走，大小不变的改写和换掉的文件可能认不出来，归 Windows 连接程序 spec";
 
     private static final String ONE = "one";
     private static final String TWO = "two";
@@ -64,6 +64,7 @@ class ObservationsTest {
     }
 
     @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = MAC_CONNECTOR)
     void aChangeAfterTheReadIsNoticed() throws Exception {
         Path file = file("x");
         observations.record(ONE, file);

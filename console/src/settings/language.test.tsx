@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 /** 假后端：`/api/auth/me` 回 `user`（null 时 401），`PUT /api/settings/language` 回 `putStatus` 并记下请求体。 */
-function fakeBackend(user: User | null, putStatus = 200) {
+function fakeBackend(user: User | null, putStatus: number | "never" = 200) {
   const puts: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -26,6 +26,7 @@ function fakeBackend(user: User | null, putStatus = 200) {
       if (path === "/api/auth/me") return user === null ? reply(401, { error: "not_authenticated", code: "auth/not-authenticated" }) : reply(200, user);
       if (path === "/api/settings/language") {
         puts.push(init?.body as string);
+        if (putStatus === "never") return new Promise(() => undefined);
         return putStatus === 200 ? reply(200, { compaction: { percent: 100, points: [] }, language: null }) : reply(putStatus, {});
       }
       if (path === "/api/settings") return reply(200, { compaction: { percent: 100, points: [] }, language: null });
@@ -85,6 +86,17 @@ describe("language pane", () => {
     expect(screen.getByRole("alert").textContent).toBe("没能保存，已恢复原来的选择。");
     expect(currentLanguage()).toBe("zh");
     expect(screen.getByRole("dialog", { name: "设置" })).toBeTruthy();
+    expect(localStorage.getItem(LANGUAGE_KEY)).toBeNull();
+  });
+
+  // 存好之前刷新，第一帧也是刚选的语言：缓存和画面一起当场写（windows-server 任务 13，windows-latest 上的 i18n.spec）
+  it("writes the browser cache at once, before the server answers", async () => {
+    const puts = fakeBackend({ username: "yi", language: null }, "never");
+    mount();
+    await openLanguagePane();
+    await userEvent.click(screen.getByRole("radio", { name: "English" }));
+    expect(puts).toEqual(['{"language":"en"}']);
+    expect(localStorage.getItem(LANGUAGE_KEY)).toBe("en");
   });
 
   // 需求 1.4：跟随浏览器发 null，换成浏览器的语言
