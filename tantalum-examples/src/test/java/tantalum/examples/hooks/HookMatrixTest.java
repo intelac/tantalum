@@ -105,8 +105,9 @@ class HookMatrixTest {
         List<String> answered = List.of(USER, run("COMPLETED"), TEXT);
         return Stream.of(
                 cell("bmc-allow", BEFORE_MODEL_CALL, ALLOW, false, "COMPLETED", List.of(U, C, R), answered, List.of(P_USER), 0, 0),
-                cell("bmc-patch", BEFORE_MODEL_CALL, PATCH, false, "COMPLETED", List.of(U, C, R), answered,
-                        List.of(P_USER + " patched"), 0, 0),
+                // 补丁里的工具是追加的工具变化（hook-patch），对话页上和用户开关工具一样有一条“工具变化”
+                cell("bmc-patch", BEFORE_MODEL_CALL, PATCH, false, "COMPLETED", List.of(U, C, R),
+                        List.of(USER, run("COMPLETED"), "toolChange", TEXT), List.of(P_USER + " patched"), 0, 0),
                 cell("bmc-stop", BEFORE_MODEL_CALL, STOP, false, "STOPPED: matrix stop", List.of(U, C),
                         List.of(USER, run("STOPPED: matrix stop")), List.of(), 0, 0),
                 cell("bmc-work-ok", BEFORE_MODEL_CALL, WORK_OK, false, "COMPLETED", List.of(U, C, W_OK, R), answered, List.of(P_USER), 1, 0),

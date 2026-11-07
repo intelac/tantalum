@@ -4,8 +4,8 @@ import java.util.Objects;
 import tantalum.value.hook.PromptPatch;
 
 /**
- * 运行正在等摘要：为什么压缩、压缩计划、钩子追加的内容（摘要重试时要发相同的 prompt）。
- * 运行在等摘要时被取消也保留它，迟到的摘要回复据此不进历史。
+ * 运行正在等摘要：为什么压缩、压缩计划。运行在等摘要时被取消也保留它，迟到的摘要回复据此不进历史。
+ * {@code patch} 是 hook-patch 之前钩子拼进 prompt 的内容；现在钩子的补丁在历史里，这里总是 {@link PromptPatch#NONE}，字段留着是为了读旧行。
  */
 public record Compacting(Cause cause, Plan plan, PromptPatch patch) {
 

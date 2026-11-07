@@ -96,6 +96,7 @@ function CallSystem({ session, call }: { session: string; call: string }) {
   const detail = useTraceCall(session, call);
   if (detail.data === undefined) return <Loading error={detail.error} />;
   const { system, segments } = detail.data;
+  const additions = detail.data.additions ?? [];
   return (
     <>
       <Restored mismatch={detail.data.fingerprintMismatch} />
@@ -111,6 +112,18 @@ function CallSystem({ session, call }: { session: string; call: string }) {
         </Section>
       )}
       <LongText text={system} empty={t.record.systemPromptMissing} />
+      {additions.length > 0 && (
+        <Section title={t.details.hookTexts}>
+          <ul className="flex flex-col gap-2">
+            {additions.map((addition, index) => (
+              <li key={index} className="flex flex-col gap-0.5">
+                <span className="text-xs text-fg-muted">{sourceText({ type: "plugin", name: addition.hook })}</span>
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs text-fg">{addition.text}</pre>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </>
   );
 }

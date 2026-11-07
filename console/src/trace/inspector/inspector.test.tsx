@@ -18,13 +18,15 @@ const byId = (id: string) => RECORDS.find((record) => record.id === id) as Trace
 
 const CALL: TraceCall = {
   call: "s_5-0",
-  system: "sys\nstyle: be brief",
-  segments: [
-    { chars: 3, source: { type: "context" } },
-    { chars: 15, source: { type: "plugin", name: "style" } },
-  ],
+  system: "sys",
+  segments: [{ chars: 3, source: { type: "context" } }],
   tools: [{ spec: { name: "read_file", description: "Read a file", schema: { type: "object" } }, source: { type: "context" } }],
-  messages: [{ role: "USER", content: [{ kind: "text", text: "q1" }], interrupted: false }],
+  messages: [
+    { role: "USER", content: [{ kind: "text", text: "q1" }], interrupted: false },
+    { role: "SYSTEM", content: [{ kind: "hookText", hook: "style", text: "style: be brief" }], interrupted: false },
+  ],
+  // hook-patch：钩子的说明在消息里，请求详情另列出来
+  additions: [{ hook: "style", text: "style: be brief" }],
   output: { toolsAllowed: true, maxTokens: 1024 },
   previous: { system: "sys", tools: [] },
 };
@@ -93,13 +95,16 @@ describe("检查器的页签", () => {
     expect(screen.getByText(/重试延迟 2\.00 秒/)).toBeTruthy();
   });
 
-  it("系统提示词按需取请求详情，分段标出来源", async () => {
+  it("系统提示词按需取请求详情，分段标出来源，另列钩子追加的说明", async () => {
     const paths = stubCalls();
     open(byId("r:s_2-0"));
     expect(paths).toEqual([]);
     await userEvent.click(screen.getByRole("tab", { name: "系统提示词" }));
-    expect(await screen.findByText(/style: be brief/)).toBeTruthy();
-    expect(screen.getByText("插件 · style · 15 字")).toBeTruthy();
+    expect(await screen.findByText("sys")).toBeTruthy();
+    expect(screen.getByText("上下文组装 · 3 字")).toBeTruthy();
+    expect(screen.getByText("插件追加的说明（在消息里，system 不变）")).toBeTruthy();
+    expect(screen.getByText("插件 · style")).toBeTruthy();
+    expect(screen.getByText("style: be brief")).toBeTruthy();
     expect(paths).toEqual(["/api/sessions/s/trace/calls/s_5-0"]);
   });
 
@@ -117,9 +122,9 @@ describe("检查器的页签", () => {
   });
 
   it("system 的差异页签按行比较上一次请求", async () => {
-    stubCalls();
+    stubCalls({ ...CALL, system: "sys\nmore", previous: { system: "sys", tools: [] } });
     open(byId("s:2"));
-    expect(await screen.findByText("+style: be brief")).toBeTruthy();
+    expect(await screen.findByText("+more")).toBeTruthy();
   });
 
   it("没有记录选项时页签仍在，显示“未记录选项”", async () => {

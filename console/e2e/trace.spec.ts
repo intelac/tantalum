@@ -52,9 +52,10 @@ test.describe("轨迹页", () => {
       expect(await tabNames(page), tag).toEqual(tabs);
     }
 
-    // 请求的系统提示词按需加载，里面有钩子加的补丁，分段标出来源。
+    // 请求的系统提示词按需加载；钩子加的说明不在 system 里，在消息里，这一页另列出来并标谁加的（hook-patch）。
     await row(page, "助手").last().click();
     await page.getByRole("tab", { name: "系统提示词" }).click();
+    await expect(page.getByText("插件追加的说明", { exact: false })).toBeVisible();
     await expect(page.getByText("插件 · e2eTrace", { exact: false })).toBeVisible();
     await expect(page.locator("aside pre", { hasText: "Trace e2e: keep answers short." })).toBeVisible();
 

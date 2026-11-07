@@ -33,6 +33,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Message;
+import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.ContextSection;
@@ -85,11 +86,16 @@ class ModelStepsTest {
         assertEquals(List.of(Message.user("hi")), call.prompt().messages());
     }
 
+    /** hook-patch：补丁不拼进 system，而是提问后面一条 system 消息，块上记着钩子名。 */
     @Test
-    void beforeModelCallPatchReachesThePrompt() {
+    void beforeModelCallPatchBecomesASystemMessage() {
         LoopFixture loop = new LoopFixture(beforeModel(new Allow(new PromptPatch("+x", List.of()))));
         toModel(loop);
-        assertEquals("system+x", assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().system());
+        CallModel call = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals("system", call.prompt().system());
+        assertEquals(List.of(Message.user("hi"), new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("beforeModel", "+x")), false)),
+                call.prompt().messages());
+        assertEquals(call.prompt().messages(), loop.session().messages());
     }
 
     @Test

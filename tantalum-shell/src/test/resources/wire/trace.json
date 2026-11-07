@@ -117,17 +117,11 @@
     "at" : "2026-10-31T00:00:02Z",
     "end" : "2026-10-31T00:00:02Z",
     "initial" : true,
-    "systemChars" : 27,
+    "systemChars" : 3,
     "segments" : [ {
       "chars" : 3,
       "source" : {
         "type" : "context"
-      }
-    }, {
-      "chars" : 24,
-      "source" : {
-        "type" : "plugin",
-        "name" : "style"
       }
     } ],
     "added" : [ "read_file", "style_check" ],
@@ -523,7 +517,7 @@
     "trigger" : "AUTO",
     "adopted" : true,
     "trimOnly" : false,
-    "estimateBefore" : 259,
+    "estimateBefore" : 283,
     "estimateAfter" : 116,
     "usage" : {
       "input" : 50,
@@ -557,17 +551,11 @@
     "at" : "2026-10-31T00:00:16Z",
     "end" : "2026-10-31T00:00:16Z",
     "initial" : false,
-    "systemChars" : 30,
+    "systemChars" : 6,
     "segments" : [ {
       "chars" : 6,
       "source" : {
         "type" : "context"
-      }
-    }, {
-      "chars" : 24,
-      "source" : {
-        "type" : "plugin",
-        "name" : "style"
       }
     } ],
     "added" : [ ],
@@ -685,29 +673,9 @@
     "endReason" : "COMPLETED",
     "endDetail" : "compacted"
   }, {
-    "kind" : "system",
-    "id" : "s:21",
-    "pos" : "21.1",
-    "run" : "s_21",
-    "compaction" : "k21",
-    "at" : "2026-10-31T00:00:21Z",
-    "end" : "2026-10-31T00:00:21Z",
-    "initial" : false,
-    "systemChars" : 6,
-    "segments" : [ {
-      "chars" : 6,
-      "source" : {
-        "type" : "context"
-      }
-    } ],
-    "added" : [ ],
-    "removed" : [ "style_check" ],
-    "toolCount" : 1,
-    "call" : "s_21-0"
-  }, {
     "kind" : "request",
     "id" : "r:s_21-0",
-    "pos" : "21.2",
+    "pos" : "21.1",
     "run" : "s_21",
     "compaction" : "k21",
     "at" : "2026-10-31T00:00:21Z",
@@ -749,7 +717,7 @@
     "trigger" : "MANUAL",
     "adopted" : true,
     "trimOnly" : false,
-    "estimateBefore" : 206,
+    "estimateBefore" : 230,
     "estimateAfter" : 116,
     "usage" : {
       "input" : 60,
@@ -800,36 +768,9 @@
     "tools" : [ "style_check" ],
     "applied" : "APPLIED"
   }, {
-    "kind" : "system",
-    "id" : "s:24",
-    "pos" : "24.1",
-    "run" : "s_23",
-    "turn" : 5,
-    "step" : 1,
-    "at" : "2026-10-31T00:00:24Z",
-    "end" : "2026-10-31T00:00:24Z",
-    "initial" : false,
-    "systemChars" : 30,
-    "segments" : [ {
-      "chars" : 6,
-      "source" : {
-        "type" : "context"
-      }
-    }, {
-      "chars" : 24,
-      "source" : {
-        "type" : "plugin",
-        "name" : "style"
-      }
-    } ],
-    "added" : [ "style_check" ],
-    "removed" : [ ],
-    "toolCount" : 2,
-    "call" : "s_24-0"
-  }, {
     "kind" : "request",
     "id" : "r:s_24-0",
-    "pos" : "24.2",
+    "pos" : "24.1",
     "run" : "s_23",
     "turn" : 5,
     "step" : 1,

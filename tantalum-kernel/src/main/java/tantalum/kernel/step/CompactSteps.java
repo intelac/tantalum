@@ -64,17 +64,17 @@ public final class CompactSteps {
     }
 
     /** 调模型前的压缩判断。自动压缩在本运行已经失败过就不再尝试；没有可压缩的计划时不接管。 */
-    static Start tryStart(Outcome out, RunState run, PromptPatch patch, Cause cause) {
+    static Start tryStart(Outcome out, RunState run, Cause cause) {
         if (cause instanceof Compacting.Auto && run.autoCompactionFailed()) {
             return Start.PROCEED;
         }
         SessionState session = out.session(run.ref());
-        Prompt base = PromptProjection.project(session, patch);
+        Prompt base = PromptProjection.project(session);
         Optional<Plan> planned = Compactor.plan(session, base.system(), base.tools(), cause.trigger());
         if (planned.isEmpty()) {
             return Start.PROCEED;
         }
-        Compacting compacting = new Compacting(cause, planned.orElseThrow(), patch);
+        Compacting compacting = new Compacting(cause, planned.orElseThrow(), PromptPatch.NONE);
 
         HookOutcome hook = out.hooks.run(HookPoint.BEFORE_COMPACT, out.state(), out.hookContext(run.ref())
                 .withCompaction(compacting.plan(), compacting.trigger()));
@@ -96,7 +96,7 @@ public final class CompactSteps {
     private static boolean sendSummary(Outcome out, RunState run, Compacting compacting) {
         SessionState session = out.session(run.ref());
         CompactionSettings settings = session.context().compaction();
-        Prompt base = PromptProjection.project(session, compacting.patch());
+        Prompt base = PromptProjection.project(session);
         String instructions = compacting.cause() instanceof Compacting.Manual manual ? manual.instructions() : null;
         Message instruction = SummaryPrompt.instruction(false, instructions);
         TokenEstimate estimate = TokenEstimate.of(settings);
@@ -129,7 +129,7 @@ public final class CompactSteps {
         }
         Outcome out = new Outcome(context);
         RunState run = SubmitSteps.newRun(out, session, new OwnerRef.OfSession(envelope.session()));
-        if (tryStart(out, run, PromptPatch.NONE, new Compacting.Manual(event.instructions())) == Start.PROCEED) {
+        if (tryStart(out, run, new Compacting.Manual(event.instructions())) == Start.PROCEED) {
             RunEnd.finish(out, run, EndReason.FAILED, NOTHING_TO_COMPACT);
         }
         return out.decision();

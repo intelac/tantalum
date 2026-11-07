@@ -257,15 +257,15 @@ class TracePassTest {
         assertEquals(4, fx.records(ModelRequest.class).getLast().number());
     }
 
+    /** hook-patch：钩子的说明在消息里，system 就是冻结的那份；钩子加的工具标插件来源；钩子决定行照旧报长度。 */
     @Test
-    void patchSegmentsAreAttributedToEachHookInOrder() {
+    void patchesLeaveTheSystemAloneAndHookToolsAreAttributed() {
         TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A-rules", "alpha_tool"), patch("beta", "BB")));
         RunId run = fx.start("hi");
 
         SystemPrompt system = fx.records(SystemPrompt.class).getFirst();
-        assertEquals(List.of(new Segment(3, Source.CONTEXT), new Segment(8, Source.plugin("alpha")), new Segment(2, Source.plugin("beta"))),
-                system.segments());
-        assertEquals(13, system.systemChars());
+        assertEquals(List.of(new Segment(3, Source.CONTEXT)), system.segments());
+        assertEquals(3, system.systemChars());
         assertEquals(List.of("read_file", "alpha_tool"), system.added());
         Trace.Split split = fx.trace.lastSplit(TraceFixture.SESSION, run);
         assertEquals(List.of(Source.CONTEXT, Source.plugin("alpha")), split.tools());

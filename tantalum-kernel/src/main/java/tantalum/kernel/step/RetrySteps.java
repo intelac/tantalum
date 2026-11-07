@@ -11,7 +11,6 @@ import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
-import tantalum.value.hook.PromptPatch;
 import tantalum.value.hook.Stop;
 import tantalum.value.id.CommandId;
 import tantalum.value.model.FailureReason;
@@ -47,7 +46,7 @@ public final class RetrySteps {
             // 超长恢复（规则 2、3.2）：只留最新单元压缩后重试一次；无可压缩或摘要失败都以原始错误结束。
             RunState recovering = run.withOverflowRecovered(true);
             out.put(recovering);
-            if (CompactSteps.tryStart(out, recovering, PromptPatch.NONE, new Compacting.Overflow(event.detail())) == CompactSteps.Start.PROCEED) {
+            if (CompactSteps.tryStart(out, recovering, new Compacting.Overflow(event.detail())) == CompactSteps.Start.PROCEED) {
                 RunEnd.finish(out, recovering, EndReason.FAILED, event.detail());
             }
         } else if (!event.retryable() || !scheduleRetry(out, run, event.retryAfter(), AWAITING_RETRY)) {

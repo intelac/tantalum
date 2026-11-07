@@ -26,6 +26,7 @@ import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
@@ -342,6 +343,7 @@ public final class OpenAiClient implements ModelClient {
                 case ReasoningBlock other -> { }
                 case ToolCallBlock call -> calls.add(call(call));
                 case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
+                case HookTextBlock note -> append(text, ToolChanges.PREFIX + note.text());
                 case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see ModelChanges");
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);

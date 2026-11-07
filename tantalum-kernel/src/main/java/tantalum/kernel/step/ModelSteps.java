@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Set;
 import tantalum.kernel.attachment.ImageBudget;
 import tantalum.kernel.hook.HookOutcome;
+import tantalum.kernel.hook.HookPatches;
 import tantalum.kernel.projection.PromptProjection;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.command.CallModel;
@@ -68,13 +69,19 @@ public final class ModelSteps {
             case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Ask ask -> AnswerSteps.ask(out, run, ask, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Allow allow -> {
+                // 钩子的补丁先进历史（hook-patch）：压缩看到的历史已经带着它，摘要调用和正常调用都从同一份会话投影
+                HookPatches.Applied patched = HookPatches.apply(out.session(run.ref()), hook.facts(), allow.patch(), run.ref());
+                if (patched.session() != out.session(run.ref())) {
+                    out.put(patched.session());
+                }
+                out.report(patched.facts());
                 if (compactionAllowed) {
-                    if (CompactSteps.tryStart(out, run, allow.patch(), new Compacting.Auto()) == CompactSteps.Start.TOOK_OVER) {
+                    if (CompactSteps.tryStart(out, run, new Compacting.Auto()) == CompactSteps.Start.TOOK_OVER) {
                         return;
                     }
                     run = out.run(run.ref());
                 }
-                Prompt prompt = PromptProjection.project(out.session(run.ref()), allow.patch()).withModel(model(out, run));
+                Prompt prompt = PromptProjection.project(out.session(run.ref())).withModel(model(out, run));
                 CommandId id = emitCall(out, run.ref(), prompt);
                 out.await(run, AWAITING_MODEL, Set.of(id));
             }
@@ -87,7 +94,7 @@ public final class ModelSteps {
      */
     static CommandId emitCall(Outcome out, RunRef run, Prompt prompt) {
         SessionState session = out.session(run);
-        ImageBudget.Applied applied = ImageBudget.apply(PromptProjection.placeToolChanges(prompt.messages()), session.omittedImages());
+        ImageBudget.Applied applied = ImageBudget.apply(PromptProjection.placeSystemUpdates(prompt.messages()), session.omittedImages());
         if (!applied.newlyOmitted().isEmpty()) {
             List<String> all = new ArrayList<>(session.omittedImages());
             all.addAll(applied.newlyOmitted());

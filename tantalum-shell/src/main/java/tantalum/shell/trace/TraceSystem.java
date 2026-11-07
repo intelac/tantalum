@@ -25,6 +25,7 @@ import tantalum.value.state.Awaiting;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
+import tantalum.value.state.SessionContext.HookState.HookTool;
 import tantalum.value.state.SessionState;
 
 /** system 和工具的变化、它们各段的来源，以及上下文的变化（需求 4）。 */
@@ -58,8 +59,8 @@ final class TraceSystem {
     }
 
     /**
-     * 有效 system = 会话 system + 模型调用前各钩子按注册顺序追加的补丁，工具同理（{@code PromptProjection}）。
-     * 长度和工具名对得上才标钩子来源，对不上的部分标未记录来源。摘要重试不重跑钩子，沿用上一次摘要调用的切分。
+     * system 就是会话冻结的那份（hook-patch 之后钩子的说明在消息里，不拼 system）；工具是全集加钩子加的工具（{@code PromptProjection}），
+     * 后者标插件来源。对不上的标未记录来源。摘要重试不重跑钩子，沿用上一次摘要调用的切分。
      */
     Split split(Prompt prompt, RunId run, Track track) {
         boolean summaryRetry = pass.before.runs().get(run) instanceof RunState earlier && earlier.phase() instanceof Awaiting awaiting
@@ -71,32 +72,14 @@ final class TraceSystem {
         SessionContext context = session == null ? null : session.context();
         String base = context == null ? "" : context.system();
         List<ToolSpec> baseTools = context == null ? List.of() : context.tools();
-        List<HookDecided> patches = new ArrayList<>();
-        for (Fact fact : pass.decision.facts()) {
-            if (fact instanceof HookDecided decided && decided.kind() == HookDecided.Kind.PATCH
-                    && decided.point() == HookPoint.BEFORE_MODEL_CALL && decided.run().run().equals(run)) {
-                patches.add(decided);
-            }
-        }
-        String system = prompt.system();
-        int extra = patches.stream().mapToInt(HookDecided::systemChars).sum();
-        List<Segment> segments = new ArrayList<>();
-        if (system.startsWith(base)) {
-            segments.add(new Segment(base.length(), Source.CONTEXT));
-            if (system.length() == base.length() + extra) {
-                patches.stream().filter(patch -> patch.systemChars() > 0)
-                        .forEach(patch -> segments.add(new Segment(patch.systemChars(), Source.plugin(patch.hook()))));
-            } else if (system.length() > base.length()) {
-                segments.add(new Segment(system.length() - base.length(), Source.UNKNOWN));
-            }
-        } else {
-            segments.add(new Segment(system.length(), Source.UNKNOWN));
-        }
+        List<Segment> segments = List.of(new Segment(prompt.system().length(), prompt.system().equals(base) ? Source.CONTEXT : Source.UNKNOWN));
         List<String> expected = new ArrayList<>(names(baseTools));
         List<Source> sources = new ArrayList<>(baseTools.stream().map(tool -> Source.CONTEXT).toList());
-        for (HookDecided patch : patches) {
-            expected.addAll(patch.tools());
-            patch.tools().forEach(tool -> sources.add(Source.plugin(patch.hook())));
+        if (context != null) {
+            for (HookTool hook : context.hookState().tools()) {
+                expected.add(hook.tool().name());
+                sources.add(Source.plugin(hook.hook()));
+            }
         }
         if (!expected.equals(names(prompt.tools()))) {
             sources.clear();

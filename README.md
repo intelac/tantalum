@@ -619,11 +619,13 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 - **问用户、等回答**（waiting-state）：钩子返回 `new Ask(new Question(id, 标题, 说明, 选项))`（文字是 `LocalText`，可以写三种语言），运行就停在“等回答”：没有在途命令，不计工作轮数，不超时；人几小时、几天后在对话页上点选都接着跑，服务器重启问题还在（问题和回答都在 journal 里）。回答从新钩子位置 `onAnswer` 回来：`context.question()` 是问题，`context.answer()` 是回答（`choice`、`text`），要先按 `question.id()` 过滤（所有钩子都会被调用）；放行回到问的位置，`Stop` 在工具调用前只拦那个调用、别处结束运行，`NeedWork` 要一轮工作，再返回 `Ask` 是新问题。`new Ask(question).after(Duration)` 给期限，到时 `answer()` 为 null。插件的问题只有选项，不收自由文本。模型自己也能问：内置工具 `ask_user`（选项加可选的一句话，可给 `timeout_seconds`），回答作为工具结果。
 - **记在会话里**：`onAnswer` 放行时 `Allow.PLAIN.withNote(键, 对象)`，或工作结果 `new WorkResult(结果, 续写文字, note)`。对象按字段并进会话状态里那一份（`SessionState.note(键)`，值为 `null` 的字段删掉），随结果行记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
 
-八个钩子（前 7 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁只在 `beforeModelCall` 生效，其余位置忽略；`Ask` 在前 5 个位置和 `onAnswer` 有效，`beforeCompact` 当作拒绝。
+八个钩子（前 7 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁（`PromptPatch(systemAppend, addTools)`）只在 `beforeModelCall` 生效，其余位置忽略；`Ask` 在前 5 个位置和 `onAnswer` 有效，`beforeCompact` 当作拒绝。
+
+**补丁怎么到模型**（hook-patch）：不拼进 system、不改工具列表——会话的 system 和开始时的工具列表整个会话不变，Claude 的思考签名绑着它们，一改历史里的思考就全失效。`systemAppend` 变成紧跟这次提问（或工具结果）的一条 `role: system` 消息，每个钩子一块；`addTools` 的定义以 `defer_loading` 追加在工具列表末尾，再用同一条消息里的 `tool_addition` 让模型看见。规则：**变化才发**（常量说明整个会话只发一次，每圈都变的说明每圈一条，所以别把时间戳写进去）；**只追加、不撤回**（发出去的说明永远留在历史里，要改口就再说一句；钩子不再返回某个工具时发 `tool_removal`）；**压缩后重发**（压缩清掉了冻结的上下文，当前说明和工具重新告知一次）；**和服务器上已有的工具重名的忽略**（那些工具归插件页开关）。不支持会话中途 system 消息的模型（Claude Sonnet 5、OpenAI 兼容路线）把说明并进前一条用户消息、带“不是用户写的”前缀，工具变化按各路线现有规则处理。轨迹页请求详情的“系统提示词”页签列出这次请求里钩子追加的说明和是谁加的。
 
 | 钩子 | 能返回 | 结果怎么生效 | 补丁 | 示例插件 |
 |---|---|---|---|---|
-| `beforeModelCall` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 结束运行；工作做完后再问一次 | 生效 | `DailyQuotaHook` |
+| `beforeModelCall` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 结束运行；工作做完后再问一次 | 生效（追加 system 消息，见上） | `DailyQuotaHook` |
 | `beforeToolCall` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 只拦这个调用，模型收到“被拦下”；工作做完后由 `onWorkResult` 决定、回答后由 `onAnswer` 决定，不再问这里 | 忽略 | `ReadOnlyHook`、`ToolApprovalHook` |
 | `onFailure` | `Allow`、`Stop`、`NeedWork`、`Ask` | 放行交给内核（超长恢复、退避重试）；`Stop` 运行失败；工作做完后重试一次，占用重试次数 | 忽略 | `ProviderBackoffHook` |
 | `beforeRunEnd` | `Allow`、`Stop`、`NeedWork`、`Ask` | `Stop` 结束为 STOPPED；工作带 `continueText` 时回到模型，否则再问一次 | 忽略 | `CitationCheckHook`（只拿会话里 `read_file`、`grep` 读到的行核对，不读服务器上的文件） |
