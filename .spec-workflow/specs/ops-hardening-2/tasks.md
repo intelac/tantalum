@@ -60,7 +60,7 @@
   - _Requirements: 3.1–3.3, 2.5, 2.6_
   - _Prompt: Role: 端到端 | Task: Playwright 用例 | Restrictions: 结束时把改过的密码改回去，别影响别的用例 | Success: 全部 e2e 过_
 
-- [-] 8. 文档和 8091
+- [x] 8. 文档和 8091
   - File: README.md（“登录和用户”改写；“运维”加两个配置项）；README.en.md（一句）；.spec-workflow/steering/tech.md（结果）；.spec-workflow/BACKLOG.md（第 0 节这项完成；第 4 节两条缺口标完成；第 5 节删“登录会话不持久化、没有用户管理界面”）
   - 8091：Yi 是管理员；加一个测试用户 `demo`、改密码、停用、再启用；页面上截一张“用户”页
   - _Requirements: 6.1, 6.2_
