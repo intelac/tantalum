@@ -175,9 +175,12 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
     }
 
-    /** 环的容量。约束见 design 的“容量”一节，不满足时启动失败。 */
+    /**
+     * 环的容量。约束见 design 的“容量”一节，不满足时启动失败。{@code maxUserPermits} 是每个用户在途事件的上限（ops-hardening-2 D4），
+     * 没写（0）就是 {@code inputRingSize / 4}；不能小于 {@code maxUserInFlight}，不能大于 {@code inputRingSize}。
+     */
     public record Loop(int maxActiveRuns, int maxParallelTools, int maxUserInFlight, int maxExternalInFlight,
-                       int inputRingSize, int outputRingSize) {
+                       int inputRingSize, int outputRingSize, int maxUserPermits) {
 
         public Loop {
             requirePositive("maxActiveRuns", maxActiveRuns);
@@ -194,10 +197,17 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             if (inputRingSize < input) {
                 throw new IllegalArgumentException("inputRingSize " + inputRingSize + " must be at least " + input);
             }
+            if (maxUserPermits == 0) {
+                maxUserPermits = inputRingSize / 4;
+            }
+            if (maxUserPermits < maxUserInFlight || maxUserPermits > inputRingSize) {
+                throw new IllegalArgumentException("tantalum.loop.max-user-permits=" + maxUserPermits + " must be between "
+                        + "tantalum.loop.max-user-in-flight (" + maxUserInFlight + ") and tantalum.loop.input-ring-size (" + inputRingSize + ")");
+            }
         }
 
         public static Loop defaults() {
-            return new Loop(64, 10, 8, 256, 1024, 1024);
+            return new Loop(64, 10, 8, 256, 1024, 1024, 0);
         }
 
         /** 留给活跃运行结果的 Input Ring 容量。 */

@@ -5,6 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
@@ -42,11 +47,39 @@ class ResidencyTest {
     void aFailedSessionStaysFailedAndCannotBeEvicted() {
         Residency residency = new Residency();
         residency.pin(S);
-        residency.fail(S, "corrupt");
+        assertTrue(residency.fail(S, "corrupt"), "first failure");
         residency.unpin(S);
         assertEquals("corrupt", residency.failure(S));
         assertFalse(residency.evict(S));
         assertEquals(Residency.State.FAILED, residency.pin(S));
+    }
+
+    /** ops-hardening-2 D5：重试时间内拒绝，过了就当 COLD 再载入；再失败不算第一次（日志只记警告）。 */
+    @Test
+    void aFailedSessionIsRetriedAfterTheRetryTime() {
+        long[] now = {0};
+        Clock clock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return this; }
+            @Override public Instant instant() { return Instant.ofEpochMilli(now[0]); }
+        };
+        Residency residency = new Residency(clock, Duration.ofMinutes(1));
+        residency.pin(S);
+        assertTrue(residency.fail(S, "locked"));
+        residency.unpin(S);
+        now[0] = 59_000;
+        assertEquals("locked", residency.failure(S));
+        assertEquals(Residency.State.FAILED, residency.pin(S));
+        residency.unpin(S);
+        now[0] = 60_000;
+        assertNull(residency.failure(S), "the refusal has expired");
+        assertEquals(Residency.State.COLD, residency.pin(S), "the next event loads it again");
+        assertFalse(residency.fail(S, "still locked"), "a repeated failure is not the first");
+        assertEquals("still locked", residency.failure(S));
+        now[0] = 120_000;
+        assertEquals(Residency.State.COLD, residency.pin(S));
+        residency.resident(S);
+        assertNull(residency.failure(S));
     }
 
     @Test

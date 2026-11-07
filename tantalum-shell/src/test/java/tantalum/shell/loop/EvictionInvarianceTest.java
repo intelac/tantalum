@@ -153,11 +153,11 @@ class EvictionInvarianceTest {
             transcript = new Transcript();
             Projections projections = new Projections(transcript, trace);
             Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, projections, Clock.systemUTC())
-                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO), residency, projections, Clock.systemUTC());
+                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO, null), residency, projections, Clock.systemUTC());
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
-            dispatcher = new LaneDispatcher(64, new TailSequence(paths, 1), files::append, ring::tryPublish,
+            dispatcher = new LaneDispatcher(64, 64, new TailSequence(paths, 1), files::append, ring::tryPublish,
                     LoopFixtures.loader((principal, session, beforeSeq) -> load(replay, principal, session, beforeSeq)), residency);
             FactListener facts = new FactListener() {
                 @Override
@@ -180,7 +180,7 @@ class EvictionInvarianceTest {
                 pending.add(command);
                 return true;
             }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor,
-                    dispatcher, envelope -> dispatcher.released());
+                    dispatcher, envelope -> dispatcher.released(envelope));
             input.connect(dispatcher);
             ring.connect(cleanroom);
             ring.start();

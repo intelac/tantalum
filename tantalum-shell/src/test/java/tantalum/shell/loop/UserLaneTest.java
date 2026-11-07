@@ -4,13 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import tantalum.shell.journal.Line;
@@ -46,7 +52,7 @@ class UserLaneTest {
             failures.add(failure);
             halted = true;
         }
-        @Override public void discarded(int count) { discarded.addAndGet(count); }
+        @Override public void discarded(List<EventEnvelope> events) { discarded.addAndGet(events.size()); }
 
         void await(int count) throws InterruptedException {
             for (int i = 0; i < 1000 && published.size() + discarded.get() < count; i++) {
@@ -295,5 +301,53 @@ class UserLaneTest {
         assertEquals(List.of(11L, 12L), written, "the steer event is published, not written");
         assertEquals(List.of("steer"), exit.published.stream().map(UserLaneTest::request).toList());
         assertEquals(List.of("released 10", "done 10", "released 11", "done 11", "released 12", "done 12"), log);
+    }
+
+    /** ops-hardening-2 需求 5.2：第一次载入失败后拒绝；过了重试时间，下一个事件重新载入，成功就正常。 */
+    @Test
+    void aFailedLoadIsRetriedAfterTheRetryTime() throws Exception {
+        long[] now = {0};
+        Clock clock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return this; }
+            @Override public Instant instant() { return Instant.ofEpochMilli(now[0]); }
+        };
+        AtomicInteger loads = new AtomicInteger();
+        UserLane.Loader loader = LoopFixtures.loader((principal, session, beforeSeq) -> {
+            if (loads.incrementAndGet() == 1) {
+                throw new IllegalStateException("index locked");
+            }
+            return Optional.empty();
+        });
+        List<String> seen = new CopyOnWriteArrayList<>();
+        UserLane.Exit capturing = new UserLane.Exit() {
+            @Override public boolean halted() { return false; }
+            @Override public boolean publish(EventEnvelope envelope, PrincipalState usage, CleanroomRing.Load load) {
+                seen.add(load == null ? "loaded" : ((CleanroomRing.Failed) load).reason());
+                return true;
+            }
+            @Override public void failed(Throwable failure) { throw new AssertionError(failure); }
+            @Override public void discarded(List<EventEnvelope> events) { throw new AssertionError("discarded " + events.size()); }
+        };
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, capturing, loader, new Residency(clock, Duration.ofMinutes(1)));
+        lane.offer(event("x", "r1"));
+        awaitSize(seen, 1);
+        now[0] = 30_000;
+        lane.offer(event("x", "r2"));
+        awaitSize(seen, 2);
+        assertEquals(List.of("java.lang.IllegalStateException: index locked", "java.lang.IllegalStateException: index locked"), seen);
+        assertEquals(1, loads.get(), "within the retry time nothing is loaded again");
+        now[0] = 60_000;
+        lane.offer(event("x", "r3"));
+        awaitSize(seen, 3);
+        assertEquals("loaded", seen.get(2));
+        assertEquals(2, loads.get());
+    }
+
+    private static void awaitSize(List<?> list, int size) throws InterruptedException {
+        for (int i = 0; i < 1000 && list.size() < size; i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(size, list.size());
     }
 }

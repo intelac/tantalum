@@ -9,6 +9,16 @@ export type Language = "zh" | "en" | "ja";
 export interface User {
   username: string;
   language?: Language | null;
+  /** 管理员才有设置页的“用户”一页（ops-hardening-2 需求 2.3）。 */
+  admin?: boolean;
+}
+
+/** 用户管理接口里的一个账号。 */
+export interface Account {
+  name: string;
+  admin: boolean;
+  disabled: boolean;
+  createdAt: string;
 }
 
 /** 插件作者写给人看的文字（I10）：一个字符串照原样显示，带语言的按用户的语言选，没有就用英文。 */

@@ -1,13 +1,14 @@
 import { LogOut } from "lucide-react";
 import { useText } from "../text";
 import { Button } from "../ui/Button";
+import { PasswordForm } from "./PasswordForm";
 
 interface Props {
   username: string;
   onLogout: () => void;
 }
 
-/** 当前用户和退出登录。退出后服务端会话立即失效，SSE 断开。 */
+/** 当前用户、修改密码和退出登录。退出后这次登录立即失效，SSE 断开。 */
 export function AccountPane({ username, onLogout }: Props) {
   const t = useText();
   return (
@@ -17,6 +18,7 @@ export function AccountPane({ username, onLogout }: Props) {
         <dt className="text-fg-muted">{t.settings.loggedInAs}</dt>
         <dd className="font-mono text-fg">{username}</dd>
       </dl>
+      <PasswordForm />
       <div>
         <Button variant="danger" onClick={onLogout}>
           <LogOut size={16} />

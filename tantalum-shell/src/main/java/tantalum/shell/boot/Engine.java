@@ -203,7 +203,7 @@ public final class Engine implements AutoCloseable {
             Kernel kernel = KernelFactory.kernel(properties, catalog.safety(), hooks);
             unfinished = storage.catchUp();
 
-            Residency residency = new Residency();
+            Residency residency = new Residency(clock, properties.residency().loadRetry());
             Transcript transcript = new Transcript();
             Projections projections = new Projections(transcript, new Trace());
             view = new StateView();
@@ -214,7 +214,7 @@ public final class Engine implements AutoCloseable {
                     turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)));
 
             cleanroomRing = new CleanroomRing(loop.inputRingSize());
-            lanes = new LaneDispatcher(loop.inputRingSize(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
+            lanes = new LaneDispatcher(loop.inputRingSize(), loop.maxUserPermits(), new TailSequence(storage.paths, Integer.getInteger(SEQUENCE_STEP, 1)),
                     storage.files::append, cleanroomRing::tryPublish, storage.loader(), residency);
             inFlight = new InFlightCommands();
             input = new InputRing(loop.inputRingSize());
@@ -297,7 +297,7 @@ public final class Engine implements AutoCloseable {
     private void processed(EventEnvelope envelope) {
         receipts.processed(envelope);
         intake.processed(envelope);
-        lanes.released();
+        lanes.released(envelope);
     }
 
     /** 提问、排队、插话、手动压缩和取消。 */
