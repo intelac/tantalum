@@ -45,10 +45,12 @@ public final class SubmitSteps {
             startRun(out, owner, message, model);
         } else {
             SessionState session = out.session(context.run().ref());
+            // 每条排队的提问各自带自己的选择（review-fixes 需求 5.5）
             List<Message> queued = new ArrayList<>(session.followUps());
             queued.add(message);
-            SessionState next = session.withFollowUps(queued);
-            out.put(model == null ? next : next.withFollowUpModel(model));
+            List<ModelChoice> models = new ArrayList<>(session.followUpModels());
+            models.add(model);
+            out.put(session.withFollowUps(queued, models));
         }
         return out.decision();
     }

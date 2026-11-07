@@ -89,8 +89,9 @@ public final class RunEnd {
         out.put(session);
         if (!session.followUps().isEmpty()) {
             Message next = session.followUps().getFirst();
-            ModelChoice requested = session.followUpModel();
-            out.put(session.withFollowUps(session.followUps().subList(1, session.followUps().size())).withFollowUpModel(null));
+            ModelChoice requested = session.followUpModels().getFirst();
+            int size = session.followUps().size();
+            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)));
             SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next, requested);
         }
     }

@@ -64,7 +64,7 @@ class HookPatchesTest {
         assertEquals(List.of(Message.user("hi"), system(new HookTextBlock("a", "one"), new HookTextBlock("b", "two!"))),
                 applied.session().messages());
         assertEquals("system", applied.session().context().system());
-        assertEquals(new HookState("onetwo!", List.of(), List.of()), hooks(applied.session()));
+        assertEquals(new HookState(List.of(new HookTextBlock("a", "one"), new HookTextBlock("b", "two!")), List.of(), List.of()), hooks(applied.session()));
         assertEquals(List.of(), applied.facts());
     }
 
@@ -83,7 +83,7 @@ class HookPatchesTest {
         assertEquals(List.of(Message.user("hi"), system(new HookTextBlock("q", "80%")),
                 new Message(Role.ASSISTANT, List.of(new TextBlock("ok")), false), Message.user("more"),
                 system(new HookTextBlock("q", "40%"))), twice.messages());
-        assertEquals("40%", hooks(twice).text());
+        assertEquals(List.of(new HookTextBlock("q", "40%")), hooks(twice).texts());
     }
 
     /** 需求 1.3：说明变空（插件被关掉）不追加任何东西，但记下现在是空，之后再出现同样的文字要重发。 */
@@ -92,7 +92,7 @@ class HookPatchesTest {
         SessionState once = HookPatches.apply(session(), List.of(patch("q", 3)), new PromptPatch("80%", List.of()), RUN).session();
         SessionState gone = HookPatches.apply(once, List.of(), PromptPatch.NONE, RUN).session();
         assertEquals(once.messages(), gone.messages());
-        assertEquals("", hooks(gone).text());
+        assertEquals(List.of(), hooks(gone).texts());
         SessionState back = HookPatches.apply(gone, List.of(patch("q", 3)), new PromptPatch("80%", List.of()), RUN).session();
         assertEquals(once.messages().size() + 1, back.messages().size());
     }
@@ -112,7 +112,7 @@ class HookPatchesTest {
         HookPatches.Applied applied = HookPatches.apply(session(), List.of(patch("tools", 0, CITE)),
                 new PromptPatch("", List.of(CITE)), RUN);
         assertEquals(system(new ToolChangeBlock(List.of("cite"), List.of())), applied.session().messages().getLast());
-        assertEquals(new HookState("", List.of(new HookTool("tools", CITE)), List.of("cite")), hooks(applied.session()));
+        assertEquals(new HookState(List.of(), List.of(new HookTool("tools", CITE)), List.of("cite")), hooks(applied.session()));
     }
 
     /** 需求 2.2：同名工具再出现沿用第一次的定义。 */
@@ -165,12 +165,21 @@ class HookPatchesTest {
         HookPatches.Applied applied = HookPatches.apply(session(), List.of(patch("tools", 0, GREP, CITE)),
                 new PromptPatch("", List.of(GREP, CITE)), RUN);
         assertEquals(system(new ToolChangeBlock(List.of("cite"), List.of())), applied.session().messages().getLast());
-        assertEquals(new HookState("", List.of(new HookTool("tools", CITE)), List.of("cite")), hooks(applied.session()));
+        assertEquals(new HookState(List.of(), List.of(new HookTool("tools", CITE)), List.of("cite")), hooks(applied.session()));
     }
 
     @Test
     void withoutAFrozenContextNothingHappens() {
         SessionState bare = SessionState.start(SESSION, USER).append(Message.user("hi"));
         assertSame(bare, HookPatches.apply(bare, List.of(patch("a", 5)), new PromptPatch("brief", List.of()), RUN).session());
+    }
+
+    /** review-fixes 需求 7.1：只有一个钩子的说明变了时，只重发它那一块。 */
+    @Test
+    void onlyTheChangedHooksTextIsSentAgain() {
+        SessionState once = HookPatches.apply(session(), List.of(patch("a", 3), patch("b", 4)), new PromptPatch("onetwo!", List.of()), RUN).session();
+        SessionState again = HookPatches.apply(once, List.of(patch("a", 3), patch("b", 5)), new PromptPatch("onethree", List.of()), RUN).session();
+        assertEquals(system(new HookTextBlock("b", "three")), again.messages().getLast());
+        assertEquals(List.of(new HookTextBlock("a", "one"), new HookTextBlock("b", "three")), hooks(again).texts());
     }
 }

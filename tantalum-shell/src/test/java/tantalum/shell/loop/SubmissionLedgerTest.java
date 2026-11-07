@@ -1,5 +1,7 @@
 package tantalum.shell.loop;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -93,5 +95,27 @@ class SubmissionLedgerTest {
         ledger.claim(ALICE, new RequestId("c"));
         ledger.claim(ALICE, new RequestId("b"));
         assertEquals(4, asked.size(), "b was the least recently used and fell out");
+    }
+
+    /** review-fixes 需求 1.1：{@code onNew} 在认领对别人可见之前运行；它抛异常则没有认领。 */
+    @Test
+    void onNewRunsBeforeTheClaimIsVisibleAndAThrowingOnNewLeavesNoClaim() {
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> Optional.empty(), SubmissionLedger.DEFAULT_CAPACITY);
+        List<SubmissionId> seen = new ArrayList<>();
+        SubmissionLedger.Claim first = ledger.claim(ALICE, REQUEST, seen::add);
+        assertEquals(List.of(first.submission()), seen);
+        assertThrows(IllegalStateException.class, () -> ledger.claim(ALICE, new RequestId("r2"), ignored -> {
+            throw new IllegalStateException("no receipt");
+        }));
+        assertTrue(ledger.claim(ALICE, new RequestId("r2")).isNew(), "the failed claim was never recorded");
+    }
+
+    /** 需求 1.4：索引查不了时抛出，不当作新提交。 */
+    @Test
+    void anIndexFailurePropagates() {
+        SubmissionLedger ledger = new SubmissionLedger((principal, request) -> {
+            throw new java.io.UncheckedIOException(new java.io.IOException("locked"));
+        }, SubmissionLedger.DEFAULT_CAPACITY);
+        assertThrows(java.io.UncheckedIOException.class, () -> ledger.claim(ALICE, REQUEST));
     }
 }

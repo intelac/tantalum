@@ -38,7 +38,7 @@ class PromptProjectionTest {
     void hookToolsFollowTheBaseAndStayDeferred() {
         ToolSpec extra = new ToolSpec("extra", "d", new Json.Null());
         SessionState session = session();
-        session = session.withContext(session.context().withHooks(new SessionContext.HookState("be brief",
+        session = session.withContext(session.context().withHooks(new SessionContext.HookState(List.of(new tantalum.value.model.HookTextBlock("style", "be brief")),
                 List.of(new SessionContext.HookState.HookTool("style", extra)), List.of("extra"))));
         Prompt prompt = PromptProjection.project(session);
         assertEquals("system", prompt.system());

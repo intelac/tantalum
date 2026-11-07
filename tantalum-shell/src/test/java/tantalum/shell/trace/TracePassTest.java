@@ -334,7 +334,8 @@ class TracePassTest {
 
         HookDecision error = fx.records(HookDecision.class).getFirst();
         assertEquals(HookDecision.Result.ERROR, error.result());
-        assertTrue(error.reason().contains("boom"), error.reason());
+        // review-fixes 需求 6.1：事实里只有异常类名，消息不进 journal
+        assertTrue(error.reason().contains("IllegalStateException") && !error.reason().contains("boom"), error.reason());
         assertNull(error.point(), "a skipped failure has no point in the fact");
         assertEquals(1, error.head().step());
     }

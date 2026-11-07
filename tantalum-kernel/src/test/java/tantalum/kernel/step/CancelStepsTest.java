@@ -118,4 +118,14 @@ class CancelStepsTest {
         assertInstanceOf(AbortCommands.class, loop.last.commands().get(0));
         assertInstanceOf(AssembleContext.class, loop.last.commands().get(1));
     }
+
+    /** review-fixes 需求 5.2：丢掉的不是运行正在等的命令时，运行不变。 */
+    @Test
+    void droppedCommandOfAnotherPhaseChangesNothing() {
+        LoopFixture loop = new LoopFixture();
+        loop.prompt("hi");
+        RunId run = loop.runId();
+        loop.feed(run, new tantalum.value.event.CommandDropped(new tantalum.value.id.CommandId("s_9-9"), "output ring full"));
+        assertEquals("AwaitingContext", loop.phase());
+    }
 }

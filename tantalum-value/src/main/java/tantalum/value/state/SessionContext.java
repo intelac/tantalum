@@ -2,6 +2,7 @@ package tantalum.value.state;
 
 import java.util.List;
 import java.util.Objects;
+import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ToolSpec;
 
 /**
@@ -16,13 +17,13 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
                              List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks) {
 
     /**
-     * 钩子补丁的状态。{@code text} 是上次发给模型的合并说明（各钩子按注册顺序连起来），用来判断变没变；
+     * 钩子补丁的状态。{@code texts} 是上次发给模型的每个钩子的说明（按注册顺序），按钩子比较变没变（review-fixes 需求 7.1）；
      * {@code tools} 是钩子加过的所有工具定义，按第一次出现的顺序只增不减，发请求时接在全集后面、永远 deferred；
      * {@code active} 是现在由钩子开着的工具名，用来算 {@code tool_addition}/{@code tool_removal}。
      */
-    public record HookState(String text, List<HookTool> tools, List<String> active) {
+    public record HookState(List<HookTextBlock> texts, List<HookTool> tools, List<String> active) {
 
-        public static final HookState NONE = new HookState("", List.of(), List.of());
+        public static final HookState NONE = new HookState(List.of(), List.of(), List.of());
 
         /** 钩子加的一个工具：定义冻结（同名再出现沿用第一次的），谁加的记下来给轨迹页。 */
         public record HookTool(String hook, ToolSpec tool) {
@@ -33,7 +34,7 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
         }
 
         public HookState {
-            Objects.requireNonNull(text, "text");
+            texts = List.copyOf(texts);
             tools = List.copyOf(tools);
             active = List.copyOf(active);
         }

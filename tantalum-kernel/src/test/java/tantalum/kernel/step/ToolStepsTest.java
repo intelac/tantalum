@@ -176,4 +176,19 @@ class ToolStepsTest {
         assertEquals(loop.last.commands(), last.commands());
         assertEquals(loop.state, state);
     }
+
+    /** review-fixes 需求 5.3：重复或迟到的结果不覆盖已有的。 */
+    @Test
+    void aDuplicateResultDoesNotOverwriteTheFirst() {
+        LoopFixture loop = new LoopFixture();
+        reply(loop, call("a", "safe1"), call("b", "safe2"));
+        List<Command> sent = loop.last.commands();
+        loop.feed(loop.runId(), finished(sent.get(0), "first", false));
+        loop.feed(loop.runId(), finished(sent.get(0), "duplicate", true));
+        assertEquals("AwaitingTools", loop.phase());
+        loop.feed(loop.runId(), finished(sent.get(1), "second", false));
+        CallModel model = assertInstanceOf(CallModel.class, loop.onlyCommand());
+        assertEquals(List.of(new ToolResultBlock("a", "first", false, null), new ToolResultBlock("b", "second", false, null)),
+                model.prompt().messages().getLast().content());
+    }
 }

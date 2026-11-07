@@ -49,9 +49,13 @@ public final class HookPatches {
         HookState state = context.hookState();
         List<ContentBlock> blocks = new ArrayList<>();
 
-        String text = patch.systemAppend();
-        if (!text.equals(state.text()) && !text.isEmpty()) {
-            blocks.addAll(split(text, facts));
+        // 按钩子比较：只有说明变了的钩子重发自己那一块；一个钩子的说明变空不发（review-fixes 需求 7.1）
+        List<HookTextBlock> now = patch.systemAppend().isEmpty() ? List.of() : split(patch.systemAppend(), facts);
+        for (HookTextBlock piece : now) {
+            boolean same = state.texts().stream().anyMatch(old -> old.hook().equals(piece.hook()) && old.text().equals(piece.text()));
+            if (!same) {
+                blocks.add(piece);
+            }
         }
 
         // 和服务器上已有的工具重名的不算：那些工具在全集里，开不开由插件页决定，钩子加不了也撤不了
@@ -71,7 +75,7 @@ public final class HookPatches {
             blocks.add(new ToolChangeBlock(added, removed));
         }
 
-        HookState next = new HookState(text, tools, desired);
+        HookState next = new HookState(now, tools, desired);
         if (blocks.isEmpty()) {
             return new Applied(next.equals(state) ? session : session.withContext(context.withHooks(next)), List.of());
         }

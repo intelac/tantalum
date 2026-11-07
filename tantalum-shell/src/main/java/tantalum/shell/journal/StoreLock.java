@@ -27,12 +27,16 @@ public final class StoreLock implements AutoCloseable {
         Path file = dir.resolve("store.lock");
         FileChannel channel = FileChannel.open(file, Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE),
                 PrivateFiles.fileAttributes(file));
-        PrivateFiles.restrict(file);
         FileLock lock;
         try {
+            PrivateFiles.restrict(file);
             lock = channel.tryLock();
         } catch (OverlappingFileLockException held) {
             lock = null;
+        } catch (IOException | RuntimeException failure) {
+            // 加锁前的任何失败都不能漏掉通道（review-fixes 需求 3.5）
+            channel.close();
+            throw failure;
         }
         if (lock == null) {
             channel.close();

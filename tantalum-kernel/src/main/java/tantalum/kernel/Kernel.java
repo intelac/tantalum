@@ -1,5 +1,11 @@
 package tantalum.kernel;
 
+import java.util.List;
+
+import tantalum.value.id.RunRef;
+
+import tantalum.value.decision.StepFailed;
+
 import java.util.Optional;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.RunEnd;
@@ -48,7 +54,9 @@ public final class Kernel {
             return step.get().apply(context);
         } catch (RuntimeException failure) {
             if (run == null) {
-                return Decision.unchanged(state);
+                // 没有运行可以结束：留一条事实，不无痕返回（review-fixes 需求 5.1）
+                RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+                return new Decision(state, List.of(), List.of(new StepFailed(where, envelope.event().type(), failure.getClass().getSimpleName())));
             }
             return RunEnd.fail(context, failure);
         }

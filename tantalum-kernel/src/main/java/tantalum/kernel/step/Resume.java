@@ -50,7 +50,8 @@ final class Resume {
             return false;
         }
         out.append(run.ref(), Message.user(work.continueText()));
-        ModelSteps.callModel(out, run, null);
+        // 钩子要看到是哪个工作的续写（review-fixes 需求 5.7）
+        ModelSteps.callModel(out, run, work);
         return true;
     }
 }

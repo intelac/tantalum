@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
@@ -192,31 +193,54 @@ public final class Intake {
         }
     }
 
+    /**
+     * 回执和认领在同一个临界区里登记（review-fixes 需求 1.1），所以重复提交要么看不到认领、要么拿到的是同一张还在途的回执；
+     * 原提交被拒、没进环或中途抛异常时回执以失败完成，名额、新运行计数和认领全部退回（需求 1.2、1.5）。
+     */
     private Submission publish(Principal principal, SessionId session, RequestId request, boolean needsNewRun,
                                Function<SubmissionId, Event> event) {
-        SubmissionLedger.Claim claim = ledger.claim(principal, request);
+        SubmissionLedger.Claim claim;
+        try {
+            claim = ledger.claim(principal, request, receipts::expect);
+        } catch (UncheckedIOException indexUnavailable) {
+            return Submission.rejected(503);
+        }
         if (!claim.isNew()) {
             if (gate.halted()) {
                 return Submission.rejected(503);
             }
             return new Submission(200, claim.submission(), true, receipts.of(claim.submission()));
         }
-        ExternalGate.Verdict verdict = gate.admit(principal, needsNewRun);
-        if (verdict != ExternalGate.Verdict.ADMITTED) {
-            ledger.release(principal, request);
-            return Submission.rejected(status(verdict));
+        CompletableFuture<Void> saved = receipts.of(claim.submission());
+        boolean admitted = false;
+        try {
+            ExternalGate.Verdict verdict = gate.admit(principal, needsNewRun);
+            if (verdict != ExternalGate.Verdict.ADMITTED) {
+                abandon(principal, request, claim.submission(), false);
+                return Submission.rejected(status(verdict));
+            }
+            admitted = true;
+            if (needsNewRun) {
+                newRuns.add(claim.submission());
+            }
+            if (!input.tryPublish(envelope(principal, session, null, event.apply(claim.submission())))) {
+                abandon(principal, request, claim.submission(), true);
+                return Submission.rejected(429);
+            }
+            return new Submission(200, claim.submission(), false, saved);
+        } catch (RuntimeException failure) {
+            abandon(principal, request, claim.submission(), admitted);
+            throw failure;
         }
-        if (needsNewRun) {
-            newRuns.add(claim.submission());
+    }
+
+    /** 提交没能进入管线：回执失败、名额和认领退回。 */
+    private void abandon(Principal principal, RequestId request, SubmissionId submission, boolean admitted) {
+        receipts.fail(submission);
+        if (admitted) {
+            release(principal, submission);
         }
-        CompletableFuture<Void> saved = receipts.expect(claim.submission());
-        if (!input.tryPublish(envelope(principal, session, null, event.apply(claim.submission())))) {
-            receipts.forget(claim.submission());
-            release(principal, claim.submission());
-            ledger.release(principal, request);
-            return Submission.rejected(429);
-        }
-        return new Submission(200, claim.submission(), false, saved);
+        ledger.release(principal, request);
     }
 
     private void release(Principal principal, SubmissionId submission) {

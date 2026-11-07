@@ -174,7 +174,7 @@ class ModelChoiceStepsTest {
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
         loop.feed(null, new FollowUpSubmitted(new SubmissionId("f1"), new RequestId("rf1"), "next", List.of(), QWEN));
-        assertEquals(QWEN, loop.session().followUpModel());
+        assertEquals(List.of(QWEN), loop.session().followUpModels());
         loop.feed(loop.runId(), new ToolFinished(tool, "t1", block("r1"), false, null));
         assertEquals(SONNET, call(loop).prompt().model(), "the running run is not affected");
 
@@ -182,7 +182,29 @@ class ModelChoiceStepsTest {
         AssembleContext assemble = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
         assertEquals(QWEN, assemble.requested());
         assertEquals(SONNET, assemble.current());
-        assertNull(loop.session().followUpModel(), "handed to the run that took it");
+        assertTrue(loop.session().followUpModels().isEmpty(), "handed to the run that took it");
+    }
+
+    /** review-fixes 需求 5.5：排队两条、各带各的选择（或不带），开始时各用各的。 */
+    @Test
+    void eachQueuedFollowUpStartsWithItsOwnChoice() {
+        LoopFixture loop = new LoopFixture();
+        loop.feed(null, prompt(loop, "q1", SONNET));
+        assembled(loop, SONNET, BIG);
+        loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
+        var tool = loop.onlyCommandId();
+        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f1"), new RequestId("rf1"), "a", List.of(), null));
+        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f2"), new RequestId("rf2"), "b", List.of(), QWEN));
+        assertEquals(java.util.Arrays.asList(null, QWEN), loop.session().followUpModels());
+        loop.feed(loop.runId(), new ToolFinished(tool, "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a1", 100));
+        AssembleContext first = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
+        assertNull(first.requested(), "the first queued prompt carried no choice");
+        assertEquals(List.of(QWEN), loop.session().followUpModels());
+        assembled(loop, SONNET, BIG);
+        loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a2", 100));
+        AssembleContext second = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
+        assertEquals(QWEN, second.requested());
     }
 
     /** 手动压缩不组装上下文，摘要用会话现在的模型。 */

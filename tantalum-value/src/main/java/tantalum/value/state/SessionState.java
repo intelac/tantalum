@@ -26,17 +26,23 @@ import tantalum.value.model.ToolSpec;
  * {@code notes} 是插件工作记在会话里的东西，按工作类型分，每份是一个对象（{@link tantalum.value.event.WorkDone#note()} 按字段并进来），
  * 只来自事件，钩子读它就和读历史一样是纯的；压缩不清空。例如工具审批的“这个会话里一直允许”。
  * {@code model} 是会话现在的模型选择（model-picker M6），每次提问组装上下文时换成这次用的，压缩不清空；本 spec 之前的会话为 null。
- * {@code followUpModel} 是排队提交带的选择，排队的提问开始运行时交给它，之后清掉（M6）。 */
+ * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它（M6；review-fixes 需求 5.5）。 */
 public record SessionState(SessionId id, Principal principal, List<Message> messages,
                            RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
                            Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
-                           Map<String, Json.Obj> notes, ModelChoice model, ModelChoice followUpModel) {
+                           Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels) {
 
     public SessionState {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(principal, "principal");
         messages = List.copyOf(messages);
         followUps = List.copyOf(followUps);
+        // 元素可为 null（没带选择），所以不用 List.copyOf；没给时按“都没带”
+        followUpModels = followUpModels == null ? Collections.nCopies(followUps.size(), null)
+                : Collections.unmodifiableList(new ArrayList<>(followUpModels));
+        if (followUpModels.size() != followUps.size()) {
+            throw new IllegalArgumentException("followUpModels has " + followUpModels.size() + " entries for " + followUps.size() + " follow-ups");
+        }
         omittedImages = omittedImages == null ? List.of() : List.copyOf(omittedImages);
         toolsSeen = toolsSeen == null ? List.of() : List.copyOf(toolsSeen);
         notes = notes == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(notes));
@@ -62,53 +68,54 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
     public SessionState append(Message message) {
         List<Message> updated = new ArrayList<>(messages);
         updated.add(message);
-        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     /** 运行开始：同时记为 {@code lastRun}。 */
     public SessionState startRun(RunId run) {
         Objects.requireNonNull(run, "run");
-        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     /** 运行结束：只清 {@code activeRun}，{@code lastRun} 留着判断迟到的结果。 */
     public SessionState endRun() {
-        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
+    /** 换排队的提问，都不带模型选择（测试）。 */
     public SessionState withFollowUps(List<Message> newFollowUps) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return withFollowUps(newFollowUps, null);
+    }
+
+    /** 换排队的提问和它们各自的选择，两者等长。 */
+    public SessionState withFollowUps(List<Message> newFollowUps, List<ModelChoice> newFollowUpModels) {
+        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels);
     }
 
     public SessionState withContext(SessionContext newContext) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     /** 压缩成功：换替换段，锚点作废。 */
     public SessionState compacted(Compaction newCompaction) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     public SessionState withAnchor(UsageAnchor newAnchor) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     public SessionState withOmittedImages(List<String> newOmittedImages) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels);
     }
 
     public SessionState withToolsSeen(List<String> newToolsSeen) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels);
     }
 
     /** 换会话的模型选择（model-picker M6、M10）。 */
     public SessionState withModel(ModelChoice newModel) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModel);
-    }
-
-    /** 排队提交带的选择；null 表示清掉。 */
-    public SessionState withFollowUpModel(ModelChoice newFollowUpModel) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels);
     }
 
     /** 这个工作类型记在会话里的东西，没有时是空对象。 */
@@ -133,7 +140,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         } else {
             updated.put(workType, new Json.Obj(Collections.unmodifiableMap(new LinkedHashMap<>(merged))));
         }
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModel);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels);
     }
 
     /**

@@ -1,5 +1,7 @@
 package tantalum.shell.loop;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -335,7 +337,7 @@ class UserLaneTest {
         now[0] = 30_000;
         lane.offer(event("x", "r2"));
         awaitSize(seen, 2);
-        assertEquals(List.of("java.lang.IllegalStateException: index locked", "java.lang.IllegalStateException: index locked"), seen);
+        assertEquals(List.of("cannot load session: IllegalStateException", "cannot load session: IllegalStateException"), seen);
         assertEquals(1, loads.get(), "within the retry time nothing is loaded again");
         now[0] = 60_000;
         lane.offer(event("x", "r3"));
@@ -349,5 +351,45 @@ class UserLaneTest {
             Thread.sleep(5);
         }
         assertEquals(size, list.size());
+    }
+
+    /** review-fixes 需求 2.4：publish 抛异常和返回 false 一样——停机、剩下的解钉并丢弃。 */
+    @Test
+    void throwingPublishHaltsAndReleasesTheRest() throws Exception {
+        Residency residency = new Residency();
+        UserLane.Exit throwing = new UserLane.Exit() {
+            @Override public boolean halted() { return exit.halted; }
+            @Override public boolean publish(EventEnvelope envelope, PrincipalState usage, CleanroomRing.Load load) {
+                throw new IllegalStateException("ring exploded");
+            }
+            @Override public void failed(Throwable failure) { exit.failed(failure); }
+            @Override public void discarded(List<EventEnvelope> events) { exit.discarded(events); }
+        };
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, throwing, LoopFixtures.NO_LOADER, residency);
+        lane.offer(event("a", "r0"));
+        lane.offer(event("a", "r1"));
+        exit.await(2);
+        assertTrue(exit.halted);
+        assertEquals("ring exploded", exit.failures.getFirst().getMessage());
+        assertEquals(0, residency.pins(new SessionId("a")), "every event of the batch was unpinned");
+    }
+
+    /** 需求 2.3：一步的放行抛 Error 不影响其余已落盘的步骤，done 都跑到。 */
+    @Test
+    void anErrorInOneReleaseDoesNotStopTheOtherSteps() throws Exception {
+        List<String> log = new CopyOnWriteArrayList<>();
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
+        EventEnvelope first = event("a", "r7").withSeq(7);
+        StepRecord record = new StepRecord(7, null, List.of(), List.of(), null, null, List.of(), List.of());
+        lane.offer(new UserLane.Released(first, record, () -> { throw new AssertionError("release 7 blew up"); }, () -> log.add("done 7")));
+        lane.offer(step("a", 8, log));
+        for (int i = 0; i < 1000 && log.size() < 3; i++) {
+            Thread.sleep(5);
+        }
+        assertEquals(List.of("done 7", "released 8", "done 8"), log);
+        assertFalse(exit.halted, "a release failure is logged, not a journal failure");
+        // 通道还活着
+        lane.offer(event("a", "r9"));
+        exit.await(1);
     }
 }

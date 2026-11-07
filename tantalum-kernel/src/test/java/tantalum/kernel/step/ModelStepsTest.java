@@ -331,4 +331,16 @@ class ModelStepsTest {
         assertEquals(List.of(Message.user("hi"), Message.user("also this"), Message.user("next")),
                 call.prompt().messages());
     }
+
+    /** review-fixes 需求 5.4：因输出上限截断、还带着工具调用的回复不执行工具，运行按“截断”结束。 */
+    @Test
+    void aTruncatedReplyWithToolCallsDoesNotRunThem() {
+        LoopFixture loop = new LoopFixture();
+        toModel(loop);
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(LoopFixture.call("t1", "grep")), StopReason.MAX_TOKENS,
+                "m", null, null, null, null));
+        assertTrue(loop.last.commands().stream().noneMatch(tantalum.value.command.RunTool.class::isInstance), "no tool was started");
+        Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
+        assertEquals(ModelSteps.TRUNCATED, ended.detail());
+    }
 }

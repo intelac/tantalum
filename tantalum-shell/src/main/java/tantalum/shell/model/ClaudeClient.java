@@ -1,5 +1,7 @@
 package tantalum.shell.model;
 
+import tantalum.value.text.Failures;
+
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.AnthropicIoException;
@@ -110,7 +112,7 @@ public final class ClaudeClient implements ModelClient {
                     return ModelFailures.timeout(visible.toString());
                 }
                 if (failure instanceof AnthropicIoException) {
-                    return ModelFailures.connection(visible.toString(), failure.toString());
+                    return ModelFailures.connection(visible.toString(), Failures.describe(failure));
                 }
                 throw failure;
             }

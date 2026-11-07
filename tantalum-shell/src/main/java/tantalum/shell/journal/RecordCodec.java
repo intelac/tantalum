@@ -28,6 +28,7 @@ import tantalum.value.decision.ImagesOmitted;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
+import tantalum.value.decision.StepFailed;
 import tantalum.value.decision.SessionChange;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.id.CommandId;
@@ -92,6 +93,7 @@ public final class RecordCodec {
     private static final int MIN_BLOCK_BYTES = 96;
     private static final TypeReference<List<Message>> MESSAGES = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<List<ModelChoice>> MODELS = new TypeReference<>() { };
     private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
@@ -116,7 +118,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = HookReported.class, name = "HookReported"),
         @JsonSubTypes.Type(value = ImagesOmitted.class, name = "ImagesOmitted"),
         @JsonSubTypes.Type(value = QuestionAsked.class, name = "QuestionAsked"),
-        @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled")
+        @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled"),
+        @JsonSubTypes.Type(value = StepFailed.class, name = "StepFailed")
     })
     private interface FactMixin {}
 
@@ -230,7 +233,8 @@ public final class RecordCodec {
         if (!record.facts().isEmpty()) {
             ArrayNode facts = root.putArray("facts");
             for (Fact fact : record.facts()) {
-                facts.add(fact instanceof UnknownFact unknown ? unknown.raw() : mapper.valueToTree(fact));
+                // 副本：shrink 和 sameRun 会改写树，不能动事实自己的节点（review-fixes 需求 3.2）
+                facts.add(fact instanceof UnknownFact unknown ? unknown.raw().deepCopy() : mapper.valueToTree(fact));
             }
         }
         shrink(root, memo);
@@ -277,7 +281,8 @@ public final class RecordCodec {
             }
             memo.answered(seq);
             return new Decoded(new StepRecord(seq, session, runs, removed, day, usage, commands, facts), fingerprints);
-        } catch (JacksonException | IllegalArgumentException | IllegalStateException failure) {
+        } catch (RuntimeException failure) {
+            // 日期、强转、空值……任何解不开的都算损坏的行，调用方按行号报（需求 3.3）
             throw new IllegalArgumentException("corrupt result line: " + failure.getMessage(), failure);
         }
     }
@@ -340,7 +345,7 @@ public final class RecordCodec {
         changed(node, "toolsSeen", change.toolsSeen());
         changed(node, "notes", change.notes());
         changed(node, "model", change.model());
-        changed(node, "followUpModel", change.followUpModel());
+        changed(node, "followUpModels", change.followUpModels());
         return node;
     }
 
@@ -371,7 +376,7 @@ public final class RecordCodec {
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
-                changed(node, "model", ModelChoice.class), changed(node, "followUpModel", ModelChoice.class));
+                changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

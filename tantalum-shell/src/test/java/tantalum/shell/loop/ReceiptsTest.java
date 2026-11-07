@@ -74,4 +74,25 @@ class ReceiptsTest {
 
         assertTrue(!saved.isDone());
     }
+
+    /** review-fixes 需求 1.2：原提交没进管线时，拿着同一张回执等的重复提交得到失败，不是永远等。 */
+    @Test
+    void failingAReceiptFailsTheDuplicateWaitingOnIt() {
+        CompletableFuture<Void> original = receipts.expect(SUBMISSION);
+        CompletableFuture<Void> duplicate = receipts.of(SUBMISSION);
+        receipts.fail(SUBMISSION);
+        assertTrue(original.isCompletedExceptionally());
+        assertInstanceOf(Receipts.NotSaved.class, assertThrows(ExecutionException.class, duplicate::get).getCause());
+        assertEquals(0, receipts.size());
+    }
+
+    /** 需求 1.3：关机或停机时在途的回执全部失败。 */
+    @Test
+    void failAllFailsEveryPendingReceipt() {
+        CompletableFuture<Void> one = receipts.expect(SUBMISSION);
+        CompletableFuture<Void> two = receipts.expect(new SubmissionId("sub-2"));
+        receipts.failAll();
+        assertTrue(one.isCompletedExceptionally() && two.isCompletedExceptionally());
+        assertEquals(0, receipts.size());
+    }
 }

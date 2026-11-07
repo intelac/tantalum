@@ -113,7 +113,8 @@ class RecordCodecTest {
     void hookStateRoundTripsAndIsAbsentWhenNone() {
         tantalum.value.model.ToolSpec cite = new tantalum.value.model.ToolSpec("cite", "cite sources", new tantalum.value.json.Json.Null());
         tantalum.value.state.SessionContext plain = new tantalum.value.state.SessionContext("sys", List.of(), null, List.of());
-        tantalum.value.state.SessionContext.HookState hooks = new tantalum.value.state.SessionContext.HookState("be brief",
+        tantalum.value.state.SessionContext.HookState hooks = new tantalum.value.state.SessionContext.HookState(
+                List.of(new tantalum.value.model.HookTextBlock("style", "be brief")),
                 List.of(new tantalum.value.state.SessionContext.HookState.HookTool("style", cite)), List.of("cite"));
         SessionChange first = new SessionChange(SESSION, USER, true, List.of(), null, null, null, new SessionChange.Changed<>(plain),
                 null, null, null, null, null);
@@ -125,7 +126,7 @@ class RecordCodecTest {
         assertFalse(one.contains("hooks"), one);
         StepRecord record = new StepRecord(2, second, List.of(), List.of(), null, null, List.of(), List.of());
         String two = codec.encode(record, writer);
-        assertTrue(two.contains("\"hooks\":{\"text\":\"be brief\",\"tools\":[{\"hook\":\"style\",\"tool\":"), two);
+        assertTrue(two.contains("\"hooks\":{\"texts\":[{\"kind\":\"hookText\",\"hook\":\"style\",\"text\":\"be brief\"}],\"tools\":[{\"hook\":\"style\",\"tool\":"), two);
         assertTrue(two.contains("\"kind\":\"hookText\",\"hook\":\"style\",\"text\":\"be brief\""), two);
         RecordMemo reader = RecordMemo.reader();
         codec.decode(one, reader);
@@ -297,5 +298,26 @@ class RecordCodecTest {
 
         assertEquals(1, line.split("\"principal\"", -1).length - 1, line);
         assertEquals(record, codec.decode(line, RecordMemo.reader()).record());
+    }
+
+    /** review-fixes 需求 3.2：编码不改写事实自己的节点，第二次编码看到的还是原文。 */
+    @Test
+    void anUnknownFactIsNotRewrittenByEncoding() {
+        tools.jackson.databind.json.JsonMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        tools.jackson.databind.JsonNode raw = mapper.readTree("{\"type\":\"Weird\",\"note\":\"" + LONG + "\"}");
+        UnknownFact fact = new UnknownFact("Weird", RUN, raw);
+        StepRecord record = new StepRecord(5, null, List.of(), List.of(), null, null, List.of(), List.of(fact));
+        RecordMemo writer = RecordMemo.writer();
+        codec.encode(appending(4, LONG), writer);
+        codec.encode(record, writer);
+        assertEquals(LONG, fact.raw().get("note").asString(), "the fact's own tree still holds the text, not a reference");
+    }
+
+    /** 需求 3.3：解不开的行都是“损坏的行”，不是裸的运行时异常。 */
+    @Test
+    void anyDecodeFailureIsACorruptLine() {
+        IllegalArgumentException corrupt = assertThrows(IllegalArgumentException.class,
+                () -> codec.decode("{\"usageDay\":\"not-a-date\",\"usage\":{\"input\":1,\"output\":1,\"cacheRead\":0,\"cacheWrite\":0}}", RecordMemo.reader()));
+        assertTrue(corrupt.getMessage().startsWith("corrupt result line"), corrupt.getMessage());
     }
 }

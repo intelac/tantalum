@@ -1,5 +1,7 @@
 package tantalum.shell.handler;
 
+import tantalum.value.text.Failures;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -173,8 +175,10 @@ public final class ModelHandler implements Handler {
         };
     }
 
+    /** 事件进 journal 和推送，只记异常类名；完整异常记日志（review-fixes 需求 6.1）。 */
     @Override
     public Event failed(Command command, Exception failure) {
-        return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, "", failure.toString(), null, null, null);
+        LOG.error("model call {} failed outside the client", command.id().value(), failure);
+        return new ModelFailed(command.id(), FailureReason.UNKNOWN, false, null, "", Failures.describe(failure), null, null, null);
     }
 }

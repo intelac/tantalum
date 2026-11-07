@@ -101,7 +101,8 @@ class ToolHandlerTest {
             throw new java.io.IOException("connection refused");
         }), Duration.ofSeconds(5)), "t");
         assertTrue(finished.error());
-        assertTrue(finished.text().contains("connection refused"));
+        // review-fixes 需求 6.1：结果只带异常类名，消息（可能带路径）不进模型上下文和 journal
+        assertEquals("Tool failed: IOException", finished.text());
         assertEquals(1, calls.get());
     }
 

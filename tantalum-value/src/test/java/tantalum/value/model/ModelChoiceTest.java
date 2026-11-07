@@ -60,7 +60,7 @@ class ModelChoiceTest {
     @Test
     void theSessionsChoiceIsPartOfItsRecordedChanges() {
         SessionState before = SessionState.start(SESSION, USER);
-        SessionState after = before.withModel(SONNET).withFollowUpModel(new ModelChoice("local", "qwen", "on"));
+        SessionState after = before.withModel(SONNET).withFollowUps(List.of(Message.user("next")), List.of(new ModelChoice("local", "qwen", "on")));
         SessionChange change = SessionChange.between(before, after);
         assertFalse(change.isEmpty());
         assertEquals(SONNET, change.model().value());

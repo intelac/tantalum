@@ -134,13 +134,20 @@ public final class EventCodec {
         Map<Language, String> byLanguage();
     }
 
-    private static final class OrderedLanguages extends StdConverter<Map<Language, String>, Map<Language, String>> {
+    static final class OrderedLanguages extends StdConverter<Map<Language, String>, Map<Language, String>> {
+        /** 已有的顺序固定：英文、中文、日文；以后加的语言按枚举顺序跟在后面，已有的字节不变，也不会被丢掉（review-fixes 需求 3.6）。 */
+        static final List<Language> FIRST = List.of(Language.EN, Language.ZH, Language.JA);
+
         @Override
         public Map<Language, String> convert(Map<Language, String> texts) {
             Map<Language, String> ordered = new LinkedHashMap<>();
-            // 和 LocalText.wire 一样：英文在前，再中文、日文；不用枚举顺序，免得以后加语言时改变已有的字节
-            for (Language language : List.of(Language.EN, Language.ZH, Language.JA)) {
+            for (Language language : FIRST) {
                 if (texts.containsKey(language)) {
+                    ordered.put(language, texts.get(language));
+                }
+            }
+            for (Language language : Language.values()) {
+                if (!FIRST.contains(language) && texts.containsKey(language)) {
                     ordered.put(language, texts.get(language));
                 }
             }

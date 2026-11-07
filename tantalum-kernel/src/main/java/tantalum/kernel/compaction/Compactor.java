@@ -9,6 +9,7 @@ import tantalum.kernel.compaction.Units.Unit;
 import tantalum.kernel.projection.ContextUpdate;
 import tantalum.kernel.attachment.ImageBudget;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Role;
@@ -180,13 +181,16 @@ public final class Compactor {
         return null;
     }
 
-    /** 用户亲笔的文字消息：全是文字块，不是上下文更新，也不是摘要。插件经 {@code HookMessages} 用同一条规则。 */
+    /**
+     * 用户亲笔的消息：第一块是文字，其余只能是文字或附件（带图片、文件提问也算，review-fixes 需求 5.8），不是上下文更新，也不是摘要。
+     * 插件经 {@code HookMessages} 用同一条规则。
+     */
     public static boolean isUserText(Message message) {
-        if (message.role() != Role.USER || message.content().isEmpty()) {
+        if (message.role() != Role.USER || message.content().isEmpty() || !(message.content().getFirst() instanceof TextBlock)) {
             return false;
         }
         for (ContentBlock block : message.content()) {
-            if (!(block instanceof TextBlock)) {
+            if (!(block instanceof TextBlock) && !(block instanceof AttachmentBlock)) {
                 return false;
             }
         }

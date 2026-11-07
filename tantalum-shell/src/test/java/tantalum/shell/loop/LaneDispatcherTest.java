@@ -162,4 +162,25 @@ class LaneDispatcherTest {
         feed(dispatcher, event("u", 1));
         assertTrue(reached.isEmpty());
     }
+
+    /** review-fixes 需求 2.6：停机后停在用户上限外的事件被丢弃、名额归还，awaitIdle 不再空转到超时。 */
+    @Test
+    void haltDiscardsTheEventsParkedAtTheUserLimit() throws Exception {
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 1, sequence, (p, s, events) -> {
+            throw new IOException("disk full");
+        }, envelope -> reached.add(envelope));
+        feed(dispatcher, event("u", 0));
+        feed(dispatcher, event("u", 1));
+        feed(dispatcher, event("u", 2));
+        awaitReached(1);
+        EventEnvelope processed = reached.getFirst();
+        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+                () -> { }, () -> dispatcher.released(processed));
+        for (int i = 0; i < 1000 && !dispatcher.halted(); i++) {
+            Thread.sleep(5);
+        }
+        assertTrue(dispatcher.halted());
+        assertTrue(dispatcher.awaitIdle(Duration.ofSeconds(2)), "the two parked events were discarded, nothing is pending");
+        assertEquals(1, reached.size(), "the parked events never reached the lane");
+    }
 }

@@ -1,5 +1,7 @@
 package tantalum.kernel.hook;
 
+import tantalum.value.text.Failures;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -51,7 +53,8 @@ public final class HookChain {
             try {
                 result = call(hook, point, state, context);
             } catch (RuntimeException failure) {
-                facts.add(new HookReported(context.run(), hook.name(), failure.toString()));
+                // 只记类名：消息可能带路径或密钥，事实进 journal 和推送（review-fixes 需求 6.1）
+                facts.add(new HookReported(context.run(), hook.name(), Failures.describe(failure)));
                 if (hook.failClosed() || required.contains(hook.plugin()) || point == HookPoint.BEFORE_TOOL_CALL) {
                     return stopped(new Stop("hook failed: " + hook.name()), facts, hook.name(), point, context);
                 }
