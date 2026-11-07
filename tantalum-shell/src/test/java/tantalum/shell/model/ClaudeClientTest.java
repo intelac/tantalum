@@ -342,4 +342,29 @@ class ClaudeClientTest {
         }
         return count;
     }
+
+    /** review-fixes 需求 10.2：不认识的块类型不产生空文字块；孤立的思考分片不当文字。 */
+    @Test
+    void unknownBlocksAndOrphanThinkingDeltasProduceNothing() throws Exception {
+        server.body = START + blockStart(0, "{\"type\":\"server_tool_use\",\"id\":\"srv1\",\"name\":\"web_search\",\"input\":{}}") + blockStop(0)
+                + blockDelta(1, "{\"type\":\"thinking_delta\",\"thinking\":\"stray\"}")
+                + blockStart(2, "{\"type\":\"text\",\"text\":\"\"}")
+                + blockDelta(2, "{\"type\":\"text_delta\",\"text\":\"ok\"}") + blockStop(2)
+                + messageDelta("end_turn", "null") + STOP;
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        assertEquals(List.of(new TextBlock("ok")), reply.content());
+    }
+
+    /** 需求 10.2：没拿到签名的思考块不以空签名发回。 */
+    @Test
+    void aThinkingBlockWithoutASignatureIsDropped() throws Exception {
+        server.body = START + blockStart(0, "{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}")
+                + blockDelta(0, "{\"type\":\"thinking_delta\",\"thinking\":\"hmm\"}") + blockStop(0)
+                + blockStart(1, "{\"type\":\"text\",\"text\":\"\"}")
+                + blockDelta(1, "{\"type\":\"text_delta\",\"text\":\"done\"}") + blockStop(1)
+                + messageDelta("end_turn", "null") + STOP;
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        assertEquals(List.of(new TextBlock("done")), reply.content());
+        assertEquals(List.of("r:hmm", "done"), chunks, "the console still saw the thinking stream");
+    }
 }

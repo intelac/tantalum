@@ -27,6 +27,7 @@ import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
+import tantalum.value.model.FailureReason;
 import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
@@ -51,6 +52,8 @@ public final class OpenAiClient implements ModelClient {
 
     private static final String PROVIDER = "openai";
     private static final int MAX_ERROR_BODY = 4096;
+    /** 错误文字进 journal 的上限。 */
+    static final int MAX_DETAIL = 1024;
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
     /** 工具结果里的图片放进紧接着的用户消息，前面这一句（同 pi）。 */
     private static final String TOOL_IMAGES = "Attached image(s) from tool result:";
@@ -138,11 +141,10 @@ public final class OpenAiClient implements ModelClient {
         if (apiKey != null) {
             request.header("authorization", "Bearer " + apiKey);
         }
-        InputStream[] open = new InputStream[1];
-        try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks, () -> closeQuietly(open))) {
+        try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks)) {
             try {
                 HttpResponse<InputStream> response = http.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-                open[0] = response.body();
+                watchdog.watch(response.body());
                 if (response.statusCode() != 200) {
                     return httpFailure(response);
                 }
@@ -150,7 +152,7 @@ public final class OpenAiClient implements ModelClient {
             } catch (HttpTimeoutException noHeaders) {
                 return ModelFailures.timeout(text.toString());
             } catch (InterruptedException | IOException failure) {
-                closeQuietly(open);
+                watchdog.abandon();
                 if (ModelFailures.isInterrupt(failure)) {
                     return new ModelOutcome.Interrupted(text.toString());
                 }
@@ -160,42 +162,40 @@ public final class OpenAiClient implements ModelClient {
                 return ModelFailures.connection(text.toString(), Failures.describe(failure));
             } catch (JacksonException malformed) {
                 // 畸形分片：流本身坏了，按连接错误重试，已收到的文本保留。
-                closeQuietly(open);
+                watchdog.abandon();
                 return ModelFailures.connection(text.toString(), "malformed stream chunk: " + malformed.getOriginalMessage());
             }
         }
     }
 
-    private static void closeQuietly(InputStream[] open) {
-        if (open[0] != null) {
-            try {
-                open[0].close();
-            } catch (IOException ignored) {
-                // 已经在结束这次调用。
-            }
-        }
-    }
-
-    /** 错误响应体会进日志、SSE 和 journal，只保留开头一段。 */
+    /** 错误响应体会进日志、SSE 和 journal：只保留开头一段，去掉控制字符（review-fixes 需求 10.5）。 */
     private ModelOutcome httpFailure(HttpResponse<InputStream> response) throws IOException {
         String body;
         try (InputStream in = response.body()) {
             byte[] head = in.readNBytes(MAX_ERROR_BODY);
             body = new String(head, StandardCharsets.UTF_8) + (in.read() >= 0 ? "..." : "");
         }
-        return ModelFailures.http(response.statusCode(), body, response.headers().firstValue("retry-after").orElse(null), "", overflow);
+        return ModelFailures.http(response.statusCode(), detail(body), response.headers().firstValue("retry-after").orElse(null), "", overflow);
+    }
+
+    /** 进 journal 的错误文字：最多 {@value #MAX_DETAIL} 个字符，控制字符换成空格。 */
+    static String detail(String body) {
+        String clean = body.replaceAll("[\\p{Cntrl}&&[^\\n\\t]]", " ");
+        return clean.length() <= MAX_DETAIL ? clean : clean.substring(0, MAX_DETAIL) + "...";
     }
 
     private ModelOutcome read(InputStream body, ChunkListener chunks, StreamWatchdog watchdog, StringBuilder text, Prompt prompt)
             throws IOException {
         StringBuilder reasoning = new StringBuilder();
-        Map<Integer, ToolFragments> tools = new TreeMap<>();
+        TreeMap<Integer, ToolFragments> tools = new TreeMap<>();
         String finishReason = null;
         String actualModel = model(prompt);
         TokenUsage usage = null;
 
-        BufferedReader lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
+        // 响应体在这里关（正常读完、[DONE]、提前 return 都关，review-fixes 需求 10.4）；看门狗到期时由它关
+        try (BufferedReader lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
         String line;
+        Map<String, Integer> indexById = new java.util.HashMap<>();
         while ((line = lines.readLine()) != null) {
             if (Thread.currentThread().isInterrupted()) {
                 return new ModelOutcome.Interrupted(text.toString());
@@ -209,6 +209,12 @@ public final class OpenAiClient implements ModelClient {
                 break;
             }
             JsonNode chunk = MAPPER.readTree(data);
+            if (chunk.has("error")) {
+                // 200 之后流里送来的错误（OpenAI 兼容服务和代理都这么做）：这次调用失败，不当作“流提前结束”去重试
+                JsonNode error = chunk.get("error");
+                String message = error.isObject() ? error.path("message").asString() : error.asString();
+                return new ModelOutcome.Failed(FailureReason.UNKNOWN, false, null, text.toString(), "stream error: " + detail(message));
+            }
             if (chunk.hasNonNull("model")) {
                 actualModel = chunk.get("model").asString();
             }
@@ -235,7 +241,16 @@ public final class OpenAiClient implements ModelClient {
                 chunks.onText(piece);
             }
             for (JsonNode call : delta.path("tool_calls")) {
-                ToolFragments fragments = tools.computeIfAbsent(call.path("index").asInt(), index -> new ToolFragments());
+                // 没有 index 的服务按 id 分片：有 id 开新片段，id 和 index 都没有的接到最后一个（需求 10.4）
+                int index;
+                if (call.hasNonNull("index")) {
+                    index = call.get("index").asInt();
+                } else if (call.hasNonNull("id")) {
+                    index = indexById.computeIfAbsent(call.get("id").asString(), ignored -> tools.isEmpty() ? 0 : tools.lastKey() + 1);
+                } else {
+                    index = tools.isEmpty() ? 0 : tools.lastKey();
+                }
+                ToolFragments fragments = tools.computeIfAbsent(index, ignored -> new ToolFragments());
                 if (call.hasNonNull("id")) {
                     fragments.id = call.get("id").asString();
                 }
@@ -247,6 +262,7 @@ public final class OpenAiClient implements ModelClient {
                 fragments.arguments.append(piece);
                 chunks.onToolInput(piece);
             }
+        }
         }
         ModelOutcome cut = ModelFailures.afterStream(text.toString(), watchdog, finishReason != null);
         if (cut != null) {

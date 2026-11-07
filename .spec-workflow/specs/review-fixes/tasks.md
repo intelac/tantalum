@@ -50,29 +50,48 @@
   - 全量回归、8091 部署、tech.md 记一节、提交推送
   - _Requirements: 9.1, 9.2_
 
-- [ ] 10. 阶段 2：看门狗持有流
+- [x] 10. 阶段 2：看门狗持有流
   - File: `model/StreamWatchdog.java`、`model/ClaudeClient.java`、`model/OpenAiClient.java`、`StreamWatchdogTest.java`（新）
   - _Requirements: 10.1_
 
-- [ ] 11. 阶段 2：Claude 流的块与失败分类
+- [x] 11. 阶段 2：Claude 流的块与失败分类
   - File: `model/ClaudeClient.java`、`ClaudeClientTest.java`
   - _Requirements: 10.2, 10.6_
 
-- [ ] 12. 阶段 2：Claude 请求的空块与思考块
+- [x] 12. 阶段 2：Claude 请求的空块与思考块
   - File: `model/ClaudeRequest.java`、`ClaudeRequestTest.java`
   - _Requirements: 10.3_
 
-- [ ] 13. 阶段 2：OpenAI 流
+- [x] 13. 阶段 2：OpenAI 流
   - File: `model/OpenAiClient.java`、`OpenAiClientTest.java`
   - _Requirements: 10.4, 10.5_
 
-- [ ] 14. 阶段 2 收尾：全量回归、8091 部署、tech.md、提交
+- [x] 14. 阶段 2 收尾：全量回归、8091 部署、tech.md、提交
 
-- [ ] 15. 阶段 3：登录与安全加固（开始前细化）
-  - _Requirements: 11_
+- [ ] 15. 阶段 3：登录、改密码、SSE、接口校验
+  - File: `auth/UserStore.java`、`auth/Logins.java`、`auth/LoginContextRepository.java`、`auth/SecurityConfig.java`、`auth/LoginThrottle.java`、`auth/UserCommand.java`、`web/AuthController.java`、`web/UsersController.java`、`web/EventStreamController.java`、`web/ApiController.java`、`web/ErrorCode.java`、控制台错误码与词典
+  - _Requirements: 11.1–11.6, 11.13_
 
-- [ ] 16. 阶段 4：去重与归位（开始前细化）
+- [ ] 16. 阶段 3：出口与地址
+  - File: `net/AddressRules.java`、`net/Egress.java`、`fetch/Fetcher.java`
+  - _Requirements: 11.7, 11.8_
+
+- [ ] 17. 阶段 3：本机工作区与连接程序
+  - File: `local/LocalLinks.java`、`local/LocalEndpoint.java`、`tantalum-connect/Link.java`、`Calls.java`、`Main.java`、`tantalum-local/sandbox/MxcPolicy.java`
+  - _Requirements: 11.9, 11.10_
+
+- [ ] 18. 阶段 3：浏览器
+  - File: `browser/Browsers.java`、`browser/UserBrowser.java`
+  - _Requirements: 11.11_
+
+- [ ] 19. 阶段 3：装配与启动
+  - File: `boot/Engine.java`
+  - _Requirements: 11.12_
+
+- [ ] 20. 阶段 3 收尾：全量回归、8091 部署、tech.md、提交
+
+- [ ] 21. 阶段 4：去重与归位（开始前细化）
   - _Requirements: 12_
 
-- [ ] 17. 阶段 5：拆大类与清注释（开始前细化）
+- [ ] 22. 阶段 5：拆大类与清注释（开始前细化）
   - _Requirements: 13_

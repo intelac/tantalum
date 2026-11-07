@@ -669,3 +669,11 @@ Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权�
 - **钩子说明按钩子比较**：`HookState.texts` 记每个钩子上次的说明，只有变了的钩子重发自己那块。
 - **没做**（留给后面阶段或不做）：`Outcome.enter` 的快照覆盖只有两个调用点、都在同一步内安全，不改；`HookPatches` 跳过时重复的 `HookReported` 不改（那条路径正常不会走到）。
 
+### review-fixes 阶段 2（2026-11-07）：模型客户端与流
+
+- **看门狗持有流**：`StreamWatchdog(firstChunk, betweenChunks)` 自己拿着流（`watch(AutoCloseable)`），流发布时已经过期就立刻关；`abandon()` 给失败路径用。两个客户端不再用 `open[]` 数组，“首块超时时关了个 null、之后流挂死”的洞补上。
+- **Claude 流**：不认识的块类型（server_tool_use 等）记成 ignored、不产生内容块；没有 start 的 delta 只有文字才补块，思考、签名、参数的孤立分片丢掉；没签名的思考块和空文字块不进回复（发回去会 400）。失败分类先看中断和看门狗，再分 HTTP 和连接。
+- **Claude 请求**：全空白文字块不发；工具结果空白时用 `(no output)`，带图片的只发图片；思考块字段缺失或签名为空时不发、不抛。
+- **OpenAI 流**：响应体 try-with-resources 关；200 之后流里的 `{"error":…}` 是一次不重试的失败（`stream error: …`）；没有 `index` 的并行调用按 `id` 分片；错误文字进 journal 前截到 1 KB、去掉控制字符（`OpenAiClient.detail`）。
+- 请求期望文件逐字节不变（阶段 2 没有改任何既有请求的字节）。
+

@@ -555,4 +555,34 @@ class OpenAiClientTest {
             assertEquals(model.equals("qwen-vl"), server.requests.getLast().contains("image_url"), model);
         }
     }
+
+    /** review-fixes 需求 10.4：200 之后流里的错误块是一次失败，不是“流提前结束”的重试。 */
+    @Test
+    void anErrorChunkInTheStreamIsAFailure() throws Exception {
+        server.body = delta("{\"content\":\"partial\"}") + data("{\"error\":{\"message\":\"upstream exploded\",\"type\":\"server_error\"}}");
+        ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, call(HI));
+        assertFalse(failed.retryable());
+        assertEquals("stream error: upstream exploded", failed.detail());
+        assertEquals("partial", failed.partialText());
+    }
+
+    /** 需求 10.4：没有 index 的并行调用按 id 分开，不并成一条。 */
+    @Test
+    void toolCallsWithoutAnIndexAreSplitById() throws Exception {
+        server.body = delta("{\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"grep\",\"arguments\":\"{\\\"q\\\":1}\"}}]}")
+                + delta("{\"tool_calls\":[{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"p\\\":2}\"}}]}")
+                + finish("tool_calls");
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        List<ToolCallBlock> calls = reply.content().stream().filter(ToolCallBlock.class::isInstance).map(ToolCallBlock.class::cast).toList();
+        assertEquals(List.of("a", "b"), calls.stream().map(ToolCallBlock::id).toList());
+        assertEquals(List.of("grep", "read_file"), calls.stream().map(ToolCallBlock::name).toList());
+    }
+
+    /** 需求 10.5：错误文字进 journal 前截到 1 KB、去掉控制字符。 */
+    @Test
+    void errorDetailIsBoundedAndClean() {
+        String detail = OpenAiClient.detail("x".repeat(5000) + "\u0007");
+        assertEquals(OpenAiClient.MAX_DETAIL + 3, detail.length());
+        assertEquals("bell  rang", OpenAiClient.detail("bell \u0007rang"));
+    }
 }

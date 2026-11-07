@@ -100,3 +100,45 @@
 - `ClaudeRequestTest`：全空白文字块不发、空工具结果有占位、缺字段的思考块不发——用 `params()` 的 JSON 断言，不改旧期望文件。
 - `OpenAiClientTest`：流内错误块；无 index 的两个并行调用按 id 分开；错误体截断到 1 KB。
 
+## 阶段 3 设计：登录与安全加固（需求 11）
+
+### 1. 登录、改密码、SSE（任务 15）
+
+- **改密码一个事务**：`UserStore.changePassword(name, next, keepLoginId)`：`BEGIN` → 更新哈希和口令戳 → `restamp(keepLoginId)` → `DELETE` 其余登录并返回被删的 id → `COMMIT`；`AuthController.changePassword` 对每个被删的 id 调 `engine.hub().closeLogin(id)`（和 logout 一样）。
+- **`touch` 失败不影响登录**：`valid()` 里 `touch` 包 try/catch，失败只记 debug；`issue()` 先 `create` 再 `sweep`，`sweep` 失败只记日志。
+- **Cookie 随 touch 续期**：`touch` 时设请求属性 `REFRESH_TOKEN`，`saveContext` 看到它就用同一个令牌重发 Cookie（Max-Age 重新算），和服务器端的滑动窗口一致。
+- **绝对上限**：`Logins.check/byId` 多一个 `maxAge`（30 天，`LoginContextRepository.MAX_LIFETIME`），`created` 太早的当过期；`sweep` 同样删。
+- **SSE 收尾**：`pump` 的 `finally` 里关订阅后一定 `emitter.complete()`（已完成的忽略异常）；`IllegalStateException` 单独捕获记 debug（容器已结束响应），其他 RuntimeException 记 error 并 `completeWithError`。
+- **Origin**：没有 `Origin` 时看 `Sec-Fetch-Site`，`cross-site` 拒绝；拒绝写 JSON `{"error":"bad origin","code":"auth/bad-origin"}`（新错误码，三语文案）。反向代理后的主机比对不动（要开 `server.forward-headers-strategy`，README 已写）。
+- **请求体先看长度**：`AuthBodyLimitFilter`（只对 `/api/auth/**`）：`Content-Length` 超过 `MAX_BODY` 或缺失（chunked）直接 413 JSON，不读体。
+- **最短密码 8 位**：`AuthController.MIN_PASSWORD`，改密码、新建、重置、命令行都用；错误码 `REQUEST_INVALID`，消息写明。
+- **`UserStore`**：`verify` 只在锁里读行，Argon2 在锁外算；`add`/`changePassword` 先算哈希再进锁；最后一个管理员的检查变成一条条件 UPDATE（`… AND (admin=0 OR disabled=1 OR EXISTS(SELECT 1 FROM users o WHERE o.admin=1 AND o.disabled=0 AND o.name<>?))`），0 行时按 `find` 分 NO_SUCH 和 LAST_ADMIN；`open` 建表失败关连接；`update(name, admin, disabled)` 一个事务（`UsersController.update` 用它）。
+- **`LoginThrottle.evictOldest`** 先清过期的再按最老淘汰。
+- **接口校验**：`requestId` 匹配 `[A-Za-z0-9._:-]{1,128}`；`/api/runs/{run}` 的 `run` 用 try/catch `IllegalArgumentException` → 404。
+
+### 2. 出口与地址（任务 16）
+
+- `AddressRules.blocked`：自端口守卫对 `plain` 和内嵌的 IPv4 都查 `isLocal`；`interfaces()` 对 `getNetworkInterfaces()` 为 null 和 `SocketException` 都返回“未知”，这时自端口守卫按“任何地址都算本机”（fail-closed）。
+- `Egress`：`readHead` 改成带缓冲对象的 `HeadReader`，超时重试不丢已读字节；请求头有总时限（`HEAD_TIMEOUT_MS` 从第一个字节起算）；转发请求体时近端 `SO_TIMEOUT` 改成 `POLL_MS`；`open.add(socket)` 在 `closed` 标志的锁下做，关闭后加进来的立即关。
+- `Fetcher`：DNS 解析放到虚拟线程，`get(left)` 超时按不可达处理。
+
+### 3. 本机工作区与连接程序（任务 17）
+
+- `LocalLinks.attach`：先在锁里登记（`links.put`，顶掉旧的）、安排到期定时器，再发 welcome；`Link.call()` 在 welcome 发出前先等（`welcomed` 闩）；welcome 发不出去就 `dropped()` 走正常清理。`verify` 发现账号停用时走 `revoke(principal)`（加锁、记 `revokedAt`、断开已有连接）。`LocalEndpoint` 的 hello 定时器和 attach 用 `AtomicBoolean attaching` 互斥。
+- 连接程序 `Link`：`socket` 在 `onOpen` 里赋值，赋值后 `ended` 已完成就 `abort()`；`run()` 在 `current = session` 之后再查一次 `stopped`；`Session.ended()` 同时等 `stopped`；`send()` 被中断时结束会话；`handle` 里的异常按 1011 结束而不是“不可读”；`calls.context` 的线程包 try/catch；`Calls`：重复 id 回错误结果、`running.remove` 放 finally、catch Throwable。
+- `Main`：`--allow-read` 同样 `toRealPath` 加 `refuseTooBroad`；`--server` 不是回环且是 `http`/`ws` 时拒绝，除非 `--insecure`；`MxcPolicy` 的拒绝路径存在时用 `toRealPath()`，字面和真实两种都写。
+
+### 4. 浏览器（任务 18）
+
+- `Browsers.close()`：每个槽位单独 try/catch（`getNow` 抛 CompletionException 当没起来），一个失败不影响其余；清扫线程 catch Exception 记日志继续；`sweep()` 每个浏览器的 close 单独 try/finally。
+- `UserBrowser.open`：catch RuntimeException 关驱动再抛 `Unavailable`；`trimTabs` 每页单独 try/catch；`use()` 任何 RuntimeException 都走崩溃检查。驱动环境的黑名单不改成白名单（Playwright 只能并入环境、不能替换），补几个常见名字。
+
+### 5. 装配与启动（任务 19）
+
+- `Engine` 构造：一个 `List<AutoCloseable> opened`，每打开一样加一个；catch Throwable 时倒序关、再抛。环启动之后的部分也包进去（失败时 `close()`）。
+- `interrupt()`：`tryPublish` 循环有上限（`DRAIN`）并看 `input.broken()`，超时或坏了抛 `IllegalStateException`；`awaitDrained` 的结果记日志；被中断时抛出，不再装作成功。
+
+### 测试
+
+每个任务改到的类都有对应测试（`AuthApiTest`、`LoginsTest`、`UserStoreTest`、`LoginThrottleTest`、`EventStreamTest`、`SecurityConfig`/`OriginFilterTest`、`AddressRulesTest`、`EgressTest`、`FetcherTest`、`LocalLinksTest`、`LinkTest`、`CallsTest`、`MainTest`、`MxcPolicyTest`、`BrowsersTest`、`EngineTest`），只加新用例、改被影响的断言。
+
