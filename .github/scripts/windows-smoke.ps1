@@ -159,6 +159,11 @@ try {
 
   # ---- 4. 用户目录外：WARN、照着运行 icacls ----
   $outside = "D:\tantalum-smoke-$PID"
+  $env:TANTALUM_DATA_DIR = $outside
+  $password | & $java -jar $Jar users add yi --lang en
+  $code = $LASTEXITCODE
+  Remove-Item Env:TANTALUM_DATA_DIR
+  Check ($code -eq 0) "users add yi in $outside"
   $third = Start-Server $outside $port "$root\outside.log"
   Check (Wait-Up $port $third) "the jar starts with $outside"
   $warning = Select-String -Path "$root\outside.log" -SimpleMatch 'is outside your user profile'
