@@ -718,7 +718,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 | prompt caching（Claude） | 有 | 经 pi | 有 | |
 | 上下文压缩 | 有 | 有 | 有：自动、超长恢复、手动，所有模型同一套规则，`context-compaction` spec；窗口从模型读，压缩点每个用户在设置页选（pi 和 DSH 画面上都没有），`compaction-threshold` spec | 自定义摘要钩子待定 |
 | 画面上选模型和思考档位 | 有（`/model`、Shift+Tab 切档位） | 有（输入框旁下拉） | 有：几条路线（Claude 加任意条 OpenAI 兼容），输入框旁按会话选模型和档位，新会话从上次的选择开始，换模型从下一次提问生效，`model-picker` spec | 管理员在画面上配路线以后再说 |
-| 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | **没有** | `ops-hardening` |
+| 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | 有：只常驻有活动的会话，空闲 30 分钟移出内存，其余按需载入（1.1 万事件冷载入 320 ms）；启动只补齐索引落后的部分，`ops-hardening`、`one-line-journal` spec | 空闲回收只在有事件时顺带做（见 BACKLOG） |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |
 | MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
