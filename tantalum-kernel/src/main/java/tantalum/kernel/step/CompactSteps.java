@@ -80,7 +80,7 @@ public final class CompactSteps {
                 .withCompaction(compacting.plan(), compacting.trigger()));
         out.report(hook.facts());
         if (!(hook.result() instanceof Allow)) {
-            String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work, which is not supported";
+            String reason = hook.result() instanceof Stop stop ? stop.reason() : "beforeCompact asked for work or a question, which is not supported";
             return notAdopted(out, run, compacting, reason, Stage.REFUSED);
         }
         if (!Compactor.summaryCanHelp(compacting.plan(), session.context().compaction())) {

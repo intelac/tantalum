@@ -22,13 +22,9 @@ public record ExampleSettings(boolean enabled, @DefaultValue ReadOnly readOnly, 
                                    "git_diff", "git_blame", "git_branches", "memory_read", "memory_write", "memory_delete"})
                            List<String> tools) {}
 
-    /**
-     * 工具审批：调用 {@code tools} 前在对话页上问。每次等 {@code answerWait}（要比 {@code tantalum.tool-timeout} 短），没回答就再问，
-     * 最多问 {@code maxPolls} 次（要比 {@code tantalum.hooks.max-work-rounds} 少），合计约 {@code answerWait × maxPolls}。
-     */
+    /** 工具审批：调用 {@code tools} 前在对话页上问，等多久都行（waiting-state）。以前的 {@code answer-wait}、{@code max-polls} 已删除。 */
     public record ToolApproval(@DefaultValue("true") boolean enabled,
-                               @DefaultValue({"write_file", "edit_file", "bash"}) List<String> tools,
-                               @DefaultValue("50s") Duration answerWait, @DefaultValue("6") int maxPolls) {}
+                               @DefaultValue({"write_file", "edit_file", "bash"}) List<String> tools) {}
 
     /** 每日额度：每个用户每天（UTC）的 token 上限，输入（含缓存）加输出。 */
     public record DailyQuota(@DefaultValue("true") boolean enabled, @DefaultValue("2000000") long tokens) {}

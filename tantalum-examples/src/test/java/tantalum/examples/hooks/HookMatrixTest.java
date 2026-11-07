@@ -2,6 +2,7 @@ package tantalum.examples.hooks;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static tantalum.examples.hooks.MatrixHook.Result.ALLOW;
+import static tantalum.examples.hooks.MatrixHook.Result.ASK;
 import static tantalum.examples.hooks.MatrixHook.Result.NULL;
 import static tantalum.examples.hooks.MatrixHook.Result.PATCH;
 import static tantalum.examples.hooks.MatrixHook.Result.STOP;
@@ -224,7 +225,8 @@ class HookMatrixTest {
     /**
      * 压缩前（CompactSteps.tryStart），用手动压缩触发：两轮对话后提交压缩。放行、补丁（被忽略）、非强制钩子抛异常 → 摘要调用，
      * 采用后 COMPLETED "compacted"；Stop、强制钩子抛异常、返回 null → 手动压缩以原因 FAILED（被拒绝时不改用裁剪）；
-     * NeedWork 在这里当作拒绝，工作不执行（成功、失败、超时三种没有区别，只测一格）。
+     * NeedWork、Ask 在这里当作拒绝，工作不执行、不问人（成功、失败、超时三种没有区别，只测一格）。其余位置的 Ask/onAnswer 由
+     * AnswerStepsTest（内核）和 ExampleHooksPipelineTest 的审批用例（真实管线，经回答接口）覆盖。
      * 被拒绝的压缩运行在同一步里开始又结束，运行条目应当带上结束原因（TranscriptPass.phaseChanged 目前只记 "Ended"、不带原因，
      * 控制台据此当作还在运行；这是缺陷，这里按正确的期望写）。
      */
@@ -236,13 +238,16 @@ class HookMatrixTest {
         // 手动压缩只留最后一个单元（A2），头部是 U1、A1、U2（Units.split），摘要调用再加一条指令
         List<String> summarized = List.of(P_USER, "msgs=3 last=user", "summary msgs=4 last=user");
         List<String> refusedPrompts = List.of(P_USER, "msgs=3 last=user");
-        String work = "beforeCompact asked for work, which is not supported";
+        String work = "beforeCompact asked for work or a question, which is not supported";
         return Stream.of(
                 cell("bcp-allow", BEFORE_COMPACT, ALLOW, false, "COMPLETED: compacted", events, compacted, summarized, 0, 0),
                 cell("bcp-patch", BEFORE_COMPACT, PATCH, false, "COMPLETED: compacted", events, compacted, summarized, 0, 0),
                 cell("bcp-stop", BEFORE_COMPACT, STOP, false, "FAILED: matrix stop", refusedEvents,
                         concat(head, run("FAILED: matrix stop"), "compaction:MANUAL failed: matrix stop"), refusedPrompts, 0, 0),
                 cell("bcp-work", BEFORE_COMPACT, WORK_OK, false, "FAILED: " + work, refusedEvents,
+                        concat(head, run("FAILED: " + work), "compaction:MANUAL failed: " + work), refusedPrompts, 0, 0),
+                // waiting-state 需求 4.3：压缩前问人同样当作拒绝，不进入等人阶段
+                cell("bcp-ask", BEFORE_COMPACT, ASK, false, "FAILED: " + work, refusedEvents,
                         concat(head, run("FAILED: " + work), "compaction:MANUAL failed: " + work), refusedPrompts, 0, 0),
                 cell("bcp-throw-m", BEFORE_COMPACT, THROW, true, "FAILED: hook failed: " + hook("bcp-throw-m"), refusedEvents,
                         concat(head, run("FAILED: hook failed: " + hook("bcp-throw-m")), "compaction:MANUAL failed: hook failed: " + hook("bcp-throw-m")),

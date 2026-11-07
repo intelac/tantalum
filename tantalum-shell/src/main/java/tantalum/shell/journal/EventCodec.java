@@ -5,12 +5,14 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import tantalum.shell.json.JsonText;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
+import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
@@ -38,6 +40,8 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.text.Language;
+import tantalum.value.text.LocalText;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.core.JsonParser;
@@ -46,6 +50,8 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.util.StdConverter;
 import tools.jackson.databind.ValueSerializer;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
@@ -120,6 +126,26 @@ public final class EventCodec {
     })
     private interface OwnerRefMixin {}
 
+    /** {@code LocalText.byLanguage} 是无序的 Map：按 en、zh、ja 固定顺序写出，同样的问题写成同样的字节（waiting-state 需求 2.3）。 */
+    private interface LocalTextMixin {
+        @JsonSerialize(converter = OrderedLanguages.class)
+        Map<Language, String> byLanguage();
+    }
+
+    private static final class OrderedLanguages extends StdConverter<Map<Language, String>, Map<Language, String>> {
+        @Override
+        public Map<Language, String> convert(Map<Language, String> texts) {
+            Map<Language, String> ordered = new LinkedHashMap<>();
+            // 和 LocalText.wire 一样：英文在前，再中文、日文；不用枚举顺序，免得以后加语言时改变已有的字节
+            for (Language language : List.of(Language.EN, Language.ZH, Language.JA)) {
+                if (texts.containsKey(language)) {
+                    ordered.put(language, texts.get(language));
+                }
+            }
+            return ordered;
+        }
+    }
+
     private final Map<Key, Class<? extends Event>> registry = new HashMap<>();
     private final JsonMapper mapper;
 
@@ -142,6 +168,7 @@ public final class EventCodec {
                 .addMixIn(CompactionSettings.class, CompactionSettingsMixin.class)
                 .addMixIn(ContextAssembled.class, ToolSourcesMixin.class)
                 .addMixIn(ToolChangeBlock.class, ToolChangeMixin.class)
+                .addMixIn(LocalText.class, LocalTextMixin.class)
                 .changeDefaultPropertyInclusion(value -> value
                         .withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))
@@ -157,6 +184,7 @@ public final class EventCodec {
         codec.register(SteerSubmitted.TYPE, 1, SteerSubmitted.class);
         codec.register(FollowUpSubmitted.TYPE, 1, FollowUpSubmitted.class);
         codec.register(Cancel.TYPE, 1, Cancel.class);
+        codec.register(Answered.TYPE, 1, Answered.class);
         // 第 1 版没有工具来源，读出来是空表：one-line-journal 第 1 步写的会话还要能读
         codec.register(ContextAssembled.TYPE, 1, ContextAssembled.class);
         codec.register(ContextAssembled.TYPE, 2, ContextAssembled.class);

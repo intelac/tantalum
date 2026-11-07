@@ -26,6 +26,8 @@ import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.HookReported;
 import tantalum.value.decision.ImagesOmitted;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.decision.QuestionAsked;
+import tantalum.value.decision.QuestionSettled;
 import tantalum.value.decision.SessionChange;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.id.CommandId;
@@ -42,6 +44,7 @@ import tantalum.value.model.Role;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.Awaiting;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.Deciding;
@@ -92,7 +95,7 @@ public final class RecordCodec {
     private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
-            "HookReported", "ImagesOmitted");
+            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled");
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
     @JsonSubTypes({
@@ -111,7 +114,9 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = CompactionFailed.class, name = "CompactionFailed"),
         @JsonSubTypes.Type(value = HookDecided.class, name = "HookDecided"),
         @JsonSubTypes.Type(value = HookReported.class, name = "HookReported"),
-        @JsonSubTypes.Type(value = ImagesOmitted.class, name = "ImagesOmitted")
+        @JsonSubTypes.Type(value = ImagesOmitted.class, name = "ImagesOmitted"),
+        @JsonSubTypes.Type(value = QuestionAsked.class, name = "QuestionAsked"),
+        @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled")
     })
     private interface FactMixin {}
 
@@ -119,6 +124,7 @@ public final class RecordCodec {
     @JsonSubTypes({
         @JsonSubTypes.Type(value = Deciding.class, name = "Deciding"),
         @JsonSubTypes.Type(value = Awaiting.class, name = "Awaiting"),
+        @JsonSubTypes.Type(value = AwaitingAnswer.class, name = "AwaitingAnswer"),
         @JsonSubTypes.Type(value = Ended.class, name = "Ended")
     })
     private interface PhaseMixin {}

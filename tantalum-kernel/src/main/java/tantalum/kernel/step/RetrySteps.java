@@ -8,6 +8,7 @@ import tantalum.value.command.StartTimer;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.WorkDone;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.PromptPatch;
@@ -40,6 +41,8 @@ public final class RetrySteps {
             RunEnd.finish(out, run, EndReason.FAILED, stop.reason());
         } else if (hook.result() instanceof NeedWork need) {
             WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.ON_FAILURE);
+        } else if (hook.result() instanceof Ask ask) {
+            AnswerSteps.ask(out, run, ask, hook.decidedBy(), HookPoint.ON_FAILURE);
         } else if (event.reason() == FailureReason.CONTEXT_OVERFLOW && !run.overflowRecovered()) {
             // 超长恢复（规则 2、3.2）：只留最新单元压缩后重试一次；无可压缩或摘要失败都以原始错误结束。
             RunState recovering = run.withOverflowRecovered(true);
@@ -72,7 +75,7 @@ public final class RetrySteps {
         }
         RunState retrying = run.withRetries(run.retries() + 1);
         out.put(retrying);
-        if (!WorkSteps.continueWithText(out, retrying, work)) {
+        if (!Resume.continueWithText(out, retrying, work)) {
             ModelSteps.callModel(out, retrying, work);
         }
     }

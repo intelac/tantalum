@@ -13,7 +13,8 @@ import tantalum.value.id.RunRef;
 public record HookDecided(RunRef run, String hook, HookPoint point, Kind kind, String reason,
                           int systemChars, List<String> tools, String toolCall, String workType) implements Fact {
 
-    public enum Kind { STOP, NEED_WORK, PATCH }
+    /** {@code ASK}：问用户（waiting-state），{@code reason} 位放问题 id。 */
+    public enum Kind { STOP, NEED_WORK, PATCH, ASK }
 
     public HookDecided {
         Objects.requireNonNull(run, "run");

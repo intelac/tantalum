@@ -625,3 +625,15 @@ CI 抓到、macOS 上看不到的问题（都已修，测试钉住）：
 - `MoveFileEx` 替换一个还有句柄开着的文件（NIO 的也算）照样拒绝：靠 `PrivateFiles.replace` 的 1 秒重试；`LockFileEx` 是强制锁，别的句柄读不了 `store.lock`；`destroyForcibly` 的退出码是 1；Java 按 ANSI 代码页解码命令行参数（英文系统上中文参数变成 `?`，环境变量和当前目录不受影响）。
 
 Windows 上跳过的测试都写明了原因：检查 600/700 和用 POSIX 权限造读写失败的（Windows 的 ACL 由 `WindowsFilesTest` 查）；macOS 连接程序的（MXC、`Git.java` 的 `/dev/null`、路径用 `\`、`fileKey()` 为空，Playwright 里两个跑真连接程序工具的用例同理）；提交带不带模型的 P95 差值（每次提交都 fsync，runner 的磁盘偶尔停上百毫秒，两组都被拖到 100–250 ms）。控制台单元测试在 Windows 上一个文件一个文件地跑：ModelPicker 的 jsdom 计时和并行的测试文件抢 CPU 时量到 65–100.6 ms。
+
+### waiting-state（2026-11-07）：等用户回答
+
+内核新阶段 `AwaitingAnswer`：钩子返回 `Ask(question)`，或模型调用内置工具 `ask_user`，运行停下来等人——没有在途命令，不计工作轮数，不超时。问题在这一步的结果行里（运行阶段带着问题，事实 `QuestionAsked`），回答是事件 `Answered`（实现 `Submitted`：占名额、去重、落盘后才回 200）；结算后事实 `QuestionSettled`，钩子的问题调新钩子位置 `onAnswer` 再回到原处（`Resume`，和插件工作共用），`ask_user` 的问题把回答写成工具结果。
+
+- **重启**：`Engine.interrupt` 按索引里的 `run_status` 跳过 `AwaitingAnswer` 的会话，不写 `RunInterrupted`；带期限的由 `DeadlineTimers` 按索引里记的到期时刻重起定时器（索引库版本 2 → 3，加 `answer_deadline`、`answer_timer` 两列；旧库启动时整个重建）。`WaitingRestartTest`：等人跨重启、回答后继续；过期的期限重启后立刻按“没有回答”结算。
+- **回收**：等人的会话按 `tantalum.residency.idle` 可移出内存（`Evictor.evictable` 看运行阶段），回答来了和提交一样触发载入。
+- **删掉的**：`Questions`、`OpenQuestions`、`ToolContext.questions()`、`ApprovalWork`，配置 `tantalum.examples.tool-approval.answer-wait`/`max-polls`。工具审批只剩 `ToolApprovalHook`（`beforeToolCall` + `onAnswer`），“一直允许”经 `Allow.withNote` 记进会话。
+- **journal**：`LocalText.byLanguage` 是无序 Map，编码时按 en、zh、ja 固定顺序写，同样的问题写成同样的字节；格式版本不变。
+- **投影**：对话条目 `Question`（OPEN/ANSWERED/EXPIRED/CANCELLED，文字按接口写法）、轨迹记录 `Question`（等人的那段从问到答，第五条泳道）、会话列表 `awaitingAnswer`、SSE `question` 只刷侧栏标记。控制台 `QuestionItem` 代替输入框上方的问题卡，不再轮询。
+- **内核里两处容易漏的**：`Kernel.isAwaited` 原来只认 `Awaiting` 的在途命令，等人阶段的定时器事件会被当成“没人等的结果”丢掉；`HookChain` 合并多个 `Allow` 时原来新建一个 `Allow`，会把 `withNote` 丢掉。都有测试钉住。
+- **测试**：`AnswerStepsTest` 19 个（五个位置、回答四种去向、期限、取消、重启不变、`ask_user` 的槽位和顺序），`HookChainTest` 加 `onAnswer` 和 `Ask` 行，`ExampleHooksPipelineTest` 的审批改经回答接口，`QuestionApiTest`、`WaitingRestartTest`、`IndexUpgradeTest`、`EvictorTest`；控制台 vitest `QuestionItem` 5 个；Playwright `question.spec`（刷新还在、另一个浏览器同账号、取消）和 `approval.spec` 照过。8091 演示见任务 15。

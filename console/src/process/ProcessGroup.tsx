@@ -45,7 +45,7 @@ export function ProcessGroup({ store, run, ids }: Props) {
         className="flex w-full items-center gap-1.5 py-1 text-left text-sm text-fg-muted hover:text-fg"
       >
         {!ended && <Loader2 size={14} className="animate-spin text-accent" aria-hidden="true" />}
-        <span>{runOutcome(runStatus, t).header}</span>
+        <span>{!ended && runStatus?.phase === "AwaitingAnswer" ? t.conversation.awaitingAnswer : runOutcome(runStatus, t).header}</span>
         {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
       </button>
       {open && (

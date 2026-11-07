@@ -7,6 +7,7 @@ import tantalum.value.decision.Fact;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.decision.HookReported;
 import tantalum.value.hook.Allow;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.HookResult;
@@ -38,6 +39,7 @@ public final class HookChain {
     public HookOutcome run(HookPoint point, KernelState state, HookContext context) {
         StringBuilder system = new StringBuilder();
         List<ToolSpec> tools = new ArrayList<>();
+        List<Allow.SessionNote> notes = new ArrayList<>();
         List<Fact> facts = new ArrayList<>();
 
         SessionContext session = sessionContext(state, context);
@@ -68,8 +70,9 @@ public final class HookChain {
             }
             system.append(allow.patch().systemAppend());
             tools.addAll(allow.patch().addTools());
+            notes.addAll(allow.notes());
         }
-        return new HookOutcome(new Allow(new PromptPatch(system.toString(), tools)), facts, null);
+        return new HookOutcome(new Allow(new PromptPatch(system.toString(), tools), notes), facts, null);
     }
 
     /**
@@ -95,6 +98,9 @@ public final class HookChain {
                     0, List.of(), toolCall, null);
             case NeedWork work -> new HookDecided(context.run(), hook, point, HookDecided.Kind.NEED_WORK, null,
                     0, List.of(), toolCall, work.workType());
+            // 问用户：reason 位放问题 id（waiting-state），不给 HookDecided 加字段，旧记录的形状不变
+            case Ask ask -> new HookDecided(context.run(), hook, point, HookDecided.Kind.ASK, ask.question().id(),
+                    0, List.of(), toolCall, null);
             case Allow allow when allow.patch().systemAppend().isEmpty() && allow.patch().addTools().isEmpty() -> null;
             case Allow allow -> new HookDecided(context.run(), hook, point, HookDecided.Kind.PATCH, null,
                     allow.patch().systemAppend().length(), allow.patch().addTools().stream().map(ToolSpec::name).toList(),
@@ -110,6 +116,7 @@ public final class HookChain {
             case BEFORE_RUN_END -> hook.beforeRunEnd(state, context);
             case ON_WORK_RESULT -> hook.onWorkResult(state, context);
             case BEFORE_COMPACT -> hook.beforeCompact(state, context);
+            case ON_ANSWER -> hook.onAnswer(state, context);
         };
     }
 }

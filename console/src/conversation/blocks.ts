@@ -14,6 +14,8 @@ export type Block =
       reply: string[];
       /** 这轮开始时换了模型、工具变了，显示在过程区上面；没有时不出现。 */
       notices?: string[];
+      /** 这轮问用户的问题（waiting-state），显示在过程区下面、回复上面；没有时不出现。 */
+      questions?: string[];
     };
 
 type Shape = Pick<Item, "kind" | "run">;
@@ -45,6 +47,11 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
     if (shape.kind === "toolChange" || shape.kind === "modelChange") {
       const block = runs.get(shape.run);
       if (block !== undefined) block.notices = [...(block.notices ?? []), id];
+      continue;
+    }
+    if (shape.kind === "question") {
+      const block = runs.get(shape.run);
+      if (block !== undefined) block.questions = [...(block.questions ?? []), id];
       continue;
     }
     // 运行状态条目由 RunStatusRow 按运行 ID 自己取，不进过程区也不进回复。

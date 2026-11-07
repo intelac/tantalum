@@ -73,6 +73,8 @@ export interface SessionSummary {
   lastActivity: string;
   /** `idle` 或内核状态名，如 `AwaitingModel`。 */
   runStatus: string;
+  /** 运行停在等你回答（waiting-state 需求 7.3）。 */
+  awaitingAnswer?: boolean;
 }
 
 export interface TextBlock {
@@ -206,7 +208,29 @@ export interface ModelChangeItem extends ItemBase {
   effort?: string | null;
 }
 
-export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem | ModelChangeItem;
+export type QuestionStatus = "OPEN" | "ANSWERED" | "EXPIRED" | "CANCELLED";
+
+/**
+ * 运行停下来问你的问题（waiting-state 需求 7.1）：等回答时显示按钮；答过后带回答和时间；期限到或取消后是 EXPIRED / CANCELLED。
+ * 文字是插件作者写的（按语言的对象）或模型写的原文（字符串）。askedBy 是钩子名，或 ask_user。
+ */
+export interface QuestionItem extends ItemBase {
+  kind: "question";
+  run: string;
+  askedBy: string;
+  questionId: string;
+  title: LocalText;
+  detail: LocalText;
+  choices: { id: string; label: LocalText }[];
+  freeText: boolean;
+  deadline?: string;
+  status: QuestionStatus;
+  choice?: string;
+  text?: string;
+  settledAt?: string;
+}
+
+export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem | ModelChangeItem | QuestionItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */
@@ -400,7 +424,7 @@ export interface HookDecision extends TraceHead {
   hook: string;
   /** 钩子抛异常时可能不知道位置。 */
   point?: HookPoint;
-  result: "STOP" | "NEED_WORK" | "PATCH" | "ERROR";
+  result: "STOP" | "NEED_WORK" | "PATCH" | "ASK" | "ERROR";
   reason?: string;
   systemChars: number;
   tools: string[];
@@ -412,7 +436,19 @@ export interface HookDecision extends TraceHead {
   work?: string;
 }
 
-export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision;
+
+/** 运行停下来等用户回答（waiting-state 需求 7.4）：从问到答的一段，不算进模型或工具时长。 */
+export interface QuestionRecord extends TraceHead {
+  kind: "question";
+  question: string;
+  askedBy: string;
+  title: LocalText;
+  status: "WAITING" | "ANSWERED" | "EXPIRED" | "CANCELLED";
+  choice?: string;
+  text?: string;
+}
+
+export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision | QuestionRecord;
 export type TraceKind = TraceRecord["kind"];
 
 /** 一页记录：按运行从新到旧切。`seq` 是重放到的最后序号；`before` 是下一页的游标。 */

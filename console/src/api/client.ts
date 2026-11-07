@@ -17,7 +17,6 @@ import type {
   ModelsResponse,
   PluginKind,
   Plugins,
-  Question,
   RunView,
   SessionSummary,
   SubmitMode,
@@ -273,16 +272,11 @@ export function revokeLocal(): Promise<unknown> {
   return call("/api/local/tokens", { method: "DELETE" });
 }
 
-/** 插件工作在这个会话里问用户、还没回答的问题（如工具审批）。 */
-export function listQuestions(session: string): Promise<{ questions: Question[] }> {
-  return call(`/api/sessions/${encodeURIComponent(session)}/questions`);
-}
-
-/** 回答一个问题。404 表示问题已经不在了（答过、插件不再等）。 */
-export function answerQuestion(session: string, question: string, choice: string): Promise<unknown> {
+/** 回答运行问的问题（waiting-state）：选项和（允许时）补充的文字至少一个。404 表示问题已经不在了（答过、运行结束）。 */
+export function answerQuestion(session: string, question: string, answer: { choice?: string; text?: string }): Promise<unknown> {
   return call(`/api/sessions/${encodeURIComponent(session)}/questions/${encodeURIComponent(question)}`, {
     method: "POST",
-    body: JSON.stringify({ choice }),
+    body: JSON.stringify(answer),
   });
 }
 

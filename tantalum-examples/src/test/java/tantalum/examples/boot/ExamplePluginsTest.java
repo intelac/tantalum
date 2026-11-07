@@ -101,15 +101,4 @@ class ExamplePluginsTest {
         }
     }
 
-    /** 审批每次等的不比工具超时短时，第一次问就会超时：启动时拒绝。 */
-    @Test
-    void anApprovalWaitLongerThanTheToolTimeoutIsRefused() {
-        Exception refused = assertThrows(Exception.class, () -> server("--tantalum.examples.enabled=true",
-                "--tantalum.examples.tool-approval.answer-wait=60s", "--tantalum.tool-timeout=60s").close());
-        Throwable cause = refused;
-        while (cause.getCause() != null && !cause.getMessage().contains("tool-approval.answer-wait")) {
-            cause = cause.getCause();
-        }
-        assertTrue(cause.getMessage().contains("tantalum.examples.tool-approval.answer-wait"), refused.toString());
-    }
 }

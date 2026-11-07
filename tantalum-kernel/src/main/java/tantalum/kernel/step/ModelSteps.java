@@ -14,6 +14,7 @@ import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.Allow;
+import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.hook.NeedWork;
 import tantalum.value.hook.Stop;
@@ -65,6 +66,7 @@ public final class ModelSteps {
         switch (hook.result()) {
             case Stop stop -> RunEnd.finish(out, run, EndReason.STOPPED, stop.reason());
             case NeedWork need -> WorkSteps.start(out, run, need, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
+            case Ask ask -> AnswerSteps.ask(out, run, ask, hook.decidedBy(), HookPoint.BEFORE_MODEL_CALL);
             case Allow allow -> {
                 if (compactionAllowed) {
                     if (CompactSteps.tryStart(out, run, allow.patch(), new Compacting.Auto()) == CompactSteps.Start.TOOK_OVER) {

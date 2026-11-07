@@ -1,6 +1,10 @@
 {
   "midSessionChanges" : true,
   "tools" : [ {
+    "name" : "ask_user",
+    "description" : "Ask the user a question and wait for the answer. Use it only when you cannot continue without their decision; it waits as long as needed, hours or days. Offer choices when there are natural options; the user can also type a free-text answer unless you set allow_text to false. The result is {\"choice\": ..., \"text\": ...}, or {\"timeout\": true} if timeout_seconds passed without an answer.",
+    "enabled" : true
+  }, {
     "name" : "memory_delete",
     "description" : "Delete one of your memory entries by name, for example when the user asks you to forget something.",
     "enabled" : true

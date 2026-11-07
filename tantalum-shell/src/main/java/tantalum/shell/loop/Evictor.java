@@ -7,12 +7,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
+import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
 /**
  * 决定哪些会话离开内存。只在 cleanroom 线程上调用，不做 I/O：离开的会话下次从会话文件重放。
- * 条件是钉住为零、没有活动运行、没有排队提交，且空闲超时或超过常驻上限。
+ * 条件是钉住为零、没有活动运行（或运行停在等用户回答）、没有排队提交，且空闲超时或超过常驻上限。
  */
 public final class Evictor {
 
@@ -83,7 +85,7 @@ public final class Evictor {
                 break;
             }
             SessionState session = result.sessions().get(next.getKey());
-            if (evictable(session) && residency.evict(next.getKey())) {
+            if (evictable(session, result) && residency.evict(next.getKey())) {
                 result = result.without(next.getKey());
                 projections.remove(next.getKey());
                 evicted.accept(next.getKey());
@@ -101,9 +103,22 @@ public final class Evictor {
         return settings.idle() != null && now - entry.lastUsed >= settings.idle().toMillis();
     }
 
-    /** 内核不认识的会话也有条目（比如对不存在的会话取消），没有状态要保留。 */
-    private static boolean evictable(SessionState session) {
-        return session == null || (session.activeRun() == null && session.followUps().isEmpty());
+    /**
+     * 内核不认识的会话也有条目（比如对不存在的会话取消），没有状态要保留。有活动运行的只有一种可以走：停在等用户回答的
+     * （waiting-state D3）——它没有在途命令，状态全在 journal 里，回答来了再载入；等命令结果的不能走。
+     */
+    private static boolean evictable(SessionState session, KernelState state) {
+        if (session == null) {
+            return true;
+        }
+        if (!session.followUps().isEmpty()) {
+            return false;
+        }
+        if (session.activeRun() == null) {
+            return true;
+        }
+        RunState run = state.runs().get(session.activeRun());
+        return run != null && run.phase() instanceof AwaitingAnswer;
     }
 
     public int resident() {

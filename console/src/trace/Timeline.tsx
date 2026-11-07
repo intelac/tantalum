@@ -18,10 +18,10 @@ const MINIMUM_BAR_PX = 2;
 const EDGE_PAN_ZONE_FRACTION = 0.08;
 const EDGE_PAN_STEP_FRACTION = 0.025;
 const MAXIMUM_EDGE_PAN_PX = 32;
-const LANE_TOP = [7, 21, 35, 49];
+const LANE_TOP = [7, 21, 35, 49, 63];
 const BAR_HEIGHT = 8;
 
-const LANE_COLOR = ["bg-bar-input", "bg-bar-model", "bg-bar-tool", "bg-warning"];
+const LANE_COLOR = ["bg-bar-input", "bg-bar-model", "bg-bar-tool", "bg-warning", "bg-fg-faint"];
 
 interface Props {
   /** 不收起时的记录表行：时间概览画的是全部已加载的记录。 */
@@ -119,7 +119,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
   if (model === null) {
     return (
       <section ref={root} aria-label={t.timeline.aria} className="shrink-0 border-b border-line bg-raised">
-        <div className="grid h-16 grid-cols-[56px_minmax(0,1fr)]">
+        <div className="grid h-20 grid-cols-[56px_minmax(0,1fr)]">
           <LaneLabels />
           <div className="flex items-center px-3 text-xs text-fg-faint">{t.timeline.noTimingData}</div>
         </div>
@@ -221,7 +221,7 @@ export function Timeline({ rows, mode, range, onRange, selected, matches, onSele
 
   return (
     <section ref={root} aria-label={t.timeline.aria} className="relative shrink-0 border-b border-line bg-raised select-none">
-      <div className="grid h-16 grid-cols-[56px_minmax(0,1fr)]">
+      <div className="grid h-20 grid-cols-[56px_minmax(0,1fr)]">
         <LaneLabels />
         <div
           ref={track}

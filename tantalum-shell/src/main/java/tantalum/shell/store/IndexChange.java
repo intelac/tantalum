@@ -11,17 +11,21 @@ import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
+import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.TokenUsage;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
+import tantalum.value.state.RunPhase;
 import tantalum.value.state.SessionState;
 
 /** 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。 */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
-                          RunId activeRun, Usage usage, Submission submission, boolean runEnded) {
+                          RunId activeRun, Usage usage, Submission submission, boolean runEnded,
+                          Instant answerDeadline, CommandId answerTimer) {
 
     /** 一个事件带来的用量，{@code seq} 在同一用户内唯一。 */
     public record Usage(long seq, LocalDate day, TokenUsage amount) {}
@@ -39,10 +43,14 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 ? new Submission(submitted.request(), submitted.submission()) : null;
         RunId active = activeRun(after, envelope.session());
         RunId previous = activeRun(before, envelope.session());
+        RunPhase phase = active == null ? null : after.runs().get(active).phase();
+        // 等用户回答且有期限：记下期限和定时器，重启后 shell 据此重新起定时器（waiting-state 需求 3.4）
+        AwaitingAnswer timed = phase instanceof AwaitingAnswer waiting && waiting.timer() != null ? waiting : null;
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
                 text == null ? "" : SessionSummary.titleOf(text),
-                active == null ? SessionSummary.IDLE : after.runs().get(active).phase().name(), active,
-                usage(envelope, before, after), submission, previous != null && !previous.equals(active));
+                phase == null ? SessionSummary.IDLE : phase.name(), active,
+                usage(envelope, before, after), submission, previous != null && !previous.equals(active),
+                timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer());
     }
 
     private static RunId activeRun(KernelState state, SessionId session) {

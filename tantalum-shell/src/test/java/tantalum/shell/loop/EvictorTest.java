@@ -176,4 +176,27 @@ class EvictorTest {
         clock.millis += 1000;
         assertFalse(evictor.sweep(state).sessions().containsKey(A));
     }
+
+    /** waiting-state D3：停在等用户回答的运行没有在途命令，会话可以走；等命令结果的不能。 */
+    @Test
+    void aRunWaitingForAnAnswerLetsTheSessionLeave() {
+        Evictor evictor = evictor(NONE, 1000);
+        tantalum.value.id.RunId waitingRun = tantalum.value.id.RunId.of(A, 1);
+        tantalum.value.id.RunId busyRun = tantalum.value.id.RunId.of(B, 1);
+        tantalum.value.question.Question question = new tantalum.value.question.Question("q", tantalum.value.text.LocalText.of("Go on?"), null,
+                List.of(new tantalum.value.question.Question.Choice("go", tantalum.value.text.LocalText.of("Go"))));
+        tantalum.value.state.RunState waiting = tantalum.value.state.RunState.start(new tantalum.value.id.RunRef(ALICE, A, waitingRun),
+                new tantalum.value.state.OwnerRef.OfSession(A)).withPhase(new tantalum.value.state.AwaitingAnswer(question,
+                tantalum.value.hook.HookPoint.BEFORE_TOOL_CALL, null, null));
+        tantalum.value.state.RunState busy = tantalum.value.state.RunState.start(new tantalum.value.id.RunRef(ALICE, B, busyRun),
+                new tantalum.value.state.OwnerRef.OfSession(B)).withPhase(new tantalum.value.state.Awaiting(
+                java.util.Set.of(new tantalum.value.id.CommandId("c")), "AwaitingTools"));
+        KernelState state = state(idle(A).startRun(waitingRun), idle(B).startRun(busyRun)).with(waiting).with(busy);
+        touch(evictor, A);
+        touch(evictor, B);
+        KernelState after = evictor.sweep(state);
+        assertFalse(after.sessions().containsKey(A), "waiting for an answer: evictable");
+        assertFalse(after.runs().containsKey(waitingRun), "its run leaves with it");
+        assertTrue(after.sessions().containsKey(B), "waiting for a command result: stays");
+    }
 }

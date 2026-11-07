@@ -84,6 +84,8 @@ class EventCodecTest {
                 new SteerSubmitted(SUB, REQ, "x"),
                 new FollowUpSubmitted(SUB, REQ, "x"),
                 new Cancel(REQ),
+                new tantalum.value.event.Answered(SUB, REQ, "approval-c1", tantalum.value.question.Answer.of("once")),
+                new tantalum.value.event.Answered(SUB, REQ, "ask-a1", new tantalum.value.question.Answer("keep", "归档到 old/")),
                 new tantalum.value.event.RunInterrupted(),
                 new ContextAssembled(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson())), null, List.of()),
                 new ContextAssembled(CMD, "system", List.of(), new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192),

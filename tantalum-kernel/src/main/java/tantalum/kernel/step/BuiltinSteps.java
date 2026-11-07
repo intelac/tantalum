@@ -1,6 +1,7 @@
 package tantalum.kernel.step;
 
 import tantalum.kernel.table.TransitionTable;
+import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
@@ -40,5 +41,9 @@ public final class BuiltinSteps {
         table.register(ToolSteps.AWAITING_TOOLS, ToolFinished.TYPE, ToolSteps::toolFinished);
         table.register(RetrySteps.AWAITING_RETRY, TimerFired.TYPE, RetrySteps::timerFired);
         table.register(WorkSteps.AWAITING_WORK, WorkDone.TYPE, WorkSteps::workDone);
+        // 等用户回答（waiting-state）：回答、期限到；别的阶段收到回答只记事实
+        table.register(AnswerSteps.AWAITING_ANSWER, Answered.TYPE, AnswerSteps::answered);
+        table.register(AnswerSteps.AWAITING_ANSWER, TimerFired.TYPE, AnswerSteps::expired);
+        table.register(TransitionTable.ANY_STATE, Answered.TYPE, AnswerSteps::ignored);
     }
 }

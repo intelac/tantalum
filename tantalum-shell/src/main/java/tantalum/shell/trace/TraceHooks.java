@@ -15,6 +15,9 @@ import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.HookDecided;
+import tantalum.value.state.AwaitingAnswer;
+import tantalum.value.decision.QuestionSettled;
+import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.HookReported;
 import tantalum.value.event.WorkDone;
 import tantalum.value.hook.HookPoint;
@@ -51,6 +54,29 @@ final class TraceHooks {
     }
 
     /** 补丁只在模型调用前生效：这个决定发出了模型调用就是用上了（摘要调用也用同一个补丁），否则未采用。 */
+    /** 运行停下来问用户（waiting-state）：一条记录，等人的这段从问到答。归发起位置所在的步；ask_user 归工具调用那一步。 */
+    void asked(int index, QuestionAsked fact) {
+        RunId run = fact.run().run();
+        HookPoint point = pass.state.runs().get(run) instanceof RunState current && current.phase() instanceof AwaitingAnswer waiting
+                && waiting.origin() != null ? waiting.origin() : HookPoint.BEFORE_TOOL_CALL;
+        Place place = place(run, point);
+        pass.add(new TraceRecord.Question(pass.head("q:" + fact.question().id(), run, place, pass.at), fact.question().id(), fact.askedBy(),
+                fact.question().title().wire(), TraceRecord.Question.Status.WAITING, null, null), place, true);
+    }
+
+    void settled(QuestionSettled fact) {
+        if (!(pass.book.open.get("q:" + fact.question()) instanceof TraceRecord.Question open)) {
+            return;
+        }
+        TraceRecord.Question.Status status = switch (fact.reason()) {
+            case ANSWERED -> TraceRecord.Question.Status.ANSWERED;
+            case EXPIRED -> TraceRecord.Question.Status.EXPIRED;
+            case CANCELLED -> TraceRecord.Question.Status.CANCELLED;
+        };
+        pass.put(new TraceRecord.Question(open.head().ended(pass.at), open.question(), open.askedBy(), open.title(), status,
+                fact.answer() == null ? null : fact.answer().choice(), fact.answer() == null ? null : fact.answer().text()), false);
+    }
+
     void decided(int index, HookDecided fact) {
         RunId run = fact.run().run();
         Applied applied = null;

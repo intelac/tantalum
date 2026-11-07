@@ -30,6 +30,8 @@ function fields(record: TraceRecord): (string | undefined)[] {
       return [record.workType, record.hook, json(record.input), json(record.result), record.continueText];
     case "hook":
       return [record.hook, record.point, record.result, record.reason, record.workType, ...record.tools];
+    case "question":
+      return [record.askedBy, typeof record.title === "string" ? record.title : record.title.en, record.status, record.choice, record.text];
   }
 }
 

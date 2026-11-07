@@ -31,6 +31,7 @@ import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.route.ChoiceCheck;
@@ -360,6 +361,8 @@ public class ApiController {
         view.put("title", summary.title());
         view.put("lastActivity", summary.lastActivity().toString());
         view.put("runStatus", summary.runStatus());
+        // 侧栏的“待回答”标记（waiting-state 需求 7.3）：从索引里的阶段名来，不载入会话
+        view.put("awaitingAnswer", AwaitingAnswer.NAME.equals(summary.runStatus()));
         return view;
     }
 

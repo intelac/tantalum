@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import tantalum.examples.ApprovalWork;
 import tantalum.examples.PinnedContextHook;
 import tantalum.examples.ProviderBackoffHook;
 import tantalum.examples.ProviderStatusWork;
@@ -49,31 +48,32 @@ class ExampleHooksPipelineTest {
     private static final MatrixFixture.CountingTool deploy = new MatrixFixture.CountingTool("deploy");
 
     /**
-     * 在对话页上回答审批（A4）：和浏览器一样经 {@code GET/POST /api/sessions/{会话}/questions} 取问题、交回答，按会话名决定怎么答。
-     * 待定那一格等第一轮审批工作落盘（没人回答）之后才答。
+     * 在对话页上回答审批（waiting-state）：和浏览器一样经 {@code GET/POST /api/sessions/{会话}/questions} 取问题、交回答，按会话名决定怎么答。
      */
     private static String choice(String session) {
         return switch (session) {
             case "ta-approved", "ta-session-other" -> "once";
             case "ta-denied" -> "deny";
             case "ta-session" -> "session";
-            case "ta-pending" -> fixture.events(session).contains("WorkDone[approval]") ? "once" : null;
             default -> null;
         };
     }
 
     private static final AtomicBoolean answering = new AtomicBoolean(true);
+    /** 已经答过的问题（会话 + 问题 id）：回答落盘到内核处理之间问题还在页面上，不重复答。 */
+    private static final java.util.Set<String> answered = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private static void answer() {
         while (answering.get()) {
             try {
-                for (String session : List.of("ta-approved", "ta-denied", "ta-pending", "ta-exhausted", "ta-session", "ta-session-other")) {
+                for (String session : List.of("ta-approved", "ta-denied", "ta-session", "ta-session-other")) {
                     JsonNode open = MatrixFixture.JSON.readTree(fixture.server().get(MatrixFixture.USER,
                             "/api/sessions/" + session + "/questions").body()).get("questions");
                     String choice = choice(session);
                     for (JsonNode question : open) {
-                        if (choice != null) {
-                            fixture.server().post(MatrixFixture.USER, "/api/sessions/" + session + "/questions/" + question.get("id").asString(),
+                        String id = question.get("id").asString();
+                        if (choice != null && answered.add(session + "/" + id)) {
+                            fixture.server().post(MatrixFixture.USER, "/api/sessions/" + session + "/questions/" + id,
                                     "{\"choice\":\"" + choice + "\"}");
                         }
                     }
@@ -93,8 +93,7 @@ class ExampleHooksPipelineTest {
         fixture = new MatrixFixture(temp, ARGS)
                 .hook(MatrixFixture.scoped(session -> session.startsWith("pb-"), new ProviderBackoffHook(Duration.ofMinutes(1))))
                 .workType(new ProviderStatusWork(status.uri(), Duration.ofMillis(50)))
-                .hook(MatrixFixture.scoped(session -> session.startsWith("ta-"), new ToolApprovalHook(Set.of("deploy"), 3)))
-                .workType(new ApprovalWork(Duration.ofMillis(300)))
+                .hook(MatrixFixture.scoped(session -> session.startsWith("ta-"), new ToolApprovalHook(Set.of("deploy"))))
                 .tool(deploy)
                 .hook(MatrixFixture.scoped(session -> session.contains("pin-"), new PinnedContextHook(PIN)));
         for (Backoff cell : backoff().toList()) {
@@ -201,18 +200,16 @@ class ExampleHooksPipelineTest {
     }
 
     /**
-     * ToolApprovalHook（beforeToolCall + onWorkResult，最多问 3 次，每次在页面上等 300 ms）：允许这一次 → 工具执行；拒绝 → 只拦这个调用；
-     * 先没人回答再允许 → 问 2 次后执行；一直没人回答 → 第 3 次后拦下；不在列表里的工具不问。运行都照常完成。
+     * ToolApprovalHook（beforeToolCall + onAnswer，waiting-state）：问了就停在等人阶段，回答是一个 Answered 事件；允许这一次 → 工具执行；
+     * 拒绝 → 只拦这个调用；不在列表里的工具不问。运行都照常完成。
      */
     static Stream<Approval> approval() {
-        String asked = "WorkDone[approval]";
+        String answered = "Answered";
         String ran = "ToolFinished[deploy-ok]";
         return Stream.of(
-                new Approval("ta-approved", "deploy", List.of(U, C, R, asked, ran, R), "tool:deploy:DONE:deploy-ok", 1),
-                new Approval("ta-denied", "deploy", List.of(U, C, R, asked, R),
+                new Approval("ta-approved", "deploy", List.of(U, C, R, answered, ran, R), "tool:deploy:DONE:deploy-ok", 1),
+                new Approval("ta-denied", "deploy", List.of(U, C, R, answered, R),
                         blocked("the user denied this call to deploy. Do not retry it or use another tool to get around this decision."), 0),
-                new Approval("ta-pending", "deploy", List.of(U, C, R, asked, asked, ran, R), "tool:deploy:DONE:deploy-ok", 1),
-                new Approval("ta-exhausted", "deploy", List.of(U, C, R, asked, asked, asked, R), blocked("no approval decision after 3 polls"), 0),
                 new Approval("ta-unlisted", "echo", List.of(U, C, R, "ToolFinished[echo-ok]", R), "tool:echo:DONE:echo-ok", 0));
     }
 
@@ -222,18 +219,21 @@ class ExampleHooksPipelineTest {
         fixture.submit(cell.id(), "go");
         assertEquals("COMPLETED", fixture.awaitEnd(cell.id(), 1));
         assertEquals(cell.events(), fixture.events(cell.id()), "journal");
-        assertEquals(List.of("user", "run:COMPLETED", cell.item(), "text:answer"), fixture.items(cell.id()), "items");
+        // 问过的问题留在对话里（waiting-state 需求 7.1）；不在列表里的工具没问
+        List<String> items = cell.tool().equals("deploy") ? List.of("user", "run:COMPLETED", cell.item(), "question", "text:answer")
+                : List.of("user", "run:COMPLETED", cell.item(), "text:answer");
+        assertEquals(items, fixture.items(cell.id()), "items");
         assertEquals(cell.runs(), deploy.calls(cell.id()), "deploy runs");
         assertEquals(fixture.model.prompts(cell.id()), fixture.replayedPrompts(cell.id()), "replayed prompts");
     }
 
     /**
      * A4：“这个会话里一直允许”。第一次提问里两个 deploy：第一个问、答“一直允许”，第二个不再问；同一会话第二次提问也不再问；
-     * 另一个会话照样问。允许名单记在 WorkDone 里（journal），所以类末尾的重开比较也覆盖了它。
+     * 另一个会话照样问。允许名单记在结果行里（journal），所以类末尾的重开比较也覆盖了它。
      */
     @Test
     void alwaysAllowInThisSessionAsksOnceAndOnlyInThisSession() throws Exception {
-        String asked = "WorkDone[approval]";
+        String asked = "Answered";
         String ran = "ToolFinished[deploy-ok]";
         fixture.submit("ta-session", "go");
         assertEquals("COMPLETED", fixture.awaitEnd("ta-session", 1));

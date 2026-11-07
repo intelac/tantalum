@@ -24,8 +24,8 @@ import tantalum.value.model.TextBlock;
  */
 class NoServerFileToolsTest {
 
-    /** 只碰服务器自己的数据：附件目录（只读）、每人的记忆。 */
-    private static final Set<String> SERVER_TOOLS = Set.of("read_attachment", "memory_read", "memory_write", "memory_delete");
+    /** 只碰服务器自己的数据：附件目录（只读）、每人的记忆；ask_user 什么都不碰。 */
+    private static final Set<String> SERVER_TOOLS = Set.of("ask_user", "read_attachment", "memory_read", "memory_write", "memory_delete");
 
     /** 联网工具：名字一个不多，包只能是 fetch 和 browser。 */
     private static final Set<String> WEB_TOOLS = Set.of("web_fetch", "browser_navigate", "browser_navigate_back", "browser_snapshot",
@@ -55,8 +55,9 @@ class NoServerFileToolsTest {
                     continue;
                 }
                 assertTrue(SERVER_TOOLS.contains(tool.name()), tool.name() + " (" + tool.getClass().getName() + ") runs on the server");
-                assertTrue(tool instanceof ReadAttachmentTool || tool.getClass().getPackageName().equals("tantalum.shell.memory"),
-                        tool.getClass().getName());
+                // ask_user 只有定义，调用由内核截下，不碰任何文件（waiting-state）
+                assertTrue(tool instanceof ReadAttachmentTool || tool instanceof tantalum.shell.tool.AskUserTool
+                        || tool.getClass().getPackageName().equals("tantalum.shell.memory"), tool.getClass().getName());
             }
             assertEquals(SERVER_TOOLS, Set.copyOf(tools.stream().filter(tool -> !(tool instanceof LocalTool) && !web(tool)).map(Tool::name).toList()));
             assertEquals(WEB_TOOLS, Set.copyOf(tools.stream().filter(NoServerFileToolsTest::web).map(Tool::name).toList()));

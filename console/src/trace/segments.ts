@@ -46,6 +46,8 @@ export function laneOf(record: TraceRecord): number {
       return 1;
     case "tool":
       return 2;
+    case "question":
+      return 4;
     default:
       return 3;
   }

@@ -22,6 +22,8 @@ import tantalum.shell.model.ChunkListener;
 import tantalum.shell.trace.TraceJson;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.decision.Fact;
+import tantalum.value.decision.QuestionAsked;
+import tantalum.value.decision.QuestionSettled;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
@@ -210,6 +212,9 @@ public final class SseHub implements FactListener {
     @Override
     public void onFact(long seq, int index, Fact fact) {
         publish(seq, index, fact.run().principal(), factMessage(mapper, seq, index, fact));
+        if (fact instanceof QuestionAsked || fact instanceof QuestionSettled) {
+            question(fact.run().principal(), fact.run().session());
+        }
     }
 
     @Override
@@ -252,7 +257,7 @@ public final class SseHub implements FactListener {
         forEachSubscriber(run.principal(), subscription -> subscription.offer(message));
     }
 
-    /** 这个会话等用户回答的问题变了（插件工作问用户，如工具审批）：推一条 {@code question}，页面再去取。不进 journal，不能补读。 */
+    /** 这个会话等用户回答的问题变了（问了、答了、撤了，waiting-state）：推一条 {@code question}，页面据此刷新侧栏标记。不进 journal，不能补读。 */
     public void question(Principal user, SessionId session) {
         SseMessage message = new SseMessage(null, "question", mapper.writeValueAsString(Map.of("session", session.value())));
         forEachSubscriber(user, subscription -> subscription.offer(message));

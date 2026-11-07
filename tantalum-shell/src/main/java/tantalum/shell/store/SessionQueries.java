@@ -12,6 +12,7 @@ import tantalum.shell.loop.StateView;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -86,6 +87,19 @@ public final class SessionQueries {
         } catch (Exception failure) {
             throw new SessionUnreadable(session, failure);
         }
+    }
+
+    /** 这个会话正在等用户回答的问题（waiting-state 需求 6.1）：活动运行停在 {@code AwaitingAnswer} 时有；不在内存的会话从文件读。 */
+    public Optional<AwaitingAnswer> openQuestion(Principal principal, SessionId session) {
+        return session(principal, session).flatMap(found -> {
+            RunId active = found.state().activeRun();
+            return active == null ? Optional.empty() : found.runs().stream()
+                    .filter(run -> run.ref().run().equals(active))
+                    .map(RunState::phase)
+                    .filter(AwaitingAnswer.class::isInstance)
+                    .map(AwaitingAnswer.class::cast)
+                    .findFirst();
+        });
     }
 
     /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */

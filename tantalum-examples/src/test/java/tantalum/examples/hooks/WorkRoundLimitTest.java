@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import tantalum.examples.ApprovalWork;
 import tantalum.examples.CitationCheckHook;
 import tantalum.examples.CitationWork;
 import tantalum.examples.ToolApprovalHook;
@@ -28,8 +27,8 @@ import tantalum.value.hook.HookPoint;
 
 /**
  * 需求 4.4、2.2、2.3：一个每次都要工作的钩子在 4 个等待点各撞一次工作轮数上限（默认 8），运行以 FAILED 结束，
- * 详情写明钩子、位置和轮数；正常的引用核对（1 轮）和审批（两个调用各 5 轮，合计 10 轮）不受影响。全部走真实管线。
- * 审批这里不在页面上问人，换成按次数回答的 {@link PollingApprovals}：测的是钩子按调用计数，不是怎么问。
+ * 详情写明钩子、位置和轮数；正常的引用核对（1 轮）不受影响。全部走真实管线。
+ * （审批以前靠反复要工作来等人，waiting-state 之后它不占工作轮数，不再在这里测。）
  */
 class WorkRoundLimitTest {
 
@@ -39,8 +38,6 @@ class WorkRoundLimitTest {
     @TempDir
     static Path temp;
     private static MatrixFixture fixture;
-    private static PollingApprovals approvals;
-    private static MatrixFixture.CountingTool deployTool;
 
     private static String settled(String hook, HookPoint at) {
         return "FAILED: plugin work did not settle: " + hook + " at " + at + " after 8 rounds (limit 8)";
@@ -93,28 +90,8 @@ class WorkRoundLimitTest {
                         List.of("user", "run:" + settled(MatrixHook.nameOf("cap-owr"), HookPoint.BEFORE_MODEL_CALL)), 0, 7));
     }
 
-    /** 和 {@code ApprovalWork} 同名、同样的结果格式：前 4 次（poll 0–3）回待定，第 5 次同意；记下问了几次。 */
-    static final class PollingApprovals implements WorkType {
-        final java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
-
-        @Override public String name() { return ApprovalWork.TYPE; }
-        @Override public String plugin() { return "toolApproval"; }
-
-        @Override
-        public WorkResult run(ToolContext context, Json input) {
-            asked.incrementAndGet();
-            java.util.Map<String, Json> fields = new java.util.LinkedHashMap<>(((Json.Obj) input).fields());
-            int poll = ((Json.Num) fields.get("poll")).value().intValue();
-            java.util.Map<String, Json> result = new java.util.LinkedHashMap<>();
-            result.put("decision", new Json.Str(poll < 4 ? "pending" : "approved"));
-            result.putAll(fields);
-            return new WorkResult(new Json.Obj(result), null);
-        }
-    }
-
     @BeforeAll
     static void start() throws Exception {
-        approvals = new PollingApprovals();
         fixture = new MatrixFixture(temp, "--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s");
         fixture.hook(new MatrixHook("cap-bmc", HookPoint.BEFORE_MODEL_CALL, MatrixHook.Result.WORK_OK, false).forever());
         fixture.hook(MatrixHook.source("cap-btc", HookPoint.BEFORE_TOOL_CALL));
@@ -128,12 +105,6 @@ class WorkRoundLimitTest {
         fixture.hook(MatrixFixture.scoped("citation"::equals, new CitationCheckHook())).workType(new CitationWork());
         fixture.model.script("citation", MatrixModel.answer("see A.cbl:9"), MatrixModel.answer("it is the second line"));
 
-        MatrixFixture.CountingTool deploy = new MatrixFixture.CountingTool("deploy");
-        fixture.hook(MatrixFixture.scoped("approval"::equals, new ToolApprovalHook(Set.of("deploy"), 5)))
-                .workType(approvals).tool(deploy);
-        fixture.model.script("approval", MatrixModel.tools(MatrixModel.call("approval", "d1", "deploy"),
-                MatrixModel.call("approval", "d2", "deploy")), MatrixModel.answer("answer"));
-        deployTool = deploy;
         fixture.start();
     }
 
@@ -168,19 +139,5 @@ class WorkRoundLimitTest {
                 fixture.events("citation"));
         assertEquals(List.of("msgs=1 last=user", "msgs=3 last=user"), fixture.prompts("citation"));
         assertEquals(fixture.model.prompts("citation"), fixture.replayedPrompts("citation"), "replayed prompts");
-    }
-
-    /** 两个调用各问 5 次（4 次待定、1 次同意），合计 10 轮工作超过 8，但每个调用单独计数，都执行了。 */
-    @Test
-    void approvalOfTwoCallsIsCountedPerCall() throws Exception {
-        fixture.submit("approval", "deploy twice");
-        assertEquals("COMPLETED", fixture.awaitEnd("approval", 1));
-        List<String> events = fixture.events("approval");
-        assertEquals(concat(concat(List.of("UserPrompt", "ContextAssembled", "ModelReplied"), repeat(10, "WorkDone[approval]")),
-                List.of("ToolFinished[deploy-ok]", "ToolFinished[deploy-ok]", "ModelReplied")), events);
-        assertEquals(List.of("user", "run:COMPLETED", "tool:deploy:DONE:deploy-ok", "tool:deploy:DONE:deploy-ok", "text:answer"),
-                fixture.items("approval"));
-        assertEquals(2, deployTool.calls("approval"));
-        assertEquals(10, approvals.asked.get());
     }
 }
