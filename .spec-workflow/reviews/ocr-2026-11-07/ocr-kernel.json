@@ -1,0 +1,538 @@
+{
+  "status": "completed_with_warnings",
+  "llm": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-5-5"
+  },
+  "summary": {
+    "files_reviewed": 142,
+    "comments": 50,
+    "total_tokens": 2243158,
+    "input_tokens": 2173758,
+    "output_tokens": 69400,
+    "cache_read_tokens": 676073,
+    "cache_write_tokens": 1497377,
+    "elapsed": "1m53s",
+    "budget_exceeded": true
+  },
+  "tool_calls": {
+    "total": 91,
+    "by_tool": {
+      "code_comment": 17,
+      "code_search": 42,
+      "file_find": 7,
+      "file_read": 25
+    },
+    "failure": 1,
+    "failure_by_tool": {
+      "code_search": 1
+    },
+    "failure_details": [
+      {
+        "tool_call_number": 1,
+        "tool_name": "code_search",
+        "file_path": "tantalum-kernel/src/main/java/tantalum/kernel/Limits.java",
+        "arguments": "{\"search_text\":\"new Limits(|Limits.DEFAULT|maxParallelTools|maxWorkRounds|max-parallel-tools|max-work-rounds\",\"use_perl_regexp\":true}",
+        "error": "git grep failed: exit status 128: fatal: -e option, 'new Limits(|Limits.DEFAULT|maxParallelTools|maxWorkRounds|max-parallel-tools|max-work-rounds': missing closing parenthesis"
+      }
+    ]
+  },
+  "comments": [
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/TokenEstimate.java",
+      "content": "`Json.Num` is a BigDecimal, and `toPlainString()` expands the exponent. A value such as `1E+1000000000`, which can come from model-produced reasoning/schema JSON, makes the kernel allocate a string about 1 GB long just to read its length. The kernel step can then throw OutOfMemoryError or stall. Compute the length from `precision()` and `scale()` without materialising the string, or use `toString()` as a cheap upper bound.",
+      "suggestion_code": "case Json.Num num -\u003e {\n    var v = num.value();\n    // plain-form length without building the string: digits + sign + padding zeros / decimal point\n    long digits = v.precision();\n    long scale = v.scale();\n    long len = digits + (v.signum() \u003c 0 ? 1 : 0);\n    if (scale \u003c 0) {\n        len += -scale;\n    } else if (scale \u003e= digits) {\n        len += scale - digits + 2; // \"0.\" + leading zeros\n    } else if (scale \u003e 0) {\n        len += 1; // decimal point\n    }\n    yield len;\n}",
+      "existing_code": "case Json.Num num -\u003e num.value().toPlainString().length();",
+      "start_line": 117,
+      "end_line": 117,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/TokenEstimate.java",
+      "content": "The class promises to over-estimate (\"宁可多算\"), but string and key sizes ignore JSON escape expansion: quotes, backslashes, newlines and control characters become 2 or 6 bytes. Reasoning `raw` and tool schemas with many newlines or quotes are therefore under-counted, which pushes the compaction trigger later than intended. Count the escape overhead, or add a safety margin.",
+      "existing_code": "case Json.Str str -\u003e str.value().getBytes(StandardCharsets.UTF_8).length + 2;",
+      "start_line": 118,
+      "end_line": 118,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/TokenEstimate.java",
+      "content": "`ofText` copies every string into a new byte[] only to read its length. `ofMessages` and `ofTools` run over the whole history on each estimate, so this adds allocation and GC pressure proportional to the session size. Count the UTF-8 length in a loop over chars/code points, with no allocation. Do the same in `jsonBytes` for `Str` and for object keys.",
+      "existing_code": "return ofBytes(text.getBytes(StandardCharsets.UTF_8).length);",
+      "start_line": 49,
+      "end_line": 49,
+      "category": "performance",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/TokenEstimate.java",
+      "content": "Image tokens are computed in `long`, but a very small `bytesPerToken`, which the constructor accepts, makes `bytes / bytesPerToken` huge. The `(long)` cast then saturates silently at Long.MAX_VALUE, and the sums in `ofMessages` can overflow to negative values. A negative total would silently suppress compaction. Enforce a sane lower bound on `bytesPerToken` (for example \u003e= 0.5) or use `Math.addExact`/saturating sums.",
+      "existing_code": "return (long) Math.ceil(bytes / bytesPerToken);",
+      "start_line": 53,
+      "end_line": 53,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Limits.java",
+      "content": "The canonical constructor accepts 0 or negative values. With `maxParallelTools \u003c= 0`, `ToolScheduler.next` hits `inFlight \u003e= maxParallelTools` immediately and never schedules a tool, so the run stalls. With `maxWorkRounds \u003c= 0`, `WorkSteps` fails on the first work round. Only `TantalumProperties` validates these values (`requirePositive`). Any other caller, such as tests, `LoopFixture` or a future embedder, can build an invalid `Limits`. Validate in the kernel type itself, which is the invariant owner.",
+      "suggestion_code": "public record Limits(int maxParallelTools, int maxWorkRounds) {\n\n    public Limits {\n        if (maxParallelTools \u003c 1) {\n            throw new IllegalArgumentException(\"maxParallelTools must be \u003e= 1: \" + maxParallelTools);\n        }\n        if (maxWorkRounds \u003c 1) {\n            throw new IllegalArgumentException(\"maxWorkRounds must be \u003e= 1: \" + maxWorkRounds);\n        }\n    }",
+      "existing_code": "public record Limits(int maxParallelTools, int maxWorkRounds) {",
+      "start_line": 4,
+      "end_line": 4,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Limits.java",
+      "content": "The defaults 10/8 are duplicated in `application.properties`, and a comment is the only thing keeping them in sync. They can drift silently. If the live run and a replay or restart use different limits, the recorded decisions and a recomputation can diverge. Make the properties file the single source, or add a test that asserts `Limits.DEFAULT` equals the bound properties defaults. Also check that a restart restores recorded results and does not recompute them under new limits.",
+      "existing_code": "public static final Limits DEFAULT = new Limits(10, 8);",
+      "start_line": 7,
+      "end_line": 7,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/SummaryPrompt.java",
+      "content": "The size check measures `summaryMessage(text)` without the `\u003cfiles-touched\u003e` block. The message that is actually adopted is built by `Compactor.replacement`, which calls `summaryMessage(summary, filesTouched(head))`. That block can hold up to 200 entries, and each path has no length limit. So validation can pass while the real replacement is as large as or larger than the head. This breaks the stated rule that the summary plus the request must be smaller than the head. Auto-compaction can then grow the view and loop again at the next threshold check. Compute the files list before validating and pass it in, for example `validate(content, stop, headEstimate, requestEstimate, files, estimate)`, then measure `summaryMessage(text, files)`. Alternatively, have the caller build the final replacement first and compare that.",
+      "suggestion_code": "        if (estimate.ofMessage(summaryMessage(text, files)) + requestEstimate \u003e= headEstimate) {",
+      "existing_code": "        if (estimate.ofMessage(summaryMessage(text)) + requestEstimate \u003e= headEstimate) {",
+      "start_line": 124,
+      "end_line": 124,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/SummaryPrompt.java",
+      "content": "`filesIn` assumes any last `\u003cfiles-touched\u003e…\u003c/files-touched\u003e` pair is the program-written block, but nothing guarantees that. `summaryMessage` appends no block when `files` is empty. In that case a model-written `\u003cfiles-touched\u003e` section inside the summary text becomes the 'file list'. It is then merged into later summaries by `Compactor.filesTouched` and re-emitted as trusted program data. File paths come from tool-call `path` arguments. A path containing a newline is split into several entries by `lines()`. A path containing `\u003c/files-touched\u003e` truncates the block. The round trip is therefore not lossless. Require the block to be anchored at the very end, i.e. `text.stripTrailing().endsWith(FILES_CLOSE)`. Also sanitize or reject entries containing newlines or the tags when writing, and strip or escape the tags from the model text in `summaryMessage` and `validate`.",
+      "existing_code": "        int open = text.lastIndexOf(FILES_OPEN);\n        int close = text.lastIndexOf(FILES_CLOSE);\n        if (open \u003c 0 || close \u003c open) {\n            return List.of();\n        }",
+      "start_line": 90,
+      "end_line": 94,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/SummaryPrompt.java",
+      "content": "The model text is embedded verbatim. `validate` does not reject output that starts with `SUMMARY_PREFIX` or contains the `\u003cfiles-touched\u003e` tags. It does not bound or deduplicate it either. A model that echoes the previous summary (the instruction asks it to keep earlier content) can produce a nested prefix or a nested files block, which `isSummary` and `filesIn` then misinterpret in the next compaction round. Normalize the model text before wrapping it. Strip a leading `SUMMARY_PREFIX` and neutralize the marker tags. Add a validation failure for these cases.",
+      "existing_code": "        return Message.user(SUMMARY_PREFIX + summary.strip() + list);",
+      "start_line": 81,
+      "end_line": 81,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/SummaryPrompt.java",
+      "content": "This bounds the number of entries but not the length of each entry. Paths come from arbitrary tool-call arguments and can be arbitrarily long. The block is stored in session state, resent on every model call, and journaled. A few very long paths can defeat the intended bound on summary size, and this is made worse because `validate` ignores the block. Also, `Compactor.filesTouched` dedups with a LinkedHashSet that keeps the first-seen position. A file touched again recently keeps its old position and can be dropped by 'keep the most recent 200'. Cap the length per entry, and move a re-touched file to the end.",
+      "existing_code": "        return files.size() \u003c= MAX_FILES ? List.copyOf(files) : List.copyOf(files.subList(files.size() - MAX_FILES, files.size()));",
+      "start_line": 100,
+      "end_line": 100,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java",
+      "content": "The marker regex runs on arbitrary tool output, and `Long.parseLong` is applied to an unbounded `\\d+`. Any result that contains marker-like text with 19 or more digits throws NumberFormatException, and that aborts the whole compaction. The same text also controls `original`, which feeds the budget and the printed counts. Output the tool did not truncate gets silently edited, and the byte counts in the new marker can be forged. Direction: only treat a marker as a prior truncation if it can be trusted. For example, require it to be at the exact head/tail join position, or carry the truncation state as a field on ToolResultBlock instead of re-parsing text. At minimum, guard the parse with try/catch or a digit-length limit, and check that `omitted \u003c= original`.",
+      "existing_code": "            original = Long.parseLong(old.group(2));",
+      "start_line": 59,
+      "end_line": 59,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java",
+      "content": "There is no clamp on the head/tail cut points. If an old marker was stripped, `bytes` can be shorter than `budget`. This happens when the marker text is forged, or when the old marker was longer than `marker(original, original)`, for example with leading zeros. Then `bytes.length - (budget - budget/2)` is negative. `charBoundaryForward` evaluates `bytes[cut]` with a negative index and throws ArrayIndexOutOfBoundsException. Even when the index is not negative, `tailStart` can be less than `headEnd`. The overlapping region is then emitted twice and `omitted` goes negative. Clamp it: `if (bytes.length \u003c= budget) { /* nothing to cut */ }`, or use `tailStart = Math.max(tailStart, headEnd)`. Also clamp the pre-adjustment index to `\u003e= 0`.",
+      "existing_code": "        int tailStart = charBoundaryForward(bytes, bytes.length - (budget - budget / 2));",
+      "start_line": 65,
+      "end_line": 65,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java",
+      "content": "`omitted` is computed from `original`, which may come from the parsed marker text, and not from what was actually removed. For forged or inconsistent markers it can be negative or wrong. When `maxBytes` is smaller than the marker, the returned block still exceeds the limit, because only the marker is kept (head and tail are empty), so `maxBytes` is not a hard guarantee. Compute omitted from the real cut, `bytes.length - headEnd - (bytes.length - tailStart)`, plus the previously omitted amount only when the old marker is trusted. Document or enforce the behavior for tiny limits.",
+      "existing_code": "        long omitted = original - headEnd - (bytes.length - tailStart);",
+      "start_line": 68,
+      "end_line": 68,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Trimming.java",
+      "content": "`result.images()` is copied through unchanged, so the byte limit applies only to text. If images are large, compaction does not bound the size of a tool result. Decide explicitly whether images should be dropped or limited when a result is truncated.",
+      "existing_code": "        return new ToolResultBlock(result.toolCallId(), head + marker(omitted, original) + tail, result.error(), result.code(),\n                result.images());",
+      "start_line": 69,
+      "end_line": 70,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Kernel.java",
+      "content": "Error handling swallows failures and can leave state inconsistent. (1) When `run == null` the exception is dropped and `unchanged(state)` is returned. No fact, log or journal trace remains, so a step that always throws for new-run events (for example Submit) is invisible, and the caller gets an unchanged state with no error. (2) `RunEnd.fail` gets a `StepContext` built from the pre-step state. It calls `finish`, which only completes tool pairing, appends steers, enters Ended and calls endRun. It does not abort in-flight commands or the AwaitingAnswer timer, so late results or timers for the failed run reach ANY_STATE handlers. (3) If the run is already in a terminal phase (Ended/Cancelled), `fail` re-enters `Ended` and calls `endRun()` again. That can overwrite the original end reason, or pop a follow-up for a session whose active run is another run. (4) `RunEnd.fail` is not guarded, so an exception inside it (for example a null `run.tools()` slot or hooks) escapes `Kernel.step`. (5) `failure.toString()` goes straight into the journal as the Ended detail, so plugin or hook exception messages can leak into the journal and SSE.\n\nSuggested direction: emit a diagnostic fact (for example `StepFailed`) for the `run == null` case too. Skip or ignore `fail` when the run is already Ended. Emit `AbortCommands` for in-flight commands and the timer on failure. Record the exception class and a sanitized message instead of the full `toString()`.",
+      "suggestion_code": "        } catch (RuntimeException failure) {\n            if (run == null || run.phase() instanceof Ended) {\n                return Decision.unchanged(state); // TODO: record a StepFailed fact so the failure is visible in the journal\n            }\n            return RunEnd.fail(context, failure);\n        }",
+      "existing_code": "        } catch (RuntimeException failure) {\n            if (run == null) {\n                return Decision.unchanged(state);\n            }\n            return RunEnd.fail(context, failure);\n        }",
+      "start_line": 49,
+      "end_line": 54,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Kernel.java",
+      "content": "A missing transition (phase, event type) silently drops the event. No fact is emitted, so events that arrive after Cancel or in a terminal phase leave no trace in the journal or in replay. A registration gap, such as a new phase that lacks a handler for an existing event, therefore fails silently. For example, the table has no entry for Answered, TimerFired or SteerSubmitted in some phase. Consider returning a decision with a diagnostic fact (for example `EventIgnored(phase, type)`). At minimum, add a test that enumerates every (phase × event type) pair and asserts that each is either registered or explicitly allow-listed as ignorable.",
+      "existing_code": "        if (step.isEmpty()) {\n            return Decision.unchanged(state);\n        }",
+      "start_line": 42,
+      "end_line": 44,
+      "category": "maintainability",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Kernel.java",
+      "content": "If `envelope.run()` is set but the run is missing from `state.runs()` (removed or evicted, or a stale id from the client), `findRun` returns null. `findStep` then treats the event as `NEW_RUN`, so a stale event is routed to the new-run handlers instead of being ignored. When the envelope names a run that is not found, return a distinct result (unknown run → unchanged with a fact). Do not conflate it with the legitimate 'no active run' case. Also, `envelope.session()` is used for the lookup with no null check. A `Map.get(null)` on an immutable map (`Map.of`/`Map.copyOf`) throws NPE, and this happens outside the try block.",
+      "existing_code": "        return id == null ? null : state.runs().get(id);",
+      "start_line": 63,
+      "end_line": 63,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Kernel.java",
+      "content": "`findStep`, and `isAwaited` inside it, run outside the try/catch. `awaiting.commands().contains(result.command())` throws NPE on immutable lists (`List.of`/`List.copyOf`) if `result.command()` is null. `result.command().equals(waiting.timer())` throws NPE for a null command. Any RuntimeException thrown from the lookup escapes `Kernel.step`. That breaks the contract that step failures are converted into a decision, and the caller's session loop may die. Move the lookup inside the guarded region, or make `isAwaited` null-safe (`Objects.equals(waiting.timer(), result.command())`).",
+      "existing_code": "        Optional\u003cStepFunction\u003e step = findStep(run, envelope.event());",
+      "start_line": 41,
+      "end_line": 41,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Replay.java",
+      "content": "The per-principal ordering check and the fold loop are copied in `tantalum-shell/src/test/.../TranscriptReplay.java`. It has the same message, `event out of order at seq`. The two versions can drift apart, and a replay that differs from the live run is the defect this class exists to catch. Add one fold primitive to the kernel, for example `Replay.fold(kernel, events, Consumer\u003cDecision\u003e)`. Have `TranscriptReplay` reuse it and add only its transcript handling.",
+      "suggestion_code": "            Long last = previous.get(envelope.principal());\n            if (last != null \u0026\u0026 envelope.seq() \u003c= last) {\n                throw new IllegalArgumentException(\"event out of order at seq \" + envelope.seq()\n                    + \" for principal \" + envelope.principal() + \" (last \" + last + \")\");\n            }\n            previous.put(envelope.principal(), envelope.seq());",
+      "existing_code": "            Long last = previous.put(envelope.principal(), envelope.seq());\n            if (last != null \u0026\u0026 envelope.seq() \u003c= last) {\n                throw new IllegalArgumentException(\"event out of order at seq \" + envelope.seq());\n            }",
+      "start_line": 27,
+      "end_line": 30,
+      "category": "maintainability",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/Replay.java",
+      "content": "`Result` exposes the mutable `ArrayList`s that `run` built, so callers can modify them. It also keeps every command and fact for the whole log. `Decision` already uses `List.copyOf`, so the record should do the same. Alternatively, add a streaming variant with a callback so large journals are not held in memory. Nothing outside tests calls `Replay.run`, so the cost today is small.",
+      "suggestion_code": "        return new Result(state, List.copyOf(commands), List.copyOf(facts));",
+      "existing_code": "        return new Result(state, commands, facts);",
+      "start_line": 36,
+      "end_line": 36,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/attachment/ImageBudget.java",
+      "content": "Image omission decisions are keyed only by `image.id()`, which is a sha256 of the stored bytes. The same id can therefore appear in several messages, for example when the user re-uploads the same screenshot or `read_file` returns the same image twice. `apply` and `replace` both work by id alone, with no notion of which occurrence was chosen. Two things go wrong:\n1. If an older occurrence is omitted, either because it overflowed or because the id is already in `alreadyOmitted`, `omit()`/`replace` substitutes every occurrence of that id. That includes a fresh upload in the newest message. The model never sees the image the user just sent, and the id stays omitted for the rest of the session because `omittedImages` only grows. The estimate path (`omit` with the session's `omittedImages`) and the sent prompt both drop a re-submitted image that has the same hash as an older omitted one.\n2. A kept id that appears twice is counted twice against the 20 MiB budget, so the accounting and the actual output disagree.\n\nSuggested direction: track omission per occurrence instead of per id. For example, key by (message index, block index, image index), or only omit older occurrences. Alternatively, treat the newest occurrence as kept and dedupe the budget by id. The persisted state would need to follow the same rule.\n\nAlso, in the `ToolResultBlock` replacement, `new StringBuilder(result.text())` assumes `text` is non-null, and it prepends '\\n' even when the text is empty. Guard both cases.",
+      "existing_code": "                if (already.contains(image.id()) || omit.contains(image.id())) {\n                    continue;\n                }",
+      "start_line": 42,
+      "end_line": 44,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/attachment/ImageBudget.java",
+      "content": "`Set.copyOf` throws NPE if `alreadyOmitted` contains a null. `alreadyOmitted` also grows without bound across the session and is copied on every model call, which is O(n) work per call. Consider keeping the session state as a Set and not copying it in the hot path.",
+      "existing_code": "        Set\u003cString\u003e already = Set.copyOf(alreadyOmitted);",
+      "start_line": 34,
+      "end_line": 34,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookOutcome.java",
+      "content": "The record doc says `decidedBy` is null on pass-through. The compact constructor does not enforce that, and it does not reject a null `result`. The only caller is HookChain, which keeps the invariant today. The invariant exists only in prose, so a future caller could silently break the attribution of a decision. A null `facts` would throw an NPE from `List.copyOf` with no message. The doc also leaves out `Ask`. A hook returning `Ask` also sets `decidedBy`, because HookChain returns `hook.name()` for every non-Allow result. Suggested fix: add `Objects.requireNonNull(result, \"result\")` and check that `decidedBy == null` exactly when `result instanceof Allow`. Update the doc to mention `Ask`.",
+      "suggestion_code": "    public HookOutcome {\n        Objects.requireNonNull(result, \"result\");\n        facts = List.copyOf(facts);\n        if ((result instanceof Allow) != (decidedBy == null)) {\n            throw new IllegalArgumentException(\"decidedBy must be null exactly when the result is Allow\");\n        }\n    }",
+      "existing_code": "    public HookOutcome {\n        facts = List.copyOf(facts);\n    }",
+      "start_line": 10,
+      "end_line": 12,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Compactor.java",
+      "content": "For a threshold below 16 (or zero or negative), `minGain` is 0 or negative. `summaryCanHelp` and `trimHelps` then always return true (`\u003e= 0`), so a call that gains nothing still counts as progress. That defeats the progress check and can cause repeated no-gain compactions or model calls. Clamp it, for example `Math.max(1, Math.min(500, threshold / 16))`, or validate `threshold` in `CompactionSettings`.",
+      "existing_code": "return Math.min(500, settings.threshold() / 16);",
+      "start_line": 79,
+      "end_line": 79,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Compactor.java",
+      "content": "Each drop iteration re-splits the whole head, copies it into a new list and re-estimates every message. Dropping k units from n messages therefore costs O(k·n). With a long history and a small capacity this is quadratic. Split once, then compute a running estimate and drop units from the front until the head fits. Also guard `units.size() \u003e floor` explicitly, so the loop does not rely on a Units.split invariant.",
+      "existing_code": "            List\u003cUnit\u003e units = Units.split(head);\n            Unit victim = units.get(floor);",
+      "start_line": 143,
+      "end_line": 144,
+      "category": "performance",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/compaction/Compactor.java",
+      "content": "`isUserText` requires every block to be a TextBlock. A real user request that carries an attachment or image block is therefore never treated as the current request. `request(head)` then skips it and may return an older text-only message. `plan` also computes `requestKept` from the wrong message. After compaction the model can see a stale request, or none, while the real request survives only in the summary. Decide by whether the message is a tool result, context update or summary rather than requiring all-text blocks. At the least, add a test with an attachment-bearing request.",
+      "existing_code": "        for (ContentBlock block : message.content()) {\n            if (!(block instanceof TextBlock)) {\n                return false;\n            }\n        }",
+      "start_line": 188,
+      "end_line": 192,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextDiff.java",
+      "content": "`Collectors.toMap` has no merge function, so two sections with the same name in `before` throw IllegalStateException. This runs inside the kernel step (ContextSteps) and in TraceSystem, so a duplicate name would fail the step and the replay. Nothing here or in the `ContextSection` record guarantees names are unique. Also, `after` is not checked for duplicates, so a repeated name would be emitted twice. Either enforce uniqueness where the sections are assembled, or merge deterministically here with a `LinkedHashMap` and a merge function such as `(a, b) -\u003e b`.",
+      "suggestion_code": "Map\u003cString, ContextSection\u003e old = before.stream().collect(Collectors.toMap(ContextSection::name, Function.identity(), (a, b) -\u003e b, java.util.LinkedHashMap::new));",
+      "existing_code": "Map\u003cString, ContextSection\u003e old = before.stream().collect(Collectors.toMap(ContextSection::name, Function.identity()));",
+      "start_line": 18,
+      "end_line": 18,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextDiff.java",
+      "content": "Change detection compares raw bodies, but `lineChanges` compares de-duplicated, blank-filtered line sets. If a body differs only in blank lines, trailing whitespace, line order or the count of duplicate lines, both `added` and `removed` are empty. The method then emits `\u003cname\u003e\\n\\n\u003c/name\u003e`, an empty tagged section. That is a spurious non-empty diff. It tells the model something changed, and it makes `of(...).isEmpty()` false in TraceSystem. Conversely, adding or removing one copy of a duplicated line is not reported at all. Return null or an empty string from `lineChanges` when there are no line changes, and skip adding it to `parts`. If duplicates or order matter, compare lists or multisets instead of sets.",
+      "suggestion_code": "        if (text.isEmpty()) {\n            return \"\";\n        }\n        return new ContextSection(now.name(), text.toString(), true).tagged();",
+      "existing_code": "        return new ContextSection(now.name(), text.toString(), true).tagged();",
+      "start_line": 47,
+      "end_line": 47,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextDiff.java",
+      "content": "The line-diff mode is chosen from `section.byLine()` alone. If `byLine` flips between `before` and `after`, or the section was previously a whole-section one, the model gets an Added/Removed diff against a body it was never shown in that form. The removal note also puts `name()` into free text without escaping, unlike `body`, which is documented as already escaped. Use the line diff only when both sections are byLine, and otherwise resend the full section.",
+      "suggestion_code": "parts.add(section.byLine() \u0026\u0026 previous != null \u0026\u0026 previous.byLine() ? lineChanges(section, previous) : section.tagged());",
+      "existing_code": "parts.add(section.byLine() \u0026\u0026 previous != null ? lineChanges(section, previous) : section.tagged());",
+      "start_line": 23,
+      "end_line": 23,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextUpdate.java",
+      "content": "isUpdate recognizes synthetic messages only by a textual prefix, with no structural marker. A real user message that starts with \"[Context update, not written by the user.\" would be misclassified. Compactor.isUserText would then treat it as not user-written and drop it from the compaction head. Pasted logs or quoted transcripts could trigger this. The prefix also can't be changed without breaking recognition of lines already in the journal. Suggested direction: carry an explicit flag or origin on the Message (or a dedicated content block type), and keep the prefix check only as a fallback for old journal lines. At minimum, pin the PREFIX/HEADER wording with a replay-compat test.",
+      "existing_code": "    public static boolean isUpdate(String text) {\n        return text.startsWith(PREFIX);\n    }",
+      "start_line": 19,
+      "end_line": 21,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ToolsGone.java",
+      "content": "The Javadoc depends on outside references: the spec id \"one-line-journal J7\" and \"同 pi 的说法\" (\"same wording as pi\"). Someone reading only the code can't tell what J7 or pi is. Replace both with the actual reason. For example: the wording is intentionally fixed and must not change, because journaled `ContextUpdate` messages and replay depend on it. Also say that the caller (`ContextSteps.freezeContext`) must pass a non-empty, ordered, de-duplicated list.",
+      "existing_code": " * 压缩之后告诉模型哪些工具已经不能用了（one-line-journal J7）。原来的工具变化消息可能已经压进摘要，",
+      "start_line": 6,
+      "end_line": 6,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ToolsGone.java",
+      "content": "`text` does not validate its input. An empty list gives the malformed sentence \"...Do not call them: .\", and a null list or null element throws an NPE. The only production caller (`ContextSteps.freezeContext`) checks `gone.isEmpty()` first, and the order comes from the ordered `toolsSeen`, so replay is deterministic today. The contract is only kept by that caller. Add `Objects.requireNonNull` and an `IllegalArgumentException` for an empty list, or document the precondition, so a future caller cannot append a broken message to the session.",
+      "suggestion_code": "    public static String text(List\u003cString\u003e tools) {\n        if (tools == null || tools.isEmpty()) {\n            throw new IllegalArgumentException(\"tools must not be empty\");\n        }\n        return \"These tools were available earlier in this conversation and are no longer available. Do not call them: \"\n                + String.join(\", \", tools) + \".\";\n    }",
+      "existing_code": "                + String.join(\", \", tools) + \".\";",
+      "start_line": 15,
+      "end_line": 15,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookChain.java",
+      "content": "The plugin-switch filter runs before the mandatory and required checks, so it can skip a hook that must stay on. `KernelHook.mandatory()` says the plugin \"cannot be turned off by the user\", and `required` says the same for admin-configured plugins. Here the chain trusts the session's `activePlugins` list, which was recorded when the run started. If the list omits a mandatory or required plugin, its hook never runs, for example a quota or read-only policy hook. This can happen when an admin adds the plugin to `tantalum.hooks.required` after the session began, when a bug in the shell leaves it out of the list, or when `defaultEnabled()` is false. The list is stable for the whole session, so the bypass lasts for every later run in it. Make the kernel enforce the rule: only skip hooks that are neither `mandatory()` nor in `required`.",
+      "suggestion_code": "            if (session != null \u0026\u0026 !hook.mandatory() \u0026\u0026 !required.contains(hook.plugin())\n                    \u0026\u0026 !session.pluginActive(hook.plugin())) {\n                continue;\n            }",
+      "existing_code": "            if (session != null \u0026\u0026 !session.pluginActive(hook.plugin())) {\n                continue;\n            }",
+      "start_line": 47,
+      "end_line": 49,
+      "category": "bug",
+      "severity": "high"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookChain.java",
+      "content": "Several calls on a hook sit outside the try/catch, so a faulty hook can crash the kernel step instead of failing closed. These are `hook.plugin()`, `session.pluginActive(...)` and `hook.name()`. `pluginActive` calls `contains(null)` on what is likely an immutable list, which throws an NPE if `plugin()` returns null. In the catch block, `hook.failClosed()`, `hook.plugin()` and `hook.name()` can also throw. Compute the hook identity (name, plugin) once, null-safely, before the try. Alternatively, wrap the whole per-hook body so that every hook defect goes through the same Stop or skip policy.",
+      "existing_code": "                if (hook.failClosed() || required.contains(hook.plugin()) || point == HookPoint.BEFORE_TOOL_CALL) {",
+      "start_line": 55,
+      "end_line": 55,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookChain.java",
+      "content": "`failure.toString()` writes the raw exception class and message into a `HookReported` fact. That fact goes to the journal and probably to SSE and the console. A third-party hook's message can contain user data, file paths, tokens or other secrets. The journal is append-only and replay must be byte-identical, so a leaked value can never be removed. The text can also be arbitrarily long, which makes the journal grow without bound. Record only the exception class and a truncated, sanitized message.",
+      "suggestion_code": "                facts.add(new HookReported(context.run(), hook.name(), failure.getClass().getName()));",
+      "existing_code": "                facts.add(new HookReported(context.run(), hook.name(), failure.toString()));",
+      "start_line": 54,
+      "end_line": 54,
+      "category": "security",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookChain.java",
+      "content": "Patches are merged and reported as PATCH at every hook point, but `KernelHook` documents that only the `beforeModelCall` patch takes effect. At other points the audit log claims a patch was applied when it was ignored. Also, `systemAppend` strings from different hooks are concatenated with no separator, so one hook's text can run into the next. Join the non-empty fragments with a newline. Only merge or record patches at BEFORE_MODEL_CALL.",
+      "suggestion_code": "            if (!allow.patch().systemAppend().isEmpty()) {\n                if (!system.isEmpty()) {\n                    system.append('\\n');\n                }\n                system.append(allow.patch().systemAppend());\n            }",
+      "existing_code": "            system.append(allow.patch().systemAppend());",
+      "start_line": 71,
+      "end_line": 71,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/UsageProjection.java",
+      "content": "`at`, `principal` and `state` are not null-checked. A null `at` makes `LocalDate.ofInstant` throw an NPE. Because the kernel is replayed, an exception here would abort the step or `Replay.run`, so one bad journal line could block session restore. Validate the inputs with `Objects.requireNonNull` and a clear message, or guarantee non-null values at the call sites. Also confirm that every caller passes the event's recorded timestamp, not a clock read. Also check that `PrincipalState.add` does not keep an unbounded per-date map. Prune or cap old dates so state growth stays bounded.",
+      "existing_code": "        PrincipalState current = state.principals().get(principal);\n        if (current == null) {\n            current = PrincipalState.start(principal);\n        }\n        return state.with(current.add(LocalDate.ofInstant(at, ZoneOffset.UTC), usage));",
+      "start_line": 20,
+      "end_line": 24,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java",
+      "content": "The Javadoc says that after a hook returns `NeedWork`, `beforeToolCall` is not asked again and `onWorkResult` decides whether to allow the call. The chain short-circuits on `NeedWork`, so hooks registered after the requesting hook (for example a read-only or quota policy) have not yet vetoed that call. If `onWorkResult` returns `Allow`, the call may run without those hooks ever seeing it. That bypasses the policy hooks. Confirm this in `ToolSteps` and `AnswerSteps`. Two safer options: resume the chain at the next hook after the one that asked, or re-run the full `beforeToolCall` chain once the work finishes, with the work result in the context.",
+      "existing_code": "    default HookResult beforeToolCall(KernelState state, HookContext context) {",
+      "start_line": 71,
+      "end_line": 71,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java",
+      "content": "Every callback returns the same open `HookResult` type, but the valid results differ by position. `Ask` is only meaningful for `onAnswer` (and apparently `beforeToolCall` and others, since `ToolSteps` handles it). `NeedWork` is a refusal in `beforeCompact`. `Allow` patches only count in `beforeModelCall`, yet `Allow.withNote` is honoured in `onAnswer`, and `HookChain` merges notes at every position. This is enforced only by Javadoc and by per-position handling in the dispatcher. A hook that returns an unsupported result gets surprising behaviour, and the kernel needs special cases at each position. Direction: use per-position return types or a position-specific result sealed interface. Alternatively, have `HookChain` validate the result against the position and treat a violation like a contract breach, as it already does for null.",
+      "existing_code": "    default HookResult onAnswer(KernelState state, HookContext context) {",
+      "start_line": 103,
+      "end_line": 103,
+      "category": "maintainability",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java",
+      "content": "The pure-kernel SPI now carries console presentation concerns: `description()` returns i18n text for the plugins page, and `plugin()`, `mandatory()` and `defaultEnabled()` are UI and admin metadata. The replayed callbacks share one interface with this metadata, and it keeps growing, with each flag added by default. Direction: split into a small `PluginDescriptor` (name, plugin, description, mandatory, defaultEnabled, failClosed) and the pure `KernelHook` callbacks, so that metadata changes don't touch the kernel contract.",
+      "existing_code": "    default LocalText description() {",
+      "start_line": 37,
+      "end_line": 37,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java",
+      "content": "Several comments only make sense with an external spec id, ticket or decision record: \"core-tools C13\", \"console-i18n I10\", \"waiting-state\", and \"2026-11-06 Yi 定\". A reader cannot resolve these from the code. State the rule itself, for example \"policy plugins start disabled so users opt in\", and drop the references. Also, `defaultEnabled` is aggregated with `logicalAnd` across a plugin's hooks, so one hook changes the whole plugin's default. That surprising coupling is documented only here.",
+      "existing_code": "     * 用户没在插件页设置过时开不开，默认开。策略类插件（只读、工具审批、每日额度）返回 false，由用户自己打开（2026-11-06 Yi 定）。",
+      "start_line": 58,
+      "end_line": 58,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPatches.java",
+      "content": "The skip path returns the original session with the old HookState. Nothing remembers that this patch was dropped. Every later call with the same patch rebuilds the blocks, skips again and emits another identical `HookReported`. If the last message stays an assistant message, the hook's instructions never reach the model and the report is repeated on every call. Persist a marker in `HookState`, or at least report once. If the situation is truly impossible, treat it as an invariant violation and don't hide it behind a repeated soft report.",
+      "existing_code": "        if (!session.messages().isEmpty() \u0026\u0026 session.messages().getLast().role() == Role.ASSISTANT) {",
+      "start_line": 78,
+      "end_line": 78,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPatches.java",
+      "content": "Change detection compares only the merged text. If any one hook's text changes, `split` re-announces every hook's text as new blocks, including the unchanged ones. Each change therefore duplicates instructions in the history and costs tokens. When the text becomes empty, no block is emitted but `next` records \"\". The model is never told the earlier instruction was withdrawn, and the old HookTextBlock stays in history as if it were still in force. If the same text comes back later it is announced again. Track the text per hook, as a map of hook to text, and emit only the changed hooks. Add an explicit \"withdrawn\" notice for hooks whose text went away, or document that withdrawal is deliberately silent.",
+      "existing_code": "        if (!text.equals(state.text()) \u0026\u0026 !text.isEmpty()) {\n            blocks.addAll(split(text, facts));\n        }",
+      "start_line": 53,
+      "end_line": 55,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPatches.java",
+      "content": "Only the upper bound is checked. A negative `systemChars` (a corrupt or replayed fact) passes this check. `substring(offset, offset + negative)` then throws `StringIndexOutOfBoundsException` or `IllegalArgumentException`. That would abort a kernel step that is supposed to degrade to the \"?\" block. Guard with `decided.systemChars() \u003c 0 ||` or use `Math.addExact`/range validation. Also, `split` assumes the merged text is a plain concatenation with no separators. This coupling to `HookChain`'s merge format is implicit and needs a shared contract or a test that pins it.",
+      "suggestion_code": "            if (decided.systemChars() \u003c 0 || offset + decided.systemChars() \u003e text.length()) {",
+      "existing_code": "            if (offset + decided.systemChars() \u003e text.length()) {",
+      "start_line": 94,
+      "end_line": 94,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPatches.java",
+      "content": "A hook tool whose name collides with a server tool is dropped silently. No fact or `HookReported` tells the hook author. Duplicate names across hooks are also resolved silently: first definition wins, and the later schema is ignored. This swallows a failure. Emit a `HookReported` for ignored tools. The filter and de-duplication logic is also written twice, once for `desired` and again in the `for` loop below. Compute the accepted `ToolSpec` list once (name to first spec) and derive `desired` and `tools` from it.",
+      "existing_code": "        List\u003cString\u003e desired = new ArrayList\u003c\u003e(new LinkedHashSet\u003c\u003e(patch.addTools().stream().map(ToolSpec::name)\n                .filter(name -\u003e !universe.contains(name)).toList()));",
+      "start_line": 59,
+      "end_line": 60,
+      "category": "maintainability",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/hook/HookPatches.java",
+      "content": "`HookState.tools` only grows and is stored in `SessionContext`, which is journaled and replayed. A hook that generates dynamic tool names, for example one name per task, adds a frozen definition for every name for the whole session. Nothing caps the list. The definition is also never refreshed when a tool is withdrawn and re-added, so the model can see a stale schema. Cap the number of hook tools or drop the definitions of tools that are no longer active. The frozen definition is only needed while the tool has been announced and is still referenced in history.",
+      "existing_code": "        List\u003cHookTool\u003e tools = new ArrayList\u003c\u003e(state.tools());\n        Set\u003cString\u003e known = new LinkedHashSet\u003c\u003e(tools.stream().map(tool -\u003e tool.tool().name()).toList());",
+      "start_line": 63,
+      "end_line": 64,
+      "category": "performance",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java",
+      "content": "Hook tools are appended without checking for name collisions with context tools or with each other. A duplicate name would put two definitions in the prompt, and model APIs usually reject that or resolve it ambiguously. A hook tool can also shadow a built-in tool and be marked deferred. Also, `initialTools()==null` silently means \"nothing is deferred\", and the null check is repeated for every tool. Suggestion: compute the initial set once, de-duplicate by name (or fail fast / skip the hook tool), and give `initialTools` a non-null owner such as an empty or all-tools sentinel.",
+      "suggestion_code": "        Set\u003cString\u003e initial = context.initialTools() == null ? null : Set.copyOf(context.initialTools());\n        Set\u003cString\u003e seen = new HashSet\u003c\u003e();\n        for (ToolSpec tool : context.tools()) {\n            seen.add(tool.name());\n            tools.add(tool.deferred(initial != null \u0026\u0026 !initial.contains(tool.name())));\n        }\n        for (HookTool hook : context.hookState().tools()) {\n            if (seen.add(hook.tool().name())) {\n                tools.add(hook.tool().deferred(true));\n            }\n        }",
+      "existing_code": "        for (HookTool hook : context.hookState().tools()) {\n            tools.add(hook.tool().deferred(true));\n        }",
+      "start_line": 34,
+      "end_line": 36,
+      "category": "bug",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java",
+      "content": "`project` passes `session.view()` straight through without calling `placeSystemUpdates`. The prompt is legal only if every caller (or the view itself) applies it. The ordering rule is therefore enforced in one place and assumed in another, and a caller that forgets it, or the summary-call path, sends an illegal order. Suggestion: apply `placeSystemUpdates` inside `project` (or in the view), so it is a single, tested path.",
+      "suggestion_code": "        return new Prompt(context.system(), tools, placeSystemUpdates(session.view()));",
+      "existing_code": "        return new Prompt(context.system(), tools, session.view());",
+      "start_line": 37,
+      "end_line": 37,
+      "category": "maintainability",
+      "severity": "medium"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java",
+      "content": "`flush` rebuilds every system update as a new `Message` with a hard-coded third argument (`false`). That drops any other flag or metadata on the original messages, even for updates that were not moved. It also reorders blocks (all texts first, then the net tool change), so interleaving is lost. If the net change is empty and there are no texts, the originals vanish entirely. This is deterministic, but it is a lossy rewrite that can differ from what was recorded or cached earlier in the prefix, and it can break prompt-cache prefix stability. Suggestion: pass through unmoved updates unchanged, and only merge when there is actually a deferral. Also document or test the empty-net-change drop.",
+      "existing_code": "            out.add(new Message(Role.SYSTEM, blocks, false));",
+      "start_line": 90,
+      "end_line": 90,
+      "category": "bug",
+      "severity": "low"
+    },
+    {
+      "path": "tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java",
+      "content": "The `default -\u003e throw` branch duplicates the block-type knowledge in `isSystemUpdate`. If one is extended without the other, projecting (and replaying) an old session would crash instead of degrading. Suggestion: derive both from one shared definition, for example by making the content block type sealed and switching exhaustively with no default, or by having the merge pass skip or keep non-update messages.",
+      "existing_code": "                        default -\u003e throw new IllegalStateException(\"not a system update: \" + block);",
+      "start_line": 60,
+      "end_line": 60,
+      "category": "maintainability",
+      "severity": "low"
+    }
+  ],
+  "warnings": [
+    {
+      "file": "tantalum-kernel/src/main/java/tantalum/kernel/step/AnswerSteps.java",
+      "message": "stopped in batch #0: used 2022325 tokens + next-file estimate exceeds budget 2000000",
+      "type": "token_budget_reached"
+    },
+    {
+      "file": "tantalum-kernel/src/main/java/tantalum/kernel/projection/ContextUpdate.java",
+      "message": "reached the aggregate token budget before finishing; the grace round completed the task",
+      "type": "review_limit_reached"
+    },
+    {
+      "file": "tantalum-kernel/src/main/java/tantalum/kernel/projection/UsageProjection.java",
+      "message": "reached the aggregate token budget before finishing; the grace round completed the task",
+      "type": "review_limit_reached"
+    },
+    {
+      "file": "tantalum-kernel/src/main/java/tantalum/kernel/hook/KernelHook.java",
+      "message": "reached the aggregate token budget before finishing; the grace round completed the task",
+      "type": "review_limit_reached"
+    },
+    {
+      "file": "tantalum-kernel/src/main/java/tantalum/kernel/projection/PromptProjection.java",
+      "message": "reached the aggregate token budget before finishing; the grace round completed the task",
+      "type": "review_limit_reached"
+    }
+  ],
+  "project_summary": "### Top Issues\n\n1. **Kernel steps can throw on untrusted or replayed input, and the throw aborts the step or `Replay.run`.** This is the most consequential root cause: the kernel is replayed, so one bad value can block session restore. Examples:\n   - `compaction/TokenEstimate.java`: `BigDecimal.toPlainString()` on a value like `1E+1000000000` allocates a ~1 GB string and can cause OOM.\n   - `compaction/Trimming.java`: `Long.parseLong` on an unbounded `\\d+` in tool output throws `NumberFormatException` and aborts compaction. Unclamped head/tail cuts can also go out of range.\n   - `hook/HookPatches.java`: a negative `systemChars` causes `StringIndexOutOfBoundsException`.\n   - `projection/ContextDiff.java`: `Collectors.toMap` without a merge function throws on duplicate section names.\n   - `projection/UsageProjection.java`: a null `at` causes an NPE.\n   - `projection/PromptProjection.java`: the `default -\u003e throw` branch crashes on old sessions.\n\n2. **`Kernel.java` has silent failure and unsafe routing.**\n   - Exceptions are swallowed when `run == null`, so no fact, log or journal trace remains.\n   - Missing transitions silently drop events.\n   - A stale or unknown `run` id is routed as `NEW_RUN`.\n   - `findStep` and `isAwaited` run outside the try/catch and can NPE on a null `result.command()`.\n\n3. **`HookChain` does not fail closed, and it can bypass mandatory hooks.**\n   - The plugin-switch filter runs before the `mandatory`/`required` checks, so a user-controlled session can disable a hook that must stay on.\n   - `hook.plugin()`, `session.pluginActive(...)` and `hook.name()` are called outside the try/catch, so a faulty hook crashes the step.\n   - `failure.toString()` writes raw exception text into the append-only `HookReported` journal fact, which can leak secrets.\n   - Patches are reported as `PATCH` at points where they are ignored.\n\n4. **Compaction can falsely report progress or fail to bound size.**\n   - `Compactor.java`: for a threshold below 16, `minGain` is ≤ 0, so no-gain compactions count as progress.\n   - `Compactor.java`: `isUserText` rejects messages with attachments, so the current request can be misidentified.\n   - `SummaryPrompt.java`: the size check omits the `\u003cfiles-touched\u003e` block that is later appended, and per-path length is unbounded.\n   - `Trimming.java`: images pass through unbounded.\n   - `TokenEstimate.java`: the estimate under-counts JSON escapes despite promising an over-estimate, and it can overflow on a tiny `bytesPerToken`.\n\n5. **Hook tool and patch handling is inconsistent, grows without bound, or fails silently.**\n   - `HookPatches.java`: tool-name collisions are dropped silently, and `HookState.tools` only grows in journaled state.\n   - `HookPatches.java`: any text change re-announces every hook's text, which duplicates instructions and wastes tokens.\n   - `HookPatches.java`: a skipped patch is not remembered, so it emits repeated `HookReported` facts.\n   - `PromptProjection.java`: hook tools are not checked for collisions with context tools, so a duplicate or shadowed definition can reach the prompt.\n\n6. **Prompt-injection and spoofing exposure through in-band markers.**\n   - `ContextUpdate.isUpdate` identifies synthetic messages by text prefix only, so a real user message can be misclassified and dropped from compaction.\n   - `SummaryPrompt.java`: `filesIn` trusts any trailing `\u003cfiles-touched\u003e` block, and model text is embedded verbatim, including echoed prefixes or tags.\n   - `Trimming.java`: forged markers control `original` and `omitted`.\n\n7. **`Limits.java` does not validate its inputs.** `maxParallelTools \u003c= 0` stalls `ToolScheduler`, and `maxWorkRounds \u003c= 0` fails `WorkSteps`. The defaults 10/8 are also duplicated in `application.properties`, so a live run and a replay can diverge.\n\n8. **`ImageBudget.java` keys omission decisions only by sha256 `image.id()`.** The same image in several messages is treated as one decision. `alreadyOmitted` also grows without bound and is copied on every model call.\n\n### Module Hotspots\n\n- **`tantalum-kernel/.../hook/`** has about 17 comments across `HookChain`, `HookPatches`, `KernelHook` and `HookOutcome`. They cover security (mandatory bypass, leaked exceptions), robustness, and SPI design. `KernelHook` mixes replayed callbacks with console and admin metadata, and every callback returns the same open `HookResult` type.\n- **`tantalum-kernel/.../compaction/`** has about 17 comments across `TokenEstimate`, `SummaryPrompt`, `Trimming` and `Compactor`. They are mostly unbounded input and arithmetic edge cases, and the OOM and parse-crash risks are the highest-severity items.\n- **`tantalum-kernel/.../projection/`** has about 12 comments across `ContextDiff`, `PromptProjection`, `ContextUpdate`, `ToolsGone` and `UsageProjection`. The main concern is replay-time exceptions and ordering rules enforced in one place and assumed in another.\n- **`tantalum-kernel/.../Kernel.java`** is a single file but the dispatcher for everything, so its silent-drop behavior affects the whole system.\n\n### Cross-Cutting Concerns\n\n- **Missing input validation in records and constructors.** The same gap appears in `Limits`, `HookOutcome`, `ToolsGone.text`, `UsageProjection`, `ImageBudget` (`Set.copyOf` on nulls) and `TokenEstimate`. Invariants live in Javadoc, not in compact constructors.\n- **Unbounded growth in journaled or replayed state.** Examples are `HookState.tools`, `ImageBudget.alreadyOmitted`, `Replay.Result` (all commands and facts), and the 200-entry files-touched block with unbounded path lengths.\n- **Silent degradation without a trace.** Examples are dropped events in `Kernel`, dropped colliding tools in `HookPatches`, and swallowed exceptions. A `HookReported` or equivalent fact should be emitted.\n- **Duplicated logic or constants that can drift.**\n  - `Replay.java` duplicates the ordering check and fold loop in `tantalum-shell/src/test/.../TranscriptReplay.java`, so replay can diverge from live runs.\n  - The `Limits` defaults are duplicated in `application.properties`.\n  - `PromptProjection` and `isSystemUpdate` duplicate block-type knowledge.\n- **Quadratic or allocation-heavy hot paths.** Examples are `Compactor` drop iterations (O(k·n)), `TokenEstimate.ofText` copying strings to bytes, and the `ImageBudget` set copy on every call.\n- **Comments that depend on external context.** Spec ids and decision references appear in `ToolsGone` (\"J7\", \"pi\") and `KernelHook` (\"C13\", \"I10\", \"2026-11-06 Yi 定\"). The rule itself should be stated in the code.\n- **Mutable or leaky exposure.** `Replay.Result` exposes its mutable `ArrayList`s, while `Decision` already uses `List.copyOf`.\n\n### Quick Wins\n\n- Replace `toPlainString().length()` in `TokenEstimate` with a bounded estimate based on precision/scale, and count UTF-8 length with a char loop instead of allocating a `byte[]`.\n- Add a compact-constructor check in `Limits` that rejects values ≤ 0.\n- Add a bounded regex `\\d{1,18}` or a try/catch around `parseLong` in `Trimming`, and clamp the cut indices.\n- Use a merge function in `ContextDiff`'s `Collectors.toMap`, and add a `systemChars \u003c 0` check in `HookPatches`.\n- In `HookChain`, move the `mandatory`/`required` checks before the plugin-switch filter, and wrap `plugin()`, `pluginActive` and `name()` in the existing try/catch. Redact the exception message and log only the class name in `HookReported`.\n- Make `Kernel.findStep` null-safe and move it inside the try/catch. Emit a fact for dropped events and for a stale run id instead of treating them as `NEW_RUN`.\n- Make `Compactor.minGain` at least 1.\n- Wrap `Replay.Result` lists in `List.copyOf`. Extract the shared ordering and fold logic so `TranscriptReplay` calls it.\n- Rewrite the `ToolsGone` and `KernelHook` comments to state the rule instead of citing J7, C13, I10 or a date.",
+  "session_id": "7baa61bc-b1e1-4a8e-9274-f837e46c4333"
+}

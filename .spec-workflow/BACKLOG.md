@@ -13,7 +13,9 @@
 | `hook-patch` | 完成（2026-11-07，8 个任务，结果见 tech.md）。`beforeModelCall` 的补丁改成追加 `role: system` 消息（每钩子一块 `HookTextBlock`）和 deferred 定义加 `tool_addition`；变化才发、只追加、压缩后重发；Sonnet 5 和 OpenAI 路线并进用户消息；轨迹页请求详情列出谁加了什么；真实 Claude 严格模式验证通过 | 完成 |
 | 内网默认拦 | 完成（2026-11-07）：`tantalum.web.block-private-network` 默认 `true`，README 配置表和“怎么拦的”一节、插件页文案改了；e2e 服务器和 `WebChainTest` 的本地测试页显式放开。2026-11-03 曾定“同 DSH 默认放行”，但 DSH 是单用户本机程序；我们是多用户企业底座，一个用户就能让 agent 扫内网、拿云元数据凭据 | 完成 |
 
-0.1 之后按 Super-Agent 方向（见 README“方向”）：后台任务（慢工具立刻返回“已开始”，完成是事件）→ 外部事件来源（先接 GitHub：issue、评论、CI 结果；代码先筛，允许名单、团队规则、观察模式）→ 用它盯 Tantalum 自己的仓库接活、提 PR（这就是垂直验证，代替简报里的 COBOL 场景，Yi 2026-11-07 同意不把 COBOL 垂直 agent 排第一）→ 拆 `RunState`、`SessionState`（全是手写 `withX`），再做子 agent 和 Router/Worker → 定时事件和看门狗。
+**0.1 之后先做 `review-fixes`**（2026-11-07 整体 review 的结论，见 `.spec-workflow/reviews/2026-11-07-architecture-review.md`：架构硬约束没破，但有六处补丁味和一批 ocr 扫出的真缺陷——提交回执与去重的竞争、用户通道没有兜底、journal 编码 memo 领先于文件、排队提问的模型选择只有一个槽、两个模型客户端的看门狗漏洞、登录和 SSE 的收尾、异常文字进 journal 等），五个阶段：管线与 journal → 模型客户端与流 → 登录与安全加固 → 去重与归位 → 拆大类与清注释。
+
+然后按 Super-Agent 方向（见 README“方向”）：后台任务（慢工具立刻返回“已开始”，完成是事件）→ 外部事件来源（先接 GitHub：issue、评论、CI 结果；代码先筛，允许名单、团队规则、观察模式）→ 用它盯 Tantalum 自己的仓库接活、提 PR（这就是垂直验证，代替简报里的 COBOL 场景，Yi 2026-11-07 同意不把 COBOL 垂直 agent 排第一）→ 拆 `RunState`、`SessionState`（全是手写 `withX`），再做子 agent 和 Router/Worker → 定时事件和看门狗。
 
 ## 1. 正在做
 
