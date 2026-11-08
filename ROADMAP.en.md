@@ -6,7 +6,9 @@ Tantalum is an event-driven foundation for enterprise agents: one server, many u
 
 ## In one sentence
 
-Let the LLM **step out of a single conversation**: it remembers what you said anywhere, it can act under the team's rules when nobody is asking, and every step can be inspected and replayed.
+**A company that stops forgetting, with AI that acts in it accountably.**
+
+Tantalum's foundation is a ledger: every step between a person and the AI is one journaled, replayable line (shipped in 0.1). From that ledger, three things that used to be built separately can grow instead: each person's memory (item 1), the company's own emergent knowledge map (the team part of item 1), and agents that act autonomously under the company's rules (items 2 and 3). The more it is used, the thicker the ledger, the better the memory and the map, the more work the agents can take on. Open source has already validated each layer on its own: Alibaba AgentScope's ReMe (memory), NVIDIA's Auto Ontology (knowledge map), DeepSeek's super-agent prototype (action). What they share is the absence of the ledger, and of a multi-user enterprise foundation.
 
 ## 1. LLM wiki: a continuously updated long-term memory (designing)
 
