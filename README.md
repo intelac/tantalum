@@ -6,9 +6,6 @@
 
 当前版本 **0.1**：[下载](https://github.com/intelac/tantalum/releases/latest)（一个 jar，macOS、Linux、Windows 通用，需要 JDK 25）。
 
-| 对话页 | 轨迹页：每一次模型调用、工具调用和钩子决定 |
-|---|---|
-| ![对话页](docs/images/conversation.png) | ![轨迹页](docs/images/trace.png) |
 
 ## 为什么适合做企业底座
 

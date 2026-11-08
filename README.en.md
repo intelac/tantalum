@@ -4,9 +4,6 @@
 
 Current version **0.1**: [download](https://github.com/intelac/tantalum/releases/latest) (one jar for macOS, Linux and Windows; needs JDK 25).
 
-| Conversation | Trace: every model call, tool call and hook decision |
-|---|---|
-| ![Conversation](docs/images/conversation.png) | ![Trace](docs/images/trace.png) |
 
 ## Event-driven
 
