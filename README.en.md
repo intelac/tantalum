@@ -20,6 +20,8 @@ So a user can steer or queue a follow-up while the model or a tool is running, s
 
 ## Direction: Super-Agent
 
+The full roadmap (LLM wiki long-term memory, stepping out of the session, Super-Agent, timers) is in [ROADMAP.en.md](ROADMAP.en.md).
+
 At the end of October 2026 DeepSeek open-sourced the research prototype [dsh-superagent](https://github.com/deepseek-ai/dsh-superagent-prototype) and described, in *Exploring Super-agent Design*, a more autonomous agent: it listens to team chat, review comments and CI results, filters them in code first and lets the model judge only what passes; it acts only when someone asks or a team rule allows it; a thin Router hands out work to Workers running in parallel; and a watchdog checks on a timer whether each Worker is really making progress. Tantalum is heading that way. (Tantalum is not affiliated with DeepSeek; this only describes the design direction.)
 
 | Super-Agent idea | What Tantalum already has | Still to build |

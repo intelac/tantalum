@@ -30,6 +30,8 @@
 
 ## 方向：Super-Agent
 
+完整的路线图（LLM wiki 长期记忆、走出会话、Super-Agent、定时事件）见 [ROADMAP.md](ROADMAP.md)。
+
 DeepSeek 在 2026 年 10 月底开源了研究原型 [dsh-superagent](https://github.com/deepseek-ai/dsh-superagent-prototype)，并在文章 *Exploring Super-agent Design* 里讲了一种更自主的 agent：它听着团队的聊天、代码评审评论、CI 结果，先用代码筛一遍，再让模型判断值不值得做；只在有人明确要求或团队规则允许时才动手；一个只分派工作的 Router 加上多个并行干活的 Worker；还有一个定时检查 Worker 是否真有进展的看门狗。Tantalum 打算往这个方向发展（Tantalum 和 DeepSeek 没有关系，只是参考它的设计）。
 
 | Super-Agent 的想法 | Tantalum 已有的基础 | 还要做的 |
