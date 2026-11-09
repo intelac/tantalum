@@ -36,3 +36,7 @@ audit.log
 .spec-workflow/templates/
 .spec-workflow/user-templates/
 .spec-workflow/reviews/
+
+# spec-workflow and code-review tooling stay local
+.spec-workflow/
+.opencodereview/

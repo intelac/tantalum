@@ -2,7 +2,7 @@
 
 [English](ROADMAP.md) | 中文
 
-Tantalum 是企业 agent 的事件驱动底座：一台服务器、很多用户、每一步落盘可回放、功能靠插件。0.1 已经发布（2026-11）。下面是我们接下来要做的事，按顺序，带着为什么。设计讨论稿都在 `.spec-workflow/steering/`，欢迎在 issue 里讨论。
+Tantalum 是企业 agent 的事件驱动底座：一台服务器、很多用户、每一步落盘可回放、功能靠插件。0.1 已经发布（2026-11）。下面是我们接下来要做的事，按顺序，带着为什么。欢迎在 issue 里讨论。
 
 ## 一句话
 
@@ -22,7 +22,6 @@ Tantalum 的底子是一本账：每个人和 AI 之间发生的每一步记一�
 - 每个用户一座 wiki；团队 wiki 另一座，页面从个人升到团队要人点头。
 - 参考：阿里 AgentScope 的 [ReMe](https://github.com/agentscope-ai/ReMe)（分层、文件即记忆、钩子捕获、定时整理）、Karpathy 的 LLM Wiki（原始来源 / wiki / schema 三层）、NVIDIA 的 [Auto Ontology](https://github.com/NVIDIA/auto-ontology)（企业数据的术语和关系由 LLM 抽、人认证后生效）。
 
-讨论稿：`.spec-workflow/steering/llm-wiki.md`。
 
 ## 2. 走出会话（设计中）
 
@@ -55,7 +54,7 @@ DeepSeek 在 *Exploring Super-agent Design* 和 [dsh-superagent-prototype](https
 
 ## 5. 持续的工程项
 
-- **安全加固**：0.1 后的整体 review（`.spec-workflow/reviews/2026-11-07-architecture-review.md`）修完了五个阶段；以后每个版本前再做一次整体 review 和 [open-code-review](https://github.com/alibaba/open-code-review) 扫描。
+- **安全加固**：0.1 后的整体 review 修完了五个阶段；以后每个版本前再做一次整体 review 和 [open-code-review](https://github.com/alibaba/open-code-review) 扫描。
 - **Windows**：服务器在 Windows 上已可运行（计划任务后台运行），靠 CI 验证；连接程序的 Windows 沙箱还没有。
 - **本机工作区的沙箱**：macOS 用微软 MXC（Seatbelt）；Linux 和 Windows 的命令沙箱待做。
 - **联网**：有 `web_fetch` 和每用户一个的无头浏览器；`web_search` 接口和读 PDF 以后另开。

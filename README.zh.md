@@ -54,7 +54,7 @@ java -jar tantalum-0.1.0.jar --tantalum.provider=local \
 | `tantalum-examples` | 示例插件 |
 | `console/` | 网页控制台（React） |
 
-依赖只朝一个方向：`value ← kernel ← shell`，由 ArchUnit 守着。spec 先行、指挥 AI 编码 agent 写成；spec 在 [`.spec-workflow/specs`](.spec-workflow/specs)，每条需求都标出 pi 和 DeepSeek Harness 怎么解决同一个问题。
+依赖只朝一个方向：`value ← kernel ← shell`，由 ArchUnit 守着。spec 先行、指挥 AI 编码 agent 写成：每个功能先过需求、设计、任务再写代码，每条需求都标出 pi 和 DeepSeek Harness 怎么解决同一个问题。
 
 ## 文档
 

@@ -75,7 +75,7 @@ DeepSeek 在 2026 年 10 月底开源了研究原型 [dsh-superagent](https://gi
 | `question` | 插件工作在对话页上问用户、等回答（如工具审批），只在内存里 |
 | `json`、`net` | JSON 文本、主机名判断；联网的出口 `Egress`（只听 `127.0.0.1` 的过滤代理）、网址和地址规则、上游代理 |
 
-设计文档在 `.spec-workflow/`。
+每个功能都先有 spec（需求、设计、任务）再写代码；spec 不随仓库发布。
 
 ## 运行
 
@@ -300,7 +300,7 @@ index caught up with 3 session files
 store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous process closed as interrupted
 ```
 
-前两行只在上次没有正常关闭（比如被 `kill -9`）时出现。50 万个事件的数据目录启动约 2 秒，实测数字见 `.spec-workflow/steering/tech.md`。
+前两行只在上次没有正常关闭（比如被 `kill -9`）时出现。50 万个事件的数据目录启动约 2 秒。
 
 **崩溃或重启时没结束的运行。** 启动时给它们追加结束事件：已经发出但没有结果的工具调用补一条“结果未知”，运行以“已中断”结束，控制台显示“服务重启，这次运行已中断”。不会自动重新调用模型或重跑工具，因为写操作可能已经生效；用户在同一会话继续提问即可。
 
@@ -509,7 +509,7 @@ Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2`
 - **过滤只有一个入口**：工具、工具后处理、插件工作只经 `PluginGate` 调用，它在调用前按当前用户的开关查一次；内核钩子只经 `HookChain`，按会话记下的名单过滤。两条 ArchUnit 规则钉住，绕过的代码构建失败。
 - **接口**：`GET /api/plugins`、`PUT /api/plugins/{tool|mcp|plugin|local|web}/{名字}`（请求体 `{"enabled": true}`）；本机工作区另有 `GET /api/local`（开关和连接状态）、`POST /api/local/tokens`（`{"validity": "30m" | "1h" | "4h" | "1d"}`，返回令牌和命令）、`DELETE /api/local/tokens`（撤销全部令牌并断开）。都只操作当前登录用户的。
 
-实测（细节在 `.spec-workflow/steering/tech.md`）：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）；`bash true` 一次往返约 28 ms，主要是 MXC 启动沙箱。
+实测：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）；`bash true` 一次往返约 28 ms，主要是 MXC 启动沙箱。
 
 ## 联网
 
@@ -570,13 +570,13 @@ sudo java -jar tantalum.jar browser install --with-deps   # Linux：同时装浏
 
 - **窗口**：每个模型用它自己的窗口。启动时和每 10 分钟从模型那边读：Claude 读 Models 接口的 `max_input_tokens`（开着备用模型时取主模型和备用模型中最小的），本地服务读 `/v1/models` 里的 `meta.n_ctx`、`max_model_len` 或 `context_length`；模型报上下文超长时再读一次。读不到才用配置的 `context-window`。设置页“模型”一栏写明窗口从哪来。
 - **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 这个模型的输出上限))，窗口是这次提问用的模型的（见“模型路线”）。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。
-- **规则**：保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。完整规则在 `.spec-workflow/specs/context-compaction/requirements.md`。
+- **规则**：保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。
 - **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
 - **配置**：每条路线的 `context-window`（读不到模型的窗口时用，为 0 时不压缩）和 `bytes-per-token`（估算系数，宁可多算：Claude 1.5、本地 1.75，按实测定）；`tantalum.compaction.window-from-model`（默认 true，测试用小窗口时关掉）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置每次提问时按当时的窗口和用户的选择重算，记进 journal，回放用记下的那份。
 - **手动**：状态栏的压缩按钮，或 `POST /api/sessions/{id}/compact`（可带 `instructions`）；会话运行中或没有可压缩的内容时返回 409。
 - **回复被截断**：回复因输出上限结束时运行照常完成，对话页提示“回复被截断”；不自动续写。
 
-实测（细节在 `.spec-workflow/steering/tech.md`）：Claude Sonnet 5.5 严格校验和本地 qwen 用同一个十篇笔记的用例，压缩后暗号和规则全部保留；同一任务开压缩后总 prompt token 从 15.3 万降到 10.3 万。
+实测：Claude Sonnet 5.5 严格校验和本地 qwen 用同一个十篇笔记的用例，压缩后暗号和规则全部保留；同一任务开压缩后总 prompt token 从 15.3 万降到 10.3 万。
 
 ## MCP
 
@@ -713,7 +713,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest=ClaudeSmokeT
 TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScenarioTest,ClaudeCrashRecoveryTest' -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
-`ClaudeScenarioTest` 和 `ClaudeCrashRecoveryTest` 用真实的 Claude 走完整的环：八步顺序工具链、thinking 签名跨多轮回传、每一个钩子位置、流式中取消后继续、三个用户同时调用、模型调用进行中杀进程再恢复。一轮约 0.1 美元，结论记在 `.spec-workflow/steering/tech.md`。
+`ClaudeScenarioTest` 和 `ClaudeCrashRecoveryTest` 用真实的 Claude 走完整的环：八步顺序工具链、thinking 签名跨多轮回传、每一个钩子位置、流式中取消后继续、三个用户同时调用、模型调用进行中杀进程再恢复。一轮约 0.1 美元。
 
 **Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`、浏览器 IT）、检查浏览器测试和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 

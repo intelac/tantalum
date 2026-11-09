@@ -2,7 +2,7 @@
 
 English | [中文](ROADMAP.zh.md)
 
-Tantalum is an event-driven foundation for enterprise agents: one server, many users, every step journaled and replayable, new behavior as plugins. 0.1 shipped in November 2026. Below is what comes next, in order, with the reasoning. Design discussions live in `.spec-workflow/steering/` (Chinese); the full manual is [docs/manual.zh.md](docs/manual.zh.md) (Chinese); questions and ideas are welcome as issues.
+Tantalum is an event-driven foundation for enterprise agents: one server, many users, every step journaled and replayable, new behavior as plugins. 0.1 shipped in November 2026. Below is what comes next, in order, with the reasoning. The full manual is [docs/manual.zh.md](docs/manual.zh.md) (Chinese); questions and ideas are welcome as issues.
 
 ## In one sentence
 
@@ -22,7 +22,6 @@ A wiki maintained by the LLM and readable and editable by the user, serving as m
 - One wiki per user; a separate team wiki; promoting a page from personal to team needs a person's approval.
 - References: Alibaba AgentScope's [ReMe](https://github.com/agentscope-ai/ReMe) (layers, memory as files, hook-driven capture, scheduled consolidation), Karpathy's LLM Wiki (raw sources / wiki / schema), NVIDIA's [Auto Ontology](https://github.com/NVIDIA/auto-ontology) (LLM-extracted terms and relations over enterprise data, certified by people before use).
 
-Discussion draft: `.spec-workflow/steering/llm-wiki.md` (Chinese).
 
 ## 2. Stepping out of the session (designing)
 
@@ -55,7 +54,7 @@ Timers as an event source: periodic reviews, the librarian's consolidation, chec
 
 ## 5. Ongoing engineering
 
-- **Hardening**: the post-0.1 whole-codebase review (`.spec-workflow/reviews/2026-11-07-architecture-review.md`) is fixed in five phases; every release gets another review and an [open-code-review](https://github.com/alibaba/open-code-review) scan.
+- **Hardening**: the post-0.1 whole-codebase review is fixed in five phases; every release gets another review and an [open-code-review](https://github.com/alibaba/open-code-review) scan.
 - **Windows**: the server runs on Windows (as a scheduled task), verified by CI; the connector has no Windows sandbox yet.
 - **Local workspace sandbox**: macOS uses Microsoft MXC (Seatbelt); command sandboxes for Linux and Windows are to do.
 - **Web**: `web_fetch` and one headless browser per user exist; a `web_search` API and PDF reading come later.

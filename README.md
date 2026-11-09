@@ -54,7 +54,7 @@ The ledger is the center. From it, three things grow as projections rather than 
 | `tantalum-examples` | Example plugins |
 | `console/` | Web console (React) |
 
-Dependencies point one way, `value ← kernel ← shell`, enforced by ArchUnit. Built spec-first by directing AI coding agents; the specs are in [`.spec-workflow/specs`](.spec-workflow/specs), and every requirement cites how two reference agents (pi and DeepSeek Harness) solve the same problem.
+Dependencies point one way, `value ← kernel ← shell`, enforced by ArchUnit. Built spec-first by directing AI coding agents: every feature went through requirements, design and tasks before code, and every requirement cites how two reference agents (pi and DeepSeek Harness) solve the same problem.
 
 ## Docs
 
