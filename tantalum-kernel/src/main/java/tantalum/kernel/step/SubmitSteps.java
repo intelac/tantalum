@@ -26,21 +26,26 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), Message.user(event.text(), event.attachments()), event.model());
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments()), event.model(), event.dir());
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
         return submit(context, new OwnerRef.OfSession(context.envelope().session()),
-                Message.user(event.text(), event.attachments()), event.model());
+                Message.user(event.text(), event.attachments()), event.model(), null);
     }
 
     /**
      * 空闲时开新运行，用提交里带的选择；运行中排队，带了选择就记下，排队的提问开始运行时用它，
-     * 正在跑的运行不受影响。
+     * 正在跑的运行不受影响。{@code dir} 只在会话还没有任何消息时定下工作目录，之后带了也不理。
      */
-    private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model) {
+    private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model, String dir) {
         Outcome out = new Outcome(context);
+        SessionState existing = out.state().sessions().get(context.envelope().session());
+        if (dir != null && (existing == null || existing.messages().isEmpty())) {
+            out.put((existing == null ? SessionState.start(context.envelope().session(), context.envelope().principal()) : existing)
+                    .withDir(dir));
+        }
         if (context.run() == null || context.run().isEnded()) {
             startRun(out, owner, message, model);
         } else {

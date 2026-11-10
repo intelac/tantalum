@@ -17,6 +17,7 @@ import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
@@ -169,6 +170,17 @@ public final class Intake {
             return Submission.rejected(409);
         }
         return publish(principal, session, request, true, submission -> new CompactRequested(submission, request, instructions));
+    }
+
+    /**
+     * 给会话改名。会话不存在或不是该用户的 → 404。运行中也可以改：内核照记，不影响运行。
+     * {@code title} 由调用方去掉首尾空白、限制长度；空串表示恢复自动标题。
+     */
+    public Submission rename(Principal principal, SessionId session, RequestId request, String title) {
+        if (sessions.find(principal, session).isEmpty()) {
+            return Submission.rejected(404);
+        }
+        return publish(principal, session, request, false, submission -> new SessionRenamed(submission, request, title));
     }
 
     /** 返回 HTTP 状态。取消不去重，也不占活跃运行名额。 */

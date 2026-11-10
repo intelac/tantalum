@@ -1,6 +1,7 @@
 package tantalum.kernel.step;
 
 import tantalum.kernel.table.TransitionTable;
+import tantalum.value.decision.Decision;
 import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
@@ -11,6 +12,7 @@ import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
@@ -31,6 +33,8 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, RunInterrupted.TYPE, CancelSteps::interrupted);
         table.register(TransitionTable.ANY_STATE, ModelInterrupted.TYPE, ModelSteps::modelInterrupted);
         table.register(TransitionTable.ANY_STATE, CompactRequested.TYPE, CompactSteps::requested);
+        // 改名只是展示用的名字：进账，内核不改状态
+        table.register(TransitionTable.ANY_STATE, SessionRenamed.TYPE, context -> Decision.unchanged(context.state()));
 
         table.register(ContextSteps.AWAITING_CONTEXT, ContextAssembled.TYPE, ContextSteps::contextAssembled);
         table.register(ModelSteps.AWAITING_MODEL, ModelReplied.TYPE, ModelSteps::modelReplied);

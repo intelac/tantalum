@@ -77,6 +77,7 @@ final class SessionDelta {
         changed(node, "notes", change.notes());
         changed(node, "model", change.model());
         changed(node, "followUpModels", change.followUpModels());
+        changed(node, "dir", change.dir());
         return node;
     }
 
@@ -107,7 +108,8 @@ final class SessionDelta {
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
-                changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS));
+                changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS),
+                changed(node, "dir", String.class));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */
