@@ -1,0 +1,30 @@
+{
+  "comment": "workspaces W2、W4：服务器 ProjectPaths 和控制台 pathKey.ts 共用这张表。absolute 为 false 时 key 不看。",
+  "cases": [
+    { "path": "/home/yi/app", "absolute": true, "key": "/home/yi/app", "name": "app" },
+    { "path": "/home/yi/app/", "absolute": true, "key": "/home/yi/app", "name": "app" },
+    { "path": "  /home/yi/app//  ", "absolute": true, "key": "/home/yi/app", "name": "app" },
+    { "path": "/Home/Yi/App", "absolute": true, "key": "/Home/Yi/App", "name": "App" },
+    { "path": "/", "absolute": true, "key": "/", "name": "/" },
+    { "path": "C:\\APPL\\QTR_Quattro_github_3", "absolute": true, "key": "c:/appl/qtr_quattro_github_3", "name": "QTR_Quattro_github_3" },
+    { "path": "c:/appl/qtr_quattro_github_3/", "absolute": true, "key": "c:/appl/qtr_quattro_github_3", "name": "qtr_quattro_github_3" },
+    { "path": "C:\\quattro-run\\wiki\\", "absolute": true, "key": "c:/quattro-run/wiki", "name": "wiki" },
+    { "path": "C:\\", "absolute": true, "key": "c:/", "name": "C:\\" },
+    { "path": "C:", "absolute": false },
+    { "path": "app", "absolute": false },
+    { "path": "./app", "absolute": false },
+    { "path": "~/app", "absolute": false },
+    { "path": "", "absolute": false },
+    { "path": "\\\\server\\share", "absolute": false }
+  ],
+  "within": [
+    { "dir": "/home/yi/app", "root": "/home/yi", "within": true },
+    { "dir": "/home/yi", "root": "/home/yi/", "within": true },
+    { "dir": "/home/yiyi", "root": "/home/yi", "within": false },
+    { "dir": "/etc", "root": "/", "within": true },
+    { "dir": "C:\\APPL\\Quattro", "root": "c:/appl", "within": true },
+    { "dir": "C:\\APPLX", "root": "C:\\APPL", "within": false },
+    { "dir": "D:\\APPL", "root": "C:\\", "within": false },
+    { "dir": "C:\\APPL", "root": "C:\\", "within": true }
+  ]
+}

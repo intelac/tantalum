@@ -19,6 +19,10 @@ public enum ErrorCode {
     SESSION_UNAVAILABLE("session/unavailable", 503),
     SESSION_UNREADABLE("session/unreadable", 500),
     SESSION_BUSY("session/busy", 409),
+    /** 已归档的会话不能再提问。 */
+    SESSION_ARCHIVED("session/archived", 409),
+    /** 运行中、等你回答的会话不能归档。 */
+    SESSION_ARCHIVE_BUSY("session/archive-busy", 409),
     SUBMISSION_REJECTED("submission/rejected", 409),
     RUN_NOT_FOUND("run/not-found", 404),
     RUN_CANCEL_REJECTED("run/cancel-rejected", 409),
@@ -57,6 +61,13 @@ public enum ErrorCode {
     /** 参数 {@code model}。 */
     MODEL_TOOL_CHANGES("model/tool-changes", 400),
     QUESTION_GONE("question/gone", 404),
+    PROJECT_NOT_FOUND("project/not-found", 404),
+    /** 不是绝对路径。 */
+    PROJECT_PATH_INVALID("project/path-invalid", 400),
+    PROJECT_PATH_TAKEN("project/path-taken", 409),
+    /** 参数 {@code max}：最长字数。 */
+    PROJECT_TITLE_INVALID("project/title-invalid", 400),
+    PROJECT_TITLE_TAKEN("project/title-taken", 409),
     /** 参数 {@code name}。 */
     PLUGIN_NOT_FOUND("plugin/not-found", 404),
     /** 参数 {@code name}。 */

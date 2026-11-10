@@ -131,7 +131,8 @@ public final class IndexWriter implements AutoCloseable {
             LOG.error("index writes keep failing, giving up until restart; the index catches up from session files on next start");
             return;
         }
-        if (change.runEnded() || pending.events() >= flushEvents) {
+        // 改名要马上出现在侧栏：和运行结束一样立刻写
+        if (change.runEnded() || change.rename() != null || pending.events() >= flushEvents) {
             write(false);
         }
     }

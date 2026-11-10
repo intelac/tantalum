@@ -106,13 +106,20 @@ public final class SessionQueries {
     public List<SessionSummary> sessions(Principal principal) throws SQLException {
         KernelState state = view.current();
         Map<SessionId, SessionSummary> summaries = new HashMap<>();
+        Map<SessionId, String> renamed = new HashMap<>();
         for (SessionIndex.Session row : index.sessions(principal)) {
-            summaries.put(row.session(), new SessionSummary(row.session(), row.title(), row.lastActivity(), row.runStatus()));
+            summaries.put(row.session(), new SessionSummary(row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir()));
+            if (row.renamed() != null) {
+                renamed.put(row.session(), row.renamed());
+            }
         }
         for (SessionState session : state.sessions().values()) {
             if (session.principal().equals(principal)) {
-                summaries.put(session.id(), SessionSummary.of(session.id(),
-                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id())));
+                // 在内存的会话：状态和最近活动取当前的；改过的名字只记在索引里（内核不存标题）
+                SessionSummary live = SessionSummary.of(session.id(),
+                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id()));
+                summaries.put(session.id(), new SessionSummary(session.id(), renamed.getOrDefault(session.id(), live.title()),
+                        live.lastActivity(), live.runStatus(), session.dir()));
             }
         }
         return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();

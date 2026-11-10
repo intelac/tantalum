@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
@@ -22,10 +23,14 @@ import tantalum.value.state.PrincipalState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.SessionState;
 
-/** 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。 */
+/**
+ * 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。
+ * {@code dir} 是会话的工作目录（没有为 null）；{@code rename} 是这一步的改名（没改名为 null，空串表示恢复自动标题），
+ * 改名不算会话的活动。
+ */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                          Instant answerDeadline, CommandId answerTimer) {
+                          Instant answerDeadline, CommandId answerTimer, String dir, String rename) {
 
     /** 一个事件带来的用量，{@code seq} 在同一用户内唯一。 */
     public record Usage(long seq, LocalDate day, TokenUsage amount) {}
@@ -50,7 +55,13 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 text == null ? "" : SessionSummary.titleOf(text),
                 phase == null ? SessionSummary.IDLE : phase.name(), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
-                timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer());
+                timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
+                dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null);
+    }
+
+    private static String dir(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? null : found.dir();
     }
 
     private static RunId activeRun(KernelState state, SessionId session) {

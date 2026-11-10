@@ -35,12 +35,21 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    static final int VERSION = 3;
+    static final int VERSION = 4;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
-    /** 一个会话的元数据。只被认领、还没写过事件时 {@code lastActivity} 为 null；没有未结束的运行时 {@code activeRun} 为 null。 */
+    /**
+     * 一个会话的元数据。只被认领、还没写过事件时 {@code lastActivity} 为 null；没有未结束的运行时 {@code activeRun} 为 null。
+     * {@code title} 是第一句的开头；{@code renamed} 是用户改的名字，没改为 null。{@code dir} 是工作目录，没有为 null。
+     */
     public record Session(SessionId session, Principal principal, String title, Instant lastActivity, String runStatus,
-                          RunId activeRun, long fileOffset) {}
+                          RunId activeRun, long fileOffset, String dir, String renamed) {
+
+        /** 侧栏显示的名字：改过的优先。 */
+        public String shownTitle() {
+            return renamed == null ? title : renamed;
+        }
+    }
 
     private final Connection connection;
 
@@ -108,7 +117,9 @@ public final class SessionIndex implements AutoCloseable {
                   active_run    TEXT,
                   file_offset   INTEGER NOT NULL,
                   answer_deadline TEXT,
-                  answer_timer    TEXT
+                  answer_timer    TEXT,
+                  dir             TEXT,
+                  renamed         TEXT
                 )""");
         statement.execute("""
                 CREATE TABLE IF NOT EXISTS submissions (
@@ -162,11 +173,14 @@ public final class SessionIndex implements AutoCloseable {
 
     private void writeSessions(IndexBatch batch) throws SQLException {
         try (PreparedStatement upsert = connection.prepareStatement("""
-                INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset, answer_deadline, answer_timer)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset, answer_deadline, answer_timer,
+                                      dir, renamed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))
                 ON CONFLICT (session) DO UPDATE SET
                   title = CASE WHEN title = '' THEN excluded.title ELSE title END,
-                  last_activity = excluded.last_activity,
+                  last_activity = COALESCE(excluded.last_activity, last_activity),
+                  dir = COALESCE(dir, excluded.dir),
+                  renamed = CASE WHEN ?12 IS NULL THEN renamed ELSE excluded.renamed END,
                   run_status = excluded.run_status,
                   active_run = excluded.active_run,
                   file_offset = max(file_offset, excluded.file_offset),
@@ -177,12 +191,16 @@ public final class SessionIndex implements AutoCloseable {
                 upsert.setString(1, row.session.value());
                 upsert.setString(2, row.principal.value());
                 upsert.setString(3, row.title);
-                upsert.setString(4, row.lastActivity.toString());
+                upsert.setString(4, row.lastActivity == null ? null : row.lastActivity.toString());
                 upsert.setString(5, row.runStatus);
                 upsert.setString(6, row.activeRun == null ? null : row.activeRun.value());
                 upsert.setLong(7, row.fileOffset);
                 upsert.setString(8, row.answerDeadline == null ? null : row.answerDeadline.toString());
                 upsert.setString(9, row.answerTimer == null ? null : row.answerTimer.value());
+                upsert.setString(10, row.dir);
+                upsert.setString(11, row.rename);
+                // 改名为空串（恢复自动标题）要清掉旧名字，没改名要留着：所以另传一次“这一批有没有改名”
+                upsert.setString(12, row.rename);
                 upsert.addBatch();
             }
             upsert.executeBatch();
@@ -292,13 +310,14 @@ public final class SessionIndex implements AutoCloseable {
     }
 
     private static final String SELECT_SESSION =
-            "SELECT session, principal, title, last_activity, run_status, active_run, file_offset FROM sessions";
+            "SELECT session, principal, title, last_activity, run_status, active_run, file_offset, dir, renamed FROM sessions";
 
     private static Session session(ResultSet result) throws SQLException {
         String at = result.getString(4);
         String run = result.getString(6);
         return new Session(new SessionId(result.getString(1)), new Principal(result.getString(2)), result.getString(3),
-                at == null ? null : Instant.parse(at), result.getString(5), run == null ? null : new RunId(run), result.getLong(7));
+                at == null ? null : Instant.parse(at), result.getString(5), run == null ? null : new RunId(run), result.getLong(7),
+                result.getString(8), result.getString(9));
     }
 
     public synchronized Optional<SubmissionId> submission(Principal principal, RequestId request) throws SQLException {

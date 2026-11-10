@@ -29,6 +29,8 @@ import tantalum.shell.net.Egress;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
+import tantalum.shell.project.Archive;
+import tantalum.shell.project.Projects;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
@@ -172,6 +174,16 @@ public final class Engine implements AutoCloseable {
         return stores.userSettings();
     }
 
+    /** 每人登记的工作区。 */
+    public Projects projects() {
+        return stores.projects();
+    }
+
+    /** 每人归档的会话。 */
+    public Archive archive() {
+        return stores.archive();
+    }
+
     /** 连到电脑的连接：WebSocket 端点、转发工具和插件页接口用它。 */
     public LocalLinks localLinks() {
         return toolbox.localLinks();
@@ -304,6 +316,8 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("close plugin settings", stores.switches()),
                 new Shutdown.Step("close local tokens", stores.localTokens()),
                 new Shutdown.Step("close user settings", stores.userSettings()),
+                new Shutdown.Step("close projects", stores.projects()),
+                new Shutdown.Step("close archive", stores.archive()),
                 new Shutdown.Step("stop reading the model lists", toolbox.routes()),
                 new Shutdown.Step("close storage", stores.storage())));
     }

@@ -156,4 +156,27 @@ class LocalWorkspaceTest {
         assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell"), List.copyOf(workspace.switches(ALICE).keySet()));
         assertEquals(Optional.empty(), workspace.section(ALICE));
     }
+
+    /** workspaces 任务 10（W5、需求 2.3–2.6）：给模型的那一段按会话目录写；协议 2 或没有目录照旧写主目录。 */
+    @Test
+    void theSectionNamesTheSessionDirectoryWhenTheConnectorUnderstandsIt() {
+        Hello.Device mac = new Hello.Device("m", "macos", "26.2", "arm64");
+        List<Hello.Root> roots = List.of(new Hello.Root("/w"), new Hello.Root("/x"));
+        Hello three = new Hello(3, "t", mac, roots, true, new Hello.Shell(false, "no"), true, true);
+        Hello two = new Hello(2, "t", mac, roots, true, new Hello.Shell(false, "no"), true, true);
+
+        String inside = LocalWorkspace.describe(three, true, false, "/w/app");
+        assertTrue(inside.contains(" Working directory: /w/app. Allowed directories: /w, /x."), inside);
+        assertFalse(inside.contains("Main directory"), inside);
+        assertFalse(inside.contains("Other allowed directories"), inside);
+
+        String outside = LocalWorkspace.describe(three, true, false, "/elsewhere");
+        assertTrue(outside.contains(" Working directory: /elsewhere (not allowed on this computer; file tools will fail)."), outside);
+
+        String old = "Local workspace: macOS 26.2 arm64 \"m\". Main directory: /w. Other allowed directories: /x. File changes: allowed."
+                + " Shell: not available.";
+        assertEquals(old, LocalWorkspace.describe(two, true, false, "/w/app"), "protocol 2 cannot use the session directory");
+        assertEquals(old, LocalWorkspace.describe(three, true, false, null), "no directory, nothing changes");
+        assertEquals(old, LocalWorkspace.describe(two, true, false));
+    }
 }

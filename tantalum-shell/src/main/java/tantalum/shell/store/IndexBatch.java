@@ -22,6 +22,10 @@ final class IndexBatch {
         RunId activeRun;
         Instant answerDeadline;
         CommandId answerTimer;
+        /** 会话的工作目录；不知道时为 null。 */
+        String dir;
+        /** 这一批里最后一次改名；没改为 null，空串表示恢复自动标题。 */
+        String rename;
         long lastSeq;
         /** 已知落盘到这里，不知道时是 0。写入时只增不减。 */
         long fileOffset;
@@ -46,7 +50,14 @@ final class IndexBatch {
         if (row.title.isEmpty()) {
             row.title = change.title();
         }
-        row.lastActivity = change.at();
+        if (change.rename() == null) {
+            row.lastActivity = change.at();
+        } else {
+            row.rename = change.rename();
+        }
+        if (change.dir() != null) {
+            row.dir = change.dir();
+        }
         row.runStatus = change.runStatus();
         row.activeRun = change.activeRun();
         row.answerDeadline = change.answerDeadline();

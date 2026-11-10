@@ -9,6 +9,7 @@ import tantalum.local.wire.Hello;
 import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.access.ToolGroup;
 import tantalum.shell.plugin.Tool;
+import tantalum.shell.project.ProjectPaths;
 import tantalum.value.id.Principal;
 
 /**
@@ -23,6 +24,8 @@ public final class LocalWorkspace implements ToolGroup {
     public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell");
     /** {@code ContextAssembled.toolSources} 里的来源。 */
     public static final String SOURCE = "local";
+    /** 从这个协议版本起，连接程序按会话的工作目录解析相对路径。 */
+    static final int SESSION_DIRS = 3;
 
     /** 每一类工具对应的子开关。 */
     private static final Map<Kind, String> SWITCH = Map.of(
@@ -98,22 +101,45 @@ public final class LocalWorkspace implements ToolGroup {
      * 目录和权限不写进工具说明，工具定义才不随电脑变。没连上、总开关关着时没有这一段。
      */
     public Optional<String> section(Principal user) {
+        return section(user, null);
+    }
+
+    /** 同上，{@code dir} 是会话的工作目录（没有为 null）。 */
+    public Optional<String> section(Principal user, String dir) {
         if (!switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)) {
             return Optional.empty();
         }
-        return links.status(user).map(status -> describe(status.hello(), enabled(user, Kind.WRITE), enabled(user, Kind.SHELL)));
+        return links.status(user).map(status -> describe(status.hello(), enabled(user, Kind.WRITE), enabled(user, Kind.SHELL), dir));
     }
 
     static String describe(Hello hello, boolean write, boolean shell) {
+        return describe(hello, write, shell, null);
+    }
+
+    /**
+     * 会话有工作目录、连接程序是协议 3 起时写 {@code Working directory}，再列全部允许的目录；目录不在允许的范围里也如实写，
+     * 不退回主目录。没有目录或协议 2（连接程序还不认会话目录）时照旧写主目录。
+     */
+    static String describe(Hello hello, boolean write, boolean shell, String dir) {
         Hello.Device device = hello.device();
         StringBuilder text = new StringBuilder("Local workspace: ").append(osName(device.os())).append(' ')
                 .append(device.osVersion()).append(' ').append(device.arch()).append(" \"").append(device.name()).append("\".");
         List<Hello.Root> roots = hello.roots();
-        if (!roots.isEmpty()) {
+        boolean sessionDir = dir != null && hello.protocol() >= SESSION_DIRS;
+        if (sessionDir) {
+            text.append(" Working directory: ").append(dir);
+            if (roots.stream().noneMatch(root -> ProjectPaths.within(dir, root.path()))) {
+                text.append(" (not allowed on this computer; file tools will fail)");
+            }
+            text.append('.');
+            if (!roots.isEmpty()) {
+                text.append(" Allowed directories: ").append(String.join(", ", roots.stream().map(Hello.Root::path).toList())).append('.');
+            }
+        } else if (!roots.isEmpty()) {
             Hello.Root main = roots.getFirst();
             text.append(" Main directory: ").append(main.path()).append('.');
         }
-        if (roots.size() > 1) {
+        if (!sessionDir && roots.size() > 1) {
             text.append(" Other allowed directories: ")
                     .append(String.join(", ", roots.subList(1, roots.size()).stream().map(Hello.Root::path).toList())).append('.');
         }

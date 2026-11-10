@@ -41,6 +41,9 @@ import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.id.SessionId;
+import tantalum.value.state.KernelState;
+import tantalum.value.state.SessionState;
 
 /**
  * 装配第四步：管线——内核、输入环、用户通道、净室、输出环、处理器、入口。这里只建不起：
@@ -71,7 +74,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         stores.memories(), new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
-                        toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings()),
+                        toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
+                        session -> dirOf(queries.view().current(), session)),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
@@ -102,6 +106,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         cleanroomRing.connect(cleanroom);
         lanes.onHalt(receipts::failAll);
         return new Pipeline(residency, cleanroomRing, lanes, inFlight, input, deadlines, handlers, output, cleanroom, intake);
+    }
+
+    /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
+    static String dirOf(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? null : found.dir();
     }
 
     private static void processed(EventEnvelope envelope, Receipts receipts, Intake intake, LaneDispatcher lanes) {

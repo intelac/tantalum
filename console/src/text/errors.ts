@@ -68,6 +68,8 @@ export function codeText(t: Text, code: string, params: Readonly<Record<string, 
       return e["memory/too-long"](bytes("limit"));
     case "memory/full":
       return e["memory/full"](count("max"));
+    case "project/title-invalid":
+      return e["project/title-invalid"](count("max"));
     case "memory/index-full":
       return e["memory/index-full"](bytes("limit"));
   }

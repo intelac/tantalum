@@ -116,6 +116,15 @@ public final class Intake {
      */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments, ModelChoice model) {
+        return submit(principal, session, request, mode, text, attachments, model, null);
+    }
+
+    /**
+     * 带工作目录的提交：{@code dir} 是调用方从本人登记的工作区查到的路径，可以为 null。只跟着提问（{@code prompt}）进 journal，
+     * 内核只在会话的第一次提问时用它。
+     */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments, ModelChoice model, String dir) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -133,7 +142,7 @@ public final class Intake {
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
             case "steer" -> new SteerSubmitted(submission, request, text, attachments);
             case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir);
         });
     }
 

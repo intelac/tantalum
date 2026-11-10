@@ -22,6 +22,7 @@ import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
@@ -84,9 +85,15 @@ final class IndexFixture {
 
     /** 提交并走到等模型回复，返回 CallModel 的命令 ID。 */
     Pending prompt(Principal principal, SessionId session, Instant at, String text) throws Exception {
+        return prompt(principal, session, at, text, null);
+    }
+
+    /** 同上，提问带工作目录。 */
+    Pending prompt(Principal principal, SessionId session, Instant at, String text, String dir) throws Exception {
         String request = "req-" + requests++;
         Decision submitted = send(principal, session, null, at,
-                new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
+                new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text, List.of(),
+                        null, dir));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
         Decision assembled = send(principal, session, run, at, new ContextAssembled(assemble.id(), "s", List.of(), null, List.of()));
@@ -97,6 +104,12 @@ final class IndexFixture {
     void reply(Pending pending, Instant at, TokenUsage usage) throws Exception {
         send(pending.principal, pending.session, pending.run, at,
                 new ModelReplied(pending.command, List.of(new TextBlock("ok")), StopReason.END_TURN, "m", usage, null, null, null));
+    }
+
+    /** 改名，不在运行里。 */
+    void rename(Principal principal, SessionId session, Instant at, String title) throws Exception {
+        String request = "req-" + requests++;
+        send(principal, session, null, at, new SessionRenamed(new SubmissionId("sub-" + request), new RequestId(request), title));
     }
 
     KernelState state() {

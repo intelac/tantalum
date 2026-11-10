@@ -11,15 +11,17 @@ import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.local.LocalTokens;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.project.Archive;
+import tantalum.shell.project.Projects;
 import tantalum.shell.settings.UserSettings;
 import tantalum.shell.tool.Workspaces;
 
 /**
- * 装配第一步：打开的数据文件和数据库——journal 和索引、本机工作区的令牌、插件开关、用户设置、记忆。
+ * 装配第一步：打开的数据文件和数据库——journal 和索引、本机工作区的令牌、插件开关、用户设置、工作区登记、归档、记忆。
  * 每打开一样就记进 {@code opened}，后面的步骤失败时 {@link Engine} 倒序关。
  */
 record Stores(Storage storage, Workspaces workspaces, LocalTokens localTokens, PluginSwitches switches, UserSettings userSettings,
-              MemoryStores memories) {
+              Projects projects, Archive archive, MemoryStores memories) {
 
     private static final Logger LOG = LoggerFactory.getLogger(Stores.class);
 
@@ -36,8 +38,18 @@ record Stores(Storage storage, Workspaces workspaces, LocalTokens localTokens, P
         opened.add(switches);
         UserSettings userSettings = openUserSettings(properties.dataDir(), clock);
         opened.add(userSettings);
+        Projects projects;
+        Archive archive;
+        try {
+            projects = Projects.open(properties.dataDir(), clock);
+            opened.add(projects);
+            archive = Archive.open(properties.dataDir(), clock);
+            opened.add(archive);
+        } catch (SQLException failure) {
+            throw new IOException("cannot open projects or the archive in " + properties.dataDir(), failure);
+        }
         MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
-        return new Stores(storage, workspaces, localTokens, switches, userSettings, memories);
+        return new Stores(storage, workspaces, localTokens, switches, userSettings, projects, archive, memories);
     }
 
     private static UserSettings openUserSettings(Path dataDir, Clock clock) throws IOException {

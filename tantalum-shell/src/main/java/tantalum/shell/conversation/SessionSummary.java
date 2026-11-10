@@ -7,8 +7,11 @@ import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.RunState;
 
-/** 侧栏里的一行：标题取第一条提问的开头，最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}。 */
-public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus) {
+/**
+ * 侧栏里的一行：标题取第一条提问的开头（用户改过名就用改的），最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}，
+ * {@code dir} 是会话的工作目录，没有为 null。
+ */
+public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus, String dir) {
 
     public static final String IDLE = "idle";
     static final int TITLE_LENGTH = 40;
@@ -26,7 +29,7 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
             }
         }
         String status = activeRun == null ? IDLE : activeRun.phase().name();
-        return new SessionSummary(id, title, last, status);
+        return new SessionSummary(id, title, last, status, null);
     }
 
     /** 第一行，最多 {@value #TITLE_LENGTH} 个字符，截断时加省略号。 */

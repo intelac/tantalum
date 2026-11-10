@@ -31,6 +31,7 @@ import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
+import tantalum.shell.project.Project;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
@@ -78,7 +79,10 @@ public class ApiController {
     /** 当前用户的会话，最近活动的在前。 */
     @GetMapping("/api/sessions")
     ResponseEntity<String> sessions() throws SQLException {
-        List<Map<String, Object>> sessions = engine.queries().sessions(WebJson.currentUser()).stream().map(ApiController::describe).toList();
+        Principal user = WebJson.currentUser();
+        Set<SessionId> archived = engine.archive().all(user);
+        List<Map<String, Object>> sessions = engine.queries().sessions(user).stream()
+                .map(summary -> describe(summary, archived.contains(summary.id()))).toList();
         return json.json(200, Map.of("sessions", sessions));
     }
 
@@ -175,6 +179,29 @@ public class ApiController {
             return json.error(ErrorCode.REQUEST_INVALID, "mode must be one of " + MODES);
         }
         Principal user = WebJson.currentUser();
+        try {
+            if (engine.archive().archived(user, id.get())) {
+                return json.error(ErrorCode.SESSION_ARCHIVED, "the session is archived");
+            }
+        } catch (SQLException failure) {
+            LOG.warn("archive lookup failed: {}", failure.toString());
+            return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
+        }
+        // 工作区只跟着提问走：查本人登记的路径作为会话目录，内核只在第一次提问时用它
+        String dir = null;
+        String project = WebJson.text(request.get(), "project");
+        if (project != null && mode.equals("prompt")) {
+            try {
+                Optional<Project> found = engine.projects().find(user, project);
+                if (found.isEmpty()) {
+                    return json.error(ErrorCode.PROJECT_NOT_FOUND, "no such project");
+                }
+                dir = found.get().path();
+            } catch (SQLException failure) {
+                LOG.warn("project lookup failed: {}", failure.toString());
+                return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
+            }
+        }
         List<AttachmentRef> attachments;
         try {
             attachments = attachments(user, request.get().get("attachments"));
@@ -206,7 +233,7 @@ public class ApiController {
             return json.error(ErrorCode.of(problem.get().kind()), problem.get().diagnostic(), problem.get().params());
         }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
-                content == null ? "" : content, attachments, model);
+                content == null ? "" : content, attachments, model, dir);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
 
@@ -367,7 +394,7 @@ public class ApiController {
         }
     }
 
-    private static Map<String, Object> describe(SessionSummary summary) {
+    private static Map<String, Object> describe(SessionSummary summary, boolean archived) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", summary.id().value());
         view.put("title", summary.title());
@@ -375,6 +402,8 @@ public class ApiController {
         view.put("runStatus", summary.runStatus());
         // 侧栏的“待回答”标记：从索引里的阶段名来，不载入会话
         view.put("awaitingAnswer", AwaitingAnswer.NAME.equals(summary.runStatus()));
+        view.put("dir", summary.dir());
+        view.put("archived", archived);
         return view;
     }
 

@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.local.LocalWorkspace;
 import tantalum.shell.memory.KnowledgeBase;
@@ -26,6 +27,7 @@ import tantalum.value.event.CommandDropped;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
+import tantalum.value.id.SessionId;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
@@ -59,13 +61,23 @@ public final class ContextHandler implements Handler {
     private final Routes routes;
     private final ChoiceCheck check;
     private final UserSettings users;
+    private final Function<SessionId, String> dirs;
+
+    /** 会话都没有工作目录时（测试）。 */
+    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
+                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
+        this(local, basePrompt, catalog, gate, memories, knowledge, fixedNote, compaction, routes, users, session -> null);
+    }
 
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
      * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal。{@code routes}、{@code users} 用来定这次用哪个模型。
+     * {@code dirs} 查会话的工作目录（没有为 null），写进给模型的“本机工作区”一段；写出的文字随事件进 journal，回放不再查。
      */
     public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
-                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
+                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users,
+                          Function<SessionId, String> dirs) {
+        this.dirs = dirs;
         this.gate = gate;
         this.fixedNote = fixedNote;
         this.compaction = compaction;
@@ -88,7 +100,7 @@ public final class ContextHandler implements Handler {
         if (!shared.isEmpty()) {
             sections.add(new ContextSection(KNOWLEDGE_TAG, escape(KNOWLEDGE_HEADING + "\n\n" + shared), false));
         }
-        Optional<String> workspace = local.section(principal);
+        Optional<String> workspace = local.section(principal, dirs.apply(command.run().session()));
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
         // 最多等 2 秒，没回就这次不带（LocalLinks.agents 记一行日志）
         String agents = workspace.isEmpty() ? "" : capped(local.agents(principal).orElse(""), AGENTS_MAX_BYTES);
