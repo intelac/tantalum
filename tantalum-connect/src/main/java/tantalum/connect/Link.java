@@ -17,6 +17,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
+import tantalum.local.wire.Browse;
+import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Bye;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Cancel;
@@ -289,6 +291,16 @@ final class Link {
                     } catch (RuntimeException failure) {
                         System.err.println("[tantalum-connect] reading AGENTS.md failed: " + failure);
                         result = new ContextResult(context.id(), null);
+                    }
+                    send(result);
+                });
+                case Browse browse -> Thread.ofVirtual().start(() -> {
+                    BrowseResult result;
+                    try {
+                        result = calls.browse(browse);
+                    } catch (RuntimeException failure) {
+                        System.err.println("[tantalum-connect] listing folders failed: " + failure);
+                        result = new BrowseResult(browse.id(), null, List.of(), false, "cannot list " + browse.path());
                     }
                     send(result);
                 });

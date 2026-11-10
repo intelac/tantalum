@@ -113,9 +113,11 @@ public final class LocalEndpoint extends Endpoint {
             peer.close(1008, "hello first");
             return;
         }
-        if (hello.protocol() != Wire.PROTOCOL) {
-            LOG.info("local connect for {}: protocol {} is not {}", verdict.principal().value(), hello.protocol(), Wire.PROTOCOL);
-            peer.close(Wire.CLOSE_PROTOCOL, "protocol " + Wire.PROTOCOL + " required");
+        // 协议 2 的连接程序照样能用：服务器对它不发会话目录和列子目录，控制台提示更新
+        if (hello.protocol() < Wire.OLDEST || hello.protocol() > Wire.PROTOCOL) {
+            LOG.info("local connect for {}: protocol {} is not between {} and {}", verdict.principal().value(), hello.protocol(),
+                    Wire.OLDEST, Wire.PROTOCOL);
+            peer.close(Wire.CLOSE_PROTOCOL, "protocol " + Wire.OLDEST + " to " + Wire.PROTOCOL + " required");
             return;
         }
         if (!attaching.compareAndSet(false, true)) {

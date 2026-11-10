@@ -13,12 +13,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.Tools;
+import tantalum.local.wire.Browse;
+import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Cancel;
 import tantalum.local.wire.Context;
@@ -54,8 +57,14 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     /** 把 {@code main}（第一个允许的目录）连给 {@code user}，到 {@code expiresAt} 为止。{@code git} 只是告诉服务器这台电脑装没装 git。 */
     public static TestComputer connect(LocalLinks links, Principal user, Instant expiresAt, Path main, boolean write, boolean git)
             throws IOException {
+        return connect(links, user, expiresAt, main, write, git, Wire.PROTOCOL);
+    }
+
+    /** 同上，报 {@code protocol} 版本：2 的电脑像老连接程序一样不认会话目录和列子目录。 */
+    public static TestComputer connect(LocalLinks links, Principal user, Instant expiresAt, Path main, boolean write, boolean git,
+                                       int protocol) throws IOException {
         Path real = main.toRealPath();
-        Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
+        Hello hello = new Hello(protocol, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
                 List.of(new Hello.Root(real.toString())), write, new Hello.Shell(false, "--allow-shell was not given"), true, git);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
@@ -121,9 +130,10 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
             }
             case Context context -> {
                 if (!silentContext) {
-                    Thread.ofVirtual().start(() -> reply(new ContextResult(context.id(), agents().orElse(null))));
+                    Thread.ofVirtual().start(() -> reply(new ContextResult(context.id(), agents(context.dir()).orElse(null))));
                 }
             }
+            case Browse browse -> Thread.ofVirtual().start(() -> reply(browse(browse)));
             default -> { } // welcome、bye
         }
     }
@@ -163,21 +173,41 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         if (tool.get().kind() == LocalTool.Kind.WRITE && !hello.write()) {
             return LocalResult.error("This computer does not allow file changes.");
         }
+        AllowedDirs scoped;
+        try {
+            scoped = call.dir() == null ? dirs : dirs.from(call.dir());
+        } catch (IllegalArgumentException notAllowed) {
+            return LocalResult.error("directory not allowed on this computer: " + call.dir());
+        }
         try {
             Observations seen = observations.computeIfAbsent(call.session(), ignored -> new Observations());
-            return tool.get().run(new LocalContext(call.session(), dirs, seen), call.arguments());
+            return tool.get().run(new LocalContext(call.session(), scoped, seen), call.arguments());
         } catch (Exception failure) {
             return LocalResult.error("Tool failed: " + failure);
         }
     }
 
     /** 和连接程序一样经 {@link AllowedDirs} 找主目录里的 {@code AGENTS.md}；这里不截断，服务器那边自己再截。 */
-    private Optional<String> agents() {
+    private Optional<String> agents(String dir) {
         try {
-            Path file = dirs.resolve("AGENTS.md");
+            Path file = (dir == null ? dirs : dirs.from(dir)).resolve("AGENTS.md");
             return Files.isRegularFile(file) ? Optional.of(Files.readString(file, StandardCharsets.UTF_8)) : Optional.empty();
         } catch (IOException | IllegalArgumentException missing) {
             return Optional.empty();
+        }
+    }
+
+    /** 同连接程序：列允许的目录本身，或一个目录下的子目录（排序、不含点开头的）。 */
+    private BrowseResult browse(Browse request) {
+        if (request.path() == null) {
+            return new BrowseResult(request.id(), null, dirs.all().stream().map(Path::toString).toList(), false, null);
+        }
+        try (Stream<Path> listing = Files.list(dirs.resolve(request.path()))) {
+            List<String> found = listing.filter(Files::isDirectory).filter(dir -> !dir.getFileName().toString().startsWith("."))
+                    .map(Path::toString).sorted().toList();
+            return new BrowseResult(request.id(), dirs.resolve(request.path()).toString(), found, false, null);
+        } catch (IOException | IllegalArgumentException missing) {
+            return new BrowseResult(request.id(), null, List.of(), false, AllowedDirs.NOT_FOUND + request.path());
         }
     }
 

@@ -78,7 +78,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         session -> dirOf(queries.view().current(), session)),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
-                RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
+                RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
+                        session -> dirOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
                 StartTimer.class, new TimerHandler());
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);

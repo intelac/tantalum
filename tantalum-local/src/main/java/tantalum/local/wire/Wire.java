@@ -29,8 +29,13 @@ public final class Wire {
     /**
      * 协议版本，写在 {@link Hello#protocol()} 里。2（2026-11-06）：{@code hello.roots[].git} 换成 {@code hello.git}，Git 工具不再要求
      * 主目录是仓库。意思变了，所以加 1：旧的连接程序连上来被拒绝，提示下载新的，不会悄悄少了 Git 工具。
+     * 3（2026-11-10）：{@code call.dir}、{@code context.dir} 带会话的工作目录，加 {@code browse}、{@code browseResult} 列子目录。
+     * 服务器仍接受 2（见 {@link #OLDEST}）：对它不发这几样，工具照旧用主目录。
      */
-    public static final int PROTOCOL = 2;
+    public static final int PROTOCOL = 3;
+
+    /** 服务器还接受的最老版本。 */
+    public static final int OLDEST = 2;
 
     /** 关闭码：协议版本不对。连接程序收到这四个就退出，不重连；其他关闭都重连。 */
     public static final int CLOSE_PROTOCOL = 4400;

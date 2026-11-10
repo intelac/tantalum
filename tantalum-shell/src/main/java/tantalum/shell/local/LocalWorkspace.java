@@ -154,10 +154,15 @@ public final class LocalWorkspace implements ToolGroup {
 
     /** 电脑主目录里的 {@code AGENTS.md}；没连上、总开关关着、2 秒没回都是空。 */
     public Optional<String> agents(Principal user) throws InterruptedException {
+        return agents(user, null);
+    }
+
+    /** 同上，会话有工作目录时从那里读。 */
+    public Optional<String> agents(Principal user, String dir) throws InterruptedException {
         if (!switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)) {
             return Optional.empty();
         }
-        return links.agents(user);
+        return links.agents(user, dir);
     }
 
     public LocalLinks links() {

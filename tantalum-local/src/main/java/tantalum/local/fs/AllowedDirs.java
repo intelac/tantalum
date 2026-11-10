@@ -11,6 +11,7 @@ import java.util.List;
  * 用户在连接程序上用 {@code --allow} 给的几个目录，第一个是主目录。规则同服务器上原来的
  * {@code Workspace}，逐条保留：相对路径按主目录解析；解析后（包括 {@code ..} 和符号链接）必须落在某个允许的目录里；
  * 越界和不存在用同一句话。这是路径校验不是沙箱：校验和随后的打开之间目录可能变化。
+ * 会话有工作目录时用 {@link #from} 换起点：相对路径从会话目录算，允许的范围不变。
  */
 public final class AllowedDirs {
 
@@ -19,6 +20,8 @@ public final class AllowedDirs {
 
     /** 真实路径，去掉重复，第一个是主目录。 */
     private final List<Path> dirs;
+    /** 相对路径从这里算：主目录，或用 {@link #from} 换成的会话目录。 */
+    private final Path start;
 
     /** 目录必须已存在。一个都没有、不存在或不是目录时抛 {@link IllegalArgumentException}。 */
     public AllowedDirs(List<Path> dirs) throws IOException {
@@ -36,10 +39,29 @@ public final class AllowedDirs {
             }
         }
         this.dirs = List.copyOf(real);
+        this.start = this.dirs.getFirst();
     }
 
+    private AllowedDirs(List<Path> dirs, Path start) {
+        this.dirs = dirs;
+        this.start = start;
+    }
+
+    /**
+     * 起点换成 {@code dir} 的同一组允许目录。{@code dir} 必须存在、是目录、真实路径在某个允许的目录里（同 {@link #resolve}），
+     * 否则抛 {@link IllegalArgumentException}，措辞同 {@link #resolve}。
+     */
+    public AllowedDirs from(String dir) {
+        Path real = resolve(dir);
+        if (!Files.isDirectory(real)) {
+            throw new IllegalArgumentException(NOT_FOUND + dir);
+        }
+        return new AllowedDirs(dirs, real);
+    }
+
+    /** 相对路径的起点：主目录，或会话目录。 */
     public Path main() {
-        return dirs.getFirst();
+        return start;
     }
 
     public List<Path> all() {

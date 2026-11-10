@@ -100,10 +100,11 @@ public final class ContextHandler implements Handler {
         if (!shared.isEmpty()) {
             sections.add(new ContextSection(KNOWLEDGE_TAG, escape(KNOWLEDGE_HEADING + "\n\n" + shared), false));
         }
-        Optional<String> workspace = local.section(principal, dirs.apply(command.run().session()));
+        String dir = dirs.apply(command.run().session());
+        Optional<String> workspace = local.section(principal, dir);
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
         // 最多等 2 秒，没回就这次不带（LocalLinks.agents 记一行日志）
-        String agents = workspace.isEmpty() ? "" : capped(local.agents(principal).orElse(""), AGENTS_MAX_BYTES);
+        String agents = workspace.isEmpty() ? "" : capped(local.agents(principal, dir).orElse(""), AGENTS_MAX_BYTES);
         if (!agents.isEmpty()) {
             sections.add(new ContextSection(AGENTS_TAG, escape(agents), false));
         }

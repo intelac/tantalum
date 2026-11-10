@@ -80,6 +80,12 @@ public final class TestServer implements AutoCloseable {
                 java.time.Instant.now().plus(java.time.Duration.ofDays(1)), dir, write, false);
     }
 
+    /** 同上，电脑报 {@code protocol} 版本。 */
+    public TestComputer connectComputer(String user, Path dir, boolean write, int protocol) throws java.io.IOException {
+        return TestComputer.connect(context.getBean(Engine.class).localLinks(), new Principal(user),
+                java.time.Instant.now().plus(java.time.Duration.ofDays(1)), dir, write, false, protocol);
+    }
+
     public HttpResponse<String> get(String principal, String path) throws Exception {
         return http.send(request(principal, path).GET().build(), HttpResponse.BodyHandlers.ofString());
     }

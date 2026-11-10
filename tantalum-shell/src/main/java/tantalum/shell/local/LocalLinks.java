@@ -25,6 +25,8 @@ import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.local.tool.LocalResult;
+import tantalum.local.wire.Browse;
+import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Bye;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Cancel;
@@ -190,6 +192,12 @@ public final class LocalLinks implements AutoCloseable {
      */
     public LocalResult call(Principal principal, String session, String tool, Json arguments, Duration timeout)
             throws InterruptedException {
+        return call(principal, session, tool, arguments, timeout, null);
+    }
+
+    /** 同上，{@code dir} 是会话的工作目录：连接程序是协议 3 起才发，协议 2 的不认识它，照旧用主目录。 */
+    public LocalResult call(Principal principal, String session, String tool, Json arguments, Duration timeout, String dir)
+            throws InterruptedException {
         Link link = links.get(principal);
         if (link == null) {
             return LocalResult.error(NOT_CONNECTED);
@@ -207,7 +215,8 @@ public final class LocalLinks implements AutoCloseable {
             CompletableFuture<Result> reply = new CompletableFuture<>();
             link.calls.put(id, reply);
             long left = deadline - System.nanoTime();
-            if (link.over.get() || !link.send(new Call(id, principal.value(), session, tool, arguments, Math.max(1, left / 1_000_000)))) {
+            if (link.over.get() || !link.send(new Call(id, principal.value(), session, tool, arguments, Math.max(1, left / 1_000_000),
+                    link.sessionDirs() ? dir : null))) {
                 return LocalResult.error(DISCONNECTED);
             }
             try {
@@ -229,8 +238,49 @@ public final class LocalLinks implements AutoCloseable {
         }
     }
 
+    /** 列子目录的结果：{@code result} 只在 {@code OK} 时有。 */
+    public record Listing(Outcome outcome, BrowseResult result) {
+
+        public enum Outcome { OK, NOT_CONNECTED, OLD_PROTOCOL, NO_ANSWER }
+    }
+
+    /**
+     * 添加工作区时列电脑上 {@code path} 下的子目录（null 列允许的目录本身），最多等 {@link Timing#agents()}。
+     * 协议 2 的连接程序不会列，直接回 {@code OLD_PROTOCOL}。
+     */
+    public Listing browse(Principal principal, String path) throws InterruptedException {
+        Link link = links.get(principal);
+        if (link == null || link.over.get()) {
+            return new Listing(Listing.Outcome.NOT_CONNECTED, null);
+        }
+        if (!link.sessionDirs()) {
+            return new Listing(Listing.Outcome.OLD_PROTOCOL, null);
+        }
+        String id = "b-" + ids.incrementAndGet();
+        CompletableFuture<BrowseResult> reply = new CompletableFuture<>();
+        link.browses.put(id, reply);
+        try {
+            if (!link.send(new Browse(id, path))) {
+                return new Listing(Listing.Outcome.NOT_CONNECTED, null);
+            }
+            return new Listing(Listing.Outcome.OK, reply.get(timing.agents().toMillis(), TimeUnit.MILLISECONDS));
+        } catch (TimeoutException late) {
+            LOG.info("local link for {}: folder listing did not arrive within {}", principal.value(), timing.agents());
+            return new Listing(Listing.Outcome.NO_ANSWER, null);
+        } catch (ExecutionException disconnected) {
+            return new Listing(Listing.Outcome.NOT_CONNECTED, null);
+        } finally {
+            link.browses.remove(id);
+        }
+    }
+
     /** 主目录里的 {@code AGENTS.md}，最多等 {@link Timing#agents()}；没有连接、没有这个文件、没按时回都是空，没按时回记一行日志。 */
     public Optional<String> agents(Principal principal) throws InterruptedException {
+        return agents(principal, null);
+    }
+
+    /** 同上，从会话的工作目录读（协议 3 起；协议 2 的连接照旧从主目录读）。 */
+    public Optional<String> agents(Principal principal, String dir) throws InterruptedException {
         Link link = links.get(principal);
         if (link == null) {
             return Optional.empty();
@@ -239,7 +289,7 @@ public final class LocalLinks implements AutoCloseable {
         CompletableFuture<ContextResult> reply = new CompletableFuture<>();
         link.contexts.put(id, reply);
         try {
-            if (link.over.get() || !link.send(new Context(id))) {
+            if (link.over.get() || !link.send(new Context(id, link.sessionDirs() ? dir : null))) {
                 return Optional.empty();
             }
             return Optional.ofNullable(reply.get(timing.agents().toMillis(), TimeUnit.MILLISECONDS).agents());
@@ -305,6 +355,7 @@ public final class LocalLinks implements AutoCloseable {
         private final Semaphore permits = new Semaphore(CONCURRENCY, true);
         private final Map<String, CompletableFuture<Result>> calls = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<ContextResult>> contexts = new ConcurrentHashMap<>();
+        private final Map<String, CompletableFuture<BrowseResult>> browses = new ConcurrentHashMap<>();
         private final AtomicBoolean over = new AtomicBoolean();
         /** {@code welcome} 发出去了（或者连接已经断了，不会再发）。 */
         private final CountDownLatch welcomed = new CountDownLatch(1);
@@ -319,6 +370,11 @@ public final class LocalLinks implements AutoCloseable {
             this.peer = peer;
         }
 
+        /** 连接程序认会话目录和列子目录（协议 3 起）。 */
+        boolean sessionDirs() {
+            return hello.protocol() >= LocalWorkspace.SESSION_DIRS;
+        }
+
         /** 电脑发来的一条消息。方向不对的消息算协议错误，关掉连接，电脑会重连。 */
         public void receive(Message message) {
             switch (message) {
@@ -330,6 +386,12 @@ public final class LocalLinks implements AutoCloseable {
                 }
                 case ContextResult result -> {
                     CompletableFuture<ContextResult> waiting = contexts.get(result.id());
+                    if (waiting != null) {
+                        waiting.complete(result);
+                    }
+                }
+                case BrowseResult result -> {
+                    CompletableFuture<BrowseResult> waiting = browses.get(result.id());
                     if (waiting != null) {
                         waiting.complete(result);
                     }
@@ -362,6 +424,9 @@ public final class LocalLinks implements AutoCloseable {
             }
             for (CompletableFuture<ContextResult> waiting : contexts.values()) {
                 waiting.complete(new ContextResult("disconnected", null));
+            }
+            for (CompletableFuture<BrowseResult> waiting : browses.values()) {
+                waiting.completeExceptionally(new IllegalStateException("disconnected"));
             }
             // 叫醒排队等名额的调用，它们看到连接已断就返回
             permits.release(Integer.MAX_VALUE / 2);

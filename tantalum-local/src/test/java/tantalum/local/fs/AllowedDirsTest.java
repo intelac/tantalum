@@ -210,4 +210,37 @@ class AllowedDirsTest {
         assertThrows(java.io.IOException.class, () -> new AllowedDirs(List.of(temp.resolve("gone"))));
         assertThrows(IllegalArgumentException.class, () -> new AllowedDirs(List.of(temp.resolve("secret.txt"))));
     }
+
+    // ---- 会话目录（workspaces 任务 13，W5、需求 2.3、2.4） ----
+
+    @Test
+    void aSessionDirectoryBecomesTheStartButNotTheLimit() throws Exception {
+        Path app = Files.createDirectory(root.resolve("app"));
+        Files.writeString(app.resolve("Main.java"), "class Main {}");
+        AllowedDirs both = new AllowedDirs(List.of(root, other));
+        AllowedDirs session = both.from(app.toString());
+        assertEquals(app, session.main());
+        assertEquals(app.resolve("Main.java"), session.resolve("Main.java"));
+        assertEquals(root.resolve("inside.txt"), session.resolve("../inside.txt"), "the rest of the allowed directory is still allowed");
+        assertEquals(other.resolve("lib.txt"), session.resolve(other.resolve("lib.txt").toString()));
+        assertEquals(List.of(root, other), session.all());
+        assertEquals("Main.java", session.display(app.resolve("Main.java")));
+        assertThrows(IllegalArgumentException.class, () -> session.resolve("../../secret.txt"));
+        assertEquals(root, both.main(), "the original is unchanged");
+    }
+
+    @Test
+    void aSessionDirectoryMustExistBeADirectoryAndBeAllowed() throws Exception {
+        assertThrows(IllegalArgumentException.class, () -> dirs.from(temp.toString()));
+        assertThrows(IllegalArgumentException.class, () -> dirs.from(root.resolve("missing").toString()));
+        assertThrows(IllegalArgumentException.class, () -> dirs.from(root.resolve("inside.txt").toString()));
+        assertEquals(root, dirs.from(root.toString()).main());
+    }
+
+    @Test
+    @DisabledOnOs(value = OS.WINDOWS, disabledReason = "符号链接在 Windows 上要管理员权限")
+    void aLinkOutOfTheAllowedDirectoriesIsNotASessionDirectory() throws Exception {
+        Path link = Files.createSymbolicLink(root.resolve("escape"), temp);
+        assertThrows(IllegalArgumentException.class, () -> dirs.from(link.toString()));
+    }
 }

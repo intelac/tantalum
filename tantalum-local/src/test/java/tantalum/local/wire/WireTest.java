@@ -54,8 +54,14 @@ class WireTest {
                 new Result("c-1", "line 1", false, List.of()),
                 new Result("c-2", "Image a.png (image/png, 3 bytes).", false, List.of(new Result.Image("image/png", "AQID"))),
                 new Cancel("c-1"),
+                new Call("c-3", "yi", "s-1a2b", "bash", arguments(), 60_000, "C:\\APPL\\Quattro"),
                 new Context("x-1"),
+                new Context("x-3", "/Users/yi/work/shop/app"),
                 new ContextResult("x-1", "# Rules\nUse tabs.\n"),
+                new Browse("b-1", null),
+                new Browse("b-2", "/Users/yi/work"),
+                new BrowseResult("b-2", "/Users/yi/work", List.of("/Users/yi/work/app", "/Users/yi/work/shop"), false, null),
+                new BrowseResult("b-3", null, List.of(), false, "path not found in the allowed directories: /etc"),
                 new ContextResult("x-2", null),
                 new Bye(Bye.Reason.REPLACED),
                 withCode());
@@ -91,7 +97,14 @@ class WireTest {
                 keys(new Call("c", "yi", "s", "grep", arguments(), 1)));
         assertEquals(Set.of("type", "id", "text", "error", "images"), keys(new Result("c", "", true, List.of())));
         assertEquals(Set.of("type", "id"), keys(new Cancel("c")));
+        assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs", "dir"),
+                keys(new Call("c", "yi", "s", "grep", arguments(), 1, "/w")));
         assertEquals(Set.of("type", "id"), keys(new Context("x")));
+        assertEquals(Set.of("type", "id", "dir"), keys(new Context("x", "/w")));
+        assertEquals(Set.of("type", "id"), keys(new Browse("b", null)));
+        assertEquals(Set.of("type", "id", "path"), keys(new Browse("b", "/w")));
+        assertEquals(Set.of("type", "id", "path", "dirs", "truncated"), keys(new BrowseResult("b", "/w", List.of("/w/a"), true, null)));
+        assertEquals(Set.of("type", "id", "dirs", "truncated", "error"), keys(new BrowseResult("b", null, List.of(), false, "nope")));
         assertEquals(Set.of("type", "id", "agents"), keys(new ContextResult("x", "a")));
         assertEquals(Set.of("type", "reason"), keys(new Bye(Bye.Reason.EXPIRED)));
     }
@@ -104,7 +117,8 @@ class WireTest {
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
-        assertEquals(2, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals(3, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals("browseResult", PLAIN.readTree(Wire.encode(new BrowseResult("b", null, List.of(), false, null))).get("type").asString());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
         }
@@ -194,7 +208,9 @@ class WireTest {
     @Test
     void closeCodesAndProtocolArePinned() {
         // 2：hello.roots[].git 换成 hello.git（B1，2026-11-06），旧的连接程序被拒绝并提示下载新的
-        assertEquals(2, Wire.PROTOCOL);
+        // 3：会话的工作目录和列子目录（workspaces，2026-11-10）；服务器仍接受 2
+        assertEquals(3, Wire.PROTOCOL);
+        assertEquals(2, Wire.OLDEST);
         assertEquals(List.of(4400, 4401, 4403, 4409),
                 List.of(Wire.CLOSE_PROTOCOL, Wire.CLOSE_BAD_TOKEN, Wire.CLOSE_EXPIRED, Wire.CLOSE_REPLACED));
     }

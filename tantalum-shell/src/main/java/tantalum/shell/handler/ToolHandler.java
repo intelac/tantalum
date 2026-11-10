@@ -3,6 +3,7 @@ package tantalum.shell.handler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tantalum.value.id.SessionId;
 import tantalum.value.text.Failures;
 
 import java.time.Clock;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
@@ -38,11 +40,19 @@ public final class ToolHandler implements Handler {
     /** 每个服务端一份名额，同一服务端的工具共用。 */
     private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
     private final Clock clock;
+    private final Function<SessionId, String> dirs;
 
     /** 执行的结果和真正开始的时刻；没拿到名额时开始时刻为 null。 */
     private record Ran(ToolOutput output, Instant startedAt) {}
 
     public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock) {
+        this(catalog, workspaces, gate, timeout, clock, session -> null);
+    }
+
+    /** {@code dirs} 查会话在用户电脑上的工作目录（没有为 null），放进 {@link ToolContext#dir()}。 */
+    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock,
+                       Function<SessionId, String> dirs) {
+        this.dirs = dirs;
         this.catalog = catalog;
         this.workspaces = workspaces;
         this.gate = gate;
@@ -59,7 +69,8 @@ public final class ToolHandler implements Handler {
         }
         ToolContext context;
         try {
-            context = new ToolContext(run.run().principal(), run.run().session(), workspaces.of(run.run().principal()));
+            context = new ToolContext(run.run().principal(), run.run().session(), workspaces.of(run.run().principal()),
+                    dirs.apply(run.run().session()));
         } catch (RuntimeException failure) {
             return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()), null);
         }

@@ -29,6 +29,8 @@ import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
 import tantalum.local.tool.Tools;
+import tantalum.local.wire.Browse;
+import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
@@ -292,5 +294,84 @@ class CallsTest {
             }
             return LocalResult.ok("done");
         }
+    }
+
+    // ---- 会话目录和列子目录（workspaces 任务 14，W5、W6） ----
+
+    private Call inDir(String id, String dir, String tool, String path) {
+        return new Call(id, "alice", "s-1a2b3c4d5e", tool, new Json.Obj(Map.of("path", new Json.Str(path))), 60_000, dir);
+    }
+
+    @Test
+    void aCallWithASessionDirectoryReadsRelativePathsFromThere() throws Exception {
+        Path app = Files.createDirectory(work.resolve("app"));
+        Files.writeString(app.resolve("a.txt"), "from app\n");
+        Calls calls = calls(false);
+        calls.call(inDir("c-1", app.toString(), "read_file", "a.txt"), replies::add);
+        Result fromApp = reply();
+        assertFalse(fromApp.error(), fromApp.text());
+        assertTrue(fromApp.text().contains("from app"), fromApp.text());
+        calls.call(inDir("c-2", null, "read_file", "a.txt"), replies::add);
+        assertTrue(reply().text().contains("SECRET-CONTENT"), "without a directory the main directory is the start");
+    }
+
+    @Test
+    void aSessionDirectoryOutsideTheAllowedOnesRunsNothing() throws Exception {
+        Calls calls = calls(true);
+        calls.call(inDir("c-1", outside.toString(), "write_file", "x.txt"), replies::add);
+        Result refused = reply();
+        assertTrue(refused.error());
+        assertEquals(Calls.DIR_NOT_ALLOWED + outside, refused.text());
+        assertFalse(Files.exists(outside.resolve("x.txt")));
+        assertFalse(Files.exists(work.resolve("x.txt")), "it does not fall back to the main directory");
+        calls.call(inDir("c-2", work.resolve("missing").toString(), "read_file", "a.txt"), replies::add);
+        assertTrue(reply().text().startsWith(Calls.DIR_NOT_ALLOWED));
+        assertTrue(printed().contains(" denied"), printed());
+    }
+
+    @Test
+    void contextReadsAgentsFromTheSessionDirectory() throws Exception {
+        Path app = Files.createDirectory(work.resolve("app"));
+        Files.writeString(work.resolve("AGENTS.md"), "main rules");
+        Files.writeString(app.resolve("AGENTS.md"), "app rules");
+        Calls calls = calls(false);
+        assertEquals("app rules", calls.context(new Context("x-1", app.toString())).agents());
+        assertEquals("main rules", calls.context(new Context("x-2")).agents());
+        assertNull(calls.context(new Context("x-3", outside.toString())).agents());
+    }
+
+    @Test
+    void browsingListsOnlyAllowedFoldersSortedWithoutHiddenOnesOrLinks() throws Exception {
+        Files.createDirectory(work.resolve("zeta"));
+        Files.createDirectory(work.resolve("Alpha"));
+        Files.createDirectory(work.resolve(".git"));
+        Files.createSymbolicLink(work.resolve("escape"), outside);
+        Calls calls = calls(false);
+
+        BrowseResult roots = calls.browse(new Browse("b-0", null));
+        assertEquals(List.of(work.toString()), roots.dirs());
+
+        BrowseResult listed = calls.browse(new Browse("b-1", work.toString()));
+        assertEquals(work.toString(), listed.path());
+        assertEquals(List.of(work.resolve("Alpha").toString(), work.resolve("zeta").toString()), listed.dirs());
+        assertFalse(listed.truncated());
+        assertNull(listed.error());
+
+        BrowseResult refused = calls.browse(new Browse("b-2", outside.toString()));
+        BrowseResult missing = calls.browse(new Browse("b-3", work.resolve("nope").toString()));
+        assertEquals(AllowedDirs.NOT_FOUND + outside, refused.error());
+        assertEquals(AllowedDirs.NOT_FOUND + work.resolve("nope"), missing.error());
+        assertEquals(List.of(), refused.dirs());
+        assertEquals("", printed(), "listing folders is not a tool call and is not journaled");
+    }
+
+    @Test
+    void browsingStopsAtTheLimit() throws Exception {
+        for (int i = 0; i <= BrowseResult.MAX_DIRS; i++) {
+            Files.createDirectory(work.resolve(String.format("d%04d", i)));
+        }
+        BrowseResult listed = calls(false).browse(new Browse("b-1", work.toString()));
+        assertEquals(BrowseResult.MAX_DIRS, listed.dirs().size());
+        assertTrue(listed.truncated());
     }
 }

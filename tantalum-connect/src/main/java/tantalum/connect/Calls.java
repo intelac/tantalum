@@ -5,12 +5,16 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Sandbox;
@@ -21,6 +25,8 @@ import tantalum.local.tool.LocalTool;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.ToolArguments;
 import tantalum.local.tool.Tools;
+import tantalum.local.wire.Browse;
+import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
@@ -38,6 +44,8 @@ final class Calls {
     static final String NO_WRITE = "This computer does not allow file changes.";
     static final String NO_SHELL = "This computer does not allow shell commands.";
     static final String AGENTS_FILE = "AGENTS.md";
+    /** 会话目录不在这台电脑允许的范围里（或不存在）：工具不跑，也不退回主目录。 */
+    static final String DIR_NOT_ALLOWED = "directory not allowed on this computer: ";
     static final String DUPLICATE = "A call with this id is already running.";
 
     private final AllowedDirs dirs;
@@ -116,8 +124,14 @@ final class Calls {
         LocalResult result;
         Outcome outcome;
         try {
-            result = tool.run(new LocalContext(call.session(), dirs, observations, sandbox), call.arguments());
-            outcome = !result.error() ? Outcome.OK : outside(call) ? Outcome.DENIED : Outcome.ERROR;
+            AllowedDirs scoped = call.dir() == null ? dirs : sessionDirs(call.dir());
+            if (scoped == null) {
+                result = LocalResult.error(DIR_NOT_ALLOWED + call.dir());
+                outcome = Outcome.DENIED;
+            } else {
+                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox), call.arguments());
+                outcome = !result.error() ? Outcome.OK : outside(call, scoped) ? Outcome.DENIED : Outcome.ERROR;
+            }
         } catch (InterruptedException stopped) {
             result = null;
             outcome = Outcome.CANCELLED;
@@ -144,7 +158,7 @@ final class Calls {
     /**
      * 记录用：报错是不是因为路径在允许的目录外。给服务器的报错不区分越界和不存在，终端是用户自己看的，分得清楚些。
      */
-    private boolean outside(Call call) {
+    private boolean outside(Call call, AllowedDirs dirs) {
         String path = ToolArguments.string(call.arguments(), "path");
         if (path == null) {
             return false;
@@ -193,12 +207,56 @@ final class Calls {
      * 也走 {@link AllowedDirs#resolve}：指向允许目录外的符号链接不会被读。没有或读不了时为 null。
      */
     ContextResult context(Context request) {
+        AllowedDirs scoped = request.dir() == null ? dirs : sessionDirs(request.dir());
+        if (scoped == null) {
+            return new ContextResult(request.id(), null);
+        }
         try {
-            Path file = dirs.resolve(AGENTS_FILE);
+            Path file = scoped.resolve(AGENTS_FILE);
             return new ContextResult(request.id(), Files.isRegularFile(file) ? capped(file, ContextResult.MAX_AGENTS_BYTES) : null);
         } catch (IllegalArgumentException | IOException missing) {
             return new ContextResult(request.id(), null);
         }
+    }
+
+    /** 会话目录做起点的允许目录；目录不存在或不在允许的范围里时为 null。 */
+    private AllowedDirs sessionDirs(String dir) {
+        try {
+            return dirs.from(dir);
+        } catch (IllegalArgumentException unusable) {
+            return null;
+        }
+    }
+
+    /**
+     * 添加工作区时列子目录：{@code path} 为空时列允许的目录本身，否则列它下面的目录（不跟符号链接、不列 {@code .} 开头的），
+     * 按名字排序，最多 {@value BrowseResult#MAX_DIRS} 个。越界和不存在说同一句话。只读目录名，不读文件，不记终端。
+     */
+    BrowseResult browse(Browse request) {
+        if (request.path() == null) {
+            return new BrowseResult(request.id(), null, dirs.all().stream().map(Path::toString).toList(), false, null);
+        }
+        Path real;
+        try {
+            real = dirs.resolve(request.path());
+        } catch (IllegalArgumentException unusable) {
+            return new BrowseResult(request.id(), null, List.of(), false, AllowedDirs.NOT_FOUND + request.path());
+        }
+        if (!Files.isDirectory(real)) {
+            return new BrowseResult(request.id(), null, List.of(), false, AllowedDirs.NOT_FOUND + request.path());
+        }
+        List<Path> children = new ArrayList<>();
+        try (Stream<Path> listing = Files.list(real)) {
+            listing.filter(child -> !child.getFileName().toString().startsWith("."))
+                    .filter(child -> Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS))
+                    .forEach(children::add);
+        } catch (IOException | SecurityException unreadable) {
+            return new BrowseResult(request.id(), real.toString(), List.of(), false, "cannot list " + request.path());
+        }
+        children.sort(Comparator.comparing(child -> child.getFileName().toString(), String.CASE_INSENSITIVE_ORDER));
+        boolean truncated = children.size() > BrowseResult.MAX_DIRS;
+        List<String> shown = children.stream().limit(BrowseResult.MAX_DIRS).map(Path::toString).toList();
+        return new BrowseResult(request.id(), real.toString(), shown, truncated, null);
     }
 
     /** 同服务器 {@code ContextHandler.capped}：超限时按 UTF-8 边界截断并告诉模型。 */

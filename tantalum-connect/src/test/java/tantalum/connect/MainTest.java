@@ -210,7 +210,7 @@ class MainTest {
         assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of()), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
-        assertEquals(2, hello.protocol());
+        assertEquals(3, hello.protocol(), "protocol 3: session directories and folder listing");
 
         Path missing = temp.resolve("no-mxc");
         Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network", "--mxc", missing.toString()).hello();

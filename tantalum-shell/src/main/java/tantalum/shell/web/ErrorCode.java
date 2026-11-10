@@ -64,10 +64,17 @@ public enum ErrorCode {
     PROJECT_NOT_FOUND("project/not-found", 404),
     /** 不是绝对路径。 */
     PROJECT_PATH_INVALID("project/path-invalid", 400),
+    /** 电脑上不存在，或不在连接程序允许的目录里。 */
+    PROJECT_PATH_NOT_ALLOWED("project/path-not-allowed", 400),
     PROJECT_PATH_TAKEN("project/path-taken", 409),
     /** 参数 {@code max}：最长字数。 */
     PROJECT_TITLE_INVALID("project/title-invalid", 400),
     PROJECT_TITLE_TAKEN("project/title-taken", 409),
+    LOCAL_NOT_CONNECTED("local/not-connected", 409),
+    /** 连接程序是协议 2，不会列子目录。 */
+    LOCAL_PROTOCOL_OLD("local/protocol-old", 409),
+    /** 电脑没按时回答。 */
+    LOCAL_NO_ANSWER("local/no-answer", 504),
     /** 参数 {@code name}。 */
     PLUGIN_NOT_FOUND("plugin/not-found", 404),
     /** 参数 {@code name}。 */

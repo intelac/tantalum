@@ -66,7 +66,7 @@ public final class LocalTool implements Tool {
     @Override
     public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException, IOException {
         LocalResult result = links.call(context.principal(), context.session().value(), name(), arguments,
-                definition.timeout(arguments, standard));
+                definition.timeout(arguments, standard), context.dir());
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
         }
