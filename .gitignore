@@ -30,13 +30,6 @@ audit.log
 # typescript incremental build cache
 *.tsbuildinfo
 
-# spec-workflow tool state: approvals, per-task implementation logs, default templates (specs, steering, reviews and BACKLOG stay tracked)
-.spec-workflow/approvals/
-.spec-workflow/specs/*/Implementation Logs/
-.spec-workflow/templates/
-.spec-workflow/user-templates/
-.spec-workflow/reviews/
-
 # spec-workflow and code-review tooling stay local
 .spec-workflow/
 .opencodereview/
