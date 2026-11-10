@@ -36,8 +36,7 @@ test.describe("语言", () => {
     await expect(ja.getByRole("button", { name: "ログイン" })).toBeVisible();
     await signIn(ja, JA);
 
-    await ja.getByRole("button", { name: "その他" }).first().click();
-    await ja.getByRole("menuitem", { name: "設定" }).click();
+    await ja.getByRole("button", { name: "設定", exact: true }).first().click();
     const dialog = ja.getByRole("dialog", { name: "設定" });
     await dialog.getByRole("button", { name: "言語" }).click();
     await expect(dialog.getByRole("radio", { name: "ブラウザーの言語に合わせる（日本語）" })).toHaveAttribute("aria-checked", "true");
@@ -66,8 +65,7 @@ test.describe("语言", () => {
     await expect(zh.locator("html")).toHaveAttribute("lang", "en");
 
     // 退出登录：登录页回到这个浏览器的语言
-    await zh.getByRole("button", { name: "More" }).first().click();
-    await zh.getByRole("menuitem", { name: "Sign out" }).click();
+    await zh.getByRole("button", { name: "Sign out", exact: true }).first().click();
     await expect(zh.getByRole("button", { name: "登录" })).toBeVisible();
     await expect(zh.locator("html")).toHaveAttribute("lang", "zh-CN");
   });
@@ -87,8 +85,7 @@ test.describe("语言", () => {
     });
     await expect(ja.getByRole("alert")).toHaveText("画像は 1 枚 50 MB までです");
 
-    await ja.getByRole("button", { name: "その他" }).first().click();
-    await ja.getByRole("menuitem", { name: "プラグイン" }).click();
+    await ja.getByRole("button", { name: "プラグイン", exact: true }).first().click();
     const builtins = ja.getByRole("dialog", { name: "プラグイン" }).getByRole("region", { name: "組み込みツール" });
     await expect(builtins.getByRole("switch", { name: "添付ファイルを読む" })).toBeVisible();
     await expect(builtins.getByRole("switch", { name: "メモリに書く" })).toBeVisible();

@@ -82,6 +82,9 @@ describe("English everywhere", () => {
     const sessions = [{ id: "s", title: "Fix the build", lastActivity: "2026-11-06T09:00:00Z", runStatus: "idle" }];
     shown(
       <Sidebar sessions={sessions} loading={false} error={null} currentSession="s" rail={false} onToggle={() => undefined} onNewSession={() => undefined}
+        projects={[]}
+        onNewSessionIn={() => undefined}
+        onAddProject={() => undefined}
         onSelectSession={() => undefined} onSettings={() => undefined} onPlugins={() => undefined} onLogout={() => undefined} username="yi" />,
     );
     expect(cjkOnScreen()).toEqual([]);

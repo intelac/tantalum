@@ -7,8 +7,7 @@ import { PASSWORD, USER, login } from "./app";
 async function openSettings(page: Page) {
   await page.goto("/");
   await expect(page).toHaveURL(/\/s\/s-[0-9a-f]{8}$/);
-  await page.getByRole("button", { name: "更多" }).click();
-  await page.getByRole("menuitem", { name: "设置" }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).first().click();
   return page.getByRole("dialog", { name: "设置" });
 }
 

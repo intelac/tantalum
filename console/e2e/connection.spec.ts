@@ -37,8 +37,7 @@ test.describe("连接", () => {
     await send(page, "hello 退出前");
     await expect(page.getByText("你说：hello 退出前")).toBeVisible();
 
-    await page.getByRole("button", { name: "更多" }).click();
-    await page.getByRole("menuitem", { name: "退出登录" }).click();
+    await page.getByRole("button", { name: "退出登录", exact: true }).first().click();
     await expect(page).toHaveURL(/\/login\?next=/);
     await expect(page.getByLabel("用户名")).toBeVisible();
 

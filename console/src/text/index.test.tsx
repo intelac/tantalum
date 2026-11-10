@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -47,6 +48,9 @@ describe("current language", () => {
           rail={false}
           onToggle={() => undefined}
           onNewSession={() => undefined}
+          projects={[]}
+          onNewSessionIn={() => undefined}
+          onAddProject={() => undefined}
           onSelectSession={() => undefined}
           onSettings={() => undefined}
           onPlugins={() => undefined}
@@ -55,7 +59,11 @@ describe("current language", () => {
         />
       );
     }
-    render(<Counted />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Counted />
+      </QueryClientProvider>,
+    );
     expect(screen.getByRole("button", { name: "新会话" })).toBeTruthy();
     act(() => setLanguage("en"));
     expect(screen.getByRole("button", { name: "[x]新会话" })).toBeTruthy();

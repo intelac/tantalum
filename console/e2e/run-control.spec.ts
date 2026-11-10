@@ -59,7 +59,7 @@ test.describe("运行控制", () => {
     await expect(page.getByText(`你说：${first}`)).toHaveCount(0);
     await composer(page).fill("还没发出去的草稿");
 
-    await page.getByRole("navigation", { name: "会话" }).getByRole("button", { name: first }).click();
+    await page.getByRole("navigation", { name: "会话" }).getByTitle(first, { exact: true }).click();
     await expect(page.getByText(`你说：${first}`)).toBeVisible();
     await expect(composer(page)).toHaveValue("");
 

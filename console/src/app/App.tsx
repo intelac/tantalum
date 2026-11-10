@@ -10,6 +10,10 @@ import { readChoice } from "../composer/drafts";
 import { pickChoice, sentChoice, useModels } from "../composer/useModels";
 import { ConversationPage } from "../conversation/ConversationPage";
 import { PluginsDialog } from "../plugins/PluginsDialog";
+import { AddProjectDialog } from "../projects/AddProjectDialog";
+import { projectOf } from "../projects/group";
+import { useProjects } from "../projects/useProjects";
+import { savePending } from "../projects/viewState";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { AppFrame } from "../shell/AppFrame";
 import { ConnectionBanner } from "../shell/ConnectionBanner";
@@ -90,6 +94,9 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
   const settingsChoice = pickChoice(readChoice(route.session), sentChoice(route.session) ?? sessionModel.model, models.data);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const projects = useProjects();
+  const projectList = projects.data ?? [];
   const list = sessions.data ?? [];
   const summary = list.find((session) => session.id === route.session);
   const title = sessionTitle(summary, t);
@@ -120,10 +127,22 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
           rail={rail}
           onToggle={toggle}
           username={username}
+          projects={projectList}
           onNewSession={() => {
             close();
-            navigate(sessionPath(newSessionId()));
+            // 新会话默认进当前会话的工作区；当前会话不在工作区里时，输入框旁用上次用的（W11）
+            const id = newSessionId();
+            const here = summary === undefined ? null : projectOf(summary, projectList);
+            if (here !== null) savePending(id, here.id);
+            navigate(sessionPath(id));
           }}
+          onNewSessionIn={(project) => {
+            close();
+            const id = newSessionId();
+            savePending(id, project.id);
+            navigate(sessionPath(id));
+          }}
+          onAddProject={() => setAddOpen(true)}
           onSelectSession={(id) => {
             close();
             if (id !== route.session) navigate(sessionPath(id));
@@ -146,6 +165,14 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
           onLogout={onLogout}
         />
         <PluginsDialog open={pluginsOpen} onClose={() => setPluginsOpen(false)} />
+        <AddProjectDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          // 还没发出第一句的会话直接用刚加的工作区
+          onAdded={(project) => {
+            if (summary === undefined) savePending(route.session, project.id);
+          }}
+        />
         <div className="min-h-0 flex-1">
           {route.page === "trace" ? (
             <TracePage key={route.session} store={trace} session={route.session} run={route.run} record={route.record} />
@@ -154,7 +181,13 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
           ) : (
             <div className="flex h-full min-h-0 flex-col">
               <ConversationPage store={store} session={route.session} />
-              <ComposerDock store={store} session={route.session} config={config.data} />
+              <ComposerDock
+                store={store}
+                session={route.session}
+                config={config.data}
+                onOpenPlugins={() => setPluginsOpen(true)}
+                onAddProject={() => setAddOpen(true)}
+              />
             </div>
           )}
         </div>

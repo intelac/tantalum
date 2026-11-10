@@ -8,8 +8,7 @@ test.describe("记忆", () => {
     await expect(page.getByText("已记住。")).toBeVisible({ timeout: 30_000 });
 
     // 设置在侧栏“更多”菜单里。
-    await page.getByRole("button", { name: "更多" }).click();
-    await page.getByRole("menuitem", { name: "设置" }).click();
+    await page.getByRole("button", { name: "设置", exact: true }).first().click();
     const dialog = page.getByRole("dialog", { name: "设置" });
     await dialog.getByRole("button", { name: "记忆" }).click();
 

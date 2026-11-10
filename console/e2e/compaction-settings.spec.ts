@@ -6,8 +6,7 @@ import { login, openNewSession, OTHER_USER, USER } from "./app";
 // 选择按用户持久保存，改设置的用例用第二个账号，结束时恢复成用满。
 
 async function openModelPane(page: Page) {
-  await page.getByRole("button", { name: "更多" }).first().click();
-  await page.getByRole("menuitem", { name: "设置" }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByRole("button", { name: "模型" }).click();
   await expect(dialog.getByRole("radiogroup", { name: "自动压缩" })).toBeVisible();

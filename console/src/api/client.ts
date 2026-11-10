@@ -6,6 +6,7 @@ import type {
   AttachmentRef,
   Config,
   ErrorParam,
+  FolderListing,
   Language,
   LocalStatus,
   LocalToken,
@@ -18,6 +19,7 @@ import type {
   ModelsResponse,
   PluginKind,
   Plugins,
+  Project,
   RunView,
   SessionSummary,
   SubmitMode,
@@ -138,6 +140,36 @@ export function listSessions(): Promise<{ sessions: SessionSummary[] }> {
   return call("/api/sessions");
 }
 
+/** 改名进账；空串恢复自动标题（workspaces W7）。 */
+export function renameSession(session: string, title: string): Promise<{ title: string }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+}
+
+export function setArchived(session: string, archived: boolean): Promise<{ archived: boolean }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/archived`, { method: "PUT", body: JSON.stringify({ archived }) });
+}
+
+export function listProjects(): Promise<{ projects: Project[] }> {
+  return call("/api/projects");
+}
+
+export function addProject(path: string, title?: string): Promise<Project> {
+  return call("/api/projects", { method: "POST", body: JSON.stringify(title === undefined || title.trim() === "" ? { path } : { path, title }) });
+}
+
+export function renameProject(id: string, title: string): Promise<Project> {
+  return call(`/api/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return call(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** 经连接程序列电脑上的目录；不给 `path` 时列允许的目录本身。 */
+export function browseFolders(path?: string): Promise<FolderListing> {
+  return call(`/api/projects/browse${path === undefined ? "" : `?path=${encodeURIComponent(path)}`}`);
+}
+
 /** 默认最近一页；`before` 是已加载部分的 `start`。还没有任何提交的会话在后端不存在，当作空会话。 */
 export async function listMessages(session: string, before?: number): Promise<Messages> {
   const page = before === undefined ? "" : `?before=${before}`;
@@ -157,11 +189,14 @@ export function submit(
   requestId: string,
   attachments: readonly AttachmentRef[] = [],
   model: ModelChoice | null = null,
+  project: string | null = null,
 ): Promise<{ submissionId: string; duplicate: boolean }> {
   const body: Record<string, unknown> = { requestId, mode, text };
   if (attachments.length > 0) body.attachments = attachments.map(({ id, name }) => ({ id, name }));
   // 选择随开始新运行的提交发出（model-picker M6）；插话不换模型，不带
   if (model !== null && mode !== "steer") body.model = model;
+  // 工作区只跟着提问走，服务器只在会话的第一次提问时用它（workspaces W3）
+  if (project !== null && mode === "prompt") body.project = project;
   return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, { method: "POST", body: JSON.stringify(body) });
 }
 

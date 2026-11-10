@@ -6,8 +6,7 @@ import { login, openNewSession, OTHER_USER, PASSWORD, processHeader, send, USER 
 // 文件工具在用户的电脑上执行（local-workspace）：E2eServer 给前两个账号各连了一台测试电脑；write_file 归本机工作区的“改文件”开关。
 
 async function openPlugins(page: Page) {
-  await page.getByRole("button", { name: "更多" }).first().click();
-  await page.getByRole("menuitem", { name: "插件" }).click();
+  await page.getByRole("button", { name: "插件", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "插件" });
   await expect(dialog.getByRole("region", { name: "内置工具" })).toBeVisible();
   return dialog;

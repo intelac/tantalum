@@ -21,7 +21,7 @@ test.describe("对话", () => {
     await expect(page.getByRole("button", { name: /思考 用户说了一句话，直接复述。/ })).toBeVisible();
 
     // 侧栏标题来自第一条消息。
-    await expect(page.getByRole("navigation", { name: "会话" }).getByRole("button", { name: greeting })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "会话" }).getByTitle(greeting, { exact: true })).toBeVisible();
 
     await page.reload();
     await expect(page.getByText(`你说：${greeting}`)).toBeVisible();

@@ -85,6 +85,25 @@ export interface SessionSummary {
   runStatus: string;
   /** 运行停在等你回答（waiting-state 需求 7.3）。 */
   awaitingAnswer?: boolean;
+  /** 会话在用户电脑上的工作目录，第一次提问时定下；没有时不出现（workspaces W3）。 */
+  dir?: string | null;
+  /** 归档了（workspaces W8）。 */
+  archived?: boolean;
+}
+
+/** 一个工作区：用户电脑上的一个目录加一个名字，每人一份（workspaces W2）。 */
+export interface Project {
+  id: string;
+  title: string;
+  path: string;
+  created: string;
+}
+
+/** 添加框里电脑上的一层目录。`path` 为空表示列的是允许的目录本身。 */
+export interface FolderListing {
+  path: string | null;
+  dirs: string[];
+  truncated: boolean;
 }
 
 export interface TextBlock {
@@ -646,6 +665,9 @@ export interface LocalLink {
   /** `code`、`params` 是同一个原因的代码和参数（I12）；老版本连接程序只送英文的 `reason`。 */
   shell: { available: boolean; reason?: string | null; code?: string | null; params?: Record<string, string> | null };
   network: boolean;
+  /** 连接程序的协议版本；`current` 为 false 时是旧版，不认会话目录，要更新（workspaces W6）。 */
+  protocol?: number;
+  current?: boolean;
   connectedAt: string;
   expiresAt: string;
 }

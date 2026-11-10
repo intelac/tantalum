@@ -18,8 +18,7 @@ async function computer(page: Page): Promise<Computer> {
 }
 
 async function openPlugins(page: Page) {
-  await page.getByRole("button", { name: "更多" }).first().click();
-  await page.getByRole("menuitem", { name: "插件" }).click();
+  await page.getByRole("button", { name: "插件", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "插件" });
   const card = dialog.getByRole("region", { name: "本机工作区" });
   await expect(card).toBeVisible();

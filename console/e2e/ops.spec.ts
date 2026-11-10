@@ -26,8 +26,7 @@ test.describe("运维", () => {
       await pageB.goto(`/s/${session}`);
       await expect(pageB.getByText(`你说：${before}`)).toBeVisible();
 
-      await pageA.getByRole("button", { name: "更多" }).click();
-      await pageA.getByRole("menuitem", { name: "退出登录" }).click();
+      await pageA.getByRole("button", { name: "退出登录", exact: true }).first().click();
       await expect(pageA).toHaveURL(/\/login\?next=/);
 
       // 退出只关掉 A 这次登录的连接：B 的回复仍然靠 SSE 推过来，也没有出现断线提示。

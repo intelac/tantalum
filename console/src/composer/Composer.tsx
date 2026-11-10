@@ -30,6 +30,10 @@ interface Props {
   choice?: ModelChoice | null;
   /** 提交成功：选择已经发出去了。 */
   onSubmitted?: (choice: ModelChoice | null) => void;
+  /** 随提问发出的工作区（workspaces W3）；服务器只在会话的第一次提问时用它。 */
+  project?: string | null;
+  /** 附件按钮右边的标签：工作区、电脑连接（workspaces 需求 7）。 */
+  accessory?: ReactNode;
 }
 
 const MAX_HEIGHT = 200;
@@ -49,6 +53,8 @@ export function Composer({
   modelPicker,
   choice = null,
   onSubmitted,
+  project = null,
+  accessory,
 }: Props) {
   const t = useText();
   const [text, setText] = useState(() => readDraft(session));
@@ -137,7 +143,7 @@ export function Composer({
       const signature = JSON.stringify([content, attachments.map((ref) => ref.id)]);
       if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
       try {
-        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments, choice);
+        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments, choice, project);
       } catch (failure) {
         failedContent.current = signature;
         setError(failure);
@@ -207,6 +213,7 @@ export function Composer({
             <Paperclip size={16} />
           </Button>
           <input ref={picker} type="file" multiple hidden onChange={onPick} data-testid="attachment-picker" />
+          {accessory}
           <span className="flex-1" />
           {modelPicker === undefined ? (
             <span className="max-w-56 truncate text-xs text-fg-muted" title={modelName}>
