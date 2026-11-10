@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.URLEncoder;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -69,6 +71,11 @@ class SessionDirLocalTest {
         server.close();
     }
 
+    /** 路径放进查询串要编码：Windows 路径里的 {@code \\} 不能直接出现在 URL 里。 */
+    private static String query(Path path) {
+        return URLEncoder.encode(path.toString(), StandardCharsets.UTF_8);
+    }
+
     private String project(Path path) throws Exception {
         HttpResponse<String> added = server.post("alice", "/api/projects", "{\"path\":" + JSON.writeValueAsString(path.toString()) + "}");
         assertEquals(201, added.statusCode(), added.body());
@@ -122,10 +129,10 @@ class SessionDirLocalTest {
         server.connectComputer("alice", main, false);
         JsonNode roots = JSON.readTree(server.get("alice", "/api/projects/browse").body());
         assertEquals(List.of(main.toString()), roots.get("dirs").valueStream().map(JsonNode::asString).toList());
-        JsonNode listed = JSON.readTree(server.get("alice", "/api/projects/browse?path=" + main).body());
+        JsonNode listed = JSON.readTree(server.get("alice", "/api/projects/browse?path=" + query(main)).body());
         assertEquals(List.of(app.toString()), listed.get("dirs").valueStream().map(JsonNode::asString).toList(), "hidden folders are left out");
         assertEquals("project/path-not-allowed",
-                JSON.readTree(server.get("alice", "/api/projects/browse?path=" + temp.toRealPath()).body()).path("code").asString());
+                JSON.readTree(server.get("alice", "/api/projects/browse?path=" + query(temp.toRealPath())).body()).path("code").asString());
 
         HttpResponse<String> missing = server.post("alice", "/api/projects", "{\"path\":" + JSON.writeValueAsString(main.resolve("nope").toString()) + "}");
         assertEquals("project/path-not-allowed", JSON.readTree(missing.body()).path("code").asString());
