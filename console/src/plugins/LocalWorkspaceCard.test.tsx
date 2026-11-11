@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true };
+const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false };
 
 function link(extra: Partial<LocalLink> = {}): LocalLink {
   return {

@@ -54,6 +54,9 @@ export function QueueDock({ queued, running, actions }: Props) {
             const attachments = item.attachments ?? [];
             const names = attachments.map((attachment) => attachment.name).join("、");
             const line = preview(item.text);
+            // 点名的技能在排队那一刻已经读好附上了：改了文字就对不上，所以不能改（服务器也会拒绝）
+            const skills = (item.skills ?? []).map((skill) => skill.name).join("、");
+            const fixed = attachments.length > 0 || skills !== "";
             return (
               <li key={item.id} className="flex min-h-7 items-start gap-1">
                 {editing === item.id ? (
@@ -78,13 +81,14 @@ export function QueueDock({ queued, running, actions }: Props) {
                       {single && <ListOrdered size={13} aria-hidden="true" className="mr-1.5 inline align-[-2px] text-fg-muted" />}
                       {line}
                       {names !== "" && <span className="text-fg-muted">{line === "" ? text.attachments(names) : ` · ${text.attachments(names)}`}</span>}
+                      {skills !== "" && <span className="text-fg-muted">{` · ${text.skills(skills)}`}</span>}
                     </span>
                     <Button
                       variant="icon"
                       size="sm"
-                      disabled={actions.busy || attachments.length > 0}
+                      disabled={actions.busy || fixed}
                       aria-label={text.edit}
-                      title={attachments.length > 0 ? text.noEditWithAttachments : text.edit}
+                      title={attachments.length > 0 ? text.noEditWithAttachments : skills !== "" ? text.noEditWithSkills : text.edit}
                       onClick={() => setEditing(item.id)}
                     >
                       <Pencil size={13} />

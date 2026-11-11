@@ -205,6 +205,8 @@ export interface UserItem extends ItemBase {
   queued: boolean;
   /** 排队时被移除了：从没发给模型，页面不显示。 */
   removed?: boolean;
+  /** 文字里点名的技能，按出现顺序；没有时不出现。 */
+  skills?: SkillNote[];
 }
 
 export interface TextItem extends ItemBase {
@@ -384,6 +386,8 @@ export interface UserInput extends TraceHead {
   source: TraceSource;
   /** 按上传顺序；没有附件时不出现。 */
   attachments?: AttachmentRef[];
+  /** 文字里点名的技能连同附上的内容；没有时不出现。 */
+  skills?: SkillNote[];
 }
 
 export interface ContextSection {
@@ -762,7 +766,7 @@ export interface Plugins {
 }
 
 /** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关（local-workspace L17）。 */
-export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell";
+export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki";
 
 /**
  * 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令、有没有 git。都由连接程序的启动参数和那台电脑决定。
@@ -791,6 +795,62 @@ export interface LocalStatus {
 }
 
 export type LocalValidity = "30m" | "1h" | "4h" | "1d";
+
+/**
+ * 技能目录、wiki 目录现在的情况（skills-wiki）：`off` 开关关着，`unset` 没填目录，`offline` 电脑没连上，`old` 连接程序太旧，
+ * `late` 电脑没按时回，`missing` 目录还不存在，`outside` 不在电脑允许的范围里，`unreadable` 读不出来。
+ */
+export type LocalDirState = "off" | "unset" | "offline" | "old" | "late" | "ok" | "missing" | "outside" | "unreadable";
+
+/** 目录里的一个技能。`model`：模型能不能自己调；`user`：用户能不能点名；`enabled`：这个用户有没有把它关掉。 */
+export interface LocalSkill {
+  name: string;
+  description: string;
+  model: boolean;
+  user: boolean;
+  enabled: boolean;
+}
+
+/** 没通过校验的技能：`folder` 是它的目录名，`code` 是原因。 */
+export interface SkillProblem {
+  folder: string;
+  code: string;
+  detail?: string;
+}
+
+/** GET /api/local/skills：`dir` 是用户填的，`path` 是电脑上解析出来的真实路径。 */
+export interface LocalSkills {
+  dir: string;
+  state: LocalDirState;
+  path?: string;
+  items: LocalSkill[];
+  problems: SkillProblem[];
+}
+
+/** GET /api/local/wiki：`pages` 是列出来的页数，`total` 是总页数，`index` 是有没有 index.md。 */
+export interface LocalWiki {
+  dir: string;
+  state: LocalDirState;
+  path?: string;
+  pages: number;
+  total: number;
+  index: boolean;
+  truncated: boolean;
+}
+
+/** 输入框菜单里的一个技能。`manualOnly`：只能由用户点名，模型不会自己调。 */
+export interface MenuSkill {
+  name: string;
+  description: string;
+  manualOnly: boolean;
+}
+
+/** 用户消息带的一个点名技能：读到了有 `content`，没读到有 `error`（原因的代码）。 */
+export interface SkillNote {
+  name: string;
+  content?: string;
+  error?: string;
+}
 
 /** 新生成的令牌：只在这一次响应里出现。 */
 export interface LocalToken {

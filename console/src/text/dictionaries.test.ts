@@ -49,6 +49,7 @@ const SAME_IN_JA = new Set([
   "projects.save",
   "composer.queue.save",
   "plugins.params.save",
+  "plugins.local.dir.save",
   "plugins.params.saving",
   "composer.picker.levelNames.low",
   "composer.picker.levelNames.medium",

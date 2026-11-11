@@ -55,6 +55,11 @@ public final class E2eServer {
     public static final String LOCAL_USER = "e2e3";
     /** 第四个账号：语言的端到端测试改它存的语言（console-i18n），不影响别的用例。 */
     public static final String I18N_USER = "e2e4";
+    /**
+     * 第五个账号：技能和知识库的端到端测试（skills-wiki）。它连着一台测试电脑，电脑上有 {@code skills/}（两个好的技能、一个没写描述的）
+     * 和 {@code wiki/}；目录由用例在插件页上填，填了以后这个账号的 system 里多出两段、多一个 skill 工具，所以不和别的用例共用账号。
+     */
+    public static final String SKILL_USER = "e2e5";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -130,7 +135,7 @@ public final class E2eServer {
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s");
         LocalLinks links = app.getBean(Engine.class).localLinks();
-        for (String user : List.of(USER, OTHER_USER)) {
+        for (String user : List.of(USER, OTHER_USER, SKILL_USER)) {
             TestComputer.connect(links, new Principal(user), Instant.now().plus(Duration.ofDays(30)),
                     Files.createDirectories(workspace.resolve(user)), true, false);
         }
@@ -179,7 +184,18 @@ public final class E2eServer {
             store.add(OTHER_USER, PASSWORD);
             store.add(LOCAL_USER, PASSWORD);
             store.add(I18N_USER, PASSWORD);
+            store.add(SKILL_USER, PASSWORD);
         }
+        // skills-wiki：第五个账号的电脑上放好技能和 wiki。名字避开脚本模型认的词（tools、slow、fail 之类）
+        Path skills = Files.createDirectories(workspace.resolve(SKILL_USER).resolve("skills"));
+        Files.writeString(Files.createDirectories(skills.resolve("greeting")).resolve("SKILL.md"),
+                "---\nname: greeting\ndescription: Greet people the house way.\n---\nAlways open with greeting-e2e-body.\n");
+        Files.writeString(Files.createDirectories(skills.resolve("by-hand")).resolve("SKILL.md"),
+                "---\nname: by-hand\ndescription: Only when the user asks for it.\ndisable-model-invocation: true\n---\nManual steps e2e.\n");
+        Files.writeString(Files.createDirectories(skills.resolve("unfinished")).resolve("SKILL.md"), "---\nname: unfinished\n---\nNo description yet.\n");
+        Path wiki = Files.createDirectories(workspace.resolve(SKILL_USER).resolve("wiki").resolve("ops"));
+        Files.writeString(wiki.resolve("rollback.md"), "# Rolling back\n\nUse the blue button.\n");
+        Files.writeString(wiki.getParent().resolve("index.md"), "Start with ops/rollback.md (wiki-e2e-index).\n");
         Path notes = Files.createDirectories(workspace.resolve(USER).resolve("notes"));
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");
         Files.writeString(notes.resolve("world.md"), "# world\n\nhello back from world\n");

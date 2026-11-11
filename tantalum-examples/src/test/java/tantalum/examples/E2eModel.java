@@ -32,6 +32,8 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code fetch:}（联网）：调用 web_fetch 抓 {@link E2eServer} 自带的本地测试页（{@link #webPage}），然后回答“抓到了网页。”；</li>
+ *   <li>{@code loadskill:}（技能）：调用 skill 加载后面那个名字的技能，然后回答“技能结果：”加结果的第一行；
+ *       {@code skillcheck}：回答“消息带着技能：”加这条用户消息里技能块的名字；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
  *   <li>{@code ask:}（waiting-state）：调用 ask_user 问“备份删还是留？”（删除 / 保留，允许补一句），然后回答“你选了：”加工具结果；</li>
@@ -87,6 +89,17 @@ public final class E2eModel implements ModelClient {
             if (text.contains("fetch:")) {
                 return results == 0 ? reply(think(chunks, "用 web_fetch 读这个网页。"), call("web_fetch", Map.of("url", webPage)))
                         : answer(chunks, "抓到了网页。");
+            }
+            if (text.contains("loadskill:")) {
+                // skills-wiki：模型自己加载一个技能，然后说加载的结果的第一行
+                return results == 0 ? reply(List.of(), call("skill", Map.of("name", word(text, "loadskill:"))))
+                        : answer(chunks, "技能结果：" + lastResult(prompt).lines().findFirst().orElse(""));
+            }
+            if (text.contains("skillcheck")) {
+                // skills-wiki：用户点名的技能有没有跟着消息到模型这里
+                return answer(chunks, "消息带着技能：" + String.join("、", prompt.messages().get(lastUser).content().stream()
+                        .filter(tantalum.value.model.SkillBlock.class::isInstance)
+                        .map(block -> ((tantalum.value.model.SkillBlock) block).name()).toList()));
             }
             if (text.contains("tools")) {
                 return toolChain(results, chunks);

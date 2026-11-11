@@ -193,7 +193,7 @@ describe("composer chips", () => {
     connectedAt: "",
     expiresAt: "",
   };
-  const on = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true };
+  const on = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false };
 
   it("names the first thing wrong with the computer, or nothing", () => {
     const status = (more: Partial<LocalStatus>): LocalStatus => ({ switches: on, link, ...more });

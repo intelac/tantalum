@@ -2,10 +2,10 @@
 
 import { FileText } from "lucide-react";
 import { attachmentUrl } from "../../api/client";
-import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, QuestionRecord, RunHead, TraceRecord, UserInput } from "../../api/types";
+import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, QuestionRecord, RunHead, SkillNote, TraceRecord, UserInput } from "../../api/types";
 import { formatBytes } from "../../text/format";
 import { Markdown } from "../../markdown/Markdown";
-import { currentLanguage, currentText, type Text, useText } from "../../text";
+import { currentLanguage, currentText, lookup, type Text, useText } from "../../text";
 import { pick } from "../../text/localText";
 import { between, formatMs, formatTokens } from "../format";
 import { JsonTree } from "./JsonTree";
@@ -52,6 +52,7 @@ function RunPages(run: RunHead, t: Text["trace"]) {
 
 function UserPages(user: UserInput, t: Text["trace"]) {
   const attachments = user.attachments ?? [];
+  const skills = user.skills ?? [];
   return [
     {
       id: "summary",
@@ -61,12 +62,43 @@ function UserPages(user: UserInput, t: Text["trace"]) {
           <Fields rows={[[t.details.mode, t.userMode[user.mode]]]} />
           <Markdown text={user.text} />
           {attachments.length > 0 && <AttachmentList attachments={attachments} />}
+          {skills.length > 0 && <SkillList skills={skills} />}
         </>
       ),
     },
     { id: "source", label: t.tab.source, render: () => <Fields rows={[[t.tab.source, sourceText(user.source)]]} /> },
-    ...(attachments.length > 0 ? [{ id: "raw", label: t.tab.raw, render: () => <JsonTree value={attachments} /> }] : []),
+    ...(attachments.length > 0 || skills.length > 0
+      ? [{ id: "raw", label: t.tab.raw, render: () => <JsonTree value={skills.length > 0 ? { attachments, skills } : attachments} /> }]
+      : []),
   ];
+}
+
+/** 检查器里用户点名的技能：名字，附给模型的全文（纯文字），或者没读到的原因（skills-wiki 需求 7.5）。 */
+function SkillList({ skills }: { skills: readonly SkillNote[] }) {
+  const text = useText();
+  return (
+    <Section title={text.trace.namedSkills}>
+      <ul className="flex flex-col gap-2 text-xs">
+        {skills.map((skill) => (
+          <li key={skill.name} className="flex flex-col gap-1">
+            <span className="font-mono text-fg">/{skill.name}</span>
+            {skill.content !== undefined ? (
+              <pre className="max-h-80 overflow-auto rounded-sm bg-code p-2 font-mono whitespace-pre-wrap text-fg">{skill.content}</pre>
+            ) : (
+              <span className="text-warning">
+                {text.conversation.skillFailed(
+                  skill.name,
+                  skill.error === "timeout"
+                    ? text.conversation.skillTimeout
+                    : (lookup(text.plugins.local.skills.problems, skill.error ?? "") ?? skill.error ?? ""),
+                )}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
 }
 
 /** 检查器里的附件：图片 48 px 缩略图，每个附件一行名字、大小、类型和尺寸（需求 5.5）。 */

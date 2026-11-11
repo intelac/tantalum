@@ -18,6 +18,7 @@ import { ProjectChip } from "./ProjectChip";
 import { QueueDock } from "./queue/QueueDock";
 import { useQueueActions } from "./queue/useQueueActions";
 import { StatusBar } from "./StatusBar";
+import { useMenuSkills } from "../skills/useSkills";
 import { findModel, findRoute, useModels, useSessionChoice } from "./useModels";
 
 interface Props {
@@ -57,6 +58,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const queued = useMemo(() => items.filter((item): item is UserItem => item?.kind === "user" && item.queued), [items]);
   const queueActions = useQueueActions(session);
   const models = useModels();
+  // 技能菜单的清单到开始打 / 时才取：没用技能的人不多一次请求
+  const menu = useMenuSkills(false);
   const current = useSessionModel(store, session);
   const choice = useSessionChoice(session, current.model, models.data);
   // 占比和压缩点按已经生效的模型；新会话还没有，就按选择器上的
@@ -106,6 +109,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
           choice={models.data === undefined ? null : choice.shown}
           queued={queued.length}
           onSteerQueue={() => void queueActions.steerAll(queued)}
+          skills={menu.data?.skills}
+          onSkillMenu={() => void menu.refetch()}
           onSubmitted={(sent) => {
             choice.submitted(sent);
             if (!started) saveLastProject(chosen?.id ?? null);

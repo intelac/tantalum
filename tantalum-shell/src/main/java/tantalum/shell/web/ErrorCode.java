@@ -67,6 +67,8 @@ public enum ErrorCode {
     QUEUE_ATTACHMENTS("queue/attachments", 409),
     /** 带点名技能的排队提问不能改文字：改了文字，附上的技能内容就对不上了。 */
     QUEUE_SKILLS("queue/skills", 409),
+    /** 技能目录、wiki 目录的写法不对：要绝对路径或 {@code ~/} 开头，最长 1000 个字符，没有控制字符。 */
+    LOCAL_DIR_INVALID("local/dir-invalid", 400),
     PROJECT_NOT_FOUND("project/not-found", 404),
     /** 不是绝对路径。 */
     PROJECT_PATH_INVALID("project/path-invalid", 400),

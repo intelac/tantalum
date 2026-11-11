@@ -10,12 +10,15 @@ import type {
   ErrorParam,
   FolderListing,
   Language,
+  LocalSkills,
   LocalStatus,
   LocalToken,
   LocalValidity,
+  LocalWiki,
   MemoryEntry,
   MemoryList,
   MemoryType,
+  MenuSkill,
   Messages,
   ModelChoice,
   ModelsResponse,
@@ -29,13 +32,13 @@ import type {
   SavedParams,
   SessionSummary,
   SubmitMode,
+  TodayUsageView,
   TraceCall,
   TracePage,
   Turn,
   TurnSummary,
   User,
   UserSettingsView,
-  TodayUsageView,
 } from "./types";
 
 /**
@@ -381,6 +384,34 @@ export function issueLocalToken(validity: LocalValidity): Promise<LocalToken> {
 /** 撤销全部令牌并断开电脑。 */
 export function revokeLocal(): Promise<unknown> {
   return call("/api/local/tokens", { method: "DELETE" });
+}
+
+/** 技能目录和里面的技能，当场向电脑要（skills-wiki）。“技能”开关用 {@link setPlugin}("local", "skills", …)。 */
+export function getLocalSkills(): Promise<LocalSkills> {
+  return call("/api/local/skills");
+}
+
+/** 保存技能目录，空串是清掉；回新的清单。写法不对回 400 `local/dir-invalid`。 */
+export function setSkillsDir(dir: string): Promise<LocalSkills> {
+  return call("/api/local/skills", { method: "PUT", body: JSON.stringify({ dir }) });
+}
+
+/** 开关一个技能。 */
+export function setLocalSkill(name: string, enabled: boolean): Promise<unknown> {
+  return call(`/api/local/skills/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+export function getLocalWiki(): Promise<LocalWiki> {
+  return call("/api/local/wiki");
+}
+
+export function setWikiDir(dir: string): Promise<LocalWiki> {
+  return call("/api/local/wiki", { method: "PUT", body: JSON.stringify({ dir }) });
+}
+
+/** 输入框的技能菜单：这个用户此刻能点名的技能。 */
+export function getMenuSkills(): Promise<{ skills: MenuSkill[] }> {
+  return call("/api/skills");
 }
 
 export type QueueAction = "edit" | "remove" | "steer";

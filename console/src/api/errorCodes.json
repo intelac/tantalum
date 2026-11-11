@@ -37,6 +37,7 @@
     "queue/gone",
     "queue/attachments",
     "queue/skills",
+    "local/dir-invalid",
     "project/not-found",
     "project/path-invalid",
     "project/path-not-allowed",

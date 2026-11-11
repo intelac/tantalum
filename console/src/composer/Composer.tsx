@@ -1,8 +1,8 @@
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 import type { ChangeEvent, ClipboardEvent, KeyboardEvent, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { cancelRun, submit } from "../api/client";
-import type { AttachmentLimits, AttachmentRef, ModelChoice } from "../api/types";
+import type { AttachmentLimits, AttachmentRef, MenuSkill, ModelChoice } from "../api/types";
 import { AttachmentTray } from "../attachment/AttachmentTray";
 import { DropZone } from "../attachment/DropZone";
 import { draftAttachments } from "../attachment/drafts";
@@ -10,6 +10,8 @@ import { admit, DEFAULT_LIMITS, isImage } from "../attachment/limits";
 import { errorLine } from "../text/errors";
 import { formatBytes } from "../text/format";
 import { useQueue } from "../attachment/useQueue";
+import { applyMention, filterSkills, mentionAt } from "../skills/mention";
+import { SkillMenu } from "../skills/SkillMenu";
 import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
@@ -37,7 +39,13 @@ interface Props {
   /** 排队的消息有几条；输入框空着按 Ctrl/Cmd+Enter 时把它们都转成插话（input-area 需求 1.10）。 */
   queued?: number;
   onSteerQueue?: () => void;
+  /** 能点名的技能（skills-wiki 需求 5.1）：打 `/` 时在输入框上方列出来。没有就没有菜单。 */
+  skills?: readonly MenuSkill[];
+  /** 开始打 `/` 了：让上面重新取一次清单。 */
+  onSkillMenu?: () => void;
 }
+
+const NO_SKILLS: readonly MenuSkill[] = [];
 
 const MAX_HEIGHT = 200;
 
@@ -45,6 +53,7 @@ const MAX_HEIGHT = 200;
  * 大圆角输入卡片。Enter 发送、Shift+Enter 换行、输入法组字时 Enter 不发送。
  * 运行中 Enter 提交进入排队，Ctrl/Cmd+Enter 作为插话发给当前运行，并多一个停止按钮。被拒绝时保留内容和附件，重试用同一个 requestId。
  * 附件按钮、拖放、粘贴走同一条路径（需求 1.1–1.3）；发送时等附件都传完再提交（需求 1.7）。
+ * 在开头或空白后打 `/` 弹出技能菜单：上下键选，Enter 或 Tab 填入 `/名字 `，Esc 关掉；菜单开着时 Enter 不发送，输入法组字时不弹。
  */
 export function Composer({
   session,
@@ -60,6 +69,8 @@ export function Composer({
   accessory,
   queued = 0,
   onSteerQueue,
+  skills = NO_SKILLS,
+  onSkillMenu,
 }: Props) {
   const t = useText();
   const [text, setText] = useState(() => readDraft(session));
@@ -75,6 +86,41 @@ export function Composer({
   const failedContent = useRef<string | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const running = activeRun !== null;
+  const menuId = useId();
+  /** 填入技能名之后光标该在的位置；文字渲染完就放过去。 */
+  const placeCaret = useRef<number | null>(null);
+  /** 光标位置：菜单只看光标前面的字。 */
+  const [caret, setCaret] = useState(0);
+  const [composing, setComposing] = useState(false);
+  /** 按 Esc 关掉的那一次点名（`/` 的位置）：再打字也不弹，换个地方打 `/` 才弹。 */
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const [activeSkill, setActiveSkill] = useState(0);
+  const mention = composing ? null : mentionAt(text, caret);
+  const offered = mention === null || mention.start === dismissed ? [] : filterSkills(skills, mention.query);
+  const menuOpen = offered.length > 0;
+  const chosen = Math.min(activeSkill, Math.max(0, offered.length - 1));
+  const mentionStart = mention?.start ?? null;
+  const askedFor = useRef<number | null>(null);
+  useEffect(() => {
+    // 开始一次新的点名：清单可能变了，让上面再取一次；选中的回到第一项
+    if (mentionStart !== null && askedFor.current !== mentionStart) onSkillMenu?.();
+    askedFor.current = mentionStart;
+    setActiveSkill(0);
+    if (mentionStart === null) setDismissed(null);
+    // 只跟着“这一次点名从哪开始”走；onSkillMenu 每次渲染都是新的函数，不放进依赖
+  }, [mentionStart]);
+  const query = mention?.query ?? "";
+  useEffect(() => setActiveSkill(0), [query]);
+
+  function pickSkill(skill: MenuSkill): void {
+    if (mention === null) return;
+    const next = applyMention(text, mention, caret, skill.name);
+    setText(next.text);
+    saveDraft(session, next.text);
+    setCaret(next.caret);
+    // 文字进了输入框之后再放光标（见下面的 useLayoutEffect）
+    placeCaret.current = next.caret;
+  }
 
   // 切换会话：存当前草稿，读目标会话的草稿，忘掉上一次失败的 requestId。
   useEffect(() => {
@@ -91,10 +137,16 @@ export function Composer({
     const next = Math.min(element.scrollHeight, MAX_HEIGHT);
     element.style.height = `${next}px`;
     element.style.overflowY = element.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
+    if (placeCaret.current !== null) {
+      element.focus();
+      element.setSelectionRange(placeCaret.current, placeCaret.current);
+      placeCaret.current = null;
+    }
   }, [text]);
 
   function onChange(event: ChangeEvent<HTMLTextAreaElement>): void {
     setText(event.target.value);
+    setCaret(event.target.selectionStart ?? event.target.value.length);
     saveDraft(session, event.target.value);
   }
 
@@ -171,6 +223,24 @@ export function Composer({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (menuOpen && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : offered.length - 1;
+        setActiveSkill((chosen + step) % offered.length);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissed(mentionStart);
+        return;
+      }
+      if ((event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) || event.key === "Tab") {
+        event.preventDefault();
+        pickSkill(offered[chosen] as MenuSkill);
+        return;
+      }
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
     // 输入法还在组字时的 Enter 是选字，不是发送。
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -211,7 +281,8 @@ export function Composer({
           {t.attachment.waiting}
         </p>
       )}
-      <div className="rounded-2xl border border-line bg-raised shadow-sm focus-within:border-line-strong">
+      <div className="relative rounded-2xl border border-line bg-raised shadow-sm focus-within:border-line-strong">
+        {menuOpen && <SkillMenu id={menuId} skills={offered} active={chosen} onPick={pickSkill} onHover={setActiveSkill} />}
         <AttachmentTray items={pending} onRemove={(key) => queue.remove(key)} onRetry={(key) => queue.retry(key)} />
         <textarea
           ref={area}
@@ -220,6 +291,15 @@ export function Composer({
           onChange={onChange}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
+          onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
+          onCompositionStart={() => setComposing(true)}
+          onCompositionEnd={(event) => {
+            setComposing(false);
+            setCaret(event.currentTarget.selectionStart ?? 0);
+          }}
+          // 还是普通的文本框（role 不变）：菜单开着时只告诉读屏选中的是哪一项
+          aria-controls={menuOpen ? menuId : undefined}
+          aria-activedescendant={menuOpen ? `${menuId}-${chosen}` : undefined}
           placeholder={steerAll ? t.composer.steerAllPlaceholder : t.composer.placeholder}
           aria-label={t.composer.placeholder}
           className="focus-plain block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-fg placeholder:text-fg-faint"

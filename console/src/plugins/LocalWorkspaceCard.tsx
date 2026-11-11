@@ -7,16 +7,20 @@ import { Button } from "../ui/Button";
 import { CopyButton } from "../ui/CopyButton";
 import { cx } from "../ui/cx";
 import { useNow } from "../ui/useNow";
+import { SkillsItem } from "../skills/SkillsItem";
+import { WikiItem } from "../skills/WikiItem";
 import { Row, Section } from "./Rows";
 import { useIssueToken, useLocal, useRevokeLocal, useToggleLocal } from "./useLocal";
 
 const MASTER: LocalSwitch = "local-workspace";
-const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell"];
+const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki"];
+/** 从这个协议版本起，连接程序会列技能和 wiki 页。 */
+const SKILL_LISTS = 4;
 const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
 /**
- * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行四个子开关；连接状态和到期倒计时；
+ * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库六个子开关（后两项各带一个目录，见 skills/）；连接状态和到期倒计时；
  * “连接这台电脑”生成令牌和一行命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
@@ -58,6 +62,8 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
         const [label, detail] = lookup(text.switches, name) ?? [name, ""];
         const on = status.switches[name];
         const refused = on && status.link !== null ? refusal(t, name, status.link) : null;
+        // 电脑连没连着、连接程序新不新、开关开没开：变了就重新向电脑要清单
+        const signal = `${status.link === null ? "offline" : (status.link.protocol ?? 0) >= SKILL_LISTS ? "linked" : "old"}:${master && on}`;
         return (
           <Row
             key={name}
@@ -72,7 +78,10 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
             checked={on}
             disabled={!master}
             onChange={(enabled) => set(name, enabled)}
-          />
+          >
+            {name === "skills" && on && <SkillsItem active={open && master} signal={signal} />}
+            {name === "wiki" && on && <WikiItem active={open && master} signal={signal} />}
+          </Row>
         );
       })}
       <li className="px-3 py-2.5">

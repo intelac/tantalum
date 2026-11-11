@@ -2,7 +2,7 @@
 
 import type { ToolStepItem } from "../api/types";
 
-export type ActivityKind = "read" | "search" | "write" | "edit" | "command" | "git" | "web" | "memory" | "question" | "tool";
+export type ActivityKind = "read" | "search" | "write" | "edit" | "command" | "git" | "web" | "memory" | "question" | "skill" | "tool";
 
 const KINDS: Record<string, ActivityKind> = {
   read_file: "read",
@@ -15,6 +15,7 @@ const KINDS: Record<string, ActivityKind> = {
   bash: "command",
   web_fetch: "web",
   ask_user: "question",
+  skill: "skill",
 };
 
 const PREFIXES: readonly (readonly [string, ActivityKind])[] = [
@@ -60,6 +61,9 @@ export const MAX_DETAIL = 160;
 export function runningDetail(step: ToolStepItem): string {
   const args = step.call.arguments;
   if (args === undefined || args === null || typeof args !== "object" || Array.isArray(args)) return "";
+  // 加载技能：细节就是技能的名字
+  const skill = skillName(step);
+  if (skill !== null) return skill;
   for (const key of DETAIL_KEYS) {
     const value = (args as Record<string, unknown>)[key];
     if (typeof value !== "string") continue;
@@ -69,4 +73,13 @@ export function runningDetail(step: ToolStepItem): string {
     return chars.length > MAX_DETAIL ? `${chars.slice(0, MAX_DETAIL - 1).join("")}…` : text;
   }
   return "";
+}
+
+/** `skill` 工具调用加载的是哪个技能；不是这个工具或没有名字返回 null。 */
+export function skillName(step: ToolStepItem): string | null {
+  if (step.call.name !== "skill") return null;
+  const args = step.call.arguments;
+  if (args === undefined || args === null || typeof args !== "object" || Array.isArray(args)) return null;
+  const name = (args as Record<string, unknown>).name;
+  return typeof name === "string" && name.trim() !== "" ? name.trim().slice(0, 80) : null;
 }

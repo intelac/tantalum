@@ -1,10 +1,11 @@
-import { Ban, Check, ChevronDown, ChevronRight, Clock, Loader2, Wrench, X } from "lucide-react";
+import { Ban, BookOpen, Check, ChevronDown, ChevronRight, Clock, Loader2, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import type { ToolStepItem } from "../api/types";
 import { formatDuration } from "../text/format";
 import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { navigate, traceRecordPath } from "../app/router";
+import { skillName } from "./activity";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
 import { FileChange, hasFileView, readRange } from "./FileChange";
 import { useNow } from "../ui/useNow";
@@ -51,6 +52,8 @@ export function ToolRow({ step }: Props) {
   const exitCode = exitCodeOf(step);
   const terminal = hasTerminalView(step);
   const search = open && !terminal ? searchResult(step) : null;
+  // 加载技能写成一句话（skills-wiki 需求 4.6），展开看到的结果就是技能的全文
+  const skill = skillName(step);
 
   return (
     <div className="text-sm">
@@ -64,10 +67,22 @@ export function ToolRow({ step }: Props) {
         )}
       >
         <StatusIcon status={step.status} />
-        <Wrench size={13} className="shrink-0 text-fg-faint" aria-hidden="true" />
-        <span className="shrink-0 font-medium text-fg">{step.call.name}</span>
+        {skill === null ? (
+          <Wrench size={13} className="shrink-0 text-fg-faint" aria-hidden="true" />
+        ) : (
+          <BookOpen size={13} className="shrink-0 text-fg-faint" aria-hidden="true" />
+        )}
+        <span className={skill === null ? "shrink-0 font-medium text-fg" : "min-w-0 truncate font-medium text-fg"}>
+          {skill === null
+            ? step.call.name
+            : failed
+              ? t.process.skillNotLoaded(skill)
+              : step.status === "DONE"
+                ? t.process.skillLoaded(skill)
+                : t.process.skillLoading(skill)}
+        </span>
         <span className="min-w-0 flex-1 truncate font-mono text-xs">
-          {summarizeArguments(step)}
+          {skill === null && summarizeArguments(step)}
           {range !== null && <span className="ml-2 font-sans text-fg-faint">{range}</span>}
           {exitCode !== undefined && <span className="ml-2 font-sans text-danger">{t.process.exitCode(exitCode)}</span>}
         </span>
