@@ -31,7 +31,7 @@ public final class LocalWorkspace implements ToolGroup {
     /** 开关的种类；这个文件里的 {@code Kind} 是本机工具的种类（读、写、git、shell）。 */
     private static final tantalum.shell.plugin.Kind LOCAL = tantalum.shell.plugin.Kind.LOCAL;
     private static final Map<Kind, String> SWITCH = Map.of(
-            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell");
+            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell", Kind.SKILL, "skills");
 
     private final PluginSwitches switches;
     private final LocalLinks links;
@@ -71,7 +71,8 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     public boolean enabled(Principal user, Kind kind) {
-        return switches.enabled(user, LOCAL, MASTER)
+        return kind != Kind.SKILL
+                && switches.enabled(user, LOCAL, MASTER)
                 && switches.enabled(user, LOCAL, SWITCH.get(kind))
                 && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false);
     }
@@ -86,6 +87,8 @@ public final class LocalWorkspace implements ToolGroup {
             case WRITE -> hello.write();
             case SHELL -> hello.shell().available();
             case GIT -> hello.git();
+            // 技能的开关和目录设置还没接上（skills-wiki 阶段 B），在那之前 skill 工具对谁都不开
+            case SKILL -> false;
         };
     }
 

@@ -18,5 +18,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
         @JsonSubTypes.Type(value = ContextResult.class, name = "contextResult"),
         @JsonSubTypes.Type(value = Browse.class, name = "browse"),
         @JsonSubTypes.Type(value = BrowseResult.class, name = "browseResult"),
+        @JsonSubTypes.Type(value = SkillLoad.class, name = "skillLoad"),
+        @JsonSubTypes.Type(value = SkillLoaded.class, name = "skillLoaded"),
         @JsonSubTypes.Type(value = Bye.class, name = "bye")})
-public sealed interface Message permits Hello, Welcome, Call, Result, Cancel, Context, ContextResult, Browse, BrowseResult, Bye {}
+public sealed interface Message permits Hello, Welcome, Call, Result, Cancel, Context, ContextResult, Browse, BrowseResult, SkillLoad, SkillLoaded, Bye {}

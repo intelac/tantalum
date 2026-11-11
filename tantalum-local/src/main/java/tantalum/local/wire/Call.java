@@ -12,9 +12,11 @@ import tantalum.value.json.Json;
  * @param user 替哪个用户执行，必须和 {@link Welcome#user()} 相同
  * @param session 哪个会话，连接程序的终端记录里写出来
  * @param dir 会话的工作目录（协议 3 起），相对路径和命令的起始目录从这里算；没有时为 null，不写出，连接程序用主目录
+ * @param skills 用户填的技能目录（协议 4 起），只在调 {@code skill} 工具时带；没有时为 null，不写出
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record Call(String id, String user, String session, String tool, Json arguments, long timeoutMs, String dir) implements Message {
+public record Call(String id, String user, String session, String tool, Json arguments, long timeoutMs, String dir,
+        String skills) implements Message {
 
     public Call {
         Objects.requireNonNull(id, "id");
@@ -26,6 +28,11 @@ public record Call(String id, String user, String session, String tool, Json arg
 
     /** 没有会话目录时。 */
     public Call(String id, String user, String session, String tool, Json arguments, long timeoutMs) {
-        this(id, user, session, tool, arguments, timeoutMs, null);
+        this(id, user, session, tool, arguments, timeoutMs, null, null);
+    }
+
+    /** 不是调 {@code skill} 工具时。 */
+    public Call(String id, String user, String session, String tool, Json arguments, long timeoutMs, String dir) {
+        this(id, user, session, tool, arguments, timeoutMs, dir, null);
     }
 }

@@ -63,8 +63,27 @@ class WireTest {
                 new BrowseResult("b-2", "/Users/yi/work", List.of("/Users/yi/work/app", "/Users/yi/work/shop"), false, null),
                 new BrowseResult("b-3", null, List.of(), false, "path not found in the allowed directories: /etc"),
                 new ContextResult("x-2", null),
+                new Context("x-4", "/w", "~/.agents/skills", "/Users/yi/wiki"),
+                new ContextResult("x-4", null, skills(), wiki()),
+                new ContextResult("x-5", "a", SkillList.unusable(DirState.OUTSIDE), WikiList.unusable(DirState.MISSING)),
+                new Call("c-4", "yi", "s-1a2b", "skill", arguments(), 60_000, null, "~/.agents/skills"),
+                new SkillLoad("k-1", "s-1a2b", "~/.agents/skills", List.of("pdf-tools", "nope")),
+                new SkillLoaded("k-1", List.of(new SkillLoaded.Loaded("pdf-tools", "<skill_content name=\"pdf-tools\">…</skill_content>", null),
+                        new SkillLoaded.Loaded("nope", null, null), new SkillLoaded.Loaded("broken", null, "yaml-invalid"))),
                 new Bye(Bye.Reason.REPLACED),
                 withCode());
+    }
+
+    private static SkillList skills() {
+        return new SkillList("/Users/yi/.agents/skills", DirState.OK,
+                List.of(new SkillList.Item("pdf-tools", "Extract text from PDFs", true, true),
+                        new SkillList.Item("release", "Cut a release", false, true)),
+                List.of(new SkillList.Problem("Bad Name", "name-invalid", "Bad Name"), new SkillList.Problem("empty", "description-missing", null)));
+    }
+
+    private static WikiList wiki() {
+        return new WikiList("/Users/yi/wiki", DirState.OK,
+                List.of(new WikiList.Page("deploy/rollback.md", "Rolling back"), new WikiList.Page("notes.md", null)), 2, "# Start here\n");
     }
 
     /** console-i18n I12：新版连接程序在 shell 里加上原因的代码和参数，老服务器不认识的字段照常忽略。 */
@@ -107,6 +126,33 @@ class WireTest {
         assertEquals(Set.of("type", "id", "dirs", "truncated", "error"), keys(new BrowseResult("b", null, List.of(), false, "nope")));
         assertEquals(Set.of("type", "id", "agents"), keys(new ContextResult("x", "a")));
         assertEquals(Set.of("type", "reason"), keys(new Bye(Bye.Reason.EXPIRED)));
+        // 协议 4：技能和 wiki
+        assertEquals(Set.of("type", "id", "dir", "skills", "wiki"), keys(new Context("x", "/w", "/s", "/k")));
+        assertEquals(Set.of("type", "id", "skills"), keys(new Context("x", null, "/s", null)));
+        assertEquals(Set.of("type", "id", "agents", "skills", "wiki"), keys(new ContextResult("x", "a", skills(), wiki())));
+        assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs", "skills"),
+                keys(new Call("c", "yi", "s", "skill", arguments(), 1, null, "/s")));
+        assertEquals(Set.of("type", "id", "session", "skills", "names"), keys(new SkillLoad("k", "s", "/s", List.of("a"))));
+        assertEquals(Set.of("type", "id", "items"), keys(new SkillLoaded("k", List.of())));
+        JsonNode result = PLAIN.readTree(Wire.encode(new ContextResult("x", null, skills(), wiki())));
+        assertEquals(new TreeSet<>(Set.of("dir", "state", "items", "problems")), new TreeSet<>(result.get("skills").propertyNames()));
+        assertEquals(new TreeSet<>(Set.of("name", "description", "model", "user")),
+                new TreeSet<>(result.get("skills").get("items").get(0).propertyNames()));
+        assertEquals(new TreeSet<>(Set.of("folder", "code", "detail")),
+                new TreeSet<>(result.get("skills").get("problems").get(0).propertyNames()));
+        assertEquals(new TreeSet<>(Set.of("dir", "state", "pages", "total", "index")), new TreeSet<>(result.get("wiki").propertyNames()));
+        assertEquals("OK", result.get("skills").get("state").asString());
+    }
+
+    /** 没带新字段时，写出来的和协议 3 一字节不差：对老的连接程序发的就是这些。 */
+    @Test
+    void withoutTheNewFieldsFramesAreWhatProtocol3Sent() {
+        assertEquals("{\"type\":\"context\",\"id\":\"x\",\"dir\":\"/w\"}", Wire.encode(new Context("x", "/w")));
+        assertEquals("{\"type\":\"contextResult\",\"id\":\"x\",\"agents\":null}", Wire.encode(new ContextResult("x", null)));
+        assertEquals("{\"type\":\"call\",\"id\":\"c\",\"user\":\"yi\",\"session\":\"s\",\"tool\":\"list_dir\",\"arguments\":{},\"timeoutMs\":5,\"dir\":\"/w\"}",
+                Wire.encode(new Call("c", "yi", "s", "list_dir", new Json.Obj(Map.of()), 5, "/w")));
+        // 协议 3 的连接程序回来的帧照常解码
+        assertEquals(new ContextResult("x", "a", null, null), Wire.decode("{\"type\":\"contextResult\",\"id\":\"x\",\"agents\":\"a\"}"));
     }
 
     private static Set<String> keys(Message message) {
@@ -117,7 +163,7 @@ class WireTest {
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
-        assertEquals(3, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals(4, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
         assertEquals("browseResult", PLAIN.readTree(Wire.encode(new BrowseResult("b", null, List.of(), false, null))).get("type").asString());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
@@ -209,7 +255,8 @@ class WireTest {
     void closeCodesAndProtocolArePinned() {
         // 2：hello.roots[].git 换成 hello.git（B1，2026-11-06），旧的连接程序被拒绝并提示下载新的
         // 3：会话的工作目录和列子目录（workspaces，2026-11-10）；服务器仍接受 2
-        assertEquals(3, Wire.PROTOCOL);
+        // 4：技能和 wiki（skills-wiki，2026-11-12）；服务器仍接受 2、3
+        assertEquals(4, Wire.PROTOCOL);
         assertEquals(2, Wire.OLDEST);
         assertEquals(List.of(4400, 4401, 4403, 4409),
                 List.of(Wire.CLOSE_PROTOCOL, Wire.CLOSE_BAD_TOKEN, Wire.CLOSE_EXPIRED, Wire.CLOSE_REPLACED));

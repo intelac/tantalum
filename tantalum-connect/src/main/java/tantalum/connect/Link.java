@@ -26,6 +26,8 @@ import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Message;
+import tantalum.local.wire.SkillLoad;
+import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.Welcome;
 import tantalum.local.wire.Wire;
 
@@ -301,6 +303,17 @@ final class Link {
                     } catch (RuntimeException failure) {
                         System.err.println("[tantalum-connect] listing folders failed: " + failure);
                         result = new BrowseResult(browse.id(), null, List.of(), false, "cannot list " + browse.path());
+                    }
+                    send(result);
+                });
+                case SkillLoad load -> Thread.ofVirtual().start(() -> {
+                    SkillLoaded result;
+                    try {
+                        result = calls.skillLoad(load);
+                    } catch (RuntimeException failure) {
+                        System.err.println("[tantalum-connect] reading skills failed: " + failure);
+                        result = new SkillLoaded(load.id(), load.names().stream()
+                                .map(name -> new SkillLoaded.Loaded(name, null, "unreadable")).toList());
                     }
                     send(result);
                 });

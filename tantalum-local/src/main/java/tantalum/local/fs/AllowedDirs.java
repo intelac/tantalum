@@ -126,6 +126,11 @@ public final class AllowedDirs {
         return relative.isEmpty() ? "." : relative;
     }
 
+    /** {@code path}（已经是绝对路径）是不是在某个允许的目录里。只比路径，不解析符号链接。 */
+    public boolean contains(Path path) {
+        return inside(path);
+    }
+
     private boolean inside(Path path) {
         for (Path dir : dirs) {
             if (path.startsWith(dir)) {

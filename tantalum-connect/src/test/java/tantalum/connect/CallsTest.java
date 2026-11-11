@@ -34,7 +34,12 @@ import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Call;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
+import tantalum.local.wire.DirState;
 import tantalum.local.wire.Result;
+import tantalum.local.wire.SkillList;
+import tantalum.local.wire.SkillLoad;
+import tantalum.local.wire.SkillLoaded;
+import tantalum.local.wire.WikiList;
 import tantalum.value.json.Json;
 
 /** local-workspace L4、L8、L15、需求 2.3、2.5：电脑这边不信任服务器，每个调用都查；取消和断开时打断；记录里没有文件内容。 */
@@ -373,5 +378,107 @@ class CallsTest {
         BrowseResult listed = calls(false).browse(new Browse("b-1", work.toString()));
         assertEquals(BrowseResult.MAX_DIRS, listed.dirs().size());
         assertTrue(listed.truncated());
+    }
+
+    // ---- skills-wiki：技能和 wiki ----
+
+    private Path skill(String folder, String text) throws Exception {
+        Path dir = Files.createDirectories(work.resolve("skills").resolve(folder));
+        Files.writeString(dir.resolve("SKILL.md"), text);
+        return dir;
+    }
+
+    /** 需求 2.2、6.1、9.5：一次 context 带回 AGENTS.md、技能清单、wiki 页；终端各记一行，只有目录和个数，没有内容。 */
+    @Test
+    void contextBringsBackSkillsAndWikiPages() throws Exception {
+        Files.writeString(work.resolve("AGENTS.md"), "Use tabs.");
+        skill("pdf-tools", "---\ndescription: SECRET-DESCRIPTION\n---\nSECRET-BODY");
+        skill("broken", "nothing");
+        Path wiki = Files.createDirectory(work.resolve("wiki"));
+        Files.writeString(wiki.resolve("index.md"), "SECRET-INDEX");
+        Files.writeString(wiki.resolve("setup.md"), "# SECRET-TITLE");
+        String skills = work.resolve("skills").toString();
+
+        ContextResult result = calls(false).context(new Context("x-1", null, skills, wiki.toString()));
+
+        assertEquals("Use tabs.", result.agents());
+        assertEquals(new SkillList(skills, DirState.OK, List.of(new SkillList.Item("pdf-tools", "SECRET-DESCRIPTION", true, true)),
+                List.of(new SkillList.Problem("broken", "description-missing", null))), result.skills());
+        assertEquals(new WikiList(wiki.toString(), DirState.OK, List.of(new WikiList.Page("setup.md", "SECRET-TITLE")), 1, "SECRET-INDEX"),
+                result.wiki());
+        assertEquals("03:02:13 - skills " + skills + " ok 1\n03:02:13 - wiki " + wiki + " ok 1\n", printed().replace("\r\n", "\n"));
+    }
+
+    /** 没问就不带：协议 3 的服务器发来的 context 得到的还是原来那样，终端也不多记。 */
+    @Test
+    void contextWithoutTheNewFieldsAnswersAsBefore() throws Exception {
+        skill("pdf-tools", "---\ndescription: D\n---\nx");
+        ContextResult result = calls(false).context(new Context("x-1"));
+        assertNull(result.skills());
+        assertNull(result.wiki());
+        assertEquals("", printed());
+    }
+
+    /** 需求 9.1：服务器让列允许目录外的目录，答“不在范围里”，什么都不读。 */
+    @Test
+    void contextRefusesDirectoriesOutsideTheAllowedOnes() throws Exception {
+        Files.writeString(Files.createDirectory(outside.resolve("leak")).resolve("SKILL.md"), "---\ndescription: LEAK\n---\nx");
+        Files.writeString(outside.resolve("page.md"), "# LEAK");
+        ContextResult result = calls(false).context(new Context("x-1", null, outside.toString(), outside.toString()));
+        assertEquals(SkillList.unusable(DirState.OUTSIDE), result.skills());
+        assertEquals(WikiList.unusable(DirState.OUTSIDE), result.wiki());
+        assertTrue(printed().contains("- skills " + outside + " outside"), printed());
+        assertTrue(printed().contains("- wiki " + outside + " outside"), printed());
+    }
+
+    /** 需求 4：skill 是只读的一类，没有 --allow-write 也能用；调用里带着技能目录；终端记名字，不记正文。 */
+    @Test
+    void theSkillToolLoadsFromTheDirectoryInTheCall() throws Exception {
+        skill("pdf-tools", "---\ndescription: D\n---\nSECRET-BODY");
+        Calls calls = calls(false);
+        Json name = new Json.Obj(Map.of("name", new Json.Str("pdf-tools")));
+        calls.call(new Call("c-1", "alice", "s-1a2b3c4d5e", "skill", name, 60_000, null, work.resolve("skills").toString()), replies::add);
+        Result loaded = reply();
+        assertFalse(loaded.error(), loaded.text());
+        assertTrue(loaded.text().contains("<skill_instructions>\nSECRET-BODY\n</skill_instructions>"), loaded.text());
+
+        calls.call(new Call("c-2", "alice", "s-1a2b3c4d5e", "skill", name, 60_000), replies::add);
+        assertEquals(new Result("c-2", "Error: skill \"pdf-tools\" is unknown or no longer available", true, List.of()), reply());
+
+        assertTrue(printed().contains("skill pdf-tools ok"), printed());
+        assertTrue(printed().contains("skill pdf-tools error"), printed());
+        assertFalse(printed().contains("SECRET"), printed());
+    }
+
+    /** 需求 5：用户点名的技能当场读；没有的、不让点名的两样都不带；读坏了的带原因。 */
+    @Test
+    void skillLoadReadsWhatTheUserNamed() throws Exception {
+        skill("pdf-tools", "---\ndescription: D\n---\nSECRET-BODY");
+        skill("manual", "---\ndescription: D\ndisable-model-invocation: true\n---\nManual steps");
+        skill("background", "---\ndescription: D\nuser-invocable: false\n---\nx");
+        skill("broken", "---\nname: broken\n---\nx");
+        String skills = work.resolve("skills").toString();
+
+        SkillLoaded loaded = calls(false).skillLoad(new SkillLoad("k-1", "s-1a2b3c4d5e", skills,
+                List.of("pdf-tools", "manual", "background", "broken", "nope", "Not A Name")));
+
+        assertEquals("k-1", loaded.id());
+        assertEquals(List.of("pdf-tools", "manual", "background", "broken", "nope", "Not A Name"),
+                loaded.items().stream().map(SkillLoaded.Loaded::name).toList());
+        assertTrue(loaded.items().get(0).content().contains("SECRET-BODY"));
+        assertTrue(loaded.items().get(1).content().contains("Manual steps"));
+        assertEquals(new SkillLoaded.Loaded("background", null, null), loaded.items().get(2));
+        assertEquals(new SkillLoaded.Loaded("broken", null, "description-missing"), loaded.items().get(3));
+        assertEquals(new SkillLoaded.Loaded("nope", null, null), loaded.items().get(4));
+        assertEquals(new SkillLoaded.Loaded("Not A Name", null, null), loaded.items().get(5));
+        assertEquals("03:02:13 s-1a2b3c skill pdf-tools ok\n03:02:13 s-1a2b3c skill manual ok\n03:02:13 s-1a2b3c skill broken error\n",
+                printed().replace("\r\n", "\n"));
+    }
+
+    @Test
+    void skillLoadFromOutsideTheAllowedDirectoriesLoadsNothing() throws Exception {
+        Files.writeString(Files.createDirectory(outside.resolve("leak")).resolve("SKILL.md"), "---\ndescription: D\n---\nLEAK");
+        SkillLoaded loaded = calls(false).skillLoad(new SkillLoad("k-1", "s-1", outside.toString(), List.of("leak")));
+        assertEquals(List.of(new SkillLoaded.Loaded("leak", null, null)), loaded.items());
     }
 }

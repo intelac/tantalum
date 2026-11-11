@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import tantalum.local.wire.DirState;
 import tantalum.value.json.Json;
 
 /**
@@ -44,10 +45,16 @@ final class Journal {
                 + outcome.word());
     }
 
-    /** 路径或命令：有 {@code path} 打路径，有 {@code command} 打命令原文，都没有打 {@code .}（主目录）。 */
+    /** 服务器让电脑列了技能目录或 wiki 目录：哪个目录、能不能用、里面有几个。不属于哪个会话，会话那一栏写 {@code -}。 */
+    void listed(String what, String dir, DirState state, int count) {
+        out.println(LocalTime.now(clock).format(TIME) + " - " + what + " " + printable(dir, SUBJECT_CHARS) + " "
+                + (state == DirState.OK ? "ok " + count : state.name().toLowerCase(Locale.ROOT)));
+    }
+
+    /** 路径、命令或技能名：有 {@code path} 打路径，有 {@code command} 打命令原文，有 {@code name} 打名字，都没有打 {@code .}（主目录）。 */
     private static String subject(Json arguments) {
         if (arguments instanceof Json.Obj object) {
-            for (String field : new String[] {"path", "command"}) {
+            for (String field : new String[] {"path", "command", "name"}) {
                 if (object.fields().get(field) instanceof Json.Str text && !text.value().isBlank()) {
                     return printable(text.value(), SUBJECT_CHARS);
                 }

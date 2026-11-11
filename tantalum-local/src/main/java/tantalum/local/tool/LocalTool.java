@@ -9,7 +9,7 @@ import tantalum.value.json.Json;
  */
 public interface LocalTool {
 
-    /** 工具的类别，对应插件页的四个子开关和连接程序的 {@code --allow-*}。 */
+    /** 工具的类别，对应插件页“本机工作区”下面的子开关和连接程序的 {@code --allow-*}。 */
     enum Kind {
         /** 读文件，有 {@code --allow} 就有。 */
         READ,
@@ -18,7 +18,9 @@ public interface LocalTool {
         /** 改文件，要 {@code --allow-write}。 */
         WRITE,
         /** 跑命令，要 {@code --allow-shell} 而且系统沙箱可用。 */
-        SHELL
+        SHELL,
+        /** 加载技能：只读用户填的技能目录，有 {@code --allow} 就有（协议 4 起）。 */
+        SKILL
     }
 
     String name();

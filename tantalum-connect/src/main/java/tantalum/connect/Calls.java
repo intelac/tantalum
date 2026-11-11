@@ -22,7 +22,9 @@ import tantalum.local.sandbox.Unavailable;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
+import tantalum.local.skill.Skills;
 import tantalum.local.tool.Observations;
+import tantalum.local.tool.SkillTool;
 import tantalum.local.tool.ToolArguments;
 import tantalum.local.tool.Tools;
 import tantalum.local.wire.Browse;
@@ -31,6 +33,12 @@ import tantalum.local.wire.Call;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Result;
+import tantalum.local.wire.SkillList;
+import tantalum.local.wire.SkillLoad;
+import tantalum.local.wire.SkillLoaded;
+import tantalum.local.wire.WikiList;
+import tantalum.local.wiki.WikiPages;
+import tantalum.value.json.Json;
 
 /**
  * 在这台电脑上执行服务器发来的调用。不信任服务器的判断，每个调用都查三件事
@@ -116,7 +124,7 @@ final class Calls {
         return switch (tool.kind()) {
             case WRITE -> write ? null : NO_WRITE;
             case SHELL -> shell ? null : NO_SHELL;
-            case READ, GIT -> null;
+            case READ, GIT, SKILL -> null;
         };
     }
 
@@ -129,7 +137,7 @@ final class Calls {
                 result = LocalResult.error(DIR_NOT_ALLOWED + call.dir());
                 outcome = Outcome.DENIED;
             } else {
-                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox), call.arguments());
+                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox, call.skills()), call.arguments());
                 outcome = !result.error() ? Outcome.OK : outside(call, scoped) ? Outcome.DENIED : Outcome.ERROR;
             }
         } catch (InterruptedException stopped) {
@@ -205,18 +213,55 @@ final class Calls {
     /**
      * 主目录里的 {@code AGENTS.md}，最多 {@value ContextResult#MAX_AGENTS_BYTES} 字节，截断的说明和服务器上原来的一样。
      * 也走 {@link AllowedDirs#resolve}：指向允许目录外的符号链接不会被读。没有或读不了时为 null。
+     * 请求里带了技能目录、wiki 目录时（协议 4 起）把那两个目录里有什么一起带回去，各在终端记一行。
      */
     ContextResult context(Context request) {
+        SkillList skills = null;
+        if (request.skills() != null) {
+            skills = Skills.list(dirs, request.skills());
+            journal.listed("skills", request.skills(), skills.state(), skills.items().size());
+        }
+        WikiList wiki = null;
+        if (request.wiki() != null) {
+            wiki = WikiPages.list(dirs, request.wiki());
+            journal.listed("wiki", request.wiki(), wiki.state(), wiki.total());
+        }
+        return new ContextResult(request.id(), agents(request), skills, wiki);
+    }
+
+    private String agents(Context request) {
         AllowedDirs scoped = request.dir() == null ? dirs : sessionDirs(request.dir());
         if (scoped == null) {
-            return new ContextResult(request.id(), null);
+            return null;
         }
         try {
             Path file = scoped.resolve(AGENTS_FILE);
-            return new ContextResult(request.id(), Files.isRegularFile(file) ? capped(file, ContextResult.MAX_AGENTS_BYTES) : null);
+            return Files.isRegularFile(file) ? capped(file, ContextResult.MAX_AGENTS_BYTES) : null;
         } catch (IllegalArgumentException | IOException missing) {
-            return new ContextResult(request.id(), null);
+            return null;
         }
+    }
+
+    /**
+     * 用户在消息里点名的技能：每个当场读，和模型用 {@code skill} 工具加载的是同一份文字。没有这个技能、它不让用户点名时两样都不带，
+     * 服务器把那个词当普通文字。每个名字在终端记一行。
+     */
+    SkillLoaded skillLoad(SkillLoad request) {
+        List<SkillLoaded.Loaded> items = new ArrayList<>();
+        for (String name : request.names().subList(0, Math.min(request.names().size(), SkillLoad.MAX_NAMES))) {
+            Skills.Loaded loaded = Skills.load(dirs, request.skills(), name, Skills.Caller.USER);
+            Json arguments = new Json.Obj(Map.of("name", new Json.Str(name)));
+            if (loaded.content() != null) {
+                journal.call(request.session(), SkillTool.NAME, arguments, Outcome.OK);
+                items.add(new SkillLoaded.Loaded(name, loaded.content(), null));
+            } else if (loaded.failure() == Skills.Failure.BROKEN) {
+                journal.call(request.session(), SkillTool.NAME, arguments, Outcome.ERROR);
+                items.add(new SkillLoaded.Loaded(name, null, loaded.code()));
+            } else {
+                items.add(new SkillLoaded.Loaded(name, null, null));
+            }
+        }
+        return new SkillLoaded(request.id(), items);
     }
 
     /** 会话目录做起点的允许目录；目录不存在或不在允许的范围里时为 null。 */
