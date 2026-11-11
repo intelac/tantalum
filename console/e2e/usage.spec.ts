@@ -54,6 +54,16 @@ test.describe("状态行", () => {
 
       await expect(bar.getByText(/^今日 [\d,]+ \/ 100,000,000$/)).toBeVisible();
 
+      // 手机宽度：今日只剩百分比，明细弹窗整个在屏幕里。
+      await page.setViewportSize({ width: 390, height: 800 });
+      await expect(bar.getByText(/^今日 \d+%$/)).toBeVisible();
+      await context.click();
+      const box = await meter.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width: 1280, height: 720 });
+
       expect((await toggle(false)).ok()).toBeTruthy();
       await page.reload();
       await expect(context).toBeVisible();

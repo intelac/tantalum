@@ -19,7 +19,7 @@ A runtime, not a framework. A framework decides how the model thinks and how pro
 
 ## 0.1 in one list
 
-Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace with a macOS connector and MXC sandbox · web fetch and one headless browser per user · runs on macOS, Linux and Windows.
+Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · queued messages you can edit, remove or hand to the running turn · tool approval card in place of the input box · usage per turn, today's usage against the daily limit, and a context breakdown · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace with a macOS connector and MXC sandbox · web fetch and one headless browser per user · runs on macOS, Linux and Windows.
 
 ## Run
 

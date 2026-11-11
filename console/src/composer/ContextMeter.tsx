@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ContextUsage } from "../api/types";
 import { useText } from "../text";
 import { cx } from "../ui/cx";
@@ -16,6 +16,9 @@ interface Props {
   window: number;
 }
 
+/** 弹窗离屏幕边至少留这么多。 */
+const EDGE = 8;
+
 const COLORS: Record<MeterPart["key"], string> = { system: "bg-accent", tools: "bg-warning", messages: "bg-success" };
 
 /**
@@ -27,8 +30,23 @@ export function ContextMeter({ label, percent, warn, hint, usage, window }: Prop
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState(0);
   const panelId = useId();
   const parts = meterParts(usage);
+
+  // 弹窗以按钮为中心；窄屏上按钮靠边，会伸出屏幕，量一下再挪回来。
+  useLayoutEffect(() => {
+    if (!open || panel.current === null) {
+      setShift(0);
+      return;
+    }
+    // 关着的时候 shift 是 0，所以这里量到的就是没挪过的位置。
+    const { left, right } = panel.current.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    if (left < EDGE) setShift(EDGE - left);
+    else if (right > width - EDGE) setShift(width - EDGE - right);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,10 +81,12 @@ export function ContextMeter({ label, percent, warn, hint, usage, window }: Prop
       </button>
       {open && (
         <div
+          ref={panel}
           id={panelId}
           role="dialog"
           aria-label={t.status.meter.title(percent)}
-          className="absolute bottom-full left-1/2 z-40 mb-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-line bg-raised p-3 text-left text-xs text-fg shadow-lg"
+          style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
+          className="absolute bottom-full left-1/2 z-40 mb-2 w-[min(16rem,calc(100vw-2rem))] rounded-md border border-line bg-raised p-3 text-left text-xs text-fg shadow-lg"
         >
           <p className="font-medium">{t.status.meter.title(percent)}</p>
           <p className="mt-0.5 text-fg-muted">{t.status.meter.amount(grouped(usage.used ?? 0), grouped(window))}</p>
