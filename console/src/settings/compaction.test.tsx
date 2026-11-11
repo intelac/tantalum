@@ -40,8 +40,7 @@ function fakeBackend(start: UserSettingsView, putStatus = 200, input = 0, models
       }
       if (path === "/api/settings") return down ? fail(502) : ok(current);
       if (path === "/api/models") return models === undefined ? fail(502) : ok(models);
-      if (path.endsWith("/turns")) return ok({ turns: [{ number: 1 }] });
-      if (path.includes("/turns/")) return ok({ reply: { usage: { input, output: 10, cacheRead: 0, cacheWrite: 0 } } });
+      if (path.endsWith("/context")) return ok({ used: input, window: 1_000_000, limit: 936_000, parts: { system: 0, tools: 0, messages: input } });
       return fail(404);
     }),
   );

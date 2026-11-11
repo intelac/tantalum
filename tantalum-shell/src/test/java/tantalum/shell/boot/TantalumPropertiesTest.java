@@ -182,7 +182,7 @@ class TantalumPropertiesTest {
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null);
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null);
     }
 
     /** 压缩参数和模型无关；预留按模型另算（CompactionPolicyTest）。路线配置的窗口不大于预留时启动失败（context-compaction 需求 9）。 */
@@ -217,5 +217,29 @@ class TantalumPropertiesTest {
         assertThrows(IllegalArgumentException.class, () -> new Loop(1, 0, 1, 1, 1024, 1024, 0));
         assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 0, 1, 1024, 1024, 0));
         assertThrows(IllegalArgumentException.class, () -> new Loop(1, 1, 1, 0, 1024, 1024, 0));
+    }
+
+    /** input-area 需求 8：首屏那句话能配，按语言另配；一句最多 200 个字符，超了启动失败并写出是哪一项。 */
+    @Test
+    void theWelcomeTextIsOptionalPerLanguageAndCapped() throws Exception {
+        assertTrue(bind().consoleTexts().empty());
+        TantalumProperties.Console console = bind("tantalum.console.welcome", "  查 JIRA 单、读代码  ",
+                "tantalum.console.welcome-by-language.en", "Look up tickets", "tantalum.console.welcome-by-language.ja", " ").consoleTexts();
+        assertEquals("查 JIRA 单、读代码", console.welcome());
+        assertEquals(java.util.Map.of("en", "Look up tickets"), console.welcomeByLanguage(), "a blank entry is not configured");
+        assertEquals(200, bind("tantalum.console.welcome", "字".repeat(200)).consoleTexts().welcome().length());
+
+        BindException tooLong = assertThrows(BindException.class, () -> bind("tantalum.console.welcome", "字".repeat(201)));
+        assertTrue(rootMessage(tooLong).contains("tantalum.console.welcome is 201 characters long; at most 200"), rootMessage(tooLong));
+        BindException english = assertThrows(BindException.class, () -> bind("tantalum.console.welcome-by-language.en", "x".repeat(201)));
+        assertTrue(rootMessage(english).contains("tantalum.console.welcome-by-language.en"), rootMessage(english));
+    }
+
+    private static String rootMessage(Throwable failure) {
+        Throwable cause = failure;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return String.valueOf(cause.getMessage());
     }
 }

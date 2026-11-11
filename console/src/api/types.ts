@@ -40,6 +40,28 @@ export interface Config {
   vision?: boolean;
   /** 附件的各项上限，前端先查一遍；服务器还会再查。 */
   attachments?: AttachmentLimits;
+  /** 管理员配的首屏那句话；没配就没有。`text` 是默认那句，`byLanguage` 按界面语言另给。 */
+  welcome?: { text?: string; byLanguage?: Record<string, string> };
+}
+
+/** 自己今天（UTC）的用量。`used` 是读入的（含缓存）加输出的；`limit` 只在有开着的插件报了每日上限时才有。 */
+export interface TodayUsageView {
+  day: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  used: number;
+  limit?: number;
+}
+
+/** 会话的上下文占用，只有数字。还没调过模型时是空对象；不知道窗口时没有 `window` 和 `limit`（压缩点）。 */
+export interface ContextUsage {
+  used?: number;
+  window?: number;
+  limit?: number;
+  /** 三项估算按比例摊到 `used` 上，加起来等于它。 */
+  parts?: { system: number; tools: number; messages: number };
 }
 
 export interface AttachmentLimits {

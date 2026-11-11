@@ -282,10 +282,20 @@ export const zh = {
     list: "附件",
   },
   status: {
-    turns: (count: number) => `${count} 轮`,
-    tokens: (count: string) => `${count} tok`,
-    inOut: (input: string, output: string) => `输入 ${input} · 输出 ${output}`,
     context: (percent: number) => `上下文 ${percent}%`,
+    // 点百分比弹出的明细（照 DSH ContextMeter）
+    meter: {
+      title: (percent: number) => `上下文用了 ${percent}%`,
+      amount: (used: string, window: string) => `约 ${used} / ${window}`,
+      about: (count: string) => `约 ${count}`,
+      system: "系统提示",
+      tools: "工具定义",
+      messages: "消息",
+    },
+    today: (used: string, limit: string) => `今日 ${used} / ${limit}`,
+    todayPercent: (percent: number) => `今日 ${percent}%`,
+    todayHint: (used: string, limit: string, percent: number) => `今天用了 ${used} token，每日上限 ${limit}（${percent}%）`,
+    todayOver: (used: string, limit: string) => `今天的额度用完了（${used} / ${limit}），到 UTC 零点恢复`,
     contextHigh: (percent: number) => `快到自动压缩的点了（${percent}%），模型调用前会自动压缩；也可以现在手动压缩`,
     compact: "压缩上下文",
     compactHint: "把较早的对话压缩成摘要，运行中不可用",

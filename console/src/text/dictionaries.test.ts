@@ -41,6 +41,8 @@ const TOKENS = /--[a-z][a-z-]*|\b[a-z]+(?:_[a-z]+)+\b|tantalum\.[a-z.-]+|`[^`]+`
 
 /** 日文和中文完全相同也没关系的：两种语言里写法本来就一样的汉字词（内容、停止、思考、生成、用途、位置、方式、保存、秒、低/中/高）。 */
 const SAME_IN_JA = new Set([
+  "status.today",
+  "status.todayPercent",
   "process.content",
   "process.thinking",
   "composer.stop",

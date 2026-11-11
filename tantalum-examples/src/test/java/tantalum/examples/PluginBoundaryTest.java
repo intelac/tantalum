@@ -45,11 +45,11 @@ class PluginBoundaryTest {
     private static final List<String> PURE = List.of(
             "tantalum.value", "tantalum.kernel.hook", "java.lang", "java.util", "java.time", "java.math");
     /**
-     * 钩子可以用的三个 shell 类型，都是纯数据的声明：插件页的说明和开关策略（review-fixes 需求 12.6），
-     * 以及参数的声明（plugin-settings 需求 9）。它们只依赖 value 和 JDK，不做 I/O；参数的值钩子仍从 {@code HookContext} 读。
+     * 钩子可以用的四个 shell 类型，都是纯数据的声明：插件页的说明和开关策略（review-fixes 需求 12.6）、
+     * 参数的声明（plugin-settings 需求 9），以及报每日上限的 DailyLimit（input-area 需求 7）。它们只依赖 value 和 JDK，不做 I/O；参数的值钩子仍从 {@code HookContext} 读。
      */
     private static final Set<String> DECLARATIONS = Set.of("tantalum.shell.plugin.PluginInfo",
-            "tantalum.shell.plugin.Configurable", "tantalum.shell.plugin.Param");
+            "tantalum.shell.plugin.Configurable", "tantalum.shell.plugin.Param", "tantalum.shell.plugin.DailyLimit");
 
     /** 插件只用插件 SDK；把它们注册成 Spring bean 的自动配置在 {@code tantalum.examples.boot}，只有那里碰 Spring。 */
     @ArchTest

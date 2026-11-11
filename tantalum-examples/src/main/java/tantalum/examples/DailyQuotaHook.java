@@ -3,13 +3,16 @@ package tantalum.examples;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.OptionalLong;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.DailyLimit;
 import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
+import tantalum.value.hook.Params;
 import tantalum.value.hook.Stop;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
@@ -22,7 +25,7 @@ import tantalum.value.text.LocalText;
  * <p>上限是一个只归管理员的参数 {@code tokens}：管理员在后台给所有人定默认、给某个人单独指定，用户自己改不了。
  * 构造时给的值（服务器配置）是插件自带的默认；没记参数的旧会话继续跑或回放时也用它。
  */
-public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurable {
+public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurable, DailyLimit {
 
     private final long dailyTokens;
 
@@ -64,6 +67,12 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurabl
     @Override
     public boolean failClosed() {
         return true;
+    }
+
+    /** 页面上“今日 已用 / 上限”的上限，和下面拦截用的是同一个参数。 */
+    @Override
+    public OptionalLong dailyTokens(Params params) {
+        return OptionalLong.of(params.number("tokens", dailyTokens));
     }
 
     @Override

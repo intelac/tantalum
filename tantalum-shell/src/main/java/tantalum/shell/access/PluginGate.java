@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ import tantalum.shell.param.ParamStore.Scope;
 import tantalum.shell.param.SecretBox;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.DailyLimit;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
@@ -78,6 +80,8 @@ public final class PluginGate {
     private final Map<String, List<Param>> pluginParams;
     /** 有内核钩子的插件：只有它们的参数记进组装上下文。 */
     private final Set<String> kernelPlugins;
+    /** 报每日上限的成员，按插件分。 */
+    private final Map<String, List<DailyLimit>> dailyLimits;
     private final ParamStore store;
     private final ParamResolver resolver;
 
@@ -115,6 +119,7 @@ public final class PluginGate {
         this.lockedInCode = lockedInCode(hooks, afterHooks);
         this.pluginParams = declared(hooks, afterHooks, workTypes);
         this.kernelPlugins = hooks.stream().map(KernelHook::plugin).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        this.dailyLimits = dailyLimits(hooks, afterHooks, workTypes);
         this.store = params;
         this.resolver = new ParamResolver(params);
         for (Tool tool : catalog.tools()) {
@@ -208,6 +213,28 @@ public final class PluginGate {
             }
         });
         return byPlugin.isEmpty() ? null : new Json.Obj(byPlugin);
+    }
+
+    /**
+     * 这个人今天的 token 上限：他开着的插件里报了上限（{@link DailyLimit}）的，各按他此刻生效的参数问一次，取最小的；
+     * 没有插件报就是空。只给页面显示用，拦截是插件钩子的事。
+     */
+    public OptionalLong dailyLimit(Principal user) {
+        OptionalLong lowest = OptionalLong.empty();
+        for (Map.Entry<String, List<DailyLimit>> entry : dailyLimits.entrySet()) {
+            String plugin = entry.getKey();
+            if (!pluginEnabled(user, plugin)) {
+                continue;
+            }
+            Params mine = resolver.params(user, Kind.PLUGIN, plugin, pluginParams.getOrDefault(plugin, List.of()), lock(Kind.PLUGIN, plugin) != null);
+            for (DailyLimit member : entry.getValue()) {
+                OptionalLong limit = member.dailyTokens(mine);
+                if (limit.isPresent() && (lowest.isEmpty() || limit.getAsLong() < lowest.getAsLong())) {
+                    lowest = limit;
+                }
+            }
+        }
+        return lowest;
     }
 
     public List<Plugin> plugins() {
@@ -691,6 +718,20 @@ public final class PluginGate {
         hooks.stream().filter(hook -> hook instanceof PluginInfo info && info.mandatory()).forEach(hook -> names.add(hook.plugin()));
         afterHooks.stream().filter(hook -> hook instanceof PluginInfo info && info.mandatory()).forEach(hook -> names.add(hook.plugin()));
         return Set.copyOf(names);
+    }
+
+    private static Map<String, List<DailyLimit>> dailyLimits(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
+        Map<String, List<DailyLimit>> members = new LinkedHashMap<>();
+        hooks.forEach(hook -> dailyLimit(hook, hook.plugin(), members));
+        afterHooks.forEach(hook -> dailyLimit(hook, hook.plugin(), members));
+        workTypes.forEach(type -> dailyLimit(type, type.plugin(), members));
+        return members;
+    }
+
+    private static void dailyLimit(Object member, String plugin, Map<String, List<DailyLimit>> members) {
+        if (member instanceof DailyLimit limit) {
+            members.computeIfAbsent(plugin, ignored -> new ArrayList<>()).add(limit);
+        }
     }
 
     /** 每个钩子插件的参数：钩子、工具后处理、插件工作的并在一起，按这个顺序。 */

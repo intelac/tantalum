@@ -153,6 +153,18 @@ public class ApiController {
         attachments.put("maxFilesPerMessage", limits.maxFilesPerMessage());
         attachments.put("maxFileBytes", limits.maxFileBytes());
         response.put("attachments", attachments);
+        // 首屏那句话：配了才有这一项，页面按界面语言挑
+        TantalumProperties.Console console = properties.consoleTexts();
+        if (!console.empty()) {
+            Map<String, Object> welcome = new LinkedHashMap<>();
+            if (console.welcome() != null) {
+                welcome.put("text", console.welcome());
+            }
+            if (!console.welcomeByLanguage().isEmpty()) {
+                welcome.put("byLanguage", console.welcomeByLanguage());
+            }
+            response.put("welcome", welcome);
+        }
         return json.json(200, response);
     }
 

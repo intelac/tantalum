@@ -122,6 +122,10 @@ public final class E2eServer {
                         "--tantalum.openai-routes.local.overrides[" + E2eModel.PLAIN + "].thinking=none",
                         "--tantalum.claude.models=claude-sonnet-5-5,claude-sonnet-5",
                         "--tantalum.claude.context-window=1000000",
+                        // 首屏那句话（input-area 需求 6）：默认一句，英文和日文各一句
+                        "--tantalum.console.welcome=这里是端到端测试用的助手，随便问。",
+                        "--tantalum.console.welcome-by-language.en=This is the end-to-end test assistant. Ask anything.",
+                        "--tantalum.console.welcome-by-language.ja=エンドツーエンドテスト用のアシスタントです。",
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s");

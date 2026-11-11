@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import tantalum.shell.access.PluginGate.ParamView;
 import tantalum.shell.param.ParamRules.InvalidParam;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.DailyLimit;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
@@ -38,6 +40,7 @@ import tantalum.shell.tool.ToolCatalog;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
+import tantalum.value.hook.Params;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
@@ -62,6 +65,7 @@ class PluginParamsTest {
     private ToolCatalog catalog;
     private PluginSwitches switches;
     private PluginGate gate;
+    private OptionalLong guardLimit = OptionalLong.empty();
 
     private static Json num(long value) {
         return new Json.Num(BigDecimal.valueOf(value));
@@ -98,7 +102,8 @@ class PluginParamsTest {
     }
 
     /** 插件 quota：钩子声明 tokens（归管理员），默认关。 */
-    static final class QuotaHook implements KernelHook, PluginInfo, Configurable {
+    static final class QuotaHook implements KernelHook, PluginInfo, Configurable, DailyLimit {
+        @Override public OptionalLong dailyTokens(Params params) { return OptionalLong.of(params.number("tokens", -1)); }
         @Override public String name() { return "quotaHook"; }
         @Override public String plugin() { return "quota"; }
         @Override public boolean defaultEnabled() { return false; }
@@ -133,7 +138,9 @@ class PluginParamsTest {
         }
     }
 
-    private final class GuardWork implements WorkType {
+    private final class GuardWork implements WorkType, DailyLimit {
+        // guard 默认开着：上限 800，或者不限
+        @Override public OptionalLong dailyTokens(Params params) { return guardLimit; }
         @Override public String name() { return "audit"; }
         @Override public String plugin() { return "guard"; }
         @Override public WorkResult run(ToolContext context, Json input) {
@@ -550,5 +557,29 @@ class PluginParamsTest {
         Json.Obj recorded = vault.pluginParams(ALICE);
         assertEquals(obj("vault", obj("maxChars", num(500))), recorded);
         assertFalse(recorded.toString().contains("hunter2"));
+    }
+
+    // ---- input-area 需求 6.2、6.3：每日上限 ----
+
+    @Test
+    void theDailyLimitIsTheLowestAmongEnabledPluginsThatReportOne() {
+        assertEquals(OptionalLong.empty(), gate.dailyLimit(ALICE), "quota is off, guard reports none");
+
+        gate.set(ALICE, Kind.PLUGIN, "quota", true);
+        assertEquals(OptionalLong.of(1000), gate.dailyLimit(ALICE), "the declared default reaches the member");
+        assertEquals(OptionalLong.empty(), gate.dailyLimit(BOB));
+
+        gate.assign(ALICE, Kind.PLUGIN, "quota", Map.of("tokens", num(300)));
+        assertEquals(OptionalLong.of(300), gate.dailyLimit(ALICE), "what the administrator assigned to this user");
+
+        guardLimit = OptionalLong.of(800);
+        assertEquals(OptionalLong.of(300), gate.dailyLimit(ALICE));
+        assertEquals(OptionalLong.of(800), gate.dailyLimit(BOB), "guard is on for everyone");
+        guardLimit = OptionalLong.of(200);
+        assertEquals(OptionalLong.of(200), gate.dailyLimit(ALICE));
+
+        gate.set(ALICE, Kind.PLUGIN, "quota", false);
+        guardLimit = OptionalLong.empty();
+        assertEquals(OptionalLong.empty(), gate.dailyLimit(ALICE));
     }
 }

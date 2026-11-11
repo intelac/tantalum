@@ -118,6 +118,31 @@ public final class Compactor {
                 + estimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
     }
 
+    /** 上下文现在占了多少，以及系统提示、工具定义、消息各占多少；三项之和等于 {@code used}。 */
+    public record Occupancy(long used, long system, long tools, long messages) {}
+
+    /**
+     * 给页面看的占用明细。{@code used} 就是 {@link #size}（压缩判断用的那个数）；三项各自估算，再按比例摊到 {@code used} 上，
+     * 消息取余数。没有锚点（还没调过模型，或者模型没报用量）时没有实测可摊，返回空。
+     */
+    public static Optional<Occupancy> occupancy(SessionState session, String system, List<ToolSpec> tools) {
+        if (session.anchor() == null) {
+            return Optional.empty();
+        }
+        CompactionSettings settings = session.context() == null ? null : session.context().compaction();
+        TokenEstimate estimate = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
+        long used = size(session, system, tools);
+        long ofSystem = estimate.ofText(system);
+        long ofTools = estimate.ofTools(tools);
+        long total = ofSystem + ofTools + estimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
+        if (total <= 0) {
+            return Optional.of(new Occupancy(used, 0, 0, used));
+        }
+        long systemShare = (long) ((double) used * ofSystem / total);
+        long toolsShare = (long) ((double) used * ofTools / total);
+        return Optional.of(new Occupancy(used, systemShare, toolsShare, used - systemShare - toolsShare));
+    }
+
     /** 规则 5：摘要、当前请求原文、处理过的保留段。 */
     public static List<Message> replacement(Plan plan, List<Message> view, String summary, CompactionSettings settings) {
         List<Message> out = new ArrayList<>();

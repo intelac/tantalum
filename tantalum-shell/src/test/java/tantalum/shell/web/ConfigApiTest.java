@@ -64,4 +64,19 @@ class ConfigApiTest {
             assertEquals(false, body.get("vision").asBoolean(), "OpenAI-compatible models take text only unless configured");
         }
     }
+
+    /** input-area 需求 8.1、8.4：配了首屏文字，{@code /api/config} 就多一项；没配时没有（上面数过是 7 项）。 */
+    @Test
+    void theWelcomeTextIsServedOnlyWhenConfigured() throws Exception {
+        try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("w")), model,
+                "--tantalum.console.welcome=查单子、读代码 <b>", "--tantalum.console.welcome-by-language.en=Look up tickets")) {
+            JsonNode welcome = JSON.readTree(server.get("alice", "/api/config").body()).get("welcome");
+            assertEquals("{\"text\":\"查单子、读代码 <b>\",\"byLanguage\":{\"en\":\"Look up tickets\"}}", welcome.toString());
+        }
+        try (TestServer server = new TestServer(temp.resolve("data2"), Files.createDirectory(temp.resolve("w2")), model,
+                "--tantalum.console.welcome-by-language.ja=チケットを調べる")) {
+            JsonNode welcome = JSON.readTree(server.get("alice", "/api/config").body()).get("welcome");
+            assertEquals("{\"byLanguage\":{\"ja\":\"チケットを調べる\"}}", welcome.toString());
+        }
+    }
 }

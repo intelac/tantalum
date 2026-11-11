@@ -324,6 +324,8 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 | `tantalum.residency.sweep-interval` | `1s` | 两次回收检查的最小间隔 |
 | `tantalum.residency.load-retry` | `1m` | 会话载入失败后多久再试；在这之前这个会话回 500，别的会话不受影响 |
 | `tantalum.loop.max-user-permits` | `256`（输入环的四分之一） | 一个用户同时在处理管线里的事件上限；到上限后他的事件排队等，别的用户照常。不能小于 `max-user-in-flight` |
+| `tantalum.console.welcome` | 没有 | 新会话首屏标题下面的那句话，最多 200 个字，当纯文本显示（不解析 Markdown 和 HTML）。不配就用控制台自带的那句 |
+| `tantalum.console.welcome-by-language.<zh\|en\|ja>` | 没有 | 给某个界面语言单独配一句；那个语言没配时用上面那句 |
 
 **关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后关索引和文件。被中断的运行下次启动按上面的规则收尾。
 
@@ -547,6 +549,8 @@ Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2`
 
 **运维（管理员）。** 设置里的“运维”一页列出所有用户、每个人今天（UTC）的 token 用量；每个人的“参数”里给他单独指定只归管理员的参数，比如给某个人更小或更大的每日额度，“用默认”取消指定。
 
+**今日用量。** 输入栏下面的状态栏在有每日上限时显示“今日 已用 / 上限”，到 90% 变色，用完变红；没有上限就不显示。上限不是平台定的：开着的插件实现 `DailyLimit`（`OptionalLong dailyTokens(Params)`）报出来，几个插件都报时取最小的；示例里的每日额度插件报的就是它拦截用的那个数。接口是 `GET /api/usage/today`，只回自己的。
+
 接口：
 
 | 接口 | 作用 |
@@ -620,7 +624,7 @@ sudo java -jar tantalum.jar browser install --with-deps   # Linux：同时装浏
 长会话不会因为上下文满而失败。模型调用前，内核按估算判断会话有没有越过阈值；越过了就先发一次禁用工具、限长的摘要调用，用摘要替换历史开头，再发原来的调用。所有模型走同一条路。
 
 - **窗口**：每个模型用它自己的窗口。启动时和每 10 分钟从模型那边读：Claude 读 Models 接口的 `max_input_tokens`（开着备用模型时取主模型和备用模型中最小的），本地服务读 `/v1/models` 里的 `meta.n_ctx`、`max_model_len` 或 `context_length`；模型报上下文超长时再读一次。读不到才用配置的 `context-window`。设置页“模型”一栏写明窗口从哪来。
-- **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 这个模型的输出上限))，窗口是这次提问用的模型的（见“模型路线”）。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。
+- **压缩点**：每个用户在设置页“模型”一栏选 50%、70%、85% 或用满（默认用满），压缩点 = min(窗口 × 百分比, 窗口 − max(`reserve-tokens`, 这个模型的输出上限))，窗口是这次提问用的模型的（见“模型路线”）。从下一次提问开始生效，正在进行的对话也是；只决定什么时候压缩，不改发给模型的内容。状态栏到压缩点的 90% 变色。点状态栏的“上下文 N%”看明细：约 已用 / 窗口，分系统提示、工具定义、消息三项（按估算摊出来的，所以写“约”）；数字来自 `GET /api/sessions/{id}/context`。
 - **规则**：保留最近约 `keep-recent-tokens`（不超过阈值的四分之一）的消息，其余交给模型总结；一次调用前最多压缩一次；摘要调用可重试，摘要帮不上忙或失败时，如果裁剪工具结果有进展就只裁剪；都不行才放弃，本运行不再自动压缩；模型报上下文超长时只留最新一段压缩并重试一次。压缩后 system 和工具重新组装。
 - **历史只追加**：journal 和对话页始终是全部原文，压缩只换模型看到的视图；对话页在压缩处有分隔线，点开能看摘要。保留段里的推理块会去掉，过大的工具结果首尾各留一半。
 - **配置**：每条路线的 `context-window`（读不到模型的窗口时用，为 0 时不压缩）和 `bytes-per-token`（估算系数，宁可多算：Claude 1.5、本地 1.75，按实测定）；`tantalum.compaction.window-from-model`（默认 true，测试用小窗口时关掉）；`tantalum.compaction.reserve-tokens`（16384）、`keep-recent-tokens`（20000）、`max-kept-tool-result-bytes`（32 KB）、`max-summarized-tool-result-bytes`（4 KB）、`summary-max-tokens`（8192）。设置每次提问时按当时的窗口和用户的选择重算，记进 journal，回放用记下的那份。

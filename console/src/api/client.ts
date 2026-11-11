@@ -6,6 +6,7 @@ import type {
   AssignedParams,
   AttachmentRef,
   Config,
+  ContextUsage,
   ErrorParam,
   FolderListing,
   Language,
@@ -34,6 +35,7 @@ import type {
   TurnSummary,
   User,
   UserSettingsView,
+  TodayUsageView,
 } from "./types";
 
 /**
@@ -400,6 +402,16 @@ export function answerQuestion(session: string, question: string, answer: { choi
     method: "POST",
     body: JSON.stringify(answer),
   });
+}
+
+/** 自己今天的用量和生效的每日上限。 */
+export function getTodayUsage(): Promise<TodayUsageView> {
+  return call("/api/usage/today");
+}
+
+/** 会话的上下文现在占了多少，分系统提示、工具定义、消息三项。 */
+export function getContextUsage(session: string): Promise<ContextUsage> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/context`);
 }
 
 export function getSettings(): Promise<UserSettingsView> {

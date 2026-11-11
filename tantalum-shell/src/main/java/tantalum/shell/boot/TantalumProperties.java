@@ -26,7 +26,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                                  String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes, MemoryLimits memory,
                                  Knowledge knowledge, McpProperties mcp,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments, Web web) {
+                                 AttachmentLimits attachments, Web web, Console console) {
 
     /** Claude 路线的名字，固定。 */
     public static final String CLAUDE_ROUTE = "claude";
@@ -60,6 +60,51 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             throw new IllegalArgumentException("tantalum.provider=" + provider + " names no route; expected claude"
                     + openaiRoutes.keySet().stream().map(name -> " or " + name).collect(java.util.stream.Collectors.joining()));
         }
+    }
+
+    /**
+     * 控制台上能配的文字。{@code welcome} 是新会话首屏标题下面那句，{@code welcomeByLanguage} 按界面语言（{@code en}、{@code ja}……）
+     * 另给一句；都不配就用控制台自带的。每句最多 {@link #MAX_WELCOME} 个字符，超了启动失败。页面当纯文本显示。
+     */
+    public record Console(String welcome, Map<String, String> welcomeByLanguage) {
+
+        public static final int MAX_WELCOME = 200;
+
+        public Console {
+            welcome = welcome == null || welcome.isBlank() ? null : welcome.strip();
+            tooLong("tantalum.console.welcome", welcome);
+            Map<String, String> byLanguage = new TreeMap<>();
+            if (welcomeByLanguage != null) {
+                welcomeByLanguage.forEach((language, text) -> {
+                    if (text != null && !text.isBlank()) {
+                        tooLong("tantalum.console.welcome-by-language." + language, text.strip());
+                        byLanguage.put(language, text.strip());
+                    }
+                });
+            }
+            welcomeByLanguage = java.util.Collections.unmodifiableMap(byLanguage);
+        }
+
+        public static Console none() {
+            return new Console(null, null);
+        }
+
+        /** 一句都没配。 */
+        public boolean empty() {
+            return welcome == null && welcomeByLanguage.isEmpty();
+        }
+
+        private static void tooLong(String name, String text) {
+            if (text != null && text.codePointCount(0, text.length()) > MAX_WELCOME) {
+                throw new IllegalArgumentException(name + " is " + text.codePointCount(0, text.length())
+                        + " characters long; at most " + MAX_WELCOME);
+            }
+        }
+    }
+
+    /** 控制台文字；没有这一段时什么都没配。 */
+    public Console consoleTexts() {
+        return console == null ? Console.none() : console;
     }
 
     /**

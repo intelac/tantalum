@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.DailyLimit;
 import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.Tool;
@@ -26,6 +28,7 @@ import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
+import tantalum.value.hook.Params;
 import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
@@ -50,7 +53,8 @@ class PluginParamsApiTest {
     }
 
     /** 插件 quota：额度只归管理员，默认关。 */
-    static final class Quota implements KernelHook, PluginInfo, Configurable {
+    static final class Quota implements KernelHook, PluginInfo, Configurable, DailyLimit {
+        @Override public OptionalLong dailyTokens(Params params) { return OptionalLong.of(params.number("tokens", 1000)); }
         @Override public String name() { return "quotaHook"; }
         @Override public String plugin() { return "quota"; }
         @Override public boolean defaultEnabled() { return false; }
@@ -306,5 +310,40 @@ class PluginParamsApiTest {
         assertEquals("{\"input\":100,\"output\":20,\"cacheRead\":30,\"cacheWrite\":5,\"total\":155}", String.valueOf(alice));
         assertEquals("{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}",
                 named(ok(send("root", "GET", "/api/users", null)).get("users"), "name", "root").get("usageToday").toString());
+    }
+
+    /**
+     * input-area 需求 6.1–6.3：登录的人查自己今天的用量和生效的上限。上限只在报它的插件开着时才有，跟着管理员给这个人指定的值变；
+     * 用量和运维页是同一个数，只回自己的。
+     */
+    @Test
+    void anyoneSeesTheirOwnUsageAndLimitForToday() throws Exception {
+        JsonNode fresh = ok(send("alice", "GET", "/api/usage/today", null));
+        assertEquals(0, fresh.get("used").asLong());
+        assertFalse(fresh.has("limit"), "the quota plugin is off by default");
+        assertTrue(fresh.get("day").asString().matches("\\d{4}-\\d{2}-\\d{2}"), fresh.toString());
+
+        ok(send("alice", "PUT", "/api/plugins/plugin/quota", "{\"enabled\":true}"));
+        assertEquals(1000, ok(send("alice", "GET", "/api/usage/today", null)).get("limit").asLong());
+        ok(send("root", "PUT", "/api/admin/users/alice/params/plugin/quota", "{\"values\":{\"tokens\":500}}"));
+        assertEquals(500, ok(send("alice", "GET", "/api/usage/today", null)).get("limit").asLong());
+        assertFalse(ok(send("bob", "GET", "/api/usage/today", null)).has("limit"));
+
+        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}")
+                .statusCode());
+        JsonNode today = null;
+        Instant deadline = Instant.now().plusSeconds(20);
+        while (Instant.now().isBefore(deadline)) {
+            today = ok(send("alice", "GET", "/api/usage/today", null));
+            if (today.get("used").asLong() > 0) {
+                break;
+            }
+            Thread.sleep(10);
+        }
+        assertEquals(List.of(100L, 20L, 30L, 5L, 155L, 500L), List.of(today.get("input").asLong(), today.get("output").asLong(),
+                today.get("cacheRead").asLong(), today.get("cacheWrite").asLong(), today.get("used").asLong(), today.get("limit").asLong()));
+        assertEquals(0, ok(send("bob", "GET", "/api/usage/today", null)).get("used").asLong());
+        assertEquals(401, server.http.send(HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/usage/today")).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
     }
 }

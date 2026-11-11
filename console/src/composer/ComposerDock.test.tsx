@@ -22,8 +22,7 @@ function backend() {
     vi.fn((path: string) => {
       const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) });
       if (path === "/api/models") return ok(MODELS);
-      if (path.endsWith("/turns")) return ok({ turns: [{ number: 1 }] });
-      if (path.includes("/turns/")) return ok({ reply: { usage: { input: 65_536, output: 10, cacheRead: 0, cacheWrite: 0 } } });
+      if (path.endsWith("/context")) return ok({ used: 65_536, window: 131_072, limit: 120_000, parts: { system: 536, tools: 5000, messages: 60_000 } });
       return Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve("") });
     }),
   );

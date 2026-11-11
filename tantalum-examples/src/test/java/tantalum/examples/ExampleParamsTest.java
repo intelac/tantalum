@@ -105,6 +105,14 @@ class ExampleParamsTest {
         assertSame(Allow.PLAIN, hook.beforeModelCall(used(100), OLD.withParams(params("tokens", num(500)))));
     }
 
+    /** input-area 需求 6.8：页面上显示的上限就是拦截用的那个参数。 */
+    @Test
+    void theQuotaReportsTheSameLimitItEnforces() {
+        DailyQuotaHook hook = new DailyQuotaHook(100);
+        assertEquals(java.util.OptionalLong.of(100), hook.dailyTokens(tantalum.value.hook.Params.NONE));
+        assertEquals(java.util.OptionalLong.of(50), hook.dailyTokens(OLD.withParams(params("tokens", num(50))).params()));
+    }
+
     @Test
     void truncationReadsItsLimitAtCallTime(@TempDir Path dir) throws Exception {
         TruncateOutputHook hook = new TruncateOutputHook(4);
