@@ -15,11 +15,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import tantalum.local.fs.AllowedDirs;
+import tantalum.local.skill.Skills;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.Tools;
+import tantalum.local.wiki.WikiPages;
 import tantalum.local.wire.Browse;
 import tantalum.local.wire.BrowseResult;
 import tantalum.local.wire.Call;
@@ -29,6 +31,8 @@ import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Message;
 import tantalum.local.wire.Result;
+import tantalum.local.wire.SkillLoad;
+import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.Wire;
 import tantalum.value.id.Principal;
 
@@ -44,6 +48,8 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     private final Map<String, Observations> observations = new ConcurrentHashMap<>();
     private final Map<String, Thread> running = new ConcurrentHashMap<>();
     private final BlockingQueue<Call> calls = new LinkedBlockingQueue<>();
+    private final List<Context> contexts = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<SkillLoad> loads = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile CountDownLatch hold;
     private volatile boolean silentContext;
     private volatile LocalLinks.Link link;
@@ -82,9 +88,24 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         calls.clear();
     }
 
-    /** 之后不回 {@code AGENTS.md} 的请求，像电脑卡住了一样。 */
+    /** 之后不回 {@code AGENTS.md}、清单和点名的请求，像电脑卡住了一样。 */
     public void ignoreContextRequests() {
         silentContext = true;
+    }
+
+    /** 重新开始回。 */
+    public void answerContextRequests() {
+        silentContext = false;
+    }
+
+    /** 收到过的清单请求，按到达顺序。 */
+    public List<Context> contexts() {
+        return List.copyOf(contexts);
+    }
+
+    /** 收到过的点名请求。 */
+    public List<SkillLoad> loads() {
+        return List.copyOf(loads);
     }
 
     /** 等下一个调用到达；超时返回 null。 */
@@ -129,8 +150,20 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
                 }
             }
             case Context context -> {
+                contexts.add(context);
                 if (!silentContext) {
-                    Thread.ofVirtual().start(() -> reply(new ContextResult(context.id(), agents(context.dir()).orElse(null))));
+                    Thread.ofVirtual().start(() -> reply(new ContextResult(context.id(), agents(context.dir()).orElse(null),
+                            context.skills() == null ? null : Skills.list(dirs, context.skills()),
+                            context.wiki() == null ? null : WikiPages.list(dirs, context.wiki()))));
+                }
+            }
+            case SkillLoad load -> {
+                loads.add(load);
+                if (!silentContext) {
+                    Thread.ofVirtual().start(() -> reply(new SkillLoaded(load.id(), load.names().stream().map(name -> {
+                        Skills.Loaded loaded = Skills.load(dirs, load.skills(), name, Skills.Caller.USER);
+                        return new SkillLoaded.Loaded(name, loaded.content(), loaded.content() == null ? loaded.code() : null);
+                    }).toList())));
                 }
             }
             case Browse browse -> Thread.ofVirtual().start(() -> reply(browse(browse)));
@@ -181,7 +214,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         }
         try {
             Observations seen = observations.computeIfAbsent(call.session(), ignored -> new Observations());
-            return tool.get().run(new LocalContext(call.session(), scoped, seen), call.arguments());
+            return tool.get().run(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()), call.arguments());
         } catch (Exception failure) {
             return LocalResult.error("Tool failed: " + failure);
         }

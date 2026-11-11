@@ -341,6 +341,39 @@ class ContextHandlerTest {
         assertTrue(system.endsWith("Java 25 only\n</memory-index>"), "index is the last section");
     }
 
+    /** skills-wiki 需求 3.1、6.2：技能清单和 wiki 两段在 AGENTS.md 之后、记忆索引之前，各是一个会变的段。 */
+    @Test
+    void theSkillListAndTheWikiSitBetweenAgentsAndTheMemoryIndex() throws Exception {
+        MemoryStores memories = memories(Workspaces.perUser(dir.resolve("ws")));
+        memories.of(ALICE).write("java", "user", "Java 25 only", "body");
+        Files.writeString(mac.resolve("AGENTS.md"), "Agents rules.");
+        Path skill = Files.createDirectories(mac.resolve("skills/pdf-tools"));
+        Files.writeString(skill.resolve("SKILL.md"), "---\nname: pdf-tools\ndescription: Convert <PDF> files.\n---\nbody\n");
+        Files.createDirectories(mac.resolve("wiki"));
+        Files.writeString(mac.resolve("wiki/a.md"), "# Page A\n");
+        tantalum.shell.local.LocalDirs filled = new tantalum.shell.local.LocalDirs() {
+            @Override public Optional<String> skillsDir(Principal user) { return Optional.of(mac.resolve("skills").toString()); }
+            @Override public Optional<String> wikiDir(Principal user) { return Optional.of(mac.resolve("wiki").toString()); }
+            @Override public java.util.Set<String> off(Principal user) { return java.util.Set.of(); }
+        };
+        ContextHandler handler = new ContextHandler(new LocalWorkspace(switches, links, filled), "Base.", catalog(),
+                tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "",
+                noCompaction(), NO_WINDOW, NOBODY);
+        try (TestComputer ignored = connect()) {
+            ContextAssembled event = assembled(handler, command(ALICE));
+            assertEquals(List.of(ContextHandler.LOCAL_TAG, ContextHandler.AGENTS_TAG, "skills", "wiki", ContextHandler.INDEX_TAG),
+                    event.sections().stream().map(section -> section.name()).toList());
+            String system = event.system();
+            assertTrue(system.contains("</project-instructions>\n\n<skills>\n## Skills\n"), system);
+            assertTrue(system.contains("<available_skills>\n- `pdf-tools`: Convert &lt;PDF&gt; files.\n</available_skills>"),
+                    "the template's own closing tag is kept as it is: " + system);
+            assertTrue(system.contains("</skills>\n\n<wiki>\n## Wiki\n"), system);
+            assertTrue(system.contains("<wiki_pages>\n- a.md — Page A\n</wiki_pages>\n</wiki>\n\n<memory-index>"), system);
+            assertTrue(event.sections().stream().filter(section -> !section.name().equals(ContextHandler.INDEX_TAG))
+                    .noneMatch(section -> section.byLine()), "a changed listing is sent again whole");
+        }
+    }
+
     @Test
     void eachUserSeesOnlyTheirOwnIndex() throws Exception {
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));

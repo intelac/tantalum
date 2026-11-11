@@ -151,9 +151,10 @@ class LocalWorkspaceTest {
     void switchStatesAreListedInOrder() {
         LocalWorkspace workspace = new LocalWorkspace(switches, links);
         switches.set(ALICE, Kind.LOCAL, "shell", false);
-        assertEquals(Map.of("local-workspace", true, "fs-read", true, "git", true, "file-edit", true, "shell", false),
-                workspace.switches(ALICE));
-        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell"), List.copyOf(workspace.switches(ALICE).keySet()));
+        assertEquals(Map.of("local-workspace", true, "fs-read", true, "git", true, "file-edit", true, "shell", false, "skills", true,
+                "wiki", true), workspace.switches(ALICE));
+        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell", "skills", "wiki"),
+                List.copyOf(workspace.switches(ALICE).keySet()));
         assertEquals(Optional.empty(), workspace.section(ALICE));
     }
 

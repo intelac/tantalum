@@ -75,7 +75,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         stores.memories(), new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
-                        session -> dirOf(queries.view().current(), session)),
+                        session -> dirOf(queries.view().current(), session), toolbox.skillCatalog()),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session())),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,

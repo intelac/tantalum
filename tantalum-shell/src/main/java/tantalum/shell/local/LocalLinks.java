@@ -35,6 +35,8 @@ import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Message;
 import tantalum.local.wire.Result;
+import tantalum.local.wire.SkillLoad;
+import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.Welcome;
 import tantalum.local.wire.Wire;
 import tantalum.value.id.Principal;
@@ -53,6 +55,7 @@ public final class LocalLinks implements AutoCloseable {
     public static final String DISCONNECTED = "The computer disconnected. Whether this operation finished is unknown.";
     /** 每条连接同时最多执行的调用数，多的排队，排队也计入超时。 */
     public static final int CONCURRENCY = 4;
+    private static final String DISCONNECTED_ID = "disconnected";
 
     /**
      * 几个时间间隔，做成参数是为了测试跑得快。
@@ -198,6 +201,12 @@ public final class LocalLinks implements AutoCloseable {
     /** 同上，{@code dir} 是会话的工作目录：连接程序是协议 3 起才发，协议 2 的不认识它，照旧用主目录。 */
     public LocalResult call(Principal principal, String session, String tool, Json arguments, Duration timeout, String dir)
             throws InterruptedException {
+        return call(principal, session, tool, arguments, timeout, dir, null);
+    }
+
+    /** 同上，{@code skills} 是这个用户的技能目录，只有 {@code skill} 工具带（协议 4 起才发）。 */
+    public LocalResult call(Principal principal, String session, String tool, Json arguments, Duration timeout, String dir,
+                            String skills) throws InterruptedException {
         Link link = links.get(principal);
         if (link == null) {
             return LocalResult.error(NOT_CONNECTED);
@@ -216,7 +225,7 @@ public final class LocalLinks implements AutoCloseable {
             link.calls.put(id, reply);
             long left = deadline - System.nanoTime();
             if (link.over.get() || !link.send(new Call(id, principal.value(), session, tool, arguments, Math.max(1, left / 1_000_000),
-                    link.sessionDirs() ? dir : null))) {
+                    link.sessionDirs() ? dir : null, link.skillLists() ? skills : null))) {
                 return LocalResult.error(DISCONNECTED);
             }
             try {
@@ -281,25 +290,73 @@ public final class LocalLinks implements AutoCloseable {
 
     /** 同上，从会话的工作目录读（协议 3 起；协议 2 的连接照旧从主目录读）。 */
     public Optional<String> agents(Principal principal, String dir) throws InterruptedException {
+        Reply<ContextResult> reply = context(principal, dir, null, null);
+        return reply.outcome() == Reply.Outcome.OK ? Optional.ofNullable(reply.result().agents()) : Optional.empty();
+    }
+
+    /** 问电脑一件事的结果：{@code result} 只在 {@code OK} 时有。 */
+    public record Reply<T>(Outcome outcome, T result) {
+
+        public enum Outcome { OK, NOT_CONNECTED, NO_ANSWER }
+
+        public static <T> Reply<T> notConnected() {
+            return new Reply<>(Outcome.NOT_CONNECTED, null);
+        }
+    }
+
+    /**
+     * 一次往返要 {@code AGENTS.md}、技能清单（{@code skills} 是用户填的技能目录）、wiki 页（{@code wiki} 同理），
+     * 最多等 {@link Timing#agents()}。两个目录为 null 就不问那一样；协议 3 及以前的连接程序不认识它们，不发。
+     */
+    public Reply<ContextResult> context(Principal principal, String dir, String skills, String wiki) throws InterruptedException {
         Link link = links.get(principal);
         if (link == null) {
-            return Optional.empty();
+            return Reply.notConnected();
         }
         String id = "x-" + ids.incrementAndGet();
         CompletableFuture<ContextResult> reply = new CompletableFuture<>();
         link.contexts.put(id, reply);
         try {
-            if (link.over.get() || !link.send(new Context(id, link.sessionDirs() ? dir : null))) {
-                return Optional.empty();
+            boolean lists = link.skillLists();
+            if (link.over.get() || !link.send(new Context(id, link.sessionDirs() ? dir : null, lists ? skills : null, lists ? wiki : null))) {
+                return Reply.notConnected();
             }
-            return Optional.ofNullable(reply.get(timing.agents().toMillis(), TimeUnit.MILLISECONDS).agents());
+            ContextResult result = reply.get(timing.agents().toMillis(), TimeUnit.MILLISECONDS);
+            return link.over.get() && DISCONNECTED_ID.equals(result.id()) ? Reply.notConnected() : new Reply<>(Reply.Outcome.OK, result);
         } catch (TimeoutException late) {
-            LOG.info("local link for {}: AGENTS.md did not arrive within {}", principal.value(), timing.agents());
-            return Optional.empty();
+            LOG.info("local link for {}: the context (AGENTS.md, skills, wiki) did not arrive within {}", principal.value(), timing.agents());
+            return new Reply<>(Reply.Outcome.NO_ANSWER, null);
         } catch (ExecutionException disconnected) {
-            return Optional.empty();
+            return Reply.notConnected();
         } finally {
             link.contexts.remove(id);
+        }
+    }
+
+    /**
+     * 用户点名的技能：让电脑当场读，最多等 {@link Timing#agents()}。协议 3 及以前的连接程序不认识这条消息，
+     * 发了它会断开，所以直接算没连上。
+     */
+    public Reply<SkillLoaded> skillLoad(Principal principal, String session, String skills, List<String> names) throws InterruptedException {
+        Link link = links.get(principal);
+        if (link == null || link.over.get() || !link.skillLists()) {
+            return Reply.notConnected();
+        }
+        String id = "k-" + ids.incrementAndGet();
+        CompletableFuture<SkillLoaded> reply = new CompletableFuture<>();
+        link.loads.put(id, reply);
+        try {
+            if (!link.send(new SkillLoad(id, session, skills, names))) {
+                return Reply.notConnected();
+            }
+            return new Reply<>(Reply.Outcome.OK, reply.get(timing.agents().toMillis(), TimeUnit.MILLISECONDS));
+        } catch (TimeoutException late) {
+            LOG.info("local link for {}: {} named skill(s) did not arrive within {}", principal.value(), names.size(), timing.agents());
+            return new Reply<>(Reply.Outcome.NO_ANSWER, null);
+        } catch (ExecutionException disconnected) {
+            return Reply.notConnected();
+        } finally {
+            link.loads.remove(id);
         }
     }
 
@@ -357,6 +414,7 @@ public final class LocalLinks implements AutoCloseable {
         private final Map<String, CompletableFuture<Result>> calls = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<ContextResult>> contexts = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<BrowseResult>> browses = new ConcurrentHashMap<>();
+        private final Map<String, CompletableFuture<SkillLoaded>> loads = new ConcurrentHashMap<>();
         private final AtomicBoolean over = new AtomicBoolean();
         /** {@code welcome} 发出去了（或者连接已经断了，不会再发）。 */
         private final CountDownLatch welcomed = new CountDownLatch(1);
@@ -376,6 +434,11 @@ public final class LocalLinks implements AutoCloseable {
             return hello.protocol() >= LocalWorkspace.SESSION_DIRS;
         }
 
+        /** 连接程序会列技能和 wiki 页、认 {@code skill} 工具和点名（协议 4 起）。 */
+        boolean skillLists() {
+            return hello.protocol() >= LocalWorkspace.SKILL_LISTS;
+        }
+
         /** 电脑发来的一条消息。方向不对的消息算协议错误，关掉连接，电脑会重连。 */
         public void receive(Message message) {
             switch (message) {
@@ -393,6 +456,12 @@ public final class LocalLinks implements AutoCloseable {
                 }
                 case BrowseResult result -> {
                     CompletableFuture<BrowseResult> waiting = browses.get(result.id());
+                    if (waiting != null) {
+                        waiting.complete(result);
+                    }
+                }
+                case SkillLoaded result -> {
+                    CompletableFuture<SkillLoaded> waiting = loads.get(result.id());
                     if (waiting != null) {
                         waiting.complete(result);
                     }
@@ -424,9 +493,12 @@ public final class LocalLinks implements AutoCloseable {
                 waiting.complete(new Result("disconnected", DISCONNECTED, true, List.of()));
             }
             for (CompletableFuture<ContextResult> waiting : contexts.values()) {
-                waiting.complete(new ContextResult("disconnected", null));
+                waiting.complete(new ContextResult(DISCONNECTED_ID, null));
             }
             for (CompletableFuture<BrowseResult> waiting : browses.values()) {
+                waiting.completeExceptionally(new IllegalStateException("disconnected"));
+            }
+            for (CompletableFuture<SkillLoaded> waiting : loads.values()) {
                 waiting.completeExceptionally(new IllegalStateException("disconnected"));
             }
             // 叫醒排队等名额的调用，它们看到连接已断就返回

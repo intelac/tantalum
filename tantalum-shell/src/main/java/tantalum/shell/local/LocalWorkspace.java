@@ -20,25 +20,37 @@ public final class LocalWorkspace implements ToolGroup {
 
     /** 总开关，也是转发工具的服务端名。 */
     public static final String MASTER = "local-workspace";
-    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关，默认都开。 */
-    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell");
+    /** “技能”和“知识库”两个子开关。知识库没有自己的工具，只管 system 里那一段。 */
+    public static final String SKILLS = "skills";
+    public static final String WIKI = "wiki";
+    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库六个子开关，默认都开。 */
+    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI);
     /** {@code ContextAssembled.toolSources} 里的来源。 */
     public static final String SOURCE = "local";
     /** 从这个协议版本起，连接程序按会话的工作目录解析相对路径。 */
     static final int SESSION_DIRS = 3;
+    /** 从这个协议版本起，连接程序会列技能和 wiki 页、有 {@code skill} 工具。 */
+    public static final int SKILL_LISTS = 4;
 
     /** 每一类工具对应的子开关。 */
     /** 开关的种类；这个文件里的 {@code Kind} 是本机工具的种类（读、写、git、shell）。 */
     private static final tantalum.shell.plugin.Kind LOCAL = tantalum.shell.plugin.Kind.LOCAL;
     private static final Map<Kind, String> SWITCH = Map.of(
-            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell", Kind.SKILL, "skills");
+            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell", Kind.SKILL, SKILLS);
 
     private final PluginSwitches switches;
     private final LocalLinks links;
+    private final LocalDirs dirs;
 
+    /** 没有地方填目录时（测试）：技能和知识库都当没填。 */
     public LocalWorkspace(PluginSwitches switches, LocalLinks links) {
+        this(switches, links, LocalDirs.NONE);
+    }
+
+    public LocalWorkspace(PluginSwitches switches, LocalLinks links, LocalDirs dirs) {
         this.switches = switches;
         this.links = links;
+        this.dirs = dirs;
     }
 
     public static String switchName(Kind kind) {
@@ -70,11 +82,28 @@ public final class LocalWorkspace implements ToolGroup {
         return tool instanceof LocalTool local && enabled(user, local.kind());
     }
 
+    /** {@code skill} 工具还要用户填了技能目录：没填的人工具列表和以前一样。 */
     public boolean enabled(Principal user, Kind kind) {
-        return kind != Kind.SKILL
-                && switches.enabled(user, LOCAL, MASTER)
+        return switches.enabled(user, LOCAL, MASTER)
                 && switches.enabled(user, LOCAL, SWITCH.get(kind))
-                && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false);
+                && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false)
+                && (kind != Kind.SKILL || dirs.skillsDir(user).isPresent());
+    }
+
+    /** 这次运行要列的技能目录：{@code skill} 工具可用时才有。 */
+    public Optional<String> skillsDir(Principal user) {
+        return enabled(user, Kind.SKILL) ? dirs.skillsDir(user) : Optional.empty();
+    }
+
+    /** 这次运行要列的 wiki 目录：总开关和“知识库”开着、电脑连着、连接程序够新、填了目录。 */
+    public Optional<String> wikiDir(Principal user) {
+        boolean on = switches.enabled(user, LOCAL, MASTER) && switches.enabled(user, LOCAL, WIKI)
+                && links.status(user).map(status -> status.hello().protocol() >= SKILL_LISTS).orElse(false);
+        return on ? dirs.wikiDir(user) : Optional.empty();
+    }
+
+    public LocalDirs dirs() {
+        return dirs;
     }
 
     /**
@@ -87,12 +116,12 @@ public final class LocalWorkspace implements ToolGroup {
             case WRITE -> hello.write();
             case SHELL -> hello.shell().available();
             case GIT -> hello.git();
-            // 技能的开关和目录设置还没接上（skills-wiki 阶段 B），在那之前 skill 工具对谁都不开
-            case SKILL -> false;
+            // 旧的连接程序不认识 skill 工具，也不会列技能
+            case SKILL -> hello.protocol() >= SKILL_LISTS;
         };
     }
 
-    /** 插件页上的开关状态：总开关和四个子开关，按 {@link #SWITCHES} 的顺序。 */
+    /** 插件页上的开关状态：总开关和各个子开关，按 {@link #SWITCHES} 的顺序。 */
     public Map<String, Boolean> switches(Principal user) {
         Map<String, Boolean> states = new LinkedHashMap<>();
         for (String name : SWITCHES) {
@@ -168,6 +197,17 @@ public final class LocalWorkspace implements ToolGroup {
             return Optional.empty();
         }
         return links.agents(user, dir);
+    }
+
+    /**
+     * 一次往返问电脑要 {@code AGENTS.md}、技能清单、wiki 页；技能和 wiki 只在 {@link #skillsDir}、{@link #wikiDir} 有值时问。
+     * 总开关关着算没连上。
+     */
+    public LocalLinks.Reply<tantalum.local.wire.ContextResult> context(Principal user, String dir) throws InterruptedException {
+        if (!switches.enabled(user, LOCAL, MASTER)) {
+            return LocalLinks.Reply.notConnected();
+        }
+        return links.context(user, dir, skillsDir(user).orElse(null), wikiDir(user).orElse(null));
     }
 
     public LocalLinks links() {

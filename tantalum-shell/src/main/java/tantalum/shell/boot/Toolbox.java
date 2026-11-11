@@ -28,6 +28,8 @@ import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
+import tantalum.shell.skill.SkillCatalog;
+import tantalum.shell.skill.SkillSettings;
 import tantalum.shell.tool.BuiltinTools;
 import tantalum.shell.tool.ToolCatalog;
 
@@ -35,7 +37,8 @@ import tantalum.shell.tool.ToolCatalog;
  * 装配第二步：工具、插件和联网——工具目录、连到电脑的连接、出口和浏览器、MCP、插件开关的入口、模型路线。
  * 管理员关掉的那一项不注册工具；这一组照样进开关，插件页照样显示。
  */
-record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks, LocalWorkspace localWorkspace, AddressRules addressRules,
+record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks, LocalWorkspace localWorkspace, SkillSettings skillSettings,
+               SkillCatalog skillCatalog, AddressRules addressRules,
                Egress egress, Browsers browsers, WebAccess webAccess, McpRegistry mcp, McpSettings mcpSettings, Routes routes,
                CompactionPolicy compaction, PluginGate gate, boolean web) {
 
@@ -51,7 +54,8 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         ToolImages toolImages = new ToolImages(stores.storage().attachments);
         // 服务器上只读附件；读写文件、Git 都转发到用户的电脑
         BuiltinTools.of(stores.storage().attachments).forEach(catalog::register);
-        LocalTool.all(localLinks, toolImages, properties.toolTimeout()).forEach(catalog::register);
+        SkillSettings skillSettings = new SkillSettings(stores.params());
+        LocalTool.all(localLinks, toolImages, properties.toolTimeout(), skillSettings).forEach(catalog::register);
         MemoryTools.all(stores.memories()).forEach(catalog::register);
         tools.forEach(catalog::register);
 
@@ -76,7 +80,8 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         McpRegistry mcp = new McpRegistry(mcpSettings, toolImages);
         opened.add(mcp);
         catalog.setSource(mcp);
-        LocalWorkspace localWorkspace = new LocalWorkspace(stores.switches(), localLinks);
+        LocalWorkspace localWorkspace = new LocalWorkspace(stores.switches(), localLinks, skillSettings);
+        SkillCatalog skillCatalog = new SkillCatalog(localWorkspace);
         WebAccess webAccess = new WebAccess(stores.switches(), web.fetch().enabled(), browser.enabled(), web.blockPrivateNetwork());
         // 每个模型的窗口在它的路线的列表里，每次提问按这次用的模型算压缩设置
         Routes started = routes.start(LIST_STARTUP_WAIT);
@@ -84,7 +89,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         PluginGate gate = new PluginGate(catalog, stores.switches(), List.of(localWorkspace, webAccess),
                 mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                 hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()), stores.params());
-        return new Toolbox(catalog, toolImages, localLinks, localWorkspace, addressRules, egress, browsers, webAccess, mcp, mcpSettings,
+        return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog, addressRules, egress, browsers, webAccess, mcp, mcpSettings,
                 started, compaction, gate, web.any());
     }
 

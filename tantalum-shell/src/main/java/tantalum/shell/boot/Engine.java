@@ -199,6 +199,16 @@ public final class Engine implements AutoCloseable {
         return toolbox.localWorkspace();
     }
 
+    /** 每个用户填的技能目录、wiki 目录和关掉的技能。 */
+    public tantalum.shell.skill.SkillSettings skillSettings() {
+        return toolbox.skillSettings();
+    }
+
+    /** 向电脑要技能清单和 wiki 页，留着每个用户最近一次的。 */
+    public tantalum.shell.skill.SkillCatalog skillCatalog() {
+        return toolbox.skillCatalog();
+    }
+
     public McpRegistry mcp() {
         return toolbox.mcp();
     }

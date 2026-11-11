@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import tantalum.local.tool.LocalResult;
+import tantalum.local.tool.SkillTool;
 import tantalum.local.tool.Tools;
 import tantalum.shell.attachment.ToolImages;
 import tantalum.shell.plugin.Tool;
@@ -27,17 +28,24 @@ public final class LocalTool implements Tool {
     private final LocalLinks links;
     private final ToolImages images;
     private final Duration standard;
+    private final LocalDirs dirs;
 
-    LocalTool(tantalum.local.tool.LocalTool definition, LocalLinks links, ToolImages images, Duration standard) {
+    LocalTool(tantalum.local.tool.LocalTool definition, LocalLinks links, ToolImages images, Duration standard, LocalDirs dirs) {
         this.definition = definition;
         this.links = links;
         this.images = images;
         this.standard = standard;
+        this.dirs = dirs;
     }
 
     /** 本机工作区的全部工具，顺序同 {@link Tools#all()}。{@code standard} 是服务器的标准工具超时。 */
     public static List<Tool> all(LocalLinks links, ToolImages images, Duration standard) {
-        return Tools.all().stream().<Tool>map(definition -> new LocalTool(definition, links, images, standard)).toList();
+        return all(links, images, standard, LocalDirs.NONE);
+    }
+
+    /** 同上，{@code dirs} 是用户填的技能目录和关掉的技能，{@code skill} 工具用。 */
+    public static List<Tool> all(LocalLinks links, ToolImages images, Duration standard, LocalDirs dirs) {
+        return Tools.all().stream().<Tool>map(definition -> new LocalTool(definition, links, images, standard, dirs)).toList();
     }
 
     /** 全部转发工具的调度描述，不用连电脑。 */
@@ -65,8 +73,17 @@ public final class LocalTool implements Tool {
     /** 不认 {@code /attachments/} 路径：附件用 {@code read_attachment} 读，旧会话不做兼容（Yi 2026-11-06 定）。 */
     @Override
     public ToolOutput run(ToolContext context, Json arguments) throws InterruptedException, IOException {
+        String skills = null;
+        if (definition.kind() == tantalum.local.tool.LocalTool.Kind.SKILL) {
+            // 用户关掉的技能和不存在的说同一句话，不发给电脑
+            String skill = argument(arguments, "name");
+            if (dirs.off(context.principal()).contains(skill)) {
+                return new ToolOutput(SkillTool.unknown(skill), true);
+            }
+            skills = dirs.skillsDir(context.principal()).orElse(null);
+        }
         LocalResult result = links.call(context.principal(), context.session().value(), name(), arguments,
-                definition.timeout(arguments, standard), context.dir());
+                definition.timeout(arguments, standard), context.dir(), skills);
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
         }

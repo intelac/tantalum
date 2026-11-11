@@ -29,4 +29,9 @@ public record LocalContext(String session, AllowedDirs dirs, Observations observ
     public LocalContext(String session, AllowedDirs dirs, Observations observations, Sandbox sandbox) {
         this(session, dirs, observations, sandbox, null);
     }
+
+    /** 同一份上下文，带上这次调用的技能目录。 */
+    public LocalContext withSkills(String dir) {
+        return new LocalContext(session, dirs, observations, sandbox, dir);
+    }
 }

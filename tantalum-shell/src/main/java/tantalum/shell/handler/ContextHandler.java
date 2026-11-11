@@ -20,7 +20,10 @@ import tantalum.shell.route.Route;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
+import tantalum.shell.skill.SkillCatalog;
+import tantalum.shell.skill.SkillSection;
 import tantalum.shell.tool.ToolCatalog;
+import tantalum.shell.wiki.WikiSection;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.Command;
 import tantalum.value.event.CommandDropped;
@@ -34,8 +37,8 @@ import tantalum.value.state.ContextSection;
 
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
- * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → 本机工作区 → AGENTS.md → 该用户的记忆索引；每段只在有内容时加入。
- * 本机工作区一段和 {@code AGENTS.md} 都来自用户连着的电脑，没连上就没有；服务器目录里的不再读。
+ * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → 本机工作区 → AGENTS.md → 技能清单 → wiki → 该用户的记忆索引；每段只在有内容时加入。
+ * 本机工作区一段、{@code AGENTS.md}、技能清单和 wiki 都来自用户连着的电脑，没连上就没有；服务器目录里的不再读。
  * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只比较这几段，把变化追加给模型，不再换 system。
  */
 public final class ContextHandler implements Handler {
@@ -62,6 +65,7 @@ public final class ContextHandler implements Handler {
     private final ChoiceCheck check;
     private final UserSettings users;
     private final Function<SessionId, String> dirs;
+    private final SkillCatalog skills;
 
     /** 会话都没有工作目录时（测试）。 */
     public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
@@ -77,6 +81,14 @@ public final class ContextHandler implements Handler {
     public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
                           KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users,
                           Function<SessionId, String> dirs) {
+        this(local, basePrompt, catalog, gate, memories, knowledge, fixedNote, compaction, routes, users, dirs, new SkillCatalog(local));
+    }
+
+    /** {@code skills} 向电脑要 {@code AGENTS.md}、技能清单和 wiki 页；和插件页、点名共用一个，它留着每个用户最近一次的清单。 */
+    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
+                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users,
+                          Function<SessionId, String> dirs, SkillCatalog skills) {
+        this.skills = skills;
         this.dirs = dirs;
         this.gate = gate;
         this.fixedNote = fixedNote;
@@ -103,10 +115,20 @@ public final class ContextHandler implements Handler {
         String dir = dirs.apply(command.run().session());
         Optional<String> workspace = local.section(principal, dir);
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
-        // 最多等 2 秒，没回就这次不带（LocalLinks.agents 记一行日志）
-        String agents = workspace.isEmpty() ? "" : capped(local.agents(principal, dir).orElse(""), AGENTS_MAX_BYTES);
+        // 一次往返，最多等 2 秒：没回的话 AGENTS.md 这次不带，技能和 wiki 用上一次的（LocalLinks 记一行日志）
+        SkillCatalog.Listing listing = workspace.isEmpty() ? new SkillCatalog.Listing(null, null, null) : skills.fetch(principal, dir);
+        String agents = listing.agents() == null ? "" : capped(listing.agents(), AGENTS_MAX_BYTES);
         if (!agents.isEmpty()) {
             sections.add(new ContextSection(AGENTS_TAG, escape(agents), false));
+        }
+        // 这两段自己转义过（描述、路径、标题里没有尖括号，index.md 的闭合标签改过），模板里的标签原样留着
+        String skillList = SkillSection.text(listing.skills(), local.dirs().off(principal));
+        if (!skillList.isEmpty()) {
+            sections.add(new ContextSection(SkillSection.NAME, skillList, false));
+        }
+        String wiki = WikiSection.text(listing.wiki());
+        if (!wiki.isEmpty()) {
+            sections.add(new ContextSection(WikiSection.NAME, wiki, false));
         }
         String index = memories.of(principal).indexText().strip();
         if (!index.isEmpty()) {
