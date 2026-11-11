@@ -9,7 +9,7 @@ import { AppearancePane } from "./AppearancePane";
 import { LanguagePane } from "./LanguagePane";
 import { MemoryPane } from "./MemoryPane";
 import { ModelPane } from "./ModelPane";
-import { UsersPane } from "./UsersPane";
+import { OpsPane } from "./OpsPane";
 
 type Pane = "appearance" | "language" | "model" | "memory" | "account" | "users";
 
@@ -72,7 +72,7 @@ export function SettingsDialog({ open, onClose, config, choice = null, username,
           {pane === "model" && <ModelPane config={config} choice={choice} />}
           {pane === "memory" && <MemoryPane />}
           {pane === "account" && <AccountPane username={username} onLogout={onLogout} />}
-          {pane === "users" && admin && <UsersPane self={username} />}
+          {pane === "users" && admin && <OpsPane self={username} />}
         </div>
       </div>
     </Dialog>

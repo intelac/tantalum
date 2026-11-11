@@ -4,9 +4,11 @@ import { useState } from "react";
 import type { Account } from "../api/types";
 import { useText } from "../text";
 import { errorLine } from "../text/errors";
-import { relativeTime } from "../text/format";
+import { formatNumber, relativeTime } from "../text/format";
+import { ParamForm } from "../plugins/ParamForm";
+import { usePluginDefaults } from "../plugins/usePlugins";
 import { Button } from "../ui/Button";
-import { useCreateUser, useResetUserPassword, useUpdateUser, useUsers } from "./useUsers";
+import { useAssignedParams, useCreateUser, useResetUserPassword, useUpdateUser, useUsers } from "./useUsers";
 
 const FIELD = "focus-plain w-full rounded-md border border-line bg-raised px-3 py-1.5 text-sm text-fg focus:border-line-strong";
 
@@ -15,10 +17,16 @@ interface Props {
   self: string;
 }
 
-/** 管理员管用户（需求 3.2）：列表、新建、停用/启用、设/取消管理员、重置密码。错误按代码翻译。 */
-export function UsersPane({ self }: Props) {
+/**
+ * 运维（ops-hardening-2 需求 3.2，plugin-settings P14）：用户列表、新建、停用/启用、设/取消管理员、重置密码；
+ * 每人今天的用量；有“只有管理员能定”的参数时，每人一个“参数”可以单独指定。错误按代码翻译。
+ */
+export function OpsPane({ self }: Props) {
   const t = useText();
   const list = useUsers();
+  // 没有一个插件声明管理员的参数时，不出现“参数”按钮；这份查不到（旧服务器）也一样
+  const defaults = usePluginDefaults();
+  const assignable = (defaults.data?.items ?? []).some((item) => item.params.some((param) => param.owner === "admin"));
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   return (
@@ -32,22 +40,25 @@ export function UsersPane({ self }: Props) {
         </p>
       )}
       {list.data !== undefined && (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="text-left text-xs text-fg-muted">
-              <th className="py-1 pr-3 font-normal">{t.users.columns.name}</th>
-              <th className="py-1 pr-3 font-normal">{t.users.columns.role}</th>
-              <th className="py-1 pr-3 font-normal">{t.users.columns.state}</th>
-              <th className="py-1 pr-3 font-normal">{t.users.columns.createdAt}</th>
-              <th className="py-1" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {list.data.users.map((account) => (
-              <Row key={account.name} account={account} isSelf={account.name === self} onNotice={setNotice} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="text-left text-xs text-fg-muted">
+                <th className="py-1 pr-3 font-normal">{t.users.columns.name}</th>
+                <th className="py-1 pr-3 font-normal">{t.users.columns.role}</th>
+                <th className="py-1 pr-3 font-normal">{t.users.columns.state}</th>
+                <th className="py-1 pr-3 font-normal">{t.users.columns.createdAt}</th>
+                <th className="py-1 pr-3 text-right font-normal">{t.users.columns.usage}</th>
+                <th className="py-1" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {list.data.users.map((account) => (
+                <Row key={account.name} account={account} isSelf={account.name === self} assignable={assignable} onNotice={setNotice} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {notice !== null && (
         <p role="status" className="text-sm text-fg-muted">
@@ -74,10 +85,12 @@ export function UsersPane({ self }: Props) {
   );
 }
 
-function Row({ account, isSelf, onNotice }: { account: Account; isSelf: boolean; onNotice: (text: string) => void }) {
+function Row({ account, isSelf, assignable, onNotice }: { account: Account; isSelf: boolean; assignable: boolean; onNotice: (text: string) => void }) {
   const t = useText();
   const update = useUpdateUser();
   const [resetting, setResetting] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const usage = account.usageToday;
 
   async function change(change: { disabled?: boolean; admin?: boolean }): Promise<void> {
     try {
@@ -97,6 +110,16 @@ function Row({ account, isSelf, onNotice }: { account: Account; isSelf: boolean;
         <td className="py-1.5 pr-3 text-fg-muted">{account.admin ? t.users.admin : t.users.user}</td>
         <td className="py-1.5 pr-3 text-fg-muted">{account.disabled ? t.users.disabled : t.users.enabled}</td>
         <td className="py-1.5 pr-3 text-fg-muted">{relativeTime(account.createdAt)}</td>
+        <td
+          className="py-1.5 pr-3 text-right text-fg-muted tabular-nums"
+          title={
+            usage === undefined
+              ? undefined
+              : t.users.usageDetail(formatNumber(usage.input), formatNumber(usage.output), formatNumber(usage.cacheRead), formatNumber(usage.cacheWrite))
+          }
+        >
+          {usage === undefined ? "" : formatNumber(usage.total)}
+        </td>
         <td className="py-1.5">
           <div role="group" aria-label={t.users.actionsFor(account.name)} className="flex flex-wrap justify-end gap-1">
             <Button size="sm" variant="ghost" disabled={isSelf || update.isPending} title={isSelf ? t.users.selfHint : undefined} onClick={() => void change({ disabled: !account.disabled })}>
@@ -108,12 +131,17 @@ function Row({ account, isSelf, onNotice }: { account: Account; isSelf: boolean;
             <Button size="sm" variant="ghost" onClick={() => setResetting((open) => !open)}>
               {t.users.resetPassword}
             </Button>
+            {assignable && (
+              <Button size="sm" variant="ghost" aria-expanded={assigning} onClick={() => setAssigning((open) => !open)}>
+                {t.users.params}
+              </Button>
+            )}
           </div>
         </td>
       </tr>
-      {(update.isError || resetting) && (
+      {(update.isError || resetting || assigning) && (
         <tr>
-          <td colSpan={5} className="pb-2">
+          <td colSpan={6} className="pb-2">
             {update.isError && (
               <p role="alert" className="text-sm text-danger">
                 {errorLine(update.error)}
@@ -129,10 +157,34 @@ function Row({ account, isSelf, onNotice }: { account: Account; isSelf: boolean;
                 onCancel={() => setResetting(false)}
               />
             )}
+            {assigning && <Assigned user={account.name} />}
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+/** 给一个人单独指定“只有管理员能定”的参数；清掉一项就回到默认。 */
+function Assigned({ user }: { user: string }) {
+  const t = useText();
+  const assigned = useAssignedParams(user);
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-line p-3">
+      <p className="text-xs text-fg-faint">{t.users.paramsHint(user)}</p>
+      {assigned.query.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
+      {assigned.query.isError && (
+        <p role="alert" className="text-sm text-danger">
+          {t.users.paramsLoadFailed}
+        </p>
+      )}
+      {(assigned.query.data?.items ?? []).map((item) => (
+        <div key={`${item.kind}/${item.name}`} className="flex flex-col gap-2">
+          <h4 className="font-mono text-xs text-fg">{item.name}</h4>
+          <ParamForm name={item.name} params={item.params} mode="assigned" onSave={(values) => assigned.save(item.kind, item.name, values)} />
+        </div>
+      ))}
+    </div>
   );
 }
 

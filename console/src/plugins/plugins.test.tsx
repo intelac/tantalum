@@ -85,9 +85,9 @@ describe("PluginsDialog", () => {
     expect(within(builtins).getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("region", { name: "本机工作区" })).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "MCP 服务器" })).getByText("已连接")).toBeTruthy();
-    const hooks = screen.getByRole("region", { name: "钩子插件" });
+    const hooks = screen.getByRole("region", { name: "规则" });
     expect(within(hooks).getByText("挂在：运行结束前、插件工作 citation")).toBeTruthy();
-    expect(screen.getByText(/从下一次提问开始可用/)).toBeTruthy();
+    expect(screen.getByText(/只影响你自己，从你的下一次提问开始生效/)).toBeTruthy();
   });
 
   it("turns a tool on for the current user", async () => {
@@ -136,7 +136,7 @@ describe("PluginsDialog", () => {
     open();
     const quota = await screen.findByRole("switch", { name: "dailyQuota" });
     expect((quota as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("必须开启")).toBeTruthy();
+    expect(screen.getByText("锁定：服务器配置里设为必须开启")).toBeTruthy();
     await userEvent.click(quota);
     expect(calls.some((call) => call.method === "PUT")).toBe(false);
   });

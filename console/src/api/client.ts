@@ -3,6 +3,7 @@
 import { reportHalted } from "./connection";
 import type {
   Account,
+  AssignedParams,
   AttachmentRef,
   Config,
   ErrorParam,
@@ -17,10 +18,14 @@ import type {
   Messages,
   ModelChoice,
   ModelsResponse,
+  ParamValue,
+  PluginDefault,
+  PluginDefaultChange,
   PluginKind,
   Plugins,
   Project,
   RunView,
+  SavedParams,
   SessionSummary,
   SubmitMode,
   TraceCall,
@@ -313,6 +318,52 @@ export function listPlugins(): Promise<Plugins> {
 /** 只改当前登录用户的开关。400 时的 ApiError.message 是拒绝原因（如必须开启的插件）。 */
 export function setPlugin(kind: PluginKind, name: string, enabled: boolean): Promise<unknown> {
   return call(`/api/plugins/${kind}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify({ enabled }) });
+}
+
+/** 开关恢复默认：删掉我自己的设置，跟着管理员的默认走。 */
+export function resetPlugin(kind: PluginKind, name: string): Promise<unknown> {
+  return call(`/api/plugins/${kind}/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+function paramsPath(kind: PluginKind, name: string): string {
+  return `/api/plugins/${kind}/${encodeURIComponent(name)}/params`;
+}
+
+/** 保存我自己的参数：只带改了的；密码给了字符串才替换。有一项不合格就一项都不存（400 `param/invalid`，带 `key`、`reason`）。 */
+export function saveParams(kind: PluginKind, name: string, values: Record<string, ParamValue>): Promise<SavedParams> {
+  return call(paramsPath(kind, name), { method: "PUT", body: JSON.stringify({ values }) });
+}
+
+/** 参数恢复默认：删掉我填的全部普通参数，密码不动。 */
+export function resetParams(kind: PluginKind, name: string): Promise<unknown> {
+  return call(paramsPath(kind, name), { method: "DELETE" });
+}
+
+export function clearSecret(kind: PluginKind, name: string, key: string): Promise<unknown> {
+  return call(`${paramsPath(kind, name)}/${encodeURIComponent(key)}`, { method: "DELETE" });
+}
+
+/** 管理员：所有开关的默认、锁、参数默认值。 */
+export function listPluginDefaults(): Promise<{ items: PluginDefault[] }> {
+  return call("/api/admin/plugins");
+}
+
+/** 管理员：改一项的默认。代码或配置里锁住的项改开关和锁会 403，参数默认值照样能改。 */
+export function setPluginDefault(kind: string, name: string, change: PluginDefaultChange): Promise<PluginDefault> {
+  return call(`/api/admin/plugins/${kind}/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(change) });
+}
+
+/** 管理员：一个人的“管理员的”参数。 */
+export function listAssignedParams(user: string): Promise<AssignedParams> {
+  return call(`/api/admin/users/${encodeURIComponent(user)}/params`);
+}
+
+/** 管理员：给一个人指定参数；`null` 是清掉、回到默认。 */
+export function assignParams(user: string, kind: string, plugin: string, values: Record<string, ParamValue | null>): Promise<AssignedParams> {
+  return call(`/api/admin/users/${encodeURIComponent(user)}/params/${kind}/${encodeURIComponent(plugin)}`, {
+    method: "PUT",
+    body: JSON.stringify({ values }),
+  });
 }
 
 /** 本机工作区的开关和连接状态（local-workspace）。开关用 {@link setPlugin}("local", …)。 */

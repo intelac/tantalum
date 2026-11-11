@@ -55,13 +55,13 @@ function open(routes: Route[], admin: boolean) {
 describe("UsersPane", () => {
   it("is absent for a non-administrator", () => {
     open([], false);
-    expect(screen.queryByRole("button", { name: "用户" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "运维" })).toBeNull();
     expect(screen.getByRole("button", { name: "账号" })).not.toBeNull();
   });
 
   it("lists accounts and keeps an administrator from disabling or demoting themselves", async () => {
     open([{ path: "/api/users", status: 200, body: JSON.stringify(USERS) }], true);
-    await userEvent.click(screen.getByRole("button", { name: "用户" }));
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
     await screen.findByText("alice");
     const mine = within(screen.getByRole("group", { name: "yi 的操作" }));
     expect((mine.getByRole("button", { name: "停用" }) as HTMLButtonElement).disabled).toBe(true);
@@ -79,7 +79,7 @@ describe("UsersPane", () => {
       ],
       true,
     );
-    await userEvent.click(screen.getByRole("button", { name: "用户" }));
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
     await screen.findByText("alice");
     await userEvent.click(screen.getByRole("button", { name: "新建用户" }));
     await userEvent.type(screen.getByLabelText("名字"), "bob");
@@ -98,10 +98,49 @@ describe("UsersPane", () => {
       ],
       true,
     );
-    await userEvent.click(screen.getByRole("button", { name: "用户" }));
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
     await screen.findByText("alice");
     await userEvent.click(within(screen.getByRole("group", { name: "alice 的操作" })).getByRole("button", { name: "停用" }));
     await screen.findByText("这是最后一个管理员，不能停用或取消");
+  });
+});
+
+// plugin-settings 任务 34：今天用量，按人指定管理员的参数。
+describe("OpsPane usage and assigned settings", () => {
+  const usage = { input: 1200, output: 300, cacheRead: 5000, cacheWrite: 0, total: 1500 };
+  const users = { users: [{ ...USERS.users[0]!, usageToday: usage }, USERS.users[1]!] };
+  const tokens = { key: "tokens", type: "number", label: { en: "Tokens", zh: "每天额度" }, hint: "", owner: "admin", min: 1, value: 1000, source: "builtin", editable: false };
+  const defaults = { items: [{ kind: "plugin", name: "quota", group: "rule", builtin: true, params: [tokens] }] };
+  const assigned = { user: "alice", items: [{ kind: "plugin", name: "quota", params: [tokens] }] };
+
+  it("shows today's usage with its breakdown, and no settings button when nothing is administrator-only", async () => {
+    open([{ path: "/api/users", status: 200, body: JSON.stringify(users) }], true);
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
+    const total = await screen.findByText("1,500");
+    expect(total.getAttribute("title")).toBe("读入 1,200，输出 300，读缓存 5,000，写缓存 0（按 UTC 的一天算）");
+    expect(screen.queryByRole("button", { name: "参数" })).toBeNull();
+  });
+
+  it("assigns an administrator-only setting to one person", async () => {
+    const calls = open(
+      [
+        { path: "/api/users", status: 200, body: JSON.stringify(users) },
+        { path: "/api/admin/plugins", status: 200, body: JSON.stringify(defaults) },
+        { path: "/api/admin/users/alice/params", status: 200, body: JSON.stringify(assigned) },
+        { method: "PUT", path: "/api/admin/users/alice/params/plugin/quota", status: 200, body: JSON.stringify(assigned) },
+      ],
+      true,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
+    await screen.findByText("alice");
+    await userEvent.click(await within(screen.getByRole("group", { name: "alice 的操作" })).findByRole("button", { name: "参数" }));
+    const form = within(await screen.findByRole("form", { name: "quota 的参数" }));
+    expect(form.getByText("· 默认")).toBeTruthy();
+    await userEvent.clear(form.getByLabelText("每天额度"));
+    await userEvent.type(form.getByLabelText("每天额度"), "50");
+    await userEvent.click(form.getByRole("button", { name: "保存 quota" }));
+    await waitFor(() => expect(calls.some((call) => call.method === "PUT")).toBe(true));
+    expect(calls.find((call) => call.method === "PUT")?.body).toBe('{"values":{"tokens":50}}');
   });
 });
 

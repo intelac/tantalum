@@ -78,17 +78,17 @@ test.describe("插件页", () => {
     await expect(web.getByRole("switch", { name: "联网" })).toBeEnabled();
   });
 
-  test("列出内置工具、MCP 服务器和钩子插件，开关只改自己的", async ({ page }) => {
+  test("列出内置工具、MCP 服务器和规则插件，开关只改自己的", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     const dialog = await openPlugins(page);
     await expect(dialog.getByText("读文件")).toBeVisible();
-    await expect(dialog.getByText(/从下一次提问开始可用/)).toBeVisible();
+    await expect(dialog.getByText(/从你的下一次提问开始生效/)).toBeVisible();
     const mcp = dialog.getByRole("region", { name: "MCP 服务器" });
     await expect(mcp.getByText("demo")).toBeVisible();
     await expect(mcp.getByText("已连接")).toBeVisible();
     await mcp.getByRole("button", { name: /个工具/ }).click();
     await expect(mcp.getByRole("switch", { name: "mcp__demo__lookup" })).toBeVisible();
-    await expect(dialog.getByRole("region", { name: "钩子插件" }).getByText("citation", { exact: false }).first()).toBeVisible();
+    await expect(dialog.getByRole("region", { name: "规则" }).getByText("citation", { exact: false }).first()).toBeVisible();
 
     // 文件工具不在内置工具里，在本机工作区卡片上
     await expect(dialog.getByRole("region", { name: "内置工具" }).getByText("读附件")).toBeVisible();

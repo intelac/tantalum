@@ -23,7 +23,7 @@ test.describe("工具审批", () => {
     // 默认关：插件页上是关着的，可以打开
     await page.getByRole("button", { name: "插件", exact: true }).first().click();
     const dialog = page.getByRole("dialog", { name: "插件" });
-    const toggle = dialog.getByRole("region", { name: "钩子插件" }).getByRole("switch", { name: "toolApproval" });
+    const toggle = dialog.getByRole("region", { name: "规则" }).getByRole("switch", { name: "toolApproval" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(toggle).toBeEnabled();
     await toggle.click();

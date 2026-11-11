@@ -1,7 +1,7 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { PASSWORD, USER, login } from "./app";
 
-// ops-hardening-2 需求 3：管理员在设置页“用户”里加人、重置密码；新用户自己改密码；非管理员看不到“用户”页。
+// ops-hardening-2 需求 3：管理员在设置页“用户”里加人、重置密码；新用户自己改密码；非管理员看不到“运维”页。
 // e2e 服务器的第一个账号（e2e）是管理员。新建的用户名带时间戳，重跑不冲突；只改新用户的密码，别的用例不受影响。
 
 async function openSettings(page: Page) {
@@ -26,12 +26,12 @@ async function canLogin(browser: Browser, username: string, password: string): P
 }
 
 test.describe("用户管理", () => {
-  test("管理员新建用户、重置密码；新用户看不到“用户”页，能改自己的密码", async ({ browser }) => {
+  test("管理员新建用户、重置密码；新用户看不到“运维”页，能改自己的密码", async ({ browser }) => {
     const name = `e2e-new-${Date.now()}`;
     const admin = await browser.newPage();
     await login(admin, USER);
     const settings = await openSettings(admin);
-    await settings.getByRole("button", { name: "用户" }).click();
+    await settings.getByRole("button", { name: "运维" }).click();
     await expect(settings.getByRole("group", { name: `${USER} 的操作` })).toBeVisible();
     // 对自己不能停用、不能取消管理员
     const mine = settings.getByRole("group", { name: `${USER} 的操作` });
@@ -45,14 +45,14 @@ test.describe("用户管理", () => {
     await expect(settings.getByText(`已创建 ${name}。`)).toBeVisible();
     await expect(settings.getByRole("group", { name: `${name} 的操作` })).toBeVisible();
 
-    // 新用户：能登录，设置里没有“用户”页，账号页能改自己的密码
+    // 新用户：能登录，设置里没有“运维”页，账号页能改自己的密码
     expect(await canLogin(browser, name, "first-password")).toBe(true);
     const user = await browser.newPage();
     await user.goto("/login");
     await user.request.post("/api/auth/login", { data: { username: name, password: "first-password" }, headers: { origin: new URL(user.url()).origin } });
     const theirs = await openSettings(user);
     await expect(theirs.getByRole("button", { name: "账号" })).toBeVisible();
-    await expect(theirs.getByRole("button", { name: "用户" })).toHaveCount(0);
+    await expect(theirs.getByRole("button", { name: "运维" })).toHaveCount(0);
     await theirs.getByRole("button", { name: "账号" }).click();
     await theirs.getByLabel("当前密码").fill("first-password");
     await theirs.getByLabel("新密码", { exact: true }).fill("second-password");

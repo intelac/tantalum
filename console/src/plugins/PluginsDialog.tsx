@@ -1,64 +1,122 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { HookPlugin, McpServerView, PluginTool } from "../api/types";
+import type { HookPlugin, McpServerView, ParamView, PluginKind, PluginTool } from "../api/types";
 import { lookup, type Text, useLanguage, useText } from "../text";
 import { errorLine } from "../text/errors";
 import { pick } from "../text/localText";
 import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
+import { Tabs } from "../ui/Tabs";
+import { DefaultsPane, type Focus } from "./DefaultsPane";
+import { groupHooks } from "./groups";
 import { LocalWorkspaceCard } from "./LocalWorkspaceCard";
-import { Row, Section } from "./Rows";
-import { type Toggle, usePlugins, useTogglePlugin } from "./usePlugins";
+import { byUse, toolText } from "./names";
+import { ParamForm } from "./ParamForm";
+import { Group, Row, Section, SwitchNotes } from "./Rows";
+import { type Toggle, useOwnParams, usePlugins, useResetPlugin, useTogglePlugin } from "./usePlugins";
 import { WebCard } from "./WebCard";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** 管理员多一个“插件默认值”页签，锁定的行上多一个“去插件默认值改”。 */
+  admin?: boolean;
 }
 
-/** 插件页（core-tools 需求 7）：本机工作区、联网、内置工具、MCP 服务器、钩子插件五块，每项一个开关，只改自己的。 */
-export function PluginsDialog({ open, onClose }: Props) {
+/** 一行要用的动作：拨开关、恢复默认、（管理员）跳到默认值里的这一项。 */
+interface Actions {
+  set: (change: Toggle) => void;
+  reset: (kind: PluginKind, name: string) => void;
+  toDefaults?: (kind: PluginKind, name: string) => void;
+}
+
+/**
+ * 插件页（core-tools 需求 7，plugin-settings 需求 6）：规则、工具、工具输出处理三组，每项一个开关，只改自己的；
+ * 有参数的在行下面带一个自己保存的表单。管理员另有“插件默认值”页签。
+ */
+export function PluginsDialog({ open, onClose, admin = false }: Props) {
   const t = useText();
   const plugins = usePlugins(open);
   const toggle = useTogglePlugin();
-  const set = (change: Toggle) => toggle.mutate(change);
+  const reset = useResetPlugin();
+  const [tab, setTab] = useState<"mine" | "defaults">("mine");
+  const [focus, setFocus] = useState<Focus | null>(null);
   const data = plugins.data;
+  const actions: Actions = {
+    set: (change) => toggle.mutate(change),
+    reset: (kind, name) => reset.mutate({ kind, name }),
+    toDefaults: admin
+      ? (kind, name) => {
+          setFocus({ kind, name });
+          setTab("defaults");
+        }
+      : undefined,
+  };
+  const failed = toggle.isError ? toggle.error : reset.isError ? reset.error : null;
+  const hooks = groupHooks(data?.plugins ?? []);
   return (
-    <Dialog open={open} onClose={onClose} title={t.plugins.title} className="max-w-2xl">
-      <div className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto px-4 pt-2 pb-6 sm:px-6">
-        {data !== undefined && (
-          <p className="text-xs text-fg-faint">{data.midSessionChanges ? t.plugins.hintNextQuestion : t.plugins.hintNewSession}</p>
-        )}
-        {toggle.isError && (
-          <p role="alert" className="text-sm text-danger">
-            {t.plugins.saveFailed(errorLine(toggle.error))}
-          </p>
-        )}
-        {plugins.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
-        {plugins.isError && (
-          <p role="alert" className="text-sm text-danger">
-            {t.plugins.loadFailed}
-          </p>
-        )}
-        <LocalWorkspaceCard open={open} />
-        {data !== undefined && (
+    <Dialog open={open} onClose={onClose} title={t.plugins.title} className="max-w-[960px]">
+      {admin && (
+        <Tabs
+          className="border-b border-line px-4 sm:px-6"
+          label={t.plugins.tabs.label}
+          tabs={[
+            { id: "mine", label: t.plugins.tabs.mine },
+            { id: "defaults", label: t.plugins.tabs.defaults },
+          ]}
+          selected={tab}
+          onSelect={(id) => setTab(id === "defaults" ? "defaults" : "mine")}
+        />
+      )}
+      <div className="flex max-h-[calc(100dvh-9rem)] min-h-[50dvh] flex-col gap-6 overflow-y-auto px-4 pt-3 pb-6 sm:px-6">
+        {tab === "defaults" && admin ? (
+          <DefaultsPane focus={focus} />
+        ) : (
           <>
-            <WebCard web={data.web} onChange={(name, enabled) => set({ kind: "web", name, enabled })} />
-            <Section title={t.plugins.builtins}>
-              {byUse(data.tools, t.plugins).map((tool) => (
-                <ToolRow key={tool.name} tool={tool} onChange={(enabled) => set({ kind: "tool", name: tool.name, enabled })} />
-              ))}
-            </Section>
-            <Section title={t.plugins.mcp} empty={data.mcp.length === 0 ? t.plugins.noMcp : undefined}>
-              {data.mcp.map((server) => (
-                <ServerRow key={server.name} server={server} onChange={set} />
-              ))}
-            </Section>
-            <Section title={t.plugins.hooks} empty={data.plugins.length === 0 ? t.plugins.noHooks : undefined}>
-              {data.plugins.map((plugin) => (
-                <HookRow key={plugin.name} plugin={plugin} onChange={(enabled) => set({ kind: "plugin", name: plugin.name, enabled })} />
-              ))}
-            </Section>
+            {data !== undefined && (
+              <p className="text-xs text-fg-faint">
+                {data.midSessionChanges ? t.plugins.hintNextQuestion : t.plugins.hintNewSession} {admin && t.plugins.hintAdmin} {t.plugins.hintParams}
+              </p>
+            )}
+            {failed !== null && (
+              <p role="alert" className="text-sm text-danger">
+                {t.plugins.saveFailed(errorLine(failed))}
+              </p>
+            )}
+            {plugins.isPending && <p className="text-sm text-fg-faint">{t.common.loading}</p>}
+            {plugins.isError && (
+              <p role="alert" className="text-sm text-danger">
+                {t.plugins.loadFailed}
+              </p>
+            )}
+            {hooks.rule.length > 0 && (
+              <Group title={t.plugins.groups.rule}>
+                <HookList label={t.plugins.groups.rule} plugins={hooks.rule} actions={actions} />
+              </Group>
+            )}
+            <Group title={t.plugins.groups.tool}>
+              <LocalWorkspaceCard open={open} />
+              {data !== undefined && (
+                <>
+                  <WebCard web={data.web} onChange={(name, enabled) => actions.set({ kind: "web", name, enabled })} />
+                  <Section title={t.plugins.builtins}>
+                    {byUse(data.tools, t.plugins).map((tool) => (
+                      <ToolRow key={tool.name} tool={tool} actions={actions} />
+                    ))}
+                  </Section>
+                  <Section title={t.plugins.mcp} empty={data.mcp.length === 0 ? t.plugins.noMcp : undefined}>
+                    {data.mcp.map((server) => (
+                      <ServerRow key={server.name} server={server} actions={actions} />
+                    ))}
+                  </Section>
+                </>
+              )}
+            </Group>
+            {hooks.output.length > 0 && (
+              <Group title={t.plugins.groups.output}>
+                <HookList label={t.plugins.groups.output} plugins={hooks.output} actions={actions} />
+              </Group>
+            )}
           </>
         )}
       </div>
@@ -66,22 +124,27 @@ export function PluginsDialog({ open, onClose }: Props) {
   );
 }
 
-/** 按用途排：中文文案里列出的顺序（读附件，然后记忆），其余按名字跟在后面。 */
-function byUse(tools: PluginTool[], text: Text["plugins"]): PluginTool[] {
-  const order = Object.keys(text.tools);
-  const rank = (tool: PluginTool) => (order.includes(tool.name) ? order.indexOf(tool.name) : order.length);
-  return [...tools].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+/** 开着、又有参数的那一行下面的表单；关着时不显示（参数要打开才用得上）。 */
+function OwnParams({ kind, name, label, params }: { kind: PluginKind; name: string; label: string; params: readonly ParamView[] | undefined }) {
+  const own = useOwnParams(kind, name);
+  if (params === undefined || params.length === 0) return null;
+  return (
+    <ParamForm
+      className="pr-3 pb-3 pl-12 max-sm:pl-3"
+      name={label}
+      params={params}
+      mode="own"
+      onSave={own.save}
+      onReset={own.reset}
+      onClearSecret={own.clearSecret}
+    />
+  );
 }
 
-/** 内置工具一律用字典里的名字和说明，不显示给模型看的英文说明（console-i18n I8）；字典里没有的只显示工具名，plugins.test.tsx 会失败。 */
-function toolText(tool: PluginTool, text: Text["plugins"]): [string, string] {
-  const known = lookup(text.tools, tool.name);
-  return known !== undefined ? [known[0], known[1]] : [tool.name, ""];
-}
-
-function ToolRow({ tool, onChange }: { tool: PluginTool; onChange: (enabled: boolean) => void }) {
+function ToolRow({ tool, actions }: { tool: PluginTool; actions: Actions }) {
   const t = useText();
-  const [label, detail] = toolText(tool, t.plugins);
+  const [label, detail] = toolText(tool.name, t.plugins);
+  const toDefaults = actions.toDefaults;
   return (
     <Row
       name={
@@ -93,16 +156,28 @@ function ToolRow({ tool, onChange }: { tool: PluginTool; onChange: (enabled: boo
       detail={detail}
       label={label}
       checked={tool.enabled}
-      onChange={onChange}
-    />
+      disabled={tool.lock !== undefined}
+      onChange={(enabled) => actions.set({ kind: "tool", name: tool.name, enabled })}
+      aside={
+        <SwitchNotes
+          state={tool}
+          label={label}
+          onDefaults={toDefaults && (() => toDefaults("tool", tool.name))}
+          onReset={() => actions.reset("tool", tool.name)}
+        />
+      }
+    >
+      {tool.enabled && <OwnParams kind="tool" name={tool.name} label={label} params={tool.params} />}
+    </Row>
   );
 }
 
-function ServerRow({ server, onChange }: { server: McpServerView; onChange: (toggle: Toggle) => void }) {
+function ServerRow({ server, actions }: { server: McpServerView; actions: Actions }) {
   const t = useText();
   const [open, setOpen] = useState(false);
   const state = lookup(t.plugins.states, server.state) ?? server.state;
   const Chevron = open ? ChevronDown : ChevronRight;
+  const toDefaults = actions.toDefaults;
   return (
     <Row
       name={
@@ -121,7 +196,16 @@ function ServerRow({ server, onChange }: { server: McpServerView; onChange: (tog
       }
       label={server.name}
       checked={server.enabled}
-      onChange={(enabled) => onChange({ kind: "mcp", name: server.name, enabled })}
+      disabled={server.lock !== undefined}
+      onChange={(enabled) => actions.set({ kind: "mcp", name: server.name, enabled })}
+      aside={
+        <SwitchNotes
+          state={server}
+          label={server.name}
+          onDefaults={toDefaults && (() => toDefaults("mcp", server.name))}
+          onReset={() => actions.reset("mcp", server.name)}
+        />
+      }
     >
       {open && (
         <ul className="mx-3 mb-2 flex flex-col divide-y divide-line rounded-md border border-line">
@@ -129,12 +213,20 @@ function ServerRow({ server, onChange }: { server: McpServerView; onChange: (tog
           {server.tools.map((tool) => (
             <Row
               key={tool.name}
-              name={<span className="font-mono text-xs">{tool.name}</span>}
+              name={<span className="font-mono text-xs break-all">{tool.name}</span>}
               detail={tool.description === "" ? undefined : tool.description}
               label={tool.name}
               checked={tool.enabled}
-              disabled={!server.enabled}
-              onChange={(enabled) => onChange({ kind: "tool", name: tool.name, enabled })}
+              disabled={!server.enabled || tool.lock !== undefined}
+              onChange={(enabled) => actions.set({ kind: "tool", name: tool.name, enabled })}
+              aside={
+                <SwitchNotes
+                  state={tool}
+                  label={tool.name}
+                  onDefaults={toDefaults && (() => toDefaults("tool", tool.name))}
+                  onReset={() => actions.reset("tool", tool.name)}
+                />
+              }
             />
           ))}
         </ul>
@@ -148,35 +240,45 @@ function pointName(point: string, text: Text["plugins"]): string {
   return lookup(text.pointNames, point) ?? point;
 }
 
-function HookRow({ plugin, onChange }: { plugin: HookPlugin; onChange: (enabled: boolean) => void }) {
+function HookList({ label, plugins, actions }: { label: string; plugins: readonly HookPlugin[]; actions: Actions }) {
+  return (
+    <Section label={label}>
+      {plugins.map((plugin) => (
+        <HookRow key={plugin.name} plugin={plugin} actions={actions} />
+      ))}
+    </Section>
+  );
+}
+
+function HookRow({ plugin, actions }: { plugin: HookPlugin; actions: Actions }) {
   const t = useText();
   const language = useLanguage();
   // 插件作者写的说明：按看的人的语言选，没有就用英文（console-i18n I10）
   const description = pick(plugin.description, language);
+  const toDefaults = actions.toDefaults;
   return (
     <Row
-      name={
-        <span className="flex items-center gap-2">
-          <span className="font-mono">{plugin.name}</span>
-          {plugin.lock !== undefined && (
-            <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted" title={t.plugins.mandatoryHint}>
-              {t.plugins.mandatory}
-            </span>
-          )}
-        </span>
-      }
+      name={<span className="font-mono">{plugin.name}</span>}
       detail={
         <>
           {description !== "" && <span className="block">{description}</span>}
-          <span className="block text-fg-faint">
-            {t.plugins.pointsList(plugin.points.map((point) => pointName(point, t.plugins)))}
-          </span>
+          <span className="block text-fg-faint">{t.plugins.pointsList(plugin.points.map((point) => pointName(point, t.plugins)))}</span>
         </>
       }
       label={plugin.name}
       checked={plugin.enabled}
       disabled={plugin.lock !== undefined}
-      onChange={onChange}
-    />
+      onChange={(enabled) => actions.set({ kind: "plugin", name: plugin.name, enabled })}
+      aside={
+        <SwitchNotes
+          state={plugin}
+          label={plugin.name}
+          onDefaults={toDefaults && (() => toDefaults("plugin", plugin.name))}
+          onReset={() => actions.reset("plugin", plugin.name)}
+        />
+      }
+    >
+      {plugin.enabled && <OwnParams kind="plugin" name={plugin.name} label={plugin.name} params={plugin.params} />}
+    </Row>
   );
 }

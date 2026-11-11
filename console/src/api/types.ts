@@ -19,6 +19,7 @@ export interface Account {
   admin: boolean;
   disabled: boolean;
   createdAt: string;
+  usageToday?: UsageToday;
 }
 
 /** 插件作者写给人看的文字（I10）：一个字符串照原样显示，带语言的按用户的语言选，没有就用英文。 */
@@ -606,28 +607,104 @@ export interface MemoryList {
 /** 插件页（core-tools 需求 7）：当前用户自己的开关。 */
 export type PluginKind = "tool" | "mcp" | "plugin" | "local" | "web";
 
-export interface PluginTool {
-  name: string;
-  description: string;
+/** 每个开关都带的状态（plugin-settings 需求 6）。旧服务器不给时当“没改过、没锁”。 */
+export interface SwitchState {
   enabled: boolean;
+  /** 管理员定的默认（没定就是自带的默认）。 */
+  byDefault?: boolean;
+  /** 我改过，和默认不是一回事：改回和默认一样也算改过，直到点“恢复默认”。 */
+  changed?: boolean;
+  /** 开关锁着改不了时有；没锁时没有这个字段。 */
+  lock?: PluginLock;
 }
 
-export interface McpServerView {
+export interface PluginTool extends SwitchState {
+  name: string;
+  description: string;
+  /** 内置工具声明的参数；MCP 的工具没有。 */
+  params?: ParamView[];
+}
+
+export interface McpServerView extends SwitchState {
   name: string;
   /** READY、CONNECTING、RECONNECTING、UNAUTHORIZED、FAILED、CLOSED，未知时 UNKNOWN。 */
   state: string;
-  enabled: boolean;
   tools: PluginTool[];
 }
 
-export interface HookPlugin {
+/** 钩子插件分两组：只处理工具结果的是 `output`，其余是 `rule`。 */
+export type PluginGroup = "rule" | "output";
+
+export interface HookPlugin extends SwitchState {
   name: string;
   description: LocalText;
   /** 挂在哪些位置：钩子方法名、afterToolExecution、work:<工作类型>。 */
   points: string[];
-  /** 开关锁着改不了时有；没锁时没有这个字段。 */
+  group?: PluginGroup;
+  params?: ParamView[];
+}
+
+export type ParamType = "text" | "number" | "toggle" | "list" | "secret";
+export type ParamValue = string | number | boolean | string[];
+
+/**
+ * 插件声明的一个参数和它现在的值。密码项没有 `value`、`source`，只说 `set`（填过没有）和 `stale`（服务器换了密钥、解不开，要重新填）。
+ * `source`：`builtin` 插件自带的，`admin` 管理员定的默认，`own` 我自己填的，`assigned` 管理员给这个人指定的。
+ */
+export interface ParamView {
+  key: string;
+  type: ParamType;
+  label: LocalText;
+  hint: LocalText;
+  owner: "user" | "admin";
+  min?: number;
+  max?: number;
+  value?: ParamValue;
+  source?: "builtin" | "admin" | "own" | "assigned";
+  editable: boolean;
+  set?: boolean;
+  stale?: boolean;
+}
+
+/** 保存参数后服务器回的这一项的新参数。 */
+export interface SavedParams {
+  kind: string;
+  name: string;
+  params: ParamView[];
+}
+
+/** “插件默认值”里的一项（管理员）：`builtin` 自带的默认，`byAdmin` 管理员定的默认（没定就没有）。参数不含密码。 */
+export interface PluginDefault {
+  kind: "tool" | "mcp" | "plugin";
+  name: string;
+  group: "tool" | "mcp" | PluginGroup;
+  builtin: boolean;
+  byAdmin?: boolean;
   lock?: PluginLock;
-  enabled: boolean;
+  params: ParamView[];
+}
+
+/** 改默认：给了哪个改哪个；`null` 是清掉、回到自带的。 */
+export interface PluginDefaultChange {
+  enabled?: boolean | null;
+  locked?: boolean;
+  reason?: string;
+  params?: Record<string, ParamValue | null>;
+}
+
+/** 管理员给一个人指定的参数（只有“管理员的”参数）。 */
+export interface AssignedParams {
+  user: string;
+  items: { kind: "tool" | "mcp" | "plugin"; name: string; params: ParamView[] }[];
+}
+
+/** 一个人今天（UTC）的用量；`total` 是每日额度插件算的那个数。 */
+export interface UsageToday {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
 }
 
 /** 谁锁的：`code` 插件自己声明必须开启，`config` 写在配置里，`admin` 管理员在页面上锁的（只有它带原因）。 */

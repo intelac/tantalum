@@ -164,7 +164,7 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
           admin={admin}
           onLogout={onLogout}
         />
-        <PluginsDialog open={pluginsOpen} onClose={() => setPluginsOpen(false)} />
+        <PluginsDialog open={pluginsOpen} onClose={() => setPluginsOpen(false)} admin={admin} />
         <AddProjectDialog
           open={addOpen}
           onClose={() => setAddOpen(false)}
