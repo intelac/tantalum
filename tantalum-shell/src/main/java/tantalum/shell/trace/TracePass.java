@@ -1,6 +1,7 @@
 package tantalum.shell.trace;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import tantalum.value.decision.HookReported;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
+import tantalum.value.decision.QueueEdited;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
@@ -36,6 +38,7 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
@@ -116,6 +119,7 @@ final class TracePass {
                 case PhaseChanged phase -> phaseChanged(phase.run().run());
                 case QuestionAsked asked -> hooks.asked(i, asked);
                 case QuestionSettled settled -> hooks.settled(settled);
+                case QueueEdited edited -> queueEdited(edited);
                 default -> { }
             }
         }
@@ -293,6 +297,31 @@ final class TracePass {
         } else if (after != null && after.followUps().size() > (earlier == null ? 0 : earlier.followUps().size())) {
             book.queued.addLast(new Queued(seq, at, text, mode, attachments));
         }
+    }
+
+    /**
+     * 排队的提问被改了。排队的提问到运行开始时才记进 trace，所以改文字和移除只改这里记着的队列；
+     * 转成插话的当场记成当前运行的一条插话。
+     */
+    private void queueEdited(QueueEdited edited) {
+        if (edited.index() < 0 || edited.index() >= book.queued.size()) {
+            return;
+        }
+        List<Queued> queue = new ArrayList<>(book.queued);
+        Queued queued = queue.remove(edited.index());
+        switch (edited.action()) {
+            case EDIT -> {
+                if (envelope.event() instanceof QueueChanged changed) {
+                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments()));
+                } else {
+                    queue.add(edited.index(), queued);
+                }
+            }
+            case REMOVE -> { }
+            case STEER -> user(edited.run().run(), Mode.STEER, queued.text(), Source.USER, queued.attachments());
+        }
+        book.queued.clear();
+        book.queued.addAll(queue);
     }
 
     void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments) {

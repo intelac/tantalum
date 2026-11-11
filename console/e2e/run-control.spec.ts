@@ -12,8 +12,7 @@ test.describe("运行控制", () => {
     await expect(page.getByText("慢慢回答第 1 段。")).toBeVisible();
 
     await send(page, "hi 排在后面");
-    const dock = page.getByRole("status", { name: "排队中" });
-    await expect(dock).toContainText("1 条排队中");
+    const dock = page.getByRole("group", { name: "排队中" });
     await expect(dock).toContainText("hi 排在后面");
     await expect(page.getByText("排队中", { exact: true })).toBeVisible();
 

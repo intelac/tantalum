@@ -17,6 +17,7 @@ import tantalum.value.event.CompactRequested;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
@@ -190,6 +191,19 @@ public final class Intake {
             return Submission.rejected(404);
         }
         return publish(principal, session, request, false, submission -> new SessionRenamed(submission, request, title));
+    }
+
+    /**
+     * 改排队的提问（见 {@link QueueChanged}）。会话不存在或不是该用户的 → 404。那一条还在不在由内核按“位置加原文”判断，
+     * 不在就什么都不改。{@code text} 只在改文字时有。
+     */
+    public Submission changeQueue(Principal principal, SessionId session, RequestId request, QueueChanged.Action action, int index,
+                                  String expected, List<AttachmentRef> attachments, String text) {
+        if (sessions.find(principal, session).isEmpty()) {
+            return Submission.rejected(404);
+        }
+        return publish(principal, session, request, false,
+                submission -> new QueueChanged(submission, request, action, index, expected, attachments, text));
     }
 
     /** 返回 HTTP 状态。取消不去重，也不占活跃运行名额。 */

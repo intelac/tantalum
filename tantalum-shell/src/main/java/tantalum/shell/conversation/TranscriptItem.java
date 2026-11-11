@@ -56,10 +56,12 @@ public sealed interface TranscriptItem {
 
     /**
      * 用户的提交。运行中提交的 {@code follow-up} 先排队，运行开始后 {@code queued} 变为 false。
+     * {@code removed} 表示排队时被用户移除了：从没发给模型，页面不显示；没移除时不写出。
      * {@code attachments} 按上传顺序；没有时不写出，接口和推送的格式和以前相同。
      */
     record UserMessage(String id, SessionId session, RunId run, Instant at, String text,
-                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued)
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued,
+                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean removed)
             implements TranscriptItem {
 
         public UserMessage {
@@ -70,12 +72,28 @@ public sealed interface TranscriptItem {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
         }
 
-        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued) {
-            this(id, session, run, at, text, List.of(), queued);
+        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
+                           boolean queued) {
+            this(id, session, run, at, text, attachments, queued, false);
         }
 
+        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued) {
+            this(id, session, run, at, text, List.of(), queued, false);
+        }
+
+        /** 排队的提问开始运行，或转成了这个运行的插话。 */
         public UserMessage started(RunId startedRun) {
-            return new UserMessage(id, session, startedRun, at, text, attachments, false);
+            return new UserMessage(id, session, startedRun, at, text, attachments, false, false);
+        }
+
+        /** 排队时改了文字。 */
+        public UserMessage withText(String newText) {
+            return new UserMessage(id, session, run, at, newText, attachments, queued, removed);
+        }
+
+        /** 排队时被用户移除：条目留着占位（id 不能再用），页面不显示它。 */
+        public UserMessage removedFromQueue() {
+            return new UserMessage(id, session, run, at, text, attachments, false, true);
         }
     }
 

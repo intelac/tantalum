@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Config, Project } from "../api/types";
+import type { Config, Project, UserItem } from "../api/types";
 import { projectOf } from "../projects/group";
 import { useProjects, useSetArchived } from "../projects/useProjects";
 import { readLastProject, readPending, saveLastProject, savePending } from "../projects/viewState";
@@ -15,7 +15,8 @@ import { Composer } from "./Composer";
 import { LinkChip } from "./LinkChip";
 import { ModelPicker } from "./ModelPicker";
 import { ProjectChip } from "./ProjectChip";
-import { QueueDock } from "./QueueDock";
+import { QueueDock } from "./queue/QueueDock";
+import { useQueueActions } from "./queue/useQueueActions";
 import { StatusBar } from "./StatusBar";
 import { findModel, findRoute, useModels, useSessionChoice } from "./useModels";
 
@@ -52,6 +53,9 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const version = useRunVersion(store, run);
   const items = useItems(store, useOrder(store, session));
   const pending = useMemo(() => pendingApproval(items), [items]);
+  // 排队的消息就是对话里 queued 的用户条目，顺序和内核的队列相同
+  const queued = useMemo(() => items.filter((item): item is UserItem => item?.kind === "user" && item.queued), [items]);
+  const queueActions = useQueueActions(session);
   const models = useModels();
   const current = useSessionModel(store, session);
   const choice = useSessionChoice(session, current.model, models.data);
@@ -78,7 +82,7 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   }
   return (
     <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
-      <QueueDock store={store} session={session} />
+      <QueueDock queued={queued} running={running} actions={queueActions} />
       {pending !== null && <ApprovalCard key={pending.question.id} pending={pending} />}
       <div hidden={pending !== null}>
         <Composer
@@ -100,6 +104,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
             )
           }
           choice={models.data === undefined ? null : choice.shown}
+          queued={queued.length}
+          onSteerQueue={() => void queueActions.steerAll(queued)}
           onSubmitted={(sent) => {
             choice.submitted(sent);
             if (!started) saveLastProject(chosen?.id ?? null);

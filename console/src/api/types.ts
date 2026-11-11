@@ -181,6 +181,8 @@ export interface UserItem extends ItemBase {
   /** 按上传顺序；没有附件时不出现。 */
   attachments?: AttachmentRef[];
   queued: boolean;
+  /** 排队时被移除了：从没发给模型，页面不显示。 */
+  removed?: boolean;
 }
 
 export interface TextItem extends ItemBase {

@@ -24,6 +24,7 @@ import tantalum.value.decision.ImagesOmitted;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
+import tantalum.value.decision.QueueEdited;
 import tantalum.value.decision.StepFailed;
 import tantalum.value.decision.SessionChange;
 import tantalum.value.decision.StepRecord;
@@ -59,7 +60,7 @@ public final class RecordCodec {
 
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
-            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled");
+            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled", "QueueEdited");
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
     @JsonSubTypes({
@@ -81,6 +82,7 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = ImagesOmitted.class, name = "ImagesOmitted"),
         @JsonSubTypes.Type(value = QuestionAsked.class, name = "QuestionAsked"),
         @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled"),
+        @JsonSubTypes.Type(value = QueueEdited.class, name = "QueueEdited"),
         @JsonSubTypes.Type(value = StepFailed.class, name = "StepFailed")
     })
     private interface FactMixin {}

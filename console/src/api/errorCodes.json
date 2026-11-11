@@ -34,6 +34,8 @@
     "model/level-unknown",
     "model/tool-changes",
     "question/gone",
+    "queue/gone",
+    "queue/attachments",
     "project/not-found",
     "project/path-invalid",
     "project/path-not-allowed",

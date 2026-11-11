@@ -34,13 +34,16 @@ interface Props {
   project?: string | null;
   /** 附件按钮右边的标签：工作区、电脑连接（workspaces 需求 7）。 */
   accessory?: ReactNode;
+  /** 排队的消息有几条；输入框空着按 Ctrl/Cmd+Enter 时把它们都转成插话（input-area 需求 1.10）。 */
+  queued?: number;
+  onSteerQueue?: () => void;
 }
 
 const MAX_HEIGHT = 200;
 
 /**
  * 大圆角输入卡片。Enter 发送、Shift+Enter 换行、输入法组字时 Enter 不发送。
- * 运行中提交进入排队，并多一个停止按钮。被拒绝时保留内容和附件，重试用同一个 requestId。
+ * 运行中 Enter 提交进入排队，Ctrl/Cmd+Enter 作为插话发给当前运行，并多一个停止按钮。被拒绝时保留内容和附件，重试用同一个 requestId。
  * 附件按钮、拖放、粘贴走同一条路径（需求 1.1–1.3）；发送时等附件都传完再提交（需求 1.7）。
  */
 export function Composer({
@@ -55,6 +58,8 @@ export function Composer({
   onSubmitted,
   project = null,
   accessory,
+  queued = 0,
+  onSteerQueue,
 }: Props) {
   const t = useText();
   const [text, setText] = useState(() => readDraft(session));
@@ -124,7 +129,8 @@ export function Composer({
     addFiles(files);
   }
 
-  async function send(): Promise<void> {
+  /** `steer`：运行中作为插话发出，不排队；没有在运行时和普通发送一样。 */
+  async function send(steer = false): Promise<void> {
     const content = text.trim();
     if ((content === "" && pending.length === 0) || busy) return;
     setBusy(true);
@@ -140,10 +146,12 @@ export function Composer({
         return;
       }
       // 内容（文字加附件）改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。
-      const signature = JSON.stringify([content, attachments.map((ref) => ref.id)]);
+      const mode = !running ? "prompt" : steer ? "steer" : "follow-up";
+      const signature = JSON.stringify([mode, content, attachments.map((ref) => ref.id)]);
       if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
       try {
-        await submit(session, running ? "follow-up" : "prompt", content, requestId.current, attachments, choice, project);
+        // 插话并进当前运行，不换模型
+        await submit(session, mode, content, requestId.current, attachments, mode === "steer" ? null : choice, project);
       } catch (failure) {
         failedContent.current = signature;
         setError(failure);
@@ -151,7 +159,7 @@ export function Composer({
       }
       requestId.current = null;
       failedContent.current = null;
-      onSubmitted?.(choice);
+      if (mode !== "steer") onSubmitted?.(choice);
       setText("");
       clearDraft(session);
       queue.clear();
@@ -167,7 +175,13 @@ export function Composer({
     // 输入法还在组字时的 Enter 是选字，不是发送。
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     event.preventDefault();
-    void send();
+    const steer = running && (event.ctrlKey || event.metaKey);
+    // 输入框空着：没有可发的，把排队的都转成插话
+    if (steer && steerAll) {
+      onSteerQueue?.();
+      return;
+    }
+    void send(steer);
   }
 
   async function stop(): Promise<void> {
@@ -180,6 +194,8 @@ export function Composer({
   }
 
   const canSend = (text.trim() !== "" || pending.length > 0) && !busy;
+  /** 运行中、输入框和附件都空、有排队的：Ctrl/Cmd+Enter 是“全部转成插话”。 */
+  const steerAll = running && queued > 0 && text.trim() === "" && pending.length === 0;
   const dropLimits = vision ? t.attachment.dropDesc(limits.maxImagesPerMessage, formatBytes(limits.maxImageBytes)) : t.attachment.modelUnsupported;
 
   return (
@@ -204,7 +220,7 @@ export function Composer({
           onChange={onChange}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={t.composer.placeholder}
+          placeholder={steerAll ? t.composer.steerAllPlaceholder : t.composer.placeholder}
           aria-label={t.composer.placeholder}
           className="focus-plain block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-fg placeholder:text-fg-faint"
         />

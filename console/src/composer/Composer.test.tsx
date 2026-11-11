@@ -122,4 +122,44 @@ describe("Composer", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("模型 x 现在不提供，请换一个");
     expect(onSubmitted).not.toHaveBeenCalled();
   });
+
+  /** input-area 需求 1.9、1.10：运行中 Enter 排队，Ctrl/Cmd+Enter 插话；输入框空着时把排队的都转成插话。 */
+  describe("while running", () => {
+    it("queues on Enter and steers on Ctrl+Enter or Cmd+Enter", async () => {
+      mount("run-1");
+      const box = screen.getByRole("textbox");
+      await userEvent.type(box, "排队{Enter}");
+      await userEvent.type(box, "插话{Control>}{Enter}{/Control}");
+      await userEvent.type(box, "再插{Meta>}{Enter}{/Meta}");
+      expect(submit.mock.calls.map((call) => [call[1], call[2], call[5]])).toEqual([
+        ["follow-up", "排队", null],
+        ["steer", "插话", null],
+        ["steer", "再插", null],
+      ]);
+    });
+
+    it("turns the whole queue into steers when the box is empty", async () => {
+      const onSteerQueue = vi.fn();
+      render(<Composer session="s1" activeRun="run-1" modelName="qwen" cloud={false} queued={2} onSteerQueue={onSteerQueue} />);
+      const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+      expect(box.placeholder).toBe("按 Ctrl/⌘+Enter 把排队的消息都作为插话发出");
+      await userEvent.type(box, "{Control>}{Enter}{/Control}");
+      expect(onSteerQueue).toHaveBeenCalledTimes(1);
+      expect(submit).not.toHaveBeenCalled();
+
+      await userEvent.type(box, "有字{Control>}{Enter}{/Control}");
+      expect(onSteerQueue).toHaveBeenCalledTimes(1);
+      expect(submit.mock.calls.map((call) => [call[1], call[2]])).toEqual([["steer", "有字"]]);
+    });
+
+    it("leaves Ctrl+Enter alone when nothing runs", async () => {
+      const onSteerQueue = vi.fn();
+      render(<Composer session="s1" activeRun={null} modelName="qwen" cloud={false} queued={0} onSteerQueue={onSteerQueue} />);
+      const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+      expect(box.placeholder).not.toContain("Ctrl");
+      await userEvent.type(box, "你好{Control>}{Enter}{/Control}");
+      expect(onSteerQueue).not.toHaveBeenCalled();
+      expect(submit.mock.calls.map((call) => call[1])).toEqual(["prompt"]);
+    });
+  });
 });

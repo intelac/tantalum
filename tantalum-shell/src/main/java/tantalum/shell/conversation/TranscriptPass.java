@@ -25,6 +25,7 @@ import tantalum.value.decision.Fact;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
+import tantalum.value.decision.QueueEdited;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
@@ -32,6 +33,7 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -110,6 +112,7 @@ final class TranscriptPass {
                 case QuestionAsked asked -> put(Question.asked(session, asked.run().run(), at, asked.askedBy(), asked.question(),
                         askedAbout(asked.run().run())));
                 case QuestionSettled settled -> questionSettled(settled);
+                case QueueEdited edited -> queueEdited(edited);
                 default -> { }
             }
         }
@@ -191,6 +194,36 @@ final class TranscriptPass {
             case CANCELLED -> QuestionStatus.CANCELLED;
         };
         put(question.settled(status, settled.answer(), at));
+    }
+
+    /**
+     * 排队的提问被改了：{@code conversation.queued} 和内核的队列一一对应，内核说动的是第几条，这里就动第几条。
+     * 移除的条目留着占位、标成已移除；转成插话的归到当前运行，和直接插话的一样。
+     */
+    private void queueEdited(QueueEdited edited) {
+        if (edited.index() < 0 || edited.index() >= conversation.queued.size()) {
+            return;
+        }
+        List<String> ids = new java.util.ArrayList<>(conversation.queued);
+        String id = ids.get(edited.index());
+        if (!(get(id) instanceof UserMessage message)) {
+            return;
+        }
+        switch (edited.action()) {
+            case EDIT -> {
+                if (envelope.event() instanceof QueueChanged changed) {
+                    put(message.withText(changed.text()));
+                }
+            }
+            case REMOVE -> {
+                conversation.queued.remove(id);
+                put(message.removedFromQueue());
+            }
+            case STEER -> {
+                conversation.queued.remove(id);
+                put(message.started(edited.run().run()));
+            }
+        }
     }
 
     private void put(TranscriptItem item) {

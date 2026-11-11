@@ -61,6 +61,10 @@ public enum ErrorCode {
     /** 参数 {@code model}。 */
     MODEL_TOOL_CHANGES("model/tool-changes", 400),
     QUESTION_GONE("question/gone", 404),
+    /** 排队的那一条已经开始运行、被移除或改过了。 */
+    QUEUE_GONE("queue/gone", 404),
+    /** 带附件的排队提问不能改文字。 */
+    QUEUE_ATTACHMENTS("queue/attachments", 409),
     PROJECT_NOT_FOUND("project/not-found", 404),
     /** 不是绝对路径。 */
     PROJECT_PATH_INVALID("project/path-invalid", 400),

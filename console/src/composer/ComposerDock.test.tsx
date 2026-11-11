@@ -84,4 +84,23 @@ describe("ComposerDock", () => {
     expect(box.closest("[hidden]")).toBeNull();
     expect(box.value).toBe("half a sentence");
   });
+
+  // input-area 需求 1：排队的消息列在输入框上方；被移除、或者轮到了，就从条里消失
+  it("lists what is queued and drops what was removed or has started", async () => {
+    backend();
+    mount({ route: "local", model: "qwen3.8", effort: "on" });
+    const base = { session: "s", at: "2026-11-07T00:00:05Z", kind: "user" };
+    act(() => {
+      mounted.applyItem({ ...base, id: "5.0", text: "甲", queued: true } as never, 5);
+      mounted.applyItem({ ...base, id: "6.0", text: "乙", queued: true } as never, 6);
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "展开排队的消息" }));
+    expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual(["甲", "乙"]);
+
+    act(() => mounted.applyItem({ ...base, id: "5.0", text: "甲", queued: false, removed: true } as never, 7));
+    expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual(["乙"]);
+
+    act(() => mounted.applyItem({ ...base, id: "6.0", text: "乙", queued: false, run: "r2" } as never, 8));
+    expect(screen.queryByRole("group", { name: "排队的消息" })).toBeNull();
+  });
 });

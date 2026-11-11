@@ -39,6 +39,15 @@ class TranscriptReplayTest {
         live.feed(run, live.reply(claudeThinking("plan"), call("c1", "write"), call("c2", "write"), badCall("c3", "write")));
         live.feed(run, live.finished(run, "c1", "ok", false));
         live.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("rf"), "later"));
+        // input-area 需求 1.11：改排队的提问也是事件，重放得到同样的条目
+        live.feed(null, new FollowUpSubmitted(new SubmissionId("f2"), new RequestId("rf2"), "dropped"));
+        live.feed(null, new FollowUpSubmitted(new SubmissionId("f3"), new RequestId("rf3"), "steered"));
+        live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q1"), new RequestId("rq1"),
+                tantalum.value.event.QueueChanged.Action.EDIT, 0, "later", List.of(), "later, edited"));
+        live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q2"), new RequestId("rq2"),
+                tantalum.value.event.QueueChanged.Action.REMOVE, 1, "dropped", List.of(), null));
+        live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q3"), new RequestId("rq3"),
+                tantalum.value.event.QueueChanged.Action.STEER, 2, "steered", List.of(), null));
         live.feed(run, new Cancel(new RequestId("x")));
         live.feed(null, live.prompt("third"));
 

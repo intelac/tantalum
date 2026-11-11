@@ -11,6 +11,7 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
@@ -28,6 +29,7 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, SubmitSteps::userPrompt);
         table.register(TransitionTable.ANY_STATE, FollowUpSubmitted.TYPE, SubmitSteps::followUp);
         table.register(TransitionTable.ANY_STATE, SteerSubmitted.TYPE, SubmitSteps::steer);
+        table.register(TransitionTable.ANY_STATE, QueueChanged.TYPE, QueueSteps::changed);
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
         table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, CancelSteps::commandDropped);
         table.register(TransitionTable.ANY_STATE, RunInterrupted.TYPE, CancelSteps::interrupted);

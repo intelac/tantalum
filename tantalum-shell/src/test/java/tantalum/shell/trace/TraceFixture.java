@@ -24,6 +24,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
@@ -164,6 +165,11 @@ final class TraceFixture {
     FollowUpSubmitted followUp(String text) {
         int n = submissions++;
         return new FollowUpSubmitted(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
+    }
+
+    QueueChanged queue(QueueChanged.Action action, int index, String expected, String text) {
+        int n = submissions++;
+        return new QueueChanged(new SubmissionId("sub-" + n), new RequestId("req-" + n), action, index, expected, List.of(), text);
     }
 
     /** 最近一次某类命令，不一定在最后一个决定里。 */

@@ -150,6 +150,33 @@ class TracePassTest {
         assertEquals(1, fx.records(SystemPrompt.class).size(), "same system and tools are not repeated");
     }
 
+    /** input-area 需求 1.11：排队的提问到运行开始才记；改了、移除了的按改后的记，转成插话的当场记在当前运行里。 */
+    @Test
+    void queueChangesShowUpWhenTheMessageIsFinallyUsed() {
+        TraceFixture fx = new TraceFixture();
+        RunId first = fx.start("one");
+        fx.feed(first, fx.followUp("a"));
+        fx.feed(first, fx.followUp("b"));
+        fx.feed(first, fx.followUp("c"));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, 0, "a", null));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.EDIT, 0, "b", "b2"));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.STEER, 1, "c", null));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, 0, "gone", null));
+
+        UserInput steer = fx.records(UserInput.class).stream().filter(user -> user.mode() == UserInput.Mode.STEER).findFirst().orElseThrow();
+        assertEquals("c", steer.text());
+        assertEquals(1, steer.head().turn());
+
+        // 有插话没读，运行不结束，再调一次模型
+        fx.feed(first, fx.reply(text("done")));
+        fx.feed(first, fx.reply(text("done again")));
+
+        List<UserInput> inputs = fx.records(UserInput.class);
+        assertEquals(List.of("one", "c", "b2"), inputs.stream().map(UserInput::text).toList());
+        assertEquals(2, inputs.getLast().head().turn());
+        assertEquals(UserInput.Mode.FOLLOW_UP, inputs.getLast().mode());
+    }
+
     @Test
     void retryIsANewAttemptOfTheSameRequestWithItsWait() {
         TraceFixture fx = new TraceFixture();

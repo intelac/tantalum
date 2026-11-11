@@ -381,6 +381,19 @@ export function revokeLocal(): Promise<unknown> {
   return call("/api/local/tokens", { method: "DELETE" });
 }
 
+export type QueueAction = "edit" | "remove" | "steer";
+
+/**
+ * 改排队的提问（input-area 需求 1）：换文字、移除、转成当前运行的插话。`item` 是对话里那条排队消息的 id。
+ * 404 `queue/gone` 表示它已经不在排队了（轮到了、被别的页面移除了）。
+ */
+export function changeQueue(session: string, item: string, action: QueueAction, text?: string): Promise<{ submissionId: string }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/queue/${encodeURIComponent(item)}`, {
+    method: "POST",
+    body: JSON.stringify({ requestId: crypto.randomUUID(), action, ...(text === undefined ? {} : { text }) }),
+  });
+}
+
 /** 回答运行问的问题（waiting-state）：选项和（允许时）补充的文字至少一个。404 表示问题已经不在了（答过、运行结束）。 */
 export function answerQuestion(session: string, question: string, answer: { choice?: string; text?: string }): Promise<unknown> {
   return call(`/api/sessions/${encodeURIComponent(session)}/questions/${encodeURIComponent(question)}`, {

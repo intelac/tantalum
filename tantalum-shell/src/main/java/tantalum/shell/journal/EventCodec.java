@@ -23,6 +23,7 @@ import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
@@ -207,6 +208,7 @@ public final class EventCodec {
         codec.register(CommandDropped.TYPE, 1, CommandDropped.class);
         codec.register(CompactRequested.TYPE, 1, CompactRequested.class);
         codec.register(SessionRenamed.TYPE, 1, SessionRenamed.class);
+        codec.register(QueueChanged.TYPE, 1, QueueChanged.class);
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
         return codec;
     }
