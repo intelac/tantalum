@@ -12,9 +12,12 @@ async function openPlugins(page: Page) {
   return dialog;
 }
 
-/** 运行结束后过程区收起：等最后一轮也结束（回答流式显示时标题还是“正在处理”），展开它，再点里面的步骤。 */
+/**
+ * 运行结束后过程区收起：等最后一轮也结束，展开它，再点里面的步骤。
+ * 运行中的标题是“正在处理…”或“正在写文件 · …”这类，都以“正在”开头；只等“正在处理”的话，慢机器上会展开到上一轮去。
+ */
 async function openStep(page: Page, name: RegExp) {
-  await expect(processHeader(page, /^正在处理/)).toHaveCount(0, { timeout: 30_000 });
+  await expect(processHeader(page, /^正在/)).toHaveCount(0, { timeout: 30_000 });
   const header = processHeader(page, /^已完成/).last();
   if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
   await page.getByRole("button", { name }).click();
