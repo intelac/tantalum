@@ -84,6 +84,9 @@ public class QueueController {
         if (action == QueueChanged.Action.EDIT && !message.attachments().isEmpty()) {
             return json.error(ErrorCode.QUEUE_ATTACHMENTS, "a queued message with attachments cannot be edited");
         }
+        if (action == QueueChanged.Action.EDIT && !message.skills().isEmpty()) {
+            return json.error(ErrorCode.QUEUE_SKILLS, "a queued message that names a skill cannot be edited");
+        }
         Intake.Submission result = engine.intake().changeQueue(user, id.get(), new RequestId(requestId), action, index,
                 message.text(), message.attachments(), text);
         if (result.status() == 404) {

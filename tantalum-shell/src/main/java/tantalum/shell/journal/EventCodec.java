@@ -25,6 +25,7 @@ import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SessionRenamed;
+import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
@@ -36,6 +37,7 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -73,7 +75,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = AttachmentBlock.class, name = "attachment"),
         @JsonSubTypes.Type(value = ToolChangeBlock.class, name = "toolChange"),
         @JsonSubTypes.Type(value = ModelChangeBlock.class, name = "modelChange"),
-        @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText")
+        @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText"),
+        @JsonSubTypes.Type(value = SkillBlock.class, name = "skill")
     })
     private interface ContentBlockMixin {}
 
@@ -103,6 +106,10 @@ public final class EventCodec {
     private interface AttachmentsMixin {
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<AttachmentRef> attachments();
+
+        /** 没点名技能时不写出，同上。 */
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<SkillUse> skills();
     }
 
     /** 同上，工具结果里的图片。 */
@@ -129,6 +136,18 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command")
     })
     private interface OwnerRefMixin {}
+
+    /** 点名的技能：读到的只写 content，没读到的只写 error；{@code loaded} 是算出来的，不写。 */
+    private interface SkillUseMixin {
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String content();
+
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String error();
+
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        boolean loaded();
+    }
 
     /** {@code LocalText.byLanguage} 是无序的 Map：按 en、zh、ja 固定顺序写出，同样的问题写成同样的字节。 */
     private interface LocalTextMixin {
@@ -170,6 +189,7 @@ public final class EventCodec {
                 .addMixIn(ContentBlock.class, ContentBlockMixin.class)
                 .addMixIn(OwnerRef.class, OwnerRefMixin.class)
                 .addMixIn(AttachmentRef.class, AttachmentRefMixin.class)
+                .addMixIn(SkillUse.class, SkillUseMixin.class)
                 .addMixIn(UserPrompt.class, AttachmentsMixin.class)
                 .addMixIn(SteerSubmitted.class, AttachmentsMixin.class)
                 .addMixIn(FollowUpSubmitted.class, AttachmentsMixin.class)

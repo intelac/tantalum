@@ -65,6 +65,8 @@ public enum ErrorCode {
     QUEUE_GONE("queue/gone", 404),
     /** 带附件的排队提问不能改文字。 */
     QUEUE_ATTACHMENTS("queue/attachments", 409),
+    /** 带点名技能的排队提问不能改文字：改了文字，附上的技能内容就对不上了。 */
+    QUEUE_SKILLS("queue/skills", 409),
     PROJECT_NOT_FOUND("project/not-found", 404),
     /** 不是绝对路径。 */
     PROJECT_PATH_INVALID("project/path-invalid", 400),

@@ -8,6 +8,7 @@ import tantalum.value.command.AssembleContext;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.CommandId;
@@ -15,6 +16,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -26,13 +28,18 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), Message.user(event.text(), event.attachments()), event.model(), event.dir());
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments(), blocks(event.skills())), event.model(), event.dir());
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
         return submit(context, new OwnerRef.OfSession(context.envelope().session()),
-                Message.user(event.text(), event.attachments()), event.model(), null);
+                Message.user(event.text(), event.attachments(), blocks(event.skills())), event.model(), null);
+    }
+
+    /** 点名的技能里读到内容的那些变成消息里的块，按点名的顺序；没读到的不进消息，只留在事件里给对话页看。 */
+    private static List<SkillBlock> blocks(List<SkillUse> skills) {
+        return skills.stream().filter(SkillUse::loaded).map(skill -> new SkillBlock(skill.name(), skill.content())).toList();
     }
 
     /**
@@ -64,7 +71,7 @@ public final class SubmitSteps {
         SteerSubmitted event = (SteerSubmitted) context.envelope().event();
         Outcome out = new Outcome(context);
         RunState run = context.run();
-        Message message = Message.user(event.text(), event.attachments());
+        Message message = Message.user(event.text(), event.attachments(), blocks(event.skills()));
         if (run == null || run.isEnded()) {
             // 插话不带选择：空闲时开的运行用会话现在的模型
             startRun(out, new OwnerRef.OfSession(context.envelope().session()), message, null);

@@ -36,6 +36,7 @@
     "question/gone",
     "queue/gone",
     "queue/attachments",
+    "queue/skills",
     "project/not-found",
     "project/path-invalid",
     "project/path-not-allowed",

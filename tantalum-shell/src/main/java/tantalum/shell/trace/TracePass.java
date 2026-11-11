@@ -6,15 +6,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import tantalum.shell.skill.SkillNote;
 import tantalum.shell.trace.Trace.Book;
 import tantalum.shell.trace.Trace.Queued;
 import tantalum.shell.trace.Trace.Track;
 import tantalum.shell.trace.TraceRecord.Head;
-import tantalum.shell.trace.TraceRecord.RunHead;
 import tantalum.shell.trace.TraceRecord.RunHead.Trigger;
+import tantalum.shell.trace.TraceRecord.RunHead;
 import tantalum.shell.trace.TraceRecord.Source;
-import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.shell.trace.TraceRecord.UserInput.Mode;
+import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -40,6 +41,7 @@ import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.ResultEvent;
+import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.ToolFinished;
@@ -94,9 +96,9 @@ final class TracePass {
 
     void run() {
         switch (envelope.event()) {
-            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), Mode.PROMPT);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), Mode.FOLLOW_UP);
-            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), Mode.STEER);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), Mode.PROMPT);
+            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), Mode.FOLLOW_UP);
+            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), Mode.STEER);
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);
@@ -222,7 +224,7 @@ final class TracePass {
             Queued queued = book.queued.pollFirst();
             Place first = pending(run);
             add(new UserInput(head("u:" + queued.seq(), run, first, queued.at()).ended(queued.at()), queued.mode(), queued.text(),
-                    Source.USER, queued.attachments()), first, false);
+                    Source.USER, queued.attachments(), queued.skills()), first, false);
         }
         return track;
     }
@@ -285,17 +287,18 @@ final class TracePass {
     // ---- 用户 ----
 
     /** 用户提交：直接开始运行、插进当前运行，或排队到运行开始时再记。 */
-    private void submission(String text, List<AttachmentRef> attachments, Mode mode) {
+    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, Mode mode) {
+        List<SkillNote> skills = SkillNote.of(named);
         RunId fresh = RunId.of(session, seq);
         SessionState earlier = before.sessions().get(session);
         SessionState after = state.sessions().get(session);
         if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
             track(fresh);
-            user(fresh, mode, text, Source.USER, attachments);
+            user(fresh, mode, text, Source.USER, attachments, skills);
         } else if (mode == Mode.STEER && activeRun() != null) {
-            user(activeRun(), mode, text, Source.USER, attachments);
+            user(activeRun(), mode, text, Source.USER, attachments, skills);
         } else if (after != null && after.followUps().size() > (earlier == null ? 0 : earlier.followUps().size())) {
-            book.queued.addLast(new Queued(seq, at, text, mode, attachments));
+            book.queued.addLast(new Queued(seq, at, text, mode, attachments, skills));
         }
     }
 
@@ -312,21 +315,25 @@ final class TracePass {
         switch (edited.action()) {
             case EDIT -> {
                 if (envelope.event() instanceof QueueChanged changed) {
-                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments()));
+                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments(), queued.skills()));
                 } else {
                     queue.add(edited.index(), queued);
                 }
             }
             case REMOVE -> { }
-            case STEER -> user(edited.run().run(), Mode.STEER, queued.text(), Source.USER, queued.attachments());
+            case STEER -> user(edited.run().run(), Mode.STEER, queued.text(), Source.USER, queued.attachments(), queued.skills());
         }
         book.queued.clear();
         book.queued.addAll(queue);
     }
 
     void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments) {
+        user(run, mode, text, source, attachments, List.of());
+    }
+
+    void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments, List<SkillNote> skills) {
         Place place = pending(run);
-        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments), place, false);
+        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments, skills), place, false);
     }
 
     /** 运行标题的 ID，和对话页运行状态条目的 ID 相同。 */

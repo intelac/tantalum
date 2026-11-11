@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import tantalum.shell.skill.SkillNote;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.decision.HookDecided;
 import tantalum.value.hook.HookPoint;
@@ -105,22 +106,28 @@ public sealed interface TraceRecord {
     }
 
     /** 用户输入或插件续写。 */
-    /** {@code attachments} 按上传顺序；没有时不写出。 */
+    /** {@code attachments} 按上传顺序；{@code skills} 是文字里点名的技能连同附上的内容。没有时都不写出。 */
     record UserInput(Head head, Mode mode, String text, Source source,
-                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments) implements TraceRecord {
+                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments,
+                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills) implements TraceRecord {
         public enum Mode { PROMPT, FOLLOW_UP, STEER, CONTINUE }
 
         public UserInput {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
+            skills = skills == null ? List.of() : List.copyOf(skills);
+        }
+
+        public UserInput(Head head, Mode mode, String text, Source source, List<AttachmentRef> attachments) {
+            this(head, mode, text, source, attachments, List.of());
         }
 
         public UserInput(Head head, Mode mode, String text, Source source) {
-            this(head, mode, text, source, List.of());
+            this(head, mode, text, source, List.of(), List.of());
         }
 
         @Override
         public UserInput withHead(Head newHead) {
-            return new UserInput(newHead, mode, text, source, attachments);
+            return new UserInput(newHead, mode, text, source, attachments, skills);
         }
     }
 

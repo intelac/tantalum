@@ -8,18 +8,19 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import tantalum.shell.skill.SkillNote;
 import tantalum.value.attachment.AttachmentRef;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
-import tantalum.value.hook.HookPoint;
 import tantalum.value.model.TokenUsage;
-import tantalum.value.state.AwaitingAnswer;
-import tantalum.value.state.RunState;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.Compacting;
 import tantalum.value.state.EndReason;
+import tantalum.value.state.RunState;
 
 /**
  * 对话里的一个条目，是事件的展示投影。ID 由事件序号和块下标算出，回放时相同；
@@ -58,10 +59,12 @@ public sealed interface TranscriptItem {
      * 用户的提交。运行中提交的 {@code follow-up} 先排队，运行开始后 {@code queued} 变为 false。
      * {@code removed} 表示排队时被用户移除了：从没发给模型，页面不显示；没移除时不写出。
      * {@code attachments} 按上传顺序；没有时不写出，接口和推送的格式和以前相同。
+     * {@code skills} 是文字里点名的技能，按出现顺序；没有时不写出。
      */
     record UserMessage(String id, SessionId session, RunId run, Instant at, String text,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued,
-                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean removed)
+                       @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean removed,
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills)
             implements TranscriptItem {
 
         public UserMessage {
@@ -70,30 +73,36 @@ public sealed interface TranscriptItem {
             Objects.requireNonNull(at, "at");
             Objects.requireNonNull(text, "text");
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
+            skills = skills == null ? List.of() : List.copyOf(skills);
+        }
+
+        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
+                           boolean queued, boolean removed) {
+            this(id, session, run, at, text, attachments, queued, removed, List.of());
         }
 
         public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
                            boolean queued) {
-            this(id, session, run, at, text, attachments, queued, false);
+            this(id, session, run, at, text, attachments, queued, false, List.of());
         }
 
         public UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued) {
-            this(id, session, run, at, text, List.of(), queued, false);
+            this(id, session, run, at, text, List.of(), queued, false, List.of());
         }
 
         /** 排队的提问开始运行，或转成了这个运行的插话。 */
         public UserMessage started(RunId startedRun) {
-            return new UserMessage(id, session, startedRun, at, text, attachments, false, false);
+            return new UserMessage(id, session, startedRun, at, text, attachments, false, false, skills);
         }
 
         /** 排队时改了文字。 */
         public UserMessage withText(String newText) {
-            return new UserMessage(id, session, run, at, newText, attachments, queued, removed);
+            return new UserMessage(id, session, run, at, newText, attachments, queued, removed, skills);
         }
 
         /** 排队时被用户移除：条目留着占位（id 不能再用），页面不显示它。 */
         public UserMessage removedFromQueue() {
-            return new UserMessage(id, session, run, at, text, attachments, false, true);
+            return new UserMessage(id, session, run, at, text, attachments, false, true, skills);
         }
     }
 

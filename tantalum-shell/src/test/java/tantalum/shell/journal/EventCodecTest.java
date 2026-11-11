@@ -356,4 +356,46 @@ class EventCodecTest {
         assertEquals(texts.keySet(), ordered.keySet());
         assertEquals(EventCodec.OrderedLanguages.FIRST, List.copyOf(ordered.keySet()).subList(0, 3));
     }
+
+    // ---- 用户点名的技能（skills-wiki 任务 15）----
+
+    private static final tantalum.value.event.SkillUse READ = new tantalum.value.event.SkillUse("pdf-tools",
+            "<skill_content name=\"pdf-tools\">x</skill_content>", null);
+    private static final tantalum.value.event.SkillUse FAILED = new tantalum.value.event.SkillUse("slow", null, "timeout");
+
+    @Test
+    void namedSkillsSurviveARoundTrip() {
+        List<tantalum.value.event.SkillUse> skills = List.of(READ, FAILED);
+        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "/pdf-tools go", List.of(), null, null, skills));
+        assertRoundTrip(new SteerSubmitted(SUB, REQ, "/pdf-tools now", List.of(), skills));
+        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "/pdf-tools later", List.of(), null, skills));
+        assertRoundTrip(new ModelReplied(CMD, List.of(new TextBlock("x"), new tantalum.value.model.SkillBlock("pdf-tools", READ.content())),
+                StopReason.END_TURN, "m", null, null, null, null));
+    }
+
+    /** 读到的只有 content，没读到的只有 error；skills 在行的最后。 */
+    @Test
+    void aNamedSkillWritesItsContentOrItsError() {
+        String line = codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(), List.of(READ, FAILED)));
+        assertTrue(line.endsWith("\"text\":\"x\",\"skills\":[{\"name\":\"pdf-tools\",\"content\":\"<skill_content name=\\\"pdf-tools\\\">x"
+                + "</skill_content>\"},{\"name\":\"slow\",\"error\":\"timeout\"}]}"), line);
+        String block = codec.encode(new ModelReplied(CMD, List.of(new tantalum.value.model.SkillBlock("pdf-tools", "body")),
+                StopReason.END_TURN, "m", null, null, null, null));
+        assertTrue(block.contains("\"content\":[{\"kind\":\"skill\",\"name\":\"pdf-tools\",\"text\":\"body\"}]"), block);
+    }
+
+    /** 没点名时三种提交写出的行和加字段之前逐字节相同；旧行读出来是空列表。 */
+    @Test
+    void withoutNamedSkillsTheBytesAreAsBefore() {
+        String prompt = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"owner\":{\"kind\":\"session\","
+                + "\"session\":{\"value\":\"s\"}},\"text\":\"hi\"}";
+        String steer = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\"}";
+        assertEquals(prompt, codec.encode(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi", List.of(), null, null,
+                List.of())));
+        assertEquals(steer, codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(), List.of())));
+        assertEquals(steer, codec.encode(new FollowUpSubmitted(SUB, REQ, "x", List.of(), null, List.of())));
+        assertEquals(List.of(), ((UserPrompt) codec.decode(UserPrompt.TYPE, 1, prompt)).skills());
+        assertEquals(List.of(), ((SteerSubmitted) codec.decode(SteerSubmitted.TYPE, 1, steer)).skills());
+        assertEquals(List.of(), ((FollowUpSubmitted) codec.decode(FollowUpSubmitted.TYPE, 1, steer)).skills());
+    }
 }

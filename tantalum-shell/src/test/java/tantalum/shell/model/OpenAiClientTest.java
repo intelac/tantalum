@@ -585,4 +585,32 @@ class OpenAiClientTest {
         assertEquals(OpenAiClient.MAX_DETAIL + 3, detail.length());
         assertEquals("bell  rang", OpenAiClient.detail("bell \u0007rang"));
     }
+
+    // ---- 用户点名的技能（skills-wiki 任务 17）：openai-skill-requests.txt。技能内容接在用户文字后面 ----
+
+    private static final java.nio.file.Path SKILL_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-skill-requests.txt");
+    private static final tantalum.value.model.SkillBlock SKILL = new tantalum.value.model.SkillBlock("pdf-tools",
+            "<skill_content name=\"pdf-tools\">\n<skill_instructions>\nUse pdftotext.\n</skill_instructions>\n</skill_content>");
+
+    @Test
+    void namedSkillRequestBodies() throws Exception {
+        List<Prompt> prompts = List.of(
+                new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools convert it", List.of(), List.of(SKILL)))),
+                new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL)))));
+        StringBuilder actual = new StringBuilder();
+        for (boolean vision : new boolean[] {true, false}) {
+            OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+                    OverflowRules.defaults(), vision);
+            for (int i = 0; i < prompts.size(); i++) {
+                server.body = finish("stop");
+                client.call(prompts.get(i), MEDIA, listener);
+                actual.append("== vision ").append(vision).append(", prompt ").append(i + 1).append('\n')
+                        .append(server.requests.getLast()).append('\n');
+            }
+        }
+        if (Boolean.getBoolean("openai.record")) {
+            java.nio.file.Files.writeString(SKILL_EXPECTED, actual);
+        }
+        assertEquals(java.nio.file.Files.readString(SKILL_EXPECTED), actual.toString(), "request changed; rerun with -Dopenai.record=true");
+    }
 }

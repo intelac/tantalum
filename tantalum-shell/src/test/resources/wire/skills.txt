@@ -1,0 +1,166 @@
+# items
+{"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"/pdf-tools and /slow please","queued":false,"skills":[{"name":"pdf-tools","content":"<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"},{"name":"slow","error":"timeout"}]}
+{"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:03Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"user","id":"2.0","session":"s","run":"s_3","at":"2026-10-31T00:00:02Z","text":"/pdf-tools again","queued":false,"skills":[{"name":"pdf-tools","content":"<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"}]}
+{"kind":"text","id":"3.0","session":"s","run":"s_0","at":"2026-10-31T00:00:03Z","text":"converted","interrupted":false,"truncated":false}
+{"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:05Z","phase":"Ended","endReason":"COMPLETED"}
+{"kind":"text","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","text":"again","interrupted":false,"truncated":false}
+# item pushes
+0.0 item {"kind":"user","id":"0.0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","text":"/pdf-tools and /slow please","queued":false,"skills":[{"name":"pdf-tools","content":"<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"},{"name":"slow","error":"timeout"}]}
+0.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:00Z","phase":"AwaitingContext"}
+1.0 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:01Z","phase":"AwaitingModel"}
+2.0 item {"kind":"user","id":"2.0","session":"s","at":"2026-10-31T00:00:02Z","text":"/pdf-tools again","queued":true,"skills":[{"name":"pdf-tools","content":"<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"}]}
+3.0 item {"kind":"text","id":"3.0","session":"s","run":"s_0","at":"2026-10-31T00:00:03Z","text":"converted","interrupted":false,"truncated":false}
+3.1 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:03Z","phase":"Ended","endReason":"COMPLETED"}
+3.2 item {"kind":"user","id":"2.0","session":"s","run":"s_3","at":"2026-10-31T00:00:02Z","text":"/pdf-tools again","queued":false,"skills":[{"name":"pdf-tools","content":"<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"}]}
+3.3 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:03Z","phase":"AwaitingContext"}
+4.0 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:04Z","phase":"AwaitingModel"}
+5.0 item {"kind":"text","id":"5.0","session":"s","run":"s_3","at":"2026-10-31T00:00:05Z","text":"again","interrupted":false,"truncated":false}
+5.1 item {"kind":"run","id":"run:s_3","session":"s","run":"s_3","at":"2026-10-31T00:00:03Z","updatedAt":"2026-10-31T00:00:05Z","phase":"Ended","endReason":"COMPLETED"}
+# trace
+{
+  "seq" : 5,
+  "records" : [ {
+    "kind" : "run",
+    "id" : "run:s_0",
+    "pos" : "0.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:03Z",
+    "trigger" : "PROMPT",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:0",
+    "pos" : "0.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:00Z",
+    "end" : "2026-10-31T00:00:00Z",
+    "mode" : "PROMPT",
+    "text" : "/pdf-tools and /slow please",
+    "source" : {
+      "type" : "user"
+    },
+    "skills" : [ {
+      "name" : "pdf-tools",
+      "content" : "<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"
+    }, {
+      "name" : "slow",
+      "error" : "timeout"
+    } ]
+  }, {
+    "kind" : "system",
+    "id" : "s:1",
+    "pos" : "1.0",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:01Z",
+    "initial" : true,
+    "systemChars" : 3,
+    "segments" : [ {
+      "chars" : 3,
+      "source" : {
+        "type" : "context"
+      }
+    } ],
+    "added" : [ "read_file" ],
+    "removed" : [ ],
+    "toolCount" : 1,
+    "call" : "s_1-0"
+  }, {
+    "kind" : "request",
+    "id" : "r:s_1-0",
+    "pos" : "1.1",
+    "run" : "s_0",
+    "turn" : 1,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:01Z",
+    "end" : "2026-10-31T00:00:03Z",
+    "number" : 1,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_1-0",
+      "issuedAt" : "2026-10-31T00:00:01Z",
+      "endedAt" : "2026-10-31T00:00:03Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "converted"
+  }, {
+    "kind" : "run",
+    "id" : "run:s_3",
+    "pos" : "3.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "at" : "2026-10-31T00:00:03Z",
+    "end" : "2026-10-31T00:00:05Z",
+    "trigger" : "FOLLOW_UP",
+    "phase" : "Ended",
+    "endReason" : "COMPLETED"
+  }, {
+    "kind" : "user",
+    "id" : "u:2",
+    "pos" : "3.1",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:02Z",
+    "end" : "2026-10-31T00:00:02Z",
+    "mode" : "FOLLOW_UP",
+    "text" : "/pdf-tools again",
+    "source" : {
+      "type" : "user"
+    },
+    "skills" : [ {
+      "name" : "pdf-tools",
+      "content" : "<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>"
+    } ]
+  }, {
+    "kind" : "request",
+    "id" : "r:s_4-0",
+    "pos" : "4.0",
+    "run" : "s_3",
+    "turn" : 2,
+    "step" : 1,
+    "at" : "2026-10-31T00:00:04Z",
+    "end" : "2026-10-31T00:00:05Z",
+    "number" : 2,
+    "purpose" : "NORMAL",
+    "status" : "DONE",
+    "attempts" : [ {
+      "call" : "s_4-0",
+      "issuedAt" : "2026-10-31T00:00:04Z",
+      "endedAt" : "2026-10-31T00:00:05Z",
+      "outcome" : "REPLIED"
+    } ],
+    "maxAttempts" : 4,
+    "actualModel" : "m",
+    "stop" : "END_TURN",
+    "toolCalls" : 0,
+    "total" : {
+      "input" : 0,
+      "output" : 0,
+      "cacheRead" : 0,
+      "cacheWrite" : 0
+    },
+    "text" : "again"
+  } ],
+  "before" : 0,
+  "hasMore" : false
+}

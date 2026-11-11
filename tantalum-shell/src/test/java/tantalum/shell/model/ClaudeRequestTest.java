@@ -557,4 +557,29 @@ class ClaudeRequestTest {
         assertTrue(sent.contains("\"content\":\"" + ClaudeRequest.NO_OUTPUT + "\""), sent);
         assertTrue(sent.contains("\"tool_use\""), sent);
     }
+
+    // ---- 用户点名的技能（skills-wiki 任务 17）：claude-skill-requests.txt。技能内容是用户消息里的又一段文字 ----
+
+    private static final Path SKILL_EXPECTED = Path.of("src/test/resources/model/claude-skill-requests.txt");
+    private static final tantalum.value.model.SkillBlock SKILL = new tantalum.value.model.SkillBlock("pdf-tools",
+            "<skill_content name=\"pdf-tools\">\n<skill_instructions>\nUse pdftotext.\n</skill_instructions>\n</skill_content>");
+
+    @Test
+    void namedSkillRequestBodies() throws IOException {
+        ClaudeClient.Settings plain = settings(4096, "medium", false, false);
+        List<Sample> samples = List.of(
+                new Sample("the user's text, then the skill as one more text block", plain,
+                        new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools convert it", List.of(), List.of(SKILL))))),
+                new Sample("text, attachment, then the skill", plain,
+                        new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL))))));
+        StringBuilder actual = new StringBuilder();
+        for (Sample sample : samples) {
+            client(sample.settings()).call(sample.prompt(), MEDIA, IGNORE);
+            actual.append("== ").append(sample.name()).append('\n').append(server.requests.get(server.requests.size() - 1)).append('\n');
+        }
+        if (Boolean.getBoolean("claude.record")) {
+            Files.writeString(SKILL_EXPECTED, actual, StandardCharsets.UTF_8);
+        }
+        assertEquals(Files.readString(SKILL_EXPECTED, StandardCharsets.UTF_8), actual.toString(), "request changed; see the class comment");
+    }
 }

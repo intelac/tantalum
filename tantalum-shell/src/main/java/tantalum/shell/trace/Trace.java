@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import tantalum.shell.skill.SkillNote;
 import tantalum.shell.trace.TraceRecord.ModelRequest.Purpose;
 import tantalum.shell.trace.TraceRecord.Segment;
 import tantalum.shell.trace.TraceRecord.Source;
@@ -37,7 +38,7 @@ public final class Trace {
     }
 
     /** 排队中的提交，运行开始时变成用户记录。 */
-    public record Queued(long seq, Instant at, String text, Mode mode, List<AttachmentRef> attachments) {}
+    public record Queued(long seq, Instant at, String text, Mode mode, List<AttachmentRef> attachments, List<SkillNote> skills) {}
 
     /** 一个会话的状态。 */
     static final class Book {

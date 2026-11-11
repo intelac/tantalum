@@ -702,6 +702,7 @@ export const ja: Text = {
     "question/gone": "この質問にはもう回答する必要はありません",
     "queue/gone": "このメッセージはもうキューにありません。すでに送信が始まった可能性があります",
     "queue/attachments": "添付ファイル付きのメッセージは編集できません。削除して送り直してください",
+    "queue/skills": "スキルを指定したメッセージは編集できません。削除して送り直してください",
     "project/not-found": "そのワークスペースはありません",
     "project/path-invalid": "絶対パスを入力してください（例：C:\\APPL\\project、/home/you/project）",
     "project/path-not-allowed": "このフォルダーがパソコンにないか、コネクターで許可されていません",

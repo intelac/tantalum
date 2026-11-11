@@ -29,6 +29,7 @@ import tantalum.shell.plugin.WorkType;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.skill.SkillCatalog;
+import tantalum.shell.skill.SkillMentions;
 import tantalum.shell.skill.SkillSettings;
 import tantalum.shell.tool.BuiltinTools;
 import tantalum.shell.tool.ToolCatalog;
@@ -38,7 +39,7 @@ import tantalum.shell.tool.ToolCatalog;
  * 管理员关掉的那一项不注册工具；这一组照样进开关，插件页照样显示。
  */
 record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks, LocalWorkspace localWorkspace, SkillSettings skillSettings,
-               SkillCatalog skillCatalog, AddressRules addressRules,
+               SkillCatalog skillCatalog, SkillMentions skillMentions, AddressRules addressRules,
                Egress egress, Browsers browsers, WebAccess webAccess, McpRegistry mcp, McpSettings mcpSettings, Routes routes,
                CompactionPolicy compaction, PluginGate gate, boolean web) {
 
@@ -89,7 +90,8 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         PluginGate gate = new PluginGate(catalog, stores.switches(), List.of(localWorkspace, webAccess),
                 mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                 hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()), stores.params());
-        return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog, addressRules, egress, browsers, webAccess, mcp, mcpSettings,
+        return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog,
+                new SkillMentions(localWorkspace, skillCatalog), addressRules, egress, browsers, webAccess, mcp, mcpSettings,
                 started, compaction, gate, web.any());
     }
 

@@ -209,6 +209,11 @@ public final class Engine implements AutoCloseable {
         return toolbox.skillCatalog();
     }
 
+    /** 提交时找用户点名的技能。 */
+    public tantalum.shell.skill.SkillMentions skillMentions() {
+        return toolbox.skillMentions();
+    }
+
     public McpRegistry mcp() {
         return toolbox.mcp();
     }

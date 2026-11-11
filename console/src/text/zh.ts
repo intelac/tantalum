@@ -724,6 +724,7 @@ export const zh = {
     "question/gone": "这个问题已经不用回答了",
     "queue/gone": "这条消息已经不在排队了，可能已经开始发送",
     "queue/attachments": "带附件的提问不能改文字，可以移除后重新发",
+    "queue/skills": "点名了技能的提问不能改文字，可以移除后重新发",
     "project/not-found": "没有这个工作区",
     "project/path-invalid": "请填绝对路径，比如 C:\\APPL\\项目 或 /home/you/项目",
     "project/path-not-allowed": "电脑上没有这个目录，或者连接程序没有允许它",

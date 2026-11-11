@@ -707,6 +707,7 @@ export const en: Text = {
     "question/gone": "This question no longer needs an answer",
     "queue/gone": "This message is no longer queued. It may already have been sent",
     "queue/attachments": "A queued message with attachments cannot be edited. Remove it and send it again",
+    "queue/skills": "A queued message that names a skill cannot be edited. Remove it and send it again",
     "project/not-found": "No such workspace",
     "project/path-invalid": "Enter an absolute path, such as C:\\APPL\\project or /home/you/project",
     "project/path-not-allowed": "This folder does not exist on the computer, or the connector does not allow it",

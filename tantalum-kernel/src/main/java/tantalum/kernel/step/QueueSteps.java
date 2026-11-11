@@ -8,6 +8,7 @@ import tantalum.value.decision.QueueEdited;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.state.Queue;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -19,7 +20,8 @@ public final class QueueSteps {
 
     /**
      * 找到了就改，没找到什么都不动；两种情况都报一条 {@link QueueEdited}。没有活动运行时队列一定是空的
-     * （运行结束时立刻取下一条），不报事实。带附件的提问不能改文字。
+     * （运行结束时立刻取下一条），不报事实。带附件的、带点名技能内容的提问不能改文字：
+     * 改了文字，附上的内容就对不上了。移除和转成插话照常，技能内容跟着整条消息走。
      */
     public static Decision changed(StepContext context) {
         QueueChanged event = (QueueChanged) context.envelope().event();
@@ -30,7 +32,8 @@ public final class QueueSteps {
         Outcome out = new Outcome(context);
         SessionState session = out.session(run.ref());
         int at = Queue.locate(session.followUps(), event.index(), Message.user(event.expected(), event.attachments()));
-        if (event.action() == QueueChanged.Action.EDIT && !event.attachments().isEmpty()) {
+        if (event.action() == QueueChanged.Action.EDIT && (!event.attachments().isEmpty()
+                || at >= 0 && session.followUps().get(at).content().stream().anyMatch(SkillBlock.class::isInstance))) {
             at = -1;
         }
         if (at >= 0) {

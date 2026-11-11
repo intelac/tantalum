@@ -42,6 +42,7 @@ import tantalum.shell.route.RouteSettings;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
+import tantalum.value.event.SkillUse;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
@@ -244,8 +245,16 @@ public class ApiController {
         if (problem.isPresent()) {
             return json.error(ErrorCode.of(problem.get().kind()), problem.get().diagnostic(), problem.get().params());
         }
+        // 文字里点名的技能（/name）：现在就让电脑读，内容随提交记下；读不到也照常发
+        List<SkillUse> skills;
+        try {
+            skills = content == null ? List.of() : engine.skillMentions().read(user, id.get(), content);
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
+            return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
+        }
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
-                content == null ? "" : content, attachments, model, dir);
+                content == null ? "" : content, attachments, model, dir, skills);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
 

@@ -19,6 +19,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SessionRenamed;
+import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
@@ -126,6 +127,12 @@ public final class Intake {
      */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments, ModelChoice model, String dir) {
+        return submit(principal, session, request, mode, text, attachments, model, dir, List.of());
+    }
+
+    /** 同上，{@code skills} 是调用方在文字里找到并已经读好的点名技能，随这次提交进 journal。 */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -141,9 +148,9 @@ public final class Intake {
         }
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
-            case "steer" -> new SteerSubmitted(submission, request, text, attachments);
-            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir);
+            case "steer" -> new SteerSubmitted(submission, request, text, attachments, skills);
+            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model, skills);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir, skills);
         });
     }
 

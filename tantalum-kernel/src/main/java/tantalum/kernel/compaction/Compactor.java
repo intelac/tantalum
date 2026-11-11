@@ -13,6 +13,7 @@ import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Role;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolSpec;
@@ -207,7 +208,8 @@ public final class Compactor {
     }
 
     /**
-     * 用户亲笔的消息：第一块是文字，其余只能是文字或附件（带图片、文件提问也算），不是上下文更新，也不是摘要。
+     * 用户亲笔的消息：第一块是文字，其余只能是文字、附件或点名的技能内容（带图片、文件、技能提问也算），不是上下文更新，也不是摘要。
+     * 压缩后留下的“最近一次提问”是整条消息，点名的技能内容跟着它一起留下。
      * 插件经 {@code HookMessages} 用同一条规则。
      */
     public static boolean isUserText(Message message) {
@@ -215,7 +217,7 @@ public final class Compactor {
             return false;
         }
         for (ContentBlock block : message.content()) {
-            if (!(block instanceof TextBlock) && !(block instanceof AttachmentBlock)) {
+            if (!(block instanceof TextBlock) && !(block instanceof AttachmentBlock) && !(block instanceof SkillBlock)) {
                 return false;
             }
         }

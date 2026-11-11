@@ -475,4 +475,42 @@ class WireFormatTest {
             return null;
         });
     }
+
+    // ---- 用户点名的技能（skills-wiki 任务 19）：skills.txt。提问读到一个、没读到一个；排队的带一个，轮到它时还在 ----
+
+    private static final tantalum.value.event.SkillUse PDF_SKILL = new tantalum.value.event.SkillUse("pdf-tools",
+            "<skill_content name=\"pdf-tools\">\nUse pdftotext.\n</skill_content>", null);
+    private static final tantalum.value.event.SkillUse SLOW_SKILL = new tantalum.value.event.SkillUse("slow", null, "timeout");
+
+    private TranscriptFixture skillScenario() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of());
+        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
+                "/pdf-tools and /slow please", List.of(), null, null, List.of(PDF_SKILL, SLOW_SKILL)));
+        RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWithoutCompaction(fx, first);
+        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "/pdf-tools again", List.of(), null, List.of(PDF_SKILL)));
+        fx.feed(first, fx.reply(text("converted")));
+        RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
+        assembledWithoutCompaction(fx, second);
+        fx.feed(second, fx.reply(text("again")));
+        return fx;
+    }
+
+    @Test
+    void namedSkillsInItemsPushesAndTrace(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = skillScenario();
+        StringBuilder out = new StringBuilder("# items\n");
+        for (TranscriptItem item : fx.items()) {
+            out.append(codec.mapper().writeValueAsString(ItemJson.toMap(codec.mapper(), item))).append('\n');
+        }
+        out.append("# item pushes\n");
+        for (TranscriptFixture.Change change : fx.changes) {
+            SseMessage message = SseHub.itemMessage(codec.mapper(), change.seq(), change.index(), change.item());
+            out.append(message.id()).append(' ').append(message.event()).append(' ').append(message.data()).append('\n');
+        }
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay, new RecordCodec(codec))
+                .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
+        out.append("# trace\n").append(pageJson(page));
+        check("skills.txt", out.toString());
+    }
 }

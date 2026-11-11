@@ -43,6 +43,7 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -400,6 +401,8 @@ final class ClaudeRequest {
             case ToolChangeBlock change -> throw new IllegalStateException("tool changes are system messages, see systemMessage()");
             case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");
             case HookTextBlock note -> throw new IllegalStateException("hook texts are system messages, see systemMessage()");
+            // 用户点名的技能：用户消息里的又一段文字
+            case SkillBlock skill -> ContentBlockParam.ofText(TextBlockParam.builder().text(skill.text()).build());
         };
     }
 

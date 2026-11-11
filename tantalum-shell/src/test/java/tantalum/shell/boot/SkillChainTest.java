@@ -58,8 +58,18 @@ class SkillChainTest {
     private Path mac;
 
     /** 提问是 {@code use <名字>} 时调 skill，拿到结果后原样回答；其余直接回答。 */
+    private volatile java.util.concurrent.CountDownLatch hold;
+
     private final ModelClient model = (prompt, chunks) -> {
         prompts.add(prompt);
+        java.util.concurrent.CountDownLatch waiting = hold;
+        if (waiting != null && prompts.size() == 1) {
+            try {
+                waiting.await();
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+            }
+        }
         ContentBlock last = prompt.messages().getLast().content().getLast();
         if (last instanceof ToolResultBlock result) {
             return new ModelOutcome.Replied(List.of(new TextBlock((result.error() ? "ERROR: " : "OK: ") + result.text())),
@@ -270,5 +280,85 @@ class SkillChainTest {
                 new PrintStream(out, true, StandardCharsets.UTF_8), CliText.of(Language.EN));
         assertEquals(0, code, out.toString(StandardCharsets.UTF_8));
         assertTrue(out.toString(StandardCharsets.UTF_8).contains("all 1 sessions"), out.toString(StandardCharsets.UTF_8));
+    }
+
+    private JsonNode items() throws Exception {
+        return JSON.readTree(server.get("alice", "/api/sessions/s1/messages").body()).get("items");
+    }
+
+    private JsonNode userItem(String text) throws Exception {
+        for (JsonNode item : items()) {
+            if (item.get("kind").asString().equals("user") && item.get("text").asString().equals(text)) {
+                return item;
+            }
+        }
+        throw new AssertionError("no user message '" + text + "' in " + items());
+    }
+
+    /**
+     * 用户点名（任务 18、19；需求 5.2–5.8、7.1、7.5）：消息原样保留，技能内容作为这条消息的又一块交给模型，和模型自己加载拿到的是
+     * 同一份文字；对话页和轨迹页带着它；技能文件之后改了，记下的不变。
+     */
+    @Test
+    void aSkillTheUserNamesTravelsWithTheirMessage() throws Exception {
+        fillBoth();
+        try (TestComputer ignored = server.connectComputer("alice", mac, false)) {
+            ask("/by-hand and /nope please", 1);
+            tantalum.value.model.Message sent = prompts.getLast().messages().getFirst();
+            assertEquals(new TextBlock("/by-hand and /nope please"), sent.content().getFirst(), "the user's text is untouched");
+            tantalum.value.model.SkillBlock block = (tantalum.value.model.SkillBlock) sent.content().get(1);
+            assertEquals("by-hand", block.name());
+            assertEquals("<skill_content name=\"by-hand\">\n<skill_resources>\nBase directory for this skill: "
+                    + mac.resolve("skills/by-hand") + "\nResolve relative paths mentioned by this skill against the base directory before"
+                    + " using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\n"
+                    + "Manual steps.\n</skill_instructions>\n</skill_content>", block.text());
+            assertEquals(2, sent.content().size(), "a name that is no skill adds nothing");
+
+            JsonNode shown = userItem("/by-hand and /nope please");
+            assertEquals(1, shown.get("skills").size(), shown.toString());
+            assertEquals("by-hand", shown.get("skills").get(0).get("name").asString());
+            assertEquals(block.text(), shown.get("skills").get(0).get("content").asString());
+
+            // 文件之后改了：这条消息带的还是提交时的内容
+            skill(mac.resolve("skills"), "by-hand", "description: Only when asked.\ndisable-model-invocation: true", "Changed later.");
+            ask("plain question", 2);
+            assertEquals(block, prompts.getLast().messages().getFirst().content().get(1));
+            assertFalse(userItem("plain question").has("skills"));
+
+            String trace = server.get("alice", "/api/sessions/s1/trace").body();
+            assertTrue(trace.contains("Manual steps."), "the trace shows what was attached");
+        }
+    }
+
+    /** 排队的提问在排队那一刻读技能；带了技能的不能改文字（409 queue/skills），能移除。 */
+    @Test
+    void aQueuedMessageWithASkillCannotBeEdited() throws Exception {
+        fillBoth();
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        hold = release;
+        try (TestComputer ignored = server.connectComputer("alice", mac, false)) {
+            assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
+                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"first\"}").statusCode());
+            assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
+                    "{\"requestId\":\"r2\",\"mode\":\"follow-up\",\"text\":\"/pdf-tools later\"}").statusCode());
+            JsonNode queued = null;
+            for (int i = 0; i < 500 && queued == null; i++) {
+                for (JsonNode item : items()) {
+                    if (item.get("kind").asString().equals("user") && item.get("queued").asBoolean()) {
+                        queued = item;
+                    }
+                }
+                Thread.sleep(10);
+            }
+            assertEquals("pdf-tools", queued.get("skills").get(0).get("name").asString(), "read when it was queued");
+            String path = "/api/sessions/s1/queue/" + queued.get("id").asString();
+            var edit = server.post("alice", path, "{\"requestId\":\"q1\",\"action\":\"edit\",\"text\":\"changed\"}");
+            assertEquals(409, edit.statusCode(), edit.body());
+            assertTrue(edit.body().contains("queue/skills"), edit.body());
+            var remove = server.post("alice", path, "{\"requestId\":\"q2\",\"action\":\"remove\"}");
+            assertEquals(200, remove.statusCode(), remove.body());
+        } finally {
+            release.countDown();
+        }
     }
 }

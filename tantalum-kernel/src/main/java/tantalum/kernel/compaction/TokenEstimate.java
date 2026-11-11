@@ -13,6 +13,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -89,6 +90,7 @@ public record TokenEstimate(double bytesPerToken) {
                     + (change.unavailable().isEmpty() ? "." : "; still unavailable " + change.unavailable() + "."));
             case ModelChangeBlock change -> ofText(change.text());
             case HookTextBlock note -> ofText(note.text());
+            case SkillBlock skill -> ofText(skill.text());
         };
     }
 

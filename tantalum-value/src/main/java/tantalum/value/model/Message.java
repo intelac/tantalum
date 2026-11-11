@@ -27,4 +27,15 @@ public record Message(Role role, List<ContentBlock> content, boolean interrupted
         attachments.forEach(ref -> content.add(new AttachmentBlock(ref)));
         return new Message(Role.USER, content, false);
     }
+
+    /** 同上，再接用户点名的技能内容，按点名的顺序。 */
+    public static Message user(String text, List<AttachmentRef> attachments, List<SkillBlock> skills) {
+        Message plain = user(text, attachments);
+        if (skills.isEmpty()) {
+            return plain;
+        }
+        List<ContentBlock> content = new ArrayList<>(plain.content());
+        content.addAll(skills);
+        return new Message(Role.USER, content, false);
+    }
 }

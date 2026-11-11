@@ -15,9 +15,10 @@ import tantalum.shell.conversation.TranscriptItem.ToolChange;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.shell.model.Reasoning;
+import tantalum.shell.skill.SkillNote;
+import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
-import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.decision.CompactionFailed;
 import tantalum.value.decision.ContextCompacted;
 import tantalum.value.decision.Decision;
@@ -34,6 +35,7 @@ import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
+import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -41,12 +43,13 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
-import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
+import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
+import tantalum.value.model.SkillBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
@@ -88,9 +91,9 @@ final class TranscriptPass {
     void run() {
         Event event = envelope.event();
         switch (event) {
-            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), false);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), false);
-            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), true);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), false);
+            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), false);
+            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), true);
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -236,17 +239,18 @@ final class TranscriptPass {
     }
 
     /** 用户提交：直接开始运行、插进当前运行，或排队。 */
-    private void submission(String text, List<AttachmentRef> attachments, boolean steer) {
+    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, boolean steer) {
+        List<SkillNote> skills = SkillNote.of(named);
         String id = TranscriptItem.id(envelope.seq(), 0);
         RunId fresh = RunId.of(session, envelope.seq());
         SessionState current = state.sessions().get(session);
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
-            put(new UserMessage(id, session, fresh, at, text, attachments, false));
+            put(new UserMessage(id, session, fresh, at, text, attachments, false, false, skills));
         } else if (steer) {
-            put(new UserMessage(id, session, current == null ? null : current.activeRun(), at, text, attachments, false));
+            put(new UserMessage(id, session, current == null ? null : current.activeRun(), at, text, attachments, false, false, skills));
         } else {
-            put(new UserMessage(id, session, null, at, text, attachments, true));
+            put(new UserMessage(id, session, null, at, text, attachments, true, false, skills));
             conversation.queued.addLast(id);
         }
     }
@@ -272,6 +276,7 @@ final class TranscriptPass {
                 case ToolChangeBlock ignored -> { } // 工具变化只在系统消息里
                 case ModelChangeBlock ignored -> { } // 换模型的说明也只在系统消息里
                 case HookTextBlock ignored -> { } // 钩子的说明也只在系统消息里
+                case SkillBlock ignored -> { } // 点名的技能内容只在用户消息里
             }
         }
         // 摘要调用在上面已经返回：它的用量在压缩标记上，不算进这次运行。放在内容之后，状态条目仍是这一步里最后变的
