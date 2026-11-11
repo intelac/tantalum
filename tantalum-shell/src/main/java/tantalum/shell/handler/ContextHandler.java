@@ -121,7 +121,7 @@ public final class ContextHandler implements Handler {
         ModelChoice model = choose(assemble, principal);
         // 全部工具加上这个用户现在开着的名单：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
-                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(), model);
+                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(), model, gate.pluginParams(principal));
     }
 
     /**

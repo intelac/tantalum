@@ -186,6 +186,18 @@ class CompactStepsTest {
         assertTrue(((TextBlock) sent.get(3).content().getFirst()).text().contains("## Goal"));
     }
 
+    /** plugin-settings 任务 17：压缩后重新冻结上下文，带上这次组装的钩子插件参数。 */
+    @Test
+    void refreezingAfterCompactionCarriesThePluginParams() {
+        LoopFixture loop = overThreshold();
+        loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
+        assertNull(loop.session().context(), "compaction drops the frozen context");
+        Json.Obj params = new Json.Obj(java.util.Map.of("quota", new Json.Obj(java.util.Map.of("tokens", new Json.Num(java.math.BigDecimal.TEN)))));
+        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of(), null, null,
+                java.util.Map.of(), null, params));
+        assertEquals(params, loop.session().context().pluginParams());
+    }
+
     @Test
     void acceptedSummaryReplacesTheViewAndCallsTheModelWithoutRechecking() {
         LoopFixture loop = overThreshold();

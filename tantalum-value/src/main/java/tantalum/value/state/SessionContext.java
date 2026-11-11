@@ -2,6 +2,8 @@ package tantalum.value.state;
 
 import java.util.List;
 import java.util.Objects;
+import tantalum.value.hook.Params;
+import tantalum.value.json.Json;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ToolSpec;
 
@@ -12,9 +14,11 @@ import tantalum.value.model.ToolSpec;
  * {@code activePlugins} 是现在开着的工具和钩子插件。三者为 null 表示全部开着（旧会话）。
  * {@code hooks} 是钩子补丁的状态：说明和工具都以追加的 system 消息告诉模型，这里记下上次告诉过什么；
  * null 表示钩子还没追加过东西（旧会话、压缩后重新冻结）。
+ * {@code pluginParams} 是最近一次组装时每个钩子插件的参数 {@code {插件: {键: 值}}}，null 表示没记过（旧会话、没有带参数的钩子插件）。
  */
 public record SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
-                             List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks) {
+                             List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks,
+                             Json.Obj pluginParams) {
 
     /**
      * 钩子补丁的状态。{@code texts} 是上次发给模型的每个钩子的说明（按注册顺序），按钩子比较变没变；
@@ -50,32 +54,47 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
     }
 
     public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections) {
-        this(system, tools, compaction, sections, null, null, null, null);
+        this(system, tools, compaction, sections, null, null, null, null, null);
     }
 
     public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
                           List<String> initialTools, List<String> activeTools, List<String> activePlugins) {
-        this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, null);
+        this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, null, null);
+    }
+
+    public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
+                          List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks) {
+        this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, null);
     }
 
     /** 只换告知过模型的可变内容，system 和工具不动。 */
     public SessionContext withSections(List<ContextSection> newSections) {
-        return new SessionContext(system, tools, compaction, newSections, initialTools, activeTools, activePlugins, hooks);
+        return new SessionContext(system, tools, compaction, newSections, initialTools, activeTools, activePlugins, hooks, pluginParams);
     }
 
     /** 换压缩设置；不影响发给模型的内容。 */
     public SessionContext withCompaction(CompactionSettings newCompaction) {
-        return new SessionContext(system, tools, newCompaction, sections, initialTools, activeTools, activePlugins, hooks);
+        return new SessionContext(system, tools, newCompaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams);
     }
 
     /** 换现在开着的工具和插件；工具全集和会话开始时的名单不动。 */
     public SessionContext withActive(List<String> tools, List<String> plugins) {
-        return new SessionContext(system, this.tools, compaction, sections, initialTools, tools, plugins, hooks);
+        return new SessionContext(system, this.tools, compaction, sections, initialTools, tools, plugins, hooks, pluginParams);
     }
 
     /** 换钩子补丁的状态。 */
     public SessionContext withHooks(HookState newHooks) {
-        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, newHooks);
+        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, newHooks, pluginParams);
+    }
+
+    /** 换钩子插件的参数；不影响发给模型的内容。 */
+    public SessionContext withPluginParams(Json.Obj params) {
+        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, params);
+    }
+
+    /** 这个插件的那一包参数；没记过时是 {@link Params#NONE}，钩子用自己构造时的值。 */
+    public Params paramsOf(String plugin) {
+        return pluginParams != null && pluginParams.fields().get(plugin) instanceof Json.Obj mine ? new Params(mine) : Params.NONE;
     }
 
     /** 钩子补丁的状态，没有时是 {@link HookState#NONE}。 */

@@ -15,37 +15,45 @@ import tantalum.value.state.Plan;
  * 钩子能看到的上下文，时间取自事件。{@code call}、{@code failure}、{@code work}、{@code plan}、{@code question} 只在对应的钩子位置有值；
  * {@code trigger} 和 {@code plan} 一起只在压缩前有值：拒绝超长恢复会让运行失败，拒绝自动压缩只是这次不压，钩子要分得清。
  * {@code onAnswer} 时 {@code question} 是问过的问题，{@code answer} 是回答，期限到了没人答时为 null。
+ * {@code params} 是这个钩子所在插件的参数，取自运行开始组装上下文时记下的那份；没记过时是 {@link Params#NONE}。
+ * 别的插件的参数看不到，也没有密码。
  */
 public record HookContext(RunRef run, Instant at, ToolCallBlock call, ModelFailed failure, WorkDone work,
-                          Plan plan, Compacting.Trigger trigger, Question question, Answer answer) {
+                          Plan plan, Compacting.Trigger trigger, Question question, Answer answer, Params params) {
 
     public HookContext {
         Objects.requireNonNull(run, "run");
         Objects.requireNonNull(at, "at");
+        params = params == null ? Params.NONE : params;
     }
 
     public static HookContext of(RunRef run, Instant at) {
-        return new HookContext(run, at, null, null, null, null, null, null, null);
+        return new HookContext(run, at, null, null, null, null, null, null, null, null);
     }
 
     public HookContext withCall(ToolCallBlock toolCall) {
-        return new HookContext(run, at, toolCall, failure, work, plan, trigger, question, answer);
+        return new HookContext(run, at, toolCall, failure, work, plan, trigger, question, answer, params);
     }
 
     public HookContext withFailure(ModelFailed modelFailure) {
-        return new HookContext(run, at, call, modelFailure, work, plan, trigger, question, answer);
+        return new HookContext(run, at, call, modelFailure, work, plan, trigger, question, answer, params);
     }
 
     public HookContext withWork(WorkDone workDone) {
-        return new HookContext(run, at, call, failure, workDone, plan, trigger, question, answer);
+        return new HookContext(run, at, call, failure, workDone, plan, trigger, question, answer, params);
     }
 
     public HookContext withCompaction(Plan compactionPlan, Compacting.Trigger compactionTrigger) {
-        return new HookContext(run, at, call, failure, work, compactionPlan, compactionTrigger, question, answer);
+        return new HookContext(run, at, call, failure, work, compactionPlan, compactionTrigger, question, answer, params);
     }
 
     /** {@code onAnswer}：问过的问题和回答（没人答为 null）。 */
     public HookContext withQuestion(Question asked, Answer given) {
-        return new HookContext(run, at, call, failure, work, plan, trigger, Objects.requireNonNull(asked, "question"), given);
+        return new HookContext(run, at, call, failure, work, plan, trigger, Objects.requireNonNull(asked, "question"), given, params);
+    }
+
+    /** 换成某个插件的参数：钩子链给每个钩子换上它自己插件的那一包。 */
+    public HookContext withParams(Params mine) {
+        return new HookContext(run, at, call, failure, work, plan, trigger, question, answer, mine);
     }
 }

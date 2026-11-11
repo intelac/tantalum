@@ -74,7 +74,7 @@ public final class ContextSteps {
     /**
      * 所有模型相同：会话的 system 和工具固定为第一次组装的结果，历史只追加。压缩设置每次换成这次算出的那份。工具是服务器上的全集，会话开始时用户没开的发给模型时
      * 标为 deferred。之后可变内容（记忆索引等）有变化时，追加一条用户消息告诉模型；用户开着的工具变了，追加一条系统消息说明
-     * 新增和移除了哪些，并重申之前就不能用、现在仍不能用的工具；钩子插件的名单只记下、不告诉模型。
+     * 新增和移除了哪些，并重申之前就不能用、现在仍不能用的工具；钩子插件的名单和参数只记下、不告诉模型。
      * 会话开始之后才出现的工具（新连上的 MCP）不在全集里，要等压缩或新会话。
      * 压缩后重新组装时，以前开着过、现在不能用的工具（{@link SessionState#toolsSeen()}）写成一条上下文更新告诉模型：
      * 原来的工具变化消息可能已经压进摘要。
@@ -90,7 +90,8 @@ public final class ContextSteps {
             List<String> gone = session.toolsSeen().stream().filter(name -> !active.contains(name)).toList();
             SessionState next = gone.isEmpty() ? session : session.append(ContextUpdate.message(ToolsGone.text(gone)));
             out.put(next.withContext(new SessionContext(event.system(), event.tools(), event.compaction(), event.sections(),
-                    enabled, enabled, event.enabledPlugins())).withToolsSeen(seen(session, active)));
+                    enabled, enabled, event.enabledPlugins()).withPluginParams(event.pluginParams()))
+                    .withToolsSeen(seen(session, active)));
             return;
         }
         SessionState next = session;
@@ -122,6 +123,10 @@ public final class ContextSteps {
         if (!added.isEmpty() || !removed.isEmpty() || !Objects.equals(frozen.activePlugins(), event.enabledPlugins())) {
             context = context.withActive(frozen.activeTools() == null && event.enabledTools() == null ? null : active,
                     event.enabledPlugins());
+        }
+        // 钩子插件的参数只给钩子看，不告诉模型；变了才换，没变不产生状态变化
+        if (!Objects.equals(frozen.pluginParams(), event.pluginParams())) {
+            context = context.withPluginParams(event.pluginParams());
         }
         if (next != session || context != frozen) {
             out.put(next.withContext(context));

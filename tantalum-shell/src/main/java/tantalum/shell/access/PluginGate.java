@@ -37,6 +37,7 @@ import tantalum.shell.tool.ToolCatalog;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.Principal;
+import tantalum.value.hook.Params;
 import tantalum.value.json.Json;
 import tantalum.value.state.KernelState;
 import tantalum.value.text.Failures;
@@ -75,6 +76,8 @@ public final class PluginGate {
     private final Set<String> lockedInCode;
     /** 钩子插件声明的参数，没声明的不在里面。 */
     private final Map<String, List<Param>> pluginParams;
+    /** 有内核钩子的插件：只有它们的参数记进组装上下文。 */
+    private final Set<String> kernelPlugins;
     private final ParamStore store;
     private final ParamResolver resolver;
 
@@ -111,6 +114,7 @@ public final class PluginGate {
         this.plugins = group(hooks, afterHooks, workTypes, required);
         this.lockedInCode = lockedInCode(hooks, afterHooks);
         this.pluginParams = declared(hooks, afterHooks, workTypes);
+        this.kernelPlugins = hooks.stream().map(KernelHook::plugin).collect(java.util.stream.Collectors.toUnmodifiableSet());
         this.store = params;
         this.resolver = new ParamResolver(params);
         for (Tool tool : catalog.tools()) {
@@ -185,6 +189,25 @@ public final class PluginGate {
 
     public List<String> enabledPlugins(Principal user) {
         return plugins.keySet().stream().filter(name -> pluginEnabled(user, name)).toList();
+    }
+
+    /**
+     * 这个用户此刻的钩子插件参数 {@code {插件: {键: 值}}}，记进组装上下文，内核钩子在整个运行里用这一份（回放时也是）。
+     * 只收开着的、有内核钩子的、有非密码参数的插件；插件按名字排序，键按声明顺序；一个都没有返回 null。
+     * 工具后处理和插件工作在 shell 里跑，调用时现取，不走这里。
+     */
+    public Json.Obj pluginParams(Principal user) {
+        Map<String, Json> byPlugin = new java.util.TreeMap<>();
+        pluginParams.forEach((plugin, declared) -> {
+            if (!kernelPlugins.contains(plugin) || !pluginEnabled(user, plugin)) {
+                return;
+            }
+            Params mine = resolver.params(user, Kind.PLUGIN, plugin, declared, lock(Kind.PLUGIN, plugin) != null);
+            if (!mine.values().fields().isEmpty()) {
+                byPlugin.put(plugin, mine.values());
+            }
+        });
+        return byPlugin.isEmpty() ? null : new Json.Obj(byPlugin);
     }
 
     public List<Plugin> plugins() {

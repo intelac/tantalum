@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import tantalum.value.id.CommandId;
+import tantalum.value.json.Json;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
@@ -16,10 +17,12 @@ import tantalum.value.state.ContextSection;
  *，为 null 表示全部开着。{@code toolSources} 是每个工具从哪来：{@code builtin} 或 {@code mcp:<服务器名>}
  *，内核不读它，画面用来说明工具为什么不能用了。
  * {@code model} 是这次提问实际用的路线、模型和档位（“配上了什么”），旧事件为 null。
+ * {@code pluginParams} 是这次组装时每个钩子插件的参数 {@code {插件: {键: 值}}}，没有密码；没有带参数的钩子插件、或旧事件为 null。
+ * 钩子只从这里拿参数，回放时拿到的和当时一样。
  */
 public record ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
                                List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
-                               Map<String, String> toolSources, ModelChoice model)
+                               Map<String, String> toolSources, ModelChoice model, Json.Obj pluginParams)
         implements ResultEvent {
 
     public static final String TYPE = "ContextAssembled";
@@ -31,6 +34,13 @@ public record ContextAssembled(CommandId command, String system, List<ToolSpec> 
         enabledTools = enabledTools == null ? null : List.copyOf(enabledTools);
         enabledPlugins = enabledPlugins == null ? null : List.copyOf(enabledPlugins);
         toolSources = toolSources == null ? Map.of() : Map.copyOf(toolSources);
+    }
+
+    /** 不记插件参数时（旧事件、测试）。 */
+    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
+                            List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
+                            Map<String, String> toolSources, ModelChoice model) {
+        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, toolSources, model, null);
     }
 
     /** 不记选择时（旧事件、测试）。 */

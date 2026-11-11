@@ -202,6 +202,28 @@ class ContextHandlerTest {
         assertFalse(sonnet.system().contains("claude-sonnet"));
     }
 
+    /** plugin-settings 任务 19：组装时把这个人的钩子插件参数记进事件；没有可记的就不带。 */
+    @Test
+    void theAssembledContextCarriesTheHookPluginParams() throws Exception {
+        final class Quota implements tantalum.kernel.hook.KernelHook, tantalum.shell.plugin.Configurable {
+            @Override public String name() { return "quotaHook"; }
+            @Override public String plugin() { return "quota"; }
+            @Override public List<tantalum.shell.plugin.Param> params() {
+                return List.of(tantalum.shell.plugin.Param.number("tokens", 1000));
+            }
+        }
+        PluginGate gate = PluginGate.allOn(catalog(), List.of(new Quota()), List.of(), List.of());
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), gate, memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
+        tantalum.value.json.Json.Obj recorded = assembled(handler, COMMAND).pluginParams();
+        assertEquals(java.util.Set.of("quota"), recorded.fields().keySet());
+        assertEquals(1000, new tantalum.value.hook.Params((tantalum.value.json.Json.Obj) recorded.fields().get("quota")).number("tokens", 0));
+        gate.saveParams(COMMAND.run().principal(), tantalum.shell.plugin.Kind.PLUGIN, "quota",
+                java.util.Map.of("tokens", new tantalum.value.json.Json.Num(java.math.BigDecimal.valueOf(50))));
+        assertEquals(50, new tantalum.value.hook.Params((tantalum.value.json.Json.Obj) assembled(handler, COMMAND).pluginParams()
+                .fields().get("quota")).number("tokens", 0));
+        assertNull(assembled(shared(), COMMAND).pluginParams());
+    }
+
     @Test
     void systemPromptIncludesAgentsFileAndToolsAreListed() throws Exception {
         Files.writeString(mac.resolve("AGENTS.md"), "Project rules here.");

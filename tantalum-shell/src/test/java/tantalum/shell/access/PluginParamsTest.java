@@ -479,4 +479,76 @@ class PluginParamsTest {
         assertNull(search.byAdmin());
         assertEquals(new Lock(Lock.CODE, ""), defaults.stream().filter(view -> view.name().equals("audit")).findFirst().orElseThrow().lock());
     }
+
+    // ---- 任务 19：记进会话的钩子插件参数 ----
+
+    /** 插件 vault：钩子声明一个普通参数和一个密码。 */
+    static final class VaultHook implements KernelHook, Configurable {
+        @Override public String name() { return "vaultHook"; }
+        @Override public String plugin() { return "vault"; }
+        @Override public List<Param> params() { return List.of(MAX_CHARS, API_KEY); }
+        @Override public HookResult beforeModelCall(KernelState state, HookContext context) { return Allow.PLAIN; }
+    }
+
+    /** 插件 badge：钩子只声明密码。 */
+    static final class BadgeHook implements KernelHook, Configurable {
+        @Override public String name() { return "badgeHook"; }
+        @Override public String plugin() { return "badge"; }
+        @Override public List<Param> params() { return List.of(API_KEY); }
+        @Override public HookResult beforeModelCall(KernelState state, HookContext context) { return Allow.PLAIN; }
+    }
+
+    private static Json.Obj obj(Object... pairs) {
+        Map<String, Json> fields = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            fields.put((String) pairs[i], (Json) pairs[i + 1]);
+        }
+        return new Json.Obj(fields);
+    }
+
+    private static Json list(String... items) {
+        return new Json.Arr(java.util.Arrays.stream(items).<Json>map(Json.Str::new).toList());
+    }
+
+    /** 只有开着的、有内核钩子的插件，按名字排，键按声明的顺序；每个人是自己那份。 */
+    @Test
+    void theRecordHoldsEnabledHookPluginsOnly() {
+        // quota 默认关；trim 只有后处理；audit 没有参数
+        assertEquals(obj("guard", obj("tools", list("write_file"), "maxChars", num(500))), gate.pluginParams(ALICE));
+        assertEquals(List.of("tools", "maxChars"), List.copyOf(((Json.Obj) gate.pluginParams(ALICE).fields().get("guard")).fields().keySet()));
+
+        gate.set(ALICE, Kind.PLUGIN, "quota", true);
+        gate.saveParams(ALICE, Kind.PLUGIN, "guard", Map.of("maxChars", num(900)));
+        gate.assign(ALICE, Kind.PLUGIN, "quota", Map.of("tokens", num(50)));
+        Json.Obj alice = gate.pluginParams(ALICE);
+        assertEquals(obj("guard", obj("tools", list("write_file"), "maxChars", num(900)), "quota", obj("tokens", num(50))), alice);
+        assertEquals(List.of("guard", "quota"), List.copyOf(alice.fields().keySet()));
+        assertEquals(obj("guard", obj("tools", list("write_file"), "maxChars", num(500))), gate.pluginParams(BOB));
+
+        gate.set(ALICE, Kind.PLUGIN, "guard", false);
+        assertEquals(obj("quota", obj("tokens", num(50))), gate.pluginParams(ALICE));
+        gate.set(ALICE, Kind.PLUGIN, "quota", false);
+        assertNull(gate.pluginParams(ALICE), "nothing to record is null, so old lines stay as they were");
+    }
+
+    /** 锁着的插件：记下的是管理员的默认，不是用户自己填的。 */
+    @Test
+    void aLockedPluginRecordsTheAdminsValues() {
+        gate.saveParams(ALICE, Kind.PLUGIN, "guard", Map.of("maxChars", num(900)));
+        gate.saveDefaults(Kind.PLUGIN, "guard", Map.of("maxChars", num(300)));
+        gate.setDefault(Kind.PLUGIN, "guard", true, true, "policy");
+        assertEquals(num(300), ((Json.Obj) gate.pluginParams(ALICE).fields().get("guard")).fields().get("maxChars"));
+    }
+
+    /** 密码不进会话记录：有别的参数的插件只记别的；只有密码的插件整个不记。 */
+    @Test
+    void secretsNeverEnterTheRecord() {
+        PluginGate vault = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new VaultHook(), new BadgeHook()),
+                List.of(), List.of(), Set.of());
+        vault.saveParams(ALICE, Kind.PLUGIN, "vault", Map.of("apiKey", new Json.Str("hunter2-plain")));
+        vault.saveParams(ALICE, Kind.PLUGIN, "badge", Map.of("apiKey", new Json.Str("hunter2-badge")));
+        Json.Obj recorded = vault.pluginParams(ALICE);
+        assertEquals(obj("vault", obj("maxChars", num(500))), recorded);
+        assertFalse(recorded.toString().contains("hunter2"));
+    }
 }

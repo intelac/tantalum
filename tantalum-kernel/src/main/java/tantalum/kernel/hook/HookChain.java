@@ -44,7 +44,8 @@ public final class HookChain {
             }
             HookResult result;
             try {
-                result = call(hook, point, state, context);
+                // 每个钩子只拿到自己插件的那一包参数
+                result = call(hook, point, state, context.withParams(session == null ? null : session.paramsOf(hook.plugin())));
             } catch (RuntimeException failure) {
                 // 只记类名：消息可能带路径或密钥，事实进 journal 和推送
                 facts.add(new HookReported(context.run(), hook.name(), Failures.describe(failure)));
