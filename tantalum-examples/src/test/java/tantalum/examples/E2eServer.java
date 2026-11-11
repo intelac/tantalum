@@ -94,6 +94,8 @@ public final class E2eServer {
                     generic.registerBean(E2eScopeHook.class);
                     // 工具审批的端到端测试（A4）：默认关，用例在插件页打开；审批写文件，在对话页上问
                     generic.registerBean(ToolApprovalHook.class, () -> new ToolApprovalHook(java.util.Set.of("write_file")));
+                    // 插件参数的端到端测试（plugin-settings）：带一个密码参数的测试工具
+                    generic.registerBean(E2eSecretTool.class);
                 })
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,

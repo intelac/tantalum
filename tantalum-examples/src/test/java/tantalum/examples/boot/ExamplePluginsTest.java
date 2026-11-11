@@ -100,5 +100,32 @@ class ExamplePluginsTest {
                     context.withCall(new ToolCallBlock("c", "grep", "{}", new Json.Obj(Map.of())))));
         }
     }
+    /** plugin-settings 需求 9、P17：原来的配置项成了参数的自带默认；额度只有管理员能改，其余用户自己改。 */
+    @Test
+    void theSettingsShowUpAsParamsOnThePluginPage() throws Exception {
+        try (TestServer server = server("--tantalum.examples.enabled=true", "--tantalum.examples.daily-quota.tokens=777",
+                "--tantalum.examples.truncate-output.max-chars=3000", "--tantalum.examples.read-only.tools=read_file,grep")) {
+            Map<String, JsonNode> params = new LinkedHashMap<>();
+            for (JsonNode plugin : JSON.readTree(server.get("alice", "/api/plugins").body()).get("plugins")) {
+                for (JsonNode param : plugin.path("params")) {
+                    params.put(plugin.get("name").asString() + "." + param.get("key").asString(), param);
+                }
+            }
+            assertEquals(java.util.Set.of("dailyQuota.tokens", "readOnly.tools", "toolApproval.tools", "truncateOutput.maxChars"),
+                    params.keySet(), "the other examples have no params");
+            JsonNode tokens = params.get("dailyQuota.tokens");
+            assertEquals(777, tokens.get("value").asInt());
+            assertEquals("admin", tokens.get("owner").asString());
+            assertEquals(false, tokens.get("editable").asBoolean());
+            assertEquals("builtin", tokens.get("source").asString());
+            assertEquals(3000, params.get("truncateOutput.maxChars").get("value").asInt());
+            assertEquals("[\"grep\",\"read_file\"]", params.get("readOnly.tools").get("value").toString());
+
+            assertEquals(403, put(server, "alice", "/api/plugins/plugin/dailyQuota/params", "{\"values\":{\"tokens\":999999}}").statusCode());
+            assertEquals(200, put(server, "alice", "/api/plugins/plugin/truncateOutput/params", "{\"values\":{\"maxChars\":500}}").statusCode());
+            assertEquals(400, put(server, "alice", "/api/plugins/plugin/truncateOutput/params", "{\"values\":{\"maxChars\":5}}").statusCode());
+            assertEquals(200, put(server, "alice", "/api/plugins/plugin/readOnly/params", "{\"values\":{\"tools\":[\"ls\"]}}").statusCode());
+        }
+    }
 
 }

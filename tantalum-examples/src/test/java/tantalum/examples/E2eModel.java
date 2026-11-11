@@ -80,6 +80,10 @@ public final class E2eModel implements ModelClient {
             if (text.contains(E2eTraceHook.KEYWORD)) {
                 return traceScenario(text, results, chunks);
             }
+            if (text.contains("secret:")) {
+                // plugin-settings：调密码测试工具，原样说出结果（只有“收到了，长度 N”或“没设置”）
+                return results == 0 ? reply(List.of(), call(E2eSecretTool.NAME, Map.of())) : answer(chunks, "密码工具说：" + lastResult(prompt));
+            }
             if (text.contains("fetch:")) {
                 return results == 0 ? reply(think(chunks, "用 web_fetch 读这个网页。"), call("web_fetch", Map.of("url", webPage)))
                         : answer(chunks, "抓到了网页。");

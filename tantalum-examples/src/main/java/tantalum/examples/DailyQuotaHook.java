@@ -2,7 +2,10 @@ package tantalum.examples;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
@@ -13,8 +16,13 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 import tantalum.value.text.LocalText;
 
-/** 每日额度：超过当天的 token 上限就停止。数据从事件投影到状态，时间取自事件，所以钩子是纯函数。 */
-public final class DailyQuotaHook implements KernelHook, PluginInfo {
+/**
+ * 每日额度：超过当天的 token 上限就停止。数据从事件投影到状态，时间取自事件，所以钩子是纯函数。
+ *
+ * <p>上限是一个只归管理员的参数 {@code tokens}：管理员在后台给所有人定默认、给某个人单独指定，用户自己改不了。
+ * 构造时给的值（服务器配置）是插件自带的默认；没记参数的旧会话继续跑或回放时也用它。
+ */
+public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurable {
 
     private final long dailyTokens;
 
@@ -28,6 +36,15 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo {
     @Override
     public String name() {
         return "dailyQuota";
+    }
+
+    @Override
+    public List<Param> params() {
+        return List.of(Param.number("tokens", dailyTokens).atLeast(1).adminOnly()
+                .label(LocalText.en("Daily token limit").zh("每天的 token 上限").ja("1 日のトークン上限"))
+                .hint(LocalText.en("Input (including cache) plus output, counted per UTC day.")
+                        .zh("读入的（含缓存）加输出的，按 UTC 的一天算。")
+                        .ja("入力（キャッシュを含む）と出力の合計で、UTC の 1 日ごとに数えます。")));
     }
 
     @Override
@@ -56,6 +73,6 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo {
             return Allow.PLAIN;
         }
         TokenUsage today = principal.usageOn(LocalDate.ofInstant(context.at(), ZoneOffset.UTC));
-        return today.promptTotal() + today.output() >= dailyTokens ? new Stop("daily token quota used up") : Allow.PLAIN;
+        return today.promptTotal() + today.output() >= context.params().number("tokens", dailyTokens) ? new Stop("daily token quota used up") : Allow.PLAIN;
     }
 }

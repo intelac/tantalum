@@ -1,14 +1,25 @@
 package tantalum.examples;
 
+import java.util.List;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
 import tantalum.value.text.LocalText;
 
-/** 输出截断：处理器钩子，只改数据，不改流程。 */
-public final class TruncateOutputHook implements AfterToolHook, PluginInfo {
+/**
+ * 输出截断：处理器钩子，只改数据，不改流程。
+ *
+ * <p>上限是用户自己的参数 {@code maxChars}，每次调用时读当时的值；构造时给的值（服务器配置）是插件自带的默认。
+ */
+public final class TruncateOutputHook implements AfterToolHook, PluginInfo, Configurable {
+
+    /** 页面上能填的范围；服务器配置写在范围外时，范围跟着放宽，不让启动失败。 */
+    private static final long LOWEST = 100;
+    private static final long HIGHEST = 1_000_000;
 
     private final int maxChars;
 
@@ -25,6 +36,12 @@ public final class TruncateOutputHook implements AfterToolHook, PluginInfo {
     }
 
     @Override
+    public List<Param> params() {
+        return List.of(Param.number("maxChars", maxChars).range(Math.min(LOWEST, maxChars), Math.max(HIGHEST, maxChars))
+                .label(LocalText.en("Longest tool result, in characters").zh("工具结果最多多少字符").ja("ツール結果の最大文字数")));
+    }
+
+    @Override
     public LocalText description() {
         // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
         return LocalText.en("Truncates tool results over the limit and notes how many characters were cut.")
@@ -36,6 +53,7 @@ public final class TruncateOutputHook implements AfterToolHook, PluginInfo {
     @Override
     public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
         String text = output.text();
+        int maxChars = (int) Math.min(Integer.MAX_VALUE, context.params().number("maxChars", this.maxChars));
         if (text.length() <= maxChars) {
             return output;
         }

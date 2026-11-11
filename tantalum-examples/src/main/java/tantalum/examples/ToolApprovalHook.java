@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.Param;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.Ask;
@@ -30,8 +32,10 @@ import tantalum.value.text.LocalText;
  *
  * <p>结果：列出的工具 → {@code Ask}；这个会话里一直允许的 → 放行；同意 → 放行；拒绝、期限到没人答 → {@code Stop}，只拦这一个调用。
  * 默认关（策略插件），开着时出错按拦截处理。
+ *
+ * <p>要审批哪些工具是用户自己的参数 {@code tools}；构造时给的名单（服务器配置）是插件自带的默认，没记参数的旧会话也用它。
  */
-public final class ToolApprovalHook implements KernelHook, PluginInfo {
+public final class ToolApprovalHook implements KernelHook, PluginInfo, Configurable {
 
     /** 会话记录的键，也是问题 id 的前缀。 */
     public static final String NOTE = "approval";
@@ -42,15 +46,23 @@ public final class ToolApprovalHook implements KernelHook, PluginInfo {
     static final String DENY = "deny";
     private static final int SHOWN_ARGUMENT_CHARS = 2000;
 
-    private final Set<String> tools;
+    /** 排过序：它是参数的默认值，会记进会话，顺序要固定。 */
+    private final List<String> tools;
 
     public ToolApprovalHook(Set<String> tools) {
-        this.tools = Set.copyOf(tools);
+        this.tools = tools.stream().sorted().toList();
     }
 
     @Override
     public String name() {
         return "toolApproval";
+    }
+
+    @Override
+    public List<Param> params() {
+        return List.of(Param.list("tools", tools)
+                .label(LocalText.en("Tools that need approval").zh("要审批的工具").ja("承認が必要なツール"))
+                .hint(LocalText.en("One tool name per line.").zh("每行一个工具名。").ja("1 行に 1 つのツール名。")));
     }
 
     @Override
@@ -75,7 +87,7 @@ public final class ToolApprovalHook implements KernelHook, PluginInfo {
     @Override
     public HookResult beforeToolCall(KernelState state, HookContext context) {
         ToolCallBlock call = context.call();
-        if (call == null || !tools.contains(call.name()) || allowedInSession(state, context, call.name())) {
+        if (call == null || !context.params().list("tools", tools).contains(call.name()) || allowedInSession(state, context, call.name())) {
             return Allow.PLAIN;
         }
         return new Ask(question(call));
