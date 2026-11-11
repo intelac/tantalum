@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Config, Project } from "../api/types";
 import { projectOf } from "../projects/group";
 import { useProjects, useSetArchived } from "../projects/useProjects";
@@ -7,8 +7,10 @@ import { useSessions } from "../shell/useSessions";
 import { Button } from "../ui/Button";
 import { errorLine } from "../text/errors";
 import type { ConversationStore } from "../store/ConversationStore";
-import { useLatestRun, useRunVersion, useSessionModel } from "../store/hooks";
+import { useItems, useLatestRun, useOrder, useRunVersion, useSessionModel } from "../store/hooks";
 import { useText } from "../text";
+import { ApprovalCard } from "./approval/ApprovalCard";
+import { pendingApproval } from "./approval/pending";
 import { Composer } from "./Composer";
 import { LinkChip } from "./LinkChip";
 import { ModelPicker } from "./ModelPicker";
@@ -28,7 +30,8 @@ interface Props {
 }
 
 /**
- * 输入区：排队的提问、输入框和状态栏（问你的问题在对话里，waiting-state）。最近的运行和排队的提交都从 store 自己取。
+ * 输入区：排队的提问、输入框和状态栏（ask_user 问你的问题在对话里，waiting-state）。最近的运行和排队的提交都从 store 自己取。
+ * 规则插件在工具调用前问你时，批准卡片顶替输入框；输入框只是藏起来，草稿还在（input-area 需求 2）。
  * 模型选择器显示这个会话的选择（model-picker）；状态栏的窗口和压缩点按这个会话的模型算（需求 8.3）。
  */
 export function ComposerDock({ store, session, config, onOpenPlugins, onAddProject }: Props) {
@@ -47,6 +50,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const dir = started ? (summary.dir ?? null) : (chosen?.path ?? null);
   const { run, running } = useLatestRun(store, session);
   const version = useRunVersion(store, run);
+  const items = useItems(store, useOrder(store, session));
+  const pending = useMemo(() => pendingApproval(items), [items]);
   const models = useModels();
   const current = useSessionModel(store, session);
   const choice = useSessionChoice(session, current.model, models.data);
@@ -74,46 +79,49 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   return (
     <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
       <QueueDock store={store} session={session} />
-      <Composer
-        session={session}
-        activeRun={running ? run : null}
-        modelName={config?.model ?? t.composer.model}
-        cloud={route?.cloud ?? config?.cloud ?? false}
-        limits={config?.attachments}
-        vision={findModel(models.data, choice.shown)?.vision ?? config?.vision}
-        modelPicker={
-          models.data === undefined ? undefined : (
-            <ModelPicker
-              models={models.data}
-              choice={choice.shown}
-              pending={choice.pending}
-              toolChangesInHistory={current.toolChangesInHistory}
-              onSelect={choice.select}
-            />
-          )
-        }
-        choice={models.data === undefined ? null : choice.shown}
-        onSubmitted={(sent) => {
-          choice.submitted(sent);
-          if (!started) saveLastProject(chosen?.id ?? null);
-        }}
-        project={started ? null : (chosen?.id ?? null)}
-        accessory={
-          <>
-            <ProjectChip
-              projects={projects}
-              value={chosen}
-              fixed={started}
-              onChange={(project) => {
-                savePending(session, project?.id ?? null);
-                setPicked((count) => count + 1);
-              }}
-              onAdd={() => onAddProject?.()}
-            />
-            <LinkChip dir={dir} onOpen={() => onOpenPlugins?.()} />
-          </>
-        }
-      />
+      {pending !== null && <ApprovalCard key={pending.question.id} pending={pending} />}
+      <div hidden={pending !== null}>
+        <Composer
+          session={session}
+          activeRun={running ? run : null}
+          modelName={config?.model ?? t.composer.model}
+          cloud={route?.cloud ?? config?.cloud ?? false}
+          limits={config?.attachments}
+          vision={findModel(models.data, choice.shown)?.vision ?? config?.vision}
+          modelPicker={
+            models.data === undefined ? undefined : (
+              <ModelPicker
+                models={models.data}
+                choice={choice.shown}
+                pending={choice.pending}
+                toolChangesInHistory={current.toolChangesInHistory}
+                onSelect={choice.select}
+              />
+            )
+          }
+          choice={models.data === undefined ? null : choice.shown}
+          onSubmitted={(sent) => {
+            choice.submitted(sent);
+            if (!started) saveLastProject(chosen?.id ?? null);
+          }}
+          project={started ? null : (chosen?.id ?? null)}
+          accessory={
+            <>
+              <ProjectChip
+                projects={projects}
+                value={chosen}
+                fixed={started}
+                onChange={(project) => {
+                  savePending(session, project?.id ?? null);
+                  setPicked((count) => count + 1);
+                }}
+                onAdd={() => onAddProject?.()}
+              />
+              <LinkChip dir={dir} onOpen={() => onOpenPlugins?.()} />
+            </>
+          }
+        />
+      </div>
       <StatusBar
         session={session}
         run={run}

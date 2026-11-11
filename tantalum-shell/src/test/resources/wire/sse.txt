@@ -9,12 +9,12 @@
 4.0 item {"kind":"thinking","id":"4.0","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"check","redacted":false}
 4.1 item {"kind":"thinking","id":"4.1","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"","redacted":true}
 4.2 item {"kind":"text","id":"4.2","session":"s","run":"s_0","at":"2026-10-31T00:00:04Z","text":"a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ","interrupted":false,"truncated":false}
-4.3 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:04Z","phase":"Ended","endReason":"COMPLETED"}
+4.3 item {"kind":"run","id":"run:s_0","session":"s","run":"s_0","at":"2026-10-31T00:00:00Z","updatedAt":"2026-10-31T00:00:04Z","phase":"Ended","endReason":"COMPLETED","usage":{"input":700,"output":10,"cacheRead":0,"cacheWrite":0}}
 5.0 item {"kind":"user","id":"5.0","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","text":"q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 q2 ","queued":false}
 5.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:05Z","phase":"AwaitingContext"}
 6.0 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:06Z","phase":"AwaitingModel"}
 7.0 item {"kind":"text","id":"7.0","session":"s","run":"s_5","at":"2026-10-31T00:00:07Z","text":"a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 a2 ","interrupted":false,"truncated":false}
-7.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED"}
+7.1 item {"kind":"run","id":"run:s_5","session":"s","run":"s_5","at":"2026-10-31T00:00:05Z","updatedAt":"2026-10-31T00:00:07Z","phase":"Ended","endReason":"COMPLETED","usage":{"input":790,"output":10,"cacheRead":0,"cacheWrite":0}}
 8.0 item {"kind":"user","id":"8.0","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","text":"q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 q3 ","queued":false}
 8.1 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:08Z","phase":"AwaitingContext"}
 9.0 item {"kind":"run","id":"run:s_8","session":"s","run":"s_8","at":"2026-10-31T00:00:08Z","updatedAt":"2026-10-31T00:00:09Z","phase":"AwaitingSummary"}

@@ -81,6 +81,7 @@ class QuestionApiTest {
         assertTrue(question.get("freeText").asBoolean());
         assertTrue(!question.has("deadline") || question.get("deadline").isNull(), "no deadline");
         assertEquals("ask_user", question.get("askedBy").asString());
+        assertTrue(!question.has("toolCallId"), "only a plugin's question before a tool call names the call");
         assertTrue(open("bob").isEmpty(), "bob does not see alice's question");
 
         assertEquals(404, server.post("bob", "/api/sessions/s1/questions/ask-a1", "{\"choice\":\"keep\"}").statusCode());

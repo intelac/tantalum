@@ -43,6 +43,21 @@ export const en: Text = {
     stats: "Stats",
   },
   conversation: {
+    approval: {
+      waiting: "Waiting for approval",
+      keys: "Enter picks the first · Esc denies",
+      enterOnly: "Enter picks the first",
+      line: (title) => `Waiting for approval · ${title}`,
+    },
+    usage: {
+      chip: (total) => `Usage ${total}`,
+      title: "Usage this turn",
+      cacheHit: "Cache hit",
+      input: "Input (cache miss)",
+      cacheRead: "Input (cache hit)",
+      cacheWrite: "Cache write",
+      output: "Output",
+    },
     viewInTrace: "View in trajectory",
     emptyTitle: "How can I help?",
     emptyHint: "Type a question to start. To let the model read and write files on your computer, connect the local workspace on the Plugins page first.",

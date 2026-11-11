@@ -215,6 +215,8 @@ export interface RunStatusItem extends ItemBase {
   endReason?: EndReason;
   detail?: string;
   failure?: FailureReason;
+  /** 这次运行各次模型调用的用量合计，不算压缩；模型没报过用量时没有。 */
+  usage?: TokenUsage;
 }
 
 export type CompactionTrigger = "AUTO" | "OVERFLOW" | "MANUAL";
@@ -273,6 +275,8 @@ export interface QuestionItem extends ItemBase {
   choice?: string;
   text?: string;
   settledAt?: string;
+  /** 规则插件在工具调用前问的问题：被问的那次调用。有它的问题显示成批准卡片。 */
+  toolCallId?: string;
 }
 
 export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem | ModelChangeItem | QuestionItem;

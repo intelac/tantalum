@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelChoice } from "../api/types";
 import { ConversationStore } from "../store/ConversationStore";
@@ -11,6 +12,8 @@ afterEach(() => {
   sessionStorage.clear();
   vi.unstubAllGlobals();
 });
+
+let mounted: ConversationStore;
 
 /** 假后端：模型列表、最近一轮的用量（输入 65536）；别的都不通。 */
 function backend() {
@@ -28,6 +31,7 @@ function backend() {
 
 function mount(model: ModelChoice) {
   const store = new ConversationStore();
+  mounted = store;
   store.loadLatest("s", {
     seq: 3,
     start: 0,
@@ -57,5 +61,27 @@ describe("ComposerDock", () => {
     mount({ route: "claude", model: "claude-sonnet-5-5", effort: "medium" });
     expect(await screen.findByText("Claude Sonnet 5.5 · 中")).not.toBeNull();
     expect(await screen.findByText("上下文 7%")).not.toBeNull();
+  });
+
+  // input-area 需求 2：等批准时卡片顶替输入框，输入框只是藏起来，写了一半的话还在
+  it("swaps the composer for the approval card and keeps the draft", async () => {
+    backend();
+    mount({ route: "local", model: "qwen3.8", effort: "on" });
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    await userEvent.type(box, "half a sentence");
+    const base = { session: "s", run: "r2", at: "2026-11-07T00:00:05Z" };
+    const question = { ...base, kind: "question", id: "q:a", askedBy: "toolApproval", questionId: "a", title: "Allow bash?", detail: "", choices: [{ id: "once", label: "Allow once" }], freeText: false, status: "OPEN", toolCallId: "c1" };
+    act(() => {
+      mounted.applyItem({ ...base, kind: "tool", id: "5.0", call: { kind: "toolCall", id: "c1", name: "bash", rawArguments: "{}", arguments: { command: "ls" } }, status: "WAITING" } as never, 5);
+      mounted.applyItem(question as never, 6);
+    });
+    const card = await screen.findByRole("group", { name: "Allow bash?" });
+    expect(card.textContent).toContain("ls");
+    expect(box.closest("[hidden]")).not.toBeNull();
+
+    act(() => mounted.applyItem({ ...question, status: "ANSWERED", choice: "once" } as never, 7));
+    expect(screen.queryByRole("group", { name: "Allow bash?" })).toBeNull();
+    expect(box.closest("[hidden]")).toBeNull();
+    expect(box.value).toBe("half a sentence");
   });
 });

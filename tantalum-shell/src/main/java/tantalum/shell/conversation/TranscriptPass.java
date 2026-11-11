@@ -107,7 +107,8 @@ final class TranscriptPass {
             }
             switch (fact) {
                 case PhaseChanged phase -> phaseChanged(phase.run().run(), phase.phase());
-                case QuestionAsked asked -> put(Question.asked(session, asked.run().run(), at, asked.askedBy(), asked.question()));
+                case QuestionAsked asked -> put(Question.asked(session, asked.run().run(), at, asked.askedBy(), asked.question(),
+                        askedAbout(asked.run().run())));
                 case QuestionSettled settled -> questionSettled(settled);
                 default -> { }
             }
@@ -240,6 +241,14 @@ final class TranscriptPass {
                 case HookTextBlock ignored -> { } // 钩子的说明也只在系统消息里
             }
         }
+        // 摘要调用在上面已经返回：它的用量在压缩标记上，不算进这次运行。放在内容之后，状态条目仍是这一步里最后变的
+        if (reply.usage() != null && get(RunStatus.idOf(run)) instanceof RunStatus status) {
+            put(status.plusUsage(reply.usage()));
+        }
+    }
+
+    private String askedAbout(RunId run) {
+        return state.runs().get(run) instanceof RunState current ? Question.askedAbout(current) : null;
     }
 
     private Thinking thinking(String id, RunId run, ReasoningBlock reasoning) {

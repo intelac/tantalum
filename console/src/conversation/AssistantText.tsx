@@ -1,14 +1,15 @@
 import { Markdown } from "../markdown/Markdown";
 import type { ConversationStore } from "../store/ConversationStore";
-import { useItem } from "../store/hooks";
+import { useItem, useRunStatus } from "../store/hooks";
 import { clockTime } from "../text/format";
 import { useText } from "../text";
 import { CopyButton } from "../ui/CopyButton";
+import { TurnUsage } from "./TurnUsage";
 
 interface Props {
   store: ConversationStore;
   id: string;
-  /** 最后一段才显示底部的复制和时间。 */
+  /** 最后一段才显示底部的复制、时间和这一轮的用量。 */
   last: boolean;
 }
 
@@ -16,6 +17,7 @@ interface Props {
 export function AssistantText({ store, id, last }: Props) {
   const t = useText();
   const item = useItem(store, id);
+  const status = useRunStatus(store, item?.run ?? null);
   if (item === undefined || item.kind !== "text") return null;
   return (
     <div className="py-1">
@@ -30,6 +32,7 @@ export function AssistantText({ store, id, last }: Props) {
         <div className="mt-2 flex h-7 items-center gap-2 text-xs text-fg-faint">
           <CopyButton text={item.text} />
           <span>{clockTime(item.at)}</span>
+          {status?.endReason !== undefined && status.usage !== undefined && <TurnUsage usage={status.usage} />}
         </div>
       )}
     </div>

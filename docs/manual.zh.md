@@ -719,6 +719,7 @@ public final class TicketTool implements Tool, Configurable {
 
 问用户和记在会话里：
 - **问用户、等回答**（waiting-state）：钩子返回 `new Ask(new Question(id, 标题, 说明, 选项))`（文字是 `LocalText`，可以写三种语言），运行就停在“等回答”：没有在途命令，不计工作轮数，不超时；人几小时、几天后在对话页上点选都接着跑，服务器重启问题还在（问题和回答都在 journal 里）。回答从新钩子位置 `onAnswer` 回来：`context.question()` 是问题，`context.answer()` 是回答（`choice`、`text`），要先按 `question.id()` 过滤（所有钩子都会被调用）；放行回到问的位置，`Stop` 在工具调用前只拦那个调用、别处结束运行，`NeedWork` 要一轮工作，再返回 `Ask` 是新问题。`new Ask(question).after(Duration)` 给期限，到时 `answer()` 为 null。插件的问题只有选项，不收自由文本。模型自己也能问：内置工具 `ask_user`（选项加可选的一句话，可给 `timeout_seconds`），回答作为工具结果。
+  在 `beforeToolCall` 问的问题，控制台显示成**批准卡片**：它顶替输入框（写了一半的话留着），上面是问题标题、工具名和这次调用要做的事（`bash` 是命令，读写改文件是路径，别的工具是参数），按钮按你给的选项顺序排，第一个是主按钮。键盘上回车选第一个选项，Esc 选 id 叫 `deny` 的选项——想让 Esc 能拒绝，就把拒绝的那个选项的 id 写成 `deny`，没有这个 id 时 Esc 不做事。别的位置问的问题和 `ask_user` 的问题还是显示在对话里。
 - **记在会话里**：`onAnswer` 放行时 `Allow.PLAIN.withNote(键, 对象)`，或工作结果 `new WorkResult(结果, 续写文字, note)`。对象按字段并进会话状态里那一份（`SessionState.note(键)`，值为 `null` 的字段删掉），随结果行记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
 
 八个钩子（前 7 个是 `KernelHook` 的方法，最后一个是处理器钩子）。`Allow` 带的补丁（`PromptPatch(systemAppend, addTools)`）只在 `beforeModelCall` 生效，其余位置忽略；`Ask` 在前 5 个位置和 `onAnswer` 有效，`beforeCompact` 当作拒绝。

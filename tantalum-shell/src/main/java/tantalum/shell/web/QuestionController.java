@@ -19,6 +19,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.question.Answer;
 import tantalum.value.question.Question;
 import tantalum.value.state.AwaitingAnswer;
+import tantalum.value.state.RunState;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -45,8 +46,8 @@ public class QuestionController {
         if (id.isEmpty()) {
             return json.error(ErrorCode.REQUEST_INVALID, "bad session id");
         }
-        List<Map<String, Object>> questions = engine.queries().openQuestion(WebJson.currentUser(), id.get())
-                .map(waiting -> List.of(view(waiting))).orElse(List.of());
+        List<Map<String, Object>> questions = engine.queries().waitingRun(WebJson.currentUser(), id.get())
+                .map(run -> List.of(view(run))).orElse(List.of());
         return json.json(200, Map.of("questions", questions));
     }
 
@@ -101,7 +102,9 @@ public class QuestionController {
         return json.json(200, response);
     }
 
-    static Map<String, Object> view(AwaitingAnswer waiting) {
+    /** {@code run} 正停在 {@code AwaitingAnswer}。规则插件在工具调用前问的带 {@code toolCallId}。 */
+    static Map<String, Object> view(RunState run) {
+        AwaitingAnswer waiting = (AwaitingAnswer) run.phase();
         Question question = waiting.question();
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", question.id());
@@ -111,6 +114,10 @@ public class QuestionController {
         view.put("freeText", question.freeText());
         view.put("deadline", question.deadline() == null ? null : question.deadline().toString());
         view.put("askedBy", waiting.fromTool() ? "ask_user" : "plugin");
+        String askedAbout = tantalum.shell.conversation.TranscriptItem.Question.askedAbout(run);
+        if (askedAbout != null) {
+            view.put("toolCallId", askedAbout);
+        }
         return view;
     }
 }

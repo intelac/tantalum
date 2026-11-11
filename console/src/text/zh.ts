@@ -52,6 +52,21 @@ export const zh = {
     stats: "统计",
   },
   conversation: {
+    approval: {
+      waiting: "等待批准",
+      keys: "回车选第一个 · Esc 拒绝",
+      enterOnly: "回车选第一个",
+      line: (title: string) => `等待批准 · ${title}`,
+    },
+    usage: {
+      chip: (total: string) => `用量 ${total}`,
+      title: "本轮用量",
+      cacheHit: "缓存命中",
+      input: "输入（未命中缓存）",
+      cacheRead: "输入（命中缓存）",
+      cacheWrite: "写入缓存",
+      output: "输出",
+    },
     viewInTrace: "在轨迹中查看",
     emptyTitle: "有什么可以帮你？",
     emptyHint: "输入问题开始。要让模型读写你电脑上的文件，先在插件页连上本机工作区。",

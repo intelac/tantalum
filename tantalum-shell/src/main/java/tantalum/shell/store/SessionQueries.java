@@ -93,13 +93,16 @@ public final class SessionQueries {
 
     /** 这个会话正在等用户回答的问题：活动运行停在 {@code AwaitingAnswer} 时有；不在内存的会话从文件读。 */
     public Optional<AwaitingAnswer> openQuestion(Principal principal, SessionId session) {
+        return waitingRun(principal, session).map(run -> (AwaitingAnswer) run.phase());
+    }
+
+    /** 同 {@link #openQuestion}，给出整个运行：要知道问的是哪次工具调用时用。 */
+    public Optional<RunState> waitingRun(Principal principal, SessionId session) {
         return session(principal, session).flatMap(found -> {
             RunId active = found.state().activeRun();
             return active == null ? Optional.empty() : found.runs().stream()
                     .filter(run -> run.ref().run().equals(active))
-                    .map(RunState::phase)
-                    .filter(AwaitingAnswer.class::isInstance)
-                    .map(AwaitingAnswer.class::cast)
+                    .filter(run -> run.phase() instanceof AwaitingAnswer)
                     .findFirst();
         });
     }

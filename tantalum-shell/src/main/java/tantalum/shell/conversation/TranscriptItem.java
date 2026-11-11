@@ -12,7 +12,10 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
+import tantalum.value.hook.HookPoint;
 import tantalum.value.model.TokenUsage;
+import tantalum.value.state.AwaitingAnswer;
+import tantalum.value.state.RunState;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.Compacting;
@@ -227,7 +230,7 @@ public sealed interface TranscriptItem {
      */
     record Question(String id, SessionId session, RunId run, Instant at, String askedBy, String questionId, Object title, Object detail,
                     List<Map<String, Object>> choices, boolean freeText, Instant deadline, QuestionStatus status,
-                    String choice, String text, Instant settledAt) implements TranscriptItem {
+                    String choice, String text, Instant settledAt, String toolCallId) implements TranscriptItem {
 
         public Question {
             Objects.requireNonNull(id, "id");
@@ -244,24 +247,39 @@ public sealed interface TranscriptItem {
             return "q:" + questionId;
         }
 
-        public static Question asked(SessionId session, RunId run, Instant at, String askedBy, tantalum.value.question.Question question) {
+        /** 规则插件在工具调用前提问时，被问的是工具轮里正在检查的那一个调用；其他提问、不在等回答时返回 null。 */
+        public static String askedAbout(RunState run) {
+            if (run.phase() instanceof AwaitingAnswer waiting && waiting.origin() == HookPoint.BEFORE_TOOL_CALL
+                    && run.tools() != null && run.tools().checked() < run.tools().slots().size()) {
+                return run.tools().slots().get(run.tools().checked()).call().id();
+            }
+            return null;
+        }
+
+        /** {@code toolCallId} 是规则插件在工具调用前提问时被问的那次调用；其他提问为 null。 */
+        public static Question asked(SessionId session, RunId run, Instant at, String askedBy, tantalum.value.question.Question question,
+                                     String toolCallId) {
             List<Map<String, Object>> choices = question.choices().stream()
                     .map(choice -> Map.<String, Object>of("id", choice.id(), "label", choice.label().wire())).toList();
             return new Question(idOf(question.id()), session, run, at, askedBy, question.id(), question.title().wire(),
-                    question.detail().wire(), choices, question.freeText(), question.deadline(), QuestionStatus.OPEN, null, null, null);
+                    question.detail().wire(), choices, question.freeText(), question.deadline(), QuestionStatus.OPEN, null, null, null,
+                    toolCallId);
         }
 
         public Question settled(QuestionStatus newStatus, tantalum.value.question.Answer answer, Instant when) {
             return new Question(id, session, run, at, askedBy, questionId, title, detail, choices, freeText, deadline, newStatus,
-                    answer == null ? null : answer.choice(), answer == null ? null : answer.text(), when);
+                    answer == null ? null : answer.choice(), answer == null ? null : answer.text(), when, toolCallId);
         }
     }
 
     enum QuestionStatus { OPEN, ANSWERED, EXPIRED, CANCELLED }
 
-    /** 运行的状态，一个运行一条。{@code phase} 是内核状态名；结束后带原因；模型失败时带最近一次失败原因。 */
+    /**
+     * 运行的状态，一个运行一条。{@code phase} 是内核状态名；结束后带原因；模型失败时带最近一次失败原因。
+     * {@code usage} 是这次运行各次模型调用的用量合计，不算压缩的摘要调用；模型没报过用量时为 null。
+     */
     record RunStatus(String id, SessionId session, RunId run, Instant at, Instant updatedAt, String phase,
-                     EndReason endReason, String detail, FailureReason failure)
+                     EndReason endReason, String detail, FailureReason failure, TokenUsage usage)
             implements TranscriptItem {
 
         public RunStatus {
@@ -278,19 +296,24 @@ public sealed interface TranscriptItem {
         }
 
         public static RunStatus started(SessionId session, RunId run, Instant at, String phase) {
-            return new RunStatus(idOf(run), session, run, at, at, phase, null, null, null);
+            return new RunStatus(idOf(run), session, run, at, at, phase, null, null, null, null);
         }
 
         public RunStatus inPhase(String newPhase, Instant when) {
-            return new RunStatus(id, session, run, at, when, newPhase, endReason, detail, failure);
+            return new RunStatus(id, session, run, at, when, newPhase, endReason, detail, failure, usage);
         }
 
         public RunStatus ended(EndReason reason, String endDetail, Instant when) {
-            return new RunStatus(id, session, run, at, when, "Ended", reason, endDetail, failure);
+            return new RunStatus(id, session, run, at, when, "Ended", reason, endDetail, failure, usage);
         }
 
         public RunStatus failedWith(FailureReason reason, Instant when) {
-            return new RunStatus(id, session, run, at, when, phase, endReason, detail, reason);
+            return new RunStatus(id, session, run, at, when, phase, endReason, detail, reason, usage);
+        }
+
+        /** 不动 {@code updatedAt}：用量不是状态变化，用时仍然算到最后一次状态变化。 */
+        public RunStatus plusUsage(TokenUsage more) {
+            return new RunStatus(id, session, run, at, updatedAt, phase, endReason, detail, failure, usage == null ? more : usage.plus(more));
         }
 
         public boolean isEnded() {

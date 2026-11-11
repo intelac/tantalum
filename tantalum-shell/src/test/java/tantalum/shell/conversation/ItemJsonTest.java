@@ -71,5 +71,13 @@ class ItemJsonTest {
         assertTrue(json.contains("\"endReason\":\"FAILED\""), json);
         assertTrue(json.contains("\"detail\":\"boom\""), json);
         assertFalse(json.contains("failure"), json);
+        assertFalse(json.contains("usage"), json);
+    }
+
+    @Test
+    void runStatusUsageIsFourCounts() {
+        RunStatus status = RunStatus.started(SESSION, RUN, T0, "AwaitingModel").plusUsage(new tantalum.value.model.TokenUsage(1, 2, 3, 4));
+        String json = MAPPER.writeValueAsString(ItemJson.toMap(MAPPER, status));
+        assertTrue(json.contains("\"usage\":{\"input\":1,\"output\":2,\"cacheRead\":3,\"cacheWrite\":4}"), json);
     }
 }

@@ -38,6 +38,21 @@ export const ja: Text = {
     stats: "統計",
   },
   conversation: {
+    approval: {
+      waiting: "承認待ち",
+      keys: "Enter で最初の選択肢 · Esc で拒否",
+      enterOnly: "Enter で最初の選択肢",
+      line: (title) => `承認待ち · ${title}`,
+    },
+    usage: {
+      chip: (total) => `使用量 ${total}`,
+      title: "このターンの使用量",
+      cacheHit: "キャッシュヒット",
+      input: "入力（キャッシュ未ヒット）",
+      cacheRead: "入力（キャッシュヒット）",
+      cacheWrite: "キャッシュ書き込み",
+      output: "出力",
+    },
     viewInTrace: "軌跡で見る",
     emptyTitle: "何をお手伝いしましょうか？",
     emptyHint: "質問を入力して始めます。モデルにこのコンピューターのファイルを読み書きさせるには、先にプラグインページでローカルワークスペースを接続してください。",

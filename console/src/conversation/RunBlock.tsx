@@ -5,6 +5,8 @@ import { LiveReply } from "./LiveReply";
 import { ModelChangeNotice } from "./ModelChangeNotice";
 import { QuestionItem } from "./QuestionItem";
 import { RunStatusRow } from "./RunStatusRow";
+import { TurnUsage } from "./TurnUsage";
+import { useRunStatus } from "../store/hooks";
 import { ToolChangeNotice } from "./ToolChangeNotice";
 
 interface Props {
@@ -22,6 +24,7 @@ interface Props {
 
 /** 一次运行：工具变化、过程区、问用户的问题、回复、还在流式输出的部分，以及没有正常完成时的说明。 */
 export function RunBlock({ store, run, process, reply, notices = [], questions = [] }: Props) {
+  const status = useRunStatus(store, run);
   return (
     <div className="py-1">
       {notices.map((id) =>
@@ -40,6 +43,12 @@ export function RunBlock({ store, run, process, reply, notices = [], questions =
       ))}
       <LiveReply store={store} run={run} />
       <RunStatusRow store={store} run={run} />
+      {/* 有回答时用量在回答的页脚里；没有回答（比如失败了）就单独一行 */}
+      {reply.length === 0 && status?.endReason !== undefined && status.usage !== undefined && (
+        <div className="flex h-7 items-center text-xs text-fg-faint">
+          <TurnUsage usage={status.usage} />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
-import { CircleHelp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CircleHelp, ShieldQuestion } from "lucide-react";
+import { useState } from "react";
 import { answerQuestion, ApiError } from "../api/client";
 import type { QuestionItem as QuestionItemData } from "../api/types";
 import type { ConversationStore } from "../store/ConversationStore";
@@ -10,32 +10,17 @@ import { errorLine } from "../text/errors";
 import { formatMs } from "../trace/format";
 import { pick } from "../text/localText";
 import { Button } from "../ui/Button";
+import { useCountdown } from "../ui/useCountdown";
 
 interface Props {
   store: ConversationStore;
   id: string;
 }
 
-/** 期限倒计时：每秒重算，到了显示 0。 */
-function useCountdown(deadline: string | undefined): number | null {
-  const [left, setLeft] = useState<number | null>(null);
-  useEffect(() => {
-    if (deadline === undefined) {
-      setLeft(null);
-      return;
-    }
-    const end = Date.parse(deadline);
-    const tick = () => setLeft(Math.max(0, end - Date.now()));
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [deadline]);
-  return left;
-}
-
 /**
  * 运行停下来问你的问题（waiting-state 需求 7.1）。等回答时：标题、说明、选项按钮，允许时还有文本框和期限倒计时；
  * 点了以后禁用、等条目变成已回答（不本地假设结果，以 journal 里结算的条目为准）。答过后只读显示问题、你的选择和时间。
+ * 规则插件在工具调用前问的（带 toolCallId）等回答时这里只有一行：按钮在顶替输入框的批准卡片上（input-area 需求 2）。
  */
 export function QuestionItem({ store, id }: Props) {
   const item = useItem(store, id);
@@ -77,6 +62,15 @@ function QuestionView({ item }: { item: QuestionItemData }) {
           <p className="text-fg">{title}</p>
           <p className="mt-0.5">{outcome}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (item.toolCallId !== undefined) {
+    return (
+      <div role="note" className="my-2 flex items-center gap-2 rounded-md border border-warning/50 bg-muted px-3 py-2 text-sm text-fg-muted">
+        <ShieldQuestion size={16} className="shrink-0 text-warning" aria-hidden="true" />
+        <p className="min-w-0 truncate">{text.approval.line(title)}</p>
       </div>
     );
   }

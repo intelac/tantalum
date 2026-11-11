@@ -40,6 +40,77 @@ class TranscriptToolTest {
         }
     };
 
+    private static tantalum.value.question.Question confirm(String id) {
+        return new tantalum.value.question.Question(id, tantalum.value.text.LocalText.of("Go on?"), null, List.of(
+                new tantalum.value.question.Question.Choice("once", tantalum.value.text.LocalText.of("Allow once")),
+                new tantalum.value.question.Question.Choice("deny", tantalum.value.text.LocalText.of("Deny"))));
+    }
+
+    /** 调 write_file 前问；{@code beforeModel} 时在第一次模型调用前也问一次。 */
+    private static KernelHook asking(boolean beforeModel) {
+        return new KernelHook() {
+            @Override
+            public String name() {
+                return "asking";
+            }
+
+            @Override
+            public HookResult beforeModelCall(KernelState state, HookContext context) {
+                boolean asked = state.sessions().get(context.run().session()).note("asking").fields().containsKey("asked");
+                return beforeModel && !asked ? new tantalum.value.hook.Ask(confirm("before-model")) : tantalum.value.hook.Allow.PLAIN;
+            }
+
+            @Override
+            public HookResult beforeToolCall(KernelState state, HookContext context) {
+                return context.call().name().equals("write_file")
+                        ? new tantalum.value.hook.Ask(confirm("approval-" + context.call().id())) : tantalum.value.hook.Allow.PLAIN;
+            }
+
+            @Override
+            public HookResult onAnswer(KernelState state, HookContext context) {
+                return tantalum.value.hook.Allow.PLAIN.withNote("asking",
+                        new tantalum.value.json.Json.Obj(java.util.Map.of("asked", new tantalum.value.json.Json.Bool(true))));
+            }
+        };
+    }
+
+    /** input-area 需求 2.1：规则插件在工具调用前问的问题带上被问的那次调用，回答之后还带着。 */
+    @Test
+    void questionAskedBeforeAToolCallNamesThatCall() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of(asking(false)));
+        RunId run = fx.start("hi");
+        fx.feed(run, fx.reply(call("c1", "read_file"), call("c2", "write_file"), call("c3", "write_file")));
+
+        TranscriptItem.Question first = fx.items(TranscriptItem.Question.class).getFirst();
+        assertEquals("approval-c2", first.questionId());
+        assertEquals("c2", first.toolCallId());
+        assertEquals("c2", TranscriptItem.Question.askedAbout(fx.state().runs().get(run)));
+
+        fx.feed(run, fx.answered("approval-c2", "once"));
+        List<TranscriptItem.Question> questions = fx.items(TranscriptItem.Question.class);
+        assertEquals(2, questions.size());
+        assertEquals(TranscriptItem.QuestionStatus.ANSWERED, questions.get(0).status());
+        assertEquals("c2", questions.get(0).toolCallId(), "kept after the answer");
+        assertEquals("c3", questions.get(1).toolCallId());
+    }
+
+    @Test
+    void questionsFromOtherMomentsNameNoCall() {
+        TranscriptFixture fx = new TranscriptFixture(true, List.of(asking(true)));
+        RunId run = fx.start("hi");
+        TranscriptItem.Question beforeModel = fx.items(TranscriptItem.Question.class).getFirst();
+        assertEquals("before-model", beforeModel.questionId());
+        assertNull(beforeModel.toolCallId());
+        assertNull(TranscriptItem.Question.askedAbout(fx.state().runs().get(run)));
+
+        fx.feed(run, fx.answered("before-model", "once"));
+        tantalum.value.json.Json arguments = new tantalum.value.json.Json.Obj(java.util.Map.of("question", new tantalum.value.json.Json.Str("Which?")));
+        fx.feed(run, fx.reply(new tantalum.value.model.ToolCallBlock("a1", "ask_user", "{\"question\":\"Which?\"}", arguments)));
+        TranscriptItem.Question fromModel = fx.items(TranscriptItem.Question.class).getLast();
+        assertEquals("ask_user", fromModel.askedBy());
+        assertNull(fromModel.toolCallId(), "ask_user questions are answered in the conversation, not on the card");
+    }
+
     @Test
     void parallelSafeCallsFormOneGroupAndEachGetsItsOwnDuration() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());

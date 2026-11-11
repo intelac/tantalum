@@ -119,6 +119,15 @@ describe("QuestionItem", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("这个问题已经不用回答了");
   });
 
+  // input-area 需求 2：带 toolCallId 的问题按钮在批准卡片上，对话里只有一行；答过以后和别的问题一样
+  it("an open question about a tool call is one read-only line", async () => {
+    const store = mount({ ...APPROVAL, toolCallId: "c1" });
+    expect(screen.getByRole("note").textContent).toBe("等待批准 · 允许调用 bash 吗？");
+    expect(screen.queryByRole("button")).toBeNull();
+    store.applyItem({ ...APPROVAL, toolCallId: "c1", status: "ANSWERED", choice: "deny", settledAt: "2026-11-07T09:11:00Z" }, 20);
+    expect((await screen.findByRole("note", { name: "允许调用 bash 吗？" })).textContent).toContain("你的回答：拒绝");
+  });
+
   it("shows expired and cancelled questions read-only", () => {
     mount({ ...APPROVAL, id: "q:x", status: "EXPIRED" });
     expect(screen.getByRole("note").textContent).toContain("到期没有回答");

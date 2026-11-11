@@ -89,6 +89,33 @@ class TranscriptTest {
         assertEquals(3, fx.items(Text.class).size());
     }
 
+    /** input-area 需求 5.1、5.4、5.6：运行带上各次模型调用的用量合计；摘要调用的不算；模型没报就没有。 */
+    @Test
+    void runStatusAddsUpTheUsageOfItsModelCallsButNotTheSummaryCall() {
+        RunId run = runNeedingCompaction();
+        fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
+        assertNull(fx.status(run).usage(), "the summary call is on the compaction mark, not on the run");
+        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+
+        fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(100, 5, 40, 7), TranscriptFixture.call("c1", "read_file")));
+        assertEquals(new tantalum.value.model.TokenUsage(100, 5, 40, 7), fx.status(run).usage());
+        fx.feed(run, fx.finished(run, "c1", "a", false));
+        fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(10, 30, 150, 0), text("a3")));
+
+        RunStatus status = fx.status(run);
+        assertTrue(status.isEnded());
+        assertEquals(new tantalum.value.model.TokenUsage(110, 35, 190, 7), status.usage());
+        assertEquals(new tantalum.value.model.TokenUsage(700, 10, 0, 0), fx.items(RunStatus.class).getFirst().usage(), "each run has its own");
+    }
+
+    @Test
+    void runWithoutReportedUsageHasNone() {
+        RunId run = fx.start("hi");
+        fx.feed(run, fx.reply(text("ok")));
+        assertTrue(fx.status(run).isEnded());
+        assertNull(fx.status(run).usage());
+    }
+
     @Test
     void failedSummaryIsAMarkWithTheReasonAndNotARunFailure() {
         RunId run = runNeedingCompaction();

@@ -140,6 +140,13 @@ final class TranscriptFixture {
         return run;
     }
 
+    /** 用户选了 {@code choice} 回答 {@code question}。 */
+    tantalum.value.event.Answered answered(String question, String choice) {
+        int n = submissions++;
+        return new tantalum.value.event.Answered(new SubmissionId("sub-" + n), new RequestId("req-" + n), question,
+                new tantalum.value.question.Answer(choice, null));
+    }
+
     UserPrompt prompt(String text) {
         int n = submissions++;
         return new UserPrompt(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
