@@ -29,7 +29,7 @@ const trace = JSON.parse(traceJson) as TracePage;
 const plugins: Plugins = {
   ...(JSON.parse(pluginsJson) as Plugins),
   mcp: [{ name: "docs", enabled: true, state: "FAILED", tools: [{ name: "mcp__docs__search", description: "Search the docs", enabled: true }] }],
-  plugins: [{ name: "dailyQuota", description: { en: "Daily token limit", zh: "每天的上限", ja: "1 日の上限" }, points: ["beforeModelCall", "work:quota"], mandatory: true, enabled: true }],
+  plugins: [{ name: "dailyQuota", description: { en: "Daily token limit", zh: "每天的上限", ja: "1 日の上限" }, points: ["beforeModelCall", "work:quota"], lock: { source: "config", reason: "" }, enabled: true }],
 };
 
 function backend() {

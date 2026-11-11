@@ -648,7 +648,19 @@ export const zh = {
     "local/protocol-old": "连接程序要更新，才能在这里浏览目录",
     "local/no-answer": "电脑没有响应，请手动输入路径",
     "plugin/not-found": (name: string) => `没有这个插件或工具：${name}`,
-    "plugin/required": (name: string) => `${name} 是管理员设为必须开启的，不能关`,
+    "plugin/locked": (name: string, source: string, reason: string) =>
+      source === "admin" ? `${name} 被管理员锁定了，不能改${reason === "" ? "" : `：${reason}`}` : `${name} 是必须开启的，不能关`,
+    "param/invalid": (key: string, reason: string) => {
+      const why: Record<string, string> = {
+        type: "填的类型不对",
+        range: "超出了允许的范围",
+        tooLong: "太长了",
+        tooMany: "条数太多",
+        unknown: "没有这个参数",
+      };
+      return `${key === "" ? "参数" : key}：${why[reason] ?? "不合格"}`;
+    },
+    "param/forbidden": (key: string) => `${key} 只有管理员能改`,
     "memory/not-found": "这条记忆不存在",
     "memory/invalid-name": "名称只能用小写字母、数字和连字符，最多 64 个",
     "memory/reserved-name": "这个名称是 Windows 保留的（如 con、nul、com1），请换一个",

@@ -198,6 +198,11 @@ class IndexStoreTest {
             LocalDate day2 = LocalDate.parse("2026-11-02");
             long tenAt = index.usage(ALICE).get(0).seq();
             long hundredAt = index.usage(ALICE).get(1).seq();
+            // 某一天的合计（用户列表的“今天用了多少”）：只算这个人这一天的
+            assertEquals(10, index.usageOn(ALICE, day1).input());
+            assertEquals(100, index.usageOn(ALICE, day2).input());
+            assertEquals(1000, index.usageOn(BOB, day1).input());
+            assertEquals(TokenUsage.ZERO, index.usageOn(BOB, day2));
             assertEquals(Map.of(), ledger.before(ALICE, tenAt));
             assertEquals(Map.of(day1, tokens(10)), ledger.before(ALICE, hundredAt));
             assertEquals(Map.of(day1, tokens(10), day2, tokens(100)), ledger.before(ALICE, hundredAt + 1));

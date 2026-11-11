@@ -625,8 +625,15 @@ export interface HookPlugin {
   description: LocalText;
   /** 挂在哪些位置：钩子方法名、afterToolExecution、work:<工作类型>。 */
   points: string[];
-  mandatory: boolean;
+  /** 开关锁着改不了时有；没锁时没有这个字段。 */
+  lock?: PluginLock;
   enabled: boolean;
+}
+
+/** 谁锁的：`code` 插件自己声明必须开启，`config` 写在配置里，`admin` 管理员在页面上锁的（只有它带原因）。 */
+export interface PluginLock {
+  source: "code" | "config" | "admin";
+  reason: string;
 }
 
 /** 联网的开关：总开关 `web` 和“抓网页”“浏览器”两个子开关（web-tools W10）。 */

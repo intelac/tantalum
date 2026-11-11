@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import tantalum.shell.boot.Engine;
 import tantalum.value.id.Principal;
+import tantalum.value.json.Json;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -77,6 +78,11 @@ final class WebJson {
         } catch (JacksonException failure) {
             return Optional.empty();
         }
+    }
+
+    /** 请求里的一个值换成内核的 {@link Json}。 */
+    Json value(JsonNode node) {
+        return mapper.treeToValue(node, Json.class);
     }
 
     /** 字段不存在或不是字符串时为 null。 */

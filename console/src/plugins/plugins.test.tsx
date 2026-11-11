@@ -30,8 +30,8 @@ const PLUGINS: Plugins = {
   ],
   web: { switches: { web: true, "web-fetch": true, browser: true }, admin: { "web-fetch": true, browser: true }, blockPrivateNetwork: false },
   plugins: [
-    { name: "dailyQuota", description: "每个用户每天的 token 用量上限，超过就停止。", points: ["beforeModelCall"], mandatory: true, enabled: true },
-    { name: "citationCheck", description: "", points: ["beforeRunEnd", "work:citation"], mandatory: false, enabled: true },
+    { name: "dailyQuota", description: "每个用户每天的 token 用量上限，超过就停止。", points: ["beforeModelCall"], lock: { source: "config", reason: "" }, enabled: true },
+    { name: "citationCheck", description: "", points: ["beforeRunEnd", "work:citation"], enabled: true },
   ],
 };
 

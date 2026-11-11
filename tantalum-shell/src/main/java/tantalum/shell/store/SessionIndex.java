@@ -352,6 +352,20 @@ public final class SessionIndex implements AutoCloseable {
         return rows;
     }
 
+    /** 该用户在 {@code day} 这一天（UTC）的用量合计，没有为零。 */
+    public synchronized TokenUsage usageOn(Principal principal, LocalDate day) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT coalesce(sum(input), 0), coalesce(sum(output), 0), coalesce(sum(cache_read), 0), coalesce(sum(cache_write), 0)
+                FROM usage WHERE principal = ? AND day = ?""")) {
+            select.setString(1, principal.value());
+            select.setString(2, day.toString());
+            try (ResultSet result = select.executeQuery()) {
+                result.next();
+                return new TokenUsage(result.getLong(1), result.getLong(2), result.getLong(3), result.getLong(4));
+            }
+        }
+    }
+
     /** 序号小于 {@code seq} 的用量，按天累计。 */
     public synchronized Map<LocalDate, TokenUsage> usageBefore(Principal principal, long seq) throws SQLException {
         Map<LocalDate, TokenUsage> totals = new HashMap<>();

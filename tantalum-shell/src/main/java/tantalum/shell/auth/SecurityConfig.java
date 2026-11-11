@@ -67,6 +67,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/local/connect").permitAll()
                         // 用户管理只有管理员
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        // 插件的默认、锁定和按人指定的参数也只有管理员
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class)

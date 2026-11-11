@@ -627,7 +627,21 @@ export const ja: Text = {
     "local/protocol-old": "ここでフォルダーを参照するにはコネクターを更新してください",
     "local/no-answer": "パソコンから応答がありません。パスを入力してください",
     "plugin/not-found": (name) => `そのプラグインまたはツールはありません：${name}`,
-    "plugin/required": (name) => `${name} は管理者が必須に設定しているため、オフにできません`,
+    "plugin/locked": (name, source, reason) =>
+      source === "admin"
+        ? `${name} は管理者がロックしているため、変更できません${reason === "" ? "" : `：${reason}`}`
+        : `${name} は必須のため、オフにできません`,
+    "param/invalid": (key, reason) => {
+      const why: Record<string, string> = {
+        type: "種類が合っていません",
+        range: "範囲外です",
+        tooLong: "長すぎます",
+        tooMany: "項目が多すぎます",
+        unknown: "その設定はありません",
+      };
+      return `${key === "" ? "設定" : key}：${why[reason] ?? "正しくありません"}`;
+    },
+    "param/forbidden": (key) => `${key} は管理者だけが変更できます`,
     "memory/not-found": "このメモリは存在しません",
     "memory/invalid-name": "名前に使えるのは英小文字、数字、ハイフンで、64 文字までです",
     "memory/reserved-name": "この名前は Windows で予約されています（con、nul、com1 など）。別の名前にしてください",

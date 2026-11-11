@@ -3,23 +3,38 @@
   "tools" : [ {
     "name" : "ask_user",
     "description" : "Ask the user a question and wait for the answer. Use it only when you cannot continue without their decision; it waits as long as needed, hours or days. Offer choices when there are natural options; the user can also type a free-text answer unless you set allow_text to false. The result is {\"choice\": ..., \"text\": ...}, or {\"timeout\": true} if timeout_seconds passed without an answer.",
-    "enabled" : true
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   }, {
     "name" : "memory_delete",
     "description" : "Delete one of your memory entries by name, for example when the user asks you to forget something.",
-    "enabled" : true
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   }, {
     "name" : "memory_read",
     "description" : "Read the full body of one of your memory entries by name (see the memory index).",
-    "enabled" : true
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   }, {
     "name" : "memory_write",
     "description" : "Save a long-term memory for this user (new, or overwrite the entry with the same name). name: [a-z0-9-]; type: user, feedback, project, reference; description: one line shown in the index; content: Markdown body.",
-    "enabled" : true
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   }, {
     "name" : "read_attachment",
     "description" : "Read a file the user attached, by its read-only path (/attachments/sha256-...). Images are shown to you. Text is cut at 2000 lines or 50 KB, whichever comes first; read in parts with offset and limit.",
-    "enabled" : true
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   } ],
   "mcp" : [ ],
   "web" : {
@@ -38,13 +53,23 @@
     "name" : "dailyQuota",
     "description" : "daily limit",
     "points" : [ "beforeModelCall" ],
-    "mandatory" : true,
-    "enabled" : true
+    "group" : "rule",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "lock" : {
+      "source" : "code",
+      "reason" : ""
+    },
+    "params" : [ ]
   }, {
     "name" : "notes",
     "description" : "",
     "points" : [ "beforeRunEnd" ],
-    "mandatory" : false,
-    "enabled" : true
+    "group" : "rule",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   } ]
 }

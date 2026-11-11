@@ -77,8 +77,12 @@ public enum ErrorCode {
     LOCAL_NO_ANSWER("local/no-answer", 504),
     /** 参数 {@code name}。 */
     PLUGIN_NOT_FOUND("plugin/not-found", 404),
-    /** 参数 {@code name}。 */
-    PLUGIN_REQUIRED("plugin/required", 400),
+    /** 开关锁着。参数 {@code name}、{@code source}（{@code code}、{@code config}、{@code admin}），管理员写了原因时还有 {@code reason}。 */
+    PLUGIN_LOCKED("plugin/locked", 403),
+    /** 参数的值不合格。参数 {@code reason}（{@code type}、{@code range}、{@code tooLong}、{@code tooMany}、{@code unknown}）和 {@code key}。 */
+    PARAM_INVALID("param/invalid", 400),
+    /** 只有管理员能改的参数。参数 {@code key}。 */
+    PARAM_FORBIDDEN("param/forbidden", 403),
     MEMORY_NOT_FOUND("memory/not-found", 404),
     MEMORY_INVALID_NAME("memory/invalid-name", 400),
     /** Windows 的设备名（con、nul、com1 这类），所有平台都不收。 */

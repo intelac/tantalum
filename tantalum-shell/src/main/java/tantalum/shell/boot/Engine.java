@@ -144,6 +144,11 @@ public final class Engine implements AutoCloseable {
         return stores.storage().attachments;
     }
 
+    /** 服务的时钟：接口要说“今天”时用它，和记录里的时间是同一个来源。 */
+    public Clock clock() {
+        return clock;
+    }
+
     /** 会话、运行和回放的读取。 */
     public SessionQueries queries() {
         return queries.queries();

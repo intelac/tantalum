@@ -632,7 +632,21 @@ export const en: Text = {
     "local/protocol-old": "Update the connector to browse folders here",
     "local/no-answer": "The computer did not answer. Type the path instead",
     "plugin/not-found": (name) => `No such plugin or tool: ${name}`,
-    "plugin/required": (name) => `${name} is required by the administrator and cannot be turned off`,
+    "plugin/locked": (name, source, reason) =>
+      source === "admin"
+        ? `${name} is locked by the administrator and cannot be changed${reason === "" ? "" : `: ${reason}`}`
+        : `${name} is required and cannot be turned off`,
+    "param/invalid": (key, reason) => {
+      const why: Record<string, string> = {
+        type: "wrong type",
+        range: "out of range",
+        tooLong: "too long",
+        tooMany: "too many items",
+        unknown: "no such setting",
+      };
+      return `${key === "" ? "Setting" : key}: ${why[reason] ?? "not valid"}`;
+    },
+    "param/forbidden": (key) => `${key} can only be changed by an administrator`,
     "memory/not-found": "This memory does not exist",
     "memory/invalid-name": "Names can use lowercase letters, digits and hyphens, up to 64",
     "memory/reserved-name": "This name is reserved by Windows (such as con, nul, com1). Choose another",

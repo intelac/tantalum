@@ -1,6 +1,9 @@
 package tantalum.shell.web;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.value.id.Principal;
+import tantalum.value.model.TokenUsage;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -37,7 +41,15 @@ public class UsersController {
 
     @GetMapping("/api/users")
     ResponseEntity<String> list() throws SQLException {
-        return json.json(200, Map.of("users", users.list().stream().map(UsersController::view).toList()));
+        // 每人带今天（UTC）的用量：管理员定每日额度时看得到这个人用了多少
+        LocalDate today = LocalDate.ofInstant(engine.clock().instant(), ZoneOffset.UTC);
+        List<Map<String, Object>> views = new ArrayList<>();
+        for (UserStore.Account account : users.list()) {
+            Map<String, Object> view = view(account);
+            view.put("usageToday", usage(engine.queries().usageOn(new Principal(account.name()), today)));
+            views.add(view);
+        }
+        return json.json(200, Map.of("users", views));
     }
 
     /** 请求体 {@code {"name", "password", "admin"}}。 */
@@ -145,6 +157,17 @@ public class UsersController {
         view.put("admin", account.admin());
         view.put("disabled", account.disabled());
         view.put("createdAt", account.createdAt().toString());
+        return view;
+    }
+
+    /** {@code total} 和每日额度插件算的是同一个数：模型读入的（含缓存读写）加输出的。 */
+    private static Map<String, Object> usage(TokenUsage usage) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("input", usage.input());
+        view.put("output", usage.output());
+        view.put("cacheRead", usage.cacheRead());
+        view.put("cacheWrite", usage.cacheWrite());
+        view.put("total", usage.promptTotal() + usage.output());
         return view;
     }
 

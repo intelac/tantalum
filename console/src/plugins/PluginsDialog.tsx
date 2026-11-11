@@ -158,7 +158,7 @@ function HookRow({ plugin, onChange }: { plugin: HookPlugin; onChange: (enabled:
       name={
         <span className="flex items-center gap-2">
           <span className="font-mono">{plugin.name}</span>
-          {plugin.mandatory && (
+          {plugin.lock !== undefined && (
             <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted" title={t.plugins.mandatoryHint}>
               {t.plugins.mandatory}
             </span>
@@ -175,7 +175,7 @@ function HookRow({ plugin, onChange }: { plugin: HookPlugin; onChange: (enabled:
       }
       label={plugin.name}
       checked={plugin.enabled}
-      disabled={plugin.mandatory}
+      disabled={plugin.lock !== undefined}
       onChange={onChange}
     />
   );

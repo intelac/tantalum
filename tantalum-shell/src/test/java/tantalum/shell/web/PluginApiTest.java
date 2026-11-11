@@ -111,10 +111,11 @@ class PluginApiTest {
         assertEquals(0, body.get("mcp").size());
         assertTrue(body.get("midSessionChanges").isBoolean());
         JsonNode quota = named(body.get("plugins"), "dailyQuota");
-        assertTrue(quota.get("mandatory").asBoolean());
+        assertEquals("{\"source\":\"code\",\"reason\":\"\"}", quota.get("lock").toString());
+        assertEquals("rule", quota.get("group").asString());
         assertEquals("daily limit", quota.get("description").asString());
         assertEquals("[\"beforeModelCall\"]", quota.get("points").toString());
-        assertFalse(named(body.get("plugins"), "notes").get("mandatory").asBoolean());
+        assertFalse(named(body.get("plugins"), "notes").has("lock"), "an unlocked switch carries no lock");
     }
 
     /**
@@ -202,8 +203,8 @@ class PluginApiTest {
     @Test
     void mandatoryPluginsAndUnknownNamesAreRefused() throws Exception {
         HttpResponse<String> required = put("alice", "/api/plugins/plugin/dailyQuota", "{\"enabled\":false}");
-        assertEquals(400, required.statusCode());
-        assertTrue(required.body().contains("\"code\":\"plugin/required\",\"params\":{\"name\":\"dailyQuota\"}"), required.body());
+        assertEquals(403, required.statusCode());
+        assertTrue(required.body().contains("\"code\":\"plugin/locked\",\"params\":{\"name\":\"dailyQuota\",\"source\":\"code\"}"), required.body());
         assertTrue(named(plugins("alice").get("plugins"), "dailyQuota").get("enabled").asBoolean());
         HttpResponse<String> unknown = put("alice", "/api/plugins/tool/nope", "{\"enabled\":false}");
         assertEquals(404, unknown.statusCode());

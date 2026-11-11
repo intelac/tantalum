@@ -47,12 +47,12 @@ class ExamplePluginsTest {
                 (prompt, chunks) -> new ModelOutcome.Replied(java.util.List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null), args);
     }
 
-    /** 插件名 → [enabled, mandatory]。 */
+    /** 插件名 → 开没开，锁着的加 required。 */
     private static Map<String, String> plugins(TestServer server, String user) throws Exception {
         Map<String, String> plugins = new LinkedHashMap<>();
         for (JsonNode plugin : JSON.readTree(server.get(user, "/api/plugins").body()).get("plugins")) {
             plugins.put(plugin.get("name").asString(), (plugin.get("enabled").asBoolean() ? "on" : "off")
-                    + (plugin.get("mandatory").asBoolean() ? ",required" : ""));
+                    + (plugin.has("lock") ? ",required" : ""));
         }
         return plugins;
     }
@@ -90,7 +90,7 @@ class ExamplePluginsTest {
             assertEquals("on,required", plugins.get("dailyQuota"));
             assertEquals("on", plugins.get("providerBackoff"));
             assertTrue(!plugins.containsKey("truncateOutput"), plugins.toString());
-            assertEquals(400, put(server, "alice", "/api/plugins/plugin/dailyQuota", "{\"enabled\":false}").statusCode());
+            assertEquals(403, put(server, "alice", "/api/plugins/plugin/dailyQuota", "{\"enabled\":false}").statusCode());
 
             KernelHook readOnly = server.context.getBean("exampleReadOnlyHook", KernelHook.class);
             HookContext context = HookContext.of(new RunRef(new Principal("alice"), new SessionId("s"), new RunId("r")), Instant.EPOCH);

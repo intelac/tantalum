@@ -1,6 +1,7 @@
 package tantalum.shell.store;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import tantalum.shell.loop.StateView;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.TokenUsage;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
@@ -100,6 +102,11 @@ public final class SessionQueries {
                     .map(AwaitingAnswer.class::cast)
                     .findFirst();
         });
+    }
+
+    /** 这个用户在 {@code day}（UTC）用了多少 token。从索引读，比刚落盘的记录最多晚一次批量写入。 */
+    public TokenUsage usageOn(Principal principal, LocalDate day) throws SQLException {
+        return index.usageOn(principal, day);
     }
 
     /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
