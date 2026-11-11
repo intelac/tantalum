@@ -174,7 +174,7 @@ export TANTALUM_ADMIN_USER=yi TANTALUM_ADMIN_PASSWORD='...'
 java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar ...
 ```
 
-这个账号是**管理员**。管理员在设置页的“用户”一页加人、停用/启用、设/取消管理员、重置密码（接口 `GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`）；每个人在“账号”页改自己的密码（`PUT /api/auth/password`，要当前密码；改后别处的登录失效，当前这个保留）。被重置密码或停用的人，所有登录立即失效。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
+这个账号是**管理员**。管理员在设置页的“运维”一页加人、停用/启用、设/取消管理员、重置密码，还能看每个人今天用了多少 token、给某个人单独指定插件参数（见“插件的参数、锁定和默认值”）（接口 `GET/POST /api/users`、`PUT /api/users/{名字}`、`PUT /api/users/{名字}/password`）；每个人在“账号”页改自己的密码（`PUT /api/auth/password`，要当前密码；改后别处的登录失效，当前这个保留）。被重置密码或停用的人，所有登录立即失效。只有“管理员 / 普通用户”两种；不能停用或取消自己，系统至少留一个启用的管理员。
 
 命令行也能管，密码从标准输入读取；`TANTALUM_DATA_DIR` 指向数据目录（默认 `~/.local/share/tantalum`）：
 
@@ -224,7 +224,8 @@ mvn -pl tantalum-examples -am verify -Dtest=TenLoopIntegrationTest -Dsurefire.fa
 | `sessions/<用户>/<会话>.jsonl` | journal：每个会话一个文件，第一行是文件头（`format: 3`），之后一步一行，只追加 |
 | `index.db` | 会话列表、提交去重、用量的索引（SQLite）。可以由会话文件重建 |
 | `format.json` | 存储格式的版本（`storage: 3`） |
-| `users.db` | 账号 |
+| `users.db` | 账号、登录、每个人的设置、插件开关和参数、管理员定的插件默认值；插件的密码加密后也存在这里 |
+| `secret.key` | 加密插件密码用的密钥（32 字节），第一次启动时生成，只有服务的账号能读。设了环境变量 `TANTALUM_SECRET_KEY` 就不生成、不使用这个文件。备份见“插件的参数、锁定和默认值” |
 | `store.lock` | 进程独占锁：一份数据目录同时只能被一个进程使用 |
 | `memory/<用户>/` | 只在 `workspace-mode=shared` 时使用的记忆目录；默认每个用户的记忆在自己工作目录的 `memory/` 下 |
 | `browser/driver-<版本>/` | 解压好的 Playwright 驱动（约 130 MB），是程序文件，不是用户数据；换版本时旧目录自动删掉。浏览器本身不在这里，见“联网” |
@@ -288,7 +289,7 @@ jq -c 'select(.result) | [.result, (.commands // [] | map(.type)), (.facts // []
 java -jar tantalum.jar check --tantalum.data-dir=/srv/tantalum
 ```
 
-它用这个版本的内核和钩子把每个会话重放一遍，和记下的结果逐步比较，不一致的会话列出第一处差异（`DIFFERENT yi/s-1: seq 42 commands`）。全部一致时退出码 0，否则 1。只读：不取存储锁、不打开索引库，服务器运行时也能跑；不建模型客户端、不连 MCP。嵌入 Tantalum 的应用有自己的插件时，在自己的 Spring 配置里调 `RecordCheck.run`。
+它用这个版本的内核和钩子把每个会话重放一遍，和记下的结果逐步比较，不一致的会话列出第一处差异（`DIFFERENT yi/s-1: seq 42 commands`）。全部一致时退出码 0，否则 1。只读：不取存储锁、不打开索引库，服务器运行时也能跑；不建模型客户端、不连 MCP。插件要和服务器装得一样：少了一个，它当时做过决定的会话（比如被每日额度拦下的一次提问）都会报不一致。以自动配置注册的插件 jar（示例插件就是）照服务器的方式启动就会装上：`java -Dloader.path=… -cp tantalum.jar org.springframework.boot.loader.launch.PropertiesLauncher check --tantalum.examples.enabled=true …`。嵌入 Tantalum 的应用有自己的插件时，在自己的 Spring 配置里调 `RecordCheck.run`。
 
 ## 运维
 
@@ -511,7 +512,7 @@ Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2`
 
 ### 插件页的开关
 
-插件页在侧栏底部的“插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认开，策略类插件（只读、工具审批、每日额度）默认关，由用户自己打开。
+插件页在侧栏底部的“插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认开，策略类插件（只读、工具审批、每日额度）默认关，由用户自己打开。页面分三组：**规则**（在固定位置判断或拦截的钩子插件）、**工具**（本机工作区、联网、内置工具、MCP 服务器）、**工具输出处理**（只改工具结果的插件，比如截断）；空的组不显示。管理员可以改默认、锁定开关，插件可以有参数，见下面“插件的参数、锁定和默认值”。
 
 - **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行四个子开关。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，MXC 不可用时写明原因，电脑上没有 `git` 时写明。连接说明分步写明：先装好 `tantalum-connect`、先 `cd` 到项目目录、`--allow .` 是当前目录。
 - **联网**：总开关，下面“抓网页 `web_fetch`”和“浏览器”两个子开关，见下面“联网”。
@@ -520,6 +521,44 @@ Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2`
 - **怎么做到不破坏思考签名**：Claude 把历史里的思考内容和当时的工具列表绑定，直接改工具列表会让新账号收到 400。所以会话的工具列表从一开始就是全集（本机工作区的工具定义固定，不随电脑变；目录和权限写在 system 里会变的“本机工作区”一段），没开的工具标为延后加载（模型看不见）；开关变了，就在下一次提问后追加一条系统消息写明新增和移除了哪些（`tool_addition`、`tool_removal`，beta `mid-conversation-tool-changes-2026-07-01`）。支持的 Claude 模型见 `ClaudeRequest.TOOL_CHANGE_MODELS`；不支持的模型打开的工具要等新会话，插件页会写明。OpenAI 兼容的模型直接发现在开着的工具，变化另写一段文字说明。
 - **过滤只有一个入口**：工具、工具后处理、插件工作只经 `PluginGate` 调用，它在调用前按当前用户的开关查一次；内核钩子只经 `HookChain`，按会话记下的名单过滤。两条 ArchUnit 规则钉住，绕过的代码构建失败。
 - **接口**：`GET /api/plugins`、`PUT /api/plugins/{tool|mcp|plugin|local|web}/{名字}`（请求体 `{"enabled": true}`）；本机工作区另有 `GET /api/local`（开关和连接状态）、`POST /api/local/tokens`（`{"validity": "30m" | "1h" | "4h" | "1d"}`，返回令牌和命令）、`DELETE /api/local/tokens`（撤销全部令牌并断开）。都只操作当前登录用户的。
+
+### 插件的参数、锁定和默认值
+
+**参数。** 插件声明了参数的，插件页上它那一行下面有一张表单：文字、数字、开关、名单、密码五种。填好点它自己的“保存”，从你的下一次提问开始生效，在同一个会话里也是；填的值不合格（超出范围、不是数字）服务器不收，错误写在那一项下面，填的不丢。“参数恢复默认”删掉你自己填的。每一项的值按这个顺序找，找到就用：
+
+| 参数归谁 | 顺序 |
+|---|---|
+| 用户自己的（默认） | 用户自己填的 → 管理员定的默认 → 插件自带的默认 |
+| 只归管理员的（插件声明 `adminOnly()`，比如每日额度的 `tokens`） | 管理员给这个人单独指定的 → 管理员定的默认 → 插件自带的默认。用户在页面上看得到值，改不了 |
+
+存着的值后来不合格了（插件升级后范围变了），当没存，往下找。规则插件的参数在每次提问开始时记进 journal（上下文组装那一行的 `pluginParams`，只在变了的时候写），重放和 `check` 用记下的值，不读现在的设置；没有参数的会话写出来和以前逐字节相同。
+
+**密码。** 密码类的参数（API 令牌之类）每人一份，只有填的人自己的调用拿得到，管理员也看不到、不能代填。页面和接口都不回显，只显示“已设置”，可以“清除”；输入新的才替换。密码用 AES-256-GCM 加密后存在 `users.db`，不进 journal、日志、SSE 和模型上下文；规则钩子（纯函数）拿不到密码，只有工具、工具输出处理和插件工作拿得到。
+
+密钥从哪来：环境变量 `TANTALUM_SECRET_KEY`（Base64 的 32 字节，比如 `openssl rand -base64 32`）优先；没设就用数据目录里的 `secret.key`，第一次启动时生成。**备份时注意**：`users.db` 和密钥要分开保管——放在一起，拿到备份的人就能解出所有人的密码；只备份了 `users.db` 而丢了密钥，或者换了密钥，存着的密码都解不开，服务照常启动，页面上这些密码显示“要重新填”，其余数据不受影响。正式部署建议用 `TANTALUM_SECRET_KEY`，由部署系统的密钥管理来给。
+
+**插件默认值（管理员）。** 管理员的插件页多一个“插件默认值”页签，同样三组，每个插件一项：
+
+- **默认开不开**：用户没自己拨过开关时用它；“用默认”回到插件自带的。
+- **锁定**：锁上以后所有人的开关都固定在默认值上，拨不动；可以写一句原因，用户那一行显示“锁定：原因”。锁着的时候用户自己填的普通参数不算数（用管理员的默认），也改不了；密码照样能填。解锁后用户原来的选择和参数恢复。
+- **参数的默认值**：密码项不出现。
+
+锁有三个来源，页面上写明是哪个：插件代码里声明的 `mandatory()`、服务器配置 `tantalum.hooks.required`（这两种在页面上只读）、管理员在这一页锁的。
+
+**运维（管理员）。** 设置里的“运维”一页列出所有用户、每个人今天（UTC）的 token 用量；每个人的“参数”里给他单独指定只归管理员的参数，比如给某个人更小或更大的每日额度，“用默认”取消指定。
+
+接口：
+
+| 接口 | 作用 |
+|---|---|
+| `PUT /api/plugins/{种类}/{名字}/params` | 存自己的参数和密码，`{"values": {"maxChars": 5000}}`；只发要改的键 |
+| `DELETE /api/plugins/{种类}/{名字}/params` | 自己的参数恢复默认（密码不动） |
+| `DELETE /api/plugins/{种类}/{名字}/params/{键}` | 删自己的一项，清除密码也用它 |
+| `DELETE /api/plugins/{种类}/{名字}` | 自己的开关恢复默认 |
+| `GET /api/admin/plugins`、`PUT /api/admin/plugins/{种类}/{名字}` | 管理员：看和改默认，`{"enabled": true \| false \| null, "locked": true, "reason": "…", "params": {…}}`，`null` 是用插件自带的 |
+| `GET /api/admin/users/{用户}/params`、`PUT /api/admin/users/{用户}/params/{种类}/{插件}` | 管理员：按人指定，`{"values": {"tokens": 50000}}`，值写 `null` 取消 |
+
+锁着的开关或参数被改时回 403（`plugin/locked`）；普通用户调管理员接口回 403。
 
 实测：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）；`bash true` 一次往返约 28 ms，主要是 MXC 启动沙箱。
 
@@ -634,6 +673,50 @@ tantalum.mcp.servers.jira.deny=delete_issue    # 优先于一切
 - `failClosed()`：钩子抛异常时按 `Stop` 处理，默认同 `mandatory()`。用户能关的策略插件也该返回 true，开着时出错不能当作放行。
 - `mandatory()`：必须开启，插件页上不能关，出错按拦截处理。管理员也可以不改代码、用 `tantalum.hooks.required=名字,…` 把任何插件设成必须开启，名字不认识时拒绝启动。
 
+**声明参数**：成员实现 `Configurable`，`params()` 返回声明；同一个插件的成员声明合在一起，在插件页上是一张表单（两个成员声明了同一个键，内容必须完全一样，否则启动失败）。`Param.text`、`number`、`toggle`、`list`、`secret` 五种；`.range(低, 高)`、`.atLeast(低)` 定范围，`.label(…)`、`.hint(…)` 是页面上的名字和说明（`LocalText`），`.adminOnly()` 表示只有管理员能定。键只能用字母、数字、`_`、`-`。读的时候给一个兜底值：
+
+```java
+public final class TruncateOutputHook implements AfterToolHook, PluginInfo, Configurable {
+
+    @Override
+    public List<Param> params() {
+        return List.of(Param.number("maxChars", 100_000).range(100, 1_000_000)
+                .label(LocalText.en("Longest tool result, in characters").zh("工具结果最多多少字符")));
+    }
+
+    @Override
+    public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
+        long maxChars = context.params().number("maxChars", 100_000);   // 这个用户现在的值
+        ...
+    }
+}
+```
+
+工具、工具输出处理、插件工作从 `ToolContext.params()` 读调用时的值；内核钩子从 `HookContext.params()` 读这次提问开始时记进 journal 的值，所以钩子仍然是纯的，重放得到同样的决定（示例 `DailyQuotaHook` 的 `tokens`）。不要在构造函数里把参数读出来存着：每次调用时读。
+
+**用密码**：声明 `Param.secret(键)`，调用时从 `ToolContext.secrets()` 取；用户没填是空的，要自己处理。拿到的原文不要写进工具结果、日志和异常消息——工具结果会进 journal 和模型上下文：
+
+```java
+public final class TicketTool implements Tool, Configurable {
+
+    @Override
+    public List<Param> params() {
+        return List.of(Param.secret("token").label(LocalText.en("Ticket system token").zh("工单系统令牌")));
+    }
+
+    @Override
+    public ToolOutput run(ToolContext context, Json arguments) {
+        Optional<String> token = context.secrets().get("token");
+        if (token.isEmpty()) {
+            return ToolOutput.error("The ticket system token is not set. Ask the user to fill it in on the plugin page.");
+        }
+        ...   // 用 token.get() 调工单系统；不要把它写进返回的文字
+    }
+}
+```
+
+内核钩子拿不到密码（钩子的输入都记在 journal 里，密码不能进去）；判断时要用密码，就返回 `NeedWork`，在 `WorkType` 里取。拿用户填的地址去发请求的工具要自己防内网探测（参照“联网”的拦法）。
+
 问用户和记在会话里：
 - **问用户、等回答**（waiting-state）：钩子返回 `new Ask(new Question(id, 标题, 说明, 选项))`（文字是 `LocalText`，可以写三种语言），运行就停在“等回答”：没有在途命令，不计工作轮数，不超时；人几小时、几天后在对话页上点选都接着跑，服务器重启问题还在（问题和回答都在 journal 里）。回答从新钩子位置 `onAnswer` 回来：`context.question()` 是问题，`context.answer()` 是回答（`choice`、`text`），要先按 `question.id()` 过滤（所有钩子都会被调用）；放行回到问的位置，`Stop` 在工具调用前只拦那个调用、别处结束运行，`NeedWork` 要一轮工作，再返回 `Ask` 是新问题。`new Ask(question).after(Duration)` 给期限，到时 `answer()` 为 null。插件的问题只有选项，不收自由文本。模型自己也能问：内置工具 `ask_user`（选项加可选的一句话，可给 `timeout_seconds`），回答作为工具结果。
 - **记在会话里**：`onAnswer` 放行时 `Allow.PLAIN.withNote(键, 对象)`，或工作结果 `new WorkResult(结果, 续写文字, note)`。对象按字段并进会话状态里那一份（`SessionState.note(键)`，值为 `null` 的字段删掉），随结果行记进 journal，恢复时照样还原；钩子之后读它和读历史一样是纯的。失败的工作不记。示例：工具审批的“这个会话里一直允许”。
@@ -672,7 +755,7 @@ java --enable-native-access=ALL-UNNAMED -Dloader.path=/path/to/tantalum-examples
   --tantalum.examples.enabled=true   # 其余参数照旧
 ```
 
-用 `-cp` 启动时 jar 清单里的 `Enable-Native-Access` 不生效，所以要自己加 `--enable-native-access=ALL-UNNAMED`（SQLite）。插件页上列出注册了的插件；只读、工具审批、每日额度对每个用户默认关。配置（默认值在 `ExampleSettings`）：
+用 `-cp` 启动时 jar 清单里的 `Enable-Native-Access` 不生效，所以要自己加 `--enable-native-access=ALL-UNNAMED`（SQLite）。插件页上列出注册了的插件；只读、工具审批、每日额度对每个用户默认关。配置（默认值在 `ExampleSettings`）。其中 `daily-quota.tokens` 和 `truncate-output.max-chars` 是这两个参数“插件自带的默认”：管理员可以在“插件默认值”里改，每日额度还能在“运维”里按人指定，截断上限每个用户能自己改（100 到 1,000,000），都不用重启。有人要填密码的插件上线前，先定好密钥放哪（`TANTALUM_SECRET_KEY` 或数据目录的 `secret.key`，见“插件的参数、锁定和默认值”）。
 
 | 配置 `tantalum.examples.` | 默认 | 说明 |
 |---|---|---|

@@ -319,8 +319,9 @@ public final class LocalLinks implements AutoCloseable {
             if (now - link.lastPong > timing.silence().toNanos()) {
                 LOG.info("local link for {}: no pong for {}; closing", link.principal.value(), timing.silence());
                 later(() -> {
-                    link.peer.close(1001, "no pong");
+                    // 先从名单里拿掉再关：对面一看到关闭，这条连接就已经不算在线
                     link.dropped();
+                    link.peer.close(1001, "no pong");
                 });
             } else {
                 later(() -> {

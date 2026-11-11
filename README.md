@@ -14,12 +14,12 @@ A runtime, not a framework. A framework decides how the model thinks and how pro
 - **Event-driven.** A user message, a model reply, a tool result and a plugin's work are all events. The kernel is a pure function: given this event, what next. All I/O happens outside it and comes back as new events, so users can steer mid-run and slow work never blocks other sessions.
 - **Rebuildable.** Any session can be replayed step by step; `java -jar tantalum.jar check` verifies that a new version rewrites old sessions byte for byte.
 - **Accountable.** Each line carries who acted, in which session and run. The console's trace view shows every model call, tool call and hook.
-- **Extensible.** New behavior is a plugin, reached only through one gate and switched per user. Eight hook points; a hook can ask the user a question and wait for days.
+- **Extensible.** New behavior is a plugin, reached only through one gate and switched per user. A plugin can declare settings, including per-user secrets that are encrypted at rest and never reach the journal; an administrator sets defaults, locks a switch with a reason, and assigns admin-only values (such as a daily quota) per user. Eight hook points; a hook can ask the user a question and wait for days.
 - **Bounded by the server, not by the model.** Plugins go through `PluginGate`; file, Git and shell tools run on the user's own machine through a connector, inside a sandbox, within directories the user allows; API keys never enter the journal, the logs or the model's context.
 
 ## 0.1 in one list
 
-Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · local workspace with a macOS connector and MXC sandbox · web fetch and one headless browser per user · runs on macOS, Linux and Windows.
+Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace with a macOS connector and MXC sandbox · web fetch and one headless browser per user · runs on macOS, Linux and Windows.
 
 ## Run
 

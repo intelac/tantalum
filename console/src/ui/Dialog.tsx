@@ -14,7 +14,7 @@ interface Props {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** 居中大圆角弹窗。Esc 和遮罩关闭；打开时聚焦第一个控件，关闭后把焦点还给打开它的控件；Tab 在弹窗内循环。 */
+/** 居中大圆角弹窗。Esc 和遮罩关闭（焦点掉到弹窗外也算）；打开时聚焦第一个控件，关闭后把焦点还给打开它的控件；Tab 在弹窗内循环。 */
 export function Dialog({ open, onClose, title, children, className }: Props) {
   const t = useText();
   const panel = useRef<HTMLDivElement>(null);
@@ -30,6 +30,30 @@ export function Dialog({ open, onClose, title, children, className }: Props) {
       const back = opener.current;
       if (back instanceof HTMLElement) back.focus();
     };
+  }, [open]);
+
+  // 焦点所在的按钮被禁用（比如点了“保存”）后，焦点掉到 body 上，弹窗自己收不到按键：这时 Esc 照样关，Tab 回到弹窗里
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    function onStray(event: globalThis.KeyboardEvent): void {
+      const box = panel.current;
+      if (box === null || box.contains(document.activeElement)) return;
+      // 焦点在更上面一层弹窗或菜单里时不管
+      if (document.activeElement !== document.body && document.activeElement !== null) return;
+      // 叠着两个弹窗时只有最上面那个响应
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== box) return;
+      if (event.key === "Escape") {
+        close.current();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        (box.querySelector<HTMLElement>(FOCUSABLE) ?? box).focus();
+      }
+    }
+    document.addEventListener("keydown", onStray);
+    return () => document.removeEventListener("keydown", onStray);
   }, [open]);
 
   if (!open) return null;

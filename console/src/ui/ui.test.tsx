@@ -100,6 +100,19 @@ describe("Dialog", () => {
     await userEvent.tab({ shift: true });
     expect(document.activeElement).toBe(done);
   });
+
+  // 点了“保存”之后按钮被禁用，焦点掉到 body 上：Tab 回到弹窗里，Esc 照样关
+  it("still answers Tab and Escape after focus fell out of it", async () => {
+    render(<DialogHarness />);
+    await userEvent.click(screen.getByRole("button", { name: "打开设置" }));
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "关闭" }));
+    (document.activeElement as HTMLElement).blur();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });
 
 describe("Menu", () => {

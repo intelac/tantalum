@@ -61,6 +61,9 @@ public final class E2eServer {
     /** 同上，进程死在工具执行途中：文件停在模型要调工具之后，没有结果行（record-results 需求 11.4）。 */
     public static final String CRASHED_TOOL_SESSION = "s-c0ffee01";
 
+    /** 第二个账号电脑上的长文件（400 字符），截断插件的端到端测试读它。名字里不能有 long：脚本模型见到这个词走别的剧本。 */
+    static final String LONG_FILE = "big.md";
+
     /** 本地测试页：标题、正文里的标记，外加不该出现在 web_fetch 结果里的脚本。 */
     static final String WEB_PAGE_PATH = "/article";
     static final String WEB_PAGE = "<!doctype html><html><head><meta charset=\"utf-8\"><title>E2E 测试文章</title>"
@@ -96,6 +99,9 @@ public final class E2eServer {
                     generic.registerBean(ToolApprovalHook.class, () -> new ToolApprovalHook(java.util.Set.of("write_file")));
                     // 插件参数的端到端测试（plugin-settings）：带一个密码参数的测试工具
                     generic.registerBean(E2eSecretTool.class);
+                    // 同上：一个用户自己能改参数的插件（截断，默认上限大到碰不到别的用例），一个参数只归管理员的插件（每日额度，默认关）
+                    generic.registerBean(TruncateOutputHook.class, () -> new TruncateOutputHook(100_000));
+                    generic.registerBean(DailyQuotaHook.class, () -> new DailyQuotaHook(100_000_000L));
                 })
                 .run("--server.port=" + port,
                         "--tantalum.data-dir=" + data,
@@ -173,6 +179,8 @@ public final class E2eServer {
         Path notes = Files.createDirectories(workspace.resolve(USER).resolve("notes"));
         Files.writeString(notes.resolve("hello.md"), "# hello\n\nhello e2e\n");
         Files.writeString(notes.resolve("world.md"), "# world\n\nhello back from world\n");
+        // plugin-settings：第二个账号的电脑上一个 400 字符的文件，截断的用例读它
+        Files.writeString(Files.createDirectories(workspace.resolve(OTHER_USER)).resolve(LONG_FILE), "big-e2e-head " + "x".repeat(387));
         // 上次进程在这个运行刚开始时被杀：会话文件停在用户提问之后。启动时它要收尾为“因重启中断”。
         ResultWriter.write(new SessionPaths(data), List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER),
                 new SessionId(CRASHED_SESSION), null, new UserPrompt(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
