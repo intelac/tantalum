@@ -28,6 +28,8 @@ public final class LocalWorkspace implements ToolGroup {
     static final int SESSION_DIRS = 3;
 
     /** 每一类工具对应的子开关。 */
+    /** 开关的种类；这个文件里的 {@code Kind} 是本机工具的种类（读、写、git、shell）。 */
+    private static final tantalum.shell.plugin.Kind LOCAL = tantalum.shell.plugin.Kind.LOCAL;
     private static final Map<Kind, String> SWITCH = Map.of(
             Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell");
 
@@ -44,8 +46,8 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     @Override
-    public PluginSwitches.Kind kind() {
-        return PluginSwitches.Kind.LOCAL;
+    public tantalum.shell.plugin.Kind kind() {
+        return LOCAL;
     }
 
     @Override
@@ -69,8 +71,8 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     public boolean enabled(Principal user, Kind kind) {
-        return switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)
-                && switches.enabled(user, PluginSwitches.Kind.LOCAL, SWITCH.get(kind))
+        return switches.enabled(user, LOCAL, MASTER)
+                && switches.enabled(user, LOCAL, SWITCH.get(kind))
                 && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false);
     }
 
@@ -91,7 +93,7 @@ public final class LocalWorkspace implements ToolGroup {
     public Map<String, Boolean> switches(Principal user) {
         Map<String, Boolean> states = new LinkedHashMap<>();
         for (String name : SWITCHES) {
-            states.put(name, switches.enabled(user, PluginSwitches.Kind.LOCAL, name));
+            states.put(name, switches.enabled(user, LOCAL, name));
         }
         return states;
     }
@@ -106,7 +108,7 @@ public final class LocalWorkspace implements ToolGroup {
 
     /** 同上，{@code dir} 是会话的工作目录（没有为 null）。 */
     public Optional<String> section(Principal user, String dir) {
-        if (!switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)) {
+        if (!switches.enabled(user, LOCAL, MASTER)) {
             return Optional.empty();
         }
         return links.status(user).map(status -> describe(status.hello(), enabled(user, Kind.WRITE), enabled(user, Kind.SHELL), dir));
@@ -159,7 +161,7 @@ public final class LocalWorkspace implements ToolGroup {
 
     /** 同上，会话有工作目录时从那里读。 */
     public Optional<String> agents(Principal user, String dir) throws InterruptedException {
-        if (!switches.enabled(user, PluginSwitches.Kind.LOCAL, MASTER)) {
+        if (!switches.enabled(user, LOCAL, MASTER)) {
             return Optional.empty();
         }
         return links.agents(user, dir);

@@ -28,6 +28,7 @@ import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.memory.MemoryGuidance;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.route.RouteClients;
 import tantalum.shell.route.RouteSettings;
 import tantalum.shell.route.Routes;
@@ -280,7 +281,7 @@ class ContextHandlerTest {
     void theMasterSwitchHidesTheComputer() throws Exception {
         Files.writeString(mac.resolve("AGENTS.md"), "computer rules");
         try (TestComputer ignored = connect()) {
-            switches.set(ALICE, PluginSwitches.Kind.LOCAL, "local-workspace", false);
+            switches.set(ALICE, Kind.LOCAL, "local-workspace", false);
             ContextAssembled event = assembled(shared(), COMMAND);
             assertEquals(List.of(), event.sections());
             assertFalse(event.system().contains("computer rules"));

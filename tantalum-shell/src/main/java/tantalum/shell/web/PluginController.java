@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import tantalum.shell.access.PluginGate;
-import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.mcp.McpRegistry;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.route.ModelInfo;
 import tantalum.value.id.Principal;
 import tools.jackson.databind.JsonNode;
@@ -65,7 +65,7 @@ public class PluginController {
             view.put("name", plugin.name());
             view.put("description", plugin.description().wire());
             view.put("points", plugin.points());
-            view.put("mandatory", plugin.mandatory());
+            view.put("mandatory", plugin.lock() != null && !PluginGate.Lock.ADMIN.equals(plugin.lock().source()));
             view.put("enabled", plugin.enabled());
             return view;
         }).toList());
@@ -90,7 +90,7 @@ public class PluginController {
             engine.plugins().set(WebJson.currentUser(), parsedKind, name, enabled);
         } catch (PluginGate.UnknownPlugin unknown) {
             return json.error(ErrorCode.PLUGIN_NOT_FOUND, unknown.getMessage(), Map.of("name", unknown.name()));
-        } catch (PluginGate.RequiredPlugin refused) {
+        } catch (PluginGate.LockedPlugin refused) {
             return json.error(ErrorCode.PLUGIN_REQUIRED, refused.getMessage(), Map.of("name", refused.name()));
         }
         return json.json(200, Map.of("kind", parsedKind.key(), "name", name, "enabled", enabled));

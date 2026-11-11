@@ -83,7 +83,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         CompactionPolicy compaction = new CompactionPolicy(stores.userSettings(), properties.compactionLimits());
         PluginGate gate = new PluginGate(catalog, stores.switches(), List.of(localWorkspace, webAccess),
                 mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
-                hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()));
+                hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()), stores.params());
         return new Toolbox(catalog, toolImages, localLinks, localWorkspace, addressRules, egress, browsers, webAccess, mcp, mcpSettings,
                 started, compaction, gate, web.any());
     }

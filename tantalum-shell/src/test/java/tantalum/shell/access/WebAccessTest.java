@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import tantalum.shell.access.PluginSwitches.Kind;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;

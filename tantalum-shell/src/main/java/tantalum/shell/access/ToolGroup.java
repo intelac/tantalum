@@ -1,6 +1,7 @@
 package tantalum.shell.access;
 
 import java.util.List;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
 
@@ -12,7 +13,7 @@ import tantalum.value.id.Principal;
 public interface ToolGroup {
 
     /** 这一组的开关存在 {@link PluginSwitches} 的哪一种里。 */
-    PluginSwitches.Kind kind();
+    Kind kind();
 
     /** 插件页上的开关名，第一个是总开关。 */
     List<String> switches();

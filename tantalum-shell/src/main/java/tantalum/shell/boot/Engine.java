@@ -314,6 +314,7 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("drain output ring", () -> pipeline.output().shutdown(DRAIN)),
                 new Shutdown.Step("close mcp", toolbox.mcp()),
                 new Shutdown.Step("close plugin settings", stores.switches()),
+                new Shutdown.Step("close plugin params", stores.params()),
                 new Shutdown.Step("close local tokens", stores.localTokens()),
                 new Shutdown.Step("close user settings", stores.userSettings()),
                 new Shutdown.Step("close projects", stores.projects()),

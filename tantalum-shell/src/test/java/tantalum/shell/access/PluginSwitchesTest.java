@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.PrivateFiles;
 import tantalum.shell.access.PluginSwitches.Key;
-import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.auth.UserStore;
+import tantalum.shell.plugin.Kind;
 import tantalum.value.id.Principal;
 
 class PluginSwitchesTest {
@@ -114,5 +114,69 @@ class PluginSwitchesTest {
         assertEquals(Kind.MCP, Kind.of("mcp"));
         assertEquals("plugin", Kind.PLUGIN.key());
         assertThrows(IllegalArgumentException.class, () -> Kind.of("hook"));
+    }
+
+    /** 管理员定的默认对没动过的人生效；动过的人按自己的。 */
+    @Test
+    void anAdminDefaultAppliesToThoseWhoHaveNotChosen() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            switches.set(BOB, Kind.TOOL, "bash", true);
+            switches.setPolicy(Kind.TOOL, "bash", false, false, "");
+            assertFalse(switches.enabled(ALICE, Kind.TOOL, "bash"));
+            assertTrue(switches.enabled(BOB, Kind.TOOL, "bash"));
+            // 默认关的插件，管理员改成默认开
+            switches.setPolicy(Kind.PLUGIN, "readOnly", true, false, "");
+            assertTrue(switches.enabled(ALICE, Kind.PLUGIN, "readOnly", false));
+        }
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertFalse(switches.enabled(ALICE, Kind.TOOL, "bash"));
+            assertEquals(new PluginSwitches.Policy(false, false, ""), switches.policy(Kind.TOOL, "bash").orElseThrow());
+        }
+    }
+
+    /** 锁住：所有人都是管理员定的值，用户的选择留在库里，解锁后回来。 */
+    @Test
+    void aLockOverridesTheUsersChoiceWithoutDeletingIt() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            switches.set(ALICE, Kind.TOOL, "bash", true);
+            switches.setPolicy(Kind.TOOL, "bash", false, true, " 安全要求 ");
+            assertFalse(switches.enabled(ALICE, Kind.TOOL, "bash"));
+            assertEquals(java.util.Optional.of(true), switches.chosen(ALICE, Kind.TOOL, "bash"));
+            assertEquals("安全要求", switches.policy(Kind.TOOL, "bash").orElseThrow().reason());
+        }
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertFalse(switches.enabled(ALICE, Kind.TOOL, "bash"));
+            switches.setPolicy(Kind.TOOL, "bash", false, false, "");
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "bash"));
+        }
+    }
+
+    /** 只锁、不改默认：锁在这一项自带的默认上。 */
+    @Test
+    void aLockWithoutADefaultPinsTheBuiltInDefault() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.inMemory(CLOCK)) {
+            switches.set(ALICE, Kind.PLUGIN, "readOnly", true);
+            switches.set(ALICE, Kind.TOOL, "bash", false);
+            switches.setPolicy(Kind.PLUGIN, "readOnly", null, true, "");
+            switches.setPolicy(Kind.TOOL, "bash", null, true, "");
+            assertFalse(switches.enabled(ALICE, Kind.PLUGIN, "readOnly", false));
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "bash", true));
+        }
+    }
+
+    @Test
+    void clearingAPolicyOrAChoiceGoesBackToTheDefault() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.inMemory(CLOCK)) {
+            switches.setPolicy(Kind.TOOL, "bash", false, true, "x");
+            switches.setPolicy(Kind.TOOL, "bash", null, false, "");
+            assertTrue(switches.policy(Kind.TOOL, "bash").isEmpty());
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "bash"));
+
+            switches.set(ALICE, Kind.TOOL, "bash", false);
+            switches.clear(ALICE, Kind.TOOL, "bash");
+            assertTrue(switches.chosen(ALICE, Kind.TOOL, "bash").isEmpty());
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "bash"));
+            assertEquals(Set.of(), switches.off(ALICE));
+        }
     }
 }

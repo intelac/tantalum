@@ -3,6 +3,7 @@ package tantalum.shell.access;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
 
@@ -43,8 +44,8 @@ public final class WebAccess implements ToolGroup {
     }
 
     @Override
-    public PluginSwitches.Kind kind() {
-        return PluginSwitches.Kind.WEB;
+    public Kind kind() {
+        return Kind.WEB;
     }
 
     @Override
@@ -59,8 +60,8 @@ public final class WebAccess implements ToolGroup {
 
     @Override
     public boolean enabled(Principal user, Tool tool) {
-        return owns(tool) && switches.enabled(user, PluginSwitches.Kind.WEB, MASTER)
-                && switches.enabled(user, PluginSwitches.Kind.WEB, tool.server());
+        return owns(tool) && switches.enabled(user, Kind.WEB, MASTER)
+                && switches.enabled(user, Kind.WEB, tool.server());
     }
 
     @Override
@@ -72,7 +73,7 @@ public final class WebAccess implements ToolGroup {
     public Map<String, Boolean> switches(Principal user) {
         Map<String, Boolean> states = new LinkedHashMap<>();
         for (String name : SWITCHES) {
-            states.put(name, switches.enabled(user, PluginSwitches.Kind.WEB, name));
+            states.put(name, switches.enabled(user, Kind.WEB, name));
         }
         return states;
     }

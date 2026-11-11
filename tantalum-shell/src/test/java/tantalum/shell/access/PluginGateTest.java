@@ -2,6 +2,7 @@ package tantalum.shell.access;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,8 +15,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.kernel.hook.KernelHook;
-import tantalum.shell.access.PluginSwitches.Kind;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
@@ -199,7 +200,7 @@ class PluginGateTest {
         assertEquals(List.of("citations"), policies.enabledPlugins(ALICE));
         PluginGate.PluginView view = policies.overview(ALICE).plugins().stream().filter(p -> p.name().equals("readOnly")).findFirst().orElseThrow();
         assertFalse(view.enabled());
-        assertFalse(view.mandatory(), "default-off policy plugins are optional");
+        assertNull(view.lock(), "default-off policy plugins are optional");
 
         policies.set(ALICE, Kind.PLUGIN, "readOnly", true);
         assertEquals(List.of("citations", "readOnly"), policies.enabledPlugins(ALICE));
