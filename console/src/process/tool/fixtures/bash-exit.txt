@@ -1,0 +1,3 @@
+boom
+
+Command exited with code 2.

@@ -140,6 +140,32 @@ describe("ProcessGroup", () => {
     expect(screen.getByText("read_file")).not.toBeNull();
   });
 
+  it("says what was done after the outcome, and what is running while it runs", async () => {
+    const bash = (id: string, extra: Partial<ToolStepItem>) =>
+      step(id, { call: { kind: "toolCall", id: `c${id}`, name: "bash", rawArguments: "{}", arguments: { command: "npm  test\n --watch" } }, ...extra });
+    const store = new ConversationStore();
+    store.applyItem({ ...status, phase: "AwaitingTools", endReason: undefined, updatedAt: "2026-10-31T00:00:02Z" });
+    store.applyItem(step("a"));
+    store.applyItem(bash("b", { status: "RUNNING", endedAt: undefined, result: undefined }));
+    render(<ProcessGroup store={store} run="run-0" ids={["a", "b"]} />);
+    expect(screen.getAllByRole("button")[0]?.textContent).toBe("正在跑命令 · npm test --watch");
+
+    store.applyItem(bash("b", {}));
+    store.applyItem(status);
+    const header = (await screen.findByText("已完成，用时 32 秒")).closest("button");
+    expect(header?.textContent).toBe("已完成，用时 32 秒· 读了文件、跑了命令");
+    // 整块的名字还是结果和用时，读屏和端到端测试都靠它
+    expect(screen.getByRole("region", { name: "已完成，用时 32 秒" })).not.toBeNull();
+  });
+
+  it("keeps the waiting-for-answer title while a tool is held for approval", () => {
+    const store = new ConversationStore();
+    store.applyItem({ ...status, phase: "AwaitingAnswer", endReason: undefined });
+    store.applyItem(step("a", { status: "RUNNING", endedAt: undefined, result: undefined }));
+    render(<ProcessGroup store={store} run="run-0" ids={["a"]} />);
+    expect(screen.getAllByRole("button")[0]?.textContent).toBe("等你回答");
+  });
+
   it("shows live reasoning while streaming", () => {
     const store = new ConversationStore();
     store.applyItem({ ...status, phase: "AwaitingModel", endReason: undefined });

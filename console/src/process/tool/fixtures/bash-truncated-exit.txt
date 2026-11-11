@@ -1,0 +1,5 @@
+tail
+
+[Output truncated: showing the last 2000 of 4321 lines (limit 2000 lines or 50 KB).]
+
+Command exited with code 3.

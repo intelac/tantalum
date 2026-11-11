@@ -44,8 +44,13 @@ test.describe("对话", () => {
     const grep = page.getByRole("button", { name: /^grep/ });
     await expect(grep).toContainText("完成");
     await grep.click();
-    await expect(page.getByRole("heading", { name: "结果" })).toBeVisible();
-    await expect(page.locator("pre", { hasText: "notes/hello.md" })).toBeVisible();
+    // grep 的结果画成搜索卡片：几处匹配、按文件分组（input-area 需求 4）
+    const search = page.getByRole("region", { name: "搜索结果" });
+    await expect(search.getByText(/^\d+ 处匹配 · \d+ 个文件$/)).toBeVisible();
+    await expect(search.getByRole("button", { name: /notes\/hello\.md/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "结果" })).toHaveCount(0);
+    // 过程区标题在结果和用时后面写做了什么，次数多的在前（input-area 需求 3）
+    await expect(processHeader(page, /^已完成/)).toContainText("读了文件、搜了代码");
 
     const group = page.getByRole("group", { name: "2 个并行调用" });
     await expect(group).toBeVisible();

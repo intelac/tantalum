@@ -1,0 +1,2 @@
+sub/a.txt:1:alpha COMPUTE
+sub/a.txt:3:COMPUTE: again 12:34

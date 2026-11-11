@@ -83,7 +83,7 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
 }
 
 /** 子开关开着、电脑也连着，但连接程序没允许这一类时的说明。读文件只要连上就能用。 */
-function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | null {
+export function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | null {
   const text = t.plugins.local;
   if (name === "file-edit" && !link.write) return text.notAllowedWrite;
   if (name === "git" && !link.git) return text.noGit;
@@ -112,6 +112,7 @@ function LinkState({ link }: { link: LocalLink | null }) {
   return (
     <span className="mt-1 block text-fg" role="status">
       <span className="block">{text.connected(link.device.name, osName(link.device.os, link.device.osVersion))}</span>
+      {link.current === false && <span className="block text-warning">{text.outdated}</span>}
       <span className="block font-mono text-[11px] break-all text-fg-muted">{text.dirs(link.roots.map((root) => root.path).join("、"))}</span>
       <span className="block text-fg-muted">
         {text.write(link.write)} · {text.shell(link.shell.available)}

@@ -1,0 +1,3 @@
+C:\src\app\Main.java:12:int x = 1; // a:b
+C:\src\app\Main.java:40:return x;
+sub\b.txt:7:x

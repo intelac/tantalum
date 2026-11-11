@@ -8,6 +8,8 @@ import { navigate, traceRecordPath } from "../app/router";
 import { elapsedMs, formatArguments, summarizeArguments } from "./chain";
 import { FileChange, hasFileView, readRange } from "./FileChange";
 import { useNow } from "../ui/useNow";
+import { SearchCard, searchResult } from "./tool/SearchCard";
+import { exitCodeOf, hasTerminalView, TerminalCard } from "./tool/TerminalCard";
 
 interface Props {
   step: ToolStepItem;
@@ -46,6 +48,9 @@ export function ToolRow({ step }: Props) {
   const failed = step.status === "FAILED" || step.status === "BLOCKED";
   const synthesized = step.result?.code !== undefined;
   const range = readRange(step);
+  const exitCode = exitCodeOf(step);
+  const terminal = hasTerminalView(step);
+  const search = open && !terminal ? searchResult(step) : null;
 
   return (
     <div className="text-sm">
@@ -64,6 +69,7 @@ export function ToolRow({ step }: Props) {
         <span className="min-w-0 flex-1 truncate font-mono text-xs">
           {summarizeArguments(step)}
           {range !== null && <span className="ml-2 font-sans text-fg-faint">{range}</span>}
+          {exitCode !== undefined && <span className="ml-2 font-sans text-danger">{t.process.exitCode(exitCode)}</span>}
         </span>
         <span className={cx("shrink-0 text-xs", failed ? (step.status === "BLOCKED" ? "text-warning" : "text-danger") : "")}>
           {t.process[STATUS_KEY[step.status]]}
@@ -83,43 +89,51 @@ export function ToolRow({ step }: Props) {
           >
             {t.conversation.viewInTrace}
           </a>
-          {hasFileView(step) ? (
-            <FileChange step={step} />
+          {terminal ? (
+            <TerminalCard step={step} />
+          ) : search !== null ? (
+            <SearchCard step={step} result={search} />
           ) : (
-            <section>
-              <h4 className="mb-1 text-xs font-medium text-fg-muted">{t.process.arguments}</h4>
-              <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>
-            </section>
-          )}
-          {step.result !== undefined && (
-            <section>
-              <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">
-                {t.process.result}
-                {step.result.error && (
-                  <span className={cx("rounded-xs px-1.5 py-0.5 text-[11px]", step.status === "BLOCKED" ? "bg-warning/15 text-warning" : "bg-danger-soft text-danger")}>
-                    {t.process[STATUS_KEY[step.status]]}
-                  </span>
-                )}
-                {synthesized && (
-                  <span className="rounded-xs bg-danger-soft px-1.5 py-0.5 font-mono text-[11px] text-danger" title={t.process.synthesized}>
-                    {step.result.code}
-                  </span>
-                )}
-              </h4>
-              {synthesized && (
-                <p className="mb-1 text-xs text-danger">
-                  {step.result.code === "TOOL_OUTCOME_UNKNOWN" ? t.process.outcomeUnknown : t.process.abortedBeforeDispatch}
-                </p>
+            <>
+              {hasFileView(step) ? (
+                <FileChange step={step} />
+              ) : (
+                <section>
+                  <h4 className="mb-1 text-xs font-medium text-fg-muted">{t.process.arguments}</h4>
+                  <pre className="max-h-64 overflow-auto rounded-sm bg-code p-2 font-mono text-xs whitespace-pre-wrap text-fg">{formatArguments(step)}</pre>
+                </section>
               )}
-              <pre
-                className={cx(
-                  "max-h-80 overflow-auto rounded-sm p-2 font-mono text-xs whitespace-pre-wrap",
-                  step.result.error ? "border border-danger/30 bg-danger-soft text-danger" : "bg-code text-fg",
-                )}
-              >
-                {step.result.text}
-              </pre>
-            </section>
+              {step.result !== undefined && (
+                <section>
+                  <h4 className="mb-1 flex items-center gap-2 text-xs font-medium text-fg-muted">
+                    {t.process.result}
+                    {step.result.error && (
+                      <span className={cx("rounded-xs px-1.5 py-0.5 text-[11px]", step.status === "BLOCKED" ? "bg-warning/15 text-warning" : "bg-danger-soft text-danger")}>
+                        {t.process[STATUS_KEY[step.status]]}
+                      </span>
+                    )}
+                    {synthesized && (
+                      <span className="rounded-xs bg-danger-soft px-1.5 py-0.5 font-mono text-[11px] text-danger" title={t.process.synthesized}>
+                        {step.result.code}
+                      </span>
+                    )}
+                  </h4>
+                  {synthesized && (
+                    <p className="mb-1 text-xs text-danger">
+                      {step.result.code === "TOOL_OUTCOME_UNKNOWN" ? t.process.outcomeUnknown : t.process.abortedBeforeDispatch}
+                    </p>
+                  )}
+                  <pre
+                    className={cx(
+                      "max-h-80 overflow-auto rounded-sm p-2 font-mono text-xs whitespace-pre-wrap",
+                      step.result.error ? "border border-danger/30 bg-danger-soft text-danger" : "bg-code text-fg",
+                    )}
+                  >
+                    {step.result.text}
+                  </pre>
+                </section>
+              )}
+            </>
           )}
         </div>
       )}

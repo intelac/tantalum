@@ -47,7 +47,10 @@ export function summarizeArguments(step: ToolStepItem, max = 60): string {
     const values = Object.values(args as Record<string, unknown>);
     const path = (args as Record<string, unknown>).path;
     // 写和改的其余参数是大段正文，摘要只看路径；正文在展开后的差异和预览里
+    const command = (args as Record<string, unknown>).command;
     if (WRITES.has(step.call.name) && typeof path === "string") text = path;
+    // 命令行带了目录、限时也只看命令本身，其余在展开后的终端卡片里
+    else if (step.call.name === "bash" && typeof command === "string") text = command.replace(/\s+/g, " ").trim();
     else text = values.length === 1 && typeof values[0] === "string" ? values[0] : JSON.stringify(args);
   } else if (args === undefined) {
     text = step.call.rawArguments;

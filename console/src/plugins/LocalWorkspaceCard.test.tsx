@@ -100,6 +100,17 @@ describe("LocalWorkspaceCard", () => {
   });
 
   /** B1：Git 查询不再要求主目录是仓库，只在电脑上没有 git 时说明。 */
+  it("says when the connected connector is too old", async () => {
+    fakeBackend({ switches: ALL_ON, link: link({ protocol: 1, current: false }) });
+    open();
+    const state = await within(await card()).findByRole("status");
+    expect(state.textContent).toContain("连接程序太旧");
+    cleanup();
+    fakeBackend({ switches: ALL_ON, link: link() });
+    open();
+    expect((await within(await card()).findByRole("status")).textContent).not.toContain("连接程序太旧");
+  });
+
   it("only explains Git when the computer has no git", async () => {
     fakeBackend({ switches: ALL_ON, link: link() });
     open();

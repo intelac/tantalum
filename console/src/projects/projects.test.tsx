@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import type { LocalStatus, Project, SessionSummary } from "../api/types";
-import { linkProblem } from "../composer/LinkChip";
+import { linkLimits, linkProblem } from "../composer/LinkChip";
 import { ProjectChip } from "../composer/ProjectChip";
 import { currentText } from "../text";
 import { AddProjectDialog } from "./AddProjectDialog";
@@ -203,6 +203,17 @@ describe("composer chips", () => {
     expect(linkProblem(status({ link: { ...link, current: false } }), "C:\\APPL\\Quattro", t)).toBe("连接程序要更新");
     expect(linkProblem(status({}), "D:\\other", t)).toBe("电脑不允许这个目录");
     expect(linkProblem(undefined, "C:\\APPL", t)).toBeNull();
+    // 开了开关而电脑那边没给：排在拦路的毛病后面，开关关着就不提
+    const weak = { ...link, write: false, shell: { available: false } };
+    const here = "C:\\APPL\\Quattro";
+    expect(linkLimits(status({}), here, t)).toEqual([]);
+    expect(linkLimits(status({ link: weak }), here, t)).toEqual([
+      { label: "不能改文件", hint: "连接程序没有允许：启动时加 --allow-write 才能改文件" },
+      { label: "不能跑命令", hint: "连接程序没有允许：启动时加 --allow-shell 才能跑命令" },
+    ]);
+    expect(linkLimits(status({ link: { ...weak, write: true } }), here, t).map((limit) => limit.label)).toEqual(["不能跑命令"]);
+    expect(linkLimits(status({ link: weak }), "D:\\other", t)).toEqual([]);
+    expect(linkLimits(status({ link: weak, switches: { ...on, "file-edit": false, shell: false } }), here, t)).toEqual([]);
   });
 
   it("lets a new session pick a workspace and shows only the name once it started", async () => {
