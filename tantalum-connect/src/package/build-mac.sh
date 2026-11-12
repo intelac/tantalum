@@ -27,7 +27,8 @@ MXC_VERSION=1.0.1
 MXC_URL=https://github.com/microsoft/mxc/releases/download/v$MXC_VERSION/mxc-release-binaries.zip
 MXC_ZIP_SHA256=0e832239454ba7fcd338ff56218a287eef4c0a01c1484084b869f55feff8abe9
 MXC_BIN_SHA256=c54390e48a25187fdae10758c6a286bede49416cb610c88c6705fd8445e97f60
-MODULES=java.base,java.desktop,java.net.http,java.sql
+# jdk.unsupported：Playwright 用的 gson 靠 sun.misc.Unsafe 建没有无参构造器的对象（反射取的，jdeps 看不到）
+MODULES=java.base,java.desktop,java.net.http,java.sql,jdk.unsupported
 APP_NAME="Tantalum Connect"
 # macOS 的包版本第一位不能是 0；连接程序自己的版本（启动说明第一行）来自 jar 的 Implementation-Version，不受影响
 APP_VERSION=${VERSION%%-*}
@@ -175,6 +176,6 @@ if ! grep -q "浏览器：" "$CHECK/browser.txt" || grep -q "浏览器：不允�
   cat "$CHECK/browser.txt" >&2
   exit 1
 fi
-echo "安装包：$OUT（$(du -h "$OUT" | cut -f1)）"
-echo "浏览器驱动：包里的 Node $NODE_VERSION；$(grep "浏览器：" "$CHECK/browser.txt")"
+echo "安装包：${OUT}（$(du -h "$OUT" | cut -f1)）"
+echo "浏览器驱动：包里的 Node ${NODE_VERSION}；$(grep "浏览器：" "$CHECK/browser.txt")"
 echo "自检通过：没有 Java 也能运行，包里的 MXC 检查通过（$(grep "命令沙箱：" "$CHECK/out.txt")）"
