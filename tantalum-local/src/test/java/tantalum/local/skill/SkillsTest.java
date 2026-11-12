@@ -101,14 +101,14 @@ class SkillsTest {
         skill("flag", "---\ndescription: D\nuser-invocable: maybe\n---\nx");
         skill("unclosed", "---\ndescription: D\nbody without end\n");
         Files.write(Files.createDirectory(skills.resolve("binary")).resolve("SKILL.md"), new byte[] {'-', '-', '-', '\n', (byte) 0xff, (byte) 0xfe});
-        Files.write(Files.createDirectory(skills.resolve("nul")).resolve("SKILL.md"), "---\ndescription: D\n---\n\0".getBytes(StandardCharsets.UTF_8));
+        Files.write(Files.createDirectory(skills.resolve("nulbyte")).resolve("SKILL.md"), "---\ndescription: D\n---\n\0".getBytes(StandardCharsets.UTF_8));
         Files.writeString(Files.createDirectory(skills.resolve("huge")).resolve("SKILL.md"),
                 "---\ndescription: D\n---\n" + "x".repeat(SkillFile.MAX_BYTES));
         SkillList list = list();
         assertEquals(List.of("good"), names(list));
         assertEquals(List.of("Bad_Name:name-invalid", "binary:not-text", "blank-description:description-missing", "flag:flag-not-boolean",
                 "huge:too-large", "named-badly:name-invalid", "no-description:description-missing", "no-front-matter:description-missing",
-                "nul:not-text", "unclosed:yaml-invalid"), problems(list));
+                "nulbyte:not-text", "unclosed:yaml-invalid"), problems(list));
         assertEquals("user-invocable", list.problems().get(3).detail());
         assertEquals("Has Space", list.problems().get(5).detail());
     }
