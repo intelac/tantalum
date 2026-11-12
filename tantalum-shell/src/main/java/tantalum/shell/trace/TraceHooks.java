@@ -61,7 +61,25 @@ final class TraceHooks {
                 && waiting.origin() != null ? waiting.origin() : HookPoint.BEFORE_TOOL_CALL;
         Place place = place(run, point);
         pass.add(new TraceRecord.Question(pass.head("q:" + fact.question().id(), run, place, pass.at), fact.question().id(), fact.askedBy(),
-                fact.question().title().wire(), TraceRecord.Question.Status.WAITING, null, null), place, true);
+                fact.question().title().wire(), TraceRecord.Question.Status.WAITING, null, null, askedFor(run)), place, true);
+    }
+
+    /**
+     * 这个问题是为哪一次工具调用问的：{@code ask_user} 是它自己那次调用；钩子在工具调用前问的是工具轮里正在检查的那个。
+     * 别的位置（模型调用前、结束前……）问的不属于哪次工具调用。
+     */
+    private String askedFor(RunId run) {
+        if (!(pass.state.runs().get(run) instanceof RunState current && current.phase() instanceof AwaitingAnswer waiting)) {
+            return null;
+        }
+        if (waiting.toolCallId() != null) {
+            return pass.tools.idOf(waiting.toolCallId());
+        }
+        if (waiting.origin() == HookPoint.BEFORE_TOOL_CALL && current.tools() instanceof ToolRound round
+                && round.checked() < round.slots().size()) {
+            return pass.tools.idOf(round.slots().get(round.checked()).call().id());
+        }
+        return null;
     }
 
     void settled(QuestionSettled fact) {
@@ -74,7 +92,7 @@ final class TraceHooks {
             case CANCELLED -> TraceRecord.Question.Status.CANCELLED;
         };
         pass.put(new TraceRecord.Question(open.head().ended(pass.at), open.question(), open.askedBy(), open.title(), status,
-                fact.answer() == null ? null : fact.answer().choice(), fact.answer() == null ? null : fact.answer().text()), false);
+                fact.answer() == null ? null : fact.answer().choice(), fact.answer() == null ? null : fact.answer().text(), open.tool()), false);
     }
 
     void decided(int index, HookDecided fact) {

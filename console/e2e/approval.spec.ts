@@ -66,4 +66,54 @@ test.describe("工具审批", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByText(new RegExp(`结果：Created e2e/approve-d${stamp}\\.txt`))).toBeVisible({ timeout: 30_000 });
   });
+
+  // trace-rounds 需求 3：轨迹页上，等批准、批准、执行是一行，不是三行。
+  test("轨迹页：一次要批准的调用是一行，写着等了多久和结果；检查面板里有“批准”一页", async ({ page }) => {
+    const stamp = Date.now();
+    await openNewSession(page, OTHER_USER);
+    await setApproval(page, true);
+    await send(page, `approve: t${stamp}`);
+    const card = page.getByRole("group", { name: "允许调用 write_file 吗？" });
+    await expect(card).toBeVisible({ timeout: 30_000 });
+
+    // 还在等的时候去看轨迹：工具那一行写着“等批准”，没有单独的“问了用户”和钩子决定两行
+    await page.getByRole("tab", { name: "轨迹" }).click();
+    const table = page.getByRole("table");
+    const rows = table.locator("[role=row][data-record]");
+    const tool = rows.filter({ hasText: /write_file/ });
+    await expect(tool).toHaveCount(1);
+    await expect(tool.locator("[data-approval=WAITING]")).toContainText(/^等批准 /);
+    await expect(rows.filter({ hasText: "toolApproval" })).toHaveCount(0);
+    await page.screenshot({ path: "test-results/trace-approval-waiting.png" });
+
+    // 回对话页批准
+    await page.getByRole("tab", { name: "对话" }).click();
+    await page.getByRole("button", { name: "允许这一次" }).click();
+    await expect(page.getByText(new RegExp(`结果：Created e2e/approve-t${stamp}\\.txt`))).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("tab", { name: "轨迹" }).click();
+    await expect(tool).toHaveCount(1);
+    await expect(tool.locator("[data-approval=ANSWERED]")).toContainText(/^等了 .+ · 已批准$/);
+    await expect(rows.filter({ hasText: "toolApproval" })).toHaveCount(0);
+
+    // 检查面板：多一页“批准”，能点开原来的提问记录
+    await tool.click();
+    const inspector = page.getByRole("complementary", { name: "事件详情" });
+    await inspector.getByRole("tab", { name: "批准" }).click();
+    await expect(inspector.getByRole("tabpanel")).toContainText("toolApproval");
+    await expect(inspector.getByRole("tabpanel")).toContainText("允许调用 write_file 吗？");
+    await expect(inspector.getByRole("tabpanel")).toContainText("已批准");
+    await page.screenshot({ path: "test-results/trace-approval-row.png" });
+    await inspector.getByRole("button", { name: "看提问记录" }).click();
+    await expect(inspector).toContainText("问用户");
+    await expect(inspector).toContainText("q:approval-");
+    // 表里高亮的还是工具那一行
+    await expect(tool).toHaveAttribute("aria-selected", "true");
+
+    // 搜索提问里的字，命中的是工具那一行
+    await page.getByRole("button", { name: "关闭" }).first().click().catch(() => {});
+    await page.getByRole("searchbox", { name: "搜索轨迹" }).fill("允许调用 write_file");
+    await page.getByRole("searchbox", { name: "搜索轨迹" }).press("Enter");
+    await expect(tool).toHaveAttribute("aria-selected", "true");
+  });
 });

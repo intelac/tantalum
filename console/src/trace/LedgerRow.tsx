@@ -8,6 +8,8 @@ import { pick } from "../text/localText";
 import { cx } from "../ui/cx";
 import { between, formatMs, formatTokens } from "./format";
 import { toolLabel, type Row, type TurnSummary } from "./rows";
+import { approvalText, type Approval } from "./approval";
+import { useNow } from "../ui/useNow";
 import { TraceTotals } from "./TraceTotals";
 
 /** 一行文字：去掉换行，长文本省略。 */
@@ -131,10 +133,19 @@ function requestTokens(record: ModelRequest): { input?: number; output?: number 
   return { input: usage.input + usage.cacheRead + usage.cacheWrite, output: usage.output };
 }
 
-function duration(record: TraceRecord): string {
+/**
+ * “时间”列。并进了等批准或等回答的工具行只算工具自己执行的那段（trace-rounds 需求 3.4）：
+ * 有开始执行的时刻就从它算起，没有就把等人的时间减掉；等人的时间单独写在这一行里。
+ */
+export function duration(record: TraceRecord, approval?: Approval): string {
   const t = currentText().trace;
-  if (record.end === undefined) return t.running;
-  const span = between(record.at, record.end);
+  if (record.end === undefined) return approval?.question.status === "WAITING" ? "" : t.running;
+  let span = between(record.at, record.end);
+  if (approval !== undefined && record.kind === "tool" && span !== undefined) {
+    const ran = between(record.startedAt, record.end);
+    const waited = between(approval.question.at, approval.question.end) ?? 0;
+    span = ran ?? Math.max(0, span - waited);
+  }
   return span === undefined || span === 0 ? "" : formatMs(span);
 }
 
@@ -289,11 +300,11 @@ export function LedgerRow({ row, selected, matched, onSelect, onToggleTurn, onTo
               tagClass={error ? "bg-danger-soft text-danger" : (TAG[record.kind] ?? "bg-muted text-fg-muted")}
               input={tokens.input}
               output={tokens.output}
-              time={duration(record)}
+              time={duration(record, row.approval)}
               compact={compact}
             >
               {record.kind === "tool" ? (
-                <ToolContent record={record} />
+                <ToolContent record={record} approval={row.approval} />
               ) : (
                 <span className={cx("min-w-0 truncate", error ? "text-danger" : "text-fg")}>{contentOf(record)}</span>
               )}
@@ -305,13 +316,33 @@ export function LedgerRow({ row, selected, matched, onSelect, onToggleTurn, onTo
   }
 }
 
-function ToolContent({ record }: { record: Extract<TraceRecord, { kind: "tool" }> }) {
+/** 并进这一行的“等批准 / 等回答”：等了多久、结果怎样。还在等时每秒重算。 */
+function ApprovalNote({ approval, record }: { approval: Approval; record: Extract<TraceRecord, { kind: "tool" }> }) {
+  const t = useText().trace.approval;
+  const waiting = approval.question.status === "WAITING";
+  const now = useNow(waiting);
+  return (
+    <span
+      data-approval={approval.question.status}
+      title={t.hint}
+      className={cx(
+        "shrink-0 rounded-xs px-1.5 py-0.5 text-[11px] whitespace-nowrap",
+        waiting ? "bg-warning/15 text-warning" : record.status === "BLOCKED" ? "bg-danger-soft text-danger" : "bg-muted text-fg-muted",
+      )}
+    >
+      {approvalText(approval, record, now, t)}
+    </span>
+  );
+}
+
+function ToolContent({ record, approval }: { record: Extract<TraceRecord, { kind: "tool" }>; approval?: Approval }) {
   const cells = toolCells(record);
   return (
     <>
       <span className="min-w-0 shrink-0 truncate font-mono text-xs text-fg" style={{ width: "clamp(180px, calc(36% - 56px), 480px)" }}>
         {cells.call}
       </span>
+      {approval !== undefined && <ApprovalNote approval={approval} record={record} />}
       <span className={cx("min-w-0 flex-1 truncate text-xs", isError(record) ? "text-danger" : "text-fg-muted")}>{cells.result}</span>
     </>
   );

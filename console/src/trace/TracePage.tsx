@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useText } from "../text";
 import { useLatestTrace, useTracePaging, useTraceRecords } from "./hooks";
+import { approvalsOf } from "./approval";
 import { buildLedger, expansionFor, focusRows } from "./rows";
 import { Inspector } from "./inspector/Inspector";
 import { Ledger } from "./Ledger";
@@ -81,15 +82,21 @@ export function TracePage({ store, session, run, record }: Props) {
   }, [paging.loaded]);
 
   const allRows = useMemo(() => buildLedger(records, NONE, NONE), [records]);
+  // 时间概览用不并的行：等人的那一段照旧画在“等回答”一道上（trace-rounds 需求 3.6）
+  const timelineRows = useMemo(() => buildLedger(records, NONE, NONE, false), [records]);
   const collapsedRows = useMemo(() => buildLedger(records, collapsedTurns, collapsedCalls), [records, collapsedTurns, collapsedCalls]);
+  // 等批准、等回答并进了工具那一行（trace-rounds 需求 3）：被并掉的记录在表里没有自己的行，凡是按记录 id 找行的地方都先换成工具的 id
+  const folding = useMemo(() => approvalsOf(records), [records]);
+  const rowOf = useCallback((id: string) => folding.into.get(id) ?? id, [folding]);
   // 时间概览选了区间时，记录表只留与区间相交的记录。
   const focused = useMemo(() => {
     if (range === null) return null;
-    const model = buildTimeline(allRows, mode);
-    return model === null ? null : spansInRange(model, range);
-  }, [allRows, mode, range]);
+    const model = buildTimeline(timelineRows, mode);
+    return model === null ? null : new Set([...spansInRange(model, range)].map(rowOf));
+  }, [timelineRows, mode, range, rowOf]);
   const rows = useMemo(() => (focused === null ? collapsedRows : focusRows(collapsedRows, focused)), [collapsedRows, focused]);
-  const matches = useMemo(() => matchRecords(records, query), [records, query]);
+  // 搜索照样搜被并掉的记录里的文字，命中算在工具那一行上
+  const matches = useMemo(() => new Set([...matchRecords(records, query)].map(rowOf)), [records, query, rowOf]);
   // 匹配按页面上的先后排（不收起时的顺序），跳转时依次经过。
   const ordered = useMemo(() => {
     if (matches.size === 0) return [];
@@ -127,13 +134,13 @@ export function TracePage({ store, session, run, record }: Props) {
     if (record !== undefined && records.some((candidate) => candidate.id === record)) {
       located.current = target;
       setSelected(record);
-      reveal(record);
+      reveal(rowOf(record));
     } else if (record === undefined && run !== undefined && records.some((candidate) => candidate.run === run)) {
       located.current = target;
       setCollapsedTurns((current) => without(current, new Set([run])));
       setScrollTo({ key: target, nonce: ++nonce.current });
     }
-  }, [record, run, records, reveal, loaded, turn, selectTurn]);
+  }, [record, run, records, reveal, loaded, turn, selectTurn, rowOf]);
 
   const jump = useCallback(
     (step: 1 | -1) => {
@@ -143,6 +150,7 @@ export function TracePage({ store, session, run, record }: Props) {
       const id = ordered[next] as string;
       setSelected(id);
       reveal(id);
+      // （`ordered` 里已经是行的 id）
     },
     [ordered, matchIndex, reveal],
   );
@@ -157,12 +165,21 @@ export function TracePage({ store, session, run, record }: Props) {
 
   const selectedRecord = selected === null ? undefined : loaded.find((entry) => entry.id === selected);
   const closeInspector = useCallback(() => setSelected(null), []);
+  /** 从时间轴、搜索选中：被并掉的记录选中的是它的工具行。 */
   const openRecord = useCallback(
     (id: string) => {
-      setSelected(id);
-      reveal(id);
+      setSelected(rowOf(id));
+      reveal(rowOf(id));
     },
-    [reveal],
+    [reveal, rowOf],
+  );
+  /** 检查面板里点开原始记录：面板显示这条记录本身，表里滚到并高亮它所在的那一行。 */
+  const openExact = useCallback(
+    (id: string) => {
+      setSelected(id);
+      reveal(rowOf(id));
+    },
+    [reveal, rowOf],
   );
 
   const loadOlder = useCallback(() => {
@@ -213,7 +230,7 @@ export function TracePage({ store, session, run, record }: Props) {
         />
       </div>
       <Timeline
-        rows={allRows}
+        rows={timelineRows}
         mode={mode}
         range={range}
         onRange={setRange}
@@ -229,7 +246,7 @@ export function TracePage({ store, session, run, record }: Props) {
           <Ledger
             rows={rows}
             paging={paging}
-            selected={selected}
+            selected={selected === null ? null : rowOf(selected)}
             matches={matches}
             scrollTo={scrollTo}
             onLoadOlder={loadOlder}
@@ -246,7 +263,8 @@ export function TracePage({ store, session, run, record }: Props) {
             containerWidth={pageWidth}
             overlay={pageWidth < OVERLAY_WIDTH_PX}
             onClose={closeInspector}
-            onOpen={openRecord}
+            onOpen={openExact}
+            approvalOf={(tool) => folding.byTool.get(tool)}
           />
         )}
       </div>

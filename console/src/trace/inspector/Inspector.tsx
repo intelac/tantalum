@@ -13,6 +13,7 @@ import { RecordTabs } from "./RecordTabs";
 import { RequestTabs } from "./RequestTabs";
 import { SystemTabs } from "./SystemTabs";
 import { ToolTabs } from "./ToolTabs";
+import type { Approval } from "../approval";
 
 export const DETAILS_MIN_WIDTH = 320;
 export const DETAILS_MAX_WIDTH = 720;
@@ -46,9 +47,11 @@ interface Props {
   overlay: boolean;
   onClose: () => void;
   onOpen: (id: string) => void;
+  /** 并进一次工具调用的等批准或等回答；没有时为 undefined。 */
+  approvalOf?: (tool: string) => Approval | undefined;
 }
 
-export function Inspector({ session, record, lookup, containerWidth, overlay, onClose, onOpen }: Props) {
+export function Inspector({ session, record, lookup, containerWidth, overlay, onClose, onOpen, approvalOf }: Props) {
   const t = useText().trace;
   const [chosen, setChosen] = useState<number | null>(storedWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
@@ -95,7 +98,15 @@ export function Inspector({ session, record, lookup, containerWidth, overlay, on
       case "request":
         return <RequestTabs session={session} request={record} />;
       case "tool":
-        return <ToolTabs session={session} tool={record} request={record.request === undefined ? undefined : lookup(record.request)} />;
+        return (
+          <ToolTabs
+            session={session}
+            tool={record}
+            request={record.request === undefined ? undefined : lookup(record.request)}
+            approval={approvalOf?.(record.id)}
+            onOpen={onOpen}
+          />
+        );
       case "system":
         return <SystemTabs session={session} system={record} />;
       default:

@@ -256,15 +256,17 @@ public sealed interface TraceRecord {
     /**
      * 运行停下来等用户回答：问了什么、谁问的（钩子名或 {@code ask_user}）、答了什么。
      * {@code head.at} 是问的时刻，{@code head.end} 是有结果的时刻；等人的这段不算进模型或工具的时长。
+     * {@code tool} 是为哪一次工具调用问的（工具记录的 ID）：钩子在工具调用前问的是它要拦的那个调用，{@code ask_user} 是它自己那次调用；
+     * 别的位置问的为 null。轨迹页据此把“等批准”并进工具那一行（trace-rounds 需求 3）。
      */
-    record Question(Head head, String question, String askedBy, Object title, Status status, String choice, String text)
+    record Question(Head head, String question, String askedBy, Object title, Status status, String choice, String text, String tool)
             implements TraceRecord {
 
         public enum Status { WAITING, ANSWERED, EXPIRED, CANCELLED }
 
         @Override
         public TraceRecord withHead(Head newHead) {
-            return new Question(newHead, question, askedBy, title, status, choice, text);
+            return new Question(newHead, question, askedBy, title, status, choice, text, tool);
         }
     }
 }

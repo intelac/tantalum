@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import type { ToolCall, TraceRecord } from "../../api/types";
-import { useText } from "../../text";
+import { useLanguage, useText } from "../../text";
+import { pick } from "../../text/localText";
+import { useNow } from "../../ui/useNow";
+import { approvalText, isAskUser, waitedMs, type Approval } from "../approval";
 import { cx } from "../../ui/cx";
 import { LineDiff } from "../../ui/LineDiff";
 import { between, formatMs } from "../format";
@@ -71,7 +74,53 @@ function editOf(tool: ToolCall): { before: string; after: string } | undefined {
   return typeof before === "string" && typeof after === "string" ? { before, after } : undefined;
 }
 
-export function ToolTabs({ session, tool, request }: { session: string; tool: ToolCall; request: TraceRecord | undefined }) {
+/** 并进这次调用的“等批准 / 等回答”（trace-rounds 需求 3.5）：谁问的、问了什么、选了什么、等了多久，并能点开原始的两条记录。 */
+function ApprovalPage({ approval, tool, onOpen }: { approval: Approval; tool: ToolCall; onOpen: (id: string) => void }) {
+  const text = useText();
+  const t = text.trace.approval;
+  const language = useLanguage();
+  const question = approval.question;
+  const waiting = question.status === "WAITING";
+  const now = useNow(waiting);
+  const waited = waitedMs(approval, now);
+  const link = "text-xs text-accent hover:underline";
+  return (
+    <>
+      <Fields
+        rows={[
+          [t.askedBy, <span className="font-mono">{question.askedBy}</span>],
+          [t.title, pick(question.title, language)],
+          [t.outcome, approvalText(approval, tool, now, t)],
+          [t.choice, question.choice],
+          [t.note, question.text],
+          [t.askedAt, <Timestamp iso={question.at} />],
+          [t.answeredAt, <Timestamp iso={question.end} />],
+          [t.waitedFor, waited === undefined ? undefined : formatMs(waited)],
+        ]}
+      />
+      <p className="text-xs text-fg-faint">{t.hint}</p>
+      <div className="flex flex-wrap gap-3">
+        {approval.hook !== undefined && (
+          <button type="button" className={link} onClick={() => onOpen(approval.hook?.id ?? "")}>
+            {t.openHook}
+          </button>
+        )}
+        <button type="button" className={link} onClick={() => onOpen(question.id)}>
+          {t.openQuestion}
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function ToolTabs({ session, tool, request, approval, onOpen }: {
+  session: string;
+  tool: ToolCall;
+  request: TraceRecord | undefined;
+  /** 并进这次调用的等批准或等回答。 */
+  approval?: Approval;
+  onOpen?: (id: string) => void;
+}) {
   const t = useText().trace;
   const edit = editOf(tool);
   const queued = between(tool.issuedAt, tool.startedAt);
@@ -101,6 +150,15 @@ export function ToolTabs({ session, tool, request }: { session: string; tool: To
         ...(edit === undefined
           ? []
           : [{ id: "diff", label: t.tab.diff, render: () => <LineDiff before={edit.before} after={edit.after} hunkHeaders={false} /> }]),
+        ...(approval === undefined
+          ? []
+          : [
+              {
+                id: "approval",
+                label: isAskUser(approval) ? t.approval.tabQuestion : t.approval.tab,
+                render: () => <ApprovalPage approval={approval} tool={tool} onOpen={onOpen ?? (() => undefined)} />,
+              },
+            ]),
         { id: "payload", label: t.tab.payload, render: () => <Payload tool={tool} /> },
         { id: "result", label: t.tab.result, render: () => <Result tool={tool} /> },
         { id: "schema", label: t.tab.schema, render: () => <Schema session={session} tool={tool} request={request} /> },

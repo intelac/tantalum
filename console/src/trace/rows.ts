@@ -3,6 +3,7 @@
 import type { ModelRequest, RunHead, ToolCall, TraceRecord } from "../api/types";
 import { comparePos, runStart } from "./TraceStore";
 import { totalsOf, type Totals } from "./totals";
+import { approvalsOf, NO_FOLDING, type Approval } from "./approval";
 
 /** 轮的摘要：有请求的步数、工具调用数。 */
 export interface TurnSummary {
@@ -16,7 +17,7 @@ export type Row =
   /** 第几步，或一个压缩组。 */
   | { type: "group"; key: string; run: string; step?: number; compaction?: string }
   /** 一条记录。请求行带“请求 #n”分隔，`collapsed` 表示它的工具调用收起了。 */
-  | { type: "record"; key: string; record: TraceRecord; collapsed?: boolean }
+  | { type: "record"; key: string; record: TraceRecord; collapsed?: boolean; approval?: Approval }
   /** 收起后留下的一行摘要；`hidden` 是被收起的记录，搜索命中时标出这一行。 */
   | { type: "summary"; key: string; of: "turn" | "calls"; summary: TurnSummary; names: string[]; hidden: string[] };
 
@@ -110,9 +111,22 @@ function callRecords(request: ModelRequest, members: readonly TraceRecord[]): Tr
  * 把排好序的记录分成行。{@code collapsedTurns} 是收起的运行，{@code collapsedCalls} 是收起了工具调用的请求记录 ID。
  * 收起的轮留标题、system 行、第一条内容和一行摘要；收起的调用留请求行和一行摘要。
  */
-export function buildLedger(records: readonly TraceRecord[], collapsedTurns: ReadonlySet<string>, collapsedCalls: ReadonlySet<string>): Row[] {
+export function buildLedger(
+  records: readonly TraceRecord[],
+  collapsedTurns: ReadonlySet<string>,
+  collapsedCalls: ReadonlySet<string>,
+  /** 时间概览要每条记录各画一段（等人的那段画在“等回答”一道上），给它的行不并。 */
+  fold = true,
+): Row[] {
   const rows: Row[] = [];
-  for (const run of byRun(records)) {
+  // 等批准、等回答并进工具那一行（trace-rounds 需求 3）：被并掉的记录不出行，工具行带上它们
+  const folding = fold ? approvalsOf(records) : NO_FOLDING;
+  const shown = folding.into.size === 0 ? records : records.filter((record) => !folding.into.has(record.id));
+  const recordRow = (record: TraceRecord, collapsed?: boolean): Row => {
+    const approval = record.kind === "tool" ? folding.byTool.get(record.id) : undefined;
+    return { type: "record", key: record.id, record, ...(collapsed === undefined ? {} : { collapsed }), ...(approval === undefined ? {} : { approval }) };
+  };
+  for (const run of byRun(shown)) {
     const collapsed = collapsedTurns.has(run.run);
     // 轮标题带这一轮的提问和总数（trace-rounds 需求 2.5）；总数把运行头也算进去（耗时从它来）
     const prompt = run.records.find((record) => record.kind === "user" && record.mode !== "CONTINUE" && record.source.type !== "plugin");
@@ -131,7 +145,7 @@ export function buildLedger(records: readonly TraceRecord[], collapsedTurns: Rea
       const ordered = groups(run.records).flatMap((group) => group.records);
       const content = ordered.filter((record) => record.kind !== "system");
       for (const record of ordered) {
-        if (record.kind === "system" || record === content[0]) rows.push({ type: "record", key: record.id, record });
+        if (record.kind === "system" || record === content[0]) rows.push(recordRow(record));
       }
       const hidden = content.slice(1);
       if (hidden.length > 0) {
@@ -146,11 +160,11 @@ export function buildLedger(records: readonly TraceRecord[], collapsedTurns: Rea
       for (const record of group.records) {
         if (hiddenIds.has(record.id)) continue;
         if (record.kind !== "request" || !collapsedCalls.has(record.id)) {
-          rows.push({ type: "record", key: record.id, record });
+          rows.push(recordRow(record));
           continue;
         }
         const calls = callRecords(record, group.records);
-        rows.push({ type: "record", key: record.id, record, collapsed: calls.length > 0 });
+        rows.push(recordRow(record, calls.length > 0));
         if (calls.length === 0) continue;
         for (const call of calls) hiddenIds.add(call.id);
         const names = [...new Set(calls.flatMap((call) => (call.kind === "tool" ? [toolLabel(call)] : [])))];

@@ -31,7 +31,8 @@ function fields(record: TraceRecord): (string | undefined)[] {
     case "hook":
       return [record.hook, record.point, record.result, record.reason, record.workType, ...record.tools];
     case "question":
-      return [record.askedBy, typeof record.title === "string" ? record.title : record.title.en, record.status, record.choice, record.text];
+      // 问题的标题可能有几种语言：都能搜到（页面上显示的是看的人的语言）
+      return [record.askedBy, ...(typeof record.title === "string" ? [record.title] : Object.values(record.title)), record.status, record.choice, record.text];
   }
 }
 

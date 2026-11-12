@@ -571,6 +571,8 @@ export interface QuestionRecord extends TraceHead {
   status: "WAITING" | "ANSWERED" | "EXPIRED" | "CANCELLED";
   choice?: string;
   text?: string;
+  /** 为哪一次工具调用问的（工具记录的 ID）：插件在调用前问的、`ask_user` 的都有；别处问的和旧服务器没有。 */
+  tool?: string;
 }
 
 export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision | QuestionRecord;
