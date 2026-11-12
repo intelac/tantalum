@@ -45,7 +45,12 @@ final class Actions {
     static LocalResult run(Tabs tabs, String session, String tool, Json arguments) {
         Page page = tabs.page(session);
         switch (tool) {
-            case "browser_navigate" -> page.navigate(PageUrl.check(BrowserArguments.required(arguments, "url")).toString());
+            case "browser_navigate" -> {
+                String url = PageUrl.check(BrowserArguments.required(arguments, "url")).toString();
+                page.navigate(url);
+                // 跳转了要说明，否则模型会以为没打开对
+                return snapshot(tabs, session, url);
+            }
             case "browser_navigate_back" -> page.goBack();
             case "browser_snapshot" -> { }
             case "browser_click" -> {
@@ -78,15 +83,15 @@ final class Actions {
             }
             default -> throw new IllegalArgumentException("Unknown tool: " + tool);
         }
-        return snapshot(tabs, session);
+        return snapshot(tabs, session, null);
     }
 
-    /** 快照类结果，取本会话的当前页（点了链接开出新窗口时，当前页不变）。 */
-    private static LocalResult snapshot(Tabs tabs, String session) {
+    /** 快照类结果，取本会话的当前页（点了链接开出新窗口时，当前页不变）。{@code requested} 是 browser_navigate 要打开的网址。 */
+    private static LocalResult snapshot(Tabs tabs, String session, String requested) {
         Page page = tabs.page(session);
         String aria = page.ariaSnapshot(new Page.AriaSnapshotOptions().setMode(AriaSnapshotMode.AI));
         List<Page> pages = tabs.pages();
-        return LocalResult.ok(PageText.snapshot(page.title(), page.url(), index(pages, page), pages.size(), aria));
+        return LocalResult.ok(PageText.snapshot(page.title(), page.url(), index(pages, page), pages.size(), aria, requested));
     }
 
     /**
@@ -162,7 +167,7 @@ final class Actions {
                 throw new IllegalArgumentException("There is no tab " + index + "; this browser has " + pages.size() + " tabs.");
             }
             tabs.select(session, pages.get(index - 1));
-            return snapshot(tabs, session);
+            return snapshot(tabs, session, null);
         }
         List<PageText.Tab> listed = new ArrayList<>();
         for (Page page : pages) {

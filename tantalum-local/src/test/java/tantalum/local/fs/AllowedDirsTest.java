@@ -3,6 +3,7 @@ package tantalum.local.fs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -81,6 +82,7 @@ class AllowedDirsTest {
         String inside = assertThrows(IllegalArgumentException.class, () -> dirs.resolve("nope.txt")).getMessage();
         assertEquals(existing.replace("secret", "X"), missing.replace("nope", "X"));
         assertEquals(missing.replace("../", ""), inside);
+        assertTrue(inside.endsWith(AllowedDirs.RELATIVE_HINT), inside);
         assertFalse(existing.contains(temp.toString()));
     }
 
@@ -242,5 +244,33 @@ class AllowedDirsTest {
     void aLinkOutOfTheAllowedDirectoriesIsNotASessionDirectory() throws Exception {
         Path link = Files.createSymbolicLink(root.resolve("escape"), temp);
         assertThrows(IllegalArgumentException.class, () -> dirs.from(link.toString()));
+    }
+
+    /**
+     * tool-scenarios 第一轮：真模型常写错相对路径（少一层目录）。报错里说明相对路径从哪算起，它一步就能改对。
+     * 绝对路径的报错不变；存在不存在、越不越界仍然是同一句话。
+     */
+    @Test
+    void aRelativePathThatIsNotFoundSaysWhereRelativePathsStart() throws Exception {
+        Path main = Files.createDirectories(temp.resolve("project")).toRealPath();
+        Files.createDirectories(main.resolve("src"));
+        Files.writeString(temp.resolve("secret.txt"), "x");
+        AllowedDirs dirs = new AllowedDirs(List.of(main));
+        String hint = AllowedDirs.RELATIVE_HINT;
+        assertFalse(hint.contains("/"), "the hint is a fixed sentence without any real path");
+
+        assertEquals(AllowedDirs.NOT_FOUND + "pricing.py" + hint, assertThrows(IllegalArgumentException.class, () -> dirs.resolve("pricing.py")).getMessage());
+        // 越界的相对路径和不存在的是同一句话
+        assertEquals(AllowedDirs.NOT_FOUND + "../secret.txt" + hint, assertThrows(IllegalArgumentException.class, () -> dirs.resolve("../secret.txt")).getMessage());
+        assertEquals(AllowedDirs.NOT_FOUND + "../nope.txt" + hint, assertThrows(IllegalArgumentException.class, () -> dirs.resolve("../nope.txt")).getMessage());
+        assertEquals(AllowedDirs.NOT_FOUND + "../new.txt" + hint, assertThrows(IllegalArgumentException.class, () -> dirs.resolveForWrite("../new.txt")).getMessage());
+        // 绝对路径：不加
+        String outside = temp.resolve("secret.txt").toString();
+        assertEquals(AllowedDirs.NOT_FOUND + outside, assertThrows(IllegalArgumentException.class, () -> dirs.resolve(outside)).getMessage());
+        assertEquals(AllowedDirs.NOT_FOUND + "/Users/someone/claude-work", assertThrows(IllegalArgumentException.class, () -> dirs.resolve("/Users/someone/claude-work")).getMessage());
+        // 会话有工作目录时，起点是它
+        AllowedDirs inSrc = dirs.from("src");
+        assertEquals(AllowedDirs.NOT_FOUND + "a.py" + hint,
+                assertThrows(IllegalArgumentException.class, () -> inSrc.resolve("a.py")).getMessage());
     }
 }

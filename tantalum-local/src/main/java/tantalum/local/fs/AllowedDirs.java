@@ -59,6 +59,24 @@ public final class AllowedDirs {
         return new AllowedDirs(dirs, real);
     }
 
+    /** 相对路径找不到时补的一句：从哪算起、下一步怎么找。不含任何真实路径。 */
+    public static final String RELATIVE_HINT = " (relative paths start at the working directory; use find_files to locate a file by its name)";
+
+    /**
+     * 找不到或越界时的那句话。相对路径后面补一句提示：真模型常把 {@code inventory/pricing.py} 写成 {@code pricing.py}，
+     * 或者凭印象猜一个目录（tool-scenarios 第一轮，两个模型共 11 次）。提示是固定的一句，不带真实路径；
+     * 存在和越界仍然是同一句话，探测不出目录外有什么。
+     */
+    String notFound(String path) {
+        boolean relative;
+        try {
+            relative = !Path.of(path).isAbsolute();
+        } catch (java.nio.file.InvalidPathException malformed) {
+            relative = false;
+        }
+        return relative ? NOT_FOUND + path + RELATIVE_HINT : NOT_FOUND + path;
+    }
+
     /** 相对路径的起点：主目录，或会话目录。 */
     public Path main() {
         return start;
@@ -72,16 +90,16 @@ public final class AllowedDirs {
     public Path resolve(String path) {
         Path candidate = main().resolve(path).normalize();
         if (!inside(candidate)) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         Path real;
         try {
             real = candidate.toRealPath();
         } catch (IOException failure) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         if (!inside(real)) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         return real;
     }
@@ -93,7 +111,7 @@ public final class AllowedDirs {
     public Path resolveForWrite(String path) {
         Path candidate = main().resolve(path).normalize();
         if (!inside(candidate) || dirs.contains(candidate)) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
             return resolve(path);
@@ -103,16 +121,16 @@ public final class AllowedDirs {
             existing = existing.getParent();
         }
         if (existing == null) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         Path real;
         try {
             real = existing.toRealPath();
         } catch (IOException failure) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         if (!inside(real) || !Files.isDirectory(real)) {
-            throw new IllegalArgumentException(NOT_FOUND + path);
+            throw new IllegalArgumentException(notFound(path));
         }
         return real.resolve(existing.relativize(candidate));
     }

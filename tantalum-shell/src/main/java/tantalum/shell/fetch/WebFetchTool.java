@@ -77,7 +77,7 @@ public final class WebFetchTool implements WebTool {
             return ToolOutput.error(invalid.getMessage());
         }
         try {
-            return ToolOutput.ok(text(fetcher.fetch(uri)));
+            return ToolOutput.ok(text(fetcher.fetch(uri), uri));
         } catch (FetchFailed failed) {
             return ToolOutput.error(failed.getMessage());
         }
@@ -85,9 +85,17 @@ public final class WebFetchTool implements WebTool {
 
     /** 第一行 W9 那句话，然后网址、状态码、类型和正文；正文超过 50,000 字符只留开头，写明原长度。 */
     static String text(Fetched page) {
+        return text(page, null);
+    }
+
+    /** 同上，{@code requested} 是模型要抓的网址：最后到的不是它时多一行 {@code Redirected from}（同浏览器工具）。 */
+    static String text(Fetched page, URI requested) {
         StringBuilder out = new StringBuilder(UNTRUSTED).append('\n')
-                .append("URL: ").append(page.finalUrl()).append('\n')
-                .append("Status: ").append(page.status()).append('\n')
+                .append("URL: ").append(page.finalUrl()).append('\n');
+        if (requested != null && !tantalum.local.browser.PageText.sameAddress(requested.toString(), page.finalUrl().toString())) {
+            out.append("Redirected from: ").append(requested).append('\n');
+        }
+        out.append("Status: ").append(page.status()).append('\n')
                 .append("Content-Type: ").append(page.contentType().isEmpty() ? "(none)" : page.contentType()).append("\n\n");
         if (page.cutAt5Mb()) {
             out.append("(Download stopped at 5 MB; the text below comes from the first 5 MB of the page.)\n\n");

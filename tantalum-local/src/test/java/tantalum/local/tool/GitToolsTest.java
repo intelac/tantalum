@@ -208,8 +208,8 @@ class GitToolsTest {
     @Test
     void pathsOutsideTheAllowedDirectoriesAreRefused() throws Exception {
         Files.writeString(temp.resolve("outside.txt"), "x");
-        assertEquals(AllowedDirs.NOT_FOUND + "../outside.txt", log.run(context, args("path", "../outside.txt")).text());
-        assertEquals(AllowedDirs.NOT_FOUND + "../nope.txt", blame.run(context, args("path", "../nope.txt")).text());
+        assertTrue(log.run(context, args("path", "../outside.txt")).text().equals(AllowedDirs.NOT_FOUND + "../outside.txt" + AllowedDirs.RELATIVE_HINT));
+        assertTrue(blame.run(context, args("path", "../nope.txt")).text().equals(AllowedDirs.NOT_FOUND + "../nope.txt" + AllowedDirs.RELATIVE_HINT));
     }
 
     // ---- 不改仓库 ----

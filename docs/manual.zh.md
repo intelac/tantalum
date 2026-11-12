@@ -962,6 +962,17 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 
 `ClaudeScenarioTest` 和 `ClaudeCrashRecoveryTest` 用真实的 Claude 走完整的环：八步顺序工具链、thinking 签名跨多轮回传、每一个钩子位置、流式中取消后继续、三个用户同时调用、模型调用进行中杀进程再恢复。一轮约 0.1 美元。
 
+**真实场景的工具测试**（`tantalum-examples/scenarios/`，Python 脚本，不进 CI）：脚本化的假模型测的是我们的代码对不对，测不出真模型拿着这些工具干真活时在哪卡住。这套脚本起一台临时服务器和一个**真的连接程序**（命令行沙箱和无头浏览器都开着），连到一份每次重新生成的小项目上，用真模型跑 32 个任务：找函数、三千行文件里找值、读图片和 PDF 和 GBK 文件、修 bug 跑测试、五个文件改名、三种被拒的修改、几万行输出、超时、等输入、三个 Git 问题、抓网页（404、跳转、2 MB 的大页）、填表、等动态内容、技能、知识库、先问用户、跨会话的记忆、并行读文件、加功能补测试。每个任务的判定只查事实：最后的文件内容、测试过没过、回答里有没有藏在项目里的那个编号。
+
+```sh
+mvn -o package -DskipTests                                         # 先打包
+python3 tantalum-examples/scenarios/run.py --model qwen            # 本机 OpenAI 兼容模型，默认 http://127.0.0.1:8090/v1（--local-url、--local-model 可改）
+python3 tantalum-examples/scenarios/run.py --model claude          # 需要 ANTHROPIC_API_KEY，一轮约 0.8 美元
+python3 tantalum-examples/scenarios/run.py --model qwen --only fix-bug,rename
+```
+
+要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。结果在 `tantalum-examples/scenarios/results/`：一张表（过没过、模型调用几次、工具调用几次、出错几次、同一个调用重复了几次）和每个场景的每一次工具调用。一轮本机模型约 10 分钟。真模型的结果有随机性，一个场景没过先再跑一次；改了工具的说明、报错或结果的写法之后，跑一轮和上一次的表比。2026-11-12 的两轮：Claude Sonnet 5.5 过 31 个，本机 qwen 过 26 到 28 个（没过的是模型拿到答案后还反复验证，超过了步数上限）。
+
 **Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`，和连接程序用 runner 上装的 Edge 或 Chrome 跑的 `LocalBrowserIT`）、检查 `LocalBrowserIT` 和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 
 第三方依赖和界面参考（DeepSeek Harness）的许可证见 `THIRD_PARTY_NOTICES.md`。
