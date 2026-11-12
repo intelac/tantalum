@@ -54,6 +54,25 @@ describe("buildLedger", () => {
     ]);
   });
 
+  it("每一轮的标题带这一轮的提问和总数（trace-rounds 需求 2.5）", () => {
+    const turns = buildLedger(RECORDS, NONE, NONE).filter((row) => row.type === "turn");
+    const first = turns[0];
+    const prompt = RECORDS.find((record) => record.kind === "user" && record.run === "s_0" && record.mode === "PROMPT");
+    expect(first?.type === "turn" && prompt?.kind === "user" && first.prompt === prompt.text.replace(/\s+/g, " ").trim()).toBe(true);
+    for (const row of turns) {
+      if (row.type !== "turn") continue;
+      const own = RECORDS.filter((record) => record.run === row.run);
+      expect(row.totals.requests).toBe(own.filter((record) => record.kind === "request").length);
+      expect(row.totals.tools).toBe(own.filter((record) => record.kind === "tool").length);
+      const head = own.find((record) => record.kind === "run");
+      // 耗时从运行头来：结束了的有数，没结束的标进行中
+      expect(row.totals.elapsed !== undefined || row.totals.running).toBe(head !== undefined);
+    }
+    // 手动压缩那一“轮”没有提问
+    const between = turns.find((row) => row.type === "turn" && row.turn === undefined);
+    expect(between?.type === "turn" && between.prompt).toBeUndefined();
+  });
+
   it("每一轮的标题带运行记录和摘要（有请求的步数、工具调用数）", () => {
     const turns = buildLedger(RECORDS, NONE, NONE).filter((row) => row.type === "turn");
     expect(turns.map((row) => [row.run, row.head?.trigger, row.summary])).toEqual([

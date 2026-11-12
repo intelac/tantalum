@@ -8,6 +8,7 @@ import { pick } from "../text/localText";
 import { cx } from "../ui/cx";
 import { between, formatMs, formatTokens } from "./format";
 import { toolLabel, type Row, type TurnSummary } from "./rows";
+import { TraceTotals } from "./TraceTotals";
 
 /** 一行文字：去掉换行，长文本省略。 */
 function line(text: string | undefined): string {
@@ -212,10 +213,13 @@ export function LedgerRow({ row, selected, matched, onSelect, onToggleTurn, onTo
           )}
         >
           <Chevron size={14} aria-hidden className="shrink-0 text-fg-faint" />
-          <span>{label}</span>
-          {head !== undefined && <span className="font-normal text-fg-faint">{t.trigger[head.trigger]}</span>}
-          <span className="min-w-0 flex-1 truncate font-normal text-fg-faint">{summaryText(row.summary, [])}</span>
+          <span className="shrink-0">{label}</span>
+          {/* 这一轮的提问；没有人写的提问时说它是怎么触发的 */}
+          <span className="min-w-0 flex-1 truncate font-normal text-fg-muted" title={row.prompt}>
+            {row.prompt !== undefined && row.prompt !== "" ? row.prompt : head === undefined ? "" : t.trigger[head.trigger]}
+          </span>
           <span className="shrink-0 font-normal text-fg-muted">{state}</span>
+          <TraceTotals totals={row.totals} compact={compact} className="shrink-0 font-normal text-fg-faint tabular-nums" />
         </div>
       );
     }

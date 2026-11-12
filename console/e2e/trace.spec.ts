@@ -165,4 +165,68 @@ test.describe("轨迹页", () => {
       });
     }
   }
+
+  // trace-rounds 需求 1、2：轮次标签、总数、轮标题上的提问。
+  test("轮次标签：选一轮只看这一轮，总数跟着变；轮标题带提问和总数", async ({ page }) => {
+    const stamp = Date.now();
+    const session = await openNewSession(page);
+    await send(page, `第一问 ${stamp}`);
+    await expect(processHeader(page, /^已完成/)).toBeVisible({ timeout: 30_000 });
+    await send(page, `trace: 读一下文件 ${stamp}`);
+    await expect(page.getByText("问候在 notes/hello.md:3，工单 42 归 e2e-owner。")).toBeVisible({ timeout: 30_000 });
+    await expect(processHeader(page, /^已完成/)).toHaveCount(2, { timeout: 30_000 });
+    await page.getByRole("tab", { name: "轨迹" }).click();
+    await expect(page).toHaveURL(new RegExp(`/s/${session}/trace$`));
+
+    const tabs = page.getByRole("tablist", { name: "轮次" });
+    await expect(tabs.getByRole("tab")).toHaveText(["全部", "第 1 轮", "第 2 轮"]);
+    await expect(tabs.getByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+    // 悬停的提示是这一轮的提问
+    await expect(tabs.getByRole("tab", { name: "第 1 轮" })).toHaveAttribute("title", `第一问 ${stamp}`);
+    await expect(tabs.getByRole("tab", { name: "第 2 轮" })).toHaveAttribute("title", `trace: 读一下文件 ${stamp}`);
+
+    // 全部：两轮都在，工具 3 个；总数一行在标签右边
+    const totals = page.locator("span[title*='模型请求数和 token']").first();
+    await expect(row(page, "工具")).toHaveCount(3);
+    await expect(totals).toContainText("3 个工具调用");
+    const all = await totals.textContent();
+    // 轮标题带提问
+    await expect(page.getByRole("row", { name: new RegExp(`第 1 轮.*第一问 ${stamp}`) })).toBeVisible();
+    await page.screenshot({ path: "test-results/trace-turn-tabs.png" });
+
+    // 第 1 轮：只有这一轮，没有工具，一次模型请求
+    await tabs.getByRole("tab", { name: "第 1 轮" }).click();
+    await expect(tabs.getByRole("tab", { name: "第 1 轮" })).toHaveAttribute("aria-selected", "true");
+    await expect(row(page, "工具")).toHaveCount(0);
+    await expect(row(page, "插件工作")).toHaveCount(0);
+    await expect(row(page, "用户")).toHaveCount(1);
+    await expect(totals).toContainText("1 次模型请求");
+    await expect(totals).toContainText("0 个工具调用");
+    await expect(page.getByRole("row", { name: /第 2 轮/ })).toHaveCount(0);
+
+    // 第 2 轮：键盘换过去
+    await tabs.getByRole("tab", { name: "第 1 轮" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(tabs.getByRole("tab", { name: "第 2 轮" })).toHaveAttribute("aria-selected", "true");
+    await expect(row(page, "工具")).toHaveCount(3);
+    await expect(row(page, "插件工作")).toBeVisible();
+    await expect(totals).toContainText("3 个工具调用");
+    await page.screenshot({ path: "test-results/trace-turn-selected.png" });
+
+    // 回到全部：和一开始一样
+    await tabs.getByRole("tab", { name: "全部" }).click();
+    await expect(totals).toHaveText(all ?? "");
+
+    // 刷新后回到全部
+    await tabs.getByRole("tab", { name: "第 1 轮" }).click();
+    await page.reload();
+    await expect(page.getByRole("tablist", { name: "轮次" }).getByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+
+    // 390px：不撑出横向滚动
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("tablist", { name: "轮次" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: "test-results/trace-turn-tabs-phone.png" });
+  });
 });

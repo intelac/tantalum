@@ -303,6 +303,23 @@ export const ja: Text = {
     title: "軌跡",
     empty: "このセッションはまだ実行していません",
     usage: "使用量",
+    turnTabs: {
+      aria: "ターン",
+      all: "すべて",
+      earlier: "前へ",
+      state: { running: "実行中", waiting: "回答待ち", failed: "失敗" },
+    },
+    totals: {
+      requests: (count) => `モデルリクエスト ${count} 回`,
+      tools: (count) => `ツール呼び出し ${count} 回`,
+      elapsed: (time) => `所要時間 ${time}`,
+      elapsedSoFar: (time) => `所要時間 ${time}、1 ターンは実行中`,
+      running: "実行中",
+      tokens: (input, output) => `${input} → ${output} tok`,
+      tokensHint: (input, output) => `読み込み ${input} トークン（入力 + キャッシュ読み取り + キャッシュ書き込み）、出力 ${output} トークン。`,
+      partial: (text) => `読み込み済みの部分：${text}`,
+      hint: "モデルリクエスト数とトークンには圧縮の要約リクエストも含みます。統計タブのターン合計には含みません。所要時間は各ターンの開始から終了までの合計です。",
+    },
     toolbar: {
       aria: "軌跡のツールバー",
       turns: "ターン",

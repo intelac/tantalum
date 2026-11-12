@@ -308,6 +308,23 @@ export const en: Text = {
     title: "Trajectory",
     empty: "No runs in this session yet",
     usage: "Usage",
+    turnTabs: {
+      aria: "Turns",
+      all: "All",
+      earlier: "Earlier",
+      state: { running: "Running", waiting: "Waiting for an answer", failed: "Failed" },
+    },
+    totals: {
+      requests: (count) => (count === 1 ? "1 model request" : `${count} model requests`),
+      tools: (count) => (count === 1 ? "1 tool call" : `${count} tool calls`),
+      elapsed: (time) => `took ${time}`,
+      elapsedSoFar: (time) => `took ${time}, one turn still running`,
+      running: "running",
+      tokens: (input, output) => `${input} → ${output} tok`,
+      tokensHint: (input, output) => `${input} tokens read (input + cache read + cache write), ${output} tokens written.`,
+      partial: (text) => `Loaded part: ${text}`,
+      hint: "Model requests and tokens include the summary requests of compaction; the turn totals on the statistics tab do not. The time is the sum of each turn from start to end.",
+    },
     toolbar: {
       aria: "Trajectory toolbar",
       turns: "Turns",

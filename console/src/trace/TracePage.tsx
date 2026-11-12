@@ -12,6 +12,10 @@ import { localArea, readStored, writeStored } from "../ui/storage";
 import { Timeline } from "./Timeline";
 import { buildTimeline, spansInRange, type TimelineMode, type TimeRange } from "./segments";
 import { Toolbar } from "./Toolbar";
+import { totalsOf } from "./totals";
+import { TraceTotals } from "./TraceTotals";
+import { recordsOfTurn, turnTabs } from "./turns";
+import { TurnTabs } from "./TurnTabs";
 import type { TraceStore } from "./TraceStore";
 import { errorLine } from "../text/errors";
 
@@ -47,7 +51,13 @@ function toggled(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
 
 export function TracePage({ store, session, run, record }: Props) {
   const t = useText().trace;
-  const records = useTraceRecords(store, session);
+  // 全部已加载的记录；下面的表、时间轴、搜索用的是 `records`——选了一轮时只有这一轮的（trace-rounds 需求 1）
+  const loaded = useTraceRecords(store, session);
+  const [turn, setTurn] = useState<string | null>(null);
+  const records = useMemo(() => recordsOfTurn(loaded, turn), [loaded, turn]);
+  const tabs = useMemo(() => turnTabs(loaded), [loaded]);
+  // 总数算的是当前看的范围，不随时间轴上的框选变
+  const totals = useMemo(() => totalsOf(records), [records]);
   const paging = useTracePaging(store, session);
   const error = useLatestTrace(store, session, run);
   const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<string>>(NONE);
@@ -96,11 +106,24 @@ export function TracePage({ store, session, run, record }: Props) {
     [records],
   );
 
+  const selectTurn = useCallback((next: string | null) => {
+    setTurn(next);
+    // 范围变了：旧的框选区间和搜索位置都没有意义
+    setRange(null);
+    setMatchIndex(-1);
+  }, []);
+
   // 地址定位：记录到了就展开、选中、滚过去；只有运行时滚到那一轮的标题。各做一次。
   const located = useRef<string | null>(null);
   useEffect(() => {
     const target = record ?? (run === undefined ? undefined : `turn:${run}`);
     if (target === undefined || located.current === target) return;
+    // 要定位的东西在已加载的记录里、却不在当前选的这一轮里：先回到“全部”，下一次再定位
+    const wanted = record !== undefined ? loaded.find((candidate) => candidate.id === record)?.run : loaded.some((candidate) => candidate.run === run) ? run : undefined;
+    if (turn !== null && wanted !== undefined && wanted !== turn) {
+      selectTurn(null);
+      return;
+    }
     if (record !== undefined && records.some((candidate) => candidate.id === record)) {
       located.current = target;
       setSelected(record);
@@ -110,7 +133,7 @@ export function TracePage({ store, session, run, record }: Props) {
       setCollapsedTurns((current) => without(current, new Set([run])));
       setScrollTo({ key: target, nonce: ++nonce.current });
     }
-  }, [record, run, records, reveal]);
+  }, [record, run, records, reveal, loaded, turn, selectTurn]);
 
   const jump = useCallback(
     (step: 1 | -1) => {
@@ -132,7 +155,7 @@ export function TracePage({ store, session, run, record }: Props) {
   const turnsCollapsed = runs.length > 0 && runs.every((id) => collapsedTurns.has(id));
   const callsCollapsed = requestsWithCalls.length > 0 && requestsWithCalls.every((id) => collapsedCalls.has(id));
 
-  const selectedRecord = selected === null ? undefined : records.find((entry) => entry.id === selected);
+  const selectedRecord = selected === null ? undefined : loaded.find((entry) => entry.id === selected);
   const closeInspector = useCallback(() => setSelected(null), []);
   const openRecord = useCallback(
     (id: string) => {
@@ -155,7 +178,7 @@ export function TracePage({ store, session, run, record }: Props) {
       </p>
     );
   }
-  if (paging.loaded && records.length === 0) {
+  if (paging.loaded && loaded.length === 0) {
     return <div className="flex h-full items-center justify-center px-4 text-sm text-fg-faint">{t.empty}</div>;
   }
 
@@ -180,6 +203,15 @@ export function TracePage({ store, session, run, record }: Props) {
           writeStored(MODE_KEY, next, localArea());
         }}
       />
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-1">
+        <TurnTabs tabs={tabs} selected={turn} onSelect={selectTurn} hasEarlier={paging.hasMore} onEarlier={loadOlder} />
+        <TraceTotals
+          totals={totals}
+          partial={turn === null && paging.hasMore}
+          compact={pageWidth < OVERLAY_WIDTH_PX}
+          className="shrink-0 text-[11px] text-fg-muted tabular-nums"
+        />
+      </div>
       <Timeline
         rows={allRows}
         mode={mode}

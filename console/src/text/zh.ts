@@ -322,6 +322,23 @@ export const zh = {
     title: "轨迹",
     empty: "这个会话还没有运行",
     usage: "用量",
+    turnTabs: {
+      aria: "轮次",
+      all: "全部",
+      earlier: "更早",
+      state: { running: "进行中", waiting: "在等回答", failed: "失败" },
+    },
+    totals: {
+      requests: (count: number) => `${count} 次模型请求`,
+      tools: (count: number) => `${count} 个工具调用`,
+      elapsed: (time: string) => `耗时 ${time}`,
+      elapsedSoFar: (time: string) => `耗时 ${time}，还有一轮进行中`,
+      running: "进行中",
+      tokens: (input: string, output: string) => `${input} → ${output} tok`,
+      tokensHint: (input: string, output: string) => `读入 ${input} token（输入 + 读缓存 + 写缓存），输出 ${output} token。`,
+      partial: (text: string) => `已加载的部分：${text}`,
+      hint: "模型请求数和 token 把压缩用的摘要请求也算上；统计页签的轮合计不算它们。耗时是各轮从开始到结束的时长之和。",
+    },
     toolbar: {
       aria: "轨迹工具栏",
       turns: "轮次",

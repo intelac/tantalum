@@ -2,6 +2,7 @@
 
 import type { ModelRequest, RunHead, ToolCall, TraceRecord } from "../api/types";
 import { comparePos, runStart } from "./TraceStore";
+import { totalsOf, type Totals } from "./totals";
 
 /** 轮的摘要：有请求的步数、工具调用数。 */
 export interface TurnSummary {
@@ -11,7 +12,7 @@ export interface TurnSummary {
 
 export type Row =
   /** 一轮的标题；`turn` 为空是手动压缩，显示在“轮次之间”。 */
-  | { type: "turn"; key: string; run: string; turn?: number; head?: RunHead; collapsed: boolean; summary: TurnSummary }
+  | { type: "turn"; key: string; run: string; turn?: number; head?: RunHead; collapsed: boolean; summary: TurnSummary; prompt?: string; totals: Totals }
   /** 第几步，或一个压缩组。 */
   | { type: "group"; key: string; run: string; step?: number; compaction?: string }
   /** 一条记录。请求行带“请求 #n”分隔，`collapsed` 表示它的工具调用收起了。 */
@@ -113,7 +114,19 @@ export function buildLedger(records: readonly TraceRecord[], collapsedTurns: Rea
   const rows: Row[] = [];
   for (const run of byRun(records)) {
     const collapsed = collapsedTurns.has(run.run);
-    rows.push({ type: "turn", key: `turn:${run.run}`, run: run.run, turn: run.turn, head: run.head, collapsed, summary: summarize(run.records) });
+    // 轮标题带这一轮的提问和总数（trace-rounds 需求 2.5）；总数把运行头也算进去（耗时从它来）
+    const prompt = run.records.find((record) => record.kind === "user" && record.mode !== "CONTINUE" && record.source.type !== "plugin");
+    rows.push({
+      type: "turn",
+      key: `turn:${run.run}`,
+      run: run.run,
+      turn: run.turn,
+      head: run.head,
+      collapsed,
+      summary: summarize(run.records),
+      prompt: prompt?.kind === "user" ? prompt.text.replace(/\s+/g, " ").trim() : undefined,
+      totals: totalsOf(run.head === undefined ? run.records : [run.head, ...run.records]),
+    });
     if (collapsed) {
       const ordered = groups(run.records).flatMap((group) => group.records);
       const content = ordered.filter((record) => record.kind !== "system");
