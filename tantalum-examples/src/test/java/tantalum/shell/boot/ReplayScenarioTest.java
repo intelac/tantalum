@@ -137,7 +137,15 @@ class ReplayScenarioTest {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", body).statusCode());
             Deque<JsonNode> answers = new ArrayDeque<>();
             scenario.path("answers").forEach(answers::add);
-            waitForEnd(server, answers);
+            waitForEnd(server, answers, 1);
+            // 同一会话的后几轮：上一轮结束后再问，等这一次新开的那一轮
+            int turn = 1;
+            for (JsonNode follow : scenario.path("turns")) {
+                turn++;
+                String more = JSON.writeValueAsString(Map.of("requestId", "r" + turn, "mode", "prompt", "text", follow.asString()));
+                assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", more).statusCode());
+                waitForEnd(server, answers, turn);
+            }
         }
 
         if (next.get() < replies.size()) {
@@ -154,10 +162,11 @@ class ReplayScenarioTest {
         assertEquals(0, code, out.toString(StandardCharsets.UTF_8));
     }
 
-    private static void waitForEnd(TestServer server, Deque<JsonNode> answers) throws Exception {
+    /** 等到会话里至少有 {@code runs} 轮、最后一轮已结束；中间有问题就按录下的答案交。 */
+    private static void waitForEnd(TestServer server, Deque<JsonNode> answers, int count) throws Exception {
         for (int i = 0; i < 6000; i++) {
             JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/s1/runs").body()).get("runs");
-            if (runs != null && !runs.isEmpty() && runs.get(runs.size() - 1).has("endReason")) {
+            if (runs != null && runs.size() >= count && runs.get(runs.size() - 1).has("endReason")) {
                 assertEquals("COMPLETED", runs.get(runs.size() - 1).get("endReason").asString(), runs.toString());
                 return;
             }

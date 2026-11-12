@@ -648,13 +648,16 @@ class CompactStepsTest {
         assertNull(loop.session().compaction());
     }
 
-    /** 需求 1.3：system 太大、头部一条都放不下时不发摘要调用，以原始错误结束。 */
+    /**
+     * 需求 1.3：system 太大、头部一条都放不下时不发摘要调用，以原始错误结束。模型报的用量和内容相称（3000 字节的 system 约一千
+     * token）：摘要调用放不放得下用实测校准过的估算（agent-eval），报得比内容少得多时估算会被缩小，就不是“放不下”了。
+     */
     @Test
     void nothingFitsInASummaryCallSoNoneIsSent() {
         LoopFixture loop = new LoopFixture();
         loop.prompt(block("q1"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
-        loop.feed(loop.runId(), endTurn(loop, block("a1"), 10));
+        loop.feed(loop.runId(), endTurn(loop, block("a1"), 1500));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), overflow(loop));

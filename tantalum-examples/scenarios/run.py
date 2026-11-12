@@ -21,8 +21,12 @@ ROOT = os.path.join(WORK, "inventory")
 PORT, SITE_PORT = 8094, 8766
 BASE = f"http://127.0.0.1:{PORT}"
 LOCAL = {"url": "http://127.0.0.1:8090/v1", "model": "qwen3.8-flash-next-unsloth-ud-q4_k_xl"}
+# claude 是 Sonnet 5.5（录制和基线用它）；opus、haiku、fable 用来比较不同的 Claude 模型
 MODELS = {"qwen": lambda: {"route": "local", "model": LOCAL["model"], "effort": "off"},
-          "claude": lambda: {"route": "claude", "model": "claude-sonnet-5-5", "effort": "medium"}}
+          "claude": lambda: {"route": "claude", "model": "claude-sonnet-5-5", "effort": "medium"},
+          "opus": lambda: {"route": "claude", "model": "claude-opus-5-5", "effort": "medium"},
+          "haiku": lambda: {"route": "claude", "model": "claude-haiku-5-5", "effort": "medium"},
+          "fable": lambda: {"route": "claude", "model": "claude-fable-5-2", "effort": "high"}}
 MXC = os.path.expanduser("~/.cache/tantalum/mxc/1.0.1/mxc-exec-mac")
 
 def jar(module, suffix=""):
@@ -90,6 +94,7 @@ def last_wins(command):
         keep.append(arg)
     return keep[::-1]
 
+MODEL_NAME = None   # 这一轮用的模型（qwen 或 claude）
 DATA = None   # 这一组服务器的数据目录（每组一份，--keep 时也不会互相影响）
 
 def start(extra=(), name=None):
@@ -130,7 +135,8 @@ def start(extra=(), name=None):
         time.sleep(1)
     else: raise SystemExit("connector did not connect: " + " | ".join(open(f"{DATA}-connector.log", errors="replace").read().strip().splitlines()[-25:])[-2500:])
     print("computer:", {k: link.get(k) for k in ("write", "git")}, "shell", link["shell"].get("available"), link["shell"].get("reason", ""), "browser", (link.get("browser") or {}).get("available"), flush=True)
-    if PERCENT.get(name): assert user.call("PUT", "/api/settings/compaction", {"percent": PERCENT[name]})[0] == 200
+    percent = PERCENT.get(name, {}).get(MODEL_NAME)
+    if percent: assert user.call("PUT", "/api/settings/compaction", {"percent": percent})[0] == 200
     assert user.call("PUT", "/api/local/skills", {"dir": os.path.join(ROOT, "skills")})[0] == 200
     assert user.call("PUT", "/api/local/wiki", {"dir": os.path.join(ROOT, "wiki")})[0] == 200
     return user
@@ -166,13 +172,17 @@ def journal(session):
 
 def ask(user, session, text, model, timeout, answers, max_calls, posted=None):
     request = secrets.token_hex(6)
+    # 同一会话里的后几轮：等的是这一次提问新开的那一轮，不是上一轮
+    status, runs = user.call("GET", f"/api/sessions/{session}/runs")
+    before = len((runs or {}).get("runs", [])) if status == 200 else 0
     status, body = user.call("POST", f"/api/sessions/{session}/submissions", {"requestId": request, "mode": "prompt", "text": text, "model": model})
     if status != 200: return f"submit {status}: {body}"
     start, answered = time.time(), set()
     while True:
         time.sleep(1.5)
         status, runs = user.call("GET", f"/api/sessions/{session}/runs")
-        last = (runs or {}).get("runs", [{}])[-1] if status == 200 and (runs or {}).get("runs") else {}
+        listed = (runs or {}).get("runs", []) if status == 200 else []
+        last = listed[-1] if len(listed) > before else {}
         if last.get("endReason"):
             return None if last["endReason"] == "COMPLETED" else f"run ended {last['endReason']}: {last.get('detail', '')}"
         status, questions = user.call("GET", f"/api/sessions/{session}/questions")
@@ -200,11 +210,16 @@ def run_one(user, scenario, model, recording=False):
     if scenario["setup"]: scenario["setup"](ROOT)
     after_setup = tree(ROOT) if recording else None
     posted = []
+    fixture.REQUESTS.clear()
     session = "s-" + secrets.token_hex(4)
     started = time.time()
     prompt = scenario["prompt"] + (RECORD_NOTE if recording else "")
     problem = ask(user, session, prompt, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
     sessions = [session]
+    # 同一会话的后几轮（多轮对话场景）
+    for turn in scenario["turns"]:
+        if problem is not None: break
+        problem = ask(user, session, turn, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
     if problem is None and scenario["followup"]:
         time.sleep(6)   # 记忆落盘
         session2 = "s-" + secrets.token_hex(4); sessions.append(session2)
@@ -234,14 +249,17 @@ def run_one(user, scenario, model, recording=False):
 SERVERS = {
     None: [],
     "small-window": ["--tantalum.compaction.window-from-model=false", "--tantalum.compaction.reserve-tokens=2000",
-                     "--tantalum.openai-routes.local.context-window=16000", "--tantalum.openai-routes.local.max-tokens=2048",
+                     "--tantalum.openai-routes.local.context-window=12000", "--tantalum.openai-routes.local.max-tokens=1024",
                      "--tantalum.claude.context-window=18000", "--tantalum.claude.max-tokens=2048"],
 }
-# 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比）。小窗口时估算偏大（工具定义是英文 JSON，按 1.75 字节一个 token 估
-# 约是实际的两倍），9k 的窗口连摘要调用都估得放不下；16k 窗口、50% 压缩点时估算放得下，中途一定压缩
-PERCENT = {"small-window": 50}
+# 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比），按模型分：本机 12k 窗口用满（压缩点 10k；qwen 压缩一次后系统提示、工具、摘要和保留的消息就有九千二左右，压缩点低于这个数时每一步都要再压，10k、11k 的窗口一轮压六到十次、丢进度；qwen 光系统提示和
+# 工具就 5.4k；9k 时也能压缩，但一轮要压七八次、模型会丢进度）；Claude 第一次调用就有九千多 token，18k 窗口取 50%（9k）
+PERCENT = {"small-window": {"qwen": 100, "claude": 50}}
 # 每百万 token 的美元价（输入、输出、读缓存、写缓存）；本机模型不花钱
-PRICES = {"claude": (3.0, 15.0, 0.3, 3.75), "qwen": (0.0, 0.0, 0.0, 0.0)}
+# 每百万 token 的美元价：输入、输出、读缓存、写缓存（写 5 分钟缓存按输入的 1.25 倍）。2026-11-13 照 claude-api 技能的价格表；
+# 之前 Sonnet 按旧价 3/15/0.3 算，报的费用多了约一半
+PRICES = {"claude": (2.0, 10.0, 0.10, 2.5), "opus": (4.0, 20.0, 0.20, 5.0), "haiku": (0.10, 0.50, 0.01, 0.125),
+          "fable": (8.0, 40.0, 0.20, 10.0), "qwen": (0.0, 0.0, 0.0, 0.0)}
 
 def cost(model, tokens):
     price = PRICES.get(model, (0, 0, 0, 0))
@@ -357,7 +375,7 @@ def record(scenario, result, base, after_setup, posted):
         if call["name"] == "ask_user": continue   # 回答不是工具结果事件，回放时由 answers 交
         tools.append(normalize(json.dumps({"name": call["name"], "text": call["result"] or "", "error": bool(call["error"])}, ensure_ascii=False)))
     server_args = [a for a in SERVERS[scenario["server"]] if a.startswith("--tantalum.compaction.") or a.startswith("--tantalum.claude.")]
-    meta = {"id": scenario["id"], "prompt": scenario["prompt"] + RECORD_NOTE, "write": True, "serverArgs": server_args, "answers": posted,
+    meta = {"id": scenario["id"], "prompt": scenario["prompt"] + RECORD_NOTE, "turns": scenario["turns"], "write": True, "serverArgs": server_args, "answers": posted,
             "recordedWith": {"model": MODELS["claude"]()["model"], "commit": commit(), "date": time.strftime("%Y-%m-%d")}}
     texts = replies + tools + [json.dumps(meta, ensure_ascii=False)] + [b.decode("utf-8", "replace") for b in list(setup_files.values()) + list(expected_files.values())]
     leaked = [text[max(0, m.start() - 80):m.end() + 80] for text in texts for m in [SENSITIVE.search(text)] if m]
@@ -411,6 +429,7 @@ def main():
     parser.add_argument("--local-url", default=LOCAL["url"]); parser.add_argument("--local-model", default=LOCAL["model"]); parser.add_argument("--mxc", default=MXC)
     args = parser.parse_args()
     LOCAL.update(url=args.local_url, model=args.local_model); MXC = args.mxc
+    global MODEL_NAME; MODEL_NAME = args.model
     os.makedirs(os.path.join(HERE, "results"), exist_ok=True)
     wanted = [each for each in args.only.split(",") if each]
     unknown = [each for each in wanted if each not in {s["id"] for s in SCENARIOS}]

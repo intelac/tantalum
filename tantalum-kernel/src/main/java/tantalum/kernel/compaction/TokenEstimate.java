@@ -38,6 +38,11 @@ public record TokenEstimate(double bytesPerToken) {
         }
     }
 
+    /** 同样的估算，但每个 token 按 {@code 1 / factor} 倍的字节算：{@code factor} 小于 1 时估得少些（见 {@link Compactor#calibrated}）。 */
+    public TokenEstimate scaled(double factor) {
+        return new TokenEstimate(bytesPerToken / factor);
+    }
+
     /** 这份压缩设置的估算；旧事件的设置没有系数，按 3 算。 */
     public static TokenEstimate of(CompactionSettings settings) {
         return new TokenEstimate(settings.bytesPerTokenOrLegacy());

@@ -93,9 +93,10 @@ public final class CompactSteps {
         Prompt base = PromptProjection.project(session);
         String instructions = compacting.cause() instanceof Compacting.Manual manual ? manual.instructions() : null;
         Message instruction = SummaryPrompt.instruction(false, instructions);
-        TokenEstimate estimate = TokenEstimate.of(settings);
+        // 放不放得下用实测用量校准过的估算（估算对英文 JSON 偏大，小窗口上否则永远放不下）
+        TokenEstimate estimate = Compactor.calibrated(session, base.system(), base.tools());
         long fixed = estimate.ofText(base.system()) + estimate.ofTools(base.tools()) + estimate.ofMessage(instruction);
-        Compactor.Head head = Compactor.headForSummary(compacting.plan(), session.view(), settings, fixed);
+        Compactor.Head head = Compactor.headForSummary(compacting.plan(), session.view(), settings, fixed, estimate);
         if (head.nothingToSummarize()) {
             return false;
         }

@@ -290,6 +290,44 @@ class CompactorTest {
         assertEquals(2, partial.messages().size(), "the first unit went, the assistant unit (about 20 tokens) stays");
     }
 
+    /**
+     * 摘要调用放不放得下用实测用量校准（agent-eval：估算对英文 JSON 偏大约一倍，9k 窗口上自动压缩一次都做不成）。
+     * 锚点是上次回复的实测；估同一段内容估多了就按比例缩小，最多缩到四分之一；估少了、没有锚点时照旧。
+     */
+    @Test
+    void theSummaryFitUsesAnEstimateCalibratedByTheMeasuredUsage() {
+        ToolSpec tool = new ToolSpec("read_file", "x".repeat(3000), new Json.Obj(java.util.Map.of()), false);
+        List<ToolSpec> tools = List.of(tool);
+        SessionState session = session(SETTINGS, user(1), assistant(1), user(2), assistant(2));
+        TokenEstimate base = TokenEstimate.of(SETTINGS);
+        long estimated = base.ofText("sys") + base.ofTools(tools) + base.ofMessages(session.view());
+
+        assertEquals(base, Compactor.calibrated(session, "sys", tools), "no anchor: as before");
+        assertEquals(base, Compactor.calibrated(session.withAnchor(new UsageAnchor(estimated + 10, 4)), "sys", tools),
+                "the estimate was not too high: as before");
+
+        TokenEstimate half = Compactor.calibrated(session.withAnchor(new UsageAnchor(estimated / 2, 4)), "sys", tools);
+        assertEquals(base.ofText("y".repeat(3000)) / 2, half.ofText("y".repeat(3000)), 2, "measured half of the estimate");
+
+        TokenEstimate floor = Compactor.calibrated(session.withAnchor(new UsageAnchor(1, 4)), "sys", tools);
+        assertEquals(base.ofText("y".repeat(3000)) / 4, floor.ofText("y".repeat(3000)), 2, "at most a quarter");
+
+        // 锚点之后又来的消息不算进校准：结果和锚点那一刻一样
+        SessionState later = session.withAnchor(new UsageAnchor(estimated / 2, 4)).append(user(3)).append(assistant(3));
+        assertEquals(half, Compactor.calibrated(later, "sys", tools));
+    }
+
+    /** 校准后放得下：同样的固定部分，按原系数头部整个丢光，按实测校准后留得下。 */
+    @Test
+    void aCalibratedEstimateLetsTheSummaryFitOnASmallWindow() {
+        List<Message> view = List.of(user(1), assistant(1), user(2), assistant(2));
+        Plan plan = new Plan(2, 2, 2, 0, null);
+        TokenEstimate base = TokenEstimate.of(SETTINGS);
+        assertTrue(Compactor.headForSummary(plan, view, SETTINGS, 790, base).messages().isEmpty(), "uncalibrated: nothing fits");
+        TokenEstimate measured = base.scaled(0.5);
+        assertFalse(Compactor.headForSummary(plan, view, SETTINGS, 395, measured).messages().isEmpty(), "calibrated: the head fits");
+    }
+
     /** compaction-threshold：用户选的压缩点只决定什么时候压缩；摘要调用能收多少按窗口减预留算。 */
     @Test
     void theSummaryHeadIsBoundByWhatTheModelTakesNotByTheChosenPoint() {

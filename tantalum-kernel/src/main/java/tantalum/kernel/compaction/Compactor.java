@@ -21,6 +21,7 @@ import tantalum.value.state.Compacting.Trigger;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.Plan;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.UsageAnchor;
 import tantalum.value.todo.TodoList;
 import tantalum.value.model.ToolResultBlock;
 
@@ -121,6 +122,35 @@ public final class Compactor {
                 + estimate.ofMessages(ImageBudget.omit(session.view(), session.omittedImages()));
     }
 
+    /** 校准最多把估算缩到四分之一：再小多半是模型报的用量不对。 */
+    static final double MIN_SCALE = 0.25;
+
+    /**
+     * 用模型报的实测用量校准的估算，只用来判断摘要调用放不放得下。系数是按一种文字定的（本机 1.75 按中文），工具定义多是英文 JSON，
+     * 实际约 3.4 字节一个 token：估算约是实际的两倍，窗口小的模型（9k 以下）上摘要调用光固定部分就“放不下”，自动压缩整轮放弃
+     * （agent-eval 的 todo-compact 场景发现的）。
+     * 做法：锚点是上次回复的实测（那时的 system、工具和视图，加上回复）；用现在的系数估同一段内容，估得比实测多就按比例缩小，
+     * 最多缩到 {@value #MIN_SCALE}。估得比实测少时照旧（只往少估的方向校准会有放不下的风险，不做）；没有锚点时照旧。
+     * 锚点之后又加的消息在视图末尾，所以锚点那一刻的视图是现在的视图去掉末尾那几条。
+     */
+    public static TokenEstimate calibrated(SessionState session, String system, List<ToolSpec> tools) {
+        CompactionSettings settings = session.context() == null ? null : session.context().compaction();
+        TokenEstimate base = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
+        UsageAnchor anchor = session.anchor();
+        if (anchor == null || anchor.tokens() <= 0) {
+            return base;
+        }
+        List<Message> view = session.view();
+        int after = Math.max(0, session.messages().size() - Math.min(anchor.messageCount(), session.messages().size()));
+        List<Message> atAnchor = view.subList(0, Math.max(0, view.size() - after));
+        long estimated = base.ofText(system) + base.ofTools(tools)
+                + base.ofMessages(ImageBudget.omit(atAnchor, session.omittedImages()));
+        if (estimated <= anchor.tokens()) {
+            return base;
+        }
+        return base.scaled(Math.max(MIN_SCALE, (double) anchor.tokens() / estimated));
+    }
+
     /** 上下文现在占了多少，以及系统提示、工具定义、消息各占多少；三项之和等于 {@code used}。 */
     public record Occupancy(long used, long system, long tools, long messages) {}
 
@@ -164,11 +194,16 @@ public final class Compactor {
      * {@code fixedEstimate} 是 system、工具和指令的估算。
      */
     public static Head headForSummary(Plan plan, List<Message> view, CompactionSettings settings, long fixedEstimate) {
+        return headForSummary(plan, view, settings, fixedEstimate, TokenEstimate.of(settings));
+    }
+
+    /** 同上，用给定的估算（摘要调用用 {@link #calibrated} 校准过的）。 */
+    public static Head headForSummary(Plan plan, List<Message> view, CompactionSettings settings, long fixedEstimate,
+                                      TokenEstimate estimate) {
         List<Message> head = Trimming.trimAll(view.subList(0, plan.headMessages()), settings.maxSummarizedResultBytes());
         boolean dropped = false;
         boolean hasSummary = !head.isEmpty() && SummaryPrompt.isSummary(head.getFirst());
         int floor = hasSummary ? 1 : 0;
-        TokenEstimate estimate = TokenEstimate.of(settings);
         while (head.size() > floor && fixedEstimate + estimate.ofMessages(head) > settings.capacity()) {
             List<Unit> units = Units.split(head);
             Unit victim = units.get(floor);
