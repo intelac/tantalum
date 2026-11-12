@@ -66,7 +66,8 @@ class LocalBrowserIT {
     @BeforeEach
     void start() throws IOException {
         installed = Installed.find(Installed.Choice.ANY);
-        assumeTrue(installed.isPresent(), "neither Google Chrome nor Microsoft Edge is installed on this machine");
+        assumeTrue(installed.isPresent(), "neither Google Chrome nor Microsoft Edge is installed on this machine; looked at "
+                + Installed.searched(Installed.Choice.ANY));
         download = "tantalum-it-" + UUID.randomUUID() + ".bin";
         site = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         page("/", "<html><head><title>Form</title></head><body><h1>Hello</h1>"

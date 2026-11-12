@@ -63,9 +63,35 @@ class InstalledTest {
         assertEquals(Optional.of(new Found("Google Chrome", chrome)), Installed.find(Choice.ANY, "Windows 11", env, temp, temp),
                 "a per-user Chrome is found too, and Chrome comes before Edge");
         assertEquals(Optional.of(new Found("Microsoft Edge", edge)), Installed.find(Choice.EDGE, "Windows Server 2022", env, temp, temp));
-        // 环境变量缺了、写得不成路径：跳过那一处，不出错
+        // 环境变量缺了、是空白：那一处用标准位置，不出错
         assertEquals(Optional.of(new Found("Google Chrome", chrome)),
                 Installed.find(Choice.ANY, "Windows 11", Map.of("LOCALAPPDATA", local.toString(), "ProgramFiles", " "), temp, temp));
+    }
+
+    /**
+     * Windows 上环境变量的名字不分大小写，但 Java 给的环境变量表区分：有的启动方式把名字写成全大写（2026-11-12 Windows CI 上
+     * 因此一个浏览器也没找到）。名字大小写不同照样认；变量根本没有时用系统盘上的标准位置和家目录下的 AppData\\Local。
+     */
+    @Test
+    void onWindowsVariableNamesIgnoreCaseAndMissingOnesFallBackToTheStandardPlaces() throws Exception {
+        Path programs = temp.resolve("PF");
+        Path edge = program(programs.resolve("Microsoft").resolve("Edge").resolve("Application").resolve("msedge.exe"));
+        assertEquals(Optional.of(new Found("Microsoft Edge", edge)),
+                Installed.find(Choice.ANY, "Windows Server 2025", Map.of("PROGRAMFILES(X86)", programs.toString()), temp, temp));
+        assertEquals("v", Installed.variable(Map.of("programfiles", "v"), "ProgramFiles"));
+        assertEquals(null, Installed.variable(Map.of("Other", "v"), "ProgramFiles"));
+
+        // 没有任何变量：系统盘根下的 Program Files、Program Files (x86)，家目录下的 AppData\Local
+        Path root = temp.resolve("drive");
+        Path home = temp.resolve("drive").resolve("Users").resolve("yi");
+        assertEquals(Optional.empty(), Installed.find(Choice.ANY, "Windows 11", Map.of(), home, root));
+        Path standardEdge = program(root.resolve("Program Files (x86)").resolve("Microsoft").resolve("Edge").resolve("Application")
+                .resolve("msedge.exe"));
+        assertEquals(Optional.of(new Found("Microsoft Edge", standardEdge)), Installed.find(Choice.ANY, "Windows 11", Map.of(), home, root));
+        Path userChrome = program(home.resolve("AppData").resolve("Local").resolve("Google").resolve("Chrome").resolve("Application")
+                .resolve("chrome.exe"));
+        assertEquals(Optional.of(new Found("Google Chrome", userChrome)), Installed.find(Choice.ANY, "Windows 11", Map.of(), home, root));
+        assertEquals(6, Installed.candidates(Choice.ANY, "Windows 11", Map.of(), home, root).size(), "three places each for Chrome and Edge");
     }
 
     @Test
