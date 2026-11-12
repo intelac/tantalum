@@ -267,7 +267,9 @@ class AllowedDirsTest {
         // 绝对路径：不加
         String outside = temp.resolve("secret.txt").toString();
         assertEquals(AllowedDirs.NOT_FOUND + outside, assertThrows(IllegalArgumentException.class, () -> dirs.resolve(outside)).getMessage());
-        assertEquals(AllowedDirs.NOT_FOUND + "/Users/someone/claude-work", assertThrows(IllegalArgumentException.class, () -> dirs.resolve("/Users/someone/claude-work")).getMessage());
+        // 模型凭印象猜的一个绝对路径（用临时目录拼，Windows 上带盘符才算绝对路径）
+        String guessed = temp.resolve("someone").resolve("claude-work").toString();
+        assertEquals(AllowedDirs.NOT_FOUND + guessed, assertThrows(IllegalArgumentException.class, () -> dirs.resolve(guessed)).getMessage());
         // 会话有工作目录时，起点是它
         AllowedDirs inSrc = dirs.from("src");
         assertEquals(AllowedDirs.NOT_FOUND + "a.py" + hint,
