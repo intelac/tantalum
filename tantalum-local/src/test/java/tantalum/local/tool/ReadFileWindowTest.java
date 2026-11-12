@@ -176,7 +176,9 @@ class ReadFileWindowTest {
         Files.write(root.resolve("a.bin"), new byte[] {'a', 0, 'b'});
         assertEquals("Binary file, not shown: a.bin", read("path", "a.bin").text());
         Files.write(root.resolve("latin1.txt"), new byte[] {'c', 'a', 'f', (byte) 0xE9, '\n'});
-        assertEquals("Not a UTF-8 text file: latin1.txt", read("path", "latin1.txt").text());
+        // 0xE9 后面跟着换行，按 GBK 也不成字，所以猜不出编码
+        assertEquals("Not a UTF-8 text file: latin1.txt. read_file and edit_file only handle UTF-8; to read it, convert a copy "
+                + "with a shell command such as iconv.", read("path", "latin1.txt").text());
     }
 
     // C5：读任何一个窗口都算读过

@@ -82,9 +82,12 @@ public final class Bash implements LocalTool {
             return LocalResult.error(invalid.getMessage());
         }
         Sandbox.Run run = context.sandbox().run(command, workdir, Duration.ofSeconds(seconds));
-        StringBuilder text = new StringBuilder(run.output().text());
+        StringBuilder text = new StringBuilder(clean(run.output().text()));
         Tail.Text output = run.output();
-        if (output.truncated()) {
+        if (output.truncated() && output.cutLine()) {
+            note(text, "[Output truncated: line " + output.totalLines() + " alone is longer than " + Tail.MAX_BYTES / 1024
+                    + " KB; showing only its end (limit " + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB).]");
+        } else if (output.truncated()) {
             note(text, "[Output truncated: showing the last " + output.shownLines() + " of " + output.totalLines() + " lines (limit "
                     + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB).]");
         }
@@ -97,6 +100,38 @@ public final class Bash implements LocalTool {
             return LocalResult.error(text.toString());
         }
         return LocalResult.ok(text.isEmpty() ? "(no output)" : text.toString());
+    }
+
+    private static final java.util.regex.Pattern ANSI = java.util.regex.Pattern.compile(
+            "\u001B\\[[0-?]*[ -/]*[@-~]|\u001B\\][^\u0007\u001B]*(?:\u0007|\u001B\\\\)?|\u001B[@-Z\\\\-_]");
+    private static final java.util.regex.Pattern CONTROL = java.util.regex.Pattern.compile("[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFF9-\uFFFB]");
+
+    /**
+     * 交给模型前清理输出（照 pi {@code bash-executor.ts:79} 的 {@code sanitizeBinaryOutput(stripAnsi(text))}）：去掉 ANSI 颜色和光标控制、
+     * 去掉制表符和换行以外的控制字符。单独的回车（进度条）照终端的样子只留最后一段，pi 是直接删掉回车、几段连在一起。
+     */
+    static String clean(String text) {
+        String plain = CONTROL.matcher(ANSI.matcher(text.replace("\r\n", "\n")).replaceAll("")).replaceAll("");
+        if (plain.indexOf('\r') < 0) {
+            return plain;
+        }
+        StringBuilder out = new StringBuilder(plain.length());
+        for (String line : plain.split("\n", -1)) {
+            String shown = line;
+            int cr = line.lastIndexOf('\r');
+            while (cr >= 0) {
+                String after = shown.substring(cr + 1);
+                if (!after.isEmpty()) {
+                    shown = after;
+                    break;
+                }
+                shown = shown.substring(0, cr);
+                cr = shown.lastIndexOf('\r');
+            }
+            out.append(shown).append('\n');
+        }
+        out.setLength(out.length() - 1);
+        return out.toString();
     }
 
     private static void note(StringBuilder text, String line) {

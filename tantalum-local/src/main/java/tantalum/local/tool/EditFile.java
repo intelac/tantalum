@@ -87,8 +87,12 @@ public final class EditFile implements LocalTool {
             return LocalResult.error("cannot edit \"" + path + "\": old_string was not found. It must match the file exactly, including "
                     + "whitespace and line breaks; read the file again if unsure.");
         }
-        if (count > 1 && !replaceAll) {
-            return LocalResult.error("cannot edit \"" + path + "\": old_string occurs " + count + " times. Include more surrounding lines "
+        // 只改一处时，重叠的出现也算：“needle needle needle”里的“e needle”有两处可以对上，改哪一处是猜的，所以拒绝
+        // （agent-eval 随机序列测试发现的；pi 用 split 计数，也只数不重叠的）
+        int places = replaceAll ? count : places(text.content(), from);
+        if (places > 1 && !replaceAll) {
+            return LocalResult.error("cannot edit \"" + path + "\": old_string occurs " + places + " times"
+                    + (places > count ? " (some of them overlap)" : "") + ". Include more surrounding lines "
                     + "to make it unique, or set replace_all to true.");
         }
         String content = text.content();
@@ -102,6 +106,15 @@ public final class EditFile implements LocalTool {
         TextFiles.writeAtomically(target, bytes);
         observations.record(context.session(), target);
         return LocalResult.ok("Edited " + path + ": replaced " + count + (count == 1 ? " occurrence." : " occurrences."));
+    }
+
+    /** 能对上的位置数，重叠的也算。 */
+    private static int places(String text, String part) {
+        int count = 0;
+        for (int at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + 1)) {
+            count++;
+        }
+        return count;
     }
 
     /** 不重叠的出现次数，和 {@link String#replace} 的替换次数一致。 */

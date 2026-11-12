@@ -208,7 +208,7 @@ public final class Mxc implements Sandbox {
             return text;
         }
         String kept = last < 0 ? "" : body.substring(0, last);
-        return new Tail.Text(kept, text.truncated(), Math.max(0, text.totalLines() - 1), Math.max(0, text.shownLines() - 1));
+        return new Tail.Text(kept, text.truncated(), Math.max(0, text.totalLines() - 1), Math.max(0, text.shownLines() - 1), text.cutLine());
     }
 
     /**

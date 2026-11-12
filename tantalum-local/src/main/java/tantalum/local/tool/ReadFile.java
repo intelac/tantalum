@@ -74,7 +74,7 @@ public final class ReadFile implements LocalTool {
         } catch (IllegalArgumentException failure) {
             return LocalResult.error(failure.getMessage());
         } catch (CharacterCodingException failure) {
-            return LocalResult.error("Not a UTF-8 text file: " + path);
+            return LocalResult.error(TextFiles.notUtf8(context.dirs().resolve(path), path));
         } catch (IOException failure) {
             return LocalResult.error("Cannot read " + path + ": " + failure.getClass().getSimpleName());
         }
@@ -145,7 +145,8 @@ public final class ReadFile implements LocalTool {
                     + ". Use grep to find the lines you need, then read them with offset and limit.");
         }
         if (TextFiles.isBinary(file)) {
-            return LocalResult.error(isPdf(file) ? "read_file cannot read PDF contents: " + path : "Binary file, not shown: " + path);
+            return LocalResult.error(isPdf(file) ? "read_file cannot read PDF contents: " + path
+                    : TextFiles.utf16(file) ? TextFiles.notUtf8(file, path) : "Binary file, not shown: " + path);
         }
         StringBuilder shown = new StringBuilder();
         int bytes = 0;

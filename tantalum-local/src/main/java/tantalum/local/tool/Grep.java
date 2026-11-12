@@ -1,19 +1,28 @@
 package tantalum.local.tool;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.MalformedInputException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.value.json.Json;
 
-/** 在用户电脑上允许的目录里按正则搜索。纯 Java 实现，不经过 shell，参数不会被当作命令。 */
+/**
+ * 在用户电脑上允许的目录里按正则搜索。纯 Java 实现，不经过 shell，参数不会被当作命令。
+ * 跳过的和 pi、DSH 的搜索（都是 ripgrep 的默认规则）一样：在 Git 仓库里只搜 Git 不忽略的文件（{@code .gitignore}、
+ * {@code .git/info/exclude}、全局忽略规则，用 {@code git ls-files} 算）；不在仓库里或没装 git 时跳过 {@code .git}、
+ * {@code node_modules} 这几个目录（同 {@code find_files}）；开头带 NUL 的二进制文件不搜（agent-eval 工具边界测试发现的）。
+ * 隐藏文件照搜，同 pi。
+ */
 public final class Grep implements LocalTool {
 
     static final int MAX_MATCHES = 200;
@@ -50,7 +59,8 @@ public final class Grep implements LocalTool {
     @Override public String name() { return "grep"; }
     @Override public String description() {
         return "Search files in the allowed directories on the user's computer with a Java regular expression. path is an optional "
-                + "directory or file, relative to the main directory or absolute. Default: the main directory.";
+                + "directory or file, relative to the main directory or absolute. Default: the main directory. In a Git repository "
+                + "files ignored by Git are skipped; binary files are skipped.";
     }
     @Override public Kind kind() { return Kind.READ; }
     @Override public Json schema() { return ToolArguments.schema(List.of("pattern"), List.of("path")); }
@@ -104,8 +114,9 @@ public final class Grep implements LocalTool {
     /** 单个文件读不了（权限、遍历途中被删）就跳过它，已找到的匹配不丢。 */
     private List<String> search(Pattern pattern, Path start, AllowedDirs dirs) throws IOException {
         List<String> matches = new ArrayList<>();
+        List<Path> tracked = Files.isDirectory(start, java.nio.file.LinkOption.NOFOLLOW_LINKS) ? gitFiles(start) : null;
         // Files.walk 默认不跟随符号链接，指向目录外的链接不会被进入。
-        try (Stream<Path> files = Files.walk(start)) {
+        try (Stream<Path> files = tracked != null ? tracked.stream() : Files.walk(start).filter(file -> !skipped(start, file))) {
             for (Path file : (Iterable<Path>) files::iterator) {
                 if (Thread.currentThread().isInterrupted()) {
                     throw new SearchInterrupted();
@@ -126,7 +137,72 @@ public final class Grep implements LocalTool {
         return matches;
     }
 
+    /** 不在仓库里时：路径上有 {@code .git}、{@code node_modules} 这类目录的跳过。 */
+    private static boolean skipped(Path start, Path file) {
+        for (Path part : start.relativize(file)) {
+            if (FindFiles.SKIPPED.contains(part.toString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * {@code start} 在 Git 仓库里时，它下面 Git 不忽略的文件（已跟踪的加上没跟踪但没被忽略的），按路径排序；
+     * 不在仓库里、没装 git、git 出错或超过 10 秒时返回 null，改为遍历目录。标准输入直接关掉，不用 {@code /dev/null}（Windows 没有）。
+     */
+    static List<Path> gitFiles(Path start) {
+        Process process;
+        try {
+            process = new ProcessBuilder("git", "-c", "core.quotePath=false", "-c", "core.fsmonitor=false",
+                    "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+                    .directory(start.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        } catch (IOException noGit) {
+            return null;
+        }
+        try {
+            process.getOutputStream().close();
+            byte[] output;
+            try (InputStream in = process.getInputStream()) {
+                output = readCapped(in);
+            }
+            if (output == null || !process.waitFor(10, TimeUnit.SECONDS) || process.exitValue() != 0) {
+                return null;
+            }
+            List<Path> files = new ArrayList<>();
+            for (String name : new String(output, java.nio.charset.StandardCharsets.UTF_8).split("\0")) {
+                if (!name.isEmpty()) {
+                    files.add(start.resolve(name));
+                }
+            }
+            return files.stream().distinct().sorted().toList();
+        } catch (IOException | InterruptedException | java.nio.file.InvalidPathException failed) {
+            if (failed instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        } finally {
+            process.destroy();
+        }
+    }
+
+    /** 文件清单最多 64 MB；再多当作 git 不可用。 */
+    private static byte[] readCapped(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[64 * 1024];
+        for (int read; (read = in.read(buffer)) >= 0; ) {
+            out.write(buffer, 0, read);
+            if (out.size() > 64 * 1024 * 1024) {
+                return null;
+            }
+        }
+        return out.toByteArray();
+    }
+
     private void searchFile(Pattern pattern, Path file, AllowedDirs dirs, List<String> matches) throws IOException {
+        if (TextFiles.isBinary(file)) {
+            return;
+        }
         List<String> lines;
         try {
             lines = Files.readAllLines(file);

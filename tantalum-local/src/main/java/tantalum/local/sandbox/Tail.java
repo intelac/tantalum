@@ -13,9 +13,14 @@ public final class Tail {
     public static final int MAX_BYTES = 50 * 1024;
 
     /**
-     * 留下的文字。{@code totalLines} 是全部输出的行数，{@code shownLines} 是留下的行数；{@code truncated} 时开头被截掉了。
+     * 留下的文字。{@code totalLines} 是全部输出的行数，{@code shownLines} 是留下的行数；{@code truncated} 时开头被截掉了，
+     * {@code cutLine} 时截在一行的中间（整段留下的文字里没有换行：一行就超过了 50 KB）。
      */
-    public record Text(String text, boolean truncated, long totalLines, int shownLines) {}
+    public record Text(String text, boolean truncated, long totalLines, int shownLines, boolean cutLine) {
+        public Text(String text, boolean truncated, long totalLines, int shownLines) {
+            this(text, truncated, totalLines, shownLines, false);
+        }
+    }
 
     private final int maxLines;
     private final int maxBytes;
@@ -65,12 +70,14 @@ public final class Tail {
         byte[] kept = Arrays.copyOfRange(buffer, start, length);
         boolean truncated = total > kept.length;
         int from = 0;
+        boolean cutLine = false;
         if (truncated) {
             // 截在一行中间时从下一行开始；整段都没有换行时只跳过半个 UTF-8 字符
             int newline = indexOf(kept, (byte) '\n');
             if (newline >= 0 && newline < kept.length - 1) {
                 from = newline + 1;
             } else {
+                cutLine = true;
                 while (from < kept.length && (kept[from] & 0xC0) == 0x80) {
                     from++;
                 }
@@ -81,14 +88,14 @@ public final class Tail {
             text = text.substring(0, text.length() - 1);
         }
         if (text.isEmpty()) {
-            return new Text("", truncated, totalLines, 0);
+            return new Text("", truncated, totalLines, 0, cutLine);
         }
         String[] lines = text.split("\n", -1);
         if (lines.length > maxLines) {
             text = String.join("\n", Arrays.copyOfRange(lines, lines.length - maxLines, lines.length));
             return new Text(text, true, totalLines, maxLines);
         }
-        return new Text(text, truncated, totalLines, lines.length);
+        return new Text(text, truncated, totalLines, lines.length, cutLine);
     }
 
     private static int indexOf(byte[] bytes, byte wanted) {

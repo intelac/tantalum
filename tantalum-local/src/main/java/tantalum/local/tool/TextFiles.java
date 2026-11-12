@@ -47,6 +47,43 @@ final class TextFiles {
     /** 逐行读到的一行：{@code text} 最多 {@code maxChars} 个字符，超出的部分只计数不保留。 */
     record Line(String text, boolean truncated) {}
 
+    /** 以 UTF-16 的 BOM 开头（Windows 上 PowerShell 的输出、.reg 文件常见）：里面每个字后面都跟着 NUL，看着像二进制。 */
+    static boolean utf16(Path file) throws IOException {
+        byte[] head;
+        try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+            head = in.readNBytes(2);
+        }
+        return head.length == 2 && ((head[0] == (byte) 0xFF && head[1] == (byte) 0xFE) || (head[0] == (byte) 0xFE && head[1] == (byte) 0xFF));
+    }
+
+    /**
+     * 不是 UTF-8 的文本文件：说清楚是什么、怎么办。只读 UTF-8 是有意的（pi、DSH 也只按 UTF-8 读），改文件按 UTF-8 写回会把别的字弄坏。
+     * 能猜出来的写出编码（UTF-16 看 BOM，GBK 看能不能按 GBK 严格解码），让模型用命令行转码。
+     */
+    static String notUtf8(Path file, String path) {
+        String guess = null;
+        try {
+            if (utf16(file)) {
+                guess = "UTF-16";
+            } else {
+                byte[] head;
+                try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                    head = in.readNBytes(SNIFF_BYTES);
+                }
+                java.nio.charset.CharsetDecoder gbk = java.nio.charset.Charset.forName("GBK").newDecoder()
+                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+                // 头部可能截在一个双字节字的中间，只解码到最后一个完整的字节对之前
+                gbk.decode(ByteBuffer.wrap(head, 0, head.length < SNIFF_BYTES ? head.length : head.length - 1));
+                guess = "GBK";
+            }
+        } catch (IOException | RuntimeException unknown) {
+            guess = null;
+        }
+        return "Not a UTF-8 text file: " + path + (guess == null ? "" : " (looks like " + guess + ")")
+                + ". read_file and edit_file only handle UTF-8; to read it, convert a copy with a shell command such as iconv.";
+    }
+
     static boolean isBinary(Path file) throws IOException {
         byte[] head;
         try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
