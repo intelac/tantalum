@@ -326,6 +326,18 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 | `tantalum.console.welcome` | 没有 | 新会话首屏标题下面的那句话，最多 200 个字，当纯文本显示（不解析 Markdown 和 HTML）。不配就用控制台自带的那句 |
 | `tantalum.console.welcome-by-language.<zh\|en\|ja>` | 没有 | 给某个界面语言单独配一句；那个语言没配时用上面那句 |
 
+**放在代理或隧道后面。** 服务器默认只绑 `127.0.0.1`；要从别的电脑或外网访问，在前面放一个 HTTPS 反向代理或隧道，指到这个端口。
+
+- 写操作要求浏览器的 `Origin` 就是它访问的这个地址。代理带 `X-Forwarded-Proto`、`X-Forwarded-For` 时加 `--server.forward-headers-strategy=native`，登录限速就能按真实来源算；代理什么都不带、只做 HTTPS 时也能用，这时服务器拿浏览器发来的 `Host` 比（同一个主机、https 默认端口才放行），所有来源在限速里算同一个。
+- 回答是靠一条长连接（`/api/events`，SSE）推到页面的。有的代理和隧道会把长连接的内容憋到响应结束才放行（例如 Cloudflare 的临时隧道 trycloudflare）。页面连上后约 4 秒收不到服务器的第一行，就自动改成反复请求 `/api/events/poll`：订阅留在服务器上，每次请求带回一批就结束，回答照样边生成边显示，只是一小批一小批地到。不用配置。
+
+| 配置 | 默认 | 含义 |
+|---|---|---|
+| `tantalum.sse-poll-hold` | `15s` | 轮询时一次请求最多等多久；没有消息就空着回去，页面马上再来。要比代理的超时短 |
+| `tantalum.sse-poll-idle` | `60s` | 轮询的订阅多久没人来取就关掉；之后页面重新开一条，按上次收到的位置补读 |
+
+对外开放前先看一遍账号：停用测试账号，密码要够强。能登录的人就能让 agent 动他连上的电脑。
+
 **关闭。** 收到 `SIGTERM` 后先拒绝新提交、关掉推送连接，再等在途的模型和工具调用最多 `tantalum.shutdown-wait`（默认 30 秒），到时中断它们；之后关索引和文件。被中断的运行下次启动按上面的规则收尾。
 
 ## 在 Windows 上运行

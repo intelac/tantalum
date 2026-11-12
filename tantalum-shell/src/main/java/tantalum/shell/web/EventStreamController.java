@@ -85,6 +85,8 @@ public class EventStreamController {
     private void stream(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter)
             throws IOException, SQLException, InterruptedException {
         long nextCheck = System.currentTimeMillis() + heartbeat.toMillis();
+        // 一连上就发一行：页面靠它分辨“连上了”和“中间有代理把内容憋住了”，憋住时改用 /api/events/poll
+        emitter.send(SseEmitter.event().comment("open"));
         while (!subscription.closed()) {
             SseMessage message = subscription.poll(Math.max(1, nextCheck - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
             if (subscription.closed()) {

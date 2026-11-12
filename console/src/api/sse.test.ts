@@ -164,4 +164,108 @@ describe("connectEvents", () => {
     expect(fetchMock.mock.calls.length).toBe(calls);
     expect(connection.every((connected) => !connected)).toBe(true);
   });
+
+  describe("when something in between holds the stream back", () => {
+    /** 轮询的一次响应：一段 SSE 文本，带订阅编号。 */
+    function batch(status: number, text: string, stream?: string) {
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        body: null,
+        headers: new Headers(stream === undefined ? {} : { "X-Event-Stream": stream }),
+        text: () => Promise.resolve(text),
+      } as unknown as Response;
+    }
+
+    /** 连上了但一个字节都不来的长连接；之后的请求按 `polls` 依次回答，用完以后挂着。 */
+    function buffered(polls: Response[]) {
+      const requests: { path: string; last: string }[] = [];
+      const fetchMock = vi.fn((path: string, init?: RequestInit) => {
+        const headers = init?.headers as Record<string, string>;
+        requests.push({ path, last: headers["Last-Event-ID"] ?? "" });
+        if (path === "/api/events") return Promise.resolve(response(200, streamOf([], true, init?.signal ?? undefined)));
+        const next = polls.shift();
+        if (next !== undefined) return Promise.resolve(next);
+        return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+      });
+      return { fetchMock, requests };
+    }
+
+    it("switches to polling and keeps the stream it was given", async () => {
+      const { fetchMock, requests } = buffered([
+        batch(200, "", "t1"),
+        batch(200, "id:4.0\nevent:item\ndata:{}\n\nevent:chunk\ndata:{}\n\n", "t1"),
+        batch(200, "id:4.1\nevent:PhaseChanged\ndata:{}\n\n", "t1"),
+      ]);
+      const events: SseEvent[] = [];
+      const connection: boolean[] = [];
+      const stop = connectEvents(
+        { onEvent: (event) => events.push(event), onConnection: (connected) => connection.push(connected) },
+        { retryDelayMs: 1, firstByteMs: 20, fetch: fetchMock as unknown as typeof fetch },
+      );
+      await until(() => requests.length === 5);
+      stop();
+
+      expect(requests.map((request) => request.path)).toEqual([
+        "/api/events",
+        "/api/events/poll",
+        "/api/events/poll?stream=t1",
+        "/api/events/poll?stream=t1",
+        "/api/events/poll?stream=t1",
+      ]);
+      expect(requests[4]?.last).toBe("4.1");
+      expect(events.map((event) => event.event)).toEqual(["item", "chunk", "PhaseChanged"]);
+      expect(connection.includes(false)).toBe(false);
+    });
+
+    it("opens a new stream from the last event id when the old one is gone", async () => {
+      const { fetchMock, requests } = buffered([
+        batch(200, "id:7.0\nevent:item\ndata:{}\n\n", "old"),
+        batch(410, ""),
+        batch(200, "id:7.1\nevent:item\ndata:{}\n\n", "new"),
+      ]);
+      const events: SseEvent[] = [];
+      const stop = connectEvents(
+        { onEvent: (event) => events.push(event), onConnection: () => undefined },
+        { retryDelayMs: 1, firstByteMs: 20, fetch: fetchMock as unknown as typeof fetch },
+      );
+      await until(() => requests.length === 5);
+      stop();
+
+      expect(requests.slice(1).map((request) => request.path)).toEqual([
+        "/api/events/poll",
+        "/api/events/poll?stream=old",
+        "/api/events/poll",
+        "/api/events/poll?stream=new",
+      ]);
+      expect(requests[3]?.last).toBe("7.0");
+      expect(events.length).toBe(2);
+    });
+
+    it("stops on 401 while polling", async () => {
+      const { fetchMock, requests } = buffered([batch(200, "", "t1"), batch(401, "")]);
+      const unauthorized = vi.fn();
+      const stop = connectEvents(
+        { onEvent: () => undefined, onConnection: () => undefined, onUnauthorized: unauthorized },
+        { retryDelayMs: 1, firstByteMs: 20, fetch: fetchMock as unknown as typeof fetch },
+      );
+      await until(() => unauthorized.mock.calls.length === 1);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      stop();
+      expect(requests.length).toBe(3);
+    });
+
+    it("a stream that says hello in time is never polled", async () => {
+      const fetchMock = vi.fn((_: string, init?: RequestInit) =>
+        Promise.resolve(response(200, streamOf([":open\n\n"], true, init?.signal ?? undefined))),
+      );
+      const stop = connectEvents(
+        { onEvent: () => undefined, onConnection: () => undefined },
+        { retryDelayMs: 1, firstByteMs: 20, fetch: fetchMock as unknown as typeof fetch },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      stop();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });
