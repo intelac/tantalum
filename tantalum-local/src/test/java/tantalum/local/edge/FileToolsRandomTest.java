@@ -150,7 +150,8 @@ class FileToolsRandomTest {
             String name = NAMES.get(random.nextInt(NAMES.size()));
             LocalResult result = new FindFiles().run(context, args("pattern", name));
             List<String> expected = model.keySet().stream().filter(each -> each.endsWith("/" + name) || each.equals(name)).sorted().toList();
-            assertEquals(expected.isEmpty() ? "No files found." : String.join("\n", expected), result.text(), "find " + name);
+            // Windows 上显示的路径用 \ 分隔，查的是找到了哪些，所以统一成 /
+            assertEquals(expected.isEmpty() ? "No files found." : String.join("\n", expected), result.text().replace('\\', '/'), "find " + name);
             return "find " + name;
         }
         if (op < 93) {
@@ -167,7 +168,7 @@ class FileToolsRandomTest {
                 }
             });
             assertEquals(expected.isEmpty() ? "No matches." : String.join("\n", expected),
-                    expected.isEmpty() ? result.text() : String.join("\n", new TreeSet<>(result.text().lines().toList())), "grep " + word);
+                    expected.isEmpty() ? result.text() : String.join("\n", new TreeSet<>(result.text().replace('\\', '/').lines().toList())), "grep " + word);
             return "grep " + word;
         }
         // 外部改动：用户在别处改了文件，之后改和覆盖都要先重读

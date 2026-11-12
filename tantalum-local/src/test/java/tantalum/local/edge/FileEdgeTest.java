@@ -71,6 +71,11 @@ class FileEdgeTest {
         return new Grep().run(context, args("pattern", pattern));
     }
 
+    /** Windows 上显示的路径用 \ 分隔（怎么显示归 Windows 连接程序 spec）；这里查的是找没找到，不是写法，所以统一成 /。 */
+    private static String unix(String text) {
+        return text.replace('\\', '/');
+    }
+
     private static boolean symlinks(Path dir) {
         try {
             Path probe = Files.createSymbolicLink(dir.resolve(".probe-link"), dir);
@@ -218,7 +223,7 @@ class FileEdgeTest {
         Files.writeString(root.resolve("web/node_modules/pkg/index.js"), "needle\n");
         Files.writeString(root.resolve("web/app.js"), "needle\n");
         Files.writeString(root.resolve(".hidden.txt"), "needle\n");
-        assertEquals(".hidden.txt:1:needle\nweb/app.js:1:needle", sorted(grep("needle").text()));
+        assertEquals(".hidden.txt:1:needle\nweb/app.js:1:needle", sorted(unix(grep("needle").text())));
     }
 
     @Test
@@ -233,10 +238,10 @@ class FileEdgeTest {
         assertTrue(git(root, "add", "src/tracked.txt"));
         Files.writeString(root.resolve("src/untracked.txt"), "needle\n");
         Files.writeString(root.resolve(".hidden.txt"), "needle\n");
-        assertEquals(".hidden.txt:1:needle\nsrc/tracked.txt:1:needle\nsrc/untracked.txt:1:needle", sorted(grep("needle").text()));
+        assertEquals(".hidden.txt:1:needle\nsrc/tracked.txt:1:needle\nsrc/untracked.txt:1:needle", sorted(unix(grep("needle").text())));
         // 从子目录搜也一样
         assertEquals("src/tracked.txt:1:needle\nsrc/untracked.txt:1:needle",
-                sorted(new Grep().run(context, args("pattern", "needle", "path", "src")).text()));
+                sorted(unix(new Grep().run(context, args("pattern", "needle", "path", "src")).text())));
         // 点名一个被忽略的文件：照搜（是用户要的）
         assertEquals("debug.log:1:needle", new Grep().run(context, args("pattern", "needle", "path", "debug.log")).text());
     }
@@ -248,7 +253,7 @@ class FileEdgeTest {
         Files.writeString(root.resolve(".gitignore"), "build/\n");
         Files.createDirectories(root.resolve("build"));
         Files.writeString(root.resolve("build/out.txt"), "x\n");
-        assertEquals("build/out.txt", new FindFiles().run(context, args("pattern", "*.txt")).text());
+        assertEquals("build/out.txt", unix(new FindFiles().run(context, args("pattern", "*.txt")).text()));
     }
 
     @Test

@@ -34,11 +34,11 @@ class ExampleHooksPipelineTest {
     private static final String PIN = "PIN";
     private static final String PINNED = "a message pinned with " + PIN + " would be summarized away";
     /**
-     * 窗口 7500、预留 500：阈值 7000，和 CompactApiTest 相同（local-workspace 的工具定义变长，从 4000 加到 6000；local-browser 起
-     * 11 个浏览器工具的定义也总是在，再加到 7500）。
+     * 窗口 4000、预留 500：阈值 3500。估算只算发给模型的工具：这里没连电脑，本机工具都是延后的、不算（agent-eval 之前连延后的
+     * 一起算，窗口曾一路加到 7500）。第一次调模型在阈值下，第二次越过。
      */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
-        "--tantalum.claude.context-window=7500", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
+        "--tantalum.claude.context-window=4000", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
         // 这里测的是钩子和压缩，不用抓网页（web-tools，同 CompactApiTest）
         "--tantalum.web.fetch.enabled=false"};

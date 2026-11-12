@@ -972,16 +972,49 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 
 `ClaudeScenarioTest` 和 `ClaudeCrashRecoveryTest` 用真实的 Claude 走完整的环：八步顺序工具链、thinking 签名跨多轮回传、每一个钩子位置、流式中取消后继续、三个用户同时调用、模型调用进行中杀进程再恢复。一轮约 0.1 美元。
 
-**真实场景的工具测试**（`tantalum-examples/scenarios/`，Python 脚本，不进 CI）：脚本化的假模型测的是我们的代码对不对，测不出真模型拿着这些工具干真活时在哪卡住。这套脚本起一台临时服务器和一个**真的连接程序**（命令行沙箱和无头浏览器都开着），连到一份每次重新生成的小项目上，用真模型跑 32 个任务：找函数、三千行文件里找值、读图片和 PDF 和 GBK 文件、修 bug 跑测试、五个文件改名、三种被拒的修改、几万行输出、超时、等输入、三个 Git 问题、抓网页（404、跳转、2 MB 的大页）、填表、等动态内容、技能、知识库、先问用户、跨会话的记忆、并行读文件、加功能补测试。每个任务的判定只查事实：最后的文件内容、测试过没过、回答里有没有藏在项目里的那个编号。
+**模型拿到的东西钉住**（`PromptPinTest`）：系统提示和全部工具定义（名字、说明、参数、是否延后）按三种情形各存一份审过的文件：`tantalum-shell/src/test/resources/wire/prompt-{full,read-only,no-computer}.txt`、`tools-*.json`。改了提示或任何一个工具的说明，这个测试就失败，在差异里看得见；有意改时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么（照 DSH 的 `system-prompt.expected.md`、`tool-schemas.expected.json`）。没连电脑、只读时不可用的工具照样在列表里、标着延后，所以三份工具文件差不多大——这是为了提示缓存不因为电脑连没连而失效。
+
+**工具的边界和随机序列**（`tantalum-local` 的 `edge/` 包、`BashEdgeIT`）：不经过服务器和模型，直接调连接程序里真的工具。`FileEdgeTest` 一条测一个边界（GBK、UTF-16、只有回车的换行、指向外面的链接、重叠的匹配、Git 忽略的文件……）；`BashEdgeIT` 在真的 MXC 沙箱里测命令行的边界（二进制和颜色码、超长单行、进度条、后台进程、等输入、超时），只在 macOS 上跑；`FileToolsRandomTest` 照 pi 的做法，对一个临时目录随机做写、改、读、列、找、搜和“外部改动”，每一步和一份“应该是什么样”的副本比，默认 40 个种子各 30 步，失败时打印种子和步数：
 
 ```sh
-mvn -o package -DskipTests                                         # 先打包
-python3 tantalum-examples/scenarios/run.py --model qwen            # 本机 OpenAI 兼容模型，默认 http://127.0.0.1:8090/v1（--local-url、--local-model 可改）
-python3 tantalum-examples/scenarios/run.py --model claude          # 需要 ANTHROPIC_API_KEY，一轮约 0.8 美元
-python3 tantalum-examples/scenarios/run.py --model qwen --only fix-bug,rename
+mvn -o -pl tantalum-local -am test -Dtest=FileToolsRandomTest -Dedge.count=500   # 多跑一些种子
+mvn -o -pl tantalum-local -am test -Dtest=FileToolsRandomTest -Dedge.seeds=6     # 只重跑一个
 ```
 
-要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。结果在 `tantalum-examples/scenarios/results/`：一张表（过没过、模型调用几次、工具调用几次、出错几次、同一个调用重复了几次）和每个场景的每一次工具调用。一轮本机模型约 10 分钟。真模型的结果有随机性，一个场景没过先再跑一次；改了工具的说明、报错或结果的写法之后，跑一轮和上一次的表比。2026-11-12 的两轮：Claude Sonnet 5.5 过 31 个，本机 qwen 过 26 到 28 个（没过的是模型拿到答案后还反复验证，超过了步数上限）。
+**录一次、回放到底**（`ReplayScenarioTest`，每次推送都跑，不花钱）：照 DSH 的 `snapshots/`。`tantalum-examples/src/test/resources/replay/<场景>/` 里是真模型跑一次录下的回复（会话记录里的 `ModelReplied` 原样）、那次每个工具的结果、运行前的准备和运行后应有的文件；种子项目是 `project.bundle`（带 Git 历史）加 `project-dirty/`（没提交的改动）。回放启动真的服务器和测试电脑，只把模型换成按顺序给录下的回复：`bash` 回录下的结果（测试电脑没有沙箱），其余工具真的执行。比对四样：模型调用次数一样、每次是不是压缩摘要一样（压缩时机变了会报出来）、真执行的工具结果一样、最后的文件一样，最后再查记录重放一致。回放不看系统提示和工具说明（那由上一条钉住），所以改说明不会让它失败；改了工具的结果、内核的循环、压缩的时机会。只在 macOS 和 Linux 上跑（录制在 macOS 上做，Windows 上结果里的路径用 `\`）。
+
+录制（花钱，只在工具的行为或循环有意改了之后）：
+
+```sh
+python3 tantalum-examples/scenarios/run.py --model claude --record                 # 能回放的场景全录
+python3 tantalum-examples/scenarios/run.py --model claude --record --only fix-bug   # 只录一个
+```
+
+只录判分通过的；写之前查有没有本机路径和像密钥的东西，有就不写；写完马上回放一次，回放不过的删掉（例如模型用 `bash` 改了文件，回放时 `bash` 不真的执行）。联网、浏览器、技能和要第二个会话的场景不录。
+
+**真实场景**（`tantalum-examples/scenarios/`，Python 脚本，不进 CI）：脚本化的假模型测的是我们的代码对不对，测不出真模型拿着这些工具干真活时在哪卡住、长任务能不能做完。这套脚本起一台临时服务器和一个**真的连接程序**（命令行沙箱和无头浏览器都开着），连到一份每次重新生成的小项目上，用真模型跑 37 个任务：找函数、三千行文件里找值、读图片和 PDF 和 GBK 文件、修 bug 跑测试、五个文件改名、三种被拒的修改、几万行输出、超时、等输入、三个 Git 问题、抓网页（404、跳转、2 MB 的大页）、填表、等动态内容、技能、知识库、先问用户、跨会话的记忆、并行读文件，以及五个长任务：
+
+| 长任务 | 判分 |
+|---|---|
+| `feature-tests`：跨三个文件加“分批发货”并写测试 | 模型看不到的隐藏测试在运行后放进项目，和原有测试一起全过；原有测试文件一个字节不许变 |
+| `debug-log`：日志里有一段报错，找原因、修、加回归测试 | 命令行能跑通 + 隐藏测试 + 原有测试 |
+| `split-module`：把一个函数拆到新模块，所有引用改对 | 新旧文件的内容 + 没有旧的导入 + 隐藏测试 |
+| `todo-steps`：照一份 8 项的清单逐项改 | 8 项逐项在文件里查；用过 `todo_write`，最后一张清单全部完成 |
+| `todo-compact`：同上，窗口很小，运行中途一定压缩 | 同上，且至少压缩了一次 |
+
+判分只看世界：最后的文件、在外面重跑的测试、系统状态（DSH：“只查 agent 自己的回答，作弊的 agent 也能过”）。问答类场景只能看回答里有没有藏在项目、网页、知识库里的那个编号，表里标“回答”。判分改了先跑 `python3 tantalum-examples/scenarios/check_graders.py`：不调模型，查每个长任务在项目原样时没过、照参考答案改了就过。
+
+```sh
+mvn -o package -DskipTests                                                   # 先打包
+python3 tantalum-examples/scenarios/run.py --model qwen                      # 本机 OpenAI 兼容模型，默认 http://127.0.0.1:8090/v1（--local-url、--local-model 可改）
+python3 tantalum-examples/scenarios/run.py --model claude                    # 需要 ANTHROPIC_API_KEY
+python3 tantalum-examples/scenarios/run.py --model qwen --repeat 3 --compare tantalum-examples/scenarios/results/上一轮.json
+python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-compact
+```
+
+`--repeat N` 每个场景跑 N 次、报通过率（照 pi 的 `--runs-per-variant`）：时过时不过的标“不稳定”，全过的标“已饱和”（这个场景对这个模型已经没有区分力）。每轮结果是一个 `.json`（计划、提交号、系统提示的哈希、每次的步数、token、压缩次数、费用）和一张 `.md` 表；`--compare` 和上一轮逐个场景比通过率、步数、token，模型或系统提示不同时先写一句提示。计划里有没跑成的（服务器起不来、运行异常结束、模型报错），表照出，但不给总通过率，退出码 2——免得少跑了几个也显示成“全过”。需要单独配置的场景（`todo-compact` 的小窗口）自动另起一台服务器。
+
+要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
 
 **Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`，和连接程序用 runner 上装的 Edge 或 Chrome 跑的 `LocalBrowserIT`）、检查 `LocalBrowserIT` 和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 

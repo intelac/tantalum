@@ -128,4 +128,15 @@ class TokenEstimateTest {
     private static Message user(AttachmentRef ref) {
         return new Message(Role.USER, List.of(new AttachmentBlock(ref)), false);
     }
+
+    /** 延后的工具不发给模型（或用到才进上下文），不算进估算；以前算进去，小窗口上摘要调用永远“放不下”。 */
+    @Test
+    void deferredToolsAreNotCounted() {
+        TokenEstimate estimate = TokenEstimate.LEGACY;
+        tantalum.value.json.Json schema = new tantalum.value.json.Json.Obj(java.util.Map.of("type", new tantalum.value.json.Json.Str("object")));
+        ToolSpec offered = new ToolSpec("read_file", "Read a file.", schema, false);
+        ToolSpec deferred = new ToolSpec("browser_click", "x".repeat(30_000), schema, true);
+        assertEquals(estimate.ofTools(List.of(offered)), estimate.ofTools(List.of(offered, deferred)));
+        assertEquals(0, estimate.ofTools(List.of(deferred)));
+    }
 }

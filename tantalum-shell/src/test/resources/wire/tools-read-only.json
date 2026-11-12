@@ -1,0 +1,674 @@
+[
+  {
+    "name": "ask_user",
+    "deferred": false,
+    "description": "Ask the user a question and wait for the answer. Use it only when you cannot continue without their decision; it waits as long as needed, hours or days. Offer choices when there are natural options; the user can also type a free-text answer unless you set allow_text to false. The result is {\"choice\": ..., \"text\": ...}, or {\"timeout\": true} if timeout_seconds passed without an answer.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The question, in the language of the conversation."
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 8,
+          "description": "1 to 8 short options, distinct strings. Put the recommended one first."
+        },
+        "allow_text": {
+          "type": "boolean",
+          "description": "Whether the user may type a free-text answer. Default true."
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "Give up after this many seconds. Omit to wait as long as needed."
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "bash",
+    "deferred": true,
+    "description": "Run a bash command on the user's computer, inside a sandbox, in the main allowed directory or workdir. The command can read the allowed directories and system tools, but not other files in the user's home. It can write only inside the allowed directories, and only if the user allowed file changes; $TMPDIR is always writable and is deleted afterwards. Network access may be off, and servers on the user's computer (localhost) are never reachable. Returns stdout and stderr together; output is truncated to the last 2000 lines or 50 KB. A non-zero exit code is an error. Prefer read_file, grep and edit_file for reading and changing files.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The bash command to run."
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Seconds before the command and everything it started are stopped. Default 120, at most 600."
+        },
+        "workdir": {
+          "type": "string",
+          "description": "Working directory, relative to the main directory or absolute. Default: the main directory."
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "browser_click",
+    "deferred": true,
+    "description": "Click an element by its ref, like e5. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "The element ref, like e5."
+        }
+      },
+      "required": [
+        "ref"
+      ]
+    }
+  },
+  {
+    "name": "browser_evaluate",
+    "deferred": true,
+    "description": "Run a JavaScript expression in the current tab to read something from the page, like `document.querySelector('h1').innerText`. The result comes back as JSON, at most 50,000 characters.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "A JavaScript expression or a function like () => document.title."
+        }
+      },
+      "required": [
+        "expression"
+      ]
+    }
+  },
+  {
+    "name": "browser_navigate",
+    "deferred": true,
+    "description": "Open a URL in a browser on the user's computer. The browser has its own profile, separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be visible to the user, who may also act in it, for example to log in when you ask. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a rate-limit page instead of results. Use web_fetch instead when you only need the text of a known public page: it is faster and uses fewer tokens.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The http or https URL to open.",
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  {
+    "name": "browser_navigate_back",
+    "deferred": true,
+    "description": "Go back to the previous page in the current tab. Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "browser_press_key",
+    "deferred": true,
+    "description": "Press a key in the current tab, like Enter, Escape, ArrowDown or Control+A. Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "The key, in Playwright key names."
+        }
+      },
+      "required": [
+        "key"
+      ]
+    }
+  },
+  {
+    "name": "browser_select_option",
+    "deferred": true,
+    "description": "Choose one or more options of a drop-down list by its ref. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "The element ref, like e5."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "The values or labels of the options to choose."
+        }
+      },
+      "required": [
+        "ref",
+        "values"
+      ]
+    }
+  },
+  {
+    "name": "browser_snapshot",
+    "deferred": true,
+    "description": "Read the current tab: its title, URL and accessibility snapshot with element refs. Use it to see the page again, for example after waiting.",
+    "schema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "browser_tabs",
+    "deferred": true,
+    "description": "List the tabs of your browser, or select one to make it the current tab of this conversation. Pages opened by links in a new window show up here.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "list",
+            "select"
+          ],
+          "description": "list the tabs, or select one by index."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The tab to select, 1 is the first tab."
+        }
+      },
+      "required": [
+        "action"
+      ]
+    }
+  },
+  {
+    "name": "browser_take_screenshot",
+    "deferred": true,
+    "description": "Take a PNG screenshot of the current tab, the visible part or the full page. The image is saved in the user's attachments and shown to you.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "fullPage": {
+          "type": "boolean",
+          "description": "Capture the whole scrollable page instead of the visible part."
+        }
+      }
+    }
+  },
+  {
+    "name": "browser_type",
+    "deferred": true,
+    "description": "Replace the text of an input or text area by its ref, optionally pressing Enter afterwards to submit. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "The element ref, like e5."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text to type."
+        },
+        "submit": {
+          "type": "boolean",
+          "description": "Press Enter after typing."
+        }
+      },
+      "required": [
+        "ref",
+        "text"
+      ]
+    }
+  },
+  {
+    "name": "browser_wait_for",
+    "deferred": true,
+    "description": "Wait until a text appears, a text disappears, or a number of seconds has passed (at most 30). Returns the page snapshot.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Wait until this text is visible."
+        },
+        "textGone": {
+          "type": "string",
+          "description": "Wait until this text is no longer visible."
+        },
+        "seconds": {
+          "type": "number",
+          "description": "Wait this many seconds.",
+          "minimum": 0,
+          "maximum": 30
+        }
+      }
+    }
+  },
+  {
+    "name": "edit_file",
+    "deferred": true,
+    "description": "Replace an exact piece of text in a file in the allowed directories on the user's computer. old_string must match the file exactly, including whitespace and line breaks, and must occur exactly once unless replace_all is true; include enough surrounding lines to make it unique. You must have read the file with read_file in this session.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path, relative to the main directory or absolute."
+        },
+        "old_string": {
+          "type": "string",
+          "description": "The exact text to replace, copied from the file without any line numbers."
+        },
+        "new_string": {
+          "type": "string",
+          "description": "The text to put in its place."
+        },
+        "replace_all": {
+          "type": "boolean",
+          "description": "Replace every occurrence instead of exactly one. Default false."
+        }
+      },
+      "required": [
+        "path",
+        "old_string",
+        "new_string"
+      ]
+    }
+  },
+  {
+    "name": "find_files",
+    "deferred": false,
+    "description": "Find files in the allowed directories on the user's computer by glob pattern. A pattern without / matches file names at any depth (*.java); a pattern with / matches paths relative to path (src/**/*Test.java). Skips .git, .svn, .hg and node_modules. Returns paths relative to the main directory (absolute in other allowed directories), sorted.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Glob pattern, e.g. *.md or src/**/*.java."
+        },
+        "path": {
+          "type": "string",
+          "description": "Directory to search, relative to the main directory or absolute. Default: the main directory."
+        }
+      },
+      "required": [
+        "pattern"
+      ]
+    }
+  },
+  {
+    "name": "git_blame",
+    "deferred": true,
+    "description": "Show which commit last changed each line of a file in the Git repository on the user's computer: short hash, author, date, line number and text. Use start_line and end_line for large files. revision blames the file as it was in that commit.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File, relative to the main directory or absolute."
+        },
+        "start_line": {
+          "type": "integer",
+          "description": "First line, 1-based. Default 1."
+        },
+        "end_line": {
+          "type": "integer",
+          "description": "Last line. Default: the end of the file."
+        },
+        "revision": {
+          "type": "string",
+          "description": "Commit to blame at. Default: the working tree."
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  {
+    "name": "git_branches",
+    "deferred": true,
+    "description": "List branches of the Git repository on the user's computer. The current branch is marked with *; each line shows the latest commit's short hash, date and subject. all=true also lists remote-tracking branches.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "type": "boolean",
+          "description": "Also list remote-tracking branches. Default false."
+        },
+        "path": {
+          "type": "string",
+          "description": "A directory in the repository, relative to the main directory or absolute. Default: the main directory."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "git_diff",
+    "deferred": true,
+    "description": "Show changes in the Git repository on the user's computer as a unified diff. Default: changes not yet staged. staged=true: changes staged for the next commit. revision: compare the working tree with that commit (HEAD shows all uncommitted changes), or compare two commits with A..B. New untracked files are not included. Output is cut at 2000 lines or 50 KB; narrow it with path.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "description": "Commit to compare with, or two commits A..B. Default: the index."
+        },
+        "staged": {
+          "type": "boolean",
+          "description": "Show staged changes (against revision, default HEAD). Default false."
+        },
+        "path": {
+          "type": "string",
+          "description": "Limit to this file or directory, relative to the main directory or absolute."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "git_log",
+    "deferred": true,
+    "description": "List commits of the Git repository on the user's computer, newest first, one per line: short hash, date, author, subject. path limits the history to a file or directory (and picks the repository containing it). revision is the branch, tag or commit to start from, or a range like main..feature. Default 20 commits, at most 200. Use git_show to see one commit.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File or directory, relative to the main directory or absolute. Default: the whole repository."
+        },
+        "revision": {
+          "type": "string",
+          "description": "Branch, tag, commit or range to list. Default: the current branch (HEAD)."
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of commits, at most 200. Default 20."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "git_show",
+    "deferred": true,
+    "description": "Show one commit of the Git repository on the user's computer: message, changed files and the diff. path limits the diff to a file or directory. To see a file as it was in a commit, use revision COMMIT:PATH with PATH relative to the repository root, e.g. HEAD~2:src/App.java. Output is cut at 2000 lines or 50 KB.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "description": "Commit, branch or tag to show, or COMMIT:PATH for a file at that commit."
+        },
+        "path": {
+          "type": "string",
+          "description": "Limit the diff to this file or directory, relative to the main directory or absolute."
+        }
+      },
+      "required": [
+        "revision"
+      ]
+    }
+  },
+  {
+    "name": "grep",
+    "deferred": false,
+    "description": "Search files in the allowed directories on the user's computer with a Java regular expression. path is an optional directory or file, relative to the main directory or absolute. Default: the main directory. In a Git repository files ignored by Git are skipped; binary files are skipped.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern"
+      ]
+    }
+  },
+  {
+    "name": "list_dir",
+    "deferred": false,
+    "description": "List the entries of a directory in the allowed directories on the user's computer, one level deep. Directories end with /. To find files by name at any depth, use find_files.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Directory, relative to the main directory or absolute. Default: the main directory."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "memory_delete",
+    "deferred": false,
+    "description": "Delete one of your memory entries by name, for example when the user asks you to forget something.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "memory_read",
+    "deferred": false,
+    "description": "Read the full body of one of your memory entries by name (see the memory index).",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "memory_write",
+    "deferred": false,
+    "description": "Save a long-term memory for this user (new, or overwrite the entry with the same name). name: [a-z0-9-]; type: user, feedback, project, reference; description: one line shown in the index; content: Markdown body.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "description",
+        "content"
+      ]
+    }
+  },
+  {
+    "name": "read_attachment",
+    "deferred": false,
+    "description": "Read a file the user attached, by its read-only path (/attachments/sha256-...). Images are shown to you. Text is cut at 2000 lines or 50 KB, whichever comes first; read in parts with offset and limit.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The attachment's read-only path, /attachments/sha256-..."
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Line number to start from, 1-based. Default 1."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of lines to return, at most 2000."
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  {
+    "name": "read_file",
+    "deferred": false,
+    "description": "Read a UTF-8 text file in the allowed directories on the user's computer. path is relative to the main directory, or absolute. Images are shown to you. Output is cut at 2000 lines or 50 KB, whichever comes first; for large files, read in parts with offset and limit, or find the place with grep first.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path, relative to the main directory or absolute."
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Line number to start from, 1-based. Default 1."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of lines to return, at most 2000."
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  {
+    "name": "skill",
+    "deferred": true,
+    "description": "Load a skill's full instructions by its exact name from the list of available skills. Load a skill when the task matches its description, before acting on the task.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Exact name of the skill, as written in the list of available skills."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  },
+  {
+    "name": "todo_write",
+    "deferred": false,
+    "description": "Record and update a structured task list for the current work. Send the ENTIRE list every call: it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Keep exactly one todo in_progress while work remains. Mark a todo completed the moment it is done (do not batch completions). Skip the list for trivial single-step tasks. Statuses: pending (not started), in_progress (being worked on now), completed (finished).",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "todos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "description": "What the task is: a short imperative line."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "in_progress",
+                  "completed"
+                ],
+                "description": "pending (not started) | in_progress (now) | completed (done)."
+              }
+            },
+            "required": [
+              "content",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The COMPLETE task list, replacing any previous list."
+        }
+      },
+      "required": [
+        "todos"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "web_fetch",
+    "deferred": false,
+    "description": "Download one web page on the server and return its text. HTML comes back as Markdown with scripts, styles and hidden elements removed; plain text, JSON and XML come back as they are. Fast and cheap: use it to read documentation and articles. Follows up to 5 redirects and returns at most 50,000 characters. 404 and other error pages are returned with their status code. It does not run JavaScript: if a page comes back empty, needs a login or needs clicking, use the browser tools (browser_navigate). Images can be viewed with browser_navigate and browser_take_screenshot; PDF files cannot be read yet.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The http or https URL to download.",
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  {
+    "name": "write_file",
+    "deferred": true,
+    "description": "Create a UTF-8 text file in the allowed directories on the user's computer, or replace one completely. Parent directories are created. To overwrite an existing file you must have read it with read_file in this session. To change part of a file, use edit_file instead.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path, relative to the main directory or absolute."
+        },
+        "content": {
+          "type": "string",
+          "description": "The complete new content of the file, written as is."
+        }
+      },
+      "required": [
+        "path",
+        "content"
+      ]
+    }
+  }
+]

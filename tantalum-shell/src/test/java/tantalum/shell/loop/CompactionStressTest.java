@@ -51,13 +51,13 @@ class CompactionStressTest {
     private static final int TURNS = 250;
     private static final int OTHER_TURNS = 20;
     /**
-     * 窗口 8500、预留 500：阈值 8000；保留 600。工具说明也计入估算：core-tools 加了 4 个内置工具后窗口从 4000 加到 5000，
-     * local-workspace 换成本机工作区的 11 个工具和 read_attachment 后又加到 7000，local-browser 把 11 个浏览器工具也变成本机工具（定义总是在）后加到 8500，让另一个用户的短会话仍不触发压缩。
+     * 窗口 5500、预留 500：阈值 5000；保留 600。工具说明也计入估算，但只算发给模型的：这里没连电脑，本机工具都是延后的、不算
+     * （agent-eval 之前连延后的一起算，窗口曾一路加到 8500）。另一个用户的短会话仍不触发压缩。
      * 估算系数按旧的 3 算（同 {@code CompactApiTest}），否则 system 和工具定义就占满了窗口，摘要调用放不下。
      */
-    private static final int THRESHOLD = 8000;
+    private static final int THRESHOLD = 5000;
     private static final String[] SETTINGS = {
-        "--tantalum.claude.context-window=8500",
+        "--tantalum.claude.context-window=5500",
         "--tantalum.claude.bytes-per-token=3",
         "--tantalum.claude.max-tokens=500",
         "--tantalum.compaction.reserve-tokens=500",

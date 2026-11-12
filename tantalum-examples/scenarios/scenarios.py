@@ -20,9 +20,10 @@ def says(ctx, *needles):
 def used(ctx, *names):
     return [] if any(ctx.tools.get(n, 0) > 0 for n in names) else [f"没有用到 {' / '.join(names)}"]
 
-def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, timeout=240, followup=None):
+def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, timeout=240, followup=None, server=None, world=True):
+    """server：要单独起一台服务器的配置名（见 run.py 的 SERVERS）；world=False 的场景只能查回答（在表里标出来）。"""
     return dict(id=id, group=group, risk=risk, prompt=prompt, check=check, max_calls=max_calls, answers=answers or {}, setup=setup,
-                timeout=timeout, followup=followup)
+                timeout=timeout, followup=followup, server=server, world=world)
 
 # ---- 找和读 ----
 def c_find_def(ctx):
@@ -194,6 +195,250 @@ def c_feature(ctx):
     if out.returncode != 0: bad.append("bulk_discount 的结果不对：" + out.stderr.strip().splitlines()[-1][:120] if out.stderr.strip() else "bulk_discount 的结果不对")
     return bad
 
+# ---- 长任务（agent-eval 需求 4、5）：判分全看世界——隐藏测试在运行结束后才放进项目，模型看不到 ----
+import hashlib, textwrap
+
+FIXED_PRICING = '''"""Prices and discounts."""
+
+
+def unit_total(quantity, unit_price):
+    """Price of a line before any discount."""
+    return quantity * unit_price
+
+
+def apply_discount(price, percent):
+    """Return the price after taking percent off."""
+    if percent < 0 or percent > 100:
+        raise ValueError("percent must be between 0 and 100")
+    return price * (100 - percent) / 100
+'''
+_ORIGINAL_TESTS = {}
+
+def _fix_pricing(root):
+    """长任务从“现有测试全过”开始，不和 fix-bug 场景混在一起。"""
+    with open(os.path.join(root, "inventory/pricing.py"), "w", encoding="utf-8") as f: f.write(FIXED_PRICING)
+
+def _remember_tests(root):
+    _ORIGINAL_TESTS[root] = {name: hashlib.sha256(open(os.path.join(root, "tests", name), "rb").read()).hexdigest()
+                             for name in os.listdir(os.path.join(root, "tests")) if name.endswith(".py")}
+
+def _tests_untouched(ctx):
+    bad = []
+    for name, digest in _ORIGINAL_TESTS.get(ctx.root, {}).items():
+        path = os.path.join(ctx.root, "tests", name)
+        if not os.path.exists(path): bad.append(f"删了原有的测试 {name}")
+        elif hashlib.sha256(open(path, "rb").read()).hexdigest() != digest: bad.append(f"改了原有的测试 {name}")
+    return bad
+
+def _new_tests(ctx):
+    return [n for n in os.listdir(os.path.join(ctx.root, "tests")) if n.startswith("test_") and n.endswith(".py")
+            and n not in _ORIGINAL_TESTS.get(ctx.root, {})]
+
+def _hidden(ctx, name, body):
+    """把隐藏测试放进 tests/ 跑全部测试，跑完拿走。返回 (过没过, 最后一行)。"""
+    path = os.path.join(ctx.root, "tests", name)
+    with open(path, "w", encoding="utf-8") as f: f.write(textwrap.dedent(body).lstrip())
+    try: return tests(ctx)
+    finally: os.remove(path)
+
+def setup_long(root):
+    _fix_pricing(root); _remember_tests(root)
+
+def c_feature_tests(ctx):
+    bad = _tests_untouched(ctx)
+    if not _new_tests(ctx): bad.append("没有新写测试文件")
+    ok, last = _hidden(ctx, "test_hidden_split.py", """
+        import unittest
+        from inventory.shipping import compute_shipping_fee, split_fee
+        from inventory.orders import place_order
+        from inventory.reports import shipping_table
+        from inventory.stock import restock
+
+        class HiddenSplit(unittest.TestCase):
+            def test_split_fee_sums_each_batch(self):
+                self.assertAlmostEqual(split_fee(6, "national", 3), 3 * compute_shipping_fee(2, "national"))
+                self.assertAlmostEqual(split_fee(6, "national", 1), compute_shipping_fee(6, "national"))
+            def test_bad_batches(self):
+                with self.assertRaises(ValueError): split_fee(6, "local", 0)
+            def test_order_with_batches(self):
+                restock("SKU-0002", 50)
+                one = place_order("SKU-0002", 4, 10, "local")
+                restock("SKU-0002", 50)
+                two = place_order("SKU-0002", 4, 10, "local", batches=2)
+                self.assertGreater(two["shipping"], one["shipping"])
+                self.assertAlmostEqual(two["total"], two["goods"] + two["shipping"])
+            def test_report_with_batches(self):
+                self.assertEqual(shipping_table([4.0], "local"), shipping_table([4.0], "local", batches=1))
+                self.assertIn("14.00", shipping_table([4.0], "local", batches=2))
+    """)
+    if not ok: bad.append(f"隐藏测试或原有测试没过：{last}")
+    return bad
+
+BUGGY_CLI = '''"""Command line entry.
+
+    python3 -m inventory.cli fee <weight> <zone>
+    python3 -m inventory.cli order <sku> <quantity> <zone>
+"""
+import sys
+
+from inventory.orders import place_order
+from inventory.shipping import compute_shipping_fee
+from inventory.stock import restock
+
+
+def main(argv):
+    if len(argv) == 3 and argv[0] == "fee":
+        print(compute_shipping_fee(float(argv[1]), argv[2]))
+        return 0
+    if len(argv) == 4 and argv[0] == "order":
+        sku, quantity, zone = argv[1], argv[2], argv[3]
+        restock(sku, 100)
+        print(place_order(sku, quantity, 9.5, zone)["total"])
+        return 0
+    print("usage: fee <weight_kg> <zone> | order <sku> <quantity> <zone>")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+'''
+APP_LOG = """2026-11-12 09:14:02 INFO  starting inventory cli
+2026-11-12 09:14:02 INFO  args: order SKU-0003 3 national
+2026-11-12 09:14:02 ERROR unhandled exception
+Traceback (most recent call last):
+  File "inventory/cli.py", line 20, in main
+    print(place_order(sku, quantity, 9.5, zone)["total"])
+  File "inventory/orders.py", line 10, in place_order
+    reserve_stock(sku, quantity)
+  File "inventory/stock.py", line 17, in reserve_stock
+    if quantity > available:
+TypeError: '>' not supported between instances of 'str' and 'int'
+2026-11-12 09:14:03 INFO  exit 1
+"""
+
+def setup_debug(root):
+    _fix_pricing(root)
+    with open(os.path.join(root, "inventory/cli.py"), "w", encoding="utf-8") as f: f.write(BUGGY_CLI)
+    os.makedirs(os.path.join(root, "logs"), exist_ok=True)
+    with open(os.path.join(root, "logs/app.log"), "w", encoding="utf-8") as f: f.write(APP_LOG)
+    _remember_tests(root)
+
+def c_debug_log(ctx):
+    bad = _tests_untouched(ctx)
+    out = subprocess.run(["python3", "-m", "inventory.cli", "order", "SKU-0003", "3", "national"], cwd=ctx.root, capture_output=True, text=True)
+    if out.returncode != 0: bad.append("命令还是报错：" + (out.stderr.strip().splitlines() or [""])[-1][:120])
+    ok, last = _hidden(ctx, "test_hidden_cli.py", """
+        import io, unittest
+        from contextlib import redirect_stdout
+        from inventory.cli import main
+
+        class HiddenCli(unittest.TestCase):
+            def test_order_from_the_command_line(self):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    self.assertEqual(main(["order", "SKU-0004", "2", "local"]), 0)
+                self.assertGreater(float(out.getvalue().strip()), 0)
+    """)
+    if not ok: bad.append(f"隐藏测试或原有测试没过：{last}")
+    if not _new_tests(ctx): bad.append("没有加回归测试")
+    return bad
+
+def c_split_module(ctx):
+    bad = []
+    stock, reservations = read(ctx, "inventory/stock.py"), read(ctx, "inventory/reservations.py")
+    if "def reserve_stock" not in reservations: bad.append("reservations.py 里没有 reserve_stock")
+    if "reserve_stock" in stock: bad.append("stock.py 里还有 reserve_stock（不要留转发）")
+    if "def restock" not in stock: bad.append("stock.py 里的 restock 不见了")
+    for folder in ("inventory", "tests"):
+        for name in os.listdir(os.path.join(ctx.root, folder)):
+            if name.endswith(".py") and re.search(r"from inventory\.stock import[^\n]*reserve_stock", read(ctx, os.path.join(folder, name))):
+                bad.append(f"{folder}/{name} 还从 stock 导入 reserve_stock")
+    ok, last = _hidden(ctx, "test_hidden_split_module.py", """
+        import unittest
+        from inventory.reservations import reserve_stock
+        from inventory.stock import restock
+        from inventory.orders import place_order
+
+        class HiddenSplitModule(unittest.TestCase):
+            def test_levels_are_shared(self):
+                restock("SKU-0005", 4)
+                self.assertEqual(reserve_stock("SKU-0005", 3), 1)
+                with self.assertRaises(ValueError): reserve_stock("SKU-0005", 2)
+            def test_orders_still_work(self):
+                restock("SKU-0006", 10)
+                self.assertIn("total", place_order("SKU-0006", 1, 5, "local"))
+    """)
+    if not ok: bad.append(f"隐藏测试或原有测试没过：{last}")
+    return bad
+
+CHECKLIST = """# Release checklist 0.3.0
+
+Do every item, in order.
+
+1. In `inventory/shipping.py`, add the zone `"remote"` with rate `4.0` to `ZONE_RATES`.
+2. In `inventory/shipping.py`, add a constant `HEAVY_LIMIT_KG = 30`.
+3. `compute_shipping_fee` must raise `ValueError("too heavy")` when `weight_kg` is more than `HEAVY_LIMIT_KG`.
+4. In `README.md`, add the line `Zones: local, national, overseas, remote.`
+5. In `docs/api.md`, add a section `## Zones` that lists the four zones.
+6. In `inventory/cli.py`, change the usage message to end with `(zones: local, national, overseas, remote)`.
+7. In `tests/test_shipping.py`, add `test_remote` (2 kg remote costs 13) and `test_too_heavy` (31 kg raises ValueError).
+8. Create `CHANGELOG.md` with a heading `## 0.3.0` and one line about the remote zone.
+
+Finish by running all tests; they must pass.
+"""
+
+def setup_checklist(root):
+    _fix_pricing(root)
+    with open(os.path.join(root, "docs/checklist.md"), "w", encoding="utf-8") as f: f.write(CHECKLIST)
+
+PROBE_CHECKLIST = """from inventory import shipping as s
+assert s.ZONE_RATES.get('remote') == 4.0, 'item 1'
+assert getattr(s, 'HEAVY_LIMIT_KG', None) == 30, 'item 2'
+assert s.compute_shipping_fee(2, 'remote') == 13, 'remote fee'
+assert s.compute_shipping_fee(30, 'local') == 35, 'item 3: 30 kg is still fine'
+try:
+    s.compute_shipping_fee(31, 'local')
+    raise SystemExit('item 3: 31 kg did not raise')
+except ValueError:
+    pass
+"""
+
+def _checklist(ctx):
+    bad = []
+    probe = subprocess.run(["python3", "-c", PROBE_CHECKLIST], cwd=ctx.root, capture_output=True, text=True)
+    if probe.returncode != 0: bad.append("shipping.py：" + ((probe.stderr.strip().splitlines() or [probe.stdout.strip()])[-1])[:120])
+    if "Zones: local, national, overseas, remote." not in read(ctx, "README.md"): bad.append("第 4 项 README")
+    api = read(ctx, "docs/api.md")
+    if "## Zones" not in api or not all(z in api.split("## Zones", 1)[-1] for z in ("local", "national", "overseas", "remote")): bad.append("第 5 项 docs/api.md")
+    if "(zones: local, national, overseas, remote)" not in read(ctx, "inventory/cli.py"): bad.append("第 6 项 cli.py")
+    tests_text = read(ctx, "tests/test_shipping.py")
+    if "def test_remote" not in tests_text or "def test_too_heavy" not in tests_text: bad.append("第 7 项 测试")
+    changelog = read(ctx, "CHANGELOG.md")
+    if "## 0.3.0" not in changelog or "remote" not in changelog.lower(): bad.append("第 8 项 CHANGELOG.md")
+    ok, last = tests(ctx)
+    if not ok: bad.append(f"测试没过：{last}")
+    return bad
+
+def _todos(ctx):
+    """模型用过 todo_write，最后一张清单全部完成。"""
+    writes = [c for c in ctx.calls if c["name"] == "todo_write" and not c["error"]]
+    if not writes: return ["没有用 todo_write 跟踪进度"]
+    args = writes[-1]["args"] if isinstance(writes[-1]["args"], dict) else {}
+    last = args.get("todos") or []
+    if len(last) < 4: return [f"最后一张清单只有 {len(last)} 项"]
+    open_items = [t.get("content") for t in last if t.get("status") != "completed"]
+    return [f"最后一张清单还有没完成的：{open_items[:3]}"] if open_items else []
+
+def c_todo_steps(ctx):
+    return _checklist(ctx) + _todos(ctx)
+
+def c_todo_compact(ctx):
+    bad = _checklist(ctx) + _todos(ctx)
+    if ctx.compactions < 1: bad.append("运行中没有压缩（压缩点没起作用）")
+    return bad
+
+LONG_PROMPT_CHECKLIST = "这是一个多步任务：按 docs/checklist.md 逐项完成里面的 8 项改动，用待办清单跟踪进度，最后跑全部测试确认通过。"
+
 SCENARIOS = [
     S("find-def", "找和读", "grep / find_files 的参数会不会用", "compute_shipping_fee 这个函数定义在哪个文件？项目里还有哪些文件调用了它？列出文件名。", c_find_def),
     S("big-file", "找和读", "三千行文件的窗口读", "inventory/data/catalog.py 里 SKU-2187 的 warehouse_code 是什么？", c_big_file),
@@ -228,4 +473,15 @@ SCENARIOS = [
       followup="（新会话）我写 Python 时缩进该用什么？按我之前告诉你的偏好回答，用英文单词 tabs 或 spaces 回答。"),
     S("parallel", "并行", "一次读多个文件", "同时读 inventory 下的 pricing.py、shipping.py、stock.py、orders.py、reports.py 这五个文件，各用一句话说它里面的主要函数（写出函数名）。", c_parallel, max_calls=8),
     S("feature", "长任务", "多步之间不丢上下文", "先修好现有失败的测试（改代码不改测试）。然后在 inventory/pricing.py 里加一个函数 bulk_discount(price, quantity)：数量不到 10 件不打折，10 到 49 件打 95 折，50 件及以上打 9 折。给它写测试放在 tests 目录里，最后跑全部测试确认通过。", c_feature, max_calls=30, timeout=600),
+    S("feature-tests", "长任务", "跨三个文件加功能并写测试；隐藏测试判分", "给订单加“分批发货”：inventory/shipping.py 加函数 split_fee(weight_kg, zone, batches)，把重量平均分成 batches 批、每批单独算运费再相加（batches 小于 1 时抛 ValueError）；inventory/orders.py 的 place_order 加可选参数 batches（默认 1），运费用 split_fee 算；inventory/reports.py 的 shipping_table 也加可选参数 batches（默认 1）。给这些改动写测试（新建测试文件，不要改原有的测试），最后跑全部测试确认通过。", c_feature_tests, setup=setup_long, max_calls=40, timeout=900),
+    S("debug-log", "长任务", "先读日志、再定位、再修，加回归测试", "logs/app.log 里记了一次命令行下单的报错。找出原因并修好代码，再加一个能抓住这个问题的回归测试（新建测试文件），最后跑全部测试确认通过。", c_debug_log, setup=setup_debug, max_calls=30, timeout=600),
+    S("split-module", "长任务", "拆模块，所有引用都改对", "把 inventory/stock.py 里的 reserve_stock 拆到新文件 inventory/reservations.py；stock.py 只保留库存数量本身（_levels 和 restock），不要在 stock.py 里留转发或重新导入。所有用到 reserve_stock 的地方（代码和测试）都改成从新模块导入，最后跑全部测试确认通过。", c_split_module, setup=setup_long, max_calls=30, timeout=600),
+    S("todo-steps", "长任务", "八步清单：会不会用待办、会不会漏步", LONG_PROMPT_CHECKLIST, c_todo_steps, setup=setup_checklist, max_calls=45, timeout=900),
+    S("todo-compact", "长任务", "同上，运行中途被压缩后能不能接着做完", LONG_PROMPT_CHECKLIST, c_todo_compact, setup=setup_checklist, max_calls=50, timeout=1200, server="small-window"),
 ]
+
+# 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
+ANSWER_ONLY = {"find-def", "big-file", "tree", "odd-files", "binary", "pdf", "run-tests", "noisy", "slow", "stdin", "network", "git-history",
+               "git-blame", "git-dirty", "web", "web-404", "web-redirect", "web-huge", "form", "wait", "skill", "wiki", "memory", "parallel"}
+for _scenario in SCENARIOS:
+    _scenario["world"] = _scenario["id"] not in ANSWER_ONLY

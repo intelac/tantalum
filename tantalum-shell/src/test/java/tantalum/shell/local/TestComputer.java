@@ -55,6 +55,11 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     private volatile LocalLinks.Link link;
     private volatile boolean closed;
 
+    /**
+     * 录下的命令结果（agent-eval 回放）：测试电脑没有沙箱，{@code bash} 不真的执行，按到达顺序回录制时的结果；为 null 时照旧拒绝。
+     */
+    private volatile java.util.Deque<LocalResult> recordedShell;
+
     /** 这台电脑上的假浏览器；没有时浏览器调用像没给 --allow-browser 一样被拒。 */
     private final tantalum.local.tool.Browser browser;
 
@@ -78,6 +83,38 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
                 List.of(new Hello.Root(real.toString())), true, new Hello.Shell(false, "--allow-shell was not given"), true, true, state);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)), browser);
+        computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
+                .orElseThrow(() -> new IllegalStateException("revoked"));
+        return computer;
+    }
+
+    /**
+     * 连一台什么都给的电脑，只为看服务器给模型的工具和提示（agent-eval 需求 3）：写、Git、命令行、浏览器都报“可用”。
+     * 真的调用 {@code bash} 和浏览器会被这台电脑拒绝（它没有沙箱也没有浏览器）。
+     */
+    public static TestComputer connectEverything(LocalLinks links, Principal user, Instant expiresAt, Path main) throws IOException {
+        Path real = main.toRealPath();
+        Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
+                List.of(new Hello.Root(real.toString())), true, new Hello.Shell(true, null), true, true,
+                Hello.Browser.available("Google Chrome", false));
+        TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
+        computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
+                .orElseThrow(() -> new IllegalStateException("revoked"));
+        return computer;
+    }
+
+    /**
+     * 回放用的电脑（agent-eval 需求 2）：写和 Git 照录制时给，命令行报“可用”，{@code bash} 回 {@code shell} 里录下的结果
+     * （按顺序；用完了再调用就报错）；其余工具全部真的执行。
+     */
+    public static TestComputer connectForReplay(LocalLinks links, Principal user, Instant expiresAt, Path main, boolean write,
+                                                java.util.Deque<LocalResult> shell) throws IOException {
+        Path real = main.toRealPath();
+        Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
+                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(true, null), true, true,
+                Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED));
+        TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
+        computer.recordedShell = shell;
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
                 .orElseThrow(() -> new IllegalStateException("revoked"));
         return computer;
@@ -230,6 +267,11 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         }
         if (tool.get().kind() == LocalTool.Kind.WRITE && !hello.write()) {
             return LocalResult.error("This computer does not allow file changes.");
+        }
+        java.util.Deque<LocalResult> shell = recordedShell;
+        if (tool.get().kind() == LocalTool.Kind.SHELL && shell != null) {
+            LocalResult next = shell.pollFirst();
+            return next != null ? next : LocalResult.error("replay: no recorded bash result left (the product ran more commands than were recorded)");
         }
         if (tool.get().kind() == LocalTool.Kind.BROWSER && browser == null) {
             return LocalResult.error(tantalum.local.tool.Browser.NOT_ALLOWED_TEXT);

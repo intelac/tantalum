@@ -70,10 +70,17 @@ public record TokenEstimate(double bytesPerToken) {
         return total;
     }
 
+    /**
+     * 只算发给模型的工具。延后的工具（这台电脑现在不给、插件关着的）OpenAI 路线根本不发，Claude 路线带 {@code defer_loading} 发、
+     * 用到时才进上下文，所以不算。以前连它们一起算，二十几个延后的工具约一万多 token：窗口小的模型（8k、16k）上，摘要调用光“固定部分”
+     * 就估得放不下，自动压缩一次都做不成（agent-eval 的 todo-compact 场景发现的）。
+     */
     public long ofTools(List<ToolSpec> tools) {
         long total = 0;
         for (ToolSpec tool : tools) {
-            total += ofText(tool.name()) + ofText(tool.description()) + ofJson(tool.schema());
+            if (!tool.deferred()) {
+                total += ofText(tool.name()) + ofText(tool.description()) + ofJson(tool.schema());
+            }
         }
         return total;
     }
