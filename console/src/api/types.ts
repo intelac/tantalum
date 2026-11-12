@@ -44,7 +44,10 @@ export interface Config {
   welcome?: { text?: string; byLanguage?: Record<string, string> };
 }
 
-/** 自己今天（UTC）的用量。`used` 是读入的（含缓存）加输出的；`limit` 只在有开着的插件报了每日上限时才有。 */
+/**
+ * 自己今天（UTC）的用量。`used` 是算进额度的量：服务器配了折算系数时是折算后的（`weighted` 为 true），否则是四项之和；
+ * `limit` 只在有开着的插件报了每日上限时才有。
+ */
 export interface TodayUsageView {
   day: string;
   input: number;
@@ -52,6 +55,8 @@ export interface TodayUsageView {
   cacheRead: number;
   cacheWrite: number;
   used: number;
+  /** 服务器配了折算系数：`used` 是按模型折算后的数，界面要写明。 */
+  weighted?: boolean;
   limit?: number;
 }
 

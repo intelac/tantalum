@@ -37,4 +37,17 @@ describe("TodayUsage", () => {
     expect(status.getAttribute("title")).toContain(hint);
     expect(status.querySelector<HTMLElement>("span[aria-hidden] > span")!.style.width).toBe(`${Math.min(100, Math.floor(used / 10))}%`);
   });
+
+  /** qagent-align 需求 3.7：折算后的数要写明是折算的，并能看到原始用量；没配系数时不出现“折算”。 */
+  it("says weighted and gives the raw usage when the server weighs tokens", () => {
+    render(<TodayUsage usage={{ day: "2026-11-12", input: 100, output: 20, cacheRead: 300, cacheWrite: 40, used: 270, weighted: true, limit: 1000 }} />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("今日折算 270 / 1,000");
+    expect(status.getAttribute("title")).toContain("按模型折算");
+    expect(status.getAttribute("title")).toContain("原始用量是 460 token");
+    cleanup();
+    render(<TodayUsage usage={today(270, 1000)} />);
+    expect(screen.getByRole("status").textContent).not.toContain("折算");
+    expect(screen.getByRole("status").getAttribute("title")).not.toContain("折算");
+  });
 });

@@ -182,7 +182,7 @@ class TantalumPropertiesTest {
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),
                 MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null);
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null);
     }
 
     /** 压缩参数和模型无关；预留按模型另算（CompactionPolicyTest）。路线配置的窗口不大于预留时启动失败（context-compaction 需求 9）。 */

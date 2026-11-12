@@ -288,6 +288,8 @@ export const ja: Text = {
     },
     today: (used, limit) => `今日 ${used} / ${limit}`,
     todayPercent: (percent) => `今日 ${percent}%`,
+    todayWeighed: (used, limit) => `今日（換算）${used} / ${limit}`,
+    weighedNote: (raw) => `モデルごとに換算しています。高いモデルは多めに、安いモデルは少なめに数えます。換算前の使用量は ${raw} トークンです`,
     todayHint: (used, limit, percent) => `今日は ${used} トークン使いました。1 日の上限は ${limit}（${percent}%）`,
     todayOver: (used, limit) => `今日の上限に達しました（${used} / ${limit}）。UTC の 0 時に戻ります`,
     contextHigh: (percent) => `自動圧縮のポイントに近づいています（${percent}%）。モデルを呼び出す前に自動で圧縮します。今すぐ手動で圧縮することもできます`,

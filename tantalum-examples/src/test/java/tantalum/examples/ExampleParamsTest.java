@@ -89,6 +89,18 @@ class ExampleParamsTest {
         assertEquals(list("bash", "write_file"), approval.byDefault());
     }
 
+    /** qagent-align 需求 3.4：额度拿折算后的今日用量比——贵的模型用得少也可能先到，便宜的用得多也可能没到。 */
+    @Test
+    void theQuotaCountsTheWeighedAmount() {
+        DailyQuotaHook quota = new DailyQuotaHook(500);
+        LocalDate day = LocalDate.of(2026, 10, 31);
+        KernelState heavy = KernelState.empty().with(PrincipalState.start(USER).add(day, new TokenUsage(100, 0, 0, 0, 600L)));
+        assertInstanceOf(Stop.class, quota.beforeModelCall(heavy, OLD), "100 raw tokens weigh 600: over the 500 limit");
+        KernelState light = KernelState.empty().with(PrincipalState.start(USER).add(day, new TokenUsage(900, 0, 0, 0, 90L)));
+        assertSame(Allow.PLAIN, quota.beforeModelCall(light, OLD), "900 raw tokens weigh 90: under the limit");
+        assertInstanceOf(Stop.class, quota.beforeModelCall(used(500), OLD), "not weighed: the sum of the four, as before");
+    }
+
     /** 服务器配置写在页面范围之外（原来就能这么配）：照样能启动，范围跟着放宽。 */
     @Test
     void aConfiguredLimitOutsideThePageRangeStillStarts() {

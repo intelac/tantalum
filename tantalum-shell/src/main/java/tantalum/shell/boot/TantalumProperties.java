@@ -15,6 +15,7 @@ import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.model.OpenAiThinking;
 import tantalum.shell.route.Levels;
 import tantalum.shell.route.RouteSettings;
+import tantalum.shell.route.UsageWeights;
 import tantalum.shell.settings.CompactionPolicy;
 
 /**
@@ -26,7 +27,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                                  String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes, MemoryLimits memory,
                                  Knowledge knowledge, McpProperties mcp,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments, Web web, Console console) {
+                                 AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights) {
 
     /** Claude 路线的名字，固定。 */
     public static final String CLAUDE_ROUTE = "claude";
@@ -60,6 +61,70 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
             throw new IllegalArgumentException("tantalum.provider=" + provider + " names no route; expected claude"
                     + openaiRoutes.keySet().stream().map(name -> " or " + name).collect(java.util.stream.Collectors.joining()));
         }
+        usageWeights = usageWeights == null ? Map.of() : java.util.Collections.unmodifiableMap(new TreeMap<>(usageWeights));
+        for (String route : usageWeights.keySet()) {
+            if (!route.equals(CLAUDE_ROUTE) && !openaiRoutes.containsKey(route)) {
+                throw new IllegalArgumentException("tantalum.usage-weights." + route + " names no route; expected claude"
+                        + openaiRoutes.keySet().stream().map(name -> " or " + name).collect(java.util.stream.Collectors.joining()));
+            }
+        }
+        // 现在就算一遍：写错的系数启动时就失败
+        table(usageWeights);
+    }
+
+    /**
+     * 一条路线的折算系数（{@code tantalum.usage-weights.{路线}.*}，qagent-align 需求 3）：{@code input}、{@code output}、
+     * {@code cache-read}、{@code cache-write}，没写的是 1；{@code models[模型名]} 给这条路线里的某个模型另写一套，没写的项用路线的。
+     * 可以是小数，不能是负数。
+     */
+    public record Weights(Double input, Double output, Double cacheRead, Double cacheWrite, Map<String, Weights> models) {
+
+        public Weights {
+            models = models == null ? Map.of() : java.util.Collections.unmodifiableMap(new TreeMap<>(models));
+        }
+
+        private UsageWeights.Four four(String property, UsageWeights.Four base) {
+            return new UsageWeights.Four(weight(property + ".input", input, base.input()), weight(property + ".output", output, base.output()),
+                    weight(property + ".cache-read", cacheRead, base.cacheRead()), weight(property + ".cache-write", cacheWrite, base.cacheWrite()));
+        }
+
+        private static double weight(String property, Double value, double fallback) {
+            if (value == null) {
+                return fallback;
+            }
+            if (!(value >= 0) || value.isInfinite()) {
+                throw new IllegalArgumentException(property + " must be a number that is not negative but was " + value);
+            }
+            return value;
+        }
+    }
+
+    /** 折算系数的查表；没配时全是 1。 */
+    public UsageWeights weights() {
+        return table(usageWeights);
+    }
+
+    private static UsageWeights table(Map<String, Weights> usageWeights) {
+        Map<String, UsageWeights.Four> routes = new TreeMap<>();
+        Map<String, Map<String, UsageWeights.Four>> models = new TreeMap<>();
+        usageWeights.forEach((route, configured) -> {
+            String property = "tantalum.usage-weights." + route;
+            UsageWeights.Four whole = configured.four(property, UsageWeights.Four.ONE);
+            routes.put(route, whole);
+            Map<String, UsageWeights.Four> byModel = new TreeMap<>();
+            configured.models().forEach((model, each) -> {
+                String nested = property + ".models[" + model + "]";
+                if (each == null) {
+                    return;
+                }
+                if (!each.models().isEmpty()) {
+                    throw new IllegalArgumentException(nested + ".models: a model has no models of its own");
+                }
+                byModel.put(model, each.four(nested, whole));
+            });
+            models.put(route, byModel);
+        });
+        return new UsageWeights(routes, models);
     }
 
     /**

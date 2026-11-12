@@ -35,7 +35,8 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    static final int VERSION = 4;
+    /** 5：用量表多了折算后的量（qagent-align 需求 3）。版本不同时删掉索引，从会话文件重建。 */
+    static final int VERSION = 5;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
@@ -137,6 +138,7 @@ public final class SessionIndex implements AutoCloseable {
                   output      INTEGER NOT NULL,
                   cache_read  INTEGER NOT NULL,
                   cache_write INTEGER NOT NULL,
+                  counted     INTEGER NOT NULL,
                   PRIMARY KEY (principal, seq)
                 ) WITHOUT ROWID""");
         statement.execute("PRAGMA user_version=" + VERSION);
@@ -209,8 +211,8 @@ public final class SessionIndex implements AutoCloseable {
 
     private void writeUsage(IndexBatch batch) throws SQLException {
         try (PreparedStatement insert = connection.prepareStatement("""
-                INSERT OR IGNORE INTO usage (principal, seq, day, input, output, cache_read, cache_write)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""")) {
+                INSERT OR IGNORE INTO usage (principal, seq, day, input, output, cache_read, cache_write, counted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""")) {
             for (IndexBatch.UsageRow row : batch.usage) {
                 TokenUsage amount = row.usage().amount();
                 insert.setString(1, row.principal().value());
@@ -220,6 +222,8 @@ public final class SessionIndex implements AutoCloseable {
                 insert.setLong(5, amount.output());
                 insert.setLong(6, amount.cacheRead());
                 insert.setLong(7, amount.cacheWrite());
+                // 折算后的量；没折算时就是四项之和
+                insert.setLong(8, amount.counted());
                 insert.addBatch();
             }
             insert.executeBatch();
@@ -339,13 +343,13 @@ public final class SessionIndex implements AutoCloseable {
     public synchronized List<IndexChange.Usage> usageFrom(Principal principal, long seq) throws SQLException {
         List<IndexChange.Usage> rows = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement(
-                "SELECT seq, day, input, output, cache_read, cache_write FROM usage WHERE principal = ? AND seq >= ? ORDER BY seq")) {
+                "SELECT seq, day, input, output, cache_read, cache_write, counted FROM usage WHERE principal = ? AND seq >= ? ORDER BY seq")) {
             select.setString(1, principal.value());
             select.setLong(2, seq);
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
                     rows.add(new IndexChange.Usage(result.getLong(1), LocalDate.parse(result.getString(2)),
-                            new TokenUsage(result.getLong(3), result.getLong(4), result.getLong(5), result.getLong(6))));
+                            new TokenUsage(result.getLong(3), result.getLong(4), result.getLong(5), result.getLong(6), result.getLong(7))));
                 }
             }
         }
@@ -355,13 +359,14 @@ public final class SessionIndex implements AutoCloseable {
     /** 该用户在 {@code day} 这一天（UTC）的用量合计，没有为零。 */
     public synchronized TokenUsage usageOn(Principal principal, LocalDate day) throws SQLException {
         try (PreparedStatement select = connection.prepareStatement("""
-                SELECT coalesce(sum(input), 0), coalesce(sum(output), 0), coalesce(sum(cache_read), 0), coalesce(sum(cache_write), 0)
+                SELECT coalesce(sum(input), 0), coalesce(sum(output), 0), coalesce(sum(cache_read), 0), coalesce(sum(cache_write), 0),
+                       coalesce(sum(counted), 0)
                 FROM usage WHERE principal = ? AND day = ?""")) {
             select.setString(1, principal.value());
             select.setString(2, day.toString());
             try (ResultSet result = select.executeQuery()) {
                 result.next();
-                return new TokenUsage(result.getLong(1), result.getLong(2), result.getLong(3), result.getLong(4));
+                return new TokenUsage(result.getLong(1), result.getLong(2), result.getLong(3), result.getLong(4), result.getLong(5));
             }
         }
     }
@@ -370,14 +375,14 @@ public final class SessionIndex implements AutoCloseable {
     public synchronized Map<LocalDate, TokenUsage> usageBefore(Principal principal, long seq) throws SQLException {
         Map<LocalDate, TokenUsage> totals = new HashMap<>();
         try (PreparedStatement select = connection.prepareStatement("""
-                SELECT day, sum(input), sum(output), sum(cache_read), sum(cache_write) FROM usage
+                SELECT day, sum(input), sum(output), sum(cache_read), sum(cache_write), sum(counted) FROM usage
                 WHERE principal = ? AND seq < ? GROUP BY day""")) {
             select.setString(1, principal.value());
             select.setLong(2, seq);
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
                     totals.put(LocalDate.parse(result.getString(1)),
-                            new TokenUsage(result.getLong(2), result.getLong(3), result.getLong(4), result.getLong(5)));
+                            new TokenUsage(result.getLong(2), result.getLong(3), result.getLong(4), result.getLong(5), result.getLong(6)));
                 }
             }
         }

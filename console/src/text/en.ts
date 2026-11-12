@@ -293,6 +293,8 @@ export const en: Text = {
     },
     today: (used, limit) => `Today ${used} / ${limit}`,
     todayPercent: (percent) => `Today ${percent}%`,
+    todayWeighed: (used, limit) => `Today (weighted) ${used} / ${limit}`,
+    weighedNote: (raw) => `Weighted by model: expensive models count for more, cheap ones for less. The raw usage is ${raw} tokens`,
     todayHint: (used, limit, percent) => `${used} tokens used today; the daily limit is ${limit} (${percent}%)`,
     todayOver: (used, limit) => `Today's limit is used up (${used} / ${limit}). It resets at midnight UTC`,
     contextHigh: (percent) => `Close to the auto-compaction point (${percent}%). It compacts before the next model call; you can also compact now`,

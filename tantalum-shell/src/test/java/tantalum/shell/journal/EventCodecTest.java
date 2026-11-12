@@ -1,6 +1,7 @@
 package tantalum.shell.journal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -171,6 +172,20 @@ class EventCodecTest {
         for (int i = 0; i < old.size(); i++) {
             assertEquals(expected.get(i), codec.decode(expected.get(i).type(), 1, old.get(i)), old.get(i));
         }
+    }
+
+    /** qagent-align 需求 3.5、3.6：折算后的量只在有的时候写（上面两条守着没有时的字节）；写了能原样读回。 */
+    @Test
+    void aWeighedUsageIsWrittenWithItsAmountAndReadBack() {
+        ModelReplied weighed = new ModelReplied(new CommandId("1-0"), List.of(new TextBlock("hi")), StopReason.END_TURN, "m",
+                new TokenUsage(1, 2, 3, 4).weighed(1, 5, 1, 1), null, null, null);
+        String line = codec.encode(weighed);
+        assertTrue(line.endsWith("\"usage\":{\"input\":1,\"output\":2,\"cacheRead\":3,\"cacheWrite\":4,\"weighted\":18}}"), line);
+        assertEquals(weighed, codec.decode(ModelReplied.TYPE, 1, line));
+        // 全是 1 的系数：和没折算一个写法
+        ModelReplied plain = new ModelReplied(new CommandId("1-0"), List.of(new TextBlock("hi")), StopReason.END_TURN, "m",
+                new TokenUsage(1, 2, 3, 4).weighed(1, 1, 1, 1), null, null, null);
+        assertFalse(codec.encode(plain).contains("weighted"));
     }
 
     // ---- 插件开关和中途换工具（core-tools 任务 15）----

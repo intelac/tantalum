@@ -82,6 +82,6 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurabl
             return Allow.PLAIN;
         }
         TokenUsage today = principal.usageOn(LocalDate.ofInstant(context.at(), ZoneOffset.UTC));
-        return today.promptTotal() + today.output() >= context.params().number("tokens", dailyTokens) ? new Stop("daily token quota used up") : Allow.PLAIN;
+        return today.counted() >= context.params().number("tokens", dailyTokens) ? new Stop("daily token quota used up") : Allow.PLAIN;
     }
 }

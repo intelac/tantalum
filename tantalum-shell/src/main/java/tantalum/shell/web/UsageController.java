@@ -25,8 +25,9 @@ public class UsageController {
     }
 
     /**
-     * {@code {day, input, output, cacheRead, cacheWrite, used, limit?}}：今天（UTC）的用量。{@code used} 是模型读入的（含缓存读写）
-     * 加输出的，和运维页的“今日用量”、每日额度插件判断用的是同一个数。{@code limit} 是开着的插件报的上限里最小的，没有插件报就没有这一项。
+     * {@code {day, input, output, cacheRead, cacheWrite, used, weighted?, limit?}}：今天（UTC）的用量。{@code used} 是算进额度的量
+     * （{@code TokenUsage.counted()}：配了折算系数就是折算后的，否则是四项之和），和运维页的“今日用量”、每日额度插件判断用的是同一个数。
+     * 服务器配了任何折算系数时 {@code weighted} 为 true，界面据此写明“折算”。{@code limit} 是开着的插件报的上限里最小的，没有插件报就没有这一项。
      */
     @GetMapping("/api/usage/today")
     ResponseEntity<String> today() throws SQLException {
@@ -39,7 +40,10 @@ public class UsageController {
         view.put("output", usage.output());
         view.put("cacheRead", usage.cacheRead());
         view.put("cacheWrite", usage.cacheWrite());
-        view.put("used", usage.promptTotal() + usage.output());
+        view.put("used", usage.counted());
+        if (engine.weights().any()) {
+            view.put("weighted", true);
+        }
         engine.plugins().dailyLimit(user).ifPresent(limit -> view.put("limit", limit));
         return json.json(200, view);
     }

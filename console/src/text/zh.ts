@@ -306,6 +306,8 @@ export const zh = {
     },
     today: (used: string, limit: string) => `今日 ${used} / ${limit}`,
     todayPercent: (percent: number) => `今日 ${percent}%`,
+    todayWeighed: (used: string, limit: string) => `今日折算 ${used} / ${limit}`,
+    weighedNote: (raw: string) => `按模型折算：贵的模型多算，便宜的少算。没折算的原始用量是 ${raw} token`,
     todayHint: (used: string, limit: string, percent: number) => `今天用了 ${used} token，每日上限 ${limit}（${percent}%）`,
     todayOver: (used: string, limit: string) => `今天的额度用完了（${used} / ${limit}），到 UTC 零点恢复`,
     contextHigh: (percent: number) => `快到自动压缩的点了（${percent}%），模型调用前会自动压缩；也可以现在手动压缩`,

@@ -1,6 +1,7 @@
 package tantalum.shell.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -147,5 +148,51 @@ class RouteConfigTest {
         assertEquals(262144L, kimi.contextWindow());
         assertEquals(Boolean.TRUE, kimi.vision());
         assertNull(properties.openaiRoutes().get("local").override("qwen").thinking(), "a model without overrides follows its route");
+    }
+
+    // ---- 折算系数（qagent-align 需求 3.1）----
+
+    private static final String WEIGHTS = "tantalum.usage-weights.";
+
+    @Test
+    void withoutWeightsEveryCallCountsAsItIs() throws Exception {
+        tantalum.shell.route.UsageWeights weights = bind().weights();
+        assertFalse(weights.any());
+        assertEquals(tantalum.shell.route.UsageWeights.Four.ONE, weights.of("claude", "claude-opus-5-5"));
+        tantalum.value.model.TokenUsage usage = new tantalum.value.model.TokenUsage(100, 20, 300, 40);
+        assertEquals(usage, weights.apply("claude", usage, "claude-opus-5-5"));
+        assertEquals(usage, weights.apply(null, usage, "m", null), "no route name: counted as it is");
+        assertEquals(usage, bind(WEIGHTS + "claude.output", "5").weights().apply(null, usage, "m", null));
+    }
+
+    @Test
+    void aRouteHasFourWeightsAndAModelMayHaveItsOwn() throws Exception {
+        tantalum.shell.route.UsageWeights weights = bind(local(WEIGHTS + "claude.output", "5", WEIGHTS + "claude.cache-read", "0.1",
+                WEIGHTS + "claude.models[claude-opus-5-5].output", "25", WEIGHTS + "claude.models[claude-opus-5-5].input", "5",
+                WEIGHTS + "local.input", "0.1", WEIGHTS + "local.output", "0.1", WEIGHTS + "local.cache-read", "0",
+                WEIGHTS + "local.cache-write", "0")).weights();
+        assertTrue(weights.any());
+        // 路线的：没写的项是 1
+        assertEquals(new tantalum.shell.route.UsageWeights.Four(1, 5, 0.1, 1), weights.of("claude", "claude-sonnet-5-5"));
+        // 模型单独写的：没写的项用路线的
+        assertEquals(new tantalum.shell.route.UsageWeights.Four(5, 25, 0.1, 1), weights.of("claude", "claude-opus-5-5"));
+        // 先按实际用的模型找，再按请求的
+        assertEquals(new tantalum.shell.route.UsageWeights.Four(5, 25, 0.1, 1), weights.of("claude", "claude-opus-5-5", "claude-sonnet-5-5"));
+        assertEquals(new tantalum.shell.route.UsageWeights.Four(5, 25, 0.1, 1), weights.of("claude", "some-snapshot-name", "claude-opus-5-5"));
+        assertEquals(new tantalum.shell.route.UsageWeights.Four(0.1, 0.1, 0, 0), weights.of("local", "qwen"));
+        // 100*1 + 20*5 + 300*0.1 + 40*1 = 270
+        assertEquals(270L, weights.apply("claude", new tantalum.value.model.TokenUsage(100, 20, 300, 40), "claude-sonnet-5-5").weighted());
+        assertEquals(List.of("claude", "claude/claude-opus-5-5", "local"),
+                weights.rows().stream().map(row -> row.model() == null ? row.route() : row.route() + "/" + row.model()).toList());
+    }
+
+    @Test
+    void wrongWeightsStopTheServerAndSayWhichOne() {
+        assertTrue(failure(WEIGHTS + "claude.output", "-1").contains("tantalum.usage-weights.claude.output must be a number that is not negative but was -1"),
+                failure(WEIGHTS + "claude.output", "-1"));
+        assertTrue(failure(WEIGHTS + "claude.models[claude-opus-5-5].cache-read", "-0.5")
+                .contains("tantalum.usage-weights.claude.models[claude-opus-5-5].cache-read"));
+        assertTrue(failure(WEIGHTS + "kimi.input", "2").contains("tantalum.usage-weights.kimi names no route"));
+        assertThrows(Exception.class, () -> bind(WEIGHTS + "claude.input", "cheap"));
     }
 }

@@ -10,6 +10,6 @@ import tantalum.value.hook.Params;
  */
 public interface DailyLimit {
 
-    /** 按这个人此刻生效的这包参数，一天最多多少 token；不限返回空。量和 {@code TokenUsage.promptTotal() + output()} 同一个算法。 */
+    /** 按这个人此刻生效的这包参数，一天最多多少 token；不限返回空。量和 {@code TokenUsage.counted()} 同一个算法（配了折算系数就是折算后的）。 */
     OptionalLong dailyTokens(Params params);
 }

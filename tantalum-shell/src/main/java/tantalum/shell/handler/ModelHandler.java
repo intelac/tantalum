@@ -18,6 +18,7 @@ import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.shell.route.Route;
 import tantalum.shell.route.Routes;
+import tantalum.shell.route.UsageWeights;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.event.Event;
@@ -47,6 +48,9 @@ public final class ModelHandler implements Handler {
     private final Clock clock;
     /** 每个运行从谁的附件目录取内容。 */
     private final Function<RunRef, AttachmentMedia> media;
+    private final UsageWeights weights;
+    /** 没有选择的 prompt 算哪条路线的系数；只有一个客户端时（测试）为 null。 */
+    private final String defaultRoute;
 
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock) {
@@ -62,6 +66,8 @@ public final class ModelHandler implements Handler {
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock, Function<RunRef, AttachmentMedia> media, Runnable onOverflow) {
         Lane lane = new Lane(client, limiter, waitTimeout, onOverflow);
+        this.weights = UsageWeights.NONE;
+        this.defaultRoute = null;
         this.lanes = route -> lane;
         this.listeners = listeners;
         this.clock = clock;
@@ -74,6 +80,14 @@ public final class ModelHandler implements Handler {
      * 超长时只让这一条路线重读列表。
      */
     public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media) {
+        this(routes, listeners, clock, media, UsageWeights.NONE);
+    }
+
+    /** 同上，回复的用量按 {@code weights} 折算后再记下（qagent-align 需求 3）。 */
+    public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media,
+                        UsageWeights weights) {
+        this.weights = weights;
+        this.defaultRoute = routes.defaultRoute();
         Map<String, Lane> byRoute = new HashMap<>();
         for (Route route : routes.all()) {
             byRoute.put(route.name(), new Lane(route.client(), new CallLimiter(route.settings().concurrency()),
@@ -116,7 +130,7 @@ public final class ModelHandler implements Handler {
                 if (outcome instanceof ModelOutcome.Failed failed && failed.reason() == FailureReason.CONTEXT_OVERFLOW) {
                     lane.onOverflow().run();
                 }
-                return toEvent(call, outcome, new Timing(startedAt, firstToken.get(), options));
+                return toEvent(call, weighed(call, outcome), new Timing(startedAt, firstToken.get(), options));
             } finally {
                 permit.close();
             }
@@ -159,6 +173,20 @@ public final class ModelHandler implements Handler {
         } catch (RuntimeException failure) {
             LOG.warn("chunk listener failed", failure);
         }
+    }
+
+    /**
+     * 折算在这里做一次，结果随回复进会话文件；重放用记下的数，不看现在的配置。先按实际用的模型找系数
+     * （降级到备用模型时按实际的算），再按请求的模型，再按路线。普通回复和压缩的摘要回复都经过这里。
+     */
+    private ModelOutcome weighed(CallModel call, ModelOutcome outcome) {
+        if (!(outcome instanceof ModelOutcome.Replied reply) || reply.usage() == null) {
+            return outcome;
+        }
+        tantalum.value.model.ModelChoice asked = call.prompt().model();
+        String route = asked == null || asked.route() == null ? defaultRoute : asked.route();
+        return new ModelOutcome.Replied(reply.content(), reply.stop(), reply.actualModel(),
+                weights.apply(route, reply.usage(), reply.actualModel(), asked == null ? null : asked.model()));
     }
 
     /** 结算事件里只供展示的三项。 */

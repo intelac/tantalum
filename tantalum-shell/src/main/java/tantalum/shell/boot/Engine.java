@@ -56,6 +56,7 @@ public final class Engine implements AutoCloseable {
     private final Clock clock;
     private final EventCodec codec;
     private final Duration shutdownWait;
+    private final tantalum.shell.route.UsageWeights weights;
     private final Stores stores;
     private final Toolbox toolbox;
     private final Queries queries;
@@ -76,6 +77,7 @@ public final class Engine implements AutoCloseable {
         this.clock = clock;
         this.codec = codec;
         this.shutdownWait = properties.shutdownWait();
+        this.weights = properties.weights();
         List<AutoCloseable> opened = new ArrayList<>();
         opened.add(routes);
         Stores openedStores;
@@ -167,6 +169,11 @@ public final class Engine implements AutoCloseable {
     /** 每个用户选的压缩点按模型算出的压缩设置，设置接口和 {@code /api/models} 用它。 */
     public CompactionPolicy compaction() {
         return toolbox.compaction();
+    }
+
+    /** 折算系数（qagent-align 需求 3）；没配时全是 1。 */
+    public tantalum.shell.route.UsageWeights weights() {
+        return weights;
     }
 
     /** 全部模型路线和它们的模型列表。 */

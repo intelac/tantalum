@@ -160,14 +160,14 @@ public class UsersController {
         return view;
     }
 
-    /** {@code total} 和每日额度插件算的是同一个数：模型读入的（含缓存读写）加输出的。 */
+    /** {@code total} 和每日额度插件算的是同一个数（{@code TokenUsage.counted()}）：配了折算系数就是折算后的，否则是四项之和。 */
     private static Map<String, Object> usage(TokenUsage usage) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("input", usage.input());
         view.put("output", usage.output());
         view.put("cacheRead", usage.cacheRead());
         view.put("cacheWrite", usage.cacheWrite());
-        view.put("total", usage.promptTotal() + usage.output());
+        view.put("total", usage.counted());
         return view;
     }
 
