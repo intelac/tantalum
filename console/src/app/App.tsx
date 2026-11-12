@@ -19,6 +19,7 @@ import { SettingsDialog } from "../settings/SettingsDialog";
 import { AppFrame } from "../shell/AppFrame";
 import { ConnectionBanner } from "../shell/ConnectionBanner";
 import { ViewingBanner, ViewingBar } from "../shell/ViewingBanner";
+import { SessionPlan } from "../conversation/PlanBar";
 import { sessionTitle } from "../shell/SessionRow";
 import { Sidebar } from "../shell/Sidebar";
 import { useConfig } from "../shell/useConfig";
@@ -209,6 +210,8 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
           ) : (
             <div className="flex h-full min-h-0 flex-col">
               <ConversationPage store={store} session={route.session} />
+              {/* 计划横条（todo-tool 需求 3）：只读查看时也显示 */}
+              <SessionPlan store={store} session={route.session} />
               {viewed !== null ? (
                 // 只读：没有输入框，也就没有排队、批准卡片、模型选择和压缩
                 <ViewingBar selected={summary !== undefined} any={list.length > 0} />

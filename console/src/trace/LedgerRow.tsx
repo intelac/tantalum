@@ -10,6 +10,7 @@ import { between, formatMs, formatTokens } from "./format";
 import { toolLabel, type Row, type TurnSummary } from "./rows";
 import { approvalText, type Approval } from "./approval";
 import { useNow } from "../ui/useNow";
+import { parseTodos, summaryOf, TODO_TOOL } from "../conversation/todos";
 import { TraceTotals } from "./TraceTotals";
 
 /** 一行文字：去掉换行，长文本省略。 */
@@ -98,7 +99,7 @@ export function contentOf(record: TraceRecord): string {
       return record.toolCalls > 0 ? t.layout.toolCallOnly : t.layout.noContent;
     }
     case "tool":
-      return `${toolLabel(record)} ${line(record.rawArguments)}`;
+      return `${toolLabel(record)} ${callText(record)}`;
     case "work": {
       const status = t.workStatus[record.status] ?? record.status;
       const after = record.after === undefined ? "" : ` · ${t.workAfter[record.after]}`;
@@ -117,11 +118,25 @@ export function contentOf(record: TraceRecord): string {
   }
 }
 
+/** 调用栏的参数：待办清单写成进度（todo-tool 需求 3.4），完整参数在检查面板里；别的照原文一行。 */
+function callText(record: Extract<TraceRecord, { kind: "tool" }>): string {
+  if (record.name === TODO_TOOL && record.status === "DONE") {
+    let todos = null;
+    try {
+      todos = parseTodos(record.arguments ?? JSON.parse(record.rawArguments));
+    } catch {
+      todos = null;
+    }
+    if (todos !== null) return summaryOf(todos, currentText().plan);
+  }
+  return line(record.rawArguments);
+}
+
 /** 工具行的调用栏和结果栏。出错时原样保留结果文字，没有文字才显示错误码。 */
 export function toolCells(record: Extract<TraceRecord, { kind: "tool" }>): { call: string; result: string } {
   const t = currentText().trace;
   const status = t.toolStatus[record.status] ?? record.status;
-  const call = `${toolLabel(record)} ${line(record.rawArguments)}`;
+  const call = `${toolLabel(record)} ${callText(record)}`;
   if (record.status === "WAITING" || record.status === "RUNNING") return { call, result: status };
   const text = record.result !== undefined && record.result !== "" ? line(record.result) || record.result : (record.code ?? record.reason ?? "");
   return { call, result: record.status === "DONE" ? text : `${status} · ${text}` };

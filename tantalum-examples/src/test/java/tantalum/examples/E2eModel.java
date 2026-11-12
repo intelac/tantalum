@@ -38,6 +38,8 @@ import tantalum.value.model.ToolResultBlock;
  *       {@code skillcheck}：回答“消息带着技能：”加这条用户消息里技能块的名字；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
+ *   <li>{@code todo:}（todo-tool）：写三步的待办清单，每隔一会儿更新一次（第一步完成、第二步完成、全部完成），
+ *       然后回答“计划做完了。”；</li>
  *   <li>{@code ask:}（waiting-state）：调用 ask_user 问“备份删还是留？”（删除 / 保留，允许补一句），然后回答“你选了：”加工具结果；</li>
  *   <li>{@code approve:}（工具审批，A4）：调用 write_file 写 {@code e2e/approve-<后面的词>.txt}，然后回答“结果：”加工具结果；
  *       用户打开 toolApproval 插件后，调用前在对话页上问；</li>
@@ -139,6 +141,9 @@ public final class E2eModel implements ModelClient {
             }
             if (text.contains("write:")) {
                 return write(word(text, "write:"), false, prompt, results, chunks);
+            }
+            if (text.contains("todo:")) {
+                return todoScenario(results, chunks);
             }
             if (text.contains("ask:")) {
                 // waiting-state：问用户两个选项，允许补一句；回答原样复述
@@ -352,6 +357,32 @@ public final class E2eModel implements ModelClient {
         fields.put("choices", new Json.Arr(List.of(new Json.Str("删除"), new Json.Str("保留"))));
         String raw = "{\"question\":\"备份删还是留？\",\"choices\":[\"删除\",\"保留\"]}";
         return new ToolCallBlock("c" + callIds.incrementAndGet(), "ask_user", raw, new Json.Obj(fields));
+    }
+
+    /** 待办清单的三步；每次更新前停一会儿，好让页面上看得到中间的样子。 */
+    static final List<String> TODO_STEPS = List.of("读失败的测试", "修 apply_discount", "跑全部测试");
+    static final Duration TODO_PAUSE = Duration.ofMillis(1200);
+
+    private ModelOutcome todoScenario(int results, ChunkListener chunks) throws InterruptedException {
+        if (results >= TODO_STEPS.size() + 1) {
+            return answer(chunks, "计划做完了。");
+        }
+        if (results > 0) {
+            Thread.sleep(TODO_PAUSE.toMillis());
+        }
+        List<Json> items = new ArrayList<>();
+        StringBuilder raw = new StringBuilder("{\"todos\":[");
+        for (int i = 0; i < TODO_STEPS.size(); i++) {
+            String status = i < results ? "completed" : i == results ? "in_progress" : "pending";
+            Map<String, Json> item = new java.util.LinkedHashMap<>();
+            item.put("content", new Json.Str(TODO_STEPS.get(i)));
+            item.put("status", new Json.Str(status));
+            items.add(new Json.Obj(item));
+            raw.append(i == 0 ? "" : ",").append("{\"content\":\"").append(TODO_STEPS.get(i)).append("\",\"status\":\"").append(status).append("\"}");
+        }
+        raw.append("]}");
+        return reply(List.of(), new ToolCallBlock("c" + callIds.incrementAndGet(), "todo_write", raw.toString(),
+                new Json.Obj(Map.of("todos", new Json.Arr(items)))));
     }
 
     private ToolCallBlock call(String tool, Map<String, String> arguments) {

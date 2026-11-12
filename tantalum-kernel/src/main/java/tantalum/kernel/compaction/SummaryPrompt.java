@@ -6,6 +6,8 @@ import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import java.util.Optional;
+import tantalum.value.todo.TodoList;
 
 /** 摘要指令（规则 6，结构来自 pi）和摘要校验（规则 7）。 */
 public final class SummaryPrompt {
@@ -54,6 +56,8 @@ public final class SummaryPrompt {
     static final int MAX_FILES = 200;
     private static final String FILES_OPEN = "<files-touched>";
     private static final String FILES_CLOSE = "</files-touched>";
+    private static final String TODOS_OPEN = "<todo-list>";
+    private static final String TODOS_CLOSE = "</todo-list>";
 
     private SummaryPrompt() {}
 
@@ -77,8 +81,32 @@ public final class SummaryPrompt {
 
     /** {@code files} 由程序提取，追加在末尾，不靠模型记住。 */
     public static Message summaryMessage(String summary, List<String> files) {
+        return summaryMessage(summary, files, null);
+    }
+
+    /**
+     * 同上，{@code todos} 是被压掉的部分里最后一张待办清单（todo-tool 需求 4），也由程序提取、附在最后，不靠模型记住；
+     * 没有就是 null，摘要消息和以前逐字节相同。
+     */
+    public static Message summaryMessage(String summary, List<String> files, TodoList todos) {
         String list = files.isEmpty() ? "" : "\n\n" + FILES_OPEN + "\n" + String.join("\n", files) + "\n" + FILES_CLOSE;
-        return Message.user(SUMMARY_PREFIX + summary.strip() + list);
+        String plan = todos == null || todos.items().isEmpty() ? "" : "\n\n" + TODOS_OPEN + "\n" + todos.lines() + "\n" + TODOS_CLOSE;
+        return Message.user(SUMMARY_PREFIX + summary.strip() + list + plan);
+    }
+
+    /** 摘要消息末尾的待办清单；模型自己写的同名标签不算，只认最后一个。 */
+    public static Optional<TodoList> todosIn(Message summary) {
+        if (!isSummary(summary)) {
+            return Optional.empty();
+        }
+        String text = ((TextBlock) summary.content().getFirst()).text();
+        int open = text.lastIndexOf(TODOS_OPEN);
+        int close = text.lastIndexOf(TODOS_CLOSE);
+        if (open < 0 || close < open) {
+            return Optional.empty();
+        }
+        TodoList list = TodoList.fromLines(text.substring(open + TODOS_OPEN.length(), close));
+        return list.items().isEmpty() ? Optional.empty() : Optional.of(list);
     }
 
     /** 摘要消息末尾的文件列表；模型自己写的同名标签不算，只认最后一个。 */

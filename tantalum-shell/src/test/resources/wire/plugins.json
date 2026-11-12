@@ -35,6 +35,13 @@
     "byDefault" : true,
     "changed" : false,
     "params" : [ ]
+  }, {
+    "name" : "todo_write",
+    "description" : "Record and update a structured task list for the current work. Send the ENTIRE list every call: it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Keep exactly one todo in_progress while work remains. Mark a todo completed the moment it is done (do not batch completions). Skip the list for trivial single-step tasks. Statuses: pending (not started), in_progress (being worked on now), completed (finished).",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   } ],
   "mcp" : [ ],
   "web" : {

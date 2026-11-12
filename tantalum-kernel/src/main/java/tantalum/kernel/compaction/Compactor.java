@@ -21,6 +21,8 @@ import tantalum.value.state.Compacting.Trigger;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.Plan;
 import tantalum.value.state.SessionState;
+import tantalum.value.todo.TodoList;
+import tantalum.value.model.ToolResultBlock;
 
 /** 规则 1、2、4、5、6 的纯函数：要不要压、切在哪、压缩后的视图、给摘要调用的头部。 */
 public final class Compactor {
@@ -147,7 +149,8 @@ public final class Compactor {
     /** 规则 5：摘要、当前请求原文、处理过的保留段。 */
     public static List<Message> replacement(Plan plan, List<Message> view, String summary, CompactionSettings settings) {
         List<Message> out = new ArrayList<>();
-        out.add(SummaryPrompt.summaryMessage(summary, filesTouched(view.subList(0, plan.headMessages()))));
+        List<Message> head = view.subList(0, plan.headMessages());
+        out.add(SummaryPrompt.summaryMessage(summary, filesTouched(head), latestTodos(head).orElse(null)));
         if (plan.request() != null) {
             out.add(plan.request());
         }
@@ -190,6 +193,37 @@ public final class Compactor {
             }
         }
         return SummaryPrompt.capFiles(new ArrayList<>(files));
+    }
+
+    /**
+     * 被压掉的部分里最后一张待办清单（todo-tool 需求 4）：倒着找最后一次成功的 {@code todo_write}（参数合格、结果不是错误），
+     * 找不到再看上一个摘要附的那张。错误的调用不算——那次清单没有换。
+     */
+    static Optional<TodoList> latestTodos(List<Message> head) {
+        Set<String> failed = new java.util.HashSet<>();
+        for (Message message : head) {
+            for (ContentBlock block : message.content()) {
+                if (block instanceof ToolResultBlock result && result.error()) {
+                    failed.add(result.toolCallId());
+                }
+            }
+        }
+        for (int i = head.size() - 1; i >= 0; i--) {
+            List<ContentBlock> content = head.get(i).content();
+            for (int j = content.size() - 1; j >= 0; j--) {
+                if (content.get(j) instanceof ToolCallBlock call && call.name().equals(TodoList.TOOL) && !failed.contains(call.id())) {
+                    Optional<TodoList> list = TodoList.tryParse(call.arguments());
+                    if (list.isPresent()) {
+                        return list;
+                    }
+                }
+            }
+            Optional<TodoList> earlier = SummaryPrompt.todosIn(head.get(i));
+            if (earlier.isPresent()) {
+                return earlier;
+            }
+        }
+        return Optional.empty();
     }
 
     private static long estimate(TokenEstimate estimate, List<Message> view, Unit unit) {

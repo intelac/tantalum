@@ -11,6 +11,7 @@ import { FileChange, hasFileView, readRange } from "./FileChange";
 import { useNow } from "../ui/useNow";
 import { SearchCard, searchResult } from "./tool/SearchCard";
 import { exitCodeOf, hasTerminalView, TerminalCard } from "./tool/TerminalCard";
+import { TodoCard, todoList, TodoSummary } from "./tool/TodoCard";
 
 interface Props {
   step: ToolStepItem;
@@ -54,6 +55,8 @@ export function ToolRow({ step }: Props) {
   const search = open && !terminal ? searchResult(step) : null;
   // 加载技能写成一句话（skills-wiki 需求 4.6），展开看到的结果就是技能的全文
   const skill = skillName(step);
+  // 待办清单（todo-tool 需求 3.3）：一行进度摘要，展开是整张清单；写错被拒的那次照普通方式显示错误
+  const todos = todoList(step);
 
   return (
     <div className="text-sm">
@@ -82,7 +85,7 @@ export function ToolRow({ step }: Props) {
                 : t.process.skillLoading(skill)}
         </span>
         <span className="min-w-0 flex-1 truncate font-mono text-xs">
-          {skill === null && summarizeArguments(step)}
+          {skill === null && (todos === null ? summarizeArguments(step) : <TodoSummary todos={todos} />)}
           {range !== null && <span className="ml-2 font-sans text-fg-faint">{range}</span>}
           {exitCode !== undefined && <span className="ml-2 font-sans text-danger">{t.process.exitCode(exitCode)}</span>}
         </span>
@@ -104,7 +107,9 @@ export function ToolRow({ step }: Props) {
           >
             {t.conversation.viewInTrace}
           </a>
-          {terminal ? (
+          {todos !== null ? (
+            <TodoCard todos={todos} />
+          ) : terminal ? (
             <TerminalCard step={step} />
           ) : search !== null ? (
             <SearchCard step={step} result={search} />

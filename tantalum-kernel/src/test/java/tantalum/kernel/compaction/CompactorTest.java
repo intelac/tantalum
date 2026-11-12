@@ -128,6 +128,60 @@ class CompactorTest {
         assertTrue(new Compactor.Head(List.of(), true).nothingToSummarize());
     }
 
+    private static Message todoCall(String id, String... items) {
+        java.util.List<Json> list = new java.util.ArrayList<>();
+        for (String item : items) {
+            String[] parts = item.split(":", 2);
+            list.add(new Json.Obj(new java.util.LinkedHashMap<>(java.util.Map.of("content", new Json.Str(parts[1]), "status", new Json.Str(parts[0])))));
+        }
+        return new Message(Role.ASSISTANT, List.of(new tantalum.value.model.ToolCallBlock(id, "todo_write", "{}",
+                new Json.Obj(java.util.Map.of("todos", new Json.Arr(list))))), false);
+    }
+
+    private static Message result(String id, boolean error) {
+        return new Message(Role.USER, List.of(new ToolResultBlock(id, error ? "Invalid todos: x" : "Todo list updated", error, null, List.of())), false);
+    }
+
+    private static String summaryText(List<Message> replaced) {
+        return ((TextBlock) replaced.getFirst().content().getFirst()).text();
+    }
+
+    /** todo-tool 需求 4：被压掉的部分里最后一张成功写下的清单附在摘要后；错误的不算；再次压缩时沿用上一张。 */
+    @Test
+    void theLatestTodoListIsKeptAcrossCompaction() {
+        List<Message> view = List.of(user(1), todoCall("t1", "in_progress:Read", "pending:Fix"), result("t1", false),
+                todoCall("t2", "completed:Read", "in_progress:Fix", "pending:Test"), result("t2", false),
+                todoCall("t3", "in_progress:A", "in_progress:B"), result("t3", true), user(2));
+        String text = summaryText(Compactor.replacement(new Plan(7, 7, 1, 900, null), view, "summary one", SETTINGS));
+        assertTrue(text.endsWith("<todo-list>\n[x] Read\n[>] Fix\n[ ] Test\n</todo-list>"), text);
+
+        // 再压一次：被压掉的部分里没有新的调用，沿用上一个摘要附的那张
+        List<Message> first = Compactor.replacement(new Plan(7, 7, 1, 900, null), view, "summary one", SETTINGS);
+        String again = summaryText(Compactor.replacement(new Plan(2, 2, 1, 900, null), List.of(first.getFirst(), assistant(5), user(6)), "summary two", SETTINGS));
+        assertTrue(again.endsWith("<todo-list>\n[x] Read\n[>] Fix\n[ ] Test\n</todo-list>"), again);
+        assertEquals(1, again.split("<todo-list>", -1).length - 1, "not nested");
+
+        // 有新的调用：取新的
+        String newer = summaryText(Compactor.replacement(new Plan(3, 3, 1, 900, null),
+                List.of(first.getFirst(), todoCall("t4", "completed:Read", "completed:Fix", "in_progress:Test"), result("t4", false), user(7)),
+                "summary three", SETTINGS));
+        assertTrue(newer.endsWith("<todo-list>\n[x] Read\n[x] Fix\n[>] Test\n</todo-list>"), newer);
+        // 摘要里的文件清单照旧能读出来
+        assertEquals(List.of(), SummaryPrompt.filesIn(Compactor.replacement(new Plan(7, 7, 1, 900, null), view, "s", SETTINGS).getFirst()));
+    }
+
+    /** todo-tool 需求 4.3：没调用过 todo_write 的会话，摘要消息和以前一样。 */
+    @Test
+    void withoutATodoListTheSummaryIsAsBefore() {
+        List<Message> view = List.of(user(1), assistant(2), user(3));
+        Message summary = Compactor.replacement(new Plan(2, 2, 1, 900, null), view, "summary", SETTINGS).getFirst();
+        assertEquals(SummaryPrompt.summaryMessage("summary", List.of()), summary);
+        assertFalse(summaryText(List.of(summary)).contains("todo-list"));
+        // 只有一次失败的调用：也不附
+        List<Message> failedOnly = List.of(user(1), todoCall("t1", "in_progress:A", "in_progress:B"), result("t1", true), user(2));
+        assertFalse(summaryText(Compactor.replacement(new Plan(3, 3, 1, 900, null), failedOnly, "s", SETTINGS)).contains("todo-list"));
+    }
+
     /** 需求 1.4：文件列表由程序提取，再次压缩时累积，不靠模型。 */
     @Test
     void filesTouchedComeFromToolCallsAndAccumulate() {
