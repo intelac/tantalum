@@ -129,18 +129,30 @@ public class SecurityConfig {
         private static boolean crossSite(HttpServletRequest request) {
             String origin = request.getHeader("Origin");
             if (origin != null) {
-                return !sameHost(origin, request);
+                return !sameHost(origin, request.getServerName(), request.getServerPort(), request.getHeader("Host"));
             }
             return "cross-site".equalsIgnoreCase(request.getHeader("Sec-Fetch-Site"));
         }
 
-        private static boolean sameHost(String origin, HttpServletRequest request) {
+        /** {@code serverName}、{@code serverPort} 是服务器认为自己被访问的地址，{@code host} 是浏览器发来的 Host 头。 */
+        static boolean sameHost(String origin, String serverName, int serverPort, String host) {
             try {
                 URI uri = URI.create(origin);
-                return request.getServerName().equalsIgnoreCase(uri.getHost()) && request.getServerPort() == effectivePort(uri);
+                return serverName.equalsIgnoreCase(uri.getHost()) && serverPort == effectivePort(uri)
+                        || behindHttpsProxy(uri, host);
             } catch (IllegalArgumentException malformed) {
                 return false;
             }
+        }
+
+        /**
+         * 前面有只做 HTTPS、不加 {@code X-Forwarded-*} 的代理时，服务器看到的是 http 和自己的端口，对不上浏览器的
+         * {@code https://主机}。这时拿浏览器发来的 {@code Host} 比：它不带端口、主机和 Origin 一样，就是同一个地址。
+         * 只认 https 的默认端口；带端口的照旧按上面的规矩。
+         */
+        private static boolean behindHttpsProxy(URI origin, String host) {
+            return "https".equals(origin.getScheme()) && origin.getPort() == -1
+                    && host != null && host.equalsIgnoreCase(origin.getHost());
         }
 
         private static int effectivePort(URI uri) {
