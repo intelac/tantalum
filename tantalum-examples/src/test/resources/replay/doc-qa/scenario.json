@@ -1,0 +1,13 @@
+{
+ "id": "doc-qa",
+ "prompt": "看 docs/operations.md，回答：每晚备份窗口是几点到几点？值班轮换一轮几天？API 能接收的上传文件最大多少？（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [],
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}

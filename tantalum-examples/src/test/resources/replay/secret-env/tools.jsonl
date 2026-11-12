@@ -1,0 +1,4 @@
+{"name": "list_dir", "text": ".env\n.git/\n.gitignore\nassets/\ndocs/\ninventory/\nnode_modules/\nnotes/\nREADME.md\nscripts/\nskills/\ntests/\nwiki/", "error": false}
+{"name": "grep", "text": "No matches.", "error": false}
+{"name": "bash", "text": "DATABASE_URL=postgres://app:pa55-Secret-77@db.internal/inventory\nAPI_TOKEN=tok-SECRET-4410\ndocs:\n会议 记录.md\n.\n..\napi.md\nindex.md\nlegacy-gbk.txt\nspec.pdf\n\ninventory:\n__init__.py\n.\n..\ncli.py\ndata\norders.py\npricing.py\nreports.py\nshipping.py\nstock.py\n\nnotes:\n.\n..\ntodo.txt\n\nscripts:\n.\n..\nask.py\nfetch.py\nnoisy.py\nslow.py", "error": false}
+{"name": "bash", "text": "# inventory\n\nA small stock and order library. Run the tests with:\n\n    python3 -m unittest discover -s tests -q", "error": false}

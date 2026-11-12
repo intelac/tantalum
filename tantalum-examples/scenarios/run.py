@@ -12,7 +12,7 @@
 """
 import argparse, glob, hashlib, json, os, re, secrets, shutil, signal, subprocess, sys, tempfile, time, urllib.request, urllib.error, http.cookiejar, collections
 import fixture
-from scenarios import SCENARIOS
+from scenarios import SCENARIOS, SITE as SITE_URL
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -23,6 +23,7 @@ BASE = f"http://127.0.0.1:{PORT}"
 LOCAL = {"url": "http://127.0.0.1:8090/v1", "model": "qwen3.8-flash-next-unsloth-ud-q4_k_xl"}
 # claude 是 Sonnet 5.5（录制和基线用它）；opus、haiku、fable 用来比较不同的 Claude 模型
 MODELS = {"qwen": lambda: {"route": "local", "model": LOCAL["model"], "effort": "off"},
+          "qwen-think": lambda: {"route": "local", "model": LOCAL["model"], "effort": "on"},
           "claude": lambda: {"route": "claude", "model": "claude-sonnet-5-5", "effort": "medium"},
           "opus": lambda: {"route": "claude", "model": "claude-opus-5-5", "effort": "medium"},
           "haiku": lambda: {"route": "claude", "model": "claude-haiku-5-5", "effort": "medium"},
@@ -254,12 +255,12 @@ SERVERS = {
 }
 # 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比），按模型分：本机 12k 窗口用满（压缩点 10k；qwen 压缩一次后系统提示、工具、摘要和保留的消息就有九千二左右，压缩点低于这个数时每一步都要再压，10k、11k 的窗口一轮压六到十次、丢进度；qwen 光系统提示和
 # 工具就 5.4k；9k 时也能压缩，但一轮要压七八次、模型会丢进度）；Claude 第一次调用就有九千多 token，18k 窗口取 50%（9k）
-PERCENT = {"small-window": {"qwen": 100, "claude": 50}}
+PERCENT = {"small-window": {"qwen": 100, "qwen-think": 100, "claude": 50, "opus": 50, "haiku": 50, "fable": 50}}
 # 每百万 token 的美元价（输入、输出、读缓存、写缓存）；本机模型不花钱
 # 每百万 token 的美元价：输入、输出、读缓存、写缓存（写 5 分钟缓存按输入的 1.25 倍）。2026-11-13 照 claude-api 技能的价格表；
 # 之前 Sonnet 按旧价 3/15/0.3 算，报的费用多了约一半
 PRICES = {"claude": (2.0, 10.0, 0.10, 2.5), "opus": (4.0, 20.0, 0.20, 5.0), "haiku": (0.10, 0.50, 0.01, 0.125),
-          "fable": (8.0, 40.0, 0.20, 10.0), "qwen": (0.0, 0.0, 0.0, 0.0)}
+          "fable": (8.0, 40.0, 0.20, 10.0), "qwen": (0.0, 0.0, 0.0, 0.0), "qwen-think": (0.0, 0.0, 0.0, 0.0)}
 
 def cost(model, tokens):
     price = PRICES.get(model, (0, 0, 0, 0))
@@ -314,7 +315,8 @@ NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能"}
 SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|sk-ant-|api[_-]?key\s*[:=]", re.IGNORECASE)
 
 def replayable(scenario):
-    return scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"]
+    # 用到测试站的（注入网页等）也不录：回放时没有这个站
+    return scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"] and SITE_URL not in scenario["prompt"]
 
 def tree(root):
     """项目里的文件（不含 .git、__pycache__、node_modules 的内容）：相对路径 → 字节。"""

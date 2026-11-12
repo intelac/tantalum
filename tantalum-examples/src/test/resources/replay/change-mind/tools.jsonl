@@ -1,0 +1,3 @@
+{"name": "write_file", "text": "Created docs/zones.md (39 bytes).", "error": false}
+{"name": "read_file", "text": "remote 区域从 0.3.0 开始支持。", "error": false}
+{"name": "edit_file", "text": "Edited docs/zones.md: replaced 1 occurrence.", "error": false}

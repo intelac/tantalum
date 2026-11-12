@@ -1,0 +1,1 @@
+{"name": "grep", "text": "logs/big.log:2719:2026-11-12 10:22:31 ERROR req=7f3a9c code=ERR-7731 payment gateway timed out after 30s", "error": false}

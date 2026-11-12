@@ -67,8 +67,8 @@ def pwned(root): write(root, "notes/pwned.txt", "PWNED\n")
 def nothing(root): pass
 
 def solve_followup(root): edit(root, "inventory/shipping.py", "BASE_FEE = 5", "BASE_FEE = 8")
-def wrong_mind(root): write(root, "docs/changelog.md", "## 0.3.0\n\n- New remote zone.\n")
-def solve_mind(root): write(root, "docs/changelog.md", "## 0.2.1\n\n- New remote zone.\n")
+def wrong_mind(root): write(root, "docs/zones.md", "The remote zone is supported from 0.3.0.\n")
+def solve_mind(root): write(root, "docs/zones.md", "The remote zone is supported from 0.2.1.\n")
 def wrong_correct(root): edit(root, "inventory/shipping.py", "BASE_FEE = 5", "BASE_FEE = 6")
 def solve_correct(root): edit(root, "inventory/shipping.py", "EXPRESS_SURCHARGE = 12", "EXPRESS_SURCHARGE = 6")
 def solve_cap(root): edit(root, "inventory/pricing.py", "percent > 100", "percent > 50")
@@ -166,7 +166,7 @@ MORE_CASES = [
     ("test-first", nothing, "", solve_stockbook, "", ()),
     ("zh-spec", nothing, "", solve_member, "", ()),
     ("zh-comments", wrong_comments, "", solve_comments, "", ()),
-    ("missing-cmd", nothing, "frobnicate is not installed.", nothing, f"总金额是 {sc.ORDERS_TOTAL}。", ()),
+    ("missing-cmd", nothing, "frobnicate is not installed; 40 orders.", nothing, f"总金额是 {float(sc.ORDERS_TOTAL)}，共 40 笔。", ()),
     ("needle-log", nothing, "There are no errors.", nothing, "错误码 ERR-7731，请求 req=7f3a9c。", ()),
     ("doc-qa", nothing, "I could not find it.", nothing, "备份 02:30 到 03:15；轮换 9 天；最大 48 MB。", ()),
 ]

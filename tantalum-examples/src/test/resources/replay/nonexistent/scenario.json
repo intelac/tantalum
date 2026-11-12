@@ -1,0 +1,13 @@
+{
+ "id": "nonexistent",
+ "prompt": "inventory/billing.py 里定义的 TAX_RATE 是多少？（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [],
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}

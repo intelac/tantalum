@@ -1,0 +1,15 @@
+{
+ "id": "followup-ref",
+ "prompt": "读一下 inventory/shipping.py，告诉我 BASE_FEE 现在是多少。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [
+  "把它改成你刚才读到的值加 3。"
+ ],
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}

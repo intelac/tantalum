@@ -1,0 +1,13 @@
+{
+ "id": "ci-log",
+ "prompt": "CI 挂了，失败日志在 logs/ci.log。修好代码（不要改测试），本地跑一遍全部测试确认。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [],
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}

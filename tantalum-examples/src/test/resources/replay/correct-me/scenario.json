@@ -1,0 +1,15 @@
+{
+ "id": "correct-me",
+ "prompt": "把 inventory/shipping.py 的 BASE_FEE 改成 6。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [
+  "我说错了：应该是 EXPRESS_SURCHARGE 改成 6，BASE_FEE 恢复原来的值。"
+ ],
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}

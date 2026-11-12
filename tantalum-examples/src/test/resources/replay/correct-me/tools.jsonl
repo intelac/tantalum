@@ -1,0 +1,6 @@
+{"name": "grep", "text": "inventory/shipping.py:3:BASE_FEE = 5  # flat part of every parcel\ninventory/shipping.py:12:    fee = BASE_FEE + weight_kg * ZONE_RATES[zone]", "error": false}
+{"name": "find_files", "text": "inventory/shipping.py", "error": false}
+{"name": "read_file", "text": "\"\"\"Shipping fees.\"\"\"\n\nBASE_FEE = 5  # flat part of every parcel\nEXPRESS_SURCHARGE = 12\nZONE_RATES = {\"local\": 1.0, \"national\": 1.5, \"overseas\": 3.5}\n\n\ndef compute_shipping_fee(weight_kg, zone, express=False):\n    \"\"\"Fee for one parcel.\"\"\"\n    if zone not in ZONE_RATES:\n        raise ValueError(\"unknown zone: \" + zone)\n    fee = BASE_FEE + weight_kg * ZONE_RATES[zone]\n    return fee + EXPRESS_SURCHARGE if express else fee", "error": false}
+{"name": "edit_file", "text": "Edited inventory/shipping.py: replaced 1 occurrence.", "error": false}
+{"name": "edit_file", "text": "Edited inventory/shipping.py: replaced 1 occurrence.", "error": false}
+{"name": "edit_file", "text": "Edited inventory/shipping.py: replaced 1 occurrence.", "error": false}

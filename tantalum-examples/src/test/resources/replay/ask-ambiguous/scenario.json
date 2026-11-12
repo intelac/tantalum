@@ -1,0 +1,17 @@
+{
+ "id": "ask-ambiguous",
+ "prompt": "把那个折扣函数改一下，现在的规则不对。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "turns": [],
+ "write": true,
+ "serverArgs": [],
+ "answers": [
+  {
+   "text": "折扣最多 50%，超过 50 就抛 ValueError；其他规则不变"
+  }
+ ],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "1a1ac2c-dirty",
+  "date": "2026-11-13"
+ }
+}
