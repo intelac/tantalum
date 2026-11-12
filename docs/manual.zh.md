@@ -1014,9 +1014,18 @@ python3 tantalum-examples/scenarios/run.py --model qwen --repeat 3 --compare tan
 python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-compact
 ```
 
-`--repeat N` 每个场景跑 N 次、报通过率（照 pi 的 `--runs-per-variant`）：时过时不过的标“不稳定”，全过的标“已饱和”（这个场景对这个模型已经没有区分力）。每轮结果是一个 `.json`（计划、提交号、系统提示的哈希、每次的步数、token、压缩次数、费用）和一张 `.md` 表；`--compare` 和上一轮逐个场景比通过率、步数、token，模型或系统提示不同时先写一句提示。计划里有没跑成的（服务器起不来、运行异常结束、模型报错），表照出，但不给总通过率，退出码 2——免得少跑了几个也显示成“全过”。需要单独配置的场景（`todo-compact` 的小窗口）自动另起一台服务器。
+`--repeat N` 每个场景跑 N 次、报通过率（照 pi 的 `--runs-per-variant`）：时过时不过的标“不稳定”，全过的标“已饱和”（这个场景对这个模型已经没有区分力）。每轮结果是一个 `.json`（计划、提交号、系统提示的哈希、每次的步数、token、压缩次数、费用）和一张 `.md` 表；`--compare` 和上一轮逐个场景比通过率、步数、token，模型或系统提示不同时先写一句提示。计划里有没跑成的（服务器起不来、提交被拒、运行失败），表照出，但不给总通过率，退出码 2——免得少跑了几个也显示成“全过”；被钩子或插件拦下、被取消算这次没过，不算没跑成。需要单独配置的场景（`todo-compact` 的小窗口）自动另起一台服务器。
 
 要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
+
+2026-11-13 的基线（提交 `c67efbd`，37 个场景各 3 次）：
+
+| 模型 | 通过 | 3 次全过的场景 | 费用 |
+|---|---|---|---|
+| Claude Sonnet 5.5 | 105 / 111 | 33 / 37 | 约 3.0 美元 |
+| 本机 qwen | 88 / 111 | 25 / 37 | 0 |
+
+Claude 没过的：`new-file` 三次都照技能的格式写、没写出“0.2.0”；两个清单任务各有一次没把最后一张待办清单标完（或只交了几项），`todo-compact` 有一次没走到压缩点；`web-404` 有一次被示例插件 `citationCheck` 拦下。qwen 没过的多半是拿到答案后还反复验证、超过步数（`binary`、`web-404`、`skill`、`run-tests`），和长任务做不完（`feature-tests`、`debug-log` 三次都没过，`fix-bug`、`split-module`、`todo-compact` 时过时不过）。以后改了工具、提示或循环，用 `--repeat 3 --compare 这份基线` 比。
 
 **每晚**：`tantalum-examples/scenarios/nightly.sh` 拉最新代码、打包、用本机模型把全部场景各跑 3 次，和前一晚比，结果放在 `results/nightly/`。不花钱。模型没响应时可以让它先启动模型：设环境变量 `TANTALUM_NIGHTLY_START` 为启动命令。用 launchd 每天 03:00 跑：照 `dev.tantalum.nightly.plist.template` 开头的两行命令装上（不会自动装）。
 

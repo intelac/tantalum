@@ -221,7 +221,8 @@ def run_one(user, scenario, model, recording=False):
     except Exception as failure: failed.append(f"check crashed: {failure!r}")
     seen = collections.Counter((call["name"], json.dumps(call["args"], sort_keys=True, ensure_ascii=False)) for call in ctx.calls)
     # 没跑成（提交被拒、运行异常结束、模型报错）和“模型做错了”分开：前者不算进通过率
-    blocked = problem if problem and (problem.startswith("submit ") or problem.startswith("run ended")) else None
+    # 被钩子或插件拦下（STOPPED）、被取消是这次运行的结果，算没过；提交被拒、运行失败（FAILED：模型报错、服务器出错）才算没跑成
+    blocked = problem if problem and (problem.startswith("submit ") or problem.startswith("run ended FAILED")) else None
     return {"id": scenario["id"], "group": scenario["group"], "risk": scenario["risk"], "passed": not failed, "failed": failed, "model_calls": ctx.model_calls,
             "blocked": blocked, "compactions": ctx.compactions, "promptSha256": prompt_sha,
             "tools": dict(ctx.tools), "errors": [{"tool": c["name"], "args": c["args"], "text": (c["result"] or "")[:400]} for c in ctx.calls if c["error"]],
