@@ -104,6 +104,7 @@ class PluginParamsTest {
     /** 插件 quota：钩子声明 tokens（归管理员），默认关。 */
     static final class QuotaHook implements KernelHook, PluginInfo, Configurable, DailyLimit {
         @Override public OptionalLong dailyTokens(Params params) { return OptionalLong.of(params.number("tokens", -1)); }
+        @Override public java.util.Optional<String> limitParam() { return java.util.Optional.of("tokens"); }
         @Override public String name() { return "quotaHook"; }
         @Override public String plugin() { return "quota"; }
         @Override public boolean defaultEnabled() { return false; }
@@ -581,5 +582,45 @@ class PluginParamsTest {
         gate.set(ALICE, Kind.PLUGIN, "quota", false);
         guardLimit = OptionalLong.empty();
         assertEquals(OptionalLong.empty(), gate.dailyLimit(ALICE));
+    }
+
+    /** qagent-align 需求 5.1、5.2、5.6、5.8：报上限的插件说明上限是哪个参数，运维页据此显示“默认 / 单独设置”并直接改。 */
+    @Test
+    void thePluginSaysWhichParamIsTheLimitSoTheOpsPageCanShowAndChangeIt() {
+        // guard 也报上限（按名字排在 quota 前面），但没说是哪个参数：能改的是 quota 的 tokens
+        PluginGate.LimitSource source = gate.limitSource().orElseThrow();
+        assertEquals("quota", source.plugin());
+        assertEquals("tokens", source.param().key());
+        assertEquals(1000, source.value(), "the plugin's own default");
+        assertEquals(1L, source.param().min());
+
+        // 他没开报上限的插件（guard 现在不报）：页面写“没有上限”
+        PluginGate.UserLimit off = gate.limitOf(ALICE);
+        assertTrue(off.reported());
+        assertTrue(off.enabled(), "guard is on for everyone, though it reports no number now");
+        assertEquals(OptionalLong.empty(), off.tokens());
+
+        gate.set(ALICE, Kind.PLUGIN, "quota", true);
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(1000), false), gate.limitOf(ALICE));
+
+        // 管理员改默认：所有人的默认变了，还是“默认”
+        gate.saveDefaults(Kind.PLUGIN, "quota", Map.of("tokens", num(5000)));
+        assertEquals(5000, gate.limitSource().orElseThrow().value());
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(5000), false), gate.limitOf(ALICE));
+
+        // 给这个人单独设；别人不受影响
+        gate.assign(ALICE, Kind.PLUGIN, "quota", Map.of("tokens", num(300)));
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(300), true), gate.limitOf(ALICE));
+        gate.set(BOB, Kind.PLUGIN, "quota", true);
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(5000), false), gate.limitOf(BOB));
+        assertEquals(5000, gate.limitSource().orElseThrow().value(), "the default is not what one person was given");
+
+        // 恢复默认
+        gate.assign(ALICE, Kind.PLUGIN, "quota", Map.of("tokens", new Json.Null()));
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(5000), false), gate.limitOf(ALICE));
+
+        // 多个插件报上限：显示最小的，“单独设置”说的仍然是能改的那个参数
+        guardLimit = OptionalLong.of(200);
+        assertEquals(new PluginGate.UserLimit(true, true, OptionalLong.of(200), false), gate.limitOf(ALICE));
     }
 }

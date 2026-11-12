@@ -244,6 +244,45 @@ public final class PluginGate {
         return lowest;
     }
 
+    /** 运维页能直接改的那个上限：哪个插件的哪个参数，所有人的默认现在是多少（管理员定的，没定就是插件自带的）。 */
+    public record LimitSource(String plugin, Param param, long value) {}
+
+    /**
+     * 报上限的插件里，第一个（按名字）说了“上限是哪个参数”（{@link DailyLimit#limitParam}）而且那个参数是归管理员的数字参数的。
+     * 没有就是空：运维页不显示上限那一列以外的修改入口。
+     */
+    public Optional<LimitSource> limitSource() {
+        for (String plugin : new java.util.TreeSet<>(dailyLimits.keySet())) {
+            List<Param> declared = pluginParams.getOrDefault(plugin, List.of());
+            for (DailyLimit member : dailyLimits.get(plugin)) {
+                Optional<Param> param = member.limitParam().flatMap(key -> declared.stream().filter(each -> each.key().equals(key)
+                        && each.type() == Param.Type.NUMBER && each.owner() == Param.Owner.ADMIN).findFirst());
+                if (param.isPresent()) {
+                    long value = resolver.defaults(Kind.PLUGIN, plugin, declared).stream()
+                            .filter(item -> item.param().key().equals(param.get().key()))
+                            .map(item -> ((Json.Num) item.value()).value().longValue()).findFirst().orElseThrow();
+                    return Optional.of(new LimitSource(plugin, param.get(), value));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 一个人的上限给运维页看：{@code reported} 有没有任何插件报上限；{@code enabled} 他开没开其中的哪一个；
+     * {@code tokens} 同 {@link #dailyLimit}；{@code own} 是 {@link #limitSource} 那个参数给他单独设过。
+     */
+    public record UserLimit(boolean reported, boolean enabled, OptionalLong tokens, boolean own) {}
+
+    public UserLimit limitOf(Principal user) {
+        boolean enabled = dailyLimits.keySet().stream().anyMatch(plugin -> pluginEnabled(user, plugin));
+        boolean own = limitSource().map(source -> resolver.resolve(user, Kind.PLUGIN, source.plugin(),
+                        pluginParams.getOrDefault(source.plugin(), List.of())).stream()
+                .anyMatch(item -> item.param().key().equals(source.param().key()) && item.source() == ParamResolver.Source.ASSIGNED))
+                .orElse(false);
+        return new UserLimit(!dailyLimits.isEmpty(), enabled, dailyLimit(user), own);
+    }
+
     public List<Plugin> plugins() {
         return List.copyOf(plugins.values());
     }

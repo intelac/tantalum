@@ -75,6 +75,12 @@ public final class DailyQuotaHook implements KernelHook, PluginInfo, Configurabl
         return OptionalLong.of(params.number("tokens", dailyTokens));
     }
 
+    /** 上限就是 {@code tokens} 这个参数：运维页据此在表格里直接改。 */
+    @Override
+    public java.util.Optional<String> limitParam() {
+        return java.util.Optional.of("tokens");
+    }
+
     @Override
     public HookResult beforeModelCall(KernelState state, HookContext context) {
         PrincipalState principal = state.principals().get(context.run().principal());

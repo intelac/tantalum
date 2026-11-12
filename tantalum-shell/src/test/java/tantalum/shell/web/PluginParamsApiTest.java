@@ -55,6 +55,7 @@ class PluginParamsApiTest {
     /** 插件 quota：额度只归管理员，默认关。 */
     static final class Quota implements KernelHook, PluginInfo, Configurable, DailyLimit {
         @Override public OptionalLong dailyTokens(Params params) { return OptionalLong.of(params.number("tokens", 1000)); }
+        @Override public java.util.Optional<String> limitParam() { return java.util.Optional.of("tokens"); }
         @Override public String name() { return "quotaHook"; }
         @Override public String plugin() { return "quota"; }
         @Override public boolean defaultEnabled() { return false; }
@@ -345,5 +346,109 @@ class PluginParamsApiTest {
         assertEquals(0, ok(send("bob", "GET", "/api/usage/today", null)).get("used").asLong());
         assertEquals(401, server.http.send(HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/usage/today")).build(),
                 HttpResponse.BodyHandlers.ofString()).statusCode());
+    }
+
+    // ---- qagent-align 需求 4、5：运维表格 ----
+
+    private JsonNode row(JsonNode list, String name) {
+        for (JsonNode user : list.get("users")) {
+            if (user.get("name").asString().equals(name)) {
+                return user;
+            }
+        }
+        throw new AssertionError("no user " + name + " in " + list);
+    }
+
+    private void ask(String user, String session, String request) throws Exception {
+        assertEquals(200, send(user, "POST", "/api/sessions/" + session + "/submissions",
+                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+        for (int i = 0; i < 1000; i++) {
+            JsonNode runs = JSON.readTree(send(user, "GET", "/api/sessions/" + session + "/runs", null).body()).get("runs");
+            if (runs != null && runs.size() > 0 && runs.get(runs.size() - 1).has("endReason")) {
+                return;
+            }
+            Thread.sleep(10);
+        }
+        throw new AssertionError("the run did not end");
+    }
+
+    @Test
+    void theOpsTableShowsSessionsRunsAndEachPersonsLimit() throws Exception {
+        ask("alice", "s1", "r1");
+        ask("alice", "s2", "r2");
+        ask("bob", "s9", "r9");
+        assertEquals(200, send("alice", "PUT", "/api/sessions/s2/archived", "{\"archived\":true}").statusCode());
+        ok(send("alice", "PUT", "/api/plugins/plugin/quota", "{\"enabled\":true}"));
+
+        JsonNode list = ok(send("root", "GET", "/api/users", null));
+        // 顶上：能直接改的那个上限是哪个插件的哪个参数、所有人的默认、范围
+        assertEquals("{\"plugin\":\"quota\",\"key\":\"tokens\",\"value\":1000,\"min\":1}", list.get("dailyLimit").toString());
+        assertFalse(list.get("weighted").asBoolean());
+        assertEquals("[]", list.get("weights").toString());
+
+        JsonNode alice = row(list, "alice");
+        assertEquals(1, alice.get("sessions").asInt(), "the archived session does not count: " + alice);
+        assertEquals(0, alice.get("running").asInt());
+        assertEquals("{\"tokens\":1000,\"own\":false}", alice.get("limit").toString());
+        // bob 没开每日额度：没有上限
+        JsonNode bob = row(list, "bob");
+        assertEquals(1, bob.get("sessions").asInt());
+        assertEquals("{\"off\":true}", bob.get("limit").toString());
+        assertEquals(0, row(list, "root").get("sessions").asInt());
+
+        // 单独设置：只有这个人变
+        ok(send("root", "PUT", "/api/admin/users/alice/params/plugin/quota", "{\"values\":{\"tokens\":50}}"));
+        list = ok(send("root", "GET", "/api/users", null));
+        assertEquals("{\"tokens\":50,\"own\":true}", row(list, "alice").get("limit").toString());
+        assertEquals(1000, list.get("dailyLimit").get("value").asInt());
+        // 数字不合参数的规矩：拒绝，不保存
+        assertEquals(400, send("root", "PUT", "/api/admin/users/alice/params/plugin/quota", "{\"values\":{\"tokens\":0}}").statusCode());
+        assertEquals("{\"tokens\":50,\"own\":true}", row(ok(send("root", "GET", "/api/users", null)), "alice").get("limit").toString());
+
+        // 改默认：等于改“插件默认值”里那个参数；单独设的不受影响
+        ok(send("root", "PUT", "/api/admin/plugins/plugin/quota", "{\"params\":{\"tokens\":7000}}"));
+        list = ok(send("root", "GET", "/api/users", null));
+        assertEquals(7000, list.get("dailyLimit").get("value").asInt());
+        assertEquals("{\"tokens\":50,\"own\":true}", row(list, "alice").get("limit").toString());
+
+        // 恢复默认
+        ok(send("root", "PUT", "/api/admin/users/alice/params/plugin/quota", "{\"values\":{\"tokens\":null}}"));
+        assertEquals("{\"tokens\":7000,\"own\":false}", row(ok(send("root", "GET", "/api/users", null)), "alice").get("limit").toString());
+
+        // 这些数只有管理员能取
+        assertEquals(403, send("alice", "GET", "/api/users", null).statusCode());
+    }
+
+    /** 需求 4.3：此刻在跑或在等回答的运行数。 */
+    @Test
+    void aRunThatIsStillGoingIsCounted() throws Exception {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        server.close();
+        ModelClient slow = (prompt, chunks) -> {
+            try {
+                release.await(20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+            }
+            return new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null);
+        };
+        server = new TestServer(temp.resolve("data2"), temp.resolve("ws"), slow);
+        server.users().add("root", TestServer.PASSWORD, true);
+        try {
+            assertEquals(200, send("alice", "POST", "/api/sessions/s1/submissions",
+                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+            int running = 0;
+            for (int i = 0; i < 500 && running == 0; i++) {
+                Thread.sleep(10);
+                running = row(ok(send("root", "GET", "/api/users", null)), "alice").get("running").asInt();
+            }
+            assertEquals(1, running);
+            JsonNode list = ok(send("root", "GET", "/api/users", null));
+            // 没有任何插件报每日上限：每个人都没有 limit，顶上也没有 dailyLimit
+            assertFalse(row(list, "alice").has("limit"), list.toString());
+            assertFalse(list.has("dailyLimit"));
+        } finally {
+            release.countDown();
+        }
     }
 }

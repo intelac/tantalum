@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,8 +17,11 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import tantalum.shell.auth.UserStore;
+import tantalum.shell.access.PluginGate;
 import tantalum.shell.boot.Engine;
+import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.id.Principal;
+import tantalum.value.id.SessionId;
 import tantalum.value.model.TokenUsage;
 import tools.jackson.databind.JsonNode;
 
@@ -39,17 +43,66 @@ public class UsersController {
         this.json = json;
     }
 
+    /**
+     * 运维表格（qagent-align 需求 4、5）。每人：今天（UTC）的用量、没归档的会话数、此刻在跑或在等回答的运行数、每日上限
+     * （{@code {tokens?, own}}，他没开报上限的插件时是 {@code {off: true}}；没有任何插件报上限时没有这一项）。
+     * 顶层：{@code dailyLimit} 是表格里能直接改的那个上限（哪个插件的哪个参数、所有人的默认、范围），没有插件说明是哪个参数时没有；
+     * {@code weighted}、{@code weights} 是折算系数（只列不全是 1 的）。平台不认识具体插件，这些都从插件点来。
+     */
     @GetMapping("/api/users")
     ResponseEntity<String> list() throws SQLException {
-        // 每人带今天（UTC）的用量：管理员定每日额度时看得到这个人用了多少
         LocalDate today = LocalDate.ofInstant(engine.clock().instant(), ZoneOffset.UTC);
         List<Map<String, Object>> views = new ArrayList<>();
         for (UserStore.Account account : users.list()) {
+            Principal user = new Principal(account.name());
             Map<String, Object> view = view(account);
-            view.put("usageToday", usage(engine.queries().usageOn(new Principal(account.name()), today)));
+            view.put("usageToday", usage(engine.queries().usageOn(user, today)));
+            Set<SessionId> archived = engine.archive().all(user);
+            List<SessionSummary> sessions = engine.queries().sessions(user).stream().filter(session -> !archived.contains(session.id())).toList();
+            view.put("sessions", sessions.size());
+            view.put("running", sessions.stream().filter(session -> !SessionSummary.IDLE.equals(session.runStatus())).count());
+            PluginGate.UserLimit limit = engine.plugins().limitOf(user);
+            if (limit.reported()) {
+                Map<String, Object> shown = new LinkedHashMap<>();
+                if (!limit.enabled()) {
+                    shown.put("off", true);
+                } else {
+                    limit.tokens().ifPresent(tokens -> shown.put("tokens", tokens));
+                    shown.put("own", limit.own());
+                }
+                view.put("limit", shown);
+            }
             views.add(view);
         }
-        return json.json(200, Map.of("users", views));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("users", views);
+        engine.plugins().limitSource().ifPresent(source -> {
+            Map<String, Object> shown = new LinkedHashMap<>();
+            shown.put("plugin", source.plugin());
+            shown.put("key", source.param().key());
+            shown.put("value", source.value());
+            if (source.param().min() != null) {
+                shown.put("min", source.param().min());
+            }
+            if (source.param().max() != null) {
+                shown.put("max", source.param().max());
+            }
+            response.put("dailyLimit", shown);
+        });
+        response.put("weighted", engine.weights().any());
+        response.put("weights", engine.weights().rows().stream().map(row -> {
+            Map<String, Object> shown = new LinkedHashMap<>();
+            shown.put("route", row.route());
+            if (row.model() != null) {
+                shown.put("model", row.model());
+            }
+            shown.put("input", row.weights().input());
+            shown.put("output", row.weights().output());
+            shown.put("cacheRead", row.weights().cacheRead());
+            shown.put("cacheWrite", row.weights().cacheWrite());
+            return shown;
+        }).toList());
+        return json.json(200, response);
     }
 
     /** 请求体 {@code {"name", "password", "admin"}}。 */

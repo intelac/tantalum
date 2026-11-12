@@ -20,6 +20,47 @@ export interface Account {
   disabled: boolean;
   createdAt: string;
   usageToday?: UsageToday;
+  /** 没归档的会话数。 */
+  sessions?: number;
+  /** 此刻在跑或在等回答的运行数。 */
+  running?: number;
+  /** 每日上限；没有任何插件报上限时没有这一项。 */
+  limit?: AccountLimit;
+}
+
+/** 一个人的每日上限：`off` 是他没开报上限的插件；`own` 是给他单独设过（否则用的是默认）。 */
+export interface AccountLimit {
+  tokens?: number;
+  own?: boolean;
+  off?: boolean;
+}
+
+/** 运维表格里能直接改的那个上限：哪个插件的哪个参数、所有人的默认、范围。 */
+export interface DailyLimitSource {
+  plugin: string;
+  key: string;
+  value: number;
+  min?: number;
+  max?: number;
+}
+
+/** 一行折算系数；没有 `model` 是整条路线的。 */
+export interface UsageWeight {
+  route: string;
+  model?: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/** GET /api/users（管理员）：运维表格。 */
+export interface UserList {
+  users: Account[];
+  dailyLimit?: DailyLimitSource;
+  /** 服务器配了折算系数：今日用量是折算后的数。 */
+  weighted?: boolean;
+  weights?: UsageWeight[];
 }
 
 /** 插件作者写给人看的文字（I10）：一个字符串照原样显示，带语言的按用户的语言选，没有就用英文。 */

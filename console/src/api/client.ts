@@ -38,6 +38,7 @@ import type {
   Turn,
   TurnSummary,
   User,
+  UserList,
   UserSettingsView,
 } from "./types";
 
@@ -126,7 +127,7 @@ export function changePassword(current: string, next: string): Promise<{ changed
 }
 
 // 用户管理（管理员；需求 2.4）
-export function listUsers(): Promise<{ users: Account[] }> {
+export function listUsers(): Promise<UserList> {
   return call("/api/users");
 }
 

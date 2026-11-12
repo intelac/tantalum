@@ -192,6 +192,63 @@ test.describe("插件参数", () => {
     await user.close();
   });
 
+  test("运维表格：各列；在表格里给一个人单独设很小的上限，他被拦下；恢复默认后又能用", async ({ browser }) => {
+    const stamp = Date.now();
+    const user = await signedIn(browser, OTHER_USER);
+    await call(user, "put", "/api/plugins/plugin/dailyQuota", { enabled: true });
+    await send(user, `table before${stamp}`);
+    await expect(user.getByText(/^已完成/).first()).toBeVisible({ timeout: 30_000 });
+
+    const admin = await signedIn(browser, USER);
+    await admin.getByRole("button", { name: "设置", exact: true }).first().click();
+    const settings = admin.getByRole("dialog", { name: "设置" });
+    await settings.getByRole("button", { name: "运维" }).click();
+    await expect(settings.getByRole("columnheader")).toHaveText(["用户", /^今日用量/, "每日上限", "会话", "进行中", "操作"]);
+    // 表格上面：所有人的默认上限
+    await expect(settings.getByText("默认每日上限", { exact: true })).toBeVisible();
+    await expect(settings.getByText("100,000,000").first()).toBeVisible();
+
+    const row = settings.getByRole("row").filter({ has: admin.getByText(OTHER_USER, { exact: true }) });
+    // 他开了每日额度、用的是默认：有百分比和进度条，标“默认”；会话数至少 1
+    await expect(row.getByRole("progressbar")).toBeVisible();
+    await expect(row.getByText("默认", { exact: true })).toBeVisible();
+    expect(Number(await row.getByRole("cell").nth(3).textContent())).toBeGreaterThanOrEqual(1);
+    // 没开每日额度的人：没有上限
+    const other = settings.getByRole("row").filter({ has: admin.getByText("e2e3", { exact: true }) });
+    await expect(other.getByText("没有上限")).toBeVisible();
+    await admin.screenshot({ path: "test-results/ops-table.png" });
+
+    // 就地单独设置：回车保存
+    await row.getByRole("button", { name: `给 ${OTHER_USER} 单独设置每日上限` }).click();
+    const field = row.getByRole("textbox", { name: `${OTHER_USER} 的每日上限` });
+    await expect(field).toHaveValue("100000000");
+    await field.fill("0");
+    await field.press("Enter");
+    await expect(row.getByRole("alert")).toHaveText("不能小于 1");
+    await field.fill("1");
+    await field.press("Enter");
+    await expect(row.getByText("单独设置", { exact: true }).first()).toBeVisible();
+    await expect(row.getByRole("progressbar")).toHaveAttribute("data-level", "over");
+    await admin.screenshot({ path: "test-results/ops-table-own-limit.png" });
+
+    await send(user, `table blocked${stamp}`);
+    await expect(user.getByText(/daily token quota used up/)).toBeVisible({ timeout: 30_000 });
+
+    // 恢复默认
+    await row.getByRole("button", { name: `把 ${OTHER_USER} 的每日上限恢复默认` }).click();
+    await expect(row.getByText("默认", { exact: true })).toBeVisible();
+    await send(user, `table after${stamp}`);
+    await expect(user.getByText(/^已完成/)).toHaveCount(2, { timeout: 30_000 });
+    await expect(user.getByText(/daily token quota used up/)).toHaveCount(1);
+
+    // 窄屏：表格在自己的容器里横向滚，页面不滚
+    await admin.setViewportSize({ width: 390, height: 800 });
+    expect(await admin.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await admin.screenshot({ path: "test-results/ops-table-phone.png" });
+    await admin.close();
+    await user.close();
+  });
+
   test("390 宽：三组、表单、锁定条、默认值都不横向滚动", async ({ browser }) => {
     const admin = await signedIn(browser, USER);
     await call(admin, "put", "/api/admin/plugins/plugin/toolApproval", { locked: true, reason: "窄屏上的一条比较长的锁定原因，看它会不会把这一行撑宽" });

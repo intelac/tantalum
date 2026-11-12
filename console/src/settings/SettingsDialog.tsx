@@ -47,7 +47,8 @@ export function SettingsDialog({ open, onClose, config, choice = null, username,
   const [pane, setPane] = useState<Pane>("appearance");
   const panes = PANES.filter((candidate) => admin || candidate.adminOnly !== true);
   return (
-    <Dialog open={open} onClose={onClose} title={t.settings.title} className="max-w-3xl">
+    // 运维是一张六列的表，比别的页宽
+    <Dialog open={open} onClose={onClose} title={t.settings.title} className={pane === "users" ? "max-w-5xl" : "max-w-3xl"}>
       <div className="flex min-h-[26rem] flex-col sm:flex-row">
         <nav aria-label={t.settings.title} className="flex gap-1 px-4 py-3 sm:w-44 sm:flex-col sm:py-4">
           {panes.map(({ id, icon: Icon }) => (

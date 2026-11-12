@@ -1,13 +1,15 @@
 import { Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
-import type { Account } from "../api/types";
+import type { Account, DailyLimitSource, UsageWeight } from "../api/types";
 import { useText } from "../text";
 import { errorLine } from "../text/errors";
-import { formatNumber, relativeTime } from "../text/format";
+import { relativeTime } from "../text/format";
 import { ParamForm } from "../plugins/ParamForm";
 import { usePluginDefaults } from "../plugins/usePlugins";
 import { Button } from "../ui/Button";
+import { DefaultLimit, LimitCell } from "./LimitCell";
+import { UsageCell } from "./UsageCell";
 import { useAssignedParams, useCreateUser, useResetUserPassword, useUpdateUser, useUsers } from "./useUsers";
 
 const FIELD = "focus-plain w-full rounded-md border border-line bg-raised px-3 py-1.5 text-sm text-fg focus:border-line-strong";
@@ -18,8 +20,9 @@ interface Props {
 }
 
 /**
- * 运维（ops-hardening-2 需求 3.2，plugin-settings P14）：用户列表、新建、停用/启用、设/取消管理员、重置密码；
- * 每人今天的用量；有“只有管理员能定”的参数时，每人一个“参数”可以单独指定。错误按代码翻译。
+ * 运维（ops-hardening-2 需求 3.2，plugin-settings P14，qagent-align 需求 4、5）：一张表看每个人今天用了多少、离上限多远、
+ * 有几个会话、现在有没有在跑；上限在表格里直接改；新建、停用/启用、设/取消管理员、重置密码照旧；
+ * 有“只有管理员能定”的参数时，每人一个“参数”可以单独指定。页面开着时每 10 秒刷新一次。错误按代码翻译。
  */
 export function OpsPane({ self }: Props) {
   const t = useText();
@@ -29,6 +32,9 @@ export function OpsPane({ self }: Props) {
   const assignable = (defaults.data?.items ?? []).some((item) => item.params.some((param) => param.owner === "admin"));
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const weighted = list.data?.weighted === true;
+  // 没有任何插件报每日上限时，没有上限这一列
+  const limits = (list.data?.users ?? []).some((account) => account.limit !== undefined);
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-medium text-fg">{t.users.title}</h3>
@@ -39,27 +45,44 @@ export function OpsPane({ self }: Props) {
           {t.users.loadFailed}
         </p>
       )}
+      {list.data?.dailyLimit !== undefined && <DefaultLimit source={list.data.dailyLimit} />}
       {list.data !== undefined && (
+        // 窄屏时表格在这个容器里横向滚动，页面本身不滚
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-fg-muted">
-                <th className="py-1 pr-3 font-normal">{t.users.columns.name}</th>
-                <th className="py-1 pr-3 font-normal">{t.users.columns.role}</th>
-                <th className="py-1 pr-3 font-normal">{t.users.columns.state}</th>
-                <th className="py-1 pr-3 font-normal">{t.users.columns.createdAt}</th>
-                <th className="py-1 pr-3 text-right font-normal">{t.users.columns.usage}</th>
-                <th className="py-1" />
+                <th className="py-1 pr-3 font-normal">{t.users.columns.user}</th>
+                <th className="py-1 pr-3 text-right font-normal" title={weighted ? t.users.weighedHint : undefined}>
+                  {weighted ? t.users.columns.usageWeighed : t.users.columns.usage}
+                </th>
+                {limits && <th className="py-1 pr-3 text-right font-normal">{t.users.columns.limit}</th>}
+                <th className="py-1 pr-3 text-right font-normal" title={t.users.sessionsHint}>
+                  {t.users.columns.sessions}
+                </th>
+                <th className="py-1 pr-3 text-right font-normal" title={t.users.runningHint}>
+                  {t.users.columns.running}
+                </th>
+                <th className="py-1 text-right font-normal">{t.users.columns.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {list.data.users.map((account) => (
-                <Row key={account.name} account={account} isSelf={account.name === self} assignable={assignable} onNotice={setNotice} />
+                <Row
+                  key={account.name}
+                  account={account}
+                  isSelf={account.name === self}
+                  assignable={assignable}
+                  limits={limits}
+                  source={list.data.dailyLimit}
+                  onNotice={setNotice}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {(list.data?.weights ?? []).length > 0 && <Weights rows={list.data?.weights ?? []} />}
       {notice !== null && (
         <p role="status" className="text-sm text-fg-muted">
           {notice}
@@ -85,12 +108,57 @@ export function OpsPane({ self }: Props) {
   );
 }
 
-function Row({ account, isSelf, assignable, onNotice }: { account: Account; isSelf: boolean; assignable: boolean; onNotice: (text: string) => void }) {
+/** 折算系数：服务器配置里写的，只读（qagent-align 需求 3.8）。 */
+function Weights({ rows }: { rows: readonly UsageWeight[] }) {
+  const t = useText();
+  const text = t.users.weights;
+  return (
+    <section aria-label={text.title} className="flex flex-col gap-1.5">
+      <h4 className="text-sm font-medium text-fg">{text.title}</h4>
+      <p className="text-xs text-fg-faint">{text.hint}</p>
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-sm">
+          <thead>
+            <tr className="text-left text-xs text-fg-muted">
+              <th className="py-1 pr-4 font-normal">{text.route}</th>
+              <th className="py-1 pr-4 font-normal">{text.model}</th>
+              <th className="py-1 pr-4 text-right font-normal">{text.input}</th>
+              <th className="py-1 pr-4 text-right font-normal">{text.output}</th>
+              <th className="py-1 pr-4 text-right font-normal">{text.cacheRead}</th>
+              <th className="py-1 text-right font-normal">{text.cacheWrite}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {rows.map((row) => (
+              <tr key={`${row.route}/${row.model ?? ""}`}>
+                <td className="py-1 pr-4 font-mono text-fg">{row.route}</td>
+                <td className="py-1 pr-4 font-mono text-fg-muted">{row.model ?? text.whole}</td>
+                <td className="py-1 pr-4 text-right tabular-nums">{row.input}</td>
+                <td className="py-1 pr-4 text-right tabular-nums">{row.output}</td>
+                <td className="py-1 pr-4 text-right tabular-nums">{row.cacheRead}</td>
+                <td className="py-1 text-right tabular-nums">{row.cacheWrite}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function Row({ account, isSelf, assignable, limits, source, onNotice }: {
+  account: Account;
+  isSelf: boolean;
+  assignable: boolean;
+  /** 表格有没有“每日上限”这一列。 */
+  limits: boolean;
+  source: DailyLimitSource | undefined;
+  onNotice: (text: string) => void;
+}) {
   const t = useText();
   const update = useUpdateUser();
   const [resetting, setResetting] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const usage = account.usageToday;
 
   async function change(change: { disabled?: boolean; admin?: boolean }): Promise<void> {
     try {
@@ -103,24 +171,27 @@ function Row({ account, isSelf, assignable, onNotice }: { account: Account; isSe
   return (
     <>
       <tr>
-        <td className="py-1.5 pr-3 font-mono text-fg">
-          {account.name}
+        <td className="py-1.5 pr-3 align-top" title={t.users.createdAt(relativeTime(account.createdAt))}>
+          <span className="font-mono text-fg">{account.name}</span>
           {isSelf && <span className="ml-1 text-xs text-fg-faint">({t.users.you})</span>}
+          <span className="mt-0.5 flex flex-wrap gap-1 text-[11px]">
+            <span className="rounded-xs bg-muted px-1.5 py-0.5 text-fg-muted">{account.admin ? t.users.admin : t.users.user}</span>
+            {account.disabled && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-warning">{t.users.disabled}</span>}
+          </span>
         </td>
-        <td className="py-1.5 pr-3 text-fg-muted">{account.admin ? t.users.admin : t.users.user}</td>
-        <td className="py-1.5 pr-3 text-fg-muted">{account.disabled ? t.users.disabled : t.users.enabled}</td>
-        <td className="py-1.5 pr-3 text-fg-muted">{relativeTime(account.createdAt)}</td>
-        <td
-          className="py-1.5 pr-3 text-right text-fg-muted tabular-nums"
-          title={
-            usage === undefined
-              ? undefined
-              : t.users.usageDetail(formatNumber(usage.input), formatNumber(usage.output), formatNumber(usage.cacheRead), formatNumber(usage.cacheWrite))
-          }
-        >
-          {usage === undefined ? "" : formatNumber(usage.total)}
+        <td className="py-1.5 pr-3 text-right align-top text-fg-muted">
+          <UsageCell account={account} />
         </td>
-        <td className="py-1.5">
+        {limits && (
+          <td className="py-1.5 pr-3 text-right align-top text-fg-muted">
+            <LimitCell account={account} source={source} />
+          </td>
+        )}
+        <td className="py-1.5 pr-3 text-right align-top text-fg-muted tabular-nums">{account.sessions ?? ""}</td>
+        <td className={account.running !== undefined && account.running > 0 ? "py-1.5 pr-3 text-right align-top font-medium text-fg tabular-nums" : "py-1.5 pr-3 text-right align-top text-fg-muted tabular-nums"}>
+          {account.running ?? ""}
+        </td>
+        <td className="w-48 py-1.5 align-top">
           <div role="group" aria-label={t.users.actionsFor(account.name)} className="flex flex-wrap justify-end gap-1">
             <Button size="sm" variant="ghost" disabled={isSelf || update.isPending} title={isSelf ? t.users.selfHint : undefined} onClick={() => void change({ disabled: !account.disabled })}>
               {account.disabled ? t.users.enable : t.users.disable}
@@ -141,7 +212,7 @@ function Row({ account, isSelf, assignable, onNotice }: { account: Account; isSe
       </tr>
       {(update.isError || resetting || assigning) && (
         <tr>
-          <td colSpan={6} className="pb-2">
+          <td colSpan={limits ? 6 : 5} className="pb-2">
             {update.isError && (
               <p role="alert" className="text-sm text-danger">
                 {errorLine(update.error)}
