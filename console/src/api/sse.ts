@@ -3,6 +3,8 @@
 // 有的代理和隧道把长连接的内容憋到响应结束才放行：连上了却一个字节都收不到。服务器一连上就发一行 `:open`，
 // 等不到它就改成反复请求 /api/events/poll——订阅留在服务器上，每次请求带回一批就结束，格式和 SSE 一样。
 
+import { asViewed } from "./viewing";
+
 export interface SseEvent {
   id?: string;
   event: string;
@@ -77,7 +79,8 @@ export function connectEvents(handlers: SseHandlers, options: SseOptions = {}): 
   /** 取一批。订阅失效（410）时清掉编号，下一次从 Last-Event-ID 重新开。 */
   async function pollOnce(): Promise<"again" | "unauthorized"> {
     const path = pollStream === undefined ? "/api/events/poll" : `/api/events/poll?stream=${encodeURIComponent(pollStream)}`;
-    const response = await doFetch(path, { headers: resume(), credentials: "same-origin", signal: controller.signal });
+    // 只读查看别人时订阅的是被看的人的事件
+    const response = await doFetch(asViewed(path), { headers: resume(), credentials: "same-origin", signal: controller.signal });
     if (response.status === 401) return "unauthorized";
     if (response.status === 410) {
       pollStream = undefined;
@@ -91,7 +94,7 @@ export function connectEvents(handlers: SseHandlers, options: SseOptions = {}): 
   }
 
   async function readOnce(): Promise<"closed" | "unauthorized" | "buffered"> {
-    const response = await doFetch("/api/events", {
+    const response = await doFetch(asViewed("/api/events"), {
       headers: resume(),
       credentials: "same-origin",
       signal: controller.signal,

@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Folder, MoreHorizontal, Pencil, SquarePen, Trash2 } from "lucide-react";
 import type { SessionSummary } from "../api/types";
+import { useViewedUser } from "../api/viewing";
 import { SessionRow } from "../shell/SessionRow";
 import { useText } from "../text";
 import { Menu } from "../ui/Menu";
@@ -39,6 +40,8 @@ export function ProjectGroup({
   const t = useText();
   const name = group.project?.title ?? t.projects.ungrouped;
   const Chevron = collapsed ? ChevronRight : ChevronDown;
+  // 只读查看别人的会话时，工作区不能新建会话、改名、删除
+  const viewing = useViewedUser() !== null;
   return (
     <li className="flex flex-col">
       <div className="group relative flex h-8 items-center">
@@ -57,7 +60,7 @@ export function ProjectGroup({
             {group.count}
           </span>
         </button>
-        {group.project !== null && (
+        {group.project !== null && !viewing && (
           <div className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
             <Menu
               label={t.projects.projectMenu(name)}

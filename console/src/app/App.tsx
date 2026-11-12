@@ -1,9 +1,10 @@
 // 路由、登录状态、SSE 和框架。对话区从这里拿到 store。
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setViewedUser, useViewedUser } from "../api/viewing";
 import { LoginPage } from "../auth/LoginPage";
-import { useCurrentUser } from "../auth/useCurrentUser";
+import { ME_KEY, useCurrentUser } from "../auth/useCurrentUser";
 import { ComposerDock } from "../composer/ComposerDock";
 import { useSessionModel } from "../store/hooks";
 import { readChoice } from "../composer/drafts";
@@ -17,6 +18,7 @@ import { savePending } from "../projects/viewState";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { AppFrame } from "../shell/AppFrame";
 import { ConnectionBanner } from "../shell/ConnectionBanner";
+import { ViewingBanner, ViewingBar } from "../shell/ViewingBanner";
 import { sessionTitle } from "../shell/SessionRow";
 import { Sidebar } from "../shell/Sidebar";
 import { useConfig } from "../shell/useConfig";
@@ -67,20 +69,40 @@ export function App() {
     else if (route.page === "home" || route.page === "notFound") navigate(sessionPath(newSessionId()), true);
   }, [loading, user, route]);
 
+  // 管理员只读查看别人的会话：进入和退出时都把会话数据的缓存清掉、回到首页，下面的工作区整个重新挂载
+  // （对话、轨迹、事件流都重来），两个人的数据不会混在一起。查看状态只在内存里，刷新就回到自己。
+  const viewed = useViewedUser();
+  const queries = useQueryClient();
+  const shown = useRef(viewed);
+  useEffect(() => {
+    if (shown.current === viewed) return;
+    shown.current = viewed;
+    queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
+    navigate(sessionPath(newSessionId()), true);
+  }, [viewed, queries]);
+  // 退出登录时不留在查看状态里
+  useEffect(() => {
+    if (user === null) setViewedUser(null);
+  }, [user]);
+
   if (loading) return null;
   if (user === null) return <LoginPage onLoggedIn={setUser} />;
   if (route.page !== "session" && route.page !== "trace" && route.page !== "stats") return null;
-  return <Workspace route={route} username={user.username} admin={user.admin === true} onLogout={() => void logout()} />;
+  return (
+    <Workspace key={viewed ?? ""} route={route} username={user.username} admin={user.admin === true} viewed={viewed} onLogout={() => void logout()} />
+  );
 }
 
 interface WorkspaceProps {
   route: Extract<Route, { page: "session" | "trace" | "stats" }>;
   username: string;
   admin: boolean;
+  /** 管理员正在只读查看的人；没有是 null。 */
+  viewed: string | null;
   onLogout: () => void;
 }
 
-function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
+function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps) {
   const t = useText();
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
@@ -101,6 +123,11 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
   const summary = list.find((session) => session.id === route.session);
   const title = sessionTitle(summary, t);
   const tabs = TABS.map(({ id, key }) => ({ id, label: t.tabs[key] }));
+  // 刚开始查看一个人时地址上是一个新的空会话：直接打开他最近的那个
+  const first = list[0]?.id;
+  useEffect(() => {
+    if (viewed !== null && summary === undefined && first !== undefined && route.page === "session") navigate(sessionPath(first), true);
+  }, [viewed, summary, first, route.page]);
 
   return (
     <AppFrame
@@ -154,6 +181,7 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
       )}
     >
       <div className="flex h-full min-h-0 flex-col">
+        <ViewingBanner />
         <ConnectionBanner />
         <SettingsDialog
           open={settingsOpen}
@@ -181,13 +209,18 @@ function Workspace({ route, username, admin, onLogout }: WorkspaceProps) {
           ) : (
             <div className="flex h-full min-h-0 flex-col">
               <ConversationPage store={store} session={route.session} />
-              <ComposerDock
-                store={store}
-                session={route.session}
-                config={config.data}
-                onOpenPlugins={() => setPluginsOpen(true)}
-                onAddProject={() => setAddOpen(true)}
-              />
+              {viewed !== null ? (
+                // 只读：没有输入框，也就没有排队、批准卡片、模型选择和压缩
+                <ViewingBar selected={summary !== undefined} any={list.length > 0} />
+              ) : (
+                <ComposerDock
+                  store={store}
+                  session={route.session}
+                  config={config.data}
+                  onOpenPlugins={() => setPluginsOpen(true)}
+                  onAddProject={() => setAddOpen(true)}
+                />
+              )}
             </div>
           )}
         </div>

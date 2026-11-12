@@ -200,6 +200,8 @@ public final class E2eServer {
                         "--tantalum.openai-routes.local.model=" + E2eModel.MODEL,
                         "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                         "--tantalum.openai-routes.local.context-window=35000",
+                        // qagent-align 需求 6.9：这台服务器上部署的人关掉了“只读查看别人的会话”
+                        "--tantalum.view-as.enabled=false",
                         "--tantalum.web.block-private-network=false",
                         "--tantalum.web.fetch.enabled=false");
     }

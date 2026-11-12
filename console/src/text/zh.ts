@@ -105,6 +105,7 @@ export const zh = {
     answerDeadline: (left: string) => `还剩 ${left}`,
     questionAnswered: (answer: string) => `你的回答：${answer}`,
     questionExpired: "到期没有回答",
+    questionWaiting: "正在等他回答。",
     questionCancelled: "运行已取消，没有回答",
   },
   process: {
@@ -619,6 +620,16 @@ export const zh = {
     saving: "修改中…",
     done: "密码已修改。别处的登录已失效，这里的登录保留。",
   },
+  viewing: {
+    banner: (name: string) => `正在只读查看 ${name} 的会话`,
+    exit: "退出查看",
+    readOnly: (name: string) => `这是 ${name} 的会话，只能看，不能发消息、改标题或做任何改动。`,
+    view: "以他的身份查看",
+    viewFor: (name: string) => `以 ${name} 的身份查看（只读）`,
+    viewHint: "只读：能看他的会话、轨迹和统计，改不了任何东西；每次查看在服务器日志里记一行。",
+    pick: "从左边选一个会话。",
+    none: (name: string) => `${name} 还没有会话。`,
+  },
   users: {
     title: "运维",
     hint: "管理员在这里加人、停用、重置密码，看每个人今天的用量。停用不删任何数据，重新启用后一切照旧。",
@@ -816,6 +827,8 @@ export const zh = {
     "auth/not-authenticated": "请先登录",
     "auth/forbidden": "只有管理员能做这个操作",
     "auth/bad-origin": "请求来自别的站点，已拒绝",
+    "view/forbidden": "不能查看别人的会话：只有管理员能看，或者这个功能被关掉了",
+    "view/read-only": "正在只读查看别人的会话，这个操作做不了",
     "auth/password-too-short": "密码至少 8 个字符",
     "user/bad-name": "用户名只能用 a-z、0-9、- 和 _",
     "user/reserved-name": "这个名字是 Windows 保留的设备名，不能用",

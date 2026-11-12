@@ -63,7 +63,8 @@ public class EventPollController {
         }
         // 新开的不久等：页面要尽快拿到编号，补读的内容也在这一次带回
         List<SseMessage> batch = held.take(opened ? LINGER_MILLIS : hold.toMillis(), LINGER_MILLIS);
-        if (held.closed() && batch.isEmpty() || !logins.stillValid(user.value(), login, System.currentTimeMillis())) {
+        // 只读查看别人时，登录是管理员自己的
+        if (held.closed() && batch.isEmpty() || !logins.stillValid(WebJson.viewer().value(), login, System.currentTimeMillis())) {
             streams.drop(held);
             return ResponseEntity.status(410).build();
         }

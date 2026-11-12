@@ -12,6 +12,7 @@ import { ProjectGroup } from "./ProjectGroup";
 import { RenameDialog } from "./RenameDialog";
 import { useDeleteProject, useRenameProject, useRenameSession, useSetArchived } from "./useProjects";
 import { useCollapsed, useViewOptions } from "./viewState";
+import { useViewedUser } from "../api/viewing";
 
 interface Props {
   sessions: readonly SessionSummary[];
@@ -48,6 +49,8 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
   const renameProject = useRenameProject();
   const deleteProject = useDeleteProject();
   const archive = useSetArchived();
+  // 只读查看别人的会话时不能加工作区（行上的改名、归档在 SessionRow、ProjectGroup 里关掉）
+  const viewing = useViewedUser() !== null;
 
   useEffect(() => {
     if (notice === null) return;
@@ -122,10 +125,12 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
         <Menu label={t.projects.view} items={viewItems} buttonProps={{ variant: "icon", size: "sm", title: t.projects.view }}>
           <SlidersHorizontal size={14} />
         </Menu>
-        <Button variant="ghost" size="sm" onClick={onAddProject}>
-          <Plus size={14} />
-          {t.projects.add}
-        </Button>
+        {!viewing && (
+          <Button variant="ghost" size="sm" onClick={onAddProject}>
+            <Plus size={14} />
+            {t.projects.add}
+          </Button>
+        )}
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-3" aria-label={t.sidebar.sessions}>
         {pinned !== undefined && found === null && <ul className="mb-1 flex flex-col">{pinned}</ul>}

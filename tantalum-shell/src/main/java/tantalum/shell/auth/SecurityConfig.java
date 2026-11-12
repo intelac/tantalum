@@ -36,7 +36,7 @@ public class SecurityConfig {
     static final String TIMEOUT_PROPERTY = "server.servlet.session.timeout";
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, LoginContextRepository contexts) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, LoginContextRepository contexts, ViewAs viewAs) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -72,6 +72,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class)
+                // 登录的身份有了以后、授权规则之前：管理员只读查看别人时在这里换成被看的人，别的请求原样过
+                .addFilterAfter(viewAs, AnonymousAuthenticationFilter.class)
                 .addFilterBefore(new AuthBodyLimitFilter(), OriginFilter.class);
         return http.build();
     }
@@ -93,6 +95,21 @@ public class SecurityConfig {
         requireSecureCookie(environment.getProperty("server.address"), secure);
         Duration timeout = environment.getProperty(TIMEOUT_PROPERTY, Duration.class, Duration.ofHours(12));
         return new LoginContextRepository(users, timeout, secure, Clock.systemUTC());
+    }
+
+    /** 管理员只读查看别人的会话；部署的人可以用 {@code tantalum.view-as.enabled=false} 关掉。 */
+    @Bean
+    ViewAs viewAs(Environment environment, UserStore users) {
+        return new ViewAs(users, environment.getProperty("tantalum.view-as.enabled", Boolean.class, true), Clock.systemUTC());
+    }
+
+    /** 这个过滤器只在上面的安全链里用；不让 Spring Boot 再把它当普通过滤器注册一遍。 */
+    @Bean
+    org.springframework.boot.web.servlet.FilterRegistrationBean<ViewAs> viewAsOnlyInTheSecurityChain(ViewAs viewAs) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<ViewAs> registration =
+                new org.springframework.boot.web.servlet.FilterRegistrationBean<>(viewAs);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /** 不用用户名密码过滤器，只是让 Spring Boot 不再生成默认用户和默认密码。 */

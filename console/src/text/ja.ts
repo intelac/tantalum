@@ -91,6 +91,7 @@ export const ja: Text = {
     answerDeadline: (left) => `残り ${left}`,
     questionAnswered: (answer) => `あなたの回答：${answer}`,
     questionExpired: "期限までに回答がありませんでした",
+    questionWaiting: "この人の回答を待っています。",
     questionCancelled: "実行が取り消され、回答はありません",
   },
   process: {
@@ -599,6 +600,16 @@ export const ja: Text = {
     saving: "変更中…",
     done: "パスワードを変更しました。他のログインは無効になり、ここでのログインは残ります。",
   },
+  viewing: {
+    banner: (name) => `${name} のセッションを読み取り専用で表示中`,
+    exit: "表示をやめる",
+    readOnly: (name) => `これは ${name} のセッションです。見るだけで、メッセージの送信、名前の変更などの操作はできません。`,
+    view: "この人として表示",
+    viewFor: (name) => `${name} として表示（読み取り専用）`,
+    viewHint: "読み取り専用です。セッション、トレース、統計が見られ、何も変更できません。表示するたびにサーバーのログに 1 行残ります。",
+    pick: "左からセッションを選んでください。",
+    none: (name) => `${name} にはまだセッションがありません。`,
+  },
   users: {
     title: "運用",
     hint: "管理者はここでユーザーの追加、停止、パスワードのリセット、各ユーザーの今日の使用量の確認ができます。停止してもデータは消えず、再開すれば元どおりです。",
@@ -796,6 +807,8 @@ export const ja: Text = {
     "auth/not-authenticated": "ログインしてください",
     "auth/forbidden": "この操作は管理者だけができます",
     "auth/bad-origin": "別のサイトからのリクエストのため拒否しました",
+    "view/forbidden": "ほかの人のセッションは見られません。管理者だけが見られるか、この機能がオフになっています",
+    "view/read-only": "ほかの人のセッションを読み取り専用で見ているため、この操作はできません",
     "auth/password-too-short": "パスワードは 8 文字以上にしてください",
     "user/bad-name": "ユーザー名に使えるのは a-z、0-9、-、_ だけです",
     "user/reserved-name": "この名前は Windows の予約名なので使えません",

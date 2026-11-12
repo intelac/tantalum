@@ -61,6 +61,8 @@ export interface UserList {
   /** 服务器配了折算系数：今日用量是折算后的数。 */
   weighted?: boolean;
   weights?: UsageWeight[];
+  /** 管理员能不能只读查看别人的会话（部署的人可以关掉）。 */
+  viewAs?: boolean;
 }
 
 /** 插件作者写给人看的文字（I10）：一个字符串照原样显示，带语言的按用户的语言选，没有就用英文。 */

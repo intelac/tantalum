@@ -5,6 +5,7 @@ import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Brand } from "./Brand";
 import { SessionRow } from "./SessionRow";
+import { useViewedUser } from "../api/viewing";
 
 interface Props {
   sessions: readonly SessionSummary[];
@@ -46,8 +47,10 @@ export function Sidebar({
   username,
 }: Props) {
   const t = useText();
+  // 管理员只读查看别人的会话时：不能新建，没有插件和设置（那些是自己的），也没有占位的新会话
+  const viewing = useViewedUser() !== null;
   // 刚新建、还没提交过的会话不在列表里，先放一行占位。
-  const unsaved = currentSession !== null && !sessions.some((session) => session.id === currentSession);
+  const unsaved = !viewing && currentSession !== null && !sessions.some((session) => session.id === currentSession);
 
   if (rail) {
     return (
@@ -55,16 +58,22 @@ export function Sidebar({
         <Button variant="icon" aria-label={t.sidebar.expand} onClick={onToggle}>
           <Brand symbolOnly size="sm" />
         </Button>
-        <Button variant="icon" aria-label={t.sidebar.newSession} onClick={onNewSession} title={t.sidebar.newSession}>
-          <SquarePen size={18} />
-        </Button>
+        {!viewing && (
+          <Button variant="icon" aria-label={t.sidebar.newSession} onClick={onNewSession} title={t.sidebar.newSession}>
+            <SquarePen size={18} />
+          </Button>
+        )}
         <div className="flex-1" />
-        <Button variant="icon" aria-label={t.sidebar.plugins} onClick={onPlugins} title={t.sidebar.plugins}>
-          <Puzzle size={18} />
-        </Button>
-        <Button variant="icon" aria-label={t.sidebar.settings} onClick={onSettings} title={t.sidebar.settings}>
-          <Settings size={18} />
-        </Button>
+        {!viewing && (
+          <>
+            <Button variant="icon" aria-label={t.sidebar.plugins} onClick={onPlugins} title={t.sidebar.plugins}>
+              <Puzzle size={18} />
+            </Button>
+            <Button variant="icon" aria-label={t.sidebar.settings} onClick={onSettings} title={t.sidebar.settings}>
+              <Settings size={18} />
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -77,12 +86,14 @@ export function Sidebar({
           <PanelLeftClose size={18} />
         </Button>
       </div>
-      <div className="px-3 pb-3">
-        <Button variant="secondary" className="w-full" onClick={onNewSession}>
-          <SquarePen size={16} />
-          {t.sidebar.newSession}
-        </Button>
-      </div>
+      {!viewing && (
+        <div className="px-3 pb-3">
+          <Button variant="secondary" className="w-full" onClick={onNewSession}>
+            <SquarePen size={16} />
+            {t.sidebar.newSession}
+          </Button>
+        </div>
+      )}
       <ProjectSidebar
         sessions={sessions}
         projects={projects}
@@ -110,14 +121,18 @@ export function Sidebar({
         <p className="px-6 py-2 text-xs text-fg-faint">{t.sidebar.empty}</p>
       )}
       <div className="flex shrink-0 flex-col gap-0.5 border-t border-line px-3 py-2">
-        <Button variant="ghost" size="sm" className="justify-start" onClick={onPlugins}>
-          <Puzzle size={16} />
-          {t.sidebar.plugins}
-        </Button>
-        <Button variant="ghost" size="sm" className="justify-start" onClick={onSettings}>
-          <Settings size={16} />
-          {t.sidebar.settings}
-        </Button>
+        {!viewing && (
+          <>
+            <Button variant="ghost" size="sm" className="justify-start" onClick={onPlugins}>
+              <Puzzle size={16} />
+              {t.sidebar.plugins}
+            </Button>
+            <Button variant="ghost" size="sm" className="justify-start" onClick={onSettings}>
+              <Settings size={16} />
+              {t.sidebar.settings}
+            </Button>
+          </>
+        )}
         <div className="flex h-8 items-center gap-2 px-2">
           <span className="min-w-0 flex-1 truncate text-xs text-fg-faint" title={username}>
             {username}

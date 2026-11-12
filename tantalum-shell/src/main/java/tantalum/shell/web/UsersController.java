@@ -36,8 +36,10 @@ public class UsersController {
     private final UserStore users;
     private final Engine engine;
     private final WebJson json;
+    private final tantalum.shell.auth.ViewAs viewAs;
 
-    public UsersController(UserStore users, Engine engine, WebJson json) {
+    public UsersController(UserStore users, Engine engine, WebJson json, tantalum.shell.auth.ViewAs viewAs) {
+        this.viewAs = viewAs;
         this.users = users;
         this.engine = engine;
         this.json = json;
@@ -47,7 +49,7 @@ public class UsersController {
      * 运维表格（qagent-align 需求 4、5）。每人：今天（UTC）的用量、没归档的会话数、此刻在跑或在等回答的运行数、每日上限
      * （{@code {tokens?, own}}，他没开报上限的插件时是 {@code {off: true}}；没有任何插件报上限时没有这一项）。
      * 顶层：{@code dailyLimit} 是表格里能直接改的那个上限（哪个插件的哪个参数、所有人的默认、范围），没有插件说明是哪个参数时没有；
-     * {@code weighted}、{@code weights} 是折算系数（只列不全是 1 的）。平台不认识具体插件，这些都从插件点来。
+     * {@code weighted}、{@code weights} 是折算系数（只列不全是 1 的）；{@code viewAs} 是只读查看别人的会话这个功能开没开。平台不认识具体插件，这些都从插件点来。
      */
     @GetMapping("/api/users")
     ResponseEntity<String> list() throws SQLException {
@@ -89,6 +91,8 @@ public class UsersController {
             }
             response.put("dailyLimit", shown);
         });
+        // 管理员能不能只读查看别人的会话（部署的人可以关掉）：页面据此显示按钮
+        response.put("viewAs", viewAs.enabled());
         response.put("weighted", engine.weights().any());
         response.put("weights", engine.weights().rows().stream().map(row -> {
             Map<String, Object> shown = new LinkedHashMap<>();

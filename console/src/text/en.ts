@@ -96,6 +96,7 @@ export const en: Text = {
     answerDeadline: (left) => `${left} left`,
     questionAnswered: (answer) => `Your answer: ${answer}`,
     questionExpired: "No answer before the deadline",
+    questionWaiting: "Waiting for their answer.",
     questionCancelled: "Run cancelled, no answer",
   },
   process: {
@@ -604,6 +605,16 @@ export const en: Text = {
     saving: "Changing…",
     done: "Password changed. Other logins are signed out; this one stays.",
   },
+  viewing: {
+    banner: (name) => `Viewing ${name}'s sessions, read-only`,
+    exit: "Stop viewing",
+    readOnly: (name) => `This is ${name}'s session. You can read it, but not send messages, rename it or change anything.`,
+    view: "View as this person",
+    viewFor: (name) => `View as ${name} (read-only)`,
+    viewHint: "Read-only: you see their sessions, traces and statistics and can change nothing; each time is logged on the server.",
+    pick: "Pick a session on the left.",
+    none: (name) => `${name} has no sessions yet.`,
+  },
   users: {
     title: "Operations",
     hint: "Administrators add people, disable accounts, reset passwords and see each person's usage today here. Disabling deletes nothing; re-enabling restores everything.",
@@ -801,6 +812,8 @@ export const en: Text = {
     "auth/not-authenticated": "Please sign in",
     "auth/forbidden": "Only an administrator can do this",
     "auth/bad-origin": "The request came from another site and was refused",
+    "view/forbidden": "You cannot view someone else's sessions: only an administrator can, or this has been turned off",
+    "view/read-only": "You are viewing someone else's sessions read-only; this cannot be done",
     "auth/password-too-short": "The password must be at least 8 characters",
     "user/bad-name": "User names may only contain a-z, 0-9, - and _",
     "user/reserved-name": "This name is reserved by Windows",

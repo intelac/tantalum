@@ -114,6 +114,10 @@ public enum ErrorCode {
     AUTH_BAD_ORIGIN("auth/bad-origin", 403),
     /** 新密码不到 {@code UserStore.MIN_PASSWORD} 位。 */
     AUTH_PASSWORD_TOO_SHORT("auth/password-too-short", 400),
+    /** 带了 {@code viewAs} 但不是管理员，或者部署的人关掉了只读查看。 */
+    VIEW_FORBIDDEN("view/forbidden", 403),
+    /** 只读查看时发了写请求，或者读的不是会话、轨迹这些允许看的接口。 */
+    VIEW_READ_ONLY("view/read-only", 403),
     USER_BAD_NAME("user/bad-name", 400),
     USER_RESERVED_NAME("user/reserved-name", 400),
     USER_EXISTS("user/exists", 409),

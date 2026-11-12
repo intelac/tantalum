@@ -77,5 +77,10 @@ class ErrorCodeTest {
         assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_NOT_AUTHENTICATED.wire() + "\\\""), "SecurityConfig");
         assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_BAD_ORIGIN.wire() + "\\\""), "OriginFilter");
         assertTrue(source.contains("\\\"code\\\":\\\"" + ErrorCode.AUTH_FORBIDDEN.wire() + "\\\""), "access denied");
+        // 只读查看的过滤器也在 auth 包里
+        String viewAs = Files.readString(Path.of("src/main/java/tantalum/shell/auth/ViewAs.java"));
+        for (ErrorCode code : List.of(ErrorCode.VIEW_FORBIDDEN, ErrorCode.VIEW_READ_ONLY, ErrorCode.USER_NOT_FOUND)) {
+            assertTrue(viewAs.contains("\\\"code\\\":\\\"" + code.wire() + "\\\""), "ViewAs: " + code);
+        }
     }
 }

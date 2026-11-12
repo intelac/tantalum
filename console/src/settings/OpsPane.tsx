@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import type { Account, DailyLimitSource, UsageWeight } from "../api/types";
+import { setViewedUser } from "../api/viewing";
 import { useText } from "../text";
 import { errorLine } from "../text/errors";
 import { relativeTime } from "../text/format";
@@ -75,6 +76,7 @@ export function OpsPane({ self }: Props) {
                   assignable={assignable}
                   limits={limits}
                   source={list.data.dailyLimit}
+                  viewable={list.data.viewAs === true}
                   onNotice={setNotice}
                 />
               ))}
@@ -146,13 +148,15 @@ function Weights({ rows }: { rows: readonly UsageWeight[] }) {
   );
 }
 
-function Row({ account, isSelf, assignable, limits, source, onNotice }: {
+function Row({ account, isSelf, assignable, limits, source, viewable, onNotice }: {
   account: Account;
   isSelf: boolean;
   assignable: boolean;
   /** 表格有没有“每日上限”这一列。 */
   limits: boolean;
   source: DailyLimitSource | undefined;
+  /** 服务器开着“只读查看别人的会话”。 */
+  viewable: boolean;
   onNotice: (text: string) => void;
 }) {
   const t = useText();
@@ -205,6 +209,12 @@ function Row({ account, isSelf, assignable, limits, source, onNotice }: {
             {assignable && (
               <Button size="sm" variant="ghost" aria-expanded={assigning} onClick={() => setAssigning((open) => !open)}>
                 {t.users.params}
+              </Button>
+            )}
+            {viewable && !isSelf && (
+              // 进入查看后整个工作区重新挂载，这个对话框也就关了
+              <Button size="sm" variant="ghost" aria-label={t.viewing.viewFor(account.name)} title={t.viewing.viewHint} onClick={() => setViewedUser(account.name)}>
+                {t.viewing.view}
               </Button>
             )}
           </div>

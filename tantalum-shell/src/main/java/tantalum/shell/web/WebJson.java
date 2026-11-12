@@ -95,8 +95,17 @@ final class WebJson {
         return value == null || value.isBlank();
     }
 
-    /** 身份只来自登录会话，不看任何请求头。 */
+    /**
+     * 身份只来自登录会话，不看任何请求头。管理员只读查看别人时（{@code auth.ViewAs}），这里是被看的人：
+     * 那一次请求已经被限制成白名单里的 GET，所以读到的是他的数据，改不了任何东西。
+     */
     static Principal currentUser() {
         return new Principal(SecurityContextHolder.getContext().getAuthentication().getName());
+    }
+
+    /** 真正登录的人：平时和 {@link #currentUser} 一样，只读查看时是那个管理员。查登录还有没有效用它。 */
+    static Principal viewer() {
+        return SecurityContextHolder.getContext().getAuthentication() instanceof tantalum.shell.auth.ViewAs.Viewing viewing
+                ? new Principal(viewing.viewer()) : currentUser();
     }
 }

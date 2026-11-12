@@ -4,6 +4,7 @@ import { relativeTime } from "../text/format";
 import { type Text, useText } from "../text";
 import { cx } from "../ui/cx";
 import { Menu } from "../ui/Menu";
+import { useViewedUser } from "../api/viewing";
 
 interface Props {
   session: SessionSummary;
@@ -32,8 +33,10 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
   const running = !waiting && session.runStatus !== "idle";
   const archived = session.archived === true;
   const title = sessionTitle(session, t);
+  // 只读查看别人的会话时不能改名、归档
+  const viewing = useViewedUser() !== null;
   const menu =
-    onRename !== undefined && onArchive !== undefined
+    !viewing && onRename !== undefined && onArchive !== undefined
       ? [
           { id: "rename", label: t.projects.rename, icon: <Pencil size={16} />, onSelect: () => onRename(session) },
           archived
@@ -47,7 +50,7 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         type="button"
         aria-current={selected ? "page" : undefined}
         onClick={() => onSelect(session.id)}
-        onDoubleClick={onRename === undefined ? undefined : () => onRename(session)}
+        onDoubleClick={viewing || onRename === undefined ? undefined : () => onRename(session)}
         title={title}
         className={cx(
           "flex w-full items-center gap-2 rounded-md px-3 text-left text-sm transition-colors duration-[var(--duration-fast)]",

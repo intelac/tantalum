@@ -41,6 +41,7 @@ import type {
   UserList,
   UserSettingsView,
 } from "./types";
+import { asViewed, setViewedUser, viewedUser } from "./viewing";
 
 /**
  * 接口错误：状态码、服务器给的代码和参数（console-i18n I9）、英文诊断。`message` 就是诊断，只给开发者和日志看；
@@ -79,6 +80,10 @@ interface Options extends RequestInit {
 }
 
 async function call<T>(path: string, { quiet401 = false, ...init }: Options = {}): Promise<T> {
+  // 只读查看别人的会话时不发任何写请求（退出登录除外）：页面已经不给入口，这里再兜一层，免得写到自己的账号上
+  if (viewedUser() !== null && (init.method ?? "GET") !== "GET" && path !== "/api/auth/logout") {
+    throw new ApiError(403, "view/read-only", {}, "read-only while viewing another user's sessions");
+  }
   const response = await fetch(path, {
     ...init,
     credentials: "same-origin",
@@ -88,7 +93,12 @@ async function call<T>(path: string, { quiet401 = false, ...init }: Options = {}
   if (response.status === 401 && !quiet401) unauthorized();
   // 任何接口返回 503 表示服务已停止处理事件，界面要说明。
   if (response.status === 503) reportHalted();
-  if (!response.ok) throw errorOf(response.status, body);
+  if (!response.ok) {
+    const failure = errorOf(response.status, body);
+    // 不再是管理员，或者功能被关了：回到自己的会话
+    if (failure.code === "view/forbidden") setViewedUser(null);
+    throw failure;
+  }
   return (body === "" ? undefined : JSON.parse(body)) as T;
 }
 
@@ -148,7 +158,7 @@ export function getConfig(): Promise<Config> {
 }
 
 export function listSessions(): Promise<{ sessions: SessionSummary[] }> {
-  return call("/api/sessions");
+  return call(asViewed("/api/sessions"));
 }
 
 /** 改名进账；空串恢复自动标题（workspaces W7）。 */
@@ -161,7 +171,7 @@ export function setArchived(session: string, archived: boolean): Promise<{ archi
 }
 
 export function listProjects(): Promise<{ projects: Project[] }> {
-  return call("/api/projects");
+  return call(asViewed("/api/projects"));
 }
 
 export function addProject(path: string, title?: string): Promise<Project> {
@@ -185,7 +195,7 @@ export function browseFolders(path?: string): Promise<FolderListing> {
 export async function listMessages(session: string, before?: number): Promise<Messages> {
   const page = before === undefined ? "" : `?before=${before}`;
   try {
-    return await call(`/api/sessions/${encodeURIComponent(session)}/messages${page}`);
+    return await call(asViewed(`/api/sessions/${encodeURIComponent(session)}/messages${page}`));
   } catch (failure) {
     if (failure instanceof ApiError && failure.status === 404) return { seq: -1, items: [], start: 0, hasMore: false };
     throw failure;
@@ -248,7 +258,7 @@ export function uploadAttachment(session: string, file: File, onProgress: Upload
 export function attachmentUrl(ref: Pick<AttachmentRef, "id" | "name">, download = false): string {
   const query = new URLSearchParams({ name: ref.name });
   if (download) query.set("download", "1");
-  return `/api/attachments/${encodeURIComponent(ref.id)}?${query.toString()}`;
+  return asViewed(`/api/attachments/${encodeURIComponent(ref.id)}?${query.toString()}`);
 }
 
 /** 手动压缩空闲会话；运行中或没有可压缩的内容时后端返回 409。 */
@@ -265,7 +275,7 @@ export function cancelRun(run: string): Promise<unknown> {
 
 export async function listRuns(session: string): Promise<{ runs: RunView[] }> {
   try {
-    return await call(`/api/sessions/${encodeURIComponent(session)}/runs`);
+    return await call(asViewed(`/api/sessions/${encodeURIComponent(session)}/runs`));
   } catch (failure) {
     if (failure instanceof ApiError && failure.status === 404) return { runs: [] };
     throw failure;
@@ -275,20 +285,20 @@ export async function listRuns(session: string): Promise<{ runs: RunView[] }> {
 /** 轨迹的一页：不带参数取最新一页；`before` 取更早一页；`run` 从最新一直取到包含这个运行的一页。 */
 export function getTracePage(session: string, cursor: { before?: number; run?: string } = {}): Promise<TracePage> {
   const query = cursor.before !== undefined ? `?before=${cursor.before}` : cursor.run !== undefined ? `?run=${encodeURIComponent(cursor.run)}` : "";
-  return call(`/api/sessions/${encodeURIComponent(session)}/trace${query}`);
+  return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/trace${query}`));
 }
 
 /** 一次尝试的完整输入（system、工具、消息），定下来后不会再变。 */
 export function getTraceCall(session: string, command: string): Promise<TraceCall> {
-  return call(`/api/sessions/${encodeURIComponent(session)}/trace/calls/${encodeURIComponent(command)}`);
+  return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/trace/calls/${encodeURIComponent(command)}`));
 }
 
 export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {
-  return call(`/api/runs/${encodeURIComponent(run)}/turns`);
+  return call(asViewed(`/api/runs/${encodeURIComponent(run)}/turns`));
 }
 
 export function getTurn(run: string, number: number): Promise<Turn> {
-  return call(`/api/runs/${encodeURIComponent(run)}/turns/${number}`);
+  return call(asViewed(`/api/runs/${encodeURIComponent(run)}/turns/${number}`));
 }
 
 // ---- 记忆：只操作当前登录用户的，接口按会话取身份。 ----
@@ -443,7 +453,7 @@ export function getTodayUsage(): Promise<TodayUsageView> {
 
 /** 会话的上下文现在占了多少，分系统提示、工具定义、消息三项。 */
 export function getContextUsage(session: string): Promise<ContextUsage> {
-  return call(`/api/sessions/${encodeURIComponent(session)}/context`);
+  return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/context`));
 }
 
 export function getSettings(): Promise<UserSettingsView> {

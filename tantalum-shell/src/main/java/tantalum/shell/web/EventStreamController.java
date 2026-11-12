@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tantalum.shell.auth.LoginContextRepository;
+import tantalum.shell.auth.ViewAs;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.sse.SseMessage;
@@ -30,24 +31,29 @@ public class EventStreamController {
 
     private final Engine engine;
     private final LoginContextRepository logins;
+    private final ViewAs viewAs;
     private final Duration heartbeat;
 
-    public EventStreamController(Engine engine, LoginContextRepository logins, @Value("${tantalum.sse-heartbeat:15s}") Duration heartbeat) {
+    public EventStreamController(Engine engine, LoginContextRepository logins, ViewAs viewAs,
+                                 @Value("${tantalum.sse-heartbeat:15s}") Duration heartbeat) {
         this.engine = engine;
         this.logins = logins;
+        this.viewAs = viewAs;
         this.heartbeat = heartbeat;
     }
 
     @GetMapping(path = "/api/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     SseEmitter events(@RequestHeader(name = "Last-Event-ID", required = false) String lastEventId, HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(0L);
+        // 管理员只读查看别人时：订阅的是被看的人的事件（和他本人看到的一样），登录是管理员自己的
         Principal user = WebJson.currentUser();
+        Principal viewer = WebJson.viewer();
         String login = LoginContextRepository.currentLogin(request);
         SseHub.Subscription subscription = engine.hub().subscribe(user, login, lastEventId);
         emitter.onCompletion(subscription::close);
         emitter.onTimeout(subscription::close);
         emitter.onError(failure -> subscription.close());
-        Thread.ofVirtual().start(() -> pump(user, login, subscription, emitter));
+        Thread.ofVirtual().start(() -> pump(user, viewer, login, subscription, emitter));
         return emitter;
     }
 
@@ -55,9 +61,9 @@ public class EventStreamController {
      * 每个心跳周期查一次登录表：登录是否还在、没过期，账号没停用、没改过密码。停用和改密码可能来自另一个进程的命令行，
      * 这边收不到通知。无论怎么退出，订阅都要注销。
      */
-    private void pump(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter) {
+    private void pump(Principal user, Principal viewer, String login, SseHub.Subscription subscription, SseEmitter emitter) {
         try {
-            stream(user, login, subscription, emitter);
+            stream(user, viewer, login, subscription, emitter);
         } catch (IOException | SQLException gone) {
             // 客户端走了，或登录表读不了：这条连接到此为止，浏览器会重连
         } catch (IllegalStateException done) {
@@ -82,7 +88,7 @@ public class EventStreamController {
         }
     }
 
-    private void stream(Principal user, String login, SseHub.Subscription subscription, SseEmitter emitter)
+    private void stream(Principal user, Principal viewer, String login, SseHub.Subscription subscription, SseEmitter emitter)
             throws IOException, SQLException, InterruptedException {
         long nextCheck = System.currentTimeMillis() + heartbeat.toMillis();
         // 一连上就发一行：页面靠它分辨“连上了”和“中间有代理把内容憋住了”，憋住时改用 /api/events/poll
@@ -94,7 +100,8 @@ public class EventStreamController {
             }
             long now = System.currentTimeMillis();
             if (now >= nextCheck) {
-                if (!logins.stillValid(user.value(), login, now)) {
+                // 查的是真正登录的人；在看别人的，还要仍然是管理员、功能没被关
+                if (!logins.stillValid(viewer.value(), login, now) || (!viewer.equals(user) && !viewAs.stillAllowed(viewer.value()))) {
                     subscription.close();
                     break;
                 }

@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { CircleHelp, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
 import { answerQuestion, ApiError } from "../api/client";
+import { useViewedUser } from "../api/viewing";
 import type { QuestionItem as QuestionItemData } from "../api/types";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
@@ -32,6 +33,7 @@ function QuestionView({ item }: { item: QuestionItemData }) {
   const t = useText();
   const text = t.conversation;
   const language = useLanguage();
+  const viewing = useViewedUser() !== null;
   const [draft, setDraft] = useState("");
   const left = useCountdown(item.status === "OPEN" ? item.deadline : undefined);
   const answer = useMutation({
@@ -61,6 +63,20 @@ function QuestionView({ item }: { item: QuestionItemData }) {
         <div className="min-w-0">
           <p className="text-fg">{title}</p>
           <p className="mt-0.5">{outcome}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 只读查看别人的会话：看得到他正在被问什么，不能替他答
+  if (viewing) {
+    return (
+      <div role="note" aria-label={title} className="my-2 flex items-start gap-2 rounded-md border border-warning/50 bg-muted px-3 py-2 text-sm text-fg-muted">
+        <CircleHelp size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-fg">{title}</p>
+          {detail !== "" && <p className="mt-0.5">{detail}</p>}
+          <p className="mt-0.5">{text.questionWaiting}</p>
         </div>
       </div>
     );
