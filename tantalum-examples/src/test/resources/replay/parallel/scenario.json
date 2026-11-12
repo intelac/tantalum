@@ -1,0 +1,12 @@
+{
+ "id": "parallel",
+ "prompt": "同时读 inventory 下的 pricing.py、shipping.py、stock.py、orders.py、reports.py 这五个文件，各用一句话说它里面的主要函数（写出函数名）。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

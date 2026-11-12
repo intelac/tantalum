@@ -1,0 +1,12 @@
+{
+ "id": "feature-tests",
+ "prompt": "给订单加“分批发货”：inventory/shipping.py 加函数 split_fee(weight_kg, zone, batches)，把重量平均分成 batches 批、每批单独算运费再相加（batches 小于 1 时抛 ValueError）；inventory/orders.py 的 place_order 加可选参数 batches（默认 1），运费用 split_fee 算；inventory/reports.py 的 shipping_table 也加可选参数 batches（默认 1）。给这些改动写测试（新建测试文件，不要改原有的测试），最后跑全部测试确认通过。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

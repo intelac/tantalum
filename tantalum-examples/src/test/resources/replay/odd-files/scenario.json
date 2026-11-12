@@ -1,0 +1,12 @@
+{
+ "id": "odd-files",
+ "prompt": "docs 目录里有一份会议记录和一份 legacy 说明。会议决定的下线日期是哪天？legacy 说明里的库存编号规则是什么？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

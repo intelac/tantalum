@@ -175,8 +175,9 @@ class ReplayScenarioTest {
 
     /** 真执行的工具结果和录下的一样（路径换成 {{root}}）；bash 是录下的结果喂回去的，只比名字和顺序。 */
     private static List<String> compareTools(Path journal, List<JsonNode> recorded, String root) throws IOException {
+        // 按调用的顺序比（同一批并行的调用完成先后每次不同）：先记下每个调用的 ID 和名字，再按 ID 找结果
         Map<String, String> names = new LinkedHashMap<>();
-        List<String[]> results = new ArrayList<>();
+        Map<String, String[]> byId = new LinkedHashMap<>();
         for (String line : Files.readAllLines(journal, StandardCharsets.UTF_8)) {
             JsonNode entry = JSON.readTree(line);
             JsonNode payload = entry.path("payload");
@@ -184,11 +185,19 @@ class ReplayScenarioTest {
                 case "ModelReplied" -> payload.path("content").forEach(block -> {
                     if (block.path("kind").asString("").equals("toolCall")) names.put(block.get("id").asString(), block.get("name").asString());
                 });
-                case "ToolFinished" -> results.add(new String[] {names.getOrDefault(payload.get("toolCallId").asString(), "?"),
+                case "ToolFinished" -> byId.put(payload.get("toolCallId").asString(), new String[] {
                         payload.path("text").asString("").replace(root, "{{root}}"), String.valueOf(payload.path("error").asBoolean())});
                 default -> { }
             }
         }
+        List<String[]> results = new ArrayList<>();
+        names.forEach((id, name) -> {
+            String[] result = byId.get(id);
+            // ask_user 的回答不算工具结果（录制时也不录）
+            if (result != null && !name.equals("ask_user")) {
+                results.add(new String[] {name, result[0], result[1]});
+            }
+        });
         List<String> problems = new ArrayList<>();
         if (results.size() != recorded.size()) {
             problems.add(results.size() + " tool results, " + recorded.size() + " recorded");

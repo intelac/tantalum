@@ -1,0 +1,12 @@
+{
+ "id": "feature",
+ "prompt": "先修好现有失败的测试（改代码不改测试）。然后在 inventory/pricing.py 里加一个函数 bulk_discount(price, quantity)：数量不到 10 件不打折，10 到 49 件打 95 折，50 件及以上打 9 折。给它写测试放在 tests 目录里，最后跑全部测试确认通过。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

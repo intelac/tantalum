@@ -1,0 +1,12 @@
+{
+ "id": "git-blame",
+ "prompt": "inventory/shipping.py 里 EXPRESS_SURCHARGE 那一行最后是谁改的？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

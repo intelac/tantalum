@@ -1,0 +1,12 @@
+{
+ "id": "run-tests",
+ "prompt": "跑一下测试，告诉我是哪几个测试方法失败了（写出方法名）。不要修。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

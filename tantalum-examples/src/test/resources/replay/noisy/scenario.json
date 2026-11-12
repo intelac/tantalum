@@ -1,0 +1,12 @@
+{
+ "id": "noisy",
+ "prompt": "运行 python3 scripts/noisy.py，它的输出里有一行以 MARKER-ANSWER= 开头，等号后面的数字是多少？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

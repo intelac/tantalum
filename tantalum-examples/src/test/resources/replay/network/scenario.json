@@ -1,0 +1,12 @@
+{
+ "id": "network",
+ "prompt": "运行 python3 scripts/fetch.py，告诉我它打印了什么；如果失败了，说明原因。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

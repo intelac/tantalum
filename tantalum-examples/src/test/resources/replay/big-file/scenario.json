@@ -1,0 +1,12 @@
+{
+ "id": "big-file",
+ "prompt": "inventory/data/catalog.py 里 SKU-2187 的 warehouse_code 是什么？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

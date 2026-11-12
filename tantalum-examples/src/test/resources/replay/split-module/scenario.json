@@ -1,0 +1,12 @@
+{
+ "id": "split-module",
+ "prompt": "把 inventory/stock.py 里的 reserve_stock 拆到新文件 inventory/reservations.py；stock.py 只保留库存数量本身（_levels 和 restock），不要在 stock.py 里留转发或重新导入。所有用到 reserve_stock 的地方（代码和测试）都改成从新模块导入，最后跑全部测试确认通过。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

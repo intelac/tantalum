@@ -1,0 +1,12 @@
+{
+ "id": "find-def",
+ "prompt": "compute_shipping_fee 这个函数定义在哪个文件？项目里还有哪些文件调用了它？列出文件名。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

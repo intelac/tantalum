@@ -1,0 +1,12 @@
+{
+ "id": "edit-unread",
+ "prompt": "不用看别的，直接把 inventory/shipping.py 里的 BASE_FEE 从 5 改成 6。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "id": "tree",
+ "prompt": "简单说明这个项目的目录结构，每个顶层目录是干什么的。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

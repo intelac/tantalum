@@ -437,7 +437,7 @@ def c_todo_compact(ctx):
     if ctx.compactions < 1: bad.append("运行中没有压缩（压缩点没起作用）")
     return bad
 
-LONG_PROMPT_CHECKLIST = "这是一个多步任务：按 docs/checklist.md 逐项完成里面的 8 项改动，用待办清单跟踪进度，最后跑全部测试确认通过。"
+LONG_PROMPT_CHECKLIST = "这是一个多步任务：按 docs/checklist.md 逐项完成里面的 8 项改动，用待办清单跟踪进度，最后跑全部测试确认通过。改文件用 edit_file 或 write_file，一项一项改，不要用命令行或脚本改文件。"
 
 SCENARIOS = [
     S("find-def", "找和读", "grep / find_files 的参数会不会用", "compute_shipping_fee 这个函数定义在哪个文件？项目里还有哪些文件调用了它？列出文件名。", c_find_def),

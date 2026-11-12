@@ -1,0 +1,2 @@
+{"name": "bash", "text": "logo.png: PNG image data, 16 x 16, 8-bit/color RGB, non-interlaced\n-rw-r--r--@ 1 501  staff  79 Nov 13 02:59 logo.png", "error": false}
+{"name": "read_file", "text": "Image \"logo.png\" (sha256:0fb1d1eb, 16x16px). Read-only copy: \"/attachments/sha256-0fb1d1ebf9c1a9f096af25dc75c82509fdea2539d67578ade8df904afb42e483\".", "error": false}

@@ -1,0 +1,12 @@
+{
+ "id": "git-history",
+ "prompt": "inventory/shipping.py 最近三次提交分别改了什么？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

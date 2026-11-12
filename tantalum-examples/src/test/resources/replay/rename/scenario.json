@@ -1,0 +1,12 @@
+{
+ "id": "rename",
+ "prompt": "把函数 compute_shipping_fee 改名为 shipping_cost，所有用到它的地方（代码、测试、文档）都要改。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

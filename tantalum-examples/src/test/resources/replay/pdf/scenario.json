@@ -1,0 +1,12 @@
+{
+ "id": "pdf",
+ "prompt": "docs/spec.pdf 里写的 Spec revision 编号是多少？",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

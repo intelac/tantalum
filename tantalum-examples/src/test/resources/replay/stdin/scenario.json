@@ -1,0 +1,12 @@
+{
+ "id": "stdin",
+ "prompt": "运行 python3 scripts/ask.py，告诉我它输出了什么。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

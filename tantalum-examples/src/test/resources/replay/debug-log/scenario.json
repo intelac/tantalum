@@ -1,0 +1,12 @@
+{
+ "id": "debug-log",
+ "prompt": "logs/app.log 里记了一次命令行下单的报错。找出原因并修好代码，再加一个能抓住这个问题的回归测试（新建测试文件），最后跑全部测试确认通过。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

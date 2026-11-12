@@ -1,0 +1,12 @@
+{
+ "id": "edit-twice",
+ "prompt": "docs/api.md 最后有 Status 和 Review 两节，都写着 status: draft。只把 Review 那一节的改成 status: approved，Status 那一节不要动。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

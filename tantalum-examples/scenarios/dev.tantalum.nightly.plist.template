@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  每天 03:00 跑 nightly.sh（agent-eval 需求 7）。装：
+
+    sed "s#__REPO__#$PWD#g" tantalum-examples/scenarios/dev.tantalum.nightly.plist.template > ~/Library/LaunchAgents/dev.tantalum.nightly.plist
+    launchctl load ~/Library/LaunchAgents/dev.tantalum.nightly.plist
+
+  在仓库根目录执行。要在模型没响应时自动启动它，在下面的 EnvironmentVariables 里加 TANTALUM_NIGHTLY_START（启动命令）。
+  卸：launchctl unload ~/Library/LaunchAgents/dev.tantalum.nightly.plist，再删掉这个文件。Mac 睡着时不会跑，醒来后补跑一次。
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.tantalum.nightly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>__REPO__/tantalum-examples/scenarios/nightly.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

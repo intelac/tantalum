@@ -1,0 +1,12 @@
+{
+ "id": "fix-bug",
+ "prompt": "这个项目的测试有失败的。找出原因并修好代码（不要改测试），最后跑一遍测试确认全部通过。（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

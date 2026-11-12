@@ -1,0 +1,2 @@
+{"name": "read_file", "text": "# API\n\n- `inventory.pricing.apply_discount(price, percent)`\n- `inventory.shipping.compute_shipping_fee(weight_kg, zone, express=False)`\n- `inventory.stock.reserve_stock(sku, quantity)`\n- `inventory.orders.place_order(sku, quantity, unit_price, zone, discount_percent=0)`\n\n## Status\n\nstatus: draft\n\n## Review\n\nstatus: draft", "error": false}
+{"name": "edit_file", "text": "Edited docs/api.md: replaced 1 occurrence.", "error": false}

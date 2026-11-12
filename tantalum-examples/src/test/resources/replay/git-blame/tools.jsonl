@@ -1,0 +1,4 @@
+{"name": "grep", "text": "path not found in the allowed directories: shipping.py (relative paths start at the working directory; use find_files to locate a file by its name)", "error": true}
+{"name": "find_files", "text": "inventory/shipping.py", "error": false}
+{"name": "grep", "text": "inventory/shipping.py:4:EXPRESS_SURCHARGE = 12\ninventory/shipping.py:13:    return fee + EXPRESS_SURCHARGE if express else fee", "error": false}
+{"name": "git_blame", "text": "a4621d7e (Mina Park 2026-09-20 4) EXPRESS_SURCHARGE = 12", "error": false}

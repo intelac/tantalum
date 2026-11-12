@@ -1,0 +1,1 @@
+{"name": "bash", "text": "Your name: Traceback (most recent call last):\n  File \"{{root}}/scripts/ask.py\", line 1, in <module>\n    name = input(\"Your name: \")\nEOFError: EOF when reading a line\n\nCommand exited with code 1.", "error": true}

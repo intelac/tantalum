@@ -990,7 +990,9 @@ python3 tantalum-examples/scenarios/run.py --model claude --record              
 python3 tantalum-examples/scenarios/run.py --model claude --record --only fix-bug   # 只录一个
 ```
 
-只录判分通过的；写之前查有没有本机路径和像密钥的东西，有就不写；写完马上回放一次，回放不过的删掉（例如模型用 `bash` 改了文件，回放时 `bash` 不真的执行）。联网、浏览器、技能和要第二个会话的场景不录。
+只录判分通过的。录制时提问末尾加一句“改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件”（存进 `scenario.json`，回放用同一句）：回放时 `bash` 不真的执行，模型用命令行改的文件回放不出来，而 Claude 常常一个 `bash` 脚本改完几个文件。写之前把项目路径换成 `{{root}}`、系统临时目录换成 `{{tmp}}`，再查有没有本机路径和像密钥的东西，有就不写；写完马上回放一次，回放不过的挪到 `results/rejected/` 里，能看到原因（例如模型仍用 `bash` 改了文件、用到了技能）。联网、浏览器、技能和要第二个会话的场景不录。
+
+现在录了 23 个（2026-11-13，Claude Sonnet 5.5）：找和读 6 个、改 7 个（`fix-bug`、`rename`、`edit-twice`、`edit-unread`、`feature`、`parallel`、`split-module`）、命令行 5 个、Git 3 个，长任务 `feature-tests`、`debug-log`；共 532 KB，回放一共约 15 秒。没录上的：`ask`、`edit-stale`（必须用命令行删文件、跑脚本）、`new-file`（用到技能）、两个清单任务（Claude 没过判分，见下）。故意改坏录音验证过：改一个工具结果、少一次回复、多一次回复，各报出对应的那一句。
 
 **真实场景**（`tantalum-examples/scenarios/`，Python 脚本，不进 CI）：脚本化的假模型测的是我们的代码对不对，测不出真模型拿着这些工具干真活时在哪卡住、长任务能不能做完。这套脚本起一台临时服务器和一个**真的连接程序**（命令行沙箱和无头浏览器都开着），连到一份每次重新生成的小项目上，用真模型跑 37 个任务：找函数、三千行文件里找值、读图片和 PDF 和 GBK 文件、修 bug 跑测试、五个文件改名、三种被拒的修改、几万行输出、超时、等输入、三个 Git 问题、抓网页（404、跳转、2 MB 的大页）、填表、等动态内容、技能、知识库、先问用户、跨会话的记忆、并行读文件，以及五个长任务：
 
@@ -1015,6 +1017,8 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 `--repeat N` 每个场景跑 N 次、报通过率（照 pi 的 `--runs-per-variant`）：时过时不过的标“不稳定”，全过的标“已饱和”（这个场景对这个模型已经没有区分力）。每轮结果是一个 `.json`（计划、提交号、系统提示的哈希、每次的步数、token、压缩次数、费用）和一张 `.md` 表；`--compare` 和上一轮逐个场景比通过率、步数、token，模型或系统提示不同时先写一句提示。计划里有没跑成的（服务器起不来、运行异常结束、模型报错），表照出，但不给总通过率，退出码 2——免得少跑了几个也显示成“全过”。需要单独配置的场景（`todo-compact` 的小窗口）自动另起一台服务器。
 
 要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
+
+**每晚**：`tantalum-examples/scenarios/nightly.sh` 拉最新代码、打包、用本机模型把全部场景各跑 3 次，和前一晚比，结果放在 `results/nightly/`。不花钱。模型没响应时可以让它先启动模型：设环境变量 `TANTALUM_NIGHTLY_START` 为启动命令。用 launchd 每天 03:00 跑：照 `dev.tantalum.nightly.plist.template` 开头的两行命令装上（不会自动装）。
 
 **Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`，和连接程序用 runner 上装的 Edge 或 Chrome 跑的 `LocalBrowserIT`）、检查 `LocalBrowserIT` 和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 

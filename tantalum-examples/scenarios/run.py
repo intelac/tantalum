@@ -202,7 +202,8 @@ def run_one(user, scenario, model, recording=False):
     posted = []
     session = "s-" + secrets.token_hex(4)
     started = time.time()
-    problem = ask(user, session, scenario["prompt"], model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
+    prompt = scenario["prompt"] + (RECORD_NOTE if recording else "")
+    problem = ask(user, session, prompt, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
     sessions = [session]
     if problem is None and scenario["followup"]:
         time.sleep(6)   # 记忆落盘
@@ -233,7 +234,7 @@ SERVERS = {
     None: [],
     "small-window": ["--tantalum.compaction.window-from-model=false", "--tantalum.compaction.reserve-tokens=2000",
                      "--tantalum.openai-routes.local.context-window=16000", "--tantalum.openai-routes.local.max-tokens=2048",
-                     "--tantalum.claude.context-window=24000", "--tantalum.claude.max-tokens=2048"],
+                     "--tantalum.claude.context-window=18000", "--tantalum.claude.max-tokens=2048"],
 }
 # 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比）。小窗口时估算偏大（工具定义是英文 JSON，按 1.75 字节一个 token 估
 # 约是实际的两倍），9k 的窗口连摘要调用都估得放不下；16k 窗口、50% 压缩点时估算放得下，中途一定压缩
@@ -286,9 +287,12 @@ def compare(table, now, path):
 
 # ---- 录制（agent-eval 需求 2.4）：判分通过的场景写进 tantalum-examples/src/test/resources/replay/<id>/，由 ReplayScenarioTest 回放 ----
 REPLAY_DIR = os.path.join(REPO, "tantalum-examples", "src", "test", "resources", "replay")
+# 回放时 bash 不真的执行，模型用命令行改的文件回放不出来：录制时在提问后面加这一句（存进 scenario.json，回放用同一句）
+RECORD_NOTE = "（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）"
 # 回放的测试电脑没有浏览器、联网站点、技能和知识库目录，也不开第二个会话
 NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能"}
-SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|[A-Za-z]:\\\\|sk-ant-|api[_-]?key\s*[:=]", re.IGNORECASE)
+# 录制只在 macOS 上做，所以只查 macOS 和 Linux 的本机路径；Windows 盘符和转义过的代码（"usage:\\n"）分不开，不查
+SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|sk-ant-|api[_-]?key\s*[:=]", re.IGNORECASE)
 
 def replayable(scenario):
     return scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"]
@@ -306,10 +310,13 @@ def tree(root):
 def diff(before, after):
     return {p: b for p, b in after.items() if before.get(p) != b}, sorted(p for p in before if p not in after)
 
+TMP = re.compile(r"(?:/private)?/var/folders/[^/\s\"']+/[^/\s\"']+/T/")
+
 def normalize(text):
     for prefix in sorted({ROOT, os.path.realpath(ROOT)}, key=len, reverse=True):
         text = text.replace(prefix, "{{root}}")
-    return text
+    # 系统临时目录（连接程序给命令的 TMPDIR、npm 的日志目录）：只是位置，换成 {{tmp}}，回放时 bash 的结果原样喂回去
+    return TMP.sub("{{tmp}}/", text)
 
 def write_files(target, files):
     for path, data in files.items():
@@ -346,12 +353,13 @@ def record(scenario, result, base, after_setup, posted):
             if entry.get("type") == "ModelReplied":
                 replies.append(normalize(json.dumps({"type": entry["type"], "version": entry["version"], "payload": entry["payload"]}, ensure_ascii=False)))
     for call in result["full_calls"]:
+        if call["name"] == "ask_user": continue   # 回答不是工具结果事件，回放时由 answers 交
         tools.append(normalize(json.dumps({"name": call["name"], "text": call["result"] or "", "error": bool(call["error"])}, ensure_ascii=False)))
     server_args = [a for a in SERVERS[scenario["server"]] if a.startswith("--tantalum.compaction.") or a.startswith("--tantalum.claude.")]
-    meta = {"id": scenario["id"], "prompt": scenario["prompt"], "write": True, "serverArgs": server_args, "answers": posted,
+    meta = {"id": scenario["id"], "prompt": scenario["prompt"] + RECORD_NOTE, "write": True, "serverArgs": server_args, "answers": posted,
             "recordedWith": {"model": MODELS["claude"]()["model"], "commit": commit(), "date": time.strftime("%Y-%m-%d")}}
     texts = replies + tools + [json.dumps(meta, ensure_ascii=False)] + [b.decode("utf-8", "replace") for b in list(setup_files.values()) + list(expected_files.values())]
-    leaked = [m.group(0) for text in texts for m in [SENSITIVE.search(text)] if m]
+    leaked = [text[max(0, m.start() - 80):m.end() + 80] for text in texts for m in [SENSITIVE.search(text)] if m]
     if leaked: return f"not recorded: it contains {leaked[0]!r}"
     target = os.path.join(REPLAY_DIR, scenario["id"])
     shutil.rmtree(target, ignore_errors=True); os.makedirs(target)
@@ -373,13 +381,21 @@ def verify_recordings(ids):
                     "-Dsurefire.failIfNoSpecifiedTests=false", "-Djacoco.skip=true"], cwd=REPO, capture_output=True, text=True)
     report = os.path.join(REPO, "tantalum-examples", "target", "surefire-reports", "TEST-tantalum.shell.boot.ReplayScenarioTest.xml")
     text = open(report, encoding="utf-8").read() if os.path.exists(report) else ""
+    # 报告里的用例叫 replaysAsRecorded(String)[k]：第 k 个，按场景名排序（和 ReplayScenarioTest.scenarios() 一样）
     bad = []
-    for sid in ids:
-        case = re.search(r'<testcase name="\[\d+\] ' + re.escape(sid) + r'"[^>]*?(/>|>(.*?)</testcase>)', text, re.S)
-        if case is None or "<failure" in (case.group(2) or "") or "<error" in (case.group(2) or ""):
-            reason = re.search(r'message="([^"]*)"', case.group(2) or "") if case else None
-            bad.append((sid, (reason.group(1) if reason else "no result")[:300]))
-            shutil.rmtree(os.path.join(REPLAY_DIR, sid), ignore_errors=True)
+    for k, sid in enumerate(sorted(ids), start=1):
+        case = re.search(r'<testcase name="replaysAsRecorded\(String\)\[' + str(k) + r'\]"[^>]*?(/>|>(.*?)</testcase>)', text, re.S)
+        if case is None:
+            # 找不到结果是验证本身的问题，不当成回放失败：留着，手动跑 ReplayScenarioTest
+            bad.append((sid, "verification produced no result; kept")); continue
+        body = case.group(2) or ""
+        if "<failure" in body or "<error" in body:
+            reason = re.search(r'message="([^"]*)"', body)
+            bad.append((sid, (reason.group(1) if reason else "failed")[:400].replace("&#10;", " ").replace("&quot;", '"')))
+            # 不直接删：挪到 results/rejected/ 里，看得到为什么回放不过
+            rejected = os.path.join(HERE, "results", "rejected", sid)
+            shutil.rmtree(rejected, ignore_errors=True); os.makedirs(os.path.dirname(rejected), exist_ok=True)
+            shutil.move(os.path.join(REPLAY_DIR, sid), rejected)
     return bad
 
 
@@ -465,7 +481,7 @@ def main():
         failed_replay = verify_recordings(recorded)
         kept = [sid for sid in recorded if sid not in dict(failed_replay)]
         lines += ["", "## 录制", "", f"录下并回放通过：{', '.join(kept) or '无'}"]
-        lines += [f"- 没录 {sid}：{why}" for sid, why in skipped] + [f"- 录了但回放不过，已删：{sid}：{why}" for sid, why in failed_replay]
+        lines += [f"- 没录 {sid}：{why}" for sid, why in skipped] + [f"- 录了但回放不过，挪到 results/rejected/{sid}：{why}" for sid, why in failed_replay]
     open(out + ".md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
     print("\n".join(lines[2:5]), "->", out + ".md")
     sys.exit(2 if blocked else 0)

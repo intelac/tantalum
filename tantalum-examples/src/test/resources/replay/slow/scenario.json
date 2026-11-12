@@ -1,0 +1,12 @@
+{
+ "id": "slow",
+ "prompt": "运行 python3 scripts/slow.py，超时设成 5 秒，告诉我结果。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}

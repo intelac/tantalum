@@ -1,0 +1,12 @@
+{
+ "id": "git-dirty",
+ "prompt": "现在工作区里有哪些还没提交的改动？包括没被 Git 跟踪的文件。",
+ "write": true,
+ "serverArgs": [],
+ "answers": [],
+ "recordedWith": {
+  "model": "claude-sonnet-5-5",
+  "commit": "95f036d-dirty",
+  "date": "2026-11-13"
+ }
+}
