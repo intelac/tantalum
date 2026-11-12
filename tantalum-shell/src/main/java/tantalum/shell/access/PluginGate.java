@@ -109,6 +109,13 @@ public final class PluginGate {
         if (groups.stream().map(ToolGroup::kind).distinct().count() != groups.size()) {
             throw new IllegalArgumentException("two tool groups share one switch kind");
         }
+        for (ToolGroup group : groups) {
+            // 逐个勾的工具和开关存在同一种里，名字就是键：重了会互相盖掉
+            List<String> picked = group.choices().values().stream().flatMap(List::stream).toList();
+            if (picked.stream().anyMatch(group.switches()::contains) || picked.stream().distinct().count() != picked.size()) {
+                throw new IllegalArgumentException("a tool that can be picked one by one shares its name with a switch or another tool: " + picked);
+            }
+        }
         this.catalog = catalog;
         this.switches = switches;
         this.groups = List.copyOf(groups);
@@ -511,7 +518,8 @@ public final class PluginGate {
 
     /**
      * 只改这个用户自己的。不存在的名字抛 {@link UnknownPlugin}；锁着的开关改不了，抛 {@link LockedPlugin}。
-     * 开关组（本机工作区、联网）的工具没有单独的开关，只能用组的种类（{@code LOCAL}、{@code WEB}）开关总开关和子开关；
+     * 开关组（本机工作区、联网）的工具没有单独的开关，只能用组的种类（{@code LOCAL}、{@code WEB}）开关总开关和子开关，
+     * 以及这一组声明可以逐个勾的工具（{@link ToolGroup#choices}）；
      * 管理员关掉的联网项也能存，插件页上禁用。
      */
     public void set(Principal user, Kind kind, String name, boolean enabled) {
@@ -549,7 +557,8 @@ public final class PluginGate {
     private void known(Kind kind, String name) {
         boolean found = switch (kind) {
             case TOOL -> catalog.find(name).filter(tool -> groupOf(tool).isEmpty()).isPresent();
-            case LOCAL, WEB -> groups.stream().anyMatch(group -> group.kind() == kind && group.switches().contains(name));
+            case LOCAL, WEB -> groups.stream().anyMatch(group -> group.kind() == kind && (group.switches().contains(name)
+                    || group.choices().values().stream().anyMatch(tools -> tools.contains(name))));
             case MCP -> mcpServers.contains(name);
             case PLUGIN -> plugins.containsKey(name);
         };

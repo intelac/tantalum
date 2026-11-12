@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import tantalum.local.tool.BrowserTools;
 import tantalum.local.tool.LocalTool.Kind;
 import tantalum.local.wire.Hello;
 import tantalum.shell.access.PluginSwitches;
@@ -35,6 +36,12 @@ public final class LocalWorkspace implements ToolGroup {
     public static final int SKILL_LISTS = 4;
     /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
     public static final int BROWSER_TOOLS = 5;
+
+    /** “浏览器”下面可以逐个勾的工具（qagent-align 需求 2），顺序同定义。 */
+    private static final Map<String, List<String>> CHOICES = Map.of(BROWSER,
+            BrowserTools.all().stream().map(tantalum.local.tool.LocalTool::name).toList());
+    private static final java.util.Set<String> PICKABLE = CHOICES.values().stream().flatMap(List::stream)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
     /** 每一类工具对应的子开关。 */
     /** 开关的种类；这个文件里的 {@code Kind} 是本机工具的种类（读、写、git、shell）。 */
@@ -83,16 +90,42 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     @Override
-    public boolean enabled(Principal user, Tool tool) {
-        return tool instanceof LocalTool local && enabled(user, local.kind());
+    public Map<String, List<String>> choices() {
+        return CHOICES;
     }
 
-    /** {@code skill} 工具还要用户填了技能目录：没填的人工具列表和以前一样。 */
+    /** 可以逐个勾的工具还要自己的勾在；别的工具只看它那一类。 */
+    @Override
+    public boolean enabled(Principal user, Tool tool) {
+        return tool instanceof LocalTool local && enabled(user, local.kind()) && picked(user, local.name());
+    }
+
+    private boolean picked(Principal user, String tool) {
+        return !PICKABLE.contains(tool) || switches.enabled(user, LOCAL, tool);
+    }
+
+    /** 插件页上逐个勾的状态：子开关名 → 工具名 → 勾没勾。和电脑连没连无关，是用户自己的设置。 */
+    public Map<String, Map<String, Boolean>> choices(Principal user) {
+        Map<String, Map<String, Boolean>> states = new LinkedHashMap<>();
+        CHOICES.forEach((child, tools) -> {
+            Map<String, Boolean> each = new LinkedHashMap<>();
+            tools.forEach(tool -> each.put(tool, switches.enabled(user, LOCAL, tool)));
+            states.put(child, each);
+        });
+        return states;
+    }
+
+    /**
+     * {@code skill} 工具还要用户填了技能目录：没填的人工具列表和以前一样。子开关下面的工具可以逐个勾时，
+     * 一个都没勾就等于这一类关着（给模型的那一段里也不提它）。
+     */
     public boolean enabled(Principal user, Kind kind) {
+        String child = SWITCH.get(kind);
         return switches.enabled(user, LOCAL, MASTER)
-                && switches.enabled(user, LOCAL, SWITCH.get(kind))
+                && switches.enabled(user, LOCAL, child)
                 && links.status(user).map(status -> allows(status.hello(), kind)).orElse(false)
-                && (kind != Kind.SKILL || dirs.skillsDir(user).isPresent());
+                && (kind != Kind.SKILL || dirs.skillsDir(user).isPresent())
+                && (!CHOICES.containsKey(child) || CHOICES.get(child).stream().anyMatch(tool -> switches.enabled(user, LOCAL, tool)));
     }
 
     /** 这次运行要列的技能目录：{@code skill} 工具可用时才有。 */

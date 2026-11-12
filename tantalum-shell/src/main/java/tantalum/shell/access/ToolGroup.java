@@ -1,6 +1,7 @@
 package tantalum.shell.access;
 
 import java.util.List;
+import java.util.Map;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Tool;
 import tantalum.value.id.Principal;
@@ -17,6 +18,14 @@ public interface ToolGroup {
 
     /** 插件页上的开关名，第一个是总开关。 */
     List<String> switches();
+
+    /**
+     * 哪些子开关下面的工具可以逐个勾（qagent-align 需求 2）：子开关名 → 工具名，按展示顺序。勾存在同一种开关里，
+     * 名字就是工具名，所以不能和 {@link #switches} 里的名字重。默认没有。
+     */
+    default Map<String, List<String>> choices() {
+        return Map.of();
+    }
 
     /** 这个工具是不是这一组的。 */
     boolean owns(Tool tool);

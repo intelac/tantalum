@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -222,6 +223,37 @@ class BrowserChainTest {
             assertFalse(denied.system().contains("Browser:"), denied.system());
         }
         assertEquals(0, browserCalls.size());
+    }
+
+    /**
+     * qagent-align 需求 2.2、2.5：用户在插件页去掉一个浏览器工具的勾，下一次提问模型被告知这个工具没有了，别的还在；
+     * 会话文件里记的是当时的工具集，重放和记下的一致。
+     */
+    @Test
+    void aBrowserToolTheUserUntickedIsGoneFromTheNextQuestionOn() throws Exception {
+        try (TestComputer ignored = computer(Hello.Browser.available("Google Chrome", false), browser)) {
+            ask("open", 1);
+            assertTrue(offered(prompts.getLast(), "browser_evaluate"));
+            HttpResponse<String> unticked = server.http.send(server.request("alice", "/api/plugins/local/browser_evaluate")
+                    .header("content-type", "application/json")
+                    .PUT(java.net.http.HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, unticked.statusCode(), unticked.body());
+            ask("hello", 2);
+            ToolChangeBlock change = prompts.getLast().messages().stream().flatMap(message -> message.content().stream())
+                    .filter(ToolChangeBlock.class::isInstance).map(ToolChangeBlock.class::cast).reduce((first, second) -> second).orElseThrow();
+            assertEquals(List.of("browser_evaluate"), change.removed(), "only the unticked tool went away");
+            // 同一个会话里工具定义不换（提示缓存才不失效），变化靠上面那条通知告诉模型
+            assertTrue(prompts.getLast().system().contains("Browser:"), "the browser itself is still on");
+        }
+        String journal = Files.readString(temp.resolve("data/sessions/alice/s1.jsonl"));
+        long withIt = journal.lines().filter(line -> line.contains("\"type\":\"ContextAssembled\"") && line.contains("\"enabledTools\""))
+                .filter(line -> JSON.readTree(line).get("payload").get("enabledTools").toString().contains("browser_evaluate")).count();
+        assertEquals(1, withIt, "the first question had the tool, the second did not");
+        server.close();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        int code = RecordCheckCommand.run(new String[] {"--tantalum.data-dir=" + temp.resolve("data"), "--tantalum.workspace=" + temp.resolve("ws")},
+                new PrintStream(out, true, StandardCharsets.UTF_8), CliText.of(Language.EN));
+        assertEquals(0, code, out.toString(StandardCharsets.UTF_8));
     }
 
     /** 需求 8.5：浏览器的结果和截图都在记录里；电脑、浏览器都不在了，重放的结果还是和记下的一致。 */

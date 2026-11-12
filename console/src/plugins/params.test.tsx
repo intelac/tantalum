@@ -179,14 +179,17 @@ function open(admin: boolean) {
 }
 
 describe("PluginsDialog with settings", () => {
-  it("shows the three groups, a lock with its reason, and the form only under a plugin that is on", async () => {
+  it("shows the groups, a lock with its reason, and the form only under a plugin that is on", async () => {
     fakeBackend();
     open(false);
     const rules = within(await screen.findByRole("group", { name: "规则" }));
     expect(screen.getByRole("group", { name: "工具" })).toBeTruthy();
     expect(within(screen.getByRole("group", { name: "工具输出处理" })).getByRole("switch", { name: "trim" })).toBeTruthy();
-    expect((rules.getByRole("switch", { name: "guard" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(rules.getByText("锁定：合规要求")).toBeTruthy();
+    // qagent-align 需求 1：锁住的不留在“规则”里，在“只有管理员能改”一组
+    expect(rules.queryByRole("switch", { name: "guard" })).toBeNull();
+    const locked = within(screen.getByRole("group", { name: "只有管理员能改" }));
+    expect((locked.getByRole("switch", { name: "guard" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(locked.getByText("锁定：合规要求")).toBeTruthy();
     // 普通用户没有页签，也没有去默认值的按钮
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.queryByRole("button", { name: "去插件默认值改" })).toBeNull();

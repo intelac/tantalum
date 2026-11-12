@@ -38,10 +38,15 @@ function fakeBackend(initial: LocalStatus) {
       calls.push({ method, path: input, body: init?.body as string | undefined });
       const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) });
       if (method === "GET") return ok(status);
-      if (method === "PUT") {
+      if (method === "PUT" || (method === "DELETE" && input.startsWith("/api/plugins/local/"))) {
         const name = decodeURIComponent(input.split("/").pop()!);
-        const enabled = (JSON.parse(init?.body as string) as { enabled: boolean }).enabled;
-        status = { ...status, switches: { ...status.switches, [name]: enabled } };
+        // 恢复默认（DELETE）就是回到勾着
+        const enabled = method === "DELETE" ? true : (JSON.parse(init?.body as string) as { enabled: boolean }).enabled;
+        if (name in status.switches) status = { ...status, switches: { ...status.switches, [name]: enabled } };
+        else if (status.tools !== undefined) {
+          const tools = Object.fromEntries(Object.entries(status.tools).map(([child, list]) => [child, list.map((tool) => (tool.name === name ? { ...tool, enabled } : tool))]));
+          status = { ...status, tools };
+        }
         return ok({});
       }
       if (method === "POST") {
@@ -253,6 +258,94 @@ describe("LocalWorkspaceCard", () => {
       const region = await card();
       await userEvent.click(within(region).getByRole("button", { name: "连接这台电脑" }));
       expect(await within(region).findByText(/要用浏览器加 --allow-browser/)).toBeTruthy();
+    });
+  });
+
+  /** qagent-align 需求 2：浏览器下面的工具能逐个勾。 */
+  describe("the browser's tools", () => {
+    const NAMES = ["browser_navigate", "browser_snapshot", "browser_click", "browser_evaluate"];
+    const tools = (off: string[] = []) => ({ browser: NAMES.map((name) => ({ name, enabled: !off.includes(name) })) });
+
+    async function browserRow() {
+      const region = await card();
+      const toggle = within(region).getByRole("switch", { name: "浏览器" });
+      return { region, row: toggle.closest("li")! };
+    }
+
+    it("lists every tool with a line of explanation, all ticked by default, and nothing says changed", async () => {
+      fakeBackend({ switches: ALL_ON, tools: tools(), link: null });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).queryByRole("list", { name: "浏览器的工具" })).toBeNull();
+      await userEvent.click(within(row).getByRole("button", { name: "已选 4 / 4 个工具" }));
+      const list = within(row).getByRole("list", { name: "浏览器的工具" });
+      expect(within(list).getAllByRole("checkbox").map((box) => box.getAttribute("aria-label"))).toEqual(NAMES);
+      expect(within(list).getAllByRole("checkbox").every((box) => (box as HTMLInputElement).checked)).toBe(true);
+      expect(within(list).getByText("在页面里执行脚本")).toBeTruthy();
+      expect(within(row).queryByText("我改的")).toBeNull();
+      await userEvent.click(within(row).getByRole("button", { name: "收起" }));
+      expect(within(row).queryByRole("list", { name: "浏览器的工具" })).toBeNull();
+    });
+
+    it("unticking a tool saves it, counts it, and offers to restore the default", async () => {
+      const calls = fakeBackend({ switches: ALL_ON, tools: tools(), link: null });
+      open();
+      const { row } = await browserRow();
+      await userEvent.click(within(row).getByRole("button", { name: "已选 4 / 4 个工具" }));
+      await userEvent.click(within(row).getByRole("checkbox", { name: "browser_evaluate" }));
+      await waitFor(() => expect(calls.some((call) => call.method === "PUT" && call.path === "/api/plugins/local/browser_evaluate")).toBe(true));
+      expect(calls.find((call) => call.method === "PUT")!.body).toBe(JSON.stringify({ enabled: false }));
+      expect(await within(row).findByText("我改的")).toBeTruthy();
+      expect((within(row).getByRole("checkbox", { name: "browser_evaluate" }) as HTMLInputElement).checked).toBe(false);
+
+      await userEvent.click(within(row).getByRole("button", { name: "浏览器 恢复默认" }));
+      await waitFor(() => expect(calls.some((call) => call.method === "DELETE" && call.path === "/api/plugins/local/browser_evaluate")).toBe(true));
+      await waitFor(() => expect(within(row).queryByText("我改的")).toBeNull());
+      expect((within(row).getByRole("checkbox", { name: "browser_evaluate" }) as HTMLInputElement).checked).toBe(true);
+    });
+
+    it("shows how many are picked when it opens with some unticked", async () => {
+      fakeBackend({ switches: ALL_ON, tools: tools(["browser_evaluate", "browser_click"]), link: null });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByRole("button", { name: "已选 2 / 4 个工具" })).toBeTruthy();
+      expect(within(row).getByText("我改的")).toBeTruthy();
+    });
+
+    it("cannot be picked while the browser or the whole workspace is off", async () => {
+      fakeBackend({ switches: { ...ALL_ON, browser: false }, tools: tools(["browser_evaluate"]), link: null });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).queryByRole("button", { name: /个工具/ })).toBeNull();
+      expect(within(row).queryByText("我改的")).toBeNull();
+      cleanup();
+      fakeBackend({ switches: { ...ALL_ON, "local-workspace": false }, tools: tools(), link: null });
+      open();
+      expect(within((await browserRow()).row).queryByRole("button", { name: /个工具/ })).toBeNull();
+    });
+
+    it("can be picked whatever the computer says about the browser, and the reason stays", async () => {
+      fakeBackend({ switches: ALL_ON, tools: tools(), link: link({ protocol: 5, current: true, browser: { available: false, code: "browser/not-allowed" } }) });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByText(/启动时加 --allow-browser/)).toBeTruthy();
+      await userEvent.click(within(row).getByRole("button", { name: "已选 4 / 4 个工具" }));
+      expect((within(row).getByRole("checkbox", { name: "browser_click" }) as HTMLInputElement).disabled).toBe(false);
+    });
+
+    it("a tool the dictionary does not know is listed by its name alone; other switches have no tools", async () => {
+      fakeBackend({ switches: ALL_ON, tools: { browser: [{ name: "browser_new_thing", enabled: true }] }, link: null });
+      open();
+      const { region, row } = await browserRow();
+      expect(within(region).getAllByRole("button", { name: /个工具/ }).length).toBe(1);
+      await userEvent.click(within(row).getByRole("button", { name: "已选 1 / 1 个工具" }));
+      expect(within(row).getByRole("checkbox", { name: "browser_new_thing" })).toBeTruthy();
+    });
+
+    it("an older server that sends no tools shows the browser as before", async () => {
+      fakeBackend({ switches: ALL_ON, link: null });
+      open();
+      expect(within((await browserRow()).row).queryByRole("button", { name: /个工具/ })).toBeNull();
     });
   });
 });

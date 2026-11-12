@@ -10,6 +10,7 @@ import { useNow } from "../ui/useNow";
 import { SkillsItem } from "../skills/SkillsItem";
 import { WikiItem } from "../skills/WikiItem";
 import { Row, Section } from "./Rows";
+import { ChoicesList, ChoicesNotes, ChoicesToggle, useToolChoices } from "./ToolChoices";
 import { useIssueToken, useLocal, useRevokeLocal, useToggleLocal } from "./useLocal";
 
 const MASTER: LocalSwitch = "local-workspace";
@@ -61,39 +62,61 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
         checked={master}
         onChange={(enabled) => set(MASTER, enabled)}
       />
-      {CHILDREN.map((name) => {
-        const [label, detail] = lookup(text.switches, name) ?? [name, ""];
-        const on = status.switches[name];
-        const refused = on && status.link !== null ? refusal(t, name, status.link) : null;
-        // 浏览器能用时写明是哪个、有没有窗口（local-browser 需求 7.3）
-        const ready = name === "browser" && on && status.link !== null && refused === null ? browserReady(t, status.link) : null;
-        // 电脑连没连着、连接程序新不新、开关开没开：变了就重新向电脑要清单
-        const signal = `${status.link === null ? "offline" : (status.link.protocol ?? 0) >= SKILL_LISTS ? "linked" : "old"}:${master && on}`;
-        return (
-          <Row
-            key={name}
-            name={<span className="pl-4">{label}</span>}
-            detail={
-              <span className="block pl-4">
-                {detail}
-                {refused !== null && <span className="mt-0.5 block text-warning">{refused}</span>}
-                {ready !== null && <span className="mt-0.5 block text-fg-muted">{ready}</span>}
-              </span>
-            }
-            label={label}
-            checked={on}
-            disabled={!master}
-            onChange={(enabled) => set(name, enabled)}
-          >
-            {name === "skills" && on && <SkillsItem active={open && master} signal={signal} />}
-            {name === "wiki" && on && <WikiItem active={open && master} signal={signal} />}
-          </Row>
-        );
-      })}
+      {CHILDREN.map((name) => (
+        <Child key={name} name={name} status={status} open={open} onChange={(enabled) => set(name, enabled)} />
+      ))}
       <li className="px-3 py-2.5">
         <Connect status={status} />
       </li>
     </Section>
+  );
+}
+
+/** 一个子开关：说明、现在为什么用不了、（技能、知识库）目录、（浏览器）可以逐个勾的工具。 */
+function Child({ name, status, open, onChange }: { name: LocalSwitch; status: LocalStatus; open: boolean; onChange: (enabled: boolean) => void }) {
+  const t = useText();
+  const text = t.plugins.local;
+  const master = status.switches[MASTER];
+  const [label, detail] = lookup(text.switches, name) ?? [name, ""];
+  const on = status.switches[name];
+  const refused = on && status.link !== null ? refusal(t, name, status.link) : null;
+  // 浏览器能用时写明是哪个、有没有窗口（local-browser 需求 7.3）
+  const ready = name === "browser" && on && status.link !== null && refused === null ? browserReady(t, status.link) : null;
+  // 电脑连没连着、连接程序新不新、开关开没开：变了就重新向电脑要清单
+  const signal = `${status.link === null ? "offline" : (status.link.protocol ?? 0) >= SKILL_LISTS ? "linked" : "old"}:${master && on}`;
+  // 下面的工具可以逐个勾（qagent-align 需求 2）：总开关和这个子开关都开着才能勾，选择一直留着
+  const choices = useToolChoices(status.tools?.[name]);
+  const pickable = choices.any && master && on;
+  return (
+    <Row
+      name={<span className="pl-4">{label}</span>}
+      detail={
+        <span className="block pl-4">
+          {detail}
+          {refused !== null && <span className="mt-0.5 block text-warning">{refused}</span>}
+          {ready !== null && <span className="mt-0.5 block text-fg-muted">{ready}</span>}
+          {pickable && (
+            <span className="block">
+              <ChoicesToggle
+                open={choices.open}
+                onToggle={() => choices.setOpen(!choices.open)}
+                picked={choices.list.length - choices.off.length}
+                total={choices.list.length}
+              />
+            </span>
+          )}
+        </span>
+      }
+      label={label}
+      checked={on}
+      disabled={!master}
+      onChange={onChange}
+      aside={pickable && choices.off.length > 0 ? <ChoicesNotes off={choices.off} label={label} /> : undefined}
+    >
+      {name === "skills" && on && <SkillsItem active={open && master} signal={signal} />}
+      {name === "wiki" && on && <WikiItem active={open && master} signal={signal} />}
+      {pickable && choices.open && <ChoicesList tools={choices.list} label={label} />}
+    </Row>
   );
 }
 

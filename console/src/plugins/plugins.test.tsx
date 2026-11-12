@@ -90,6 +90,39 @@ describe("PluginsDialog", () => {
     expect(screen.getByText(/只影响你自己，从你的下一次提问开始生效/)).toBeTruthy();
   });
 
+  it("moves everything that is locked into a group of its own", async () => {
+    fakeBackend({
+      ...PLUGINS,
+      tools: [...PLUGINS.tools, { name: "ask_user", description: "Ask the user.", enabled: true, lock: { source: "admin", reason: "合规要求" } }],
+      mcp: [...PLUGINS.mcp, { name: "jira", state: "READY", enabled: false, lock: { source: "admin", reason: "" }, tools: [] }],
+      plugins: [...PLUGINS.plugins, { name: "redact", description: "", points: ["afterTool"], group: "output", enabled: true, lock: { source: "code", reason: "" } }],
+    });
+    open();
+    const locked = await screen.findByRole("group", { name: "只有管理员能改" });
+    // 规则插件、内置工具、MCP 服务器、输出插件，按这个顺序
+    expect(within(locked).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["dailyQuota", "问用户", "jira", "redact"]);
+    expect(within(locked).getAllByRole("switch").every((item) => (item as HTMLButtonElement).disabled)).toBe(true);
+    expect(within(locked).getByText(/合规要求/)).toBeTruthy();
+    // 原来的组里不再有它们
+    expect(within(screen.getByRole("group", { name: "规则" })).queryByRole("switch", { name: "dailyQuota" })).toBeNull();
+    expect(within(screen.getByRole("group", { name: "规则" })).getByRole("switch", { name: "citationCheck" })).toBeTruthy();
+    const tools = screen.getByRole("group", { name: "工具" });
+    expect(within(tools).queryByRole("switch", { name: "问用户" })).toBeNull();
+    expect(within(tools).queryByRole("switch", { name: "jira" })).toBeNull();
+    expect(within(tools).getByRole("switch", { name: "playwright" })).toBeTruthy();
+    // 输出插件只有锁住的那一个：“工具输出处理”这一组空了，不显示
+    expect(screen.queryByRole("group", { name: "工具输出处理" })).toBeNull();
+    // 四组的顺序
+    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label")).filter((name) => ["规则", "工具", "工具输出处理", "只有管理员能改"].includes(name ?? ""))).toEqual(["规则", "工具", "只有管理员能改"]);
+  });
+
+  it("shows no locked group when nothing is locked", async () => {
+    fakeBackend({ ...PLUGINS, plugins: PLUGINS.plugins.filter((plugin) => plugin.lock === undefined) });
+    open();
+    await screen.findByRole("region", { name: "内置工具" });
+    expect(screen.queryByRole("group", { name: "只有管理员能改" })).toBeNull();
+  });
+
   it("turns a tool on for the current user", async () => {
     const calls = fakeBackend(PLUGINS);
     open();

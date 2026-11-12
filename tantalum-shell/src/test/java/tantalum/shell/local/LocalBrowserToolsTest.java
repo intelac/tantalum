@@ -123,6 +123,66 @@ class LocalBrowserToolsTest {
         return out.toByteArray();
     }
 
+    /** qagent-align 需求 2.2、2.3、2.6：浏览器下面的工具能逐个去掉；被去掉的模型看不到，硬调被拒；开关关了再开，勾还在。 */
+    @Test
+    void browserToolsCanBePickedOneByOne() throws Exception {
+        assertEquals(Map.of("browser", BROWSER.stream().sorted().toList()),
+                Map.of("browser", workspace.choices().get("browser").stream().sorted().toList()), "only the browser has tools to pick");
+        try (TestComputer ignored = connect(Hello.Browser.available("Google Chrome", false), fake)) {
+            gate.set(ALICE, Kind.LOCAL, "browser_evaluate", false);
+            gate.set(ALICE, Kind.LOCAL, "browser_tabs", false);
+            List<String> left = BROWSER.stream().filter(name -> !name.equals("browser_evaluate") && !name.equals("browser_tabs")).toList();
+            assertEquals(left, browserTools(ALICE));
+            assertEquals(false, workspace.choices(ALICE).get("browser").get("browser_evaluate"));
+            assertEquals(true, workspace.choices(ALICE).get("browser").get("browser_click"));
+            assertEquals(workspace.choices().get("browser"), List.copyOf(workspace.choices(ALICE).get("browser").keySet()), "in the order they are defined");
+
+            // 模型仍然调它：被拒，假浏览器没有收到
+            ToolOutput refused = gate.runTool(new ToolContext(ALICE, new SessionId("s-1"), new Workspace(temp)),
+                    tools.get("browser_evaluate"), new Json.Obj(Map.of("function", new Json.Str("() => 1"))));
+            assertTrue(refused.error());
+            assertEquals(PluginGate.TOOL_OFF, refused.text());
+            assertEquals(List.of(), seen);
+
+            // 浏览器关了再开：选择还在
+            gate.set(ALICE, Kind.LOCAL, "browser", false);
+            assertEquals(List.of(), browserTools(ALICE));
+            gate.set(ALICE, Kind.LOCAL, "browser", true);
+            assertEquals(left, browserTools(ALICE));
+
+            // 恢复默认：勾回去
+            gate.reset(ALICE, Kind.LOCAL, "browser_evaluate");
+            gate.reset(ALICE, Kind.LOCAL, "browser_tabs");
+            assertEquals(BROWSER, browserTools(ALICE));
+        }
+        // 别人不受影响；电脑没连上时选择照样能改
+        gate.set(ALICE, Kind.LOCAL, "browser_click", false);
+        assertEquals(true, workspace.choices(BOB).get("browser").get("browser_click"));
+        assertEquals(false, workspace.choices(ALICE).get("browser").get("browser_click"));
+    }
+
+    /** 需求 2.8：一个都不勾，等于浏览器关着——工具没有，给模型的那一段里也不提浏览器。 */
+    @Test
+    void withEveryToolUntickedTheBrowserCountsAsOff() throws Exception {
+        try (TestComputer ignored = connect(Hello.Browser.available("Google Chrome", false), fake)) {
+            assertTrue(workspace.section(ALICE).orElseThrow().contains("Browser:"));
+            for (String tool : BROWSER) {
+                gate.set(ALICE, Kind.LOCAL, tool, false);
+            }
+            assertEquals(List.of(), browserTools(ALICE));
+            assertFalse(workspace.section(ALICE).orElseThrow().contains("Browser:"));
+            assertTrue(gate.enabledTools(ALICE).contains("read_file"));
+        }
+    }
+
+    /** 需求 2.6：只有声明了可以逐个勾的才认；别的本机工具名照旧不是开关。 */
+    @Test
+    void onlyDeclaredToolsCanBePicked() {
+        org.junit.jupiter.api.Assertions.assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.LOCAL, "read_file", false));
+        org.junit.jupiter.api.Assertions.assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.TOOL, "browser_click", false));
+        org.junit.jupiter.api.Assertions.assertThrows(PluginGate.UnknownPlugin.class, () -> gate.setDefault(Kind.LOCAL, "browser_click", false, true, ""));
+    }
+
     /** 需求 7.2：总开关开、“浏览器”开、电脑连着、协议 5 起、连接程序说浏览器可用，五样都满足才有这 11 个工具。 */
     @Test
     void theBrowserToolsNeedTheSwitchesTheConnectionAndABrowserOnTheComputer() throws Exception {

@@ -102,6 +102,16 @@ class LocalApiTest {
         assertTrue(empty.get("link").isNull(), empty.toString());
         assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true}",
                 empty.get("switches").toString());
+        // qagent-align 需求 2：浏览器下面的工具可以逐个勾，默认全勾；改和恢复默认用现成的开关接口
+        assertEquals(11, empty.get("tools").get("browser").size(), empty.get("tools").toString());
+        assertEquals("{\"name\":\"browser_navigate\",\"enabled\":true}", empty.get("tools").get("browser").get(0).toString());
+        assertEquals(List.of("browser"), List.copyOf(empty.get("tools").propertyNames()));
+        assertEquals(200, send("alice", "PUT", "/api/plugins/local/browser_evaluate", "{\"enabled\":false}").statusCode());
+        assertEquals("{\"name\":\"browser_evaluate\",\"enabled\":false}", status("alice").get("tools").get("browser").get(10).toString());
+        assertEquals("{\"name\":\"browser_evaluate\",\"enabled\":true}", status("bob").get("tools").get("browser").get(10).toString());
+        assertEquals(200, send("alice", "DELETE", "/api/plugins/local/browser_evaluate", null).statusCode());
+        assertEquals("{\"name\":\"browser_evaluate\",\"enabled\":true}", status("alice").get("tools").get("browser").get(10).toString());
+        assertEquals(404, send("alice", "PUT", "/api/plugins/local/read_file", "{\"enabled\":false}").statusCode());
 
         String token = JSON.readTree(send("alice", "POST", "/api/local/tokens", "{\"validity\":\"30m\"}").body()).get("token").asString();
         Path mac = Files.createDirectories(temp.resolve("mac"));

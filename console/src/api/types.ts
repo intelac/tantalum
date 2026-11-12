@@ -796,7 +796,14 @@ export interface LocalLink {
 /** GET /api/local：开关和现在的连接，没连上时 link 为 null。 */
 export interface LocalStatus {
   switches: Record<LocalSwitch, boolean>;
+  /** 可以逐个勾的工具（qagent-align 需求 2）：子开关名 → 工具和勾没勾。旧服务器不给。 */
+  tools?: Record<string, LocalTool[]>;
   link: LocalLink | null;
+}
+
+export interface LocalTool {
+  name: string;
+  enabled: boolean;
 }
 
 export type LocalValidity = "30m" | "1h" | "4h" | "1d";

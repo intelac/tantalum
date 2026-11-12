@@ -41,12 +41,20 @@ public class LocalController {
         this.json = json;
     }
 
-    /** 开关状态和这个用户现在的连接；没连上时 {@code link} 为 null。 */
+    /**
+     * 开关状态和这个用户现在的连接；没连上时 {@code link} 为 null。{@code tools} 是可以逐个勾的工具：子开关名 →
+     * {@code [{name, enabled}]}，改和恢复默认走 {@code PUT/DELETE /api/plugins/local/<工具名>}。
+     */
     @GetMapping("/api/local")
     ResponseEntity<String> status() {
         Principal user = WebJson.currentUser();
         ObjectNode response = json.object();
         response.set("switches", json.tree(engine.localWorkspace().switches(user)));
+        ObjectNode tools = response.putObject("tools");
+        engine.localWorkspace().choices(user).forEach((child, states) -> {
+            var list = tools.putArray(child);
+            states.forEach((name, enabled) -> list.addObject().put("name", name).put("enabled", enabled));
+        });
         response.set("link", engine.localLinks().status(user).map(status -> json.tree(link(status))).orElse(NullNode.getInstance()));
         return json.json(200, response);
     }

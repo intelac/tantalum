@@ -8,7 +8,7 @@ import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { Tabs } from "../ui/Tabs";
 import { DefaultsPane, type Focus } from "./DefaultsPane";
-import { groupHooks } from "./groups";
+import { anyLocked, splitLocked } from "./groups";
 import { LocalWorkspaceCard } from "./LocalWorkspaceCard";
 import { byUse, toolText } from "./names";
 import { ParamForm } from "./ParamForm";
@@ -31,7 +31,8 @@ interface Actions {
 }
 
 /**
- * 插件页（core-tools 需求 7，plugin-settings 需求 6）：规则、工具、工具输出处理三组，每项一个开关，只改自己的；
+ * 插件页（core-tools 需求 7，plugin-settings 需求 6，qagent-align 需求 1）：规则、工具、工具输出处理三组，每项一个开关，
+ * 只改自己的；锁住的另成一组“只有管理员能改”；
  * 有参数的在行下面带一个自己保存的表单。管理员另有“插件默认值”页签。
  */
 export function PluginsDialog({ open, onClose, admin = false }: Props) {
@@ -53,7 +54,7 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
       : undefined,
   };
   const failed = toggle.isError ? toggle.error : reset.isError ? reset.error : null;
-  const hooks = groupHooks(data?.plugins ?? []);
+  const split = splitLocked(data ?? { tools: [], mcp: [], plugins: [] });
   return (
     <Dialog open={open} onClose={onClose} title={t.plugins.title} className="max-w-[960px]">
       {admin && (
@@ -89,9 +90,9 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
                 {t.plugins.loadFailed}
               </p>
             )}
-            {hooks.rule.length > 0 && (
+            {split.rule.length > 0 && (
               <Group title={t.plugins.groups.rule}>
-                <HookList label={t.plugins.groups.rule} plugins={hooks.rule} actions={actions} />
+                <HookList label={t.plugins.groups.rule} plugins={split.rule} actions={actions} />
               </Group>
             )}
             <Group title={t.plugins.groups.tool}>
@@ -99,22 +100,44 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
               {data !== undefined && (
                 <>
                   <WebCard web={data.web} onChange={(name, enabled) => actions.set({ kind: "web", name, enabled })} />
-                  <Section title={t.plugins.builtins}>
-                    {byUse(data.tools, t.plugins).map((tool) => (
-                      <ToolRow key={tool.name} tool={tool} actions={actions} />
-                    ))}
-                  </Section>
-                  <Section title={t.plugins.mcp} empty={data.mcp.length === 0 ? t.plugins.noMcp : undefined}>
-                    {data.mcp.map((server) => (
-                      <ServerRow key={server.name} server={server} actions={actions} />
-                    ))}
-                  </Section>
+                  {split.tools.length > 0 && (
+                    <Section title={t.plugins.builtins}>
+                      {byUse(split.tools, t.plugins).map((tool) => (
+                        <ToolRow key={tool.name} tool={tool} actions={actions} />
+                      ))}
+                    </Section>
+                  )}
+                  {(split.servers.length > 0 || data.mcp.length === 0) && (
+                    <Section title={t.plugins.mcp} empty={data.mcp.length === 0 ? t.plugins.noMcp : undefined}>
+                      {split.servers.map((server) => (
+                        <ServerRow key={server.name} server={server} actions={actions} />
+                      ))}
+                    </Section>
+                  )}
                 </>
               )}
             </Group>
-            {hooks.output.length > 0 && (
+            {split.output.length > 0 && (
               <Group title={t.plugins.groups.output}>
-                <HookList label={t.plugins.groups.output} plugins={hooks.output} actions={actions} />
+                <HookList label={t.plugins.groups.output} plugins={split.output} actions={actions} />
+              </Group>
+            )}
+            {anyLocked(split) && (
+              <Group title={t.plugins.groups.locked}>
+                <Section label={t.plugins.groups.locked}>
+                  {split.locked.rule.map((plugin) => (
+                    <HookRow key={plugin.name} plugin={plugin} actions={actions} />
+                  ))}
+                  {byUse(split.locked.tools, t.plugins).map((tool) => (
+                    <ToolRow key={tool.name} tool={tool} actions={actions} />
+                  ))}
+                  {split.locked.servers.map((server) => (
+                    <ServerRow key={server.name} server={server} actions={actions} />
+                  ))}
+                  {split.locked.output.map((plugin) => (
+                    <HookRow key={plugin.name} plugin={plugin} actions={actions} />
+                  ))}
+                </Section>
               </Group>
             )}
           </>

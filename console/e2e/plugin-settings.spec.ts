@@ -127,8 +127,12 @@ test.describe("插件参数", () => {
     const user = await signedIn(browser, OTHER_USER);
     let dialog = await openPlugins(user);
     let rules = dialog.getByRole("group", { name: "规则" });
-    await expect(rules.getByText("锁定：端到端测试先不让开")).toBeVisible();
-    await expect(rules.getByRole("switch", { name: "toolApproval" })).toBeDisabled();
+    // qagent-align 需求 1：锁住的项挪到“只有管理员能改”一组，原来的组里没有了
+    const locked = dialog.getByRole("group", { name: "只有管理员能改" });
+    await expect(locked.getByText("锁定：端到端测试先不让开")).toBeVisible();
+    await expect(locked.getByRole("switch", { name: "toolApproval" })).toBeDisabled();
+    await expect(rules.getByRole("switch", { name: "toolApproval" })).toHaveCount(0);
+    await user.screenshot({ path: "test-results/plugins-locked-group.png" });
     await expect(dialog.getByRole("button", { name: "去插件默认值改" })).toHaveCount(0);
     // 绕过页面直接调接口也不行
     const forced = await user.request.put("/api/plugins/plugin/toolApproval", { data: { enabled: true } });
@@ -148,6 +152,7 @@ test.describe("插件参数", () => {
     rules = dialog.getByRole("group", { name: "规则" });
     await expect(rules.getByRole("switch", { name: "toolApproval" })).toBeEnabled();
     await expect(rules.getByText(/^锁定：/)).toHaveCount(0);
+    await expect(dialog.getByRole("group", { name: "只有管理员能改" }).getByRole("switch", { name: "toolApproval" })).toHaveCount(0);
     await admin.close();
     await user.close();
   });

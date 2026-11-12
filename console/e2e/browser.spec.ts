@@ -22,6 +22,7 @@ test.describe("本机浏览器", () => {
   test.afterEach(async ({ page }) => {
     await login(page, BROWSER_USER);
     await setBrowser(page, true);
+    await page.request.delete("/api/plugins/local/browser_navigate");
   });
 
   test("插件页：浏览器在本机工作区下面，写明是哪个浏览器；联网那一块里没有它；关掉后刷新还是关的", async ({ page }) => {
@@ -68,6 +69,36 @@ test.describe("本机浏览器", () => {
     await page.screenshot({ path: "test-results/browser-conversation.png" });
   });
 
+  test("逐个勾工具：去掉 browser_navigate 的勾，模型再调它被拒；恢复默认后又能用", async ({ page }) => {
+    await openNewSession(page, BROWSER_USER);
+    let card = await openCard(page);
+    await card.getByRole("button", { name: "已选 11 / 11 个工具" }).click();
+    const list = card.getByRole("list", { name: "浏览器的工具" });
+    await expect(list.getByRole("checkbox")).toHaveCount(11);
+    await expect(list.getByText("在页面里执行脚本")).toBeVisible();
+    // 勾选框先发请求、界面跟着变，所以点了以后等它变，不用 uncheck（它点完立刻就查）
+    await list.getByRole("checkbox", { name: "browser_navigate", exact: true }).click();
+    await expect(list.getByRole("checkbox", { name: "browser_navigate", exact: true })).not.toBeChecked();
+    await expect(card.getByText("我改的")).toBeVisible();
+    await page.screenshot({ path: "test-results/browser-tool-choices.png" });
+    await page.keyboard.press("Escape");
+
+    await send(page, "browse: the board");
+    await expect(page.getByText("浏览器结果：This tool was turned off in the plugin page and is not available.")).toBeVisible();
+    await expect(composer(page)).toBeEnabled();
+
+    // 刷新后选择还在；恢复默认把勾都放回去
+    await page.reload();
+    card = await openCard(page);
+    await expect(card.getByRole("button", { name: "已选 10 / 11 个工具" })).toBeVisible();
+    await card.getByRole("button", { name: "浏览器 恢复默认" }).click();
+    await expect(card.getByRole("button", { name: "已选 11 / 11 个工具" })).toBeVisible();
+    await expect(card.getByText("我改的")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await send(page, "browse: the board again");
+    await expect(page.getByText("浏览器结果：Page: Board")).toBeVisible();
+  });
+
   test("390px 宽：浏览器那一行不撑出横向滚动", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openNewSession(page, BROWSER_USER);
@@ -84,6 +115,12 @@ test.describe("本机浏览器", () => {
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(390);
     }
+    // 展开逐个勾的工具列表也不撑出去
+    await card.getByRole("button", { name: "已选 11 / 11 个工具" }).click();
+    const last = card.getByRole("checkbox", { name: "browser_evaluate", exact: true });
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await page.screenshot({ path: "test-results/browser-plugin-phone.png" });
   });
 });
