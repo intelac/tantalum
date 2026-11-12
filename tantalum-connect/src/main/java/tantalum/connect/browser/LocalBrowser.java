@@ -5,6 +5,8 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.PlaywrightException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -272,7 +274,7 @@ public final class LocalBrowser implements Browser, AutoCloseable {
             } catch (RuntimeException gone) {
                 // 进程已经没了
             }
-            if (profileInUse(String.valueOf(failed.getMessage()))) {
+            if (profileInUse(String.valueOf(failed.getMessage()), settings.profile())) {
                 note("the browser profile " + settings.profile() + " is in use by another program");
                 throw new Unavailable(IN_USE);
             }
@@ -281,10 +283,25 @@ public final class LocalBrowser implements Browser, AutoCloseable {
         }
     }
 
-    /** 同一个资料目录只能给一个浏览器进程用；第二个启动时 Chromium 报这几种话之一。 */
+    /**
+     * 同一个资料目录只能给一个浏览器进程用。第二个启动时，macOS、Linux 上 Chromium 明说资料目录被占；Windows 上它把事情交给已经开着的
+     * 那个进程、自己马上退出，Playwright 只看到“浏览器已经关了”（2026-11-12 Windows CI 实测）。后一种情况再看资料目录里有没有
+     * 浏览器运行时留的锁，有才算被占，别的启动失败不算。
+     */
+    static boolean profileInUse(String message, Path profile) {
+        return profileInUse(message) || (message.contains("has been closed") && locked(profile));
+    }
+
+    /** Chromium 明说资料目录被占的几种话。 */
     static boolean profileInUse(String message) {
         return message.contains("ProcessSingleton") || message.contains("SingletonLock") || message.contains("profile is already in use")
                 || message.contains("profile appears to be in use");
+    }
+
+    /** 资料目录里有浏览器运行时的锁：Windows 上是 {@code lockfile}（进程一结束系统就删掉），macOS、Linux 上是 {@code SingletonLock}。 */
+    static boolean locked(Path profile) {
+        return Files.exists(profile.resolve("lockfile"), LinkOption.NOFOLLOW_LINKS)
+                || Files.exists(profile.resolve("SingletonLock"), LinkOption.NOFOLLOW_LINKS);
     }
 
     /** 给驱动进程的环境：不下载浏览器；密钥、口令、令牌这类变量清空（Playwright 把它们并到连接程序的环境上，清空即覆盖）。 */

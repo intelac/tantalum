@@ -268,6 +268,25 @@ class LocalBrowserTest {
         assertFalse(LocalBrowser.profileInUse("Failed to launch: spawn ENOENT"));
     }
 
+    /**
+     * Windows 上第二个浏览器不报“资料目录被占”，而是把事情交给已经开着的那个、自己退出，Playwright 只说“浏览器已经关了”。
+     * 这时资料目录里有运行时的锁才算被占；没有锁、或者是别的错误，都不算。
+     */
+    @Test
+    void onWindowsAProfileInUseShowsAsAClosedBrowserPlusALockFile(@org.junit.jupiter.api.io.TempDir java.nio.file.Path temp) throws Exception {
+        String closed = "Target page, context or browser has been closed";
+        java.nio.file.Path free = java.nio.file.Files.createDirectory(temp.resolve("free"));
+        assertFalse(LocalBrowser.profileInUse(closed, free), "no lock: the browser simply died");
+        java.nio.file.Path windows = java.nio.file.Files.createDirectory(temp.resolve("win"));
+        java.nio.file.Files.writeString(windows.resolve("lockfile"), "");
+        assertTrue(LocalBrowser.profileInUse(closed, windows));
+        assertFalse(LocalBrowser.profileInUse("Failed to launch: spawn ENOENT", windows), "a lock alone does not explain other errors");
+        java.nio.file.Path posix = java.nio.file.Files.createDirectory(temp.resolve("posix"));
+        java.nio.file.Files.writeString(posix.resolve("SingletonLock"), "");
+        assertTrue(LocalBrowser.profileInUse(closed, posix));
+        assertTrue(LocalBrowser.profileInUse("Failed to create a ProcessSingleton for your profile directory", free), "said outright");
+    }
+
     /** 搬自服务器的 BrowserToolsTest：Playwright 的错误只给第一行，不给调用日志。 */
     @Test
     void playwrightErrorsBecomeShortSentences() {
