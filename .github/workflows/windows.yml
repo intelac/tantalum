@@ -60,20 +60,13 @@ jobs:
           pnpm test --no-file-parallelism
       - name: Package
         run: mvn -B -ntp package "-DskipTests"
-      - name: Cache Chromium
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~\AppData\Local\ms-playwright
-          key: ms-playwright-java-1.64.0-windows
-      - name: Install Chromium
-        run: java -jar tantalum-shell\target\tantalum-shell-0.1.0-exec.jar browser install
       - name: Maven verify
         # 覆盖率门槛留在 macOS 的全量回归上：MXC 这类 macOS 连接程序的代码在这里跳过，比例会偏低（设计“windows.yml”）。
         run: mvn -B -ntp verify "-Djacoco.haltOnFailure=false"
       - name: Browser tests and Windows-only tests were not skipped
         if: success() || failure()
         run: |
-          ./.github/scripts/assert-not-skipped.ps1 UserBrowserIT BrowserToolsIT WindowsFilesTest DataDirCheckTest
+          ./.github/scripts/assert-not-skipped.ps1 LocalBrowserIT WindowsFilesTest DataDirCheckTest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # 检查本身也要会失败：一个没跑过的类名必须让它退出码 1
           ./.github/scripts/assert-not-skipped.ps1 NoSuchTest

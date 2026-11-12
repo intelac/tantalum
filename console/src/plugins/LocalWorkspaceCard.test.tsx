@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false };
+const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false, browser: true };
 
 function link(extra: Partial<LocalLink> = {}): LocalLink {
   return {
@@ -188,5 +188,71 @@ describe("LocalWorkspaceCard", () => {
     const before = calls.filter((call) => call.method === "GET").length;
     await vi.advanceTimersByTimeAsync(4100);
     expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThanOrEqual(before + 2);
+  });
+
+  /** local-browser 需求 7.1、7.3：“浏览器”一项在本机工作区下面，写明现在能不能用、为什么。 */
+  describe("the browser item", () => {
+    async function browserRow() {
+      const region = await card();
+      const toggle = within(region).getByRole("switch", { name: "浏览器" });
+      return { region, toggle, row: toggle.closest("li")! };
+    }
+
+    it("says which browser is used and that it has a window when the computer allows it", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 5, current: true, browser: { available: true, name: "Google Chrome", headless: false } }) });
+      open();
+      const { row, toggle } = await browserRow();
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(within(row).getByText("可用：Google Chrome，有窗口（用到时才打开）")).toBeTruthy();
+      expect(within(row).getByText(/和你平时的浏览器分开/)).toBeTruthy();
+      expect(within(row).getByText(/页面内容会送到服务器和你选的模型/)).toBeTruthy();
+    });
+
+    it("says headless when the connector hides the window", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 5, current: true, browser: { available: true, name: "Microsoft Edge", headless: true } }) });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByText("可用：Microsoft Edge，不显示窗口")).toBeTruthy();
+    });
+
+    it("explains a connector that was started without --allow-browser", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 5, current: true, browser: { available: false, code: "browser/not-allowed" } }) });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByText("连接程序没有允许：启动时加 --allow-browser 才能用浏览器")).toBeTruthy();
+      expect(within(row).queryByText(/^可用：/)).toBeNull();
+    });
+
+    it("explains a computer without Chrome or Edge", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 5, current: true, browser: { available: false, code: "browser/not-found" } }) });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByText(/没有找到 Chrome 或 Edge：装一个，或者启动连接程序时用 --browser-path/)).toBeTruthy();
+    });
+
+    it("asks to update a connector that is too old for the browser", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 4, current: false }) });
+      open();
+      const { row } = await browserRow();
+      expect(within(row).getByText(/连接程序需要更新才能用浏览器/)).toBeTruthy();
+    });
+
+    it("shows no reason while no computer is connected or the switch is off, and sends the switch change", async () => {
+      const calls = fakeBackend({ switches: ALL_ON, link: null });
+      open();
+      const { row, toggle } = await browserRow();
+      expect(within(row).queryByText(/连接程序|可用：|没有找到/)).toBeNull();
+      await userEvent.click(toggle);
+      await waitFor(() => expect(calls.some((call) => call.method === "PUT" && call.path.endsWith("/browser"))).toBe(true));
+      expect(calls.find((call) => call.method === "PUT")!.body).toBe(JSON.stringify({ enabled: false }));
+    });
+
+    it("tells in the connect steps to add --allow-browser", async () => {
+      fakeBackend({ switches: ALL_ON, link: null });
+      open();
+      const region = await card();
+      await userEvent.click(within(region).getByRole("button", { name: "连接这台电脑" }));
+      expect(await within(region).findByText(/要用浏览器加 --allow-browser/)).toBeTruthy();
+    });
   });
 });

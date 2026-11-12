@@ -40,12 +40,10 @@
   "web" : {
     "switches" : {
       "web" : true,
-      "web-fetch" : true,
-      "browser" : true
+      "web-fetch" : true
     },
     "admin" : {
-      "web-fetch" : true,
-      "browser" : true
+      "web-fetch" : true
     },
     "blockPrivateNetwork" : true
   },

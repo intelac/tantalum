@@ -16,6 +16,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import tantalum.connect.Words.Key;
+import tantalum.connect.browser.Driver;
+import tantalum.connect.browser.Installed;
+import tantalum.connect.browser.LocalBrowser;
+import tantalum.connect.browser.Profile;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Mxc;
 import tantalum.local.sandbox.MxcPolicy;
@@ -84,10 +88,16 @@ public final class Main {
         }
         summary(setup, out, words);
         Journal journal = new Journal(out, Clock.systemDefaultZone());
-        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.sandbox(), journal);
-        // Ctrl+C：打断在跑的调用，再结束这个程序启动的全部进程（MXC 和命令、git），最后删掉沙箱的临时目录
+        // 浏览器这时不启动：第一次有 browser_* 调用才起驱动和浏览器
+        LocalBrowser browser = setup.browser() == null ? null
+                : new LocalBrowser(setup.browser(), new Driver(Profile.home()), Clock.systemUTC());
+        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.sandbox(), journal, browser);
+        // Ctrl+C：打断在跑的调用，关浏览器，再结束这个程序启动的全部进程（MXC 和命令、git、浏览器的驱动），最后删掉沙箱的临时目录
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             calls.stopAll();
+            if (browser != null) {
+                browser.close();
+            }
             ProcessHandle.current().descendants().forEach(ProcessHandle::destroyForcibly);
             setup.sandbox().close();
         }, "stop-calls"));
@@ -128,7 +138,13 @@ public final class Main {
 
     /** 解析后的启动参数。 */
     record Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
-                   boolean network, String name, Path mxc, boolean help, boolean insecure) {
+                   boolean network, String name, Path mxc, boolean help, boolean insecure, BrowserOptions browser) {
+
+        /** 没有浏览器参数时。 */
+        Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
+                boolean network, String name, Path mxc, boolean help, boolean insecure) {
+            this(server, allow, write, shell, read, env, network, name, mxc, help, insecure, BrowserOptions.NONE);
+        }
 
         static Options parse(String[] args, Words words) throws Refused {
             for (String arg : args) {
@@ -146,6 +162,11 @@ public final class Main {
             boolean insecure = false;
             String name = null;
             Path mxc = null;
+            boolean browser = false;
+            boolean headless = false;
+            Installed.Choice choice = null;
+            Path browserPath = null;
+            Path profile = null;
             for (int i = 0; i < args.length; i++) {
                 String arg = args[i];
                 switch (arg) {
@@ -164,13 +185,31 @@ public final class Main {
                     case "--allow-shell" -> shell = true;
                     case "--no-network" -> network = false;
                     case "--insecure" -> insecure = true;
+                    case "--allow-browser" -> browser = true;
+                    case "--browser-headless" -> headless = true;
+                    case "--browser" -> {
+                        String value = value(args, ++i, arg, words);
+                        choice = Installed.Choice.parse(value)
+                                .orElseThrow(() -> new Refused(words.say(Key.REFUSED_BROWSER_CHOICE, Map.of("value", value))));
+                    }
+                    case "--browser-path" -> browserPath = Path.of(value(args, ++i, arg, words));
+                    case "--browser-profile" -> profile = Path.of(value(args, ++i, arg, words));
                     default -> throw new Refused(words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
                 }
             }
             if (allow.isEmpty()) {
                 throw new Refused(words.say(Key.REFUSED_NO_ALLOW));
             }
-            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false, insecure);
+            if (!browser) {
+                // 浏览器的参数单独给是写漏了 --allow-browser：说清楚，不悄悄忽略
+                String stray = choice != null ? "--browser" : browserPath != null ? "--browser-path" : headless ? "--browser-headless"
+                        : profile != null ? "--browser-profile" : null;
+                if (stray != null) {
+                    throw new Refused(words.say(Key.REFUSED_BROWSER_NEEDS_ALLOW, Map.of("option", stray)));
+                }
+            }
+            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false,
+                    insecure, new BrowserOptions(browser, choice == null ? Installed.Choice.ANY : choice, browserPath, headless, profile));
         }
 
         /** 以 {@code tc_} 开头、在哪里带着一整个令牌、或者是 {@code --token}。报错时不回显这个参数。 */
@@ -187,10 +226,25 @@ public final class Main {
     }
 
     /**
+     * 浏览器的启动参数（local-browser 需求 1–3）：{@code --allow-browser}、{@code --browser chrome|edge}、
+     * {@code --browser-path 文件}、{@code --browser-headless}、{@code --browser-profile 目录}。后四个要有第一个才收。
+     */
+    record BrowserOptions(boolean allowed, Installed.Choice choice, Path path, boolean headless, Path profile) {
+
+        static final BrowserOptions NONE = new BrowserOptions(false, Installed.Choice.ANY, null, false, null);
+    }
+
+    /**
      * 检查过的启动设置：WebSocket 地址、允许的目录、要发给服务器的 {@code hello}、令牌、跑命令的沙箱（没有 {@code --allow-shell}
      * 或不可用时是不能用的沙箱）。{@link #toString()} 不带令牌，打印或写进异常都不会泄露。
      */
-    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox) {
+    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox,
+                 LocalBrowser.Settings browser) {
+
+        /** 没有浏览器时。 */
+        Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox) {
+            this(socket, options, dirs, hello, token, sandbox, null);
+        }
 
         @Override
         public String toString() {
@@ -236,9 +290,42 @@ public final class Main {
                 throw new Refused(words.say(Key.REFUSED_ENV_NAME, Map.of("name", name)));
             }
         }
+        LocalBrowser.Settings browser = browser(options.browser(), words);
         String token = token(env, prompt, words);
         Sandbox sandbox = sandbox(options, dirs, env);
-        return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check()), token, sandbox);
+        Hello.Browser state = !options.browser().allowed() ? Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED)
+                : browser == null ? Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)
+                : Hello.Browser.available(browser.name(), browser.headless());
+        return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check(), state), token, sandbox, browser);
+    }
+
+    /**
+     * 有 {@code --allow-browser} 时找浏览器、建资料目录；只看文件，不启动浏览器。没允许、或者找不到 Chrome 和 Edge 时为 null：
+     * 连接程序照常启动，只是没有浏览器，原因写进启动说明和插件页。{@code --browser-path} 指的文件不能用、资料目录建不了是写错了，拒绝启动。
+     */
+    private static LocalBrowser.Settings browser(BrowserOptions options, Words words) throws Refused {
+        if (!options.allowed()) {
+            return null;
+        }
+        Installed.Found found;
+        if (options.path() != null) {
+            if (!Installed.usable(options.path())) {
+                throw new Refused(words.say(Key.REFUSED_BROWSER_PATH, Map.of("path", options.path())));
+            }
+            found = new Installed.Found(String.valueOf(options.path().getFileName()), options.path().toAbsolutePath());
+        } else {
+            found = Installed.find(options.choice()).orElse(null);
+        }
+        if (found == null) {
+            return null;
+        }
+        Path profile = options.profile() == null ? Profile.standard() : options.profile();
+        try {
+            profile = Profile.prepare(profile.toAbsolutePath());
+        } catch (IOException | RuntimeException failure) {
+            throw new Refused(words.say(Key.REFUSED_BROWSER_PROFILE, Map.of("dir", profile, "detail", String.valueOf(failure.getMessage()))));
+        }
+        return new LocalBrowser.Settings(found.path(), found.name(), options.headless(), profile);
     }
 
     /**
@@ -321,7 +408,7 @@ public final class Main {
     }
 
     /** Git 只看这台电脑装没装：哪个目录是仓库由每次调用按路径判断。 */
-    private static Hello hello(Options options, AllowedDirs dirs, Sandbox.Status shell) {
+    private static Hello hello(Options options, AllowedDirs dirs, Sandbox.Status shell, Hello.Browser browser) {
         List<Hello.Root> roots = new ArrayList<>();
         for (Path dir : dirs.all()) {
             roots.add(new Hello.Root(dir.toString()));
@@ -334,7 +421,7 @@ public final class Main {
             git = false;
         }
         return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
-                Hello.Shell.of(shell), options.network(), git);
+                Hello.Shell.of(shell), options.network(), git, browser);
     }
 
     static String version() {
@@ -361,7 +448,7 @@ public final class Main {
         }
     }
 
-    /** 启动说明：连到哪、允许什么、命令行能不能用以及原因。 */
+    /** 启动说明：连到哪、允许什么、命令行能不能用以及原因、浏览器的情况。 */
     static void summary(Setup setup, PrintStream out, Words words) {
         Hello hello = setup.hello();
         out.println("Tantalum Connect " + hello.connector());
@@ -387,6 +474,16 @@ public final class Main {
             if (!setup.options().env().isEmpty()) {
                 out.println(words.say(Key.SUMMARY_ENV, Map.of("names", String.join(", ", setup.options().env()))));
             }
+        }
+        Hello.Browser browser = hello.browser();
+        if (browser == null || Hello.Browser.NOT_ALLOWED.equals(browser.code())) {
+            out.println(words.say(Key.SUMMARY_BROWSER_NO));
+        } else if (!browser.available()) {
+            out.println(words.say(Key.SUMMARY_BROWSER_MISSING));
+        } else {
+            out.println(words.say(browser.headless() ? Key.SUMMARY_BROWSER_HEADLESS : Key.SUMMARY_BROWSER_WINDOW,
+                    Map.of("name", browser.name())));
+            out.println(words.say(Key.SUMMARY_BROWSER_PROFILE, Map.of("dir", setup.browser().profile())));
         }
         out.println(words.say(Key.SUMMARY_FOOTER));
         out.flush();

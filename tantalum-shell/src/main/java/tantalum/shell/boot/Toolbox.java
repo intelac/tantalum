@@ -9,9 +9,6 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.WebAccess;
 import tantalum.shell.attachment.ToolImages;
-import tantalum.shell.browser.BrowserDriver;
-import tantalum.shell.browser.BrowserTools;
-import tantalum.shell.browser.Browsers;
 import tantalum.shell.fetch.Fetcher;
 import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.local.LocalLinks;
@@ -40,8 +37,8 @@ import tantalum.shell.tool.ToolCatalog;
  */
 record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks, LocalWorkspace localWorkspace, SkillSettings skillSettings,
                SkillCatalog skillCatalog, SkillMentions skillMentions, AddressRules addressRules,
-               Egress egress, Browsers browsers, WebAccess webAccess, McpRegistry mcp, McpSettings mcpSettings, Routes routes,
-               CompactionPolicy compaction, PluginGate gate, boolean web) {
+               Egress egress, WebAccess webAccess, McpRegistry mcp, McpSettings mcpSettings, Routes routes,
+               CompactionPolicy compaction, PluginGate gate) {
 
     /** 读模型列表：启动时几条路线并行，总共最多等 5 秒，之后每 10 分钟（同 DSH {@code listing-config.ts:7,9}）。 */
     private static final Duration LIST_STARTUP_WAIT = Duration.ofSeconds(5);
@@ -69,21 +66,13 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         if (web.fetch().enabled()) {
             catalog.register(new WebFetchTool(new Fetcher(egress, addressRules)));
         }
-        // 浏览器懒启动：这里只登记，用户第一次调浏览器工具时才起 Chromium
-        TantalumProperties.Browser browser = web.browser();
-        Browsers browsers = browser.enabled() ? new Browsers(new Browsers.Settings(browser.maxOpen(), browser.idleClose(), browser.sandbox()),
-                egress, toolImages, clock, new BrowserDriver(properties.dataDir())) : null;
-        if (browsers != null) {
-            opened.add(browsers);
-            BrowserTools.all(browsers).forEach(catalog::register);
-        }
         McpSettings mcpSettings = McpSettings.from(properties.mcp(), properties.toolTimeout(), System::getenv);
         McpRegistry mcp = new McpRegistry(mcpSettings, toolImages);
         opened.add(mcp);
         catalog.setSource(mcp);
         LocalWorkspace localWorkspace = new LocalWorkspace(stores.switches(), localLinks, skillSettings);
         SkillCatalog skillCatalog = new SkillCatalog(localWorkspace);
-        WebAccess webAccess = new WebAccess(stores.switches(), web.fetch().enabled(), browser.enabled(), web.blockPrivateNetwork());
+        WebAccess webAccess = new WebAccess(stores.switches(), web.fetch().enabled(), web.blockPrivateNetwork());
         // 每个模型的窗口在它的路线的列表里，每次提问按这次用的模型算压缩设置
         Routes started = routes.start(LIST_STARTUP_WAIT);
         CompactionPolicy compaction = new CompactionPolicy(stores.userSettings(), properties.compactionLimits());
@@ -91,16 +80,16 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
                 mcpSettings.servers().stream().map(McpSettings.Server::name).toList(),
                 hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()), stores.params());
         return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog,
-                new SkillMentions(localWorkspace, skillCatalog), addressRules, egress, browsers, webAccess, mcp, mcpSettings,
-                started, compaction, gate, web.any());
+                new SkillMentions(localWorkspace, skillCatalog), addressRules, egress, webAccess, mcp, mcpSettings,
+                started, compaction, gate);
     }
 
-    /** 固定说明：MCP 的那段加联网的那段，都不随用户开关变化。 */
+    /**
+     * 固定说明：MCP 的那段加“网页内容不可信”的那段，都不随用户开关、管理员的配置变化。后一段总是有：浏览器工具的定义总是注册着
+     * （在用户电脑上执行），不论服务器开没开抓网页。
+     */
     String fixedNote() {
         String mcpNote = mcp.fixedNote();
-        if (!web) {
-            return mcpNote;
-        }
         return mcpNote.isEmpty() ? WebAccess.NOTE : mcpNote + "\n\n" + WebAccess.NOTE;
     }
 }

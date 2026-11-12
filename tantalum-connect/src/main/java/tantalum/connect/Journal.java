@@ -9,7 +9,7 @@ import tantalum.local.wire.DirState;
 import tantalum.value.json.Json;
 
 /**
- * 终端里的调用记录：每个调用一行，时间、会话、工具、路径或命令、结果，比如
+ * 终端里的调用记录：每个调用一行，时间、会话、工具、路径或命令（浏览器是网址、元素编号、键名）、结果，比如
  * {@code 10:02:13 s-1a2b read_file src/Order.java ok}。用户随时能看到服务器让电脑做了什么。不写文件内容，不写令牌
  * （这里拿不到令牌）。
  */
@@ -29,6 +29,9 @@ final class Journal {
     private static final int SESSION_CHARS = 8;
     /** 路径或命令最多打这么多字符，太长的截掉。 */
     private static final int SUBJECT_CHARS = 160;
+
+    /** 能打在终端里的参数，按这个顺序取第一个有值的。 */
+    private static final String[] SUBJECTS = {"path", "command", "name", "url", "ref", "key", "expression"};
 
     private final PrintStream out;
     private final Clock clock;
@@ -51,10 +54,15 @@ final class Journal {
                 + (state == DirState.OK ? "ok " + count : state.name().toLowerCase(Locale.ROOT)));
     }
 
-    /** 路径、命令或技能名：有 {@code path} 打路径，有 {@code command} 打命令原文，有 {@code name} 打名字，都没有打 {@code .}（主目录）。 */
+    /**
+     * 路径、命令、技能名，或浏览器调用的对象：有 {@code path} 打路径，有 {@code command} 打命令原文，有 {@code name} 打名字；
+     * 浏览器工具有 {@code url} 打网址，有 {@code ref} 打元素编号，有 {@code key} 打键名，有 {@code expression} 打表达式的开头。
+     * 都没有打 {@code .}。只认这几个字段：{@code browser_type} 的 {@code text}、{@code browser_select_option} 的 {@code values}
+     * 是用户网页里填的内容（可能是口令），从不打出来。
+     */
     private static String subject(Json arguments) {
         if (arguments instanceof Json.Obj object) {
-            for (String field : new String[] {"path", "command", "name"}) {
+            for (String field : SUBJECTS) {
                 if (object.fields().get(field) instanceof Json.Str text && !text.value().isBlank()) {
                     return printable(text.value(), SUBJECT_CHARS);
                 }

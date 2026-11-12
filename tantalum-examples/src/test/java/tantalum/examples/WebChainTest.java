@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
@@ -46,8 +45,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 联网的内核链路（web-tools 需求 3.4、5.2、W11）：真服务器、本地测试网站，不访问外网。
- * 在插件页关掉“浏览器”，下一次提问模型收到“不再可用”的工具变化，来源 web；截图在会话文件里只有附件引用；
- * {@code web_fetch} 抓到的正文进会话文件，重启后读会话不再访问网站。MCP 图片的同一项检查在 {@code McpIntegrationTest}。
+ * 在插件页关掉“抓网页”，下一次提问模型收到“不再可用”的工具变化，来源 web；
+ * {@code web_fetch} 抓到的正文进会话文件，重启后读会话不再访问网站。MCP 图片的同一项检查在 {@code McpIntegrationTest}；
+ * 浏览器截图“会话文件里只有附件引用”的检查随浏览器搬到了 shell 的 {@code BrowserChainTest}（local-browser）。
  */
 class WebChainTest {
 
@@ -64,7 +64,7 @@ class WebChainTest {
     private TestServer server;
 
     /**
-     * 提问 {@code fetch} 调 web_fetch 抓文章；{@code shot} 先打开页面再截图；拿到最后一个工具结果后回答它；其余直接回答。
+     * 提问 {@code fetch} 调 web_fetch 抓文章；拿到工具结果后回答它；其余直接回答。
      */
     private final ModelClient model = (prompt, chunks) -> {
         prompts.add(prompt);
@@ -72,12 +72,6 @@ class WebChainTest {
         int results = resultsSinceLastQuestion(prompt);
         if (asked.equals("fetch") && results == 0) {
             return call("web_fetch", Map.of("url", url("/article")));
-        }
-        if (asked.equals("shot") && results == 0) {
-            return call("browser_navigate", Map.of("url", url("/article")));
-        }
-        if (asked.equals("shot") && results == 1) {
-            return call("browser_take_screenshot", Map.of());
         }
         ContentBlock last = prompt.messages().getLast().content().getLast();
         String answer = last instanceof ToolResultBlock result ? (result.error() ? "ERROR: " : "OK: ") + result.text() : "ok";
@@ -113,22 +107,24 @@ class WebChainTest {
         return "http://127.0.0.1:" + site.getAddress().getPort() + path;
     }
 
+    /**
+     * 在插件页关掉“抓网页”：下一次提问模型收到“不再可用”的工具变化，来源 web，对话页据此写“联网已在插件页关闭”。
+     * 浏览器不在这里：它在用户电脑上，归本机工作区（local-browser）；它的链路在 shell 的 {@code BrowserChainTest}。
+     */
     @Test
-    void turningTheBrowserOffIsAToolChangeOnTheNextQuestionFromSourceWeb() throws Exception {
+    void turningWebFetchOffIsAToolChangeOnTheNextQuestionFromSourceWeb() throws Exception {
         ask("hello", 1);
-        List<String> browserTools = prompts.getLast().tools().stream().filter(tool -> !tool.deferred())
-                .map(tool -> tool.name()).filter(name -> name.startsWith("browser_")).sorted().toList();
-        assertEquals(11, browserTools.size(), browserTools.toString());
+        assertTrue(prompts.getLast().tools().stream().anyMatch(tool -> !tool.deferred() && tool.name().equals("web_fetch")));
 
-        HttpResponse<String> off = server.http.send(server.request("alice", "/api/plugins/web/browser")
+        HttpResponse<String> off = server.http.send(server.request("alice", "/api/plugins/web/web-fetch")
                 .header("content-type", "application/json").PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, off.statusCode(), off.body());
 
         ask("hello again", 2);
         ToolChangeBlock change = change(prompts.getLast());
-        assertNotNull(change, "the model is told the browser tools are gone");
-        assertEquals(browserTools, change.removed().stream().sorted().toList());
+        assertNotNull(change, "the model is told web_fetch is gone");
+        assertEquals(List.of("web_fetch"), change.removed());
         assertTrue(change.added().isEmpty(), change.toString());
 
         JsonNode item = null;
@@ -138,33 +134,9 @@ class WebChainTest {
             }
         }
         assertNotNull(item, "the conversation shows the change");
-        assertTrue(item.get("disabled").toString().contains("browser_navigate"), item.toString());
-        assertFalse(item.get("disabled").toString().contains("web_fetch"), "web_fetch stays on: " + item);
-        assertEquals("web", item.get("sources").get("browser_navigate").asString(), "the console explains it with the source");
-    }
-
-    /**
-     * 驱动解压在这个测试的临时数据目录里。Playwright 在一个 JVM 里只认第一次用到的驱动目录（{@code UserBrowserIT.DRIVER_DATA} 的说明），
-     * 所以 examples 里只有这一个用例起浏览器；再加的话要共用一个数据目录。
-     */
-    @Test
-    void aScreenshotIsOnlyAnAttachmentReferenceInTheSessionFile() throws Exception {
-        ask("shot", 1);
-        List<ToolFinished> finished = finished();
-        assertEquals(2, finished.size(), finished.toString());
-        assumeFalse(finished.getFirst().text().contains("not installed"),
-                "Chromium headless shell is not installed here; run: java -jar tantalum.jar browser install");
-        assertFalse(finished.getFirst().error(), finished.getFirst().text());
-        ToolFinished shot = finished.get(1);
-        assertFalse(shot.error(), shot.text());
-        assertTrue(shot.text().startsWith(UNTRUSTED), shot.text());
-        assertEquals(1, shot.images().size());
-        assertEquals("screenshot-127.0.0.1.png", shot.images().getFirst().name());
-        assertTrue(server.context.getBean(Engine.class).attachments().find(new Principal("alice"), shot.images().getFirst().id()).isPresent(),
-                "the screenshot is in alice's attachments");
-        server.close();
-        server = null;
-        assertNoBase64Png(temp.resolve("data"));
+        assertTrue(item.get("disabled").toString().contains("web_fetch"), item.toString());
+        assertFalse(item.get("disabled").toString().contains("browser_"), "the browser tools are local tools, untouched: " + item);
+        assertEquals("web", item.get("sources").get("web_fetch").asString(), "the console explains it with the source");
     }
 
     @Test
@@ -203,18 +175,6 @@ class WebChainTest {
     private List<ToolFinished> finished() throws Exception {
         return new SessionStore(temp.resolve("data"), EventCodec.withBuiltins()).readAll().stream().map(EventEnvelope::event)
                 .filter(ToolFinished.class::isInstance).map(ToolFinished.class::cast).toList();
-    }
-
-    /** 会话文件、索引里都没有 PNG 的 base64（开头 iVBORw0K）。 */
-    private static void assertNoBase64Png(Path data) throws Exception {
-        int checked = 0;
-        try (Stream<Path> files = Files.walk(data)) {
-            for (Path file : files.filter(path -> path.toString().endsWith(".jsonl") || path.toString().endsWith(".json")).toList()) {
-                assertFalse(Files.readString(file).contains("iVBORw0K"), "base64 in " + file);
-                checked++;
-            }
-        }
-        assertTrue(checked > 0, "no session files found under " + data);
     }
 
     private ModelOutcome call(String tool, Map<String, String> arguments) {

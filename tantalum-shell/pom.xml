@@ -94,12 +94,6 @@
       <artifactId>pdfbox</artifactId>
       <version>3.0.8</version>
     </dependency>
-    <!-- 联网（web-tools spec）：每个用户的无头浏览器；driver-bundle 带 5 个平台的 Node，服务器上不用另装。 -->
-    <dependency>
-      <groupId>com.microsoft.playwright</groupId>
-      <artifactId>playwright</artifactId>
-      <version>1.64.0</version>
-    </dependency>
     <!-- web_fetch 解析 HTML（编码、没闭合的标签、实体），Markdown 转换在它的 DOM 上自己写。 -->
     <dependency>
       <groupId>org.jsoup</groupId>

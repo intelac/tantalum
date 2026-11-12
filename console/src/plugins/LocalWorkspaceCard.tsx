@@ -13,14 +13,17 @@ import { Row, Section } from "./Rows";
 import { useIssueToken, useLocal, useRevokeLocal, useToggleLocal } from "./useLocal";
 
 const MASTER: LocalSwitch = "local-workspace";
-const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki"];
+const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser"];
 /** 从这个协议版本起，连接程序会列技能和 wiki 页。 */
 const SKILL_LISTS = 4;
+/** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
+const BROWSER_TOOLS = 5;
 const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
 /**
- * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库六个子开关（后两项各带一个目录，见 skills/）；连接状态和到期倒计时；
+ * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（技能、知识库各带一个目录，见 skills/；
+ * 浏览器是电脑上已装的 Chrome 或 Edge，见 local-browser）；连接状态和到期倒计时；
  * “连接这台电脑”生成令牌和一行命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
@@ -62,6 +65,8 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
         const [label, detail] = lookup(text.switches, name) ?? [name, ""];
         const on = status.switches[name];
         const refused = on && status.link !== null ? refusal(t, name, status.link) : null;
+        // 浏览器能用时写明是哪个、有没有窗口（local-browser 需求 7.3）
+        const ready = name === "browser" && on && status.link !== null && refused === null ? browserReady(t, status.link) : null;
         // 电脑连没连着、连接程序新不新、开关开没开：变了就重新向电脑要清单
         const signal = `${status.link === null ? "offline" : (status.link.protocol ?? 0) >= SKILL_LISTS ? "linked" : "old"}:${master && on}`;
         return (
@@ -72,6 +77,7 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
               <span className="block pl-4">
                 {detail}
                 {refused !== null && <span className="mt-0.5 block text-warning">{refused}</span>}
+                {ready !== null && <span className="mt-0.5 block text-fg-muted">{ready}</span>}
               </span>
             }
             label={label}
@@ -105,7 +111,19 @@ export function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | n
     const shown = reason ?? "";
     return shown === "" || shown === NO_SHELL_FLAG ? text.sandbox["shell/not-allowed"] : text.noSandbox(shown);
   }
+  if (name === "browser") {
+    // 旧的连接程序不认浏览器，也不送这一项
+    if ((link.protocol ?? 0) < BROWSER_TOOLS || link.browser == null) return text.browserOld;
+    if (!link.browser.available) return link.browser.code === "browser/not-found" ? text.browserNotFound : text.browserNotAllowed;
+  }
   return null;
+}
+
+/** 浏览器能用时的一句：哪个浏览器、有没有窗口。 */
+function browserReady(t: Text, link: LocalLink): string | null {
+  const browser = link.browser;
+  if (browser == null || !browser.available) return null;
+  return t.plugins.local.browserReady(browser.name ?? "", browser.headless === true);
 }
 
 function osName(os: string, version: string): string {

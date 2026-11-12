@@ -108,44 +108,31 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     }
 
     /**
-     * 联网：内网限制、“抓网页”、“浏览器”。管理员关掉的那一项不注册工具；两项都关时不起出口。
+     * 联网：内网限制和“抓网页”。管理员关掉抓网页时不注册工具，也不起出口。浏览器不在服务器上（local-browser：在用户电脑上，
+     * 经连接程序驱动），原来的 {@code tantalum.web.browser.*} 已经不起作用，见 {@link #STALE_BROWSER_KEYS}。
      * 默认值在 {@code application.properties}，没有这一段时（嵌入使用和测试）用 {@link #defaults()}。
      */
-    public record Web(boolean blockPrivateNetwork, Fetch fetch, Browser browser) {
+    public record Web(boolean blockPrivateNetwork, Fetch fetch) {
 
         public Web {
             fetch = fetch == null ? new Fetch(true) : fetch;
-            browser = browser == null ? Browser.defaults() : browser;
         }
 
         public static Web defaults() {
-            return new Web(true, new Fetch(true), Browser.defaults());
+            return new Web(true, new Fetch(true));
         }
 
-        /** 两项里有一项开着，就要起出口。 */
+        /** 抓网页开着，就要起出口。 */
         public boolean any() {
-            return fetch.enabled() || browser.enabled();
+            return fetch.enabled();
         }
     }
 
     public record Fetch(boolean enabled) {}
 
-    /** 浏览器：同时开着的上限（每个用户一个）、空闲多久关、Chromium 渲染进程的沙箱。上限小于 1 时启动失败。 */
-    public record Browser(boolean enabled, int maxOpen, Duration idleClose, boolean sandbox) {
-
-        public Browser {
-            if (maxOpen < 1) {
-                throw new IllegalArgumentException("tantalum.web.browser.max-open must be at least 1 but was " + maxOpen);
-            }
-            if (idleClose == null || idleClose.isNegative() || idleClose.isZero()) {
-                throw new IllegalArgumentException("tantalum.web.browser.idle-close must be positive but was " + idleClose);
-            }
-        }
-
-        public static Browser defaults() {
-            return new Browser(true, 4, Duration.ofMinutes(10), true);
-        }
-    }
+    /** 服务器上还有浏览器时的配置。现在写着也不起作用，启动时提示一行（local-browser 需求 8.2）。 */
+    public static final List<String> STALE_BROWSER_KEYS = List.of("tantalum.web.browser.enabled", "tantalum.web.browser.max-open",
+            "tantalum.web.browser.idle-close", "tantalum.web.browser.sandbox");
 
     /**
      * 插件工作的上限：一个等待点连续最多几轮，防止钩子每次都要工作、运行转个不停。{@code required} 是管理员设成必须开启的插件名：

@@ -10,7 +10,10 @@
     <version>0.1.0</version>
   </parent>
 
-  <!-- 连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。运行时只依赖 tantalum-local 和 JDK。 -->
+  <!--
+    连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。运行时依赖 tantalum-local、JDK，
+    和驱动本机浏览器用的 Playwright for Java（local-browser；只有 tantalum.connect.browser 包用它）。
+  -->
   <artifactId>tantalum-connect</artifactId>
 
   <dependencies>
@@ -18,6 +21,15 @@
       <groupId>dev.tantalum</groupId>
       <artifactId>tantalum-local</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <!--
+      驱动用户电脑上已装的 Chrome 或 Edge。driver-bundle（约 200 MB）里是各平台的 Node：从源码或 jar 运行时第一次用浏览器
+      才解压本平台那一份；macOS 安装包里只带本平台的，这个 jar 不进包（见 src/package/build-mac.sh）。
+    -->
+    <dependency>
+      <groupId>com.microsoft.playwright</groupId>
+      <artifactId>playwright</artifactId>
+      <version>1.64.0</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

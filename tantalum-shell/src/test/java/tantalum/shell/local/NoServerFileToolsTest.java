@@ -28,9 +28,8 @@ class NoServerFileToolsTest {
     private static final Set<String> SERVER_TOOLS = Set.of("ask_user", "read_attachment", "memory_read", "memory_write", "memory_delete");
 
     /** 联网工具：名字一个不多，包只能是 fetch 和 browser。 */
-    private static final Set<String> WEB_TOOLS = Set.of("web_fetch", "browser_navigate", "browser_navigate_back", "browser_snapshot",
-            "browser_click", "browser_type", "browser_press_key", "browser_select_option", "browser_wait_for", "browser_take_screenshot",
-            "browser_tabs", "browser_evaluate");
+    /** 服务器上的联网工具只剩抓网页；浏览器工具是转发到用户电脑的本机工具（local-browser）。 */
+    private static final Set<String> WEB_TOOLS = Set.of("web_fetch");
 
     private static boolean web(Tool tool) {
         return tool instanceof WebTool;
@@ -50,8 +49,7 @@ class NoServerFileToolsTest {
                 }
                 if (web(tool)) {
                     assertTrue(WEB_TOOLS.contains(tool.name()), tool.name());
-                    assertTrue(Set.of("tantalum.shell.fetch", "tantalum.shell.browser").contains(tool.getClass().getPackageName()),
-                            tool.getClass().getName());
+                    assertEquals("tantalum.shell.fetch", tool.getClass().getPackageName(), tool.getClass().getName());
                     continue;
                 }
                 assertTrue(SERVER_TOOLS.contains(tool.name()), tool.name() + " (" + tool.getClass().getName() + ") runs on the server");

@@ -33,8 +33,10 @@ public final class Wire {
      * 服务器仍接受 2（见 {@link #OLDEST}）：对它不发这几样，工具照旧用主目录。
      * 4（2026-11-12）：技能和 wiki。{@code context.skills}、{@code context.wiki} 和回复里对应的两样，{@code call.skills}，
      * 加 {@code skillLoad}、{@code skillLoaded}。服务器对 2、3 不发这几样，那台电脑上就没有技能和 wiki。
+     * 5（2026-11-12）：浏览器搬到电脑上。{@code hello.browser} 说明能不能用，11 个 {@code browser_*} 工具，
+     * {@code result.images[].name} 是截图的文件名。服务器对 2–4 不发浏览器调用，那台电脑上就没有浏览器。
      */
-    public static final int PROTOCOL = 4;
+    public static final int PROTOCOL = 5;
 
     /** 服务器还接受的最老版本。 */
     public static final int OLDEST = 2;

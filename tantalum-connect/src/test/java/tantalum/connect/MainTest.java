@@ -89,7 +89,8 @@ class MainTest {
     void helpListsEveryOption() {
         assertEquals(0, Main.run(new String[] {"--help"}, Map.of(), answering(null), out));
         for (String option : List.of("--server", "--allow", "--allow-write", "--allow-shell", "--allow-read", "--env", "--no-network",
-                "--insecure", "--name", "--mxc", "--help", "TANTALUM_TOKEN")) {
+                "--insecure", "--name", "--mxc", "--help", "TANTALUM_TOKEN", "--allow-browser", "--browser ", "--browser-path",
+                "--browser-headless", "--browser-profile")) {
             assertTrue(printed().contains(option), option);
         }
         assertTrue(asked.isEmpty(), "help does not ask for a token");
@@ -210,7 +211,7 @@ class MainTest {
         assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of()), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
-        assertEquals(4, hello.protocol(), "protocol 4: skills and wiki pages");
+        assertEquals(5, hello.protocol(), "protocol 5: the browser on this computer");
 
         Path missing = temp.resolve("no-mxc");
         Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network", "--mxc", missing.toString()).hello();
@@ -272,5 +273,84 @@ class MainTest {
         assertTrue(summary.contains(other.toString()));
         assertTrue(summary.contains("命令行：不可用，"), summary);
         assertTrue(summary.contains("--allow-write"), "says how to allow file changes: " + summary);
+    }
+
+    /** 一个能“执行”的假浏览器程序：启动时只看文件在不在，不运行它。 */
+    private Path fakeBrowser(String name) throws Exception {
+        Path file = Files.writeString(temp.resolve(name), "#!/bin/sh\n");
+        assertTrue(file.toFile().setExecutable(true, false));
+        return file;
+    }
+
+    /** local-browser 需求 1.1–1.3：没有 --allow-browser 时 hello 写明“没允许”，不建资料目录；启动说明写怎么允许。 */
+    @Test
+    void withoutAllowBrowserTheHelloSaysNotAllowed() throws Exception {
+        Setup setup = setup("--allow", work.toString());
+        assertEquals(Hello.Browser.unavailable("browser/not-allowed"), setup.hello().browser());
+        assertEquals(null, setup.browser());
+        Main.summary(setup, out, ZH);
+        assertTrue(printed().contains("浏览器：不允许（要允许请加 --allow-browser）"), printed());
+    }
+
+    /**
+     * 需求 1.2、2.3、3.1–3.5、3.8：允许了并指定了程序：hello 写明可用、名字、有没有窗口；资料目录建好；启动说明写明目录和怎么清空登录。
+     */
+    @Test
+    void anAllowedBrowserIsDescribedInTheHelloAndTheSummary() throws Exception {
+        Path program = fakeBrowser("my-chromium");
+        Path profile = temp.resolve("profiles").resolve("p1");
+        Setup visible = setup("--allow", work.toString(), "--allow-browser", "--browser-path", program.toString(),
+                "--browser-profile", profile.toString());
+        assertEquals(Hello.Browser.available("my-chromium", false), visible.hello().browser());
+        assertEquals(program.toAbsolutePath(), visible.browser().executable());
+        assertEquals(profile.toRealPath(), visible.browser().profile());
+        assertTrue(Files.isDirectory(profile), "the profile directory is created at start-up");
+        Main.summary(visible, out, ZH);
+        assertTrue(printed().contains("浏览器：my-chromium，有窗口"), printed());
+        assertTrue(printed().contains("浏览器资料目录：" + profile.toRealPath()), printed());
+        assertTrue(printed().contains("删掉这个目录就清空里面全部的登录状态"), printed());
+
+        Setup headless = setup("--allow", work.toString(), "--allow-browser", "--browser-headless", "--browser-path", program.toString(),
+                "--browser-profile", profile.toString());
+        assertEquals(Hello.Browser.available("my-chromium", true), headless.hello().browser());
+        bytes.reset();
+        Main.summary(headless, out, new Words(Language.EN));
+        assertTrue(printed().contains("Browser: my-chromium, without a window"), printed());
+    }
+
+    /** 需求 1.3、2.5：允许了但没找到浏览器：照常启动，启动说明写明装一个或用 --browser-path。 */
+    @Test
+    void aMissingBrowserIsExplainedInTheSummary() throws Exception {
+        Setup base = setup("--allow", work.toString());
+        Hello hello = base.hello();
+        Hello missing = new Hello(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(), hello.shell(),
+                hello.network(), hello.git(), Hello.Browser.unavailable(Hello.Browser.NOT_FOUND));
+        Main.summary(new Setup(base.socket(), base.options(), base.dirs(), missing, base.token(), base.sandbox(), null), out, ZH);
+        assertTrue(printed().contains("浏览器：不可用，这台电脑上没有找到 Chrome 或 Edge"), printed());
+        assertTrue(printed().contains("--browser-path"), printed());
+    }
+
+    /** 需求 2.2–2.4、3.5：浏览器参数写错了拒绝启动，说清楚哪里不对；单独给浏览器参数是漏了 --allow-browser。 */
+    @Test
+    void wrongBrowserOptionsAreRefused() throws Exception {
+        Path program = fakeBrowser("chrome-x");
+        for (String[] stray : List.of(new String[] {"--browser", "chrome"}, new String[] {"--browser-path", program.toString()},
+                new String[] {"--browser-headless"}, new String[] {"--browser-profile", temp.resolve("p").toString()})) {
+            List<String> args = new ArrayList<>(List.of("--allow", work.toString()));
+            args.addAll(List.of(stray));
+            Refused refused = assertThrows(Refused.class, () -> setup(args.toArray(String[]::new)));
+            assertEquals(stray[0] + " 要和 --allow-browser 一起用。", refused.getMessage());
+        }
+        assertEquals("--browser 只能是 chrome 或 edge：firefox", assertThrows(Refused.class,
+                () -> setup("--allow", work.toString(), "--allow-browser", "--browser", "firefox")).getMessage());
+        Path gone = temp.resolve("no-such-browser");
+        assertEquals("--browser-path 的文件不存在或不能运行：" + gone, assertThrows(Refused.class,
+                () -> setup("--allow", work.toString(), "--allow-browser", "--browser-path", gone.toString())).getMessage());
+        // 资料目录建不了：上级是个文件
+        Path file = Files.writeString(temp.resolve("a-file"), "x");
+        Refused profile = assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--allow-browser", "--browser-path",
+                program.toString(), "--browser-profile", file.resolve("p").toString()));
+        assertTrue(profile.getMessage().startsWith("浏览器的资料目录不能用：" + file.resolve("p")), profile.getMessage());
+        assertFalse(Files.exists(temp.resolve("p")), "a refused start creates no profile directory");
     }
 }

@@ -14,7 +14,6 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.WebAccess;
 import tantalum.shell.attachment.AttachmentStore;
-import tantalum.shell.browser.Browsers;
 import tantalum.shell.handler.Handler;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalWorkspace;
@@ -228,11 +227,6 @@ public final class Engine implements AutoCloseable {
         return Optional.ofNullable(toolbox.egress());
     }
 
-    /** 每个用户的浏览器；管理员关了浏览器时没有。给诊断和测试用。 */
-    public Optional<Browsers> browsers() {
-        return Optional.ofNullable(toolbox.browsers());
-    }
-
     /** 联网的地址规则：Web 服务器起来后由 Spring 设置实际端口（{@code WebServerInitializedEvent}），访问自己永远被拦。 */
     public AddressRules addressRules() {
         return toolbox.addressRules();
@@ -316,12 +310,7 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
                 new Shutdown.Step("stop answer deadline timers", pipeline.deadlines()),
                 new Shutdown.Step("close local links", toolbox.localLinks()),
-                new Shutdown.Step("close browsers", () -> {
-                    if (toolbox.browsers() != null) {
-                        toolbox.browsers().close();
-                    }
-                }),
-                new Shutdown.Step("close egress", () -> {
+new Shutdown.Step("close egress", () -> {
                     if (toolbox.egress() != null) {
                         toolbox.egress().close();
                     }

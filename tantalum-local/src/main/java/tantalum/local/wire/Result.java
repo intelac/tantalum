@@ -1,5 +1,6 @@
 package tantalum.local.wire;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -24,7 +25,13 @@ public record Result(String id, String text, boolean error, List<Image> images) 
         return new LocalResult(text, error, images.stream().map(Image::toLocal).toList());
     }
 
-    public record Image(String mime, String base64) {
+    /** {@code name}：建议的附件名（协议 5 起，浏览器截图），没有时不写出。 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Image(String mime, String base64, String name) {
+
+        public Image(String mime, String base64) {
+            this(mime, base64, null);
+        }
 
         public Image {
             Objects.requireNonNull(mime, "mime");
@@ -32,11 +39,11 @@ public record Result(String id, String text, boolean error, List<Image> images) 
         }
 
         static Image of(LocalImage image) {
-            return new Image(image.mime(), Base64.getEncoder().encodeToString(image.bytes()));
+            return new Image(image.mime(), Base64.getEncoder().encodeToString(image.bytes()), image.name());
         }
 
         LocalImage toLocal() {
-            return new LocalImage(mime, Base64.getDecoder().decode(base64));
+            return new LocalImage(mime, Base64.getDecoder().decode(base64), name);
         }
     }
 }

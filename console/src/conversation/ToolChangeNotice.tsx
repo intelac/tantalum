@@ -15,12 +15,17 @@ function names(list: readonly string[]): string {
   return list.length <= SHOWN ? list.join("、") : t.conversation.toolsMore(list.slice(0, SHOWN).join("、"), list.length);
 }
 
-/** 联网的工具：browser_* 合成“浏览器（N 个工具）”一项，免得一行列 11 个名字（web-tools）。 */
-function webNames(list: readonly string[]): string {
+/**
+ * browser_* 合成“浏览器（N 个工具）”一项，免得一行列 11 个名字。浏览器在用户电脑上（local-browser），所以这些工具和别的本机工具
+ * 一起出现在“本机工作区”那一条里；浏览器还在服务器上时记下的旧会话里，它们的来源是 web，写法一样。
+ */
+function grouped(list: readonly string[]): string {
   const t = currentText();
   const browser = list.filter((name) => name.startsWith("browser_"));
   const rest = list.filter((name) => !name.startsWith("browser_"));
-  return [...rest, ...(browser.length > 0 ? [t.conversation.toolsBrowser(browser.length)] : [])].join("、");
+  if (browser.length === 0) return names(rest);
+  const group = t.conversation.toolsBrowser(browser.length);
+  return rest.length === 0 ? group : `${names(rest)}、${group}`;
 }
 
 /**
@@ -38,8 +43,8 @@ export function ToolChangeNotice({ store, id }: Props) {
   const parts = [
     item.added.length > 0 ? t.conversation.toolsAdded(names(item.added)) : null,
     off.length > 0 ? t.conversation.toolsDisabled(names(off)) : null,
-    local.length > 0 ? t.conversation.toolsLocalOff(names(local)) : null,
-    web.length > 0 ? t.conversation.toolsWebOff(webNames(web)) : null,
+    local.length > 0 ? t.conversation.toolsLocalOff(grouped(local)) : null,
+    web.length > 0 ? t.conversation.toolsWebOff(grouped(web)) : null,
     item.gone.length > 0 ? t.conversation.toolsGone(names(item.gone)) : null,
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return null;

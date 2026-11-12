@@ -20,7 +20,9 @@ public interface LocalTool {
         /** 跑命令，要 {@code --allow-shell} 而且系统沙箱可用。 */
         SHELL,
         /** 加载技能：只读用户填的技能目录，有 {@code --allow} 就有（协议 4 起）。 */
-        SKILL
+        SKILL,
+        /** 这台电脑上的浏览器，要 {@code --allow-browser} 而且找得到 Chrome 或 Edge（协议 5 起）。 */
+        BROWSER
     }
 
     String name();

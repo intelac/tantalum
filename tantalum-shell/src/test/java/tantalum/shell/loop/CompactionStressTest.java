@@ -51,21 +51,20 @@ class CompactionStressTest {
     private static final int TURNS = 250;
     private static final int OTHER_TURNS = 20;
     /**
-     * 窗口 7000、预留 500：阈值 6500；保留 600。工具说明也计入估算：core-tools 加了 4 个内置工具后窗口从 4000 加到 5000，
-     * local-workspace 换成本机工作区的 11 个工具和 read_attachment 后又加到 7000，让另一个用户的短会话仍不触发压缩。
+     * 窗口 8500、预留 500：阈值 8000；保留 600。工具说明也计入估算：core-tools 加了 4 个内置工具后窗口从 4000 加到 5000，
+     * local-workspace 换成本机工作区的 11 个工具和 read_attachment 后又加到 7000，local-browser 把 11 个浏览器工具也变成本机工具（定义总是在）后加到 8500，让另一个用户的短会话仍不触发压缩。
      * 估算系数按旧的 3 算（同 {@code CompactApiTest}），否则 system 和工具定义就占满了窗口，摘要调用放不下。
      */
-    private static final int THRESHOLD = 6500;
+    private static final int THRESHOLD = 8000;
     private static final String[] SETTINGS = {
-        "--tantalum.claude.context-window=7000",
+        "--tantalum.claude.context-window=8500",
         "--tantalum.claude.bytes-per-token=3",
         "--tantalum.claude.max-tokens=500",
         "--tantalum.compaction.reserve-tokens=500",
         "--tantalum.compaction.keep-recent-tokens=600",
         "--tantalum.claude.concurrency=4",
-        // 联网的 12 个工具定义会挤占 7000 的小窗口、改变压缩次数；这里测的是压缩，不用联网（web-tools）
-        "--tantalum.web.fetch.enabled=false",
-        "--tantalum.web.browser.enabled=false"
+        // 这里测的是压缩，不用抓网页（web-tools）
+        "--tantalum.web.fetch.enabled=false"
     };
     private static final JsonMapper JSON = JsonMapper.builder().build();
 

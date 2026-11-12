@@ -33,7 +33,7 @@ async function setWebFetch(page: Page, enabled: boolean) {
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-/** E2eServer 另起的、管理员关掉浏览器的服务（主端口 + 1），用 jar 里打包的控制台。 */
+/** E2eServer 另起的、管理员关掉抓网页的服务（主端口 + 1），用 jar 里打包的控制台。 */
 const ADMIN_OFF = "http://127.0.0.1:8098";
 
 test.describe("插件页", () => {
@@ -46,9 +46,10 @@ test.describe("插件页", () => {
   test("联网一块：关掉抓网页后刷新还是关的，另一个账号还是开的", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     const web = (await openPlugins(page)).getByRole("region", { name: "联网" });
-    await expect(web.getByText("可以访问服务器所在的内网")).toBeVisible();
+    await expect(web.getByText("抓网页可以访问服务器所在的内网")).toBeVisible();
     await expect(web.getByRole("switch", { name: "联网" })).toHaveAttribute("aria-checked", "true");
-    await expect(web.getByRole("switch", { name: "浏览器" })).toHaveAttribute("aria-checked", "true");
+    // local-browser：浏览器不在联网这一块里了
+    await expect(web.getByRole("switch", { name: "浏览器" })).toHaveCount(0);
     const fetch = web.getByRole("switch", { name: "抓网页" });
     await expect(fetch).toHaveAttribute("aria-checked", "true");
     await fetch.click();
@@ -57,14 +58,14 @@ test.describe("插件页", () => {
     await page.reload();
     const again = (await openPlugins(page)).getByRole("region", { name: "联网" });
     await expect(again.getByRole("switch", { name: "抓网页" })).toHaveAttribute("aria-checked", "false");
-    await expect(again.getByRole("switch", { name: "浏览器" })).toHaveAttribute("aria-checked", "true");
+    await expect(again.getByRole("switch", { name: "联网" })).toHaveAttribute("aria-checked", "true");
 
     await login(page, USER);
     const other = await (await page.request.get("/api/plugins")).json();
     expect(other.web.switches["web-fetch"]).toBe(true);
   });
 
-  test("管理员在配置里关掉浏览器：那一行禁用，写着管理员已关闭", async ({ page }) => {
+  test("管理员在配置里关掉抓网页：那一行和总开关都禁用，写着管理员已关闭", async ({ page }) => {
     const response = await page.request.post(`${ADMIN_OFF}/api/auth/login`, {
       data: { username: USER, password: PASSWORD },
       headers: { origin: ADMIN_OFF },
@@ -73,12 +74,11 @@ test.describe("插件页", () => {
     await page.goto(`${ADMIN_OFF}/`);
     await expect(page).toHaveURL(/\/s\/s-[0-9a-f]{8}$/);
     const web = (await openPlugins(page)).getByRole("region", { name: "联网" });
-    const browser = web.getByRole("switch", { name: "浏览器" });
-    await expect(browser).toBeDisabled();
-    await expect(browser).toHaveAttribute("aria-checked", "false");
-    await expect(web.getByText(/你自己的无头浏览器.*管理员已关闭/)).toBeVisible();
-    await expect(web.getByRole("switch", { name: "抓网页" })).toBeEnabled();
-    await expect(web.getByRole("switch", { name: "联网" })).toBeEnabled();
+    const fetch = web.getByRole("switch", { name: "抓网页" });
+    await expect(fetch).toBeDisabled();
+    await expect(fetch).toHaveAttribute("aria-checked", "false");
+    await expect(web.getByText(/服务器下载网页.*管理员已关闭/)).toBeVisible();
+    await expect(web.getByRole("switch", { name: "联网" })).toBeDisabled();
   });
 
   test("列出内置工具、MCP 服务器和规则插件，开关只改自己的", async ({ page }) => {

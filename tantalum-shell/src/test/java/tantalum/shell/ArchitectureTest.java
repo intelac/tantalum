@@ -114,10 +114,13 @@ class ArchitectureTest {
             .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.mcp..")
             .should().dependOnClassesThat().resideInAPackage("io.modelcontextprotocol..");
 
-    /** 浏览器的驱动只在浏览器包里用（web-tools 设计“Project Structure”规则 1）：换掉 Playwright 时只改一个包。 */
+    /**
+     * 服务器不驱动浏览器（local-browser 需求 8.1）：浏览器在用户电脑上，Playwright 只在连接程序里（{@code tantalum.connect.browser}）。
+     * 这里查的是服务器和它依赖的模块里谁也不用 Playwright。
+     */
     @ArchTest
-    static final ArchRule playwrightStaysInTheBrowserPackage = noClasses()
-            .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.browser..")
+    static final ArchRule theServerNeverUsesPlaywright = noClasses()
+            .that().resideInAPackage("tantalum..")
             .should().dependOnClassesThat().resideInAPackage("com.microsoft.playwright..");
 
     /** HTML 解析只在 {@code web_fetch} 的包里用（规则 2）。 */
@@ -127,31 +130,27 @@ class ArchitectureTest {
             .should().dependOnClassesThat().resideInAPackage("org.jsoup..");
 
     /**
-     * 联网只能经出口（规则 3）：抓网页和浏览器不自己建 {@code HttpClient}、不开 {@code Socket}、不调 {@code URL.openConnection}，
+     * 联网只能经出口（规则 3）：抓网页不自己建 {@code HttpClient}、不开 {@code Socket}、不调 {@code URL.openConnection}，
      * 内网限制和“自己的端口”才不会被绕过。
      */
     @ArchTest
     static final ArchRule webToolsGoOnlyThroughTheEgress = noClasses()
-            .that().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..")
+            .that().resideInAnyPackage("tantalum.shell.fetch..")
             .should().callMethodWhere(callTo(java.net.http.HttpClient.class, "newBuilder|newHttpClient"))
             .orShould().callConstructorWhere(callTo(java.net.Socket.class, "<init>"))
             .orShould().callMethodWhere(callTo(java.net.URL.class, "openConnection"));
 
-    /**
-     * 服务器不为联网写文件（规则 4）：浏览器资料在内存里，下载拒绝，截图只进附件。{@code BrowserDriver} 例外：它把 Playwright 驱动
-     * 解压进数据目录，碰的是服务器自己的程序文件（同 {@code LocalTokens} 的例外）。
-     */
+    /** 服务器不为联网写文件（规则 4）：抓来的网页只变成给模型的文字，不落盘。 */
     @ArchTest
     static final ArchRule webToolsTouchNoFiles = noClasses()
-            .that().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..")
-            .and().doNotHaveFullyQualifiedName("tantalum.shell.browser.BrowserDriver")
+            .that().resideInAnyPackage("tantalum.shell.fetch..")
             .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
 
-    /** 开关组按 {@code server()} 认联网工具（web-tools 设计“包 access”）：开关不依赖抓网页和浏览器的实现。 */
+    /** 开关组按 {@code server()} 认联网工具（web-tools 设计“包 access”）：开关不依赖抓网页的实现。 */
     @ArchTest
     static final ArchRule accessKnowsNoWebTools = noClasses()
             .that().resideInAPackage("tantalum.shell.access..")
-            .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.browser..", "tantalum.shell.local..");
+            .should().dependOnClassesThat().resideInAnyPackage("tantalum.shell.fetch..", "tantalum.shell.local..");
 
     /** 压缩是通用逻辑：内核不认识任何供应商的 SDK。 */
     @ArchTest

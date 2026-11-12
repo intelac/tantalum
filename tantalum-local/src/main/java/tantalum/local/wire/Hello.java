@@ -18,9 +18,16 @@ import tantalum.local.sandbox.Sandbox;
  * @param network 命令能不能联网（{@code --no-network} 时为 false）
  * @param git 这台电脑上能不能跑 {@code git}。Git 工具不看目录是不是仓库：每次调用按它的路径找仓库，不在仓库里就报“不是 Git 仓库”
  *            （协议 2 起；协议 1 按主目录是不是仓库决定有没有 Git 工具，见 {@link Wire#PROTOCOL}）
+ * @param browser 这台电脑上的浏览器能不能用（协议 5 起）；老的连接程序不送，为 null，不写出
  */
 public record Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
-                    boolean git) implements Message {
+                    boolean git, @JsonInclude(JsonInclude.Include.NON_NULL) Browser browser) implements Message {
+
+    /** 没有浏览器这一项的连接程序（协议 4 及以前）。 */
+    public Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
+                 boolean git) {
+        this(protocol, connector, device, roots, write, shell, network, git, null);
+    }
 
     public Hello {
         Objects.requireNonNull(connector, "connector");
@@ -54,6 +61,27 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
 
         public static Shell of(Sandbox.Status status) {
             return status.available() ? new Shell(true, null) : new Shell(false, status.reason(), status.why().code().wire(), status.why().params());
+        }
+    }
+
+    /**
+     * 浏览器的情况。可用时 {@code name} 是找到的浏览器（“Google Chrome”“Microsoft Edge”，或 {@code --browser-path} 的文件名），
+     * {@code headless} 说明有没有窗口；不可用时 {@code code} 写明原因，控制台按看的人的语言说。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Browser(boolean available, String code, Map<String, String> params, String name, boolean headless) {
+
+        /** 没有 {@code --allow-browser}。 */
+        public static final String NOT_ALLOWED = "browser/not-allowed";
+        /** 没有找到 Chrome 或 Edge。 */
+        public static final String NOT_FOUND = "browser/not-found";
+
+        public static Browser available(String name, boolean headless) {
+            return new Browser(true, null, null, name, headless);
+        }
+
+        public static Browser unavailable(String code) {
+            return new Browser(false, code, null, null, false);
         }
     }
 }

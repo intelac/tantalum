@@ -55,9 +55,32 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     private volatile LocalLinks.Link link;
     private volatile boolean closed;
 
+    /** 这台电脑上的假浏览器；没有时浏览器调用像没给 --allow-browser 一样被拒。 */
+    private final tantalum.local.tool.Browser browser;
+
     private TestComputer(Hello hello, AllowedDirs dirs) {
+        this(hello, dirs, null);
+    }
+
+    private TestComputer(Hello hello, AllowedDirs dirs, tantalum.local.tool.Browser browser) {
         this.hello = hello;
         this.dirs = dirs;
+        this.browser = browser;
+    }
+
+    /**
+     * 连一台带浏览器的电脑（local-browser）：{@code state} 是它在握手里说的浏览器情况，{@code browser} 是测试给的假浏览器
+     * （收到查过参数的调用，回结果）。{@code browser} 为 null 时电脑这边像没给 {@code --allow-browser} 一样拒绝浏览器调用。
+     */
+    public static TestComputer connectWithBrowser(LocalLinks links, Principal user, Instant expiresAt, Path main, Hello.Browser state,
+                                                  tantalum.local.tool.Browser browser) throws IOException {
+        Path real = main.toRealPath();
+        Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
+                List.of(new Hello.Root(real.toString())), true, new Hello.Shell(false, "--allow-shell was not given"), true, true, state);
+        TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)), browser);
+        computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
+                .orElseThrow(() -> new IllegalStateException("revoked"));
+        return computer;
     }
 
     /** 把 {@code main}（第一个允许的目录）连给 {@code user}，到 {@code expiresAt} 为止。{@code git} 只是告诉服务器这台电脑装没装 git。 */
@@ -70,8 +93,10 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     public static TestComputer connect(LocalLinks links, Principal user, Instant expiresAt, Path main, boolean write, boolean git,
                                        int protocol) throws IOException {
         Path real = main.toRealPath();
+        // 协议 5 起的连接程序总会说浏览器的情况；这台没给 --allow-browser。更老的没有这一项
         Hello hello = new Hello(protocol, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(false, "--allow-shell was not given"), true, git);
+                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(false, "--allow-shell was not given"), true, git,
+                protocol >= 5 ? Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED) : null);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
                 .orElseThrow(() -> new IllegalStateException("revoked"));
@@ -206,6 +231,9 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         if (tool.get().kind() == LocalTool.Kind.WRITE && !hello.write()) {
             return LocalResult.error("This computer does not allow file changes.");
         }
+        if (tool.get().kind() == LocalTool.Kind.BROWSER && browser == null) {
+            return LocalResult.error(tantalum.local.tool.Browser.NOT_ALLOWED_TEXT);
+        }
         AllowedDirs scoped;
         try {
             scoped = call.dir() == null ? dirs : dirs.from(call.dir());
@@ -214,7 +242,8 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         }
         try {
             Observations seen = observations.computeIfAbsent(call.session(), ignored -> new Observations());
-            return tool.get().run(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()), call.arguments());
+            return tool.get().run(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()).withBrowser(browser),
+                    call.arguments());
         } catch (Exception failure) {
             return LocalResult.error("Tool failed: " + failure);
         }

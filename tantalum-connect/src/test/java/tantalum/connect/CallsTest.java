@@ -481,4 +481,70 @@ class CallsTest {
         SkillLoaded loaded = calls(false).skillLoad(new SkillLoad("k-1", "s-1", outside.toString(), List.of("leak")));
         assertEquals(List.of(new SkillLoaded.Loaded("leak", null, null)), loaded.items());
     }
+
+    /** local-browser 需求 1.1、9.1：没有 --allow-browser，服务器硬发浏览器调用也被拒，终端记 denied 和网址。 */
+    @Test
+    void aBrowserCallWithoutAllowBrowserIsRefused() throws Exception {
+        Calls calls = calls(true);
+        calls.call(call("c-1", "alice", "browser_navigate", "url", "https://board.example/"), replies::add);
+        assertEquals(new Result("c-1", "This computer does not allow the browser.", true, List.of()), reply());
+        assertTrue(printed().contains("browser_navigate https://board.example/ denied"), printed());
+    }
+
+    /**
+     * 需求 9.1–9.4：有浏览器时调用交给它；终端每个调用一行，对象是网址、元素编号、键名、表达式的开头；
+     * 输入的文字、选的值、页面内容都不打出来。
+     */
+    @Test
+    void browserCallsPrintWhatWasTouchedButNeverWhatWasTyped() throws Exception {
+        List<String> seen = new ArrayList<>();
+        Calls calls = new Calls(dirs, false, false, tantalum.local.sandbox.Sandbox.unavailable(
+                tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
+                (session, tool, arguments) -> {
+                    seen.add(session + " " + tool);
+                    return LocalResult.ok("External web content follows.\nPAGE-CONTENT account 4242");
+                });
+        calls.welcome("alice");
+        calls.call(call("c-1", "alice", "browser_navigate", "url", "https://board.example/login?next=%2F"), replies::add);
+        assertEquals("External web content follows.\nPAGE-CONTENT account 4242", reply().text());
+        calls.call(call("c-2", "alice", "browser_type", "ref", "e7", "text", "hunter2-PASSWORD"), replies::add);
+        reply();
+        calls.call(new Call("c-3", "alice", "s-1a2b3c4d5e", "browser_select_option", new Json.Obj(Map.of("ref", new Json.Str("e9"),
+                "values", new Json.Arr(List.of(new Json.Str("SECRET-OPTION"))))), 60_000), replies::add);
+        reply();
+        calls.call(call("c-4", "alice", "browser_press_key", "key", "Enter"), replies::add);
+        reply();
+        calls.call(call("c-5", "alice", "browser_evaluate", "expression", "document.title"), replies::add);
+        reply();
+        calls.call(call("c-6", "alice", "browser_snapshot"), replies::add);
+        reply();
+        assertEquals(6, seen.size());
+        assertEquals("s-1a2b3c4d5e browser_navigate", seen.getFirst());
+        String printed = printed();
+        assertTrue(printed.contains("03:02:13 s-1a2b3c browser_navigate https://board.example/login?next=%2F ok"), printed);
+        assertTrue(printed.contains("browser_type e7 ok"), printed);
+        assertTrue(printed.contains("browser_select_option e9 ok"), printed);
+        assertTrue(printed.contains("browser_press_key Enter ok"), printed);
+        assertTrue(printed.contains("browser_evaluate document.title ok"), printed);
+        assertTrue(printed.contains("browser_snapshot . ok"), printed);
+        assertFalse(printed.contains("hunter2"), printed);
+        assertFalse(printed.contains("SECRET-OPTION"), printed);
+        assertFalse(printed.contains("PAGE-CONTENT"), printed);
+    }
+
+    /** 需求 9.3：网址和表达式里的控制字符换掉、截到 160 个字符，改不了用户的终端。 */
+    @Test
+    void longOrOddBrowserSubjectsAreMadeSafeForTheTerminal() throws Exception {
+        Calls calls = new Calls(dirs, false, false, tantalum.local.sandbox.Sandbox.unavailable(
+                tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
+                (session, tool, arguments) -> LocalResult.ok("ok"));
+        calls.welcome("alice");
+        calls.call(call("c-1", "alice", "browser_evaluate", "expression", "a\u001b[2Jb\n" + "x".repeat(400)), replies::add);
+        reply();
+        String line = printed().lines().filter(text -> text.contains("browser_evaluate")).findFirst().orElseThrow();
+        assertFalse(line.contains("\u001b"), line);
+        assertTrue(line.contains("a?[2Jb?"), line);
+        assertTrue(line.contains("…"), line);
+        assertTrue(line.length() < 260, line);
+    }
 }

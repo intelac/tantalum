@@ -32,6 +32,8 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code fetch:}（联网）：调用 web_fetch 抓 {@link E2eServer} 自带的本地测试页（{@link #webPage}），然后回答“抓到了网页。”；</li>
+ *   <li>{@code browse:}（本机浏览器）：调用 browser_navigate，然后回答“浏览器结果：”加结果里 {@code Page:} 那一行；
+ *       {@code capture:}：调用 browser_take_screenshot，然后回答“截图结果：”加结果的第二行；</li>
  *   <li>{@code loadskill:}（技能）：调用 skill 加载后面那个名字的技能，然后回答“技能结果：”加结果的第一行；
  *       {@code skillcheck}：回答“消息带着技能：”加这条用户消息里技能块的名字；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
@@ -89,6 +91,17 @@ public final class E2eModel implements ModelClient {
             if (text.contains("fetch:")) {
                 return results == 0 ? reply(think(chunks, "用 web_fetch 读这个网页。"), call("web_fetch", Map.of("url", webPage)))
                         : answer(chunks, "抓到了网页。");
+            }
+            if (text.contains("browse:")) {
+                // local-browser：模型打开一个网页，然后说出结果里的页面标题那一行
+                return results == 0 ? reply(List.of(), call("browser_navigate", Map.of("url", "https://board.example/")))
+                        : answer(chunks, "浏览器结果：" + lastResult(prompt).lines().filter(line -> line.startsWith("Page: ")).findFirst()
+                                .orElse(lastResult(prompt)));
+            }
+            if (text.contains("capture:")) {
+                // local-browser：模型截一张图，然后说结果的第二行（截的是哪个网址）
+                return results == 0 ? reply(List.of(), call("browser_take_screenshot", Map.of()))
+                        : answer(chunks, "截图结果：" + lastResult(prompt).lines().skip(1).findFirst().orElse(lastResult(prompt)));
             }
             if (text.contains("loadskill:")) {
                 // skills-wiki：模型自己加载一个技能，然后说加载的结果的第一行

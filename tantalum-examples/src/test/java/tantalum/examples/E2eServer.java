@@ -1,13 +1,21 @@
 package tantalum.examples;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import javax.imageio.ImageIO;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
+import tantalum.local.browser.PageText;
+import tantalum.local.tool.LocalImage;
+import tantalum.local.tool.LocalResult;
+import tantalum.local.wire.Hello;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumApplication;
@@ -41,7 +49,7 @@ import tantalum.value.state.OwnerRef;
  * 文件工具在用户自己的电脑上执行（local-workspace）：{@value #USER} 和 {@value #OTHER_USER} 各连着一台测试电脑（{@link TestComputer}），
  * 允许各自的目录、可以改文件；{@value #LOCAL_USER} 什么都没连，本机工作区的端到端测试用它起真的连接程序。
  * 联网（web-tools）：自带一个只听 127.0.0.1 的测试页 {@value #WEB_PAGE_PATH}，脚本化模型的 {@code fetch:} 用 web_fetch 抓它；
- * 另起一个管理员关掉浏览器的服务（端口 = 主端口 + 1，{@code tantalum.web.browser.enabled=false}，只有账号 {@value #USER}），
+ * 另起一个管理员关掉抓网页的服务（端口 = 主端口 + 1，{@code tantalum.web.fetch.enabled=false}，只有账号 {@value #USER}），
  * 插件页的端到端测试在那里看“管理员已关闭”。它用 jar 里打包的控制台（{@code console/dist}），要先 {@code pnpm build}。
  * 由 {@code console/playwright.config.ts} 通过 {@code mvn -P e2e} 启动，进程被杀即结束。
  */
@@ -60,6 +68,11 @@ public final class E2eServer {
      * 和 {@code wiki/}；目录由用例在插件页上填，填了以后这个账号的 system 里多出两段、多一个 skill 工具，所以不和别的用例共用账号。
      */
     public static final String SKILL_USER = "e2e5";
+    /**
+     * 第六个账号：本机浏览器的端到端测试（local-browser）。它连着的测试电脑说“浏览器可用：Google Chrome，有窗口”，电脑上是一个假浏览器
+     * （打开网页回一份固定的快照，截图回一张小图）；别的账号的电脑都没允许浏览器。
+     */
+    public static final String BROWSER_USER = "e2e6";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -139,8 +152,22 @@ public final class E2eServer {
             TestComputer.connect(links, new Principal(user), Instant.now().plus(Duration.ofDays(30)),
                     Files.createDirectories(workspace.resolve(user)), true, false);
         }
+        TestComputer.connectWithBrowser(links, new Principal(BROWSER_USER), Instant.now().plus(Duration.ofDays(30)),
+                Files.createDirectories(workspace.resolve(BROWSER_USER)), Hello.Browser.available("Google Chrome", false),
+                E2eServer::fakeBrowser);
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
+    }
+
+    /** 第六个账号电脑上的假浏览器：截图回一张 64×48 的 PNG，别的调用回同一份快照（标题 Board，一个标题元素）。 */
+    private static LocalResult fakeBrowser(String session, String tool, Json arguments) throws IOException {
+        if (tool.equals("browser_take_screenshot")) {
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            ImageIO.write(new BufferedImage(64, 48, BufferedImage.TYPE_INT_RGB), "png", png);
+            return LocalResult.image(PageText.screenshot("https://board.example/"),
+                    new LocalImage("image/png", png.toByteArray(), "screenshot-board.example.png"));
+        }
+        return LocalResult.ok(PageText.snapshot("Board", "https://board.example/", 1, 1, "- heading \"3 open tasks\" [ref=e2]"));
     }
 
     /** 联网的测试页，只听 127.0.0.1 的随机端口（不是服务器自己的端口，所以不被拦）。 */
@@ -174,7 +201,7 @@ public final class E2eServer {
                         "--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1",
                         "--tantalum.openai-routes.local.context-window=35000",
                         "--tantalum.web.block-private-network=false",
-                        "--tantalum.web.browser.enabled=false");
+                        "--tantalum.web.fetch.enabled=false");
     }
 
     /** 第一个账号 {@value #USER} 是管理员（ops-hardening-2），users.spec.ts 用它管用户。 */
@@ -185,6 +212,7 @@ public final class E2eServer {
             store.add(LOCAL_USER, PASSWORD);
             store.add(I18N_USER, PASSWORD);
             store.add(SKILL_USER, PASSWORD);
+            store.add(BROWSER_USER, PASSWORD);
         }
         // skills-wiki：第五个账号的电脑上放好技能和 wiki。名字避开脚本模型认的词（tools、slow、fail 之类）
         Path skills = Files.createDirectories(workspace.resolve(SKILL_USER).resolve("skills"));

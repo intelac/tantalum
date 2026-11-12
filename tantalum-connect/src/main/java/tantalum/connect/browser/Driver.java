@@ -1,9 +1,8 @@
-package tantalum.shell.browser;
+package tantalum.connect.browser;
 
 import com.microsoft.playwright.impl.driver.jar.DriverJar;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystemException;
@@ -15,33 +14,30 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.stream.Stream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import tantalum.shell.cli.CliText;
 
 /**
- * Playwright 驱动：第一次用时把 jar 里的驱动解压到 {@code <数据目录>/browser/driver-<版本>/}，
- * 之后每次 {@code Playwright.create} 都直接用它（实测 195 ms；不预先解压时每次把 130 MB 解到临时目录，要 1.6–1.8 s）。
- * 内容是 {@code driver} jar 里的 {@code driver/package/**} 加 {@code driver-bundle} 里本平台的 Node，解压交给 Playwright 自己的
- * {@link DriverJar#installDriverTo}（它认得 Spring Boot 可执行 jar 里的嵌套 jar）。
- * <p>先解到同目录下的临时名字，完整了再改名，中途失败不留半个目录。碰的只是服务器自己的程序文件，不是用户的东西
- * （ArchitectureTest 规则 4 的唯一例外）。浏览器本身由 {@link #install} 装到 Playwright 的默认位置。
- * <p>Playwright 在一个进程里只认第一次用到的驱动目录（它的 {@code Driver} 是单例）。所以服务运行中这个目录不能被删：
- * 用新版本的 jar 对同一个数据目录跑 {@code browser install}，会删掉旧版本的目录，旧版本的服务要重启后浏览器才能再起。
+ * Playwright 驱动（Node 加 {@code package/cli.js}）在这台电脑上的位置（local-browser 需求 2.7）。两种来源：
+ * <ul>
+ *   <li>安装包：启动器经系统属性 {@value #BUNDLED} 指到包里已经解压好的目录，直接用。</li>
+ *   <li>从源码或 jar 运行：第一次用浏览器时把 jar 里本平台的驱动解压到连接程序自己的目录下
+ *       {@code browser-driver-<版本>/}，之后直接用（不预先解压时 Playwright 每次都往临时目录解 130 MB）。</li>
+ * </ul>
+ * 先解到同目录下的临时名字，完整了再改名，中途失败不留半个目录；别的版本的目录删掉。只在第一次有浏览器调用时做，
+ * 连接程序启动时不碰。Playwright 在一个进程里只认第一次用到的驱动目录，所以运行中这个目录不能被删。
  */
-public final class BrowserDriver {
+public final class Driver {
 
-    private static final Logger LOG = LoggerFactory.getLogger(BrowserDriver.class);
+    /** 安装包的启动器设的：包里驱动目录的位置。 */
+    public static final String BUNDLED = "tantalum.browser.driver";
     /** Playwright 认的系统属性：设了就用这个目录里的 {@code node} 和 {@code package/cli.js}，不再往临时目录解压。 */
     static final String CLI_DIR = "playwright.cli.dir";
     static final boolean WINDOWS = System.getProperty("os.name", "").startsWith("Windows");
-    private static final String PREFIX = "driver-";
+    static final String PREFIX = "browser-driver-";
     private static final String PART = ".part-";
-    /** 别的进程（比如同时跑的 {@code browser install}）可能正在解压；这么久没动的临时目录才算残留。 */
+    /** 别的进程（同一台电脑上另一个连接程序）可能正在解压；这么久没动的临时目录才算残留。 */
     private static final Duration STALE_PART = Duration.ofMinutes(10);
 
     /** 把驱动解压进一个新目录。测试里换成会中途失败的。 */
@@ -52,20 +48,34 @@ public final class BrowserDriver {
     private final Path root;
     private final String version;
     private final Unpack unpack;
+    private final Path bundled;
     private Path ready;
 
-    public BrowserDriver(Path dataDir) {
-        this(dataDir, version(), BrowserDriver::fromJars);
+    /** {@code home}：连接程序自己的目录（{@link Profile#home()}）。 */
+    public Driver(Path home) {
+        this(home, version(), Driver::fromJars, bundled(System.getProperty(BUNDLED)));
     }
 
-    BrowserDriver(Path dataDir, String version, Unpack unpack) {
-        this.root = dataDir.resolve("browser").toAbsolutePath().normalize();
+    Driver(Path home, String version, Unpack unpack, Path bundled) {
+        this.root = home.toAbsolutePath().normalize();
         this.version = version;
         this.unpack = unpack;
+        this.bundled = bundled;
     }
 
-    /** 驱动目录，没有就解压；然后设 {@code playwright.cli.dir}，删掉别的版本的目录。重复调用不重新解压。 */
+    private static Path bundled(String property) {
+        return property == null || property.isBlank() ? null : Path.of(property);
+    }
+
+    /** 驱动目录；然后设 {@code playwright.cli.dir}。包里带的优先；否则没有就解压，并删掉别的版本的目录。重复调用不重新解压。 */
     public synchronized Path ensure() throws IOException {
+        if (bundled != null) {
+            if (!complete(bundled)) {
+                throw new IOException("the browser driver in the package is incomplete: " + bundled);
+            }
+            System.setProperty(CLI_DIR, bundled.toString());
+            return bundled;
+        }
         Path target = root.resolve(PREFIX + version);
         if (ready == null || !complete(target)) {
             if (!complete(target)) {
@@ -103,8 +113,7 @@ public final class BrowserDriver {
                     throw other;
                 }
             }
-            LOG.info("browser: unpacked the Playwright driver {} in {} ms", version,
-                    Duration.ofNanos(System.nanoTime() - started).toMillis());
+            note("unpacked the browser driver " + version + " in " + Duration.ofNanos(System.nanoTime() - started).toMillis() + " ms");
         } finally {
             if (Files.exists(part)) {
                 delete(part);
@@ -131,7 +140,7 @@ public final class BrowserDriver {
                     delete(other);
                 }
             } catch (IOException busy) {
-                LOG.warn("browser: cannot remove the old driver directory {}", other.getFileName());
+                note("cannot remove the old browser driver directory " + other.getFileName());
             }
         }
     }
@@ -145,39 +154,6 @@ public final class BrowserDriver {
         return dir.resolve(windows ? "node.exe" : "node");
     }
 
-    /**
-     * {@code browser install}：先 {@link #ensure}，再用驱动的命令行装 Chromium headless shell（约 200 MB）到 Playwright 的默认位置；
-     * {@code withDeps} 时同时装 Linux 的系统库（要 root）。返回命令的退出码。
-     */
-    public int install(boolean withDeps, PrintStream out, CliText text) throws IOException, InterruptedException {
-        Path dir = ensure();
-        if (withDeps && WINDOWS) {
-            out.println(text.say(CliText.Key.BROWSER_WITH_DEPS_IGNORED));
-        }
-        ProcessBuilder builder = new ProcessBuilder(installCommand(dir, withDeps, WINDOWS)).inheritIO();
-        builder.environment().remove("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD");
-        out.println(text.say(CliText.Key.BROWSER_INSTALLING, Map.of("version", version)));
-        long started = System.nanoTime();
-        int code = builder.start().waitFor();
-        out.println(code == 0 ? text.say(CliText.Key.BROWSER_DONE, Map.of("seconds", Duration.ofNanos(System.nanoTime() - started).toSeconds()))
-                : text.say(CliText.Key.BROWSER_FAILED, Map.of("code", code)));
-        return code;
-    }
-
-    /**
-     * {@code --no-remove}：不顺手删掉这台机器上别的程序还在用的旧版浏览器（Playwright 默认会删“没人用的”）。
-     * {@code --with-deps} 只对 Linux 有意义，Windows 上不加（{@link #install} 已经说明）。
-     */
-    static List<String> installCommand(Path dir, boolean withDeps, boolean windows) {
-        List<String> command = new ArrayList<>(List.of(node(dir, windows).toString(), dir.resolve("package").resolve("cli.js").toString(),
-                "install", "--no-remove"));
-        if (withDeps && !windows) {
-            command.add("--with-deps");
-        }
-        command.add("chromium-headless-shell");
-        return command;
-    }
-
     static void fromJars(Path dir) throws IOException {
         try {
             DriverJar.installDriverTo(dir);
@@ -188,7 +164,7 @@ public final class BrowserDriver {
 
     /** {@code driver} jar 的 Maven 版本（1.64.0），和 Playwright for Java 的版本一致。 */
     static String version() {
-        try (InputStream in = DriverJar.class.getResourceAsStream("/META-INF/maven/com.microsoft.playwright/driver/pom.properties")) {
+        try (InputStream in = Driver.class.getResourceAsStream("/META-INF/maven/com.microsoft.playwright/driver/pom.properties")) {
             Properties properties = new Properties();
             if (in != null) {
                 properties.load(in);
@@ -205,5 +181,10 @@ public final class BrowserDriver {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    /** 细节只打在这台电脑的终端里。 */
+    private static void note(String text) {
+        System.err.println("[tantalum-connect] " + text);
     }
 }

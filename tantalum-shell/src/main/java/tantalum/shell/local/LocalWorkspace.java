@@ -14,7 +14,7 @@ import tantalum.value.id.Principal;
 
 /**
  * 本机工作区：哪些工具现在能用、给模型的“本机工作区”一段、电脑上的 {@code AGENTS.md}。
- * 一个工具能用要四样都满足：总开关开、它那一类的子开关开、电脑连着、连接程序允许这一类。
+ * 一个工具能用要四样都满足：总开关开、它那一类的子开关开、电脑连着、连接程序允许这一类（浏览器还要协议 5 起、电脑上找到了浏览器）。
  */
 public final class LocalWorkspace implements ToolGroup {
 
@@ -23,20 +23,25 @@ public final class LocalWorkspace implements ToolGroup {
     /** “技能”和“知识库”两个子开关。知识库没有自己的工具，只管 system 里那一段。 */
     public static final String SKILLS = "skills";
     public static final String WIKI = "wiki";
-    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库六个子开关，默认都开。 */
-    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI);
+    /** “浏览器”子开关：电脑上的 Chrome 或 Edge，11 个 {@code browser_*} 工具（local-browser）。 */
+    public static final String BROWSER = "browser";
+    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关，默认都开。 */
+    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI, BROWSER);
     /** {@code ContextAssembled.toolSources} 里的来源。 */
     public static final String SOURCE = "local";
     /** 从这个协议版本起，连接程序按会话的工作目录解析相对路径。 */
     static final int SESSION_DIRS = 3;
     /** 从这个协议版本起，连接程序会列技能和 wiki 页、有 {@code skill} 工具。 */
     public static final int SKILL_LISTS = 4;
+    /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
+    public static final int BROWSER_TOOLS = 5;
 
     /** 每一类工具对应的子开关。 */
     /** 开关的种类；这个文件里的 {@code Kind} 是本机工具的种类（读、写、git、shell）。 */
     private static final tantalum.shell.plugin.Kind LOCAL = tantalum.shell.plugin.Kind.LOCAL;
     private static final Map<Kind, String> SWITCH = Map.of(
-            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell", Kind.SKILL, SKILLS);
+            Kind.READ, "fs-read", Kind.GIT, "git", Kind.WRITE, "file-edit", Kind.SHELL, "shell", Kind.SKILL, SKILLS,
+            Kind.BROWSER, BROWSER);
 
     private final PluginSwitches switches;
     private final LocalLinks links;
@@ -107,7 +112,8 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     /**
-     * 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要沙箱可用，Git 要电脑上装了 git。Git 不看目录是不是仓库：
+     * 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要沙箱可用，Git 要电脑上装了 git，浏览器要
+     * {@code --allow-browser} 而且找到了 Chrome 或 Edge。Git 不看目录是不是仓库：
      * 每次调用在电脑上按路径找仓库，不在仓库里就报“不是 Git 仓库”，子文件夹和任何一个允许目录里的仓库都能查。
      */
     public static boolean allows(Hello hello, Kind kind) {
@@ -118,6 +124,8 @@ public final class LocalWorkspace implements ToolGroup {
             case GIT -> hello.git();
             // 旧的连接程序不认识 skill 工具，也不会列技能
             case SKILL -> hello.protocol() >= SKILL_LISTS;
+            // 要 --allow-browser 而且电脑上找到了 Chrome 或 Edge；旧的连接程序不送这一项
+            case BROWSER -> hello.protocol() >= BROWSER_TOOLS && hello.browser() != null && hello.browser().available();
         };
     }
 
@@ -143,18 +151,24 @@ public final class LocalWorkspace implements ToolGroup {
         if (!switches.enabled(user, LOCAL, MASTER)) {
             return Optional.empty();
         }
-        return links.status(user).map(status -> describe(status.hello(), enabled(user, Kind.WRITE), enabled(user, Kind.SHELL), dir));
+        return links.status(user).map(status -> describe(status.hello(), enabled(user, Kind.WRITE), enabled(user, Kind.SHELL),
+                enabled(user, Kind.BROWSER), dir));
     }
 
     static String describe(Hello hello, boolean write, boolean shell) {
-        return describe(hello, write, shell, null);
+        return describe(hello, write, shell, false, null);
+    }
+
+    static String describe(Hello hello, boolean write, boolean shell, String dir) {
+        return describe(hello, write, shell, false, dir);
     }
 
     /**
+     * {@code browser}：这个用户现在能不能用浏览器工具（开关、连接程序都允许）。
      * 会话有工作目录、连接程序是协议 3 起时写 {@code Working directory}，再列全部允许的目录；目录不在允许的范围里也如实写，
      * 不退回主目录。没有目录或协议 2（连接程序还不认会话目录）时照旧写主目录。
      */
-    static String describe(Hello hello, boolean write, boolean shell, String dir) {
+    static String describe(Hello hello, boolean write, boolean shell, boolean browser, String dir) {
         Hello.Device device = hello.device();
         StringBuilder text = new StringBuilder("Local workspace: ").append(osName(device.os())).append(' ')
                 .append(device.osVersion()).append(' ').append(device.arch()).append(" \"").append(device.name()).append("\".");
@@ -179,6 +193,11 @@ public final class LocalWorkspace implements ToolGroup {
         }
         text.append(" File changes: ").append(write ? "allowed." : "not allowed.");
         text.append(" Shell: ").append(shell ? "bash, network " + (hello.network() ? "on." : "off.") : "not available.");
+        // 能用时才写这一句（不能用时模型的工具列表里本来就没有 browser_*）：没有浏览器的电脑上这一段和以前逐字相同
+        if (browser && hello.browser() != null) {
+            text.append(" Browser: ").append(hello.browser().name())
+                    .append(hello.browser().headless() ? ", no visible window." : ", window visible to the user.");
+        }
         return text.toString();
     }
 

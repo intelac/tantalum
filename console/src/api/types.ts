@@ -745,10 +745,10 @@ export interface PluginLock {
   reason: string;
 }
 
-/** 联网的开关：总开关 `web` 和“抓网页”“浏览器”两个子开关（web-tools W10）。 */
-export type WebSwitch = "web" | "web-fetch" | "browser";
+/** 联网的开关：总开关 `web` 和“抓网页”子开关（web-tools W10）。浏览器在用户电脑上，归本机工作区（local-browser）。 */
+export type WebSwitch = "web" | "web-fetch";
 
-/** 插件页的“联网”一块：这个用户的开关、管理员开着哪几项、管理员是否禁止访问内网。两项都被管理员关掉时照样返回。 */
+/** 插件页的“联网”一块：这个用户的开关、管理员开没开抓网页、管理员是否禁止抓内网的网页。管理员关掉时照样返回。 */
 export interface WebPlugins {
   switches: Record<WebSwitch, boolean>;
   /** `false` 的那项管理员在配置里关掉了，没有注册工具。 */
@@ -765,8 +765,8 @@ export interface Plugins {
   plugins: HookPlugin[];
 }
 
-/** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行四个子开关（local-workspace L17）。 */
-export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki";
+/** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（local-workspace L17、local-browser）。 */
+export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki" | "browser";
 
 /**
  * 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令、有没有 git。都由连接程序的启动参数和那台电脑决定。
@@ -781,6 +781,11 @@ export interface LocalLink {
   /** `code`、`params` 是同一个原因的代码和参数（I12）；老版本连接程序只送英文的 `reason`。 */
   shell: { available: boolean; reason?: string | null; code?: string | null; params?: Record<string, string> | null };
   network: boolean;
+  /**
+   * 电脑上的浏览器（协议 5 起，local-browser）：可用时 `name` 是哪个浏览器、`headless` 说有没有窗口；不可用时 `code` 是
+   * `browser/not-allowed`（没加 --allow-browser）或 `browser/not-found`（没找到 Chrome、Edge）。旧的连接程序没有这一项。
+   */
+  browser?: { available: boolean; code?: string | null; name?: string | null; headless?: boolean } | null;
   /** 连接程序的协议版本；`current` 为 false 时是旧版，不认会话目录，要更新（workspaces W6）。 */
   protocol?: number;
   current?: boolean;

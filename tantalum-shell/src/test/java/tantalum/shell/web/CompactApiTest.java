@@ -26,13 +26,14 @@ class CompactApiTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /** 窗口 6000、预留 500：阈值 5500。正常对话远在阈值之下，只有手动压缩会触发摘要调用。 */
     // 估算系数按旧的 3 算，否则 system 和工具定义就占满了，摘要调用放不下（compaction-threshold 改了默认系数）；
-    // local-workspace 换成本机工作区的 11 个工具和 read_attachment，工具定义变长，窗口从 4000 加到 6000
+    // local-workspace 换成本机工作区的 11 个工具和 read_attachment，工具定义变长，窗口从 4000 加到 6000；
+    // local-browser 起 11 个浏览器工具也是本机工具（定义总是在，不随管理员的配置去掉），再加到 7500
 
-    private static final String[] SETTINGS = {"--tantalum.claude.context-window=6000", "--tantalum.claude.max-tokens=500",
+    private static final String[] SETTINGS = {"--tantalum.claude.context-window=7500", "--tantalum.claude.max-tokens=500",
         "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
-        // 联网的 12 个工具定义约 1600 token（系数 3），6000 的窗口放不下；这里测的是压缩，不用联网（web-tools）
-        "--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false"};
+        // 这里测的是压缩，不用抓网页（web-tools）
+        "--tantalum.web.fetch.enabled=false"};
 
     @TempDir
     Path temp;

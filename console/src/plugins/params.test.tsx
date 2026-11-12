@@ -135,7 +135,7 @@ const PLUGINS: Plugins = {
   midSessionChanges: true,
   tools: [{ name: "read_attachment", description: "", enabled: true, byDefault: true, changed: false }],
   mcp: [],
-  web: { switches: { web: true, "web-fetch": true, browser: true }, admin: { "web-fetch": true, browser: true }, blockPrivateNetwork: false },
+  web: { switches: { web: true, "web-fetch": true }, admin: { "web-fetch": true }, blockPrivateNetwork: false },
   plugins: [
     { name: "guard", description: "", points: ["beforeToolCall"], group: "rule", enabled: true, byDefault: true, changed: false, lock: { source: "admin", reason: "合规要求" }, params: [] },
     { name: "approval", description: "", points: ["beforeToolCall"], group: "rule", enabled: true, byDefault: false, changed: true, params: [MAX_CHARS] },

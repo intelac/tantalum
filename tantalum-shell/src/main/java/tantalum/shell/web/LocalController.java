@@ -94,6 +94,10 @@ public class LocalController {
         view.put("write", hello.write());
         view.put("shell", hello.shell());
         view.put("network", hello.network());
+        // 协议 5 起：电脑上的浏览器能不能用、是哪个、有没有窗口；旧的连接程序没有这一项
+        if (hello.browser() != null) {
+            view.put("browser", hello.browser());
+        }
         // 协议 2 的连接程序不认会话目录：控制台据此提示“连接程序要更新”
         view.put("protocol", hello.protocol());
         view.put("current", hello.protocol() >= Wire.PROTOCOL);

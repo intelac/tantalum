@@ -165,12 +165,12 @@ class PluginApiTest {
         assertFalse(spec("bob", "memory_write").deferred());
     }
 
-    /** web-tools 需求 5.1：联网三个开关默认都开；alice 关掉“抓网页”后她的是关的，bob 的还是开的。 */
+    /** web-tools 需求 5.1：联网两个开关默认都开（local-browser：浏览器不在这一组了）；alice 关掉“抓网页”后她的是关的，bob 的还是开的。 */
     @Test
     void webSwitchesDefaultOnAndBelongToTheUser() throws Exception {
         JsonNode web = plugins("alice").get("web");
-        assertEquals("{\"web\":true,\"web-fetch\":true,\"browser\":true}", web.get("switches").toString());
-        assertEquals("{\"web-fetch\":true,\"browser\":true}", web.get("admin").toString());
+        assertEquals("{\"web\":true,\"web-fetch\":true}", web.get("switches").toString());
+        assertEquals("{\"web-fetch\":true}", web.get("admin").toString());
         assertTrue(web.get("blockPrivateNetwork").asBoolean(), "blocked by default");
         assertEquals(3, web.size(), "no proxy or other server details: " + web);
 
@@ -181,9 +181,12 @@ class PluginApiTest {
         assertEquals(404, put("alice", "/api/plugins/web/web_fetch", "{\"enabled\":false}").statusCode());
         assertEquals(404, put("alice", "/api/plugins/tool/web_fetch", "{\"enabled\":false}").statusCode(), "no per-tool switch");
         assertEquals(401, put(null, "/api/plugins/web/web", "{\"enabled\":false}").statusCode());
+        // local-browser 需求 8.7：旧的“联网 › 浏览器”不再是开关；新的在本机工作区下面
+        assertEquals(404, put("alice", "/api/plugins/web/browser", "{\"enabled\":false}").statusCode());
+        assertEquals(200, put("alice", "/api/plugins/local/browser", "{\"enabled\":false}").statusCode());
     }
 
-    /** web-tools 需求 5.3：管理员关掉的项 admin 为 false；两项都关时这一块照样返回，开关照样能存。 */
+    /** web-tools 需求 5.3：管理员关掉抓网页时 admin 为 false；这一块照样返回，开关照样能存。以前关浏览器的配置写着也不碍事。 */
     @Test
     void whatTheAdminTurnedOffIsMarked() throws Exception {
         try (TestServer restricted = new TestServer(temp.resolve("data2"), temp.resolve("ws2"), (prompt, chunks) -> null,
@@ -191,9 +194,9 @@ class PluginApiTest {
             HttpResponse<String> response = restricted.get("alice", "/api/plugins");
             assertEquals(200, response.statusCode(), response.body());
             JsonNode web = JSON.readTree(response.body()).get("web");
-            assertEquals("{\"web-fetch\":false,\"browser\":false}", web.get("admin").toString());
+            assertEquals("{\"web-fetch\":false}", web.get("admin").toString());
             assertFalse(web.get("blockPrivateNetwork").asBoolean(), "the administrator opened the private network");
-            HttpResponse<String> saved = restricted.http.send(restricted.request("alice", "/api/plugins/web/browser")
+            HttpResponse<String> saved = restricted.http.send(restricted.request("alice", "/api/plugins/web/web-fetch")
                     .header("content-type", "application/json").PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(),
                     HttpResponse.BodyHandlers.ofString());
             assertEquals(200, saved.statusCode(), saved.body());

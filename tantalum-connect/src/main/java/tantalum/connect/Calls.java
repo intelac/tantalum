@@ -19,6 +19,7 @@ import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.sandbox.Sandbox;
 import tantalum.local.sandbox.Unavailable;
+import tantalum.local.tool.Browser;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.LocalTool;
@@ -43,7 +44,7 @@ import tantalum.value.json.Json;
 /**
  * 在这台电脑上执行服务器发来的调用。不信任服务器的判断，每个调用都查三件事
  * ：发给的用户是不是 {@code welcome} 里的这个人；工具类别是否被启动参数允许（改文件要 {@code --allow-write}，
- * 命令要 {@code --allow-shell}）；路径在不在允许的目录里（由工具经 {@link AllowedDirs} 查）。每个调用一个虚拟线程，
+ * 命令要 {@code --allow-shell}，浏览器要 {@code --allow-browser}）；路径在不在允许的目录里（由工具经 {@link AllowedDirs} 查）。每个调用一个虚拟线程，
  * {@code cancel} 和断开时打断它。先读后写的记录只在内存里：连接程序重启后模型要先重新读。
  */
 final class Calls {
@@ -51,6 +52,7 @@ final class Calls {
     static final String OTHER_USER = "This computer is connected for another user.";
     static final String NO_WRITE = "This computer does not allow file changes.";
     static final String NO_SHELL = "This computer does not allow shell commands.";
+    static final String NO_BROWSER = Browser.NOT_ALLOWED_TEXT;
     static final String AGENTS_FILE = "AGENTS.md";
     /** 会话目录不在这台电脑允许的范围里（或不存在）：工具不跑，也不退回主目录。 */
     static final String DIR_NOT_ALLOWED = "directory not allowed on this computer: ";
@@ -61,6 +63,8 @@ final class Calls {
     private final boolean shell;
     private final Sandbox sandbox;
     private final Journal journal;
+    /** 这台电脑上的浏览器；没允许或没找到时为 null。 */
+    private final Browser browser;
     private final Map<String, LocalTool> tools;
     /**
      * 先读后写的记录。按会话分开记，所以每个会话一份；整台电脑共用一个实例，是为了让两个会话同时改同一个文件时也互斥。
@@ -81,6 +85,16 @@ final class Calls {
     }
 
     Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools) {
+        this(dirs, write, shell, sandbox, journal, tools, null);
+    }
+
+    /** {@code browser}：有 {@code --allow-browser} 而且找到了浏览器时才有，否则为 null，浏览器调用一律拒绝。 */
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, Browser browser) {
+        this(dirs, write, shell, sandbox, journal, Tools.all(), browser);
+    }
+
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools, Browser browser) {
+        this.browser = browser;
         this.dirs = dirs;
         this.write = write;
         this.shell = shell && sandbox.check().available();
@@ -125,6 +139,7 @@ final class Calls {
             case WRITE -> write ? null : NO_WRITE;
             case SHELL -> shell ? null : NO_SHELL;
             case READ, GIT, SKILL -> null;
+            case BROWSER -> browser != null ? null : NO_BROWSER;
         };
     }
 
@@ -137,7 +152,7 @@ final class Calls {
                 result = LocalResult.error(DIR_NOT_ALLOWED + call.dir());
                 outcome = Outcome.DENIED;
             } else {
-                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox, call.skills()), call.arguments());
+                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox, call.skills(), browser), call.arguments());
                 outcome = !result.error() ? Outcome.OK : outside(call, scoped) ? Outcome.DENIED : Outcome.ERROR;
             }
         } catch (InterruptedException stopped) {

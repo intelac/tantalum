@@ -903,18 +903,17 @@ export const zh = {
     work: (type: string) => `插件工作 ${type}`,
     web: {
       title: "联网",
-      detail: "在服务器上抓网页、用浏览器。网页内容只当资料，不当指令。",
-      privateAllowed: "可以访问服务器所在的内网",
-      privateBlocked: "不能访问服务器所在的内网（默认拦，管理员可改）",
+      detail: "在服务器上抓网页。网页内容只当资料，不当指令。浏览器在你自己的电脑上，见“本机工作区”。",
+      privateAllowed: "抓网页可以访问服务器所在的内网",
+      privateBlocked: "抓网页不能访问服务器所在的内网（默认拦，管理员可改）",
       adminOff: "管理员已关闭",
       switches: {
         "web-fetch": ["抓网页", "服务器下载网页、转成文字，快、省 token；不运行网页里的脚本。"],
-        browser: ["浏览器", "你自己的无头浏览器，能搜索、点击、输入、截图；10 分钟不用自动关闭，登录状态随之清空。"],
       } satisfies Record<Exclude<WebSwitch, "web">, readonly [string, string]>,
     },
     local: {
       title: "本机工作区",
-      detail: "让 agent 读写你电脑上允许的目录、查 Git、跑命令。工具在你的电脑上执行，服务器上不读写你的文件。",
+      detail: "让 agent 读写你电脑上允许的目录、查 Git、跑命令、用你电脑上的浏览器。工具在你的电脑上执行，服务器上不读写你的文件。",
       notConnected: "没有连上电脑。点“连接这台电脑”，在电脑的终端里运行给出的命令。",
       connected: (name: string, os: string) => `已连接：${name}（${os}）`,
       outdated: "连接程序太旧，不认会话的工作目录。在电脑上停掉它，点“连接这台电脑”重新运行给出的命令。",
@@ -930,8 +929,16 @@ export const zh = {
         shell: ["命令行", "在隔离环境里跑命令：bash。"],
         skills: ["技能", "让 agent 用你电脑上一个目录里的技能：每个技能一个子目录，里面有 SKILL.md。填了目录才生效。"],
         wiki: ["知识库", "让 agent 知道你电脑上一个 wiki 目录里有哪些页，需要时自己去读。填了目录才生效。"],
+        browser: [
+          "浏览器",
+          "让 agent 用你电脑上已装的 Chrome 或 Edge：搜索、点击、输入、截图。它用单独的资料目录，和你平时的浏览器分开；你在它的窗口里登录过的网站，agent 之后能以你的身份打开。页面内容会送到服务器和你选的模型。",
+        ],
       } satisfies Record<Exclude<LocalSwitch, "local-workspace">, readonly [string, string]>,
       notAllowedWrite: "连接程序没有允许：启动时加 --allow-write 才能改文件",
+      browserNotAllowed: "连接程序没有允许：启动时加 --allow-browser 才能用浏览器",
+      browserNotFound: "这台电脑上没有找到 Chrome 或 Edge：装一个，或者启动连接程序时用 --browser-path 指定浏览器程序",
+      browserOld: "连接程序需要更新才能用浏览器：在电脑上停掉它，点“连接这台电脑”，用新的 tantalum-connect 重新运行给出的命令",
+      browserReady: (name: string, headless: boolean) => (headless ? `可用：${name}，不显示窗口` : `可用：${name}，有窗口（用到时才打开）`),
       noSandbox: (reason: string) => `这台电脑不支持隔离执行命令：${reason}`,
       // 命令行用不了的原因（console-i18n I12），键和 api/errorCodes.json 的 sandbox 一组相同。detail 是 MXC 或系统的输出，原样放进去。
       sandbox: {
@@ -955,7 +962,7 @@ export const zh = {
         "先装好连接程序 tantalum-connect：macOS 安装包 Tantalum Connect.app，装法见 README“本机工作区 › 安装”，装好后终端里能直接运行 tantalum-connect。",
         "在终端里先 cd 到要交给 agent 的项目目录，例如 cd ~/work/shop。",
         "再运行上面这条命令。--allow . 的 . 就是当前目录；也可以写别的目录，可以写多个，第一个是主目录。不能是家目录或 /。",
-        "要改文件加 --allow-write，要跑命令加 --allow-shell。",
+        "要改文件加 --allow-write，要跑命令加 --allow-shell，要用浏览器加 --allow-browser。",
       ],
       token: "令牌",
       command: "命令",

@@ -152,8 +152,8 @@ class LocalWorkspaceTest {
         LocalWorkspace workspace = new LocalWorkspace(switches, links);
         switches.set(ALICE, Kind.LOCAL, "shell", false);
         assertEquals(Map.of("local-workspace", true, "fs-read", true, "git", true, "file-edit", true, "shell", false, "skills", true,
-                "wiki", true), workspace.switches(ALICE));
-        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell", "skills", "wiki"),
+                "wiki", true, "browser", true), workspace.switches(ALICE));
+        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser"),
                 List.copyOf(workspace.switches(ALICE).keySet()));
         assertEquals(Optional.empty(), workspace.section(ALICE));
     }

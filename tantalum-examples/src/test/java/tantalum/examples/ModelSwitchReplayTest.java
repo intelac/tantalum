@@ -243,7 +243,18 @@ class ModelSwitchReplayTest {
         assertEquals(SONNET, prompt.model(), "no choice anywhere: the administrator's default");
         assertFalse(hasNotice(prompt), "the first recorded choice of an old session is not a switch");
         assertEquals("claude", ((ReasoningBlock) prompt.messages().get(1).content().getFirst()).provider());
-        assertEquals(List.of(new TextBlock("What was the word?")), prompt.messages().getLast().content());
+        // 这份旧会话录的时候浏览器还在服务器上、是可用的；现在浏览器在用户电脑上（local-browser 需求 8.6），没连电脑，
+        // 所以提问后面多一条“工具变化”，只说浏览器那 11 个工具不再可用。提问本身一个字不变，也没有换模型的说明。
+        List<tantalum.value.model.Message> asked = prompt.messages().stream()
+                .filter(message -> message.content().contains(new TextBlock("What was the word?"))).toList();
+        assertEquals(1, asked.size());
+        assertEquals(List.of(new TextBlock("What was the word?")), asked.getFirst().content());
+        List<tantalum.value.model.ToolChangeBlock> changes = prompt.messages().stream().flatMap(message -> message.content().stream())
+                .filter(tantalum.value.model.ToolChangeBlock.class::isInstance).map(tantalum.value.model.ToolChangeBlock.class::cast).toList();
+        assertEquals(1, changes.size(), changes.toString());
+        assertEquals(11, changes.getFirst().removed().size(), changes.toString());
+        assertTrue(changes.getFirst().removed().stream().allMatch(name -> name.startsWith("browser_")), changes.toString());
+        assertTrue(changes.getFirst().added().isEmpty(), changes.toString());
         byte[] after = Files.readAllBytes(file);
         assertArrayEquals(original, java.util.Arrays.copyOf(after, original.length), "only appended");
         assertTrue(after.length > original.length);

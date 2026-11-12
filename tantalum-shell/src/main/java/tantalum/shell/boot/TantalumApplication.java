@@ -36,7 +36,6 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.auth.AdminBootstrap;
 import tantalum.shell.auth.UserCommand;
 import tantalum.shell.auth.UserStore;
-import tantalum.shell.browser.BrowserCommand;
 import tantalum.shell.cli.CliText;
 import tantalum.shell.journal.EventCodec;
 import tantalum.shell.local.LocalEndpoint;
@@ -86,14 +85,16 @@ public class TantalumApplication {
             // check 读和服务器相同的配置，数据目录在 Spring 里才知道，在那里检查
             return RecordCheckCommand.run(command, System.out, text);
         }
+        if (args[0].equals("browser")) {
+            // 以前用来给服务器装 Chromium。浏览器现在在用户电脑上，这个命令只剩一句说明（local-browser 需求 8.3）
+            System.out.println(text.say(CliText.Key.BROWSER_MOVED));
+            return 2;
+        }
         Path dataDir = dataDirFromEnvironment();
         if (!DataDirCheck.forCommand(dataDir, System.out, text)) {
             return 1;
         }
-        return switch (args[0]) {
-            case "users" -> UserCommand.run(command, dataDir, passwordInput(), System.out, text);
-            default -> BrowserCommand.run(command, dataDir, System.out, text);
-        };
+        return UserCommand.run(command, dataDir, passwordInput(), System.out, text);
     }
 
     /**
@@ -137,6 +138,7 @@ public class TantalumApplication {
         Engine engine = new Engine(properties, routes, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
                 EventCodec.withBuiltins(), Clock.systemUTC());
+        RetiredBrowser.atStartup(environment::containsProperty, properties.dataDir());
         // 停用或删掉的账号不能再连电脑：握手时查，之后每次心跳再查
         engine.localLinks().accounts(principal -> usable(users, principal.value()));
         // 联网访问自己永远被拦：先用配置的端口，Web 服务器起来后换成实际端口（见 ownPort）

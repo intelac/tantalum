@@ -1,6 +1,7 @@
 package tantalum.shell.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -149,11 +150,10 @@ class ShutdownOrderTest {
         }
         List<String> order = steps.list.stream().map(event -> event.getFormattedMessage().replace("shutdown step: ", "")).toList();
         int handlers = order.indexOf("wait for running handlers");
-        int browsers = order.indexOf("close browsers");
         int egress = order.indexOf("close egress");
-        assertTrue(handlers >= 0 && handlers < browsers && browsers < egress, order.toString());
+        assertTrue(handlers >= 0 && handlers < egress, order.toString());
         assertTrue(egress < order.indexOf("close storage"), order.toString());
-        assertEquals(0, engine.browsers().orElseThrow().openCount());
+        assertFalse(order.contains("close browsers"), "the server has no browser of its own any more: " + order);
     }
 
     @Test

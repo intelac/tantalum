@@ -5,12 +5,16 @@
 #
 # 1. 取 MXC v1.0.1 的发布包：先看缓存（~/.cache/tantalum/mxc/1.0.1，或 TANTALUM_CACHE），再看环境变量 MXC_ZIP 给的本地文件，
 #    都没有才从 GitHub 下载。整个包和取出的 mxc-exec-mac 都校验 SHA-256，对不上就停。MXC 程序不进 Git 仓库。
-# 2. jlink 裁剪运行环境（jdeps 算出的模块）。
+# 2. 浏览器驱动（local-browser）：从 Playwright 的 driver-bundle jar 里只取本平台（mac-arm64）的 Node，从 driver jar 里取
+#    package/，放进包里的 browser-driver/；五个平台合在一起约 200 MB 的 driver-bundle jar 不进包。启动器经系统属性
+#    tantalum.browser.driver 告诉程序这个目录在哪，用户电脑上不用装 Node，第一次用浏览器也不用解压。
+#    然后 jlink 裁剪运行环境（jdeps 算出的模块）。
 # 3. jpackage 做 “Tantalum Connect.app”（不签名、不公证），另加一个叫 tantalum-connect 的命令行启动器，和插件页给的命令同名。
 #    启动器经系统属性 tantalum.mxc 告诉程序包里的 MXC 在哪。堆从 16 MB 起步（默认按内存的 1/64 起步，大内存的 Mac 上空闲就占
 #    两三百 MB），最多 512 MB，空闲时整个进程约 115 MB（LinkBench 实测，要求 ≤ 150 MB）。
 # 4. 用 ditto 打成 zip。
-# 5. 自检：解压到临时目录，在没有 Java 的环境里跑 --help；再带 --allow-shell 启动一次，确认包里的 MXC 检查通过。
+# 5. 自检：解压到临时目录，在没有 Java 的环境里跑 --help；再带 --allow-shell 启动一次，确认包里的 MXC 检查通过；
+#    包里只有本平台的浏览器驱动、Node 能在没有别的 Node 的环境里运行；带 --allow-browser 启动时启动说明里有浏览器那一行。
 set -euo pipefail
 
 TARGET=$1
@@ -76,6 +80,23 @@ rm -rf "$PACKAGE/runtime" "$PACKAGE/app"
 cp "$TARGET/$JAR" "$INPUT/"
 cp "$BIN" "$INPUT/mxc-exec-mac"
 cp "$HERE/MXC-LICENSE.txt" "$ROOT/THIRD_PARTY_NOTICES.md" "$INPUT/"
+# 浏览器驱动：只带本平台的 Node 和 Playwright 的 package/
+BUNDLE=$(ls "$INPUT"/driver-bundle-*.jar)
+DRIVER_JAR=$(ls "$INPUT"/driver-[0-9]*.jar)
+DRIVER=$INPUT/browser-driver
+UNPACK=$(mktemp -d)
+rm -rf "$DRIVER"
+mkdir -p "$DRIVER"
+unzip -q "$BUNDLE" 'driver/mac-arm64/*' -d "$UNPACK"
+unzip -q "$DRIVER_JAR" 'driver/package/*' -d "$UNPACK"
+mv "$UNPACK/driver/mac-arm64/node" "$DRIVER/node"
+mv "$UNPACK/driver/mac-arm64/LICENSE" "$DRIVER/NODE-LICENSE"
+mv "$UNPACK/driver/package" "$DRIVER/package"
+chmod 755 "$DRIVER/node"
+rm -rf "$UNPACK"
+# 五个平台的 Node 不进包；驱动的类在 driver jar 里，那个留着
+rm -f "$BUNDLE"
+[ -f "$DRIVER/package/cli.js" ] && [ -x "$DRIVER/node" ]
 jlink --add-modules "$MODULES" --strip-debug --no-man-pages --no-header-files --compress zip-6 --output "$PACKAGE/runtime"
 
 # 3. .app
@@ -84,6 +105,7 @@ jpackage --type app-image --name "$APP_NAME" --app-version "$APP_VERSION" --vend
   --input "$INPUT" --main-jar "$JAR" --main-class tantalum.connect.Main \
   --runtime-image "$PACKAGE/runtime" \
   --java-options '-Dtantalum.mxc=$APPDIR/mxc-exec-mac' \
+  --java-options '-Dtantalum.browser.driver=$APPDIR/browser-driver' \
   --java-options '-XX:+UseSerialGC' --java-options '-Xms16m' --java-options '-Xmx512m' \
   --add-launcher tantalum-connect="$HERE/tantalum-connect.properties" \
   --dest "$PACKAGE/app"
@@ -107,7 +129,8 @@ trap 'rm -rf "$CHECK"' EXIT
 ditto -x -k "$OUT" "$CHECK"
 LAUNCHER="$CHECK/$APP_NAME.app/Contents/MacOS/tantalum-connect"
 HELP=$(env -i HOME="$HOME" PATH=/usr/bin:/bin JAVA_HOME= "$LAUNCHER" --help)
-for flag in --server --allow --allow-write --allow-shell --allow-read --env --no-network --name --mxc --help; do
+for flag in --server --allow --allow-write --allow-shell --allow-read --env --no-network --name --mxc --help \
+    --allow-browser --browser-path --browser-headless --browser-profile; do
   if ! grep -q -- "$flag" <<< "$HELP"; then
     echo "自检失败：--help 没有列出 $flag" >&2
     exit 1
@@ -129,5 +152,29 @@ if ! grep -q "命令行：可用" "$CHECK/out.txt"; then
   cat "$CHECK/out.txt" >&2
   exit 1
 fi
-echo "安装包：$OUT"
+# 浏览器驱动：包里没有别的平台的 Node，也没有那个 200 MB 的 jar；包里的 Node 自己能跑
+APPDIR="$CHECK/$APP_NAME.app/Contents/app"
+if ls "$APPDIR"/driver-bundle-*.jar > /dev/null 2>&1 || find "$APPDIR" -name 'node.exe' | grep -q .; then
+  echo "自检失败：包里带了别的平台的浏览器驱动" >&2
+  exit 1
+fi
+NODE_VERSION=$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$APPDIR/browser-driver/node" --version)
+[ -f "$APPDIR/browser-driver/package/cli.js" ]
+# 带 --allow-browser 启动：启动说明里有浏览器那一行（这台机器上有 Chrome 或 Edge 就写名字，没有就写“不可用”，都算通过）
+env -i HOME="$HOME" PATH=/usr/bin:/bin JAVA_HOME= TANTALUM_TOKEN="tc_$(printf 'A%.0s' {1..43})" \
+  "$LAUNCHER" --server http://127.0.0.1:9 --allow "$CHECK/work" --allow-browser --browser-profile "$CHECK/profile" > "$CHECK/browser.txt" 2>&1 &
+PID=$!
+for _ in $(seq 1 50); do
+  grep -q "浏览器：" "$CHECK/browser.txt" 2>/dev/null && break
+  sleep 0.2
+done
+kill "$PID" 2>/dev/null || true
+wait "$PID" 2>/dev/null || true
+if ! grep -q "浏览器：" "$CHECK/browser.txt" || grep -q "浏览器：不允许" "$CHECK/browser.txt"; then
+  echo "自检失败：带 --allow-browser 启动后启动说明里没有浏览器的情况" >&2
+  cat "$CHECK/browser.txt" >&2
+  exit 1
+fi
+echo "安装包：$OUT（$(du -h "$OUT" | cut -f1)）"
+echo "浏览器驱动：包里的 Node $NODE_VERSION；$(grep "浏览器：" "$CHECK/browser.txt")"
 echo "自检通过：没有 Java 也能运行，包里的 MXC 检查通过（$(grep "命令沙箱：" "$CHECK/out.txt")）"

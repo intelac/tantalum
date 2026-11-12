@@ -449,7 +449,7 @@ class ContextHandlerTest {
         });
         Workspaces workspaces = Workspaces.shared(dir);
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
-                new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, true, false)), List.of(),
+                new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, false)), List.of(),
                         List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
                 noCompaction(), NO_WINDOW, NOBODY);
 

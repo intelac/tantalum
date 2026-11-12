@@ -20,7 +20,10 @@ class ToolsTest {
     @Test
     void namesAndOrderAreFixed() {
         assertEquals(List.of("read_file", "grep", "list_dir", "find_files", "write_file", "edit_file",
-                        "git_log", "git_show", "git_diff", "git_blame", "git_branches", "bash", "skill"),
+                        "git_log", "git_show", "git_diff", "git_blame", "git_branches", "bash", "skill",
+                        "browser_navigate", "browser_navigate_back", "browser_snapshot", "browser_click", "browser_type",
+                        "browser_press_key", "browser_select_option", "browser_wait_for", "browser_take_screenshot", "browser_tabs",
+                        "browser_evaluate"),
                 Tools.all().stream().map(LocalTool::name).toList());
         assertEquals(Tools.all(), Tools.all());
     }
@@ -38,6 +41,8 @@ class ToolsTest {
                 .forEach(tool -> assertEquals(LocalTool.Kind.GIT, tool.kind(), tool.name()));
         assertEquals(LocalTool.Kind.SHELL, kinds.get("bash"));
         assertEquals(LocalTool.Kind.SKILL, kinds.get("skill"));
+        Tools.all().stream().filter(tool -> tool.name().startsWith("browser_"))
+                .forEach(tool -> assertEquals(LocalTool.Kind.BROWSER, tool.kind(), tool.name()));
     }
 
     /**
@@ -50,6 +55,10 @@ class ToolsTest {
             String name = tool.name();
             assertTrue(name.matches("[a-zA-Z0-9_-]{1,64}"), name);
             assertFalse(tool.description().isBlank(), name);
+            if (tool.kind() == LocalTool.Kind.BROWSER) {
+                // 浏览器工具的参数照搬服务器上原来的（有的没有参数、没有 required），在 BrowserToolsTest 里逐个钉住
+                continue;
+            }
             assertFalse(tool.description().contains("workspace"), name);
             assertFalse(tool.description().contains("attachment"), name);
             Json.Obj schema = assertInstanceOf(Json.Obj.class, tool.schema(), name);

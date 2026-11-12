@@ -12,6 +12,8 @@ export const LOCAL_USER = "e2e3";
 export const I18N_USER = "e2e4";
 /** 第五个账号（E2eServer.SKILL_USER）：技能和知识库的用例；它的测试电脑上有 skills/ 和 wiki/。 */
 export const SKILL_USER = "e2e5";
+/** 第六个账号（E2eServer.BROWSER_USER）：本机浏览器的用例；它的测试电脑说浏览器可用，电脑上是一个假浏览器。 */
+export const BROWSER_USER = "e2e6";
 
 /** 用例跑在 Windows 上（控制台没有 Node 的类型定义，所以不直接写 process）。windows-server：连接程序目前只在 macOS 上运行。 */
 export const ON_WINDOWS = (globalThis as { process?: { platform?: string } }).process?.platform === "win32";

@@ -157,20 +157,20 @@ class TantalumPropertiesTest {
         assertThrows(BindException.class, () -> bind("tantalum.attachments.max-file-bytes", "0"));
     }
 
-    /** web-tools：发布的配置和代码里的默认值一致；浏览器上限小于 1 时启动失败。 */
+    /**
+     * web-tools：发布的配置和代码里的默认值一致。local-browser 需求 8.2：以前的 tantalum.web.browser.* 还写着时照常启动，
+     * 不管写的是什么值（以前 max-open=0 会让启动失败）。
+     */
     @Test
-    void webDefaultsMatchTheDesignAndMaxOpenBelowOneFails() throws Exception {
+    void webDefaultsMatchTheDesignAndOldBrowserSettingsAreIgnored() throws Exception {
         assertEquals(TantalumProperties.Web.defaults(), bind().webSettings());
         assertTrue(bind().webSettings().blockPrivateNetwork(), "blocked by default: a multi-user server");
-        assertEquals(Duration.ofMinutes(10), bind().webSettings().browser().idleClose());
         assertFalse(bind("tantalum.web.block-private-network", "false").webSettings().blockPrivateNetwork());
-        assertFalse(bind("tantalum.web.browser.enabled", "false").webSettings().browser().enabled());
-        BindException failure = assertThrows(BindException.class, () -> bind("tantalum.web.browser.max-open", "0"));
-        Throwable cause = failure;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();
+        assertFalse(bind("tantalum.web.fetch.enabled", "false").webSettings().fetch().enabled());
+        for (String[] old : new String[][] {{"tantalum.web.browser.enabled", "false"}, {"tantalum.web.browser.max-open", "0"},
+                {"tantalum.web.browser.idle-close", "10m"}, {"tantalum.web.browser.sandbox", "false"}}) {
+            assertEquals(TantalumProperties.Web.defaults(), bind(old[0], old[1]).webSettings(), old[0]);
         }
-        assertTrue(cause.getMessage().contains("max-open"), cause.getMessage());
         assertEquals(TantalumProperties.Web.defaults(), properties("claude", 0, 0, null).webSettings(), "no web section: defaults");
     }
 

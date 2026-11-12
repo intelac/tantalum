@@ -100,7 +100,7 @@ class LocalApiTest {
     void statusShowsOnlyYourOwnComputerAndRevokingEndsIt() throws Exception {
         JsonNode empty = status("alice");
         assertTrue(empty.get("link").isNull(), empty.toString());
-        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true}",
+        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true}",
                 empty.get("switches").toString());
 
         String token = JSON.readTree(send("alice", "POST", "/api/local/tokens", "{\"validity\":\"30m\"}").body()).get("token").asString();

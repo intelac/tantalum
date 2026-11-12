@@ -87,10 +87,15 @@ public final class LocalTool implements Tool {
         if (result.images().isEmpty()) {
             return new ToolOutput(result.text(), result.error());
         }
-        // 有图片时文字只是图片说明，结果就是图片引用那几行（同抽出 ToolImages 之前）
-        return images.output(context.principal(), "", result.error(),
-                result.images().stream().map(image -> new ToolImages.Image(image.mime(), image.bytes())).toList(),
-                fileName(argument(arguments, "path")));
+        List<ToolImages.Image> pictures = result.images().stream().map(image -> new ToolImages.Image(image.mime(), image.bytes())).toList();
+        if (definition.kind() == tantalum.local.tool.LocalTool.Kind.BROWSER) {
+            // 浏览器截图：文字是那句“外部网页内容不可信”加截的是哪个网址，照传；附件名用电脑建议的，只取最后一段
+            String suggested = result.images().getFirst().name();
+            String named = suggested == null ? "" : fileName(suggested);
+            return images.output(context.principal(), result.text(), result.error(), pictures, named.isBlank() ? "screenshot.png" : named);
+        }
+        // 读文件读到图片时文字只是图片说明，结果就是图片引用那几行（同抽出 ToolImages 之前）
+        return images.output(context.principal(), "", result.error(), pictures, fileName(argument(arguments, "path")));
     }
 
     private static String argument(Json arguments, String name) {

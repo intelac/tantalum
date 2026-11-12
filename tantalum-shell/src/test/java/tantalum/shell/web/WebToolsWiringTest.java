@@ -56,15 +56,22 @@ class WebToolsWiringTest {
         return engine.tools().stream().map(Tool::name).filter(name -> name.equals("web_fetch") || name.startsWith("browser_")).toList();
     }
 
-    /** 默认两项都开：web_fetch 和 11 个浏览器工具都注册，浏览器不在启动时起（懒启动）；system 里有“## Web content”那段（W9）。 */
+    /**
+     * 默认 web_fetch 注册在服务器上；11 个浏览器工具也注册着，但它们是转发到用户电脑的本机工具（local-browser），服务器自己不起浏览器。
+     * system 里有“## Web content”那段（W9）。
+     */
     @Test
-    void byDefaultBothAreRegisteredAndTheSystemSaysWebContentIsUntrusted() throws Exception {
+    void byDefaultWebFetchIsRegisteredAndTheSystemSaysWebContentIsUntrusted() throws Exception {
         try (TestServer server = server()) {
             Engine engine = server.context.getBean(Engine.class);
             List<String> names = names(engine);
             assertTrue(names.contains("web_fetch"), names.toString());
-            assertEquals(11, names.stream().filter(name -> name.startsWith("browser_")).count(), names.toString());
-            assertEquals(0, engine.browsers().orElseThrow().openCount(), "no browser starts with the server");
+            List<Tool> browser = engine.tools().stream().filter(tool -> tool.name().startsWith("browser_")).toList();
+            assertEquals(11, browser.size(), names.toString());
+            for (Tool tool : browser) {
+                assertEquals(tantalum.shell.local.LocalTool.class, tool.getClass(), tool.name() + " runs on the user's computer");
+                assertEquals("local-workspace", tool.server());
+            }
             assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), "prompt", "hi").status());
             String text = system.get(30, TimeUnit.SECONDS);
             assertTrue(text.contains(WebAccess.NOTE), text);
@@ -84,28 +91,26 @@ class WebToolsWiringTest {
         }
     }
 
-    /** 需求 5.3：管理员关掉的那一项不注册工具；两项都关时不起出口，system 里也没有联网那段，插件页照样有这一组。 */
+    /**
+     * 需求 5.3：管理员关掉抓网页就不注册 web_fetch，也不起出口；插件页照样有这一组。local-browser 需求 8.2：以前关浏览器的配置还写着时
+     * 照常启动、不起作用。“网页内容不可信”那段总是在：浏览器工具在用户电脑上，不归这个配置管。
+     */
     @Test
     void whatTheAdminTurnsOffIsNotRegistered() throws Exception {
-        try (TestServer server = server("--tantalum.web.fetch.enabled=false")) {
+        try (TestServer server = server("--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false",
+                "--tantalum.web.browser.max-open=0")) {
             Engine engine = server.context.getBean(Engine.class);
             assertFalse(names(engine).contains("web_fetch"));
-            assertEquals(11, names(engine).size());
-            assertEquals(Map.of("web-fetch", false, "browser", true), engine.webAccess().admin());
+            assertEquals(11, names(engine).size(), "the browser tools are local tools; the old browser.enabled=false does nothing");
+            assertEquals(Map.of("web-fetch", false), engine.webAccess().admin());
+            assertTrue(engine.egress().isEmpty(), "no egress when nothing on the server uses it");
+            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), "prompt", "hi").status());
+            assertTrue(system.get(30, TimeUnit.SECONDS).contains("## Web content"));
         }
         try (TestServer server = server("--tantalum.web.browser.enabled=false")) {
             Engine engine = server.context.getBean(Engine.class);
-            assertEquals(List.of("web_fetch"), names(engine), "browser.enabled=false: no browser_* tools");
-            assertTrue(engine.browsers().isEmpty());
+            assertTrue(names(engine).contains("web_fetch"));
             assertTrue(engine.egress().isPresent(), "web_fetch still needs the egress");
-        }
-        try (TestServer server = server("--tantalum.web.fetch.enabled=false", "--tantalum.web.browser.enabled=false")) {
-            Engine engine = server.context.getBean(Engine.class);
-            assertEquals(List.of(), names(engine));
-            assertTrue(engine.egress().isEmpty(), "no egress when nothing uses it");
-            assertTrue(engine.browsers().isEmpty());
-            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), "prompt", "hi").status());
-            assertFalse(system.get(30, TimeUnit.SECONDS).contains("## Web content"));
         }
     }
 

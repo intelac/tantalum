@@ -46,6 +46,29 @@ class WireTest {
                 new Hello.Shell(false, "--allow-shell was not given"), true, true);
     }
 
+    private static Hello helloWith(Hello.Browser browser) {
+        Hello hello = hello();
+        return new Hello(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(), hello.shell(),
+                hello.network(), hello.git(), browser);
+    }
+
+    /** local-browser 需求 1.5、4.5：没有浏览器这一项、图片没有名字时，帧和协议 4 的逐字节相同；老的帧照常能读。 */
+    @Test
+    void withoutTheBrowserFieldsFramesAreWhatProtocol4Sent() throws Exception {
+        assertEquals(Set.of("type", "protocol", "connector", "device", "roots", "write", "shell", "network", "git"), keys(hello()));
+        assertEquals("{\"type\":\"result\",\"id\":\"c\",\"text\":\"t\",\"error\":false,\"images\":[{\"mime\":\"image/png\",\"base64\":\"AQID\"}]}",
+                Wire.encode(new Result("c", "t", false, List.of(new Result.Image("image/png", "AQID")))));
+        Hello old = (Hello) Wire.decode(Wire.encode(hello()));
+        assertEquals(null, old.browser());
+        JsonNode browser = PLAIN.readTree(Wire.encode(helloWith(Hello.Browser.available("Google Chrome", true)))).get("browser");
+        assertEquals(Set.of("available", "name", "headless"), Set.copyOf(browser.propertyNames()));
+        JsonNode missing = PLAIN.readTree(Wire.encode(helloWith(Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED)))).get("browser");
+        assertEquals("browser/not-allowed", missing.get("code").asString());
+        assertEquals(false, missing.get("available").asBoolean());
+        assertEquals("screenshot-a.png", ((Result) Wire.decode(Wire.encode(new Result("c", "t", false,
+                List.of(new Result.Image("image/png", "AQID", "screenshot-a.png")))))).toLocal().images().getFirst().name());
+    }
+
     static Stream<Message> messages() {
         return Stream.of(
                 hello(),
@@ -53,6 +76,10 @@ class WireTest {
                 new Call("c-1", "yi", "s-1a2b", "read_file", arguments(), 60_000),
                 new Result("c-1", "line 1", false, List.of()),
                 new Result("c-2", "Image a.png (image/png, 3 bytes).", false, List.of(new Result.Image("image/png", "AQID"))),
+                new Result("c-4", "Screenshot of https://a.example/", false,
+                        List.of(new Result.Image("image/png", "AQID", "screenshot-a.example.png"))),
+                helloWith(Hello.Browser.available("Google Chrome", false)),
+                helloWith(Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)),
                 new Cancel("c-1"),
                 new Call("c-3", "yi", "s-1a2b", "bash", arguments(), 60_000, "C:\\APPL\\Quattro"),
                 new Context("x-1"),
@@ -163,7 +190,7 @@ class WireTest {
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
-        assertEquals(4, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals(5, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
         assertEquals("browseResult", PLAIN.readTree(Wire.encode(new BrowseResult("b", null, List.of(), false, null))).get("type").asString());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
@@ -256,7 +283,8 @@ class WireTest {
         // 2：hello.roots[].git 换成 hello.git（B1，2026-11-06），旧的连接程序被拒绝并提示下载新的
         // 3：会话的工作目录和列子目录（workspaces，2026-11-10）；服务器仍接受 2
         // 4：技能和 wiki（skills-wiki，2026-11-12）；服务器仍接受 2、3
-        assertEquals(4, Wire.PROTOCOL);
+        // 5：浏览器搬到电脑上（local-browser，2026-11-12）；服务器仍接受 2–4
+        assertEquals(5, Wire.PROTOCOL);
         assertEquals(2, Wire.OLDEST);
         assertEquals(List.of(4400, 4401, 4403, 4409),
                 List.of(Wire.CLOSE_PROTOCOL, Wire.CLOSE_BAD_TOKEN, Wire.CLOSE_EXPIRED, Wire.CLOSE_REPLACED));

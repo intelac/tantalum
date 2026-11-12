@@ -34,11 +34,7 @@ public final class CliText {
         CHECK_ALL_OK,
         CHECK_SOME_DIFFER,
         CHECK_FAILED,
-        BROWSER_USAGE,
-        BROWSER_INSTALLING,
-        BROWSER_DONE,
-        BROWSER_FAILED,
-        BROWSER_WITH_DEPS_IGNORED,
+        BROWSER_MOVED,
         DATA_DIR_NETWORK_SHARE,
         DATA_DIR_OUTSIDE_PROFILE,
         DATA_DIR_NO_ACL

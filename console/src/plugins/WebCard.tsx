@@ -3,13 +3,13 @@ import { lookup, useText } from "../text";
 import { Row, Section } from "./Rows";
 
 const MASTER: WebSwitch = "web";
-const CHILDREN: Exclude<WebSwitch, "web">[] = ["web-fetch", "browser"];
-/** 子开关名旁边灰色写的工具名：浏览器有 11 个工具，不列。 */
+const CHILDREN: Exclude<WebSwitch, "web">[] = ["web-fetch"];
+/** 子开关名旁边灰色写的工具名。 */
 const TOOL_NAMES: Record<string, string | undefined> = { "web-fetch": "web_fetch" };
 
 /**
- * 插件页的“联网”（web-tools W10，需求 5.1、5.3）：总开关和“抓网页”“浏览器”两个子开关，下面一行写内网限制。数据跟着 /api/plugins 来，
- * 不轮询。管理员关掉的那一项开关禁用、写“管理员已关闭”；两项都关时总开关也禁用。
+ * 插件页的“联网”（web-tools W10，需求 5.1、5.3）：总开关和“抓网页”子开关，下面一行写内网限制（只管抓网页）。数据跟着 /api/plugins 来，
+ * 不轮询。管理员关掉抓网页时开关禁用、写“管理员已关闭”，总开关也禁用。浏览器不在这里：它在用户电脑上，归“本机工作区”（local-browser）。
  */
 export function WebCard({ web, onChange }: { web: WebPlugins; onChange: (name: WebSwitch, enabled: boolean) => void }) {
   const text = useText().plugins.web;
