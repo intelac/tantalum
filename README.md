@@ -15,11 +15,11 @@ A runtime, not a framework. A framework decides how the model thinks and how pro
 - **Rebuildable.** Any session can be replayed step by step; `java -jar tantalum.jar check` verifies that a new version rewrites old sessions byte for byte.
 - **Accountable.** Each line carries who acted, in which session and run. The console's trace view shows every model call, tool call and hook.
 - **Extensible.** New behavior is a plugin, reached only through one gate and switched per user. A plugin can declare settings, including per-user secrets that are encrypted at rest and never reach the journal; an administrator sets defaults, locks a switch with a reason, and assigns admin-only values (such as a daily quota) per user. Eight hook points; a hook can ask the user a question and wait for days.
-- **Bounded by the server, not by the model.** Plugins go through `PluginGate`; file, Git and shell tools run on the user's own machine through a connector, inside a sandbox, within directories the user allows; API keys never enter the journal, the logs or the model's context.
+- **Bounded by the server, not by the model.** Plugins go through `PluginGate`; file, Git and shell tools run on the user's own machine through a connector, within directories the user allows, and each command is shown to the user for approval by default; API keys never enter the journal, the logs or the model's context.
 
 ## 0.1 in one list
 
-Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · queued messages you can edit, remove or hand to the running turn · tool approval card in place of the input box · usage per turn, today's usage against the daily limit, and a context breakdown · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace with a macOS connector and MXC sandbox · skills (a `skill` tool and `/name` in the composer) and a wiki folder as knowledge base, both read from one directory on the user's machine · web fetch on the server, and a browser on the user's own machine (the connector drives the installed Chrome or Edge, with a visible window and logins that stay on that machine) · runs on macOS, Linux and Windows.
+Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · queued messages you can edit, remove or hand to the running turn · tool approval card in place of the input box · usage per turn, today's usage against the daily limit, and a context breakdown · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace through one cross-platform connector jar downloaded from the plugin page, with each command (bash or PowerShell) shown to the user for approval first, and MCP servers started on the user's own machine · skills (a `skill` tool and `/name` in the composer) and a wiki folder as knowledge base, both read from one directory on the user's machine · web fetch on the server, and a browser on the user's own machine (a local Playwright MCP server drives the installed Chrome or Edge, with a visible window and logins that stay on that machine) · runs on macOS, Linux and Windows.
 
 ## Run
 
@@ -49,8 +49,8 @@ The ledger is the center. From it, three things grow as projections rather than 
 | `tantalum-value` | Immutable types: events, commands, state |
 | `tantalum-kernel` | Pure logic: transition table and hooks, no I/O |
 | `tantalum-shell` | All I/O: rings, journal, handlers, model clients, web |
-| `tantalum-local` | Tools that run on the user's computer, MXC sandbox, wire format |
-| `tantalum-connect` | The connector the user runs on their Mac |
+| `tantalum-local` | Tools that run on the user's computer (files, Git, bash or PowerShell), wire format |
+| `tantalum-connect` | The connector the user runs on their own computer: one jar for macOS, Windows and Linux, downloaded from the server; it can start MCP servers on that computer (the browser is Playwright MCP among them) |
 | `tantalum-examples` | Example plugins |
 | `console/` | Web console (React) |
 

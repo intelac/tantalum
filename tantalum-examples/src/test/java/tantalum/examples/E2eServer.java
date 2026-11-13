@@ -16,6 +16,8 @@ import tantalum.local.browser.PageText;
 import tantalum.local.tool.LocalImage;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.wire.Hello;
+import tantalum.local.wire.Wire;
+import tantalum.local.wire.McpServerState;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumApplication;
@@ -73,6 +75,11 @@ public final class E2eServer {
      * （打开网页回一份固定的快照，截图回一张小图）；别的账号的电脑都没允许浏览器。
      */
     public static final String BROWSER_USER = "e2e6";
+    /**
+     * 第七个账号：跨平台连接程序的端到端测试（connector-jar）。它的测试电脑说协议 6、Windows、PowerShell 可用、两个本机 MCP 服务器
+     * （{@code tickets} 可用、有一个工具；{@code broken} 出错），报的版本 0.0.9 和服务器提供的 0.1.0 不一样（插件页提示换新）。
+     */
+    public static final String CONNECTOR_USER = "e2e7";
     public static final int DEFAULT_PORT = 8097;
     /** 启动前写好的、运行被进程崩溃打断的会话。 */
     public static final String CRASHED_SESSION = "s-c0ffee00";
@@ -146,7 +153,9 @@ public final class E2eServer {
                         "--tantalum.console.welcome-by-language.ja=エンドツーエンドテスト用のアシスタントです。",
                         "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
-                        "--tantalum.residency.idle=2s");
+                        "--tantalum.residency.idle=2s",
+                        // connector-jar：插件页第 1 步能下载的连接程序（一个只有清单的小 jar，版本 0.1.0）
+                        "--tantalum.local.connector-jar=" + connectorJar(root));
         LocalLinks links = app.getBean(Engine.class).localLinks();
         for (String user : List.of(USER, OTHER_USER, SKILL_USER)) {
             TestComputer.connect(links, new Principal(user), Instant.now().plus(Duration.ofDays(30)),
@@ -155,6 +164,14 @@ public final class E2eServer {
         TestComputer.connectWithBrowser(links, new Principal(BROWSER_USER), Instant.now().plus(Duration.ofDays(30)),
                 Files.createDirectories(workspace.resolve(BROWSER_USER)), Hello.Browser.available("Google Chrome", false),
                 E2eServer::fakeBrowser);
+        TestComputer.connectAs(links, new Principal(CONNECTOR_USER), Instant.now().plus(Duration.ofDays(30)),
+                Files.createDirectories(workspace.resolve(CONNECTOR_USER)), roots -> new Hello(Wire.PROTOCOL, "0.0.9",
+                        new Hello.Device("E2E PC", "windows-11", "10.0", "amd64"), roots, true,
+                        new Hello.Shell(true, null, null, null, "powershell", "C:\\Program Files\\PowerShell\\7\\pwsh.exe"), true, true,
+                        Hello.Browser.unavailable(Hello.Browser.NODE_MISSING), "0".repeat(64), List.of(
+                        new McpServerState("tickets", McpServerState.State.READY, null, List.of(new McpServerState.McpToolSpec(
+                                "find_ticket", "Find a ticket by number.", null))),
+                        new McpServerState("broken", McpServerState.State.FAILED, "cannot start: spawn uvx ENOENT", List.of()))));
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
     }
@@ -207,6 +224,18 @@ public final class E2eServer {
     }
 
     /** 第一个账号 {@value #USER} 是管理员（ops-hardening-2），users.spec.ts 用它管用户。 */
+    /** 一个只有清单的小 jar，当作服务器提供下载的连接程序。 */
+    private static Path connectorJar(Path root) throws IOException {
+        java.util.jar.Manifest manifest = new java.util.jar.Manifest();
+        manifest.getMainAttributes().put(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
+        manifest.getMainAttributes().put(java.util.jar.Attributes.Name.IMPLEMENTATION_VERSION, "0.1.0");
+        Path file = root.resolve("tantalum-connect.jar");
+        try (java.io.OutputStream out = Files.newOutputStream(file); java.util.jar.JarOutputStream jar = new java.util.jar.JarOutputStream(out, manifest)) {
+            jar.flush();
+        }
+        return file;
+    }
+
     private static void seed(Path data, Path workspace) throws Exception {
         try (UserStore store = UserStore.open(data)) {
             store.add(USER, PASSWORD, true);
@@ -215,6 +244,7 @@ public final class E2eServer {
             store.add(I18N_USER, PASSWORD);
             store.add(SKILL_USER, PASSWORD);
             store.add(BROWSER_USER, PASSWORD);
+            store.add(CONNECTOR_USER, PASSWORD);
         }
         // skills-wiki：第五个账号的电脑上放好技能和 wiki。名字避开脚本模型认的词（tools、slow、fail 之类）
         Path skills = Files.createDirectories(workspace.resolve(SKILL_USER).resolve("skills"));

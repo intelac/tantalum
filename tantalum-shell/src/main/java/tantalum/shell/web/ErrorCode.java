@@ -83,6 +83,8 @@ public enum ErrorCode {
     LOCAL_PROTOCOL_OLD("local/protocol-old", 409),
     /** 电脑没按时回答。 */
     LOCAL_NO_ANSWER("local/no-answer", 504),
+    /** 服务器上没有放连接程序的 jar（connector-jar 需求 2.1）。 */
+    LOCAL_CONNECTOR_MISSING("local/connector-missing", 404),
     /** 参数 {@code name}。 */
     PLUGIN_NOT_FOUND("plugin/not-found", 404),
     /** 开关锁着。参数 {@code name}、{@code source}（{@code code}、{@code config}、{@code admin}），管理员写了原因时还有 {@code reason}。 */

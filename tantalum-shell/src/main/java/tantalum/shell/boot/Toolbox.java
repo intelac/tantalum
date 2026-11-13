@@ -54,6 +54,8 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         BuiltinTools.of(stores.storage().attachments).forEach(catalog::register);
         SkillSettings skillSettings = new SkillSettings(stores.params());
         LocalTool.all(localLinks, toolImages, properties.toolTimeout(), skillSettings).forEach(catalog::register);
+        // 每个用户电脑上的本机 MCP 工具（connector-jar 需求 6.3）
+        catalog.setUserSource(new tantalum.shell.local.LocalMcpSource(localLinks, toolImages));
         MemoryTools.all(stores.memories()).forEach(catalog::register);
         tools.forEach(catalog::register);
 

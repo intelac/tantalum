@@ -9,7 +9,7 @@
 # 英文系统的 runner 上中文参数会变成 ?；环境变量和当前目录走的是 Unicode 接口。连接程序照 README 先进目录再 --allow .
 param(
   [Parameter(Mandatory)][string]$Jar,
-  [Parameter(Mandatory)][string]$ConnectorClasspath
+  [Parameter(Mandatory)][string]$ConnectorJar
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +19,7 @@ $java = Join-Path $env:JAVA_HOME 'bin\java.exe'
 $root = Join-Path ([IO.Path]::GetTempPath()) "tantalum-smoke-$PID"
 $data = Join-Path $root '数据 目录\tantalum'
 $keyless = @('--tantalum.provider=local', '--tantalum.openai-routes.local.base-url=http://127.0.0.1:9/v1',
-  '--tantalum.openai-routes.local.model=smoke')
+  '--tantalum.openai-routes.local.model=smoke', "--tantalum.local.connector-jar=$ConnectorJar")
 $password = '中文 密码 pw-1'
 $started = @()
 
@@ -133,9 +133,13 @@ try {
   New-Item -ItemType Directory -Force $work | Out-Null
   $token = (Text (Call 'POST' '/api/local/tokens' @{ validity = '30m' } $web) | ConvertFrom-Json).token
   $env:TANTALUM_TOKEN = $token
+  # connector-jar：连接程序从服务器下载（插件页第 1 步），和服务器提供的是同一个文件；照插件页给的命令 java -jar 运行，开着命令行
+  $downloaded = Join-Path $root 'tantalum-connect.jar'
+  Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/local/connector.jar" -WebSession $web -OutFile $downloaded
+  Check ((Get-FileHash $downloaded).Hash -eq (Get-FileHash $ConnectorJar).Hash) 'the connector downloaded from the server is the built jar'
   $connector = Start-Process -PassThru -NoNewWindow -FilePath $java -WorkingDirectory $work -RedirectStandardOutput "$root\connect.log" `
-    -RedirectStandardError "$root\connect.err" -ArgumentList @('-cp', "`"$ConnectorClasspath`"", 'tantalum.connect.Main',
-      '--server', "http://127.0.0.1:$port", '--allow', '.', '--lang', 'en')
+    -RedirectStandardError "$root\connect.err" -ArgumentList @('-jar', "`"$downloaded`"",
+      '--server', "http://127.0.0.1:$port", '--allow', '.', '--allow-shell', '--lang', 'en')
   Remove-Item Env:TANTALUM_TOKEN
   $script:started += $connector
   $link = $null
@@ -145,6 +149,8 @@ try {
   }
   if (-not $link) { Get-Content "$root\connect.log", "$root\connect.err" -ErrorAction SilentlyContinue }
   Check ($null -ne $link) "the connector connected: $($link | ConvertTo-Json -Compress -Depth 5)"
+  Check ($link.shell.available -and $link.shell.kind -eq 'powershell') "commands run in PowerShell: $($link.shell | ConvertTo-Json -Compress)"
+  Check ($link.connectorMatches -eq $true) 'the server sees its own connector jar'
   Check ((Call 'DELETE' '/api/local/tokens' $null $web).StatusCode -eq 200) 'revoke the token'
   Check ($connector.WaitForExit(15000) -and $connector.ExitCode -eq 2) "the connector ended with exit code 2 after the revoke"
   Check (-not (Select-String -Path "$root\connect.log", "$root\connect.err" -SimpleMatch $token -Quiet)) 'the token is not in the connector output'

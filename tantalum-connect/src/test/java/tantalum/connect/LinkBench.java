@@ -40,8 +40,8 @@ import tantalum.value.model.TextBlock;
  *   <li>同一台电脑上 {@code read_file} 经过连接程序的往返，比直接执行多花的时间 P95 ≤ 20 ms：各 1000 次（先各热身 200 次）；</li>
  *   <li>连接程序空闲时内存 ≤ 150 MB：调用完等 10 秒，量进程的 RSS（{@code ps}），另打印 {@code jcmd GC.heap_info} 作参考。</li>
  * </ul>
- * 连接程序是单独的进程，和用户实际跑的一样：有安装包（{@code -Pmac} 打过）时用包里的 {@code tantalum-connect}，没有时用
- * {@code java -cp … tantalum.connect.Main}。令牌只放在子进程的环境变量里。不是常规测试，按需跑：
+ * 连接程序是单独的进程，和用户实际跑的一样：打过单个 jar（{@code target/tantalum-connect-*-all.jar}）时用
+ * {@code java -jar} 跑它，没有时用 {@code java -cp … tantalum.connect.Main}。令牌只放在子进程的环境变量里。不是常规测试，按需跑：
  * <pre>mvn -o -pl tantalum-connect -am verify -Djacoco.skip=true -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false \
  *     -Dit.test=LinkBench -Dfailsafe.failIfNoSpecifiedTests=false</pre>
  */
@@ -51,7 +51,8 @@ class LinkBench {
     static final int CALLS = 1000;
     static final long MAX_OVERHEAD_MS = 20;
     static final long MAX_IDLE_MB = 150;
-    static final Path APP = Path.of("target/package/app/Tantalum Connect.app/Contents/MacOS/tantalum-connect");
+    /** 打好的单个 jar（{@code mvn package} 产出）。 */
+    static final Path APP = Path.of("target/tantalum-connect-0.1.0-all.jar");
 
     @TempDir
     Path temp;
@@ -73,9 +74,10 @@ class LinkBench {
             server.users().add("bench", TestServer.PASSWORD);
             Principal user = new Principal("bench");
             String token = links.tokens().issue(user, Duration.ofHours(1)).token();
-            boolean packaged = Files.isExecutable(APP);
-            List<String> command = new ArrayList<>(packaged ? List.of(APP.toString())
-                    : List.of(ProcessHandle.current().info().command().orElse("java"), "-cp", classpath(), "tantalum.connect.Main"));
+            boolean packaged = Files.isRegularFile(APP);
+            String java = ProcessHandle.current().info().command().orElse("java");
+            List<String> command = new ArrayList<>(packaged ? List.of(java, "-jar", APP.toString())
+                    : List.of(java, "-cp", classpath(), "tantalum.connect.Main"));
             command.addAll(List.of("--server", "http://127.0.0.1:" + server.port(), "--allow", work.toString(), "--name", "Bench Mac"));
             if (packaged) {
                 command.add("--allow-shell");

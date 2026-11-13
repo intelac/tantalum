@@ -18,7 +18,7 @@ public interface LocalTool {
         GIT,
         /** 改文件，要 {@code --allow-write}。 */
         WRITE,
-        /** 跑命令，要 {@code --allow-shell} 而且系统沙箱可用。 */
+        /** 跑命令（bash 或 PowerShell），要 {@code --allow-shell} 而且电脑上找得到 shell。 */
         SHELL,
         /** 加载技能：只读用户填的技能目录，有 {@code --allow} 就有（协议 4 起）。 */
         SKILL,

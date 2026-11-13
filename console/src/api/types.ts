@@ -816,7 +816,7 @@ export interface Plugins {
 }
 
 /** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（local-workspace L17、local-browser）。 */
-export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki" | "browser";
+export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki" | "browser" | "local-mcp";
 
 /**
  * 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令、有没有 git。都由连接程序的启动参数和那台电脑决定。
@@ -829,7 +829,15 @@ export interface LocalLink {
   write: boolean;
   /** 命令行不能用时 reason 写明原因，如 “--allow-shell was not given”。 */
   /** `code`、`params` 是同一个原因的代码和参数（I12）；老版本连接程序只送英文的 `reason`。 */
-  shell: { available: boolean; reason?: string | null; code?: string | null; params?: Record<string, string> | null };
+  shell: {
+    available: boolean;
+    reason?: string | null;
+    code?: string | null;
+    params?: Record<string, string> | null;
+    /** 协议 6 起（connector-jar）：`bash` 或 `powershell`，和找到的程序。 */
+    kind?: string | null;
+    path?: string | null;
+  };
   network: boolean;
   /**
    * 电脑上的浏览器（协议 5 起，local-browser）：可用时 `name` 是哪个浏览器、`headless` 说有没有窗口；不可用时 `code` 是
@@ -839,13 +847,31 @@ export interface LocalLink {
   /** 连接程序的协议版本；`current` 为 false 时是旧版，不认会话目录，要更新（workspaces W6）。 */
   protocol?: number;
   current?: boolean;
+  /** 连接程序的版本，以及是不是这台服务器提供下载的那个（connector-jar 需求 2.2）；服务器上没放 jar 时没有 `connectorMatches`。 */
+  connector?: string;
+  connectorMatches?: boolean;
+  /** 电脑上 mcp.json 里的本机 MCP 服务器（协议 6 起）。 */
+  mcp?: LocalMcpServer[];
   connectedAt: string;
   expiresAt: string;
+}
+
+/** 一个本机 MCP 服务器：状态、出错原因、工具、这个用户开没开（开关名 `local-mcp:名字`）。 */
+export interface LocalMcpServer {
+  name: string;
+  state: "starting" | "ready" | "failed" | "disabled";
+  reason?: string | null;
+  enabled: boolean;
+  tools: { name: string; description: string }[];
 }
 
 /** GET /api/local：开关和现在的连接，没连上时 link 为 null。 */
 export interface LocalStatus {
   switches: Record<LocalSwitch, boolean>;
+  /** 服务器提供下载的连接程序（connector-jar 需求 2.1）。旧服务器不给。 */
+  connector?: { available: boolean; version?: string; sha256?: string; size?: number };
+  /** 命令先问（内置的 commandApproval 插件）开没开；服务器去掉了这个插件时没有。 */
+  commandApproval?: boolean;
   /** 可以逐个勾的工具（qagent-align 需求 2）：子开关名 → 工具和勾没勾。旧服务器不给。 */
   tools?: Record<string, LocalTool[]>;
   link: LocalLink | null;
@@ -917,7 +943,10 @@ export interface SkillNote {
 /** 新生成的令牌：只在这一次响应里出现。 */
 export interface LocalToken {
   token: string;
+  /** bash 写法的命令；插件页按看页面的电脑换写法。 */
   command: string;
+  /** 浏览器访问的服务器地址（connector-jar 起）。旧服务器不给。 */
+  server?: string;
   expiresAt: string;
 }
 

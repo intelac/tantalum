@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import tantalum.value.id.Principal;
 import java.util.stream.Stream;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.shell.plugin.Tool;
@@ -29,6 +30,21 @@ public final class ToolCatalog {
         /** 等来源准备好，比如第一次连接外部服务器。有上限，不阻塞内核（在 Handler 的虚拟线程上调用）。 */
         default void awaitReady() throws InterruptedException { }
     }
+
+    /**
+     * 按用户变的工具来源：用户自己电脑上的本机 MCP 服务器（connector-jar 需求 6.3）。同名时已注册的和全局动态来源的优先。
+     * 必须线程安全。
+     */
+    public interface UserToolSource {
+        List<Tool> tools(Principal user);
+
+        Optional<Tool> find(Principal user, String name);
+    }
+
+    private volatile UserToolSource userSource = new UserToolSource() {
+        @Override public List<Tool> tools(Principal user) { return List.of(); }
+        @Override public Optional<Tool> find(Principal user, String name) { return Optional.empty(); }
+    };
 
     private volatile ToolSource source = new ToolSource() {
         @Override public List<Tool> tools() { return List.of(); }
@@ -56,6 +72,29 @@ public final class ToolCatalog {
 
     public void setSource(ToolSource newSource) {
         source = newSource;
+    }
+
+    public void setUserSource(UserToolSource newSource) {
+        userSource = newSource;
+    }
+
+    /** 这个用户能看到的全部工具：{@link #tools()} 加上他电脑上的（和前面重名的不算），按名称排序。 */
+    public List<Tool> tools(Principal user) {
+        List<Tool> shared = tools();
+        java.util.Set<String> names = shared.stream().map(Tool::name).collect(java.util.stream.Collectors.toSet());
+        return Stream.concat(shared.stream(), userSource.tools(user).stream().filter(tool -> !names.contains(tool.name())))
+                .sorted(Comparator.comparing(Tool::name)).toList();
+    }
+
+    /** 同 {@link #specs()}，带上这个用户电脑上的工具。 */
+    public List<ToolSpec> specs(Principal user) {
+        return tools(user).stream().map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
+    }
+
+    /** 先找共用的，再找这个用户电脑上的。 */
+    public Optional<Tool> find(Principal user, String name) {
+        Optional<Tool> shared = find(name);
+        return shared.isPresent() ? shared : userSource.find(user, name);
     }
 
     public Optional<Tool> find(String name) {

@@ -7,6 +7,7 @@ import java.util.Optional;
 import tantalum.local.tool.BrowserTools;
 import tantalum.local.tool.LocalTool.Kind;
 import tantalum.local.wire.Hello;
+import tantalum.local.shell.ShellKind;
 import tantalum.shell.access.PluginSwitches;
 import tantalum.shell.access.ToolGroup;
 import tantalum.shell.plugin.Tool;
@@ -26,8 +27,10 @@ public final class LocalWorkspace implements ToolGroup {
     public static final String WIKI = "wiki";
     /** “浏览器”子开关：电脑上的 Chrome 或 Edge，11 个 {@code browser_*} 工具（local-browser）。 */
     public static final String BROWSER = "browser";
-    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关，默认都开。 */
-    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI, BROWSER);
+    /** “本机 MCP”子开关：电脑上 {@code mcp.json} 里的服务器（connector-jar 需求 6）；每个服务器另有 {@code local-mcp:名字} 一个开关。 */
+    public static final String MCP = "local-mcp";
+    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器、本机 MCP 八个子开关，默认都开。 */
+    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI, BROWSER, MCP);
     /** {@code ContextAssembled.toolSources} 里的来源。 */
     public static final String SOURCE = "local";
     /** 从这个协议版本起，连接程序按会话的工作目录解析相对路径。 */
@@ -36,6 +39,8 @@ public final class LocalWorkspace implements ToolGroup {
     public static final int SKILL_LISTS = 4;
     /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
     public static final int BROWSER_TOOLS = 5;
+    /** 从这个协议版本起，连接程序跨平台（bash 或 PowerShell）、报 jar 的哈希和本机 MCP 服务器（connector-jar）。 */
+    public static final int MCP_TOOLS = 6;
 
     /** “浏览器”下面可以逐个勾的工具（qagent-align 需求 2），顺序同定义。 */
     private static final Map<String, List<String>> CHOICES = Map.of(BROWSER,
@@ -86,7 +91,28 @@ public final class LocalWorkspace implements ToolGroup {
 
     @Override
     public boolean owns(Tool tool) {
-        return tool instanceof LocalTool;
+        return tool instanceof LocalTool || tool instanceof LocalMcpTool;
+    }
+
+    /** 每个本机 MCP 服务器的开关：{@code local-mcp:名字}，名字的规则同连接程序的 {@code mcp.json}。 */
+    @Override
+    public boolean acceptsSwitch(String name) {
+        return name.startsWith(MCP + ":") && name.substring(MCP.length() + 1).matches("[A-Za-z0-9_-]{1,32}");
+    }
+
+    /** 这个用户有没有关掉某个本机 MCP 服务器（只看它自己的开关，默认开）。 */
+    public boolean mcpSwitch(Principal user, String server) {
+        return switches.enabled(user, LOCAL, mcpSwitch(server));
+    }
+
+    /** 某个本机 MCP 服务器的开关名。 */
+    public static String mcpSwitch(String server) {
+        return MCP + ":" + server;
+    }
+
+    /** 本机 MCP 服务器这个用户开没开：总开关、“本机 MCP”、这个服务器自己的，默认都开。 */
+    public boolean mcpEnabled(Principal user, String server) {
+        return switches.enabled(user, LOCAL, MASTER) && switches.enabled(user, LOCAL, MCP) && switches.enabled(user, LOCAL, mcpSwitch(server));
     }
 
     @Override
@@ -94,10 +120,26 @@ public final class LocalWorkspace implements ToolGroup {
         return CHOICES;
     }
 
-    /** 可以逐个勾的工具还要自己的勾在；别的工具只看它那一类。 */
+    /**
+     * 可以逐个勾的工具还要自己的勾在；别的工具只看它那一类。命令工具按电脑的系统只给一个：Windows 上 {@code powershell}，
+     * 其它 {@code bash}（connector-jar 需求 4.1）。
+     */
     @Override
     public boolean enabled(Principal user, Tool tool) {
-        return tool instanceof LocalTool local && enabled(user, local.kind()) && picked(user, local.name());
+        if (tool instanceof LocalMcpTool mcp) {
+            // 电脑现在报着这个工具（重连中也算），三个开关都开
+            return mcpEnabled(user, mcp.serverName()) && links.status(user).map(status -> status.hello().mcp().stream()
+                    .anyMatch(server -> server.name().equals(mcp.serverName())
+                            && server.tools().stream().anyMatch(spec -> spec.name().equals(mcp.remoteName())))).orElse(false);
+        }
+        return tool instanceof LocalTool local && enabled(user, local.kind()) && picked(user, local.name())
+                && (local.kind() != Kind.SHELL || links.status(user).map(status -> shellTool(status.hello()).equals(local.name())).orElse(false));
+    }
+
+    /** 这台电脑上的命令工具叫什么：{@code hello.shell.kind}，老的连接程序（协议 5 及以前）不送，只有 bash。 */
+    public static String shellTool(Hello hello) {
+        String kind = hello.shell().kind();
+        return kind == null ? ShellKind.BASH.wire() : kind;
     }
 
     private boolean picked(Principal user, String tool) {
@@ -145,7 +187,7 @@ public final class LocalWorkspace implements ToolGroup {
     }
 
     /**
-     * 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要沙箱可用，Git 要电脑上装了 git，浏览器要
+     * 连接程序允许不允许这一类：改文件要 {@code --allow-write}，命令行要 {@code --allow-shell} 而且电脑上找得到 shell，Git 要电脑上装了 git，浏览器要
      * {@code --allow-browser} 而且找到了 Chrome 或 Edge。Git 不看目录是不是仓库：
      * 每次调用在电脑上按路径找仓库，不在仓库里就报“不是 Git 仓库”，子文件夹和任何一个允许目录里的仓库都能查。
      */
@@ -225,7 +267,11 @@ public final class LocalWorkspace implements ToolGroup {
                     .append(String.join(", ", roots.subList(1, roots.size()).stream().map(Hello.Root::path).toList())).append('.');
         }
         text.append(" File changes: ").append(write ? "allowed." : "not allowed.");
-        text.append(" Shell: ").append(shell ? "bash, network " + (hello.network() ? "on." : "off.") : "not available.");
+        // 协议 6 起没有沙箱、网络拦不住，只写是哪种 shell；老的连接程序照旧，这一段和以前逐字相同
+        String shellText = !shell ? "not available."
+                : hello.protocol() < MCP_TOOLS ? "bash, network " + (hello.network() ? "on." : "off.")
+                : ShellKind.POWERSHELL.wire().equals(shellTool(hello)) ? "PowerShell (use the powershell tool)." : "bash.";
+        text.append(" Shell: ").append(shellText);
         // 能用时才写这一句（不能用时模型的工具列表里本来就没有 browser_*）：没有浏览器的电脑上这一段和以前逐字相同
         if (browser && hello.browser() != null) {
             text.append(" Browser: ").append(hello.browser().name())

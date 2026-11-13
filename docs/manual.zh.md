@@ -12,7 +12,7 @@
 - **自己部署，数据不出门**：会话、journal、记忆都在自己的服务器上，默认只听 `127.0.0.1`。模型可以用 Claude，也可以用公司内部或本机的 OpenAI 兼容模型（llama.cpp、vLLM 等），每个会话自己选。
 - **多用户**：登录；每人有自己的会话、记忆、插件开关和界面语言（中文、English、日本語）。
 - **能审计、能复核**：每一步连同它的结果写成只追加的 journal 的一行，落盘之后才生效；重启时照记下的结果还原，不重算。`java -jar tantalum.jar check` 能逐步复核；控制台的轨迹页能看到每一次模型调用、工具调用和钩子。
-- **边界由服务器守，不靠模型自觉**：插件只能经 `PluginGate` 调用，每个用户自己开关；本机工作区允许哪些目录、能不能写、能不能跑命令，由用户在自己电脑上定，服务器放不宽；命令在沙箱里跑；密钥只从环境变量读，不进 journal、日志和模型上下文。
+- **边界由服务器守，不靠模型自觉**：插件只能经 `PluginGate` 调用，每个用户自己开关；本机工作区允许哪些目录、能不能写、能不能跑命令，由用户在自己电脑上定，服务器放不宽；命令每条先问用户（电脑上没有沙箱）；密钥只从环境变量读，不进 journal、日志和模型上下文。
 - **插件不改内核**：七个钩子点，钩子是纯函数，要做 I/O 就交给内核外、有超时、记进 journal 的“工作”。示例插件有只读策略、工具审批、每日额度、供应商退避、引用检查等。
 
 ## 事件驱动
@@ -50,8 +50,8 @@ DeepSeek 在 2026 年 10 月底开源了研究原型 [dsh-superagent](https://gi
 | `tantalum-value` | 不可变类型：事件、命令、状态 |
 | `tantalum-kernel` | 纯逻辑：转移表、钩子，不做 I/O |
 | `tantalum-shell` | 一切 I/O：环、journal、Handler、模型客户端、Web |
-| `tantalum-local` | 在用户电脑上执行的工具（文件、Git、`bash`、技能，以及 11 个浏览器工具的定义）、MXC 沙箱、和连接程序之间的消息格式，服务器和连接程序共用；不依赖 Spring 和 `tantalum-shell` |
-| `tantalum-connect` | 连接程序：在用户电脑上运行，主动连服务器，执行本机工作区的工具，用 Playwright 驱动电脑上已装的 Chrome 或 Edge；macOS 安装包 |
+| `tantalum-local` | 在用户电脑上执行的工具（文件、Git、`bash`、技能，以及 11 个浏览器工具的定义）、跑命令的 bash / PowerShell、和连接程序之间的消息格式，服务器和连接程序共用；不依赖 Spring 和 `tantalum-shell` |
+| `tantalum-connect` | 连接程序：在用户电脑上运行，主动连服务器，执行本机工作区的工具，启动本机 MCP 服务器（浏览器是其中的 Playwright MCP）；一个 jar，macOS、Windows、Linux 通用 |
 | `tantalum-examples` | 示例插件，单独打成一个 jar，不在可执行 jar 里；部署时用 `loader.path` 加载（见“写插件 › 部署示例插件”） |
 | `console/` | 参考控制台 |
 
@@ -79,7 +79,7 @@ DeepSeek 在 2026 年 10 月底开源了研究原型 [dsh-superagent](https://gi
 
 ## 运行
 
-**直接下载**：[Releases](https://github.com/intelac/tantalum/releases/latest) 里的 `tantalum-0.1.0.jar` 在 macOS、Linux、Windows 上都能跑，只需要 JDK 25（例如 Temurin 25）；示例插件是 `tantalum-examples-0.1.0.jar`，连接程序（macOS，Apple 芯片）是 `tantalum-connect-0.1.0-macos-arm64.zip`。下面从源码构建的 `tantalum-shell/target/tantalum-shell-0.1.0-exec.jar` 就是同一个文件。
+**直接下载**：[Releases](https://github.com/intelac/tantalum/releases/latest) 里的 `tantalum-0.1.0.jar` 在 macOS、Linux、Windows 上都能跑，只需要 JDK 25（例如 Temurin 25）；示例插件是 `tantalum-examples-0.1.0.jar`，连接程序是 `tantalum-connect.jar`（也是一个 jar，三个系统通用；放在服务器 jar 旁边，插件页就提供下载，见“本机工作区”）。下面从源码构建的 `tantalum-shell/target/tantalum-shell-0.1.0-exec.jar` 就是同一个文件。
 
 **从源码构建**：需要 JDK 25、Maven 3.9、Node 25 和 pnpm。
 
@@ -453,40 +453,37 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 
 ## 本机工作区：文件、Git、命令行
 
-服务器上没有读写文件、跑命令的工具（`local-workspace` spec）。这些工具在**用户自己的电脑上**执行：电脑上运行连接程序 `tantalum-connect`，由它主动用 WebSocket 连到服务器（电脑上不开端口），模型调 `read_file`、`git_diff`、`bash` 时，服务器把调用转给这台电脑，执行完再把结果送回来。服务器上唯一读文件的工具是 `read_attachment`，只读本人上传的附件；记忆、待办照常在服务器上。
+服务器上没有读写文件、跑命令的工具（`local-workspace` spec）。这些工具在**用户自己的电脑上**执行：电脑上运行连接程序 `tantalum-connect.jar`（一个 jar，macOS、Windows、Linux 通用，`connector-jar` spec），由它主动用 WebSocket 连到服务器（电脑上不开端口），模型调 `read_file`、`git_diff`、`bash`（Windows 上是 `powershell`）时，服务器把调用转给这台电脑，执行完再把结果送回来。连接程序还能在电脑上启动 MCP 服务器（见下面“本机 MCP”），浏览器就是其中内置的 Playwright MCP。服务器上唯一读文件的工具是 `read_attachment`，只读本人上传的附件；记忆、待办照常在服务器上。
 
 **能动什么只由电脑这边的启动参数决定**：`--allow` 列出的目录才能进，加 `--allow-write` 才能改文件，加 `--allow-shell` 才能跑命令。服务器没有任何办法改这几项；每个调用到了电脑上，连接程序都自己再查一遍（用户对不对、这一类工具允许没有、路径在不在允许的目录里），不信任服务器的判断。每个调用在终端里打一行：时间、会话、工具、路径或命令原文、结果（`ok`、`denied`、`error`、`cancelled`），不打文件内容和令牌。
 
-### 安装（macOS，Apple 芯片）
+### 下载
 
-1. 拿到安装包 `tantalum-connect-<版本>-macos-arm64.zip`（自己打：`mvn -o -pl tantalum-connect -am package -Pmac -DskipTests`，产物在 `tantalum-connect/target/`）。包里有自带的 Java 运行环境和微软 MXC 的 `mxc-exec-mac`，不用另装 Java。
-2. 解压，把 `Tantalum Connect.app` 放进“应用程序”。
-3. **第一次打开**：安装包没有签名、没有公证。从浏览器下载的会带隔离标记，系统会拦下并提示“无法验证开发者”。二选一：
-   - 终端里去掉隔离标记：`xattr -dr com.apple.quarantine "/Applications/Tantalum Connect.app"`；
-   - 或者先在终端运行一次下面的命令，被拦后到“系统设置 › 隐私与安全性”底部点“仍要打开”。
-4. 把命令放到 `PATH` 上，插件页给出的命令才能直接运行：
+插件页“本机工作区”没连上时照 QAgent 写三步：① 下载连接程序 ② 生成令牌 ③ 在电脑的终端里运行命令。
 
-   ```sh
-   mkdir -p ~/.local/bin
-   ln -sf "/Applications/Tantalum Connect.app/Contents/MacOS/tantalum-connect" ~/.local/bin/tantalum-connect
-   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc   # 已经在 PATH 上就不用
-   ```
-
-   `tantalum-connect --help` 列出全部参数。
-5. 连接程序和服务器之间有协议版本。2026-11-10 起是协议 3（会话的工作目录、列子目录，见下面“工作区”），服务器仍接受协议 2 的连接程序：照常能用，只是相对路径一律从主目录算、添加工作区时不能浏览目录，输入框旁显示“连接程序要更新”。比 2 更老的连上来会被拒绝，提示“服务器版本不同，请下载新的连接程序”，按第 1 步重新打包安装即可。
+1. **下载**：点“下载连接程序 tantalum-connect.jar”（`GET /api/local/connector.jar`，要登录）。电脑上要有 **Java 25**（例如 Temurin 25）；用浏览器还要有 **Node.js**（浏览器由本机的 Playwright MCP 驱动，见“本机浏览器”）和 Chrome 或 Edge。Java 版本不够时，连接程序只打一句“需要 Java 25”和下载地址就退出（入口类单独按 Java 8 编译，旧 Java 也能跑到它）。
+2. **服务器怎么有这个文件**：服务器在自己的 jar 旁边找 `tantalum-connect.jar`，再找 `tantalum-connect-*-all.jar`，或者用 `tantalum.local.connector-jar=路径` 指定。都没有时下载接口回 404（`local/connector-missing`），第 1 步写“服务器上没有放连接程序”。从源码构建：`mvn -o -pl tantalum-connect -am package -DskipTests`，产物 `tantalum-connect/target/tantalum-connect-0.1.0-all.jar`（约 7 MB，不含各平台的二进制），改名放到服务器 jar 旁边。
+3. **版本对不上**：连接程序连上时报协议、版本号和自己 jar 的 SHA-256。协议比服务器旧、或者两边都是正式版本号（数字开头）而不一样时，插件页黄色提示“这台电脑上的连接程序不是这里提供的版本……请按第 1 步重新下载，替换旧文件后用原来的命令重新启动（令牌不用重新生成）”。不比哈希：构建不能重复出同样的字节，服务器重新打包一次、连接程序的代码没变也会不一样；从源码跑（`dev`）不提示。协议 6 以前的连接程序（旧的 macOS 安装包）照常能用文件、Git、技能和 wiki，也提示换新。
+4. 连接程序和服务器之间有协议版本，现在是 6（`hello` 带 shell 的种类、jar 的哈希、本机 MCP 服务器）。服务器仍接受 2–5：照常能用，只是没有本机 MCP。比 2 更老的连上来会被拒绝，提示下载新的。
 
 ### 连接
 
-1. 控制台侧栏底部点“插件”，“本机工作区”一栏点“连接这台电脑”，选有效期（半小时、1 小时、4 小时、1 天）。页面给出令牌和一行命令，**只显示这一次**；服务器只存令牌的哈希。
-2. 先装好 `tantalum-connect`（上面“安装”）。在电脑的终端里先 `cd` 到要交给 agent 的项目目录，再运行这行命令，按需改参数。`--allow .` 的 `.` 就是当前目录；家目录和 `/` 不行，连接程序会拒绝并提示换成具体的项目目录：
+1. 控制台侧栏底部点“插件”，“本机工作区”一栏选有效期（半小时、1 小时、4 小时、1 天），点“连接这台电脑”。页面给出令牌和一行命令，**只显示这一次**；服务器只存令牌的哈希。命令按看页面的那台电脑写：Windows 上是 PowerShell 的写法，其他是 bash 的写法。
+2. 在电脑的终端里先 `cd` 到放 `tantalum-connect.jar` 的目录（或者把命令里的文件名换成完整路径），按需改参数再运行。`--allow .` 的 `.` 是当前目录，换成要交给 agent 的目录；家目录和根目录不行，连接程序会拒绝并提示换成具体的项目目录：
 
    ```sh
-   TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . --allow-write --allow-shell
+   # macOS、Linux
+   TANTALUM_TOKEN=tc_… java -jar tantalum-connect.jar --server http://127.0.0.1:8091 --allow ~/work/shop --allow-write --allow-shell
+   ```
+
+   ```powershell
+   # Windows
+   $env:TANTALUM_TOKEN="tc_…"; java -jar tantalum-connect.jar --server http://127.0.0.1:8091 --allow D:\work\shop --allow-write --allow-shell
    ```
 
    令牌只从环境变量 `TANTALUM_TOKEN` 读；不设就在启动后按提示粘贴（不显示）。**不要写在命令行参数里**（同一台电脑上的其他程序看得到参数），写了连接程序拒绝启动。令牌不写进任何文件。
-3. 启动说明写明连到哪、允许了什么、命令行能不能用以及原因；插件页 2 秒内显示“已连接”、电脑名、目录、权限和到期时间。下一次提问开始，模型就有这些工具，对话里这一轮上方显示“工具变化：新增 …”。
-4. 有效期内断网会自动重连（1、2、4 … 30 秒）。到期、在插件页点“撤销”、同一个账号从另一台电脑连上时，连接程序写明原因退出（退出码 2）；下一次提问显示这些工具不能用了。按 Ctrl+C 断开，正在跑的命令连同它启动的进程一起结束。
+3. 启动说明写明连到哪、允许了什么、命令行能不能用（用哪个 shell）以及原因、本机 MCP 服务器有哪些；插件页 2 秒内显示“已连接”、电脑名、目录、权限和到期时间。下一次提问开始，模型就有这些工具，对话里这一轮上方显示“工具变化：新增 …”。
+4. 有效期内断网会自动重连（1、2、4 … 30 秒）。到期、在插件页点“撤销”、同一个账号从另一台电脑连上时，连接程序写明原因退出（退出码 2）；下一次提问显示这些工具不能用了。按 Ctrl+C 断开，正在跑的命令和本机 MCP 服务器连同它们启动的进程一起结束。
 
 一个账号同一时间只连一台电脑；这个账号的所有会话共用它，同时最多执行 4 个调用。服务器只绑 `127.0.0.1` 时只有同一台电脑能连；要从别的电脑连，在前面放 HTTPS 反向代理，`--server` 写 `https://` 地址。
 
@@ -507,41 +504,60 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 | 参数 | 意思 | 风险 |
 |---|---|---|
 | `--server URL` | 服务器地址，默认 `http://127.0.0.1:8091` | 不是本机时用 `https://`，否则令牌和文件内容明文经过网络 |
-| `--allow 目录` | 允许 agent 进的目录，可以写多个，第一个是主目录（会话不在工作区里时，相对路径按它解析，`AGENTS.md` 从这里读）。`.` 是当前目录；家目录和 `/` 拒绝启动 | agent 能读里面的所有文件，包括 `.env` 这类密钥文件；只给具体的项目目录 |
-| `--allow-write` | 允许 `write_file`、`edit_file`，命令也能写这些目录 | 能改、能删允许目录里的任何内容；用 Git 管着的目录出错了好恢复 |
-| `--allow-shell` | 允许 `bash`，在 MXC 沙箱里执行 | 命令能读允许目录、联网（除非 `--no-network`），能用本机的工具链；见下面“沙箱拦什么” |
-| `--allow-read 目录` | 命令额外能读（只读）的目录，如 `~/.m2`、另装的 JDK | 只给命令，文件工具不能进 |
-| `--env 名字` | 把这台电脑上的这个环境变量交给命令，可以写多个（如 `--env JAVA_HOME`） | 名字里有 `KEY`、`TOKEN`、`SECRET`、`PASSWORD` 的一律拒绝；其他变量的值模型能读到 |
-| `--no-network` | 命令不能联网 | 下载依赖、访问内网的命令会失败 |
+| `--allow 目录` | 允许 agent 进的目录，可以写多个，第一个是主目录（会话不在工作区里时，相对路径按它解析，`AGENTS.md` 从这里读）。`.` 是当前目录；家目录和根目录拒绝启动 | agent 能读里面的所有文件，包括 `.env` 这类密钥文件；只给具体的项目目录 |
+| `--allow-write` | 允许 `write_file`、`edit_file` | 能改、能删允许目录里的任何内容；用 Git 管着的目录出错了好恢复 |
+| `--allow-shell` | 允许跑命令：macOS、Linux 上 `bash`，Windows 上 `powershell` | **没有沙箱**：命令以运行连接程序的账号身份执行，能读写这个账号能碰的所有文件、联网、用本机的一切工具。允许目录只管文件工具和命令的起始目录。把关的是“命令先问”，见下面 |
+| `--env 名字` | 命令和本机 MCP 平时拿不到名字像密钥的环境变量（含 `KEY`、`TOKEN`、`SECRET`、`PASSWORD`），写在这里的照样给，可以写多个（如 `--env GITHUB_TOKEN`） | 给了的值模型能读到；`TANTALUM_TOKEN` 怎样都不给 |
+| `--mcp-config 文件` | 本机 MCP 服务器的配置，默认 `~/.config/tantalum/mcp.json`（Windows 上 `%APPDATA%\tantalum\mcp.json`），见“本机 MCP” | 这些程序在你电脑上以你的身份运行 |
+| `--allow-browser` 等 | 浏览器，见“本机浏览器” | |
 | `--name 名字` | 插件页和 system 里显示的电脑名，默认主机名 | |
-| `--mxc 路径` | 用这个 `mxc-exec-mac`，不用包里的 | 只在调试或不用安装包时用 |
+
+`--mxc`、`--no-network`、`--allow-read` 已去掉（命令不再在沙箱里跑，这些限制不存在了）；给了会写明“已不再支持”并拒绝启动，免得以为还有效。
 
 ### 工具
 
 - **读文件**（`read_file`、`list_dir`、`find_files`、`grep`）：路径相对主目录或写绝对路径，解析符号链接之后必须在某个允许的目录里，越界和不存在用同一句话拒绝。`read_file` 按行窗口读，`offset`（从 1 开始）和 `limit`；默认最多 2000 行或 50 KB，没读完时结尾写明下一次从哪一行接着读；超过 2000 字符的行截断并注明；64 MB 以内的文件不会整个进内存，二进制和不是 UTF-8 的文件拒绝。读到图片时电脑送回原始字节，服务器照附件规则规范化、存进本人附件目录再交给模型。`list_dir` 列一层（最多 500 项），`find_files` 按 glob 找（最多 1000 个，跳过 `.git`、`node_modules` 等，不跟符号链接）。
 - **改文件**（`write_file`、`edit_file`，要 `--allow-write`）：先读后写，覆盖或修改已有文件前这个会话必须读过它，而且之后没被改过。“读过”记在连接程序的内存里，只留最近 64 个会话；连接程序重启或会话太久没用要重读。先写临时文件再改名，保留原来的权限、CRLF 换行和 BOM；单次最多 10 MB。`edit_file` 逐字匹配，默认必须正好出现一次，多处时用 `replace_all`。
 - **Git 查询**（`git_log`、`git_show`、`git_diff`、`git_blame`、`git_branches`，电脑上装了 `git` 就有）：调本机的 `git`，只读，不碰索引锁；每次调用按 `path` 找仓库（没给时是主目录），主目录下子文件夹里的仓库、任何一个允许目录里的仓库都能查，不在仓库里返回 “Not a Git repository inside the allowed directories”；仓库的顶层必须在允许的目录里，否则同样拒绝（`git show` 会读到外面的文件）。只接受路径、提交号、行范围、条数，以 `-` 开头的提交号拒绝；输出最多 2000 行或 50 KB。
-- **命令行**（`bash`，要 `--allow-shell` 而且 MXC 可用）：参数 `command`、`timeout`（秒，默认 120，最多 600）、`workdir`（默认主目录，必须在允许的目录里）。标准输出和错误输出合在一起，只留最后 2000 行或 50 KB，截掉时写明；退出码不是 0 算错误并写明；超时、取消、断开时结束整个进程树。每次调用一个临时目录（`TMPDIR`），结束后删掉。
+- **命令行**（macOS、Linux 上 `bash`，Windows 上 `powershell`，要 `--allow-shell`，按电脑的系统只给模型其中一个）：参数 `command`、`timeout`（秒，默认 120，最多 600）、`workdir`（默认主目录，必须在允许的目录里）。bash 找 `/bin/bash`，再找 `PATH` 里的 `bash`，最后 `/bin/sh`；PowerShell 依次找 `%ProgramFiles%\PowerShell\7\pwsh.exe`、`PATH` 里的 `pwsh.exe`、系统自带的 5.1（同 DSH），用 `-NoLogo -NoProfile -NonInteractive -EncodedCommand` 运行，命令前加一行把输出设成 UTF-8（中文不乱码；用 `-EncodedCommand` 是因为 Java 在 Windows 上不转义参数里的双引号）。标准输出和错误输出合在一起，只留最后 2000 行或 50 KB，截掉时写明；退出码不是 0 算错误并写明；超时、取消、断开时结束整个进程树。命令拿到的环境变量是连接程序自己的，去掉名字像密钥的和 `TANTALUM_` 开头的（同 DSH），加上 `--env` 放行的。
 - **显示**：对话页上 `edit_file` 显示改动前后的差异，`write_file` 显示字节数和前 20 行，`read_file` 显示读了哪几行；轨迹页检查器里 `edit_file` 有“差异”页签。
 
-### 沙箱拦什么、不拦什么（`bash`）
+### 命令先问（没有沙箱）
 
-命令在微软 MXC（`microsoft/mxc` v1.0.1）的 `mxc-exec-mac` 里执行，它用 macOS 自带的 Seatbelt，规则从“全部拒绝”开始。连接程序启动时先检查 MXC（`--dry-run` 检查规则，再真跑一次 `/usr/bin/true`）；找不到或检查不过，`bash` 就不出现，启动说明和插件页写明原因，读文件、改文件照常能用，**不会退回到不隔离直接跑**。
+2026-11-14 起命令不再在操作系统的沙箱里跑（以前用的微软 MXC 只有 macOS 有，Windows、Linux 跑不了命令）。命令以运行连接程序的那个账号身份执行，**能碰这个账号能碰的一切**，不只是允许的目录。把关的是服务器上内置的“命令先问”（插件 `commandApproval`，默认开）：
 
-- **能读**：系统目录（`/usr`、`/bin`、`/System`、`/Library` 等，MXC 自带）、允许的目录、`/opt/homebrew`、`/usr/local`、`--allow-read` 的目录。
-- **读不到**：家目录里的其他东西（`~/Documents`、浏览器资料、`~/.gitconfig` 等）；`~/.ssh`、`~/Library/Keychains` 就算在允许的目录里也读不到。
-- **能写**：有 `--allow-write` 时只能写允许的目录和这次的临时目录；没有就只能写临时目录（结束后删掉）。
-- **网络**：默认放开，`--no-network` 整体关掉。MXC 在 macOS 上**只能整体开关，不能按网址放行**。不管开没开，**都连不上本机的端口**（`localhost`、本机的局域网地址）：命令碰不到 Tantalum 自己的接口，也碰不到本机的数据库、开发服务器；要在命令里起服务再自己连（比如测试里起的嵌入式服务器）也连不上。
-- **环境变量**：命令拿不到连接程序的环境变量（包括 `TANTALUM_TOKEN`），只有 `PATH`、`HOME`（连接程序自己的空目录，只读）、`TMPDIR`、`LANG` 和 `--env` 放行的。
-- **不拦的**：允许目录里的东西随便读（含 `.env`）；网络开着时能把读到的内容发出去；能用本机装的所有工具链。MXC 清理进程是尽力而为：一直在飞快地起新进程的命令，极少数情况下可能漏掉一个（MXC 文档 “Process cleanup › Limits”）。
+- 模型要跑 `bash` 或 `powershell` 时，运行停下，对话里出现一张卡片：“在你的电脑上执行这条命令吗？”、命令全文、目录，三个选项“允许”“这个会话都允许”“拒绝”。侧栏这一行显示“待回答”，等多久都行；服务器重启问题还在。
+- “允许”：这一条发到电脑上执行。“这个会话都允许”：这一条和这个会话以后的命令都不再问（记在会话记录 `approval` 的 `shell` 里，`bash`、`powershell` 共用，换电脑也算），别的会话照样问。“拒绝”：不执行，模型收到“用户拒绝执行这条命令，不要换个办法绕过去”，可以接着说话。
+- 模型一次要跑几条命令时，每条各问一次。等待中停止这次运行或电脑断开，卡片作废，命令不执行。只读查看别人的会话时卡片只显示，不能点。
+- 插件页“本机工作区 › 命令行”下面的“执行前先问我”就是这个开关，每个用户自己的；关掉后命令直接执行。管理员可以写进 `tantalum.hooks.required` 对所有人强制打开；`tantalum.local.command-approval.enabled=false` 整个去掉（评测场景用，那里没有人回答）。
+- 例子插件的“工具审批”（默认关）还在，两个都开时各问各的。
+- 照 DSH 的取舍不同：DSH 靠操作系统沙箱、只在沙箱拒了要放宽时才问；pi 不问。我们没有跨平台的沙箱，所以每条都问（Yi 2026-11-14 定的）。
 
-Maven、Gradle 这类要读 `~/.m2`、`~/.gradle` 的：加 `--allow-read ~/.m2` 并用离线模式（`mvn -o`），或者把它加成允许目录（`--allow ~/.m2`，有 `--allow-write` 时可写；注意文件工具也能读它）。命令里的 `HOME` 是连接程序给的空目录，Maven 按它找不到 `~/.m2`，会报 “Could not create local repository”：启动前 `export MAVEN_OPTS=-Dmaven.repo.local=$HOME/.m2/repository` 并加 `--env MAVEN_OPTS`，或者让 agent 在命令里带上 `-Dmaven.repo.local=…`（2026-11-06 在 8091 上实测）。JDK 不在 `/opt/homebrew`、`/Library/Java` 下时用 `--allow-read` 加上它，再 `--env JAVA_HOME`。
+### 本机 MCP
+
+连接程序可以在电脑上启动任意 MCP 服务器（stdio），把它们的工具交给模型（`connector-jar` 需求 6）。启动什么只由**电脑上的文件**决定，服务器没有任何消息能叫电脑启动程序。
+
+- **配置**：`--mcp-config` 指的文件，默认 `~/.config/tantalum/mcp.json`（有 `XDG_CONFIG_HOME` 时在它下面），Windows 上 `%APPDATA%\tantalum\mcp.json`。格式同 Claude Desktop 和 pi 的 `mcpServers`：
+
+  ```json
+  {"mcpServers": {
+    "sqlite": {"command": "uvx", "args": ["mcp-server-sqlite", "--db-path", "shop.db"], "cwd": "data"},
+    "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "…"}},
+    "off": {"command": "npx", "args": ["…"], "disabled": true}
+  }}
+  ```
+
+  名字只能用字母、数字、`_`、`-`，最长 32；`cwd` 相对主目录；文件不存在当没有；哪一项写错，启动说明写明哪一项哪里错，其余照常。只支持本机程序（`command`）；远程的 MCP 服务器由管理员在服务器上配（见“MCP”）。
+- **启动**：连上服务器以后在后台启动，好了再把工具补报给服务器（不拖慢连接）。用官方 MCP Java SDK；Windows 上 `npx` 这类 `.cmd` 经 `cmd.exe /d /s /c` 启动；环境变量同命令（去掉像密钥的，`env` 里写的照样给）；stderr 留最后 64 KB。
+- **给模型**：工具名 `mcp__服务器__工具`（规则同服务器的 MCP：非法字符换 `_`，超长加哈希），说明和参数原样；结果第一行写明是外部工具的输出、不可信，文字最多 64 KB，图片存进本人附件。只有这个用户自己看得到；会话的工具在第一次提问时定下，之后加的服务器从新会话开始有。调用不逐条问（你自己配的、在你自己电脑上的程序）。
+- **断了**：服务器退出或崩溃时退避重连（0.5 秒起翻倍，30 秒封顶，一次故障最多 10 次，稳定 30 秒后重新计数），重连期间工具保留、调用返回错误；次数用完停在“出错”，工具撤掉，原因是 stderr 的末尾。连接程序退出时关掉全部 MCP 服务器和它们起的进程。
+- **插件页**：“本机工作区”下面多一个“本机 MCP”子开关，下面列出电脑报的每个服务器：状态（启动中、可用、出错和原因、在 mcp.json 里停用了）、工具（点开看名字和说明），每个服务器一个开关（`PUT /api/plugins/local/local-mcp:名字`）。
 
 ### 插件页的开关
 
 插件页在侧栏底部的“插件”，每个用户自己管自己的开关，存在数据目录的 `users.db`，不进 journal；默认开，策略类插件（只读、工具审批、每日额度）默认关，由用户自己打开。页面分四组：**规则**（在固定位置判断或拦截的钩子插件）、**工具**（本机工作区、联网、内置工具、MCP 服务器）、**工具输出处理**（只改工具结果的插件，比如截断）、**只有管理员能改**（被锁住的规则、内置工具、MCP 服务器和输出插件——代码里定了必须开、服务器配置里定了必须开、管理员锁定，三种都算；它们只出现在这一组，开关是灰的，旁边写着原因）；空的组不显示。管理员可以改默认、锁定开关，插件可以有参数，见下面“插件的参数、锁定和默认值”。
 
-- **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（技能、知识库各带一个目录，见“技能和知识库”；浏览器见“本机浏览器”）。“浏览器”开着时下面能展开 11 个工具逐个勾：去掉勾的工具从你的下一次提问起模型就没有了（比如不想让它在页面里执行脚本，去掉 `browser_evaluate`），有改动时这一行显示“我改的”和“恢复默认”，全去掉等于关掉浏览器；选择是你自己的设置，电脑没连上也能改，关掉浏览器再打开还在。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，MXC 不可用时写明原因，电脑上没有 `git` 时写明。连接说明分步写明：先装好 `tantalum-connect`、先 `cd` 到项目目录、`--allow .` 是当前目录。
+- **本机工作区**：总开关，下面读文件、Git 查询、改文件、命令行、技能、知识库、浏览器、本机 MCP 八个子开关（技能、知识库各带一个目录，见“技能和知识库”；浏览器见“本机浏览器”；命令行下面有“执行前先问我”，见“命令先问”；本机 MCP 下面每个服务器一个开关，见“本机 MCP”）。“浏览器”开着时下面能展开 11 个工具逐个勾：去掉勾的工具从你的下一次提问起模型就没有了（比如不想让它在页面里执行脚本，去掉 `browser_evaluate`），有改动时这一行显示“我改的”和“恢复默认”，全去掉等于关掉浏览器；选择是你自己的设置，电脑没连上也能改，关掉浏览器再打开还在。总开关关着、电脑没连上、或者连接程序没给对应的 `--allow-*` 时，这些工具一个也没有；子开关开着但连接程序没允许时写明“连接程序没有允许”，电脑上找不到 shell 时写明原因，电脑上没有 `git` 时写明。没连上时照 QAgent 写三步：下载连接程序、生成令牌、按这台电脑的系统给出命令。
 - **联网**：总开关，下面“抓网页 `web_fetch`”一个子开关，见下面“联网”。浏览器不在这一块，在“本机工作区”下面。
 - **其他能开关的**：`read_attachment` 和记忆工具；每个 MCP 服务器（关掉等于关掉它的全部工具）和其中每个工具；每个钩子插件（同一个插件的钩子、插件工作和工具后处理一起开关，页面上列出它挂在哪些位置）。钩子声明了 `defaultEnabled() == false` 的插件（示例里的只读、工具审批、每日额度）对每个用户默认关。管理员要对所有人强制开启时写进 `tantalum.hooks.required`（如 `dailyQuota`），钩子声明了 `mandatory()` 的也一样：显示为“必须开启”，不能关，钩子出错按拦截处理。
 - **什么时候生效**：打开的工具、连上的电脑从下一次提问开始可用，在同一个会话里也是；关掉的立即不能再调用，模型这时再调会收到“已在插件页关闭”；运行中途电脑断开，再调会收到 “The local workspace is not connected.”，调用途中断开收到 “The computer disconnected. Whether this operation finished is unknown.”，不自动重发。运行进行中不换名单。
@@ -620,7 +636,7 @@ tantalum.usage-weights.local.output=0.1
 
 锁着的开关或参数被改时回 403（`plugin/locked`）；普通用户调管理员接口回 403。
 
-实测：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）；`bash true` 一次往返约 28 ms，主要是 MXC 启动沙箱。
+实测：同一台电脑上 `read_file` 经过连接程序比直接执行 P95 多 0.94 ms（要求 ≤ 20 ms）；安装包里的连接程序空闲时 114 MB（要求 ≤ 150 MB）（这两个数是 2026-11-06 的 macOS 安装包测的；2026-11-14 起是 `java -jar` 跑单个 jar，`LinkBench` 有 jar 时用它）。
 
 ## 技能和知识库
 
@@ -679,7 +695,7 @@ description: Write release notes for a software release. Use whenever the user a
 
 ### 安全提醒
 
-- **技能是写给模型的指示**，模型会照做。只放你自己写的或看过的技能；从网上拿来的先读一遍 `SKILL.md` 和它带的脚本。技能本身不带任何权限：它让模型做的事，仍然受“改文件”“命令行”开关、`--allow-*` 和沙箱的限制。
+- **技能是写给模型的指示**，模型会照做。只放你自己写的或看过的技能；从网上拿来的先读一遍 `SKILL.md` 和它带的脚本。技能本身不带任何权限：它让模型做的事，仍然受“改文件”“命令行”开关、`--allow-*` 和“命令先问”的限制。
 - **wiki 页和 `index.md` 是资料**，进 prompt 前转义，但这只降低注入风险，不是保证；别把不信任的人写的页放进 wiki 目录。
 - 技能清单和 wiki 页列表会随 prompt 发给你选的模型；选了云端模型，这些名字、描述、标题和 `index.md` 就到了云端。页的正文只有模型去读时才发出去。
 - 连接程序的终端里，每次列目录、读技能各记一行（目录、名字、个数），不记内容。
@@ -690,13 +706,15 @@ description: Write release notes for a software release. Use whenever the user a
 
 ## 本机浏览器
 
-浏览器在**你自己的电脑上**（`local-browser` spec）：连接程序用 Playwright 驱动电脑上已装的 Chrome 或 Edge，模型调 `browser_*` 工具时，服务器把调用转给你的电脑，页面的文字和截图再送回来。服务器上没有浏览器，也不用装。好处是它用的是你的网络，能打开公司内网的页面；需要登录的网站你自己在窗口里登一次，之后 agent 接着用。
+浏览器在**你自己的电脑上**（`local-browser` spec；2026-11-14 起由本机的 Playwright MCP 驱动，`connector-jar` spec）：连接程序在电脑上启动固定版本的 `@playwright/mcp`（现在 0.0.85），由它驱动电脑上已装的 Chrome 或 Edge，模型调 `browser_*` 工具时，服务器把调用转给你的电脑，页面的文字和截图再送回来。服务器上没有浏览器，也不用装。好处是它用的是你的网络，能打开公司内网的页面；需要登录的网站你自己在窗口里登一次，之后 agent 接着用。
 
-**怎么打开：** 启动连接程序时加 `--allow-browser`，别的不用装（安装包里带着 Playwright 的驱动和 Node，电脑上不需要 Node）。
+**怎么打开：** 电脑上要装 **Node.js**（https://nodejs.org，连接程序用 `npx` 运行 `@playwright/mcp`，第一次会从 npm 下载它）和 Chrome 或 Edge，启动连接程序时加 `--allow-browser`。没找到 Node.js 时浏览器不可用，启动说明和插件页写“没有找到 Node.js”。
 
 ```sh
-TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . --allow-browser
+TANTALUM_TOKEN=tc_… java -jar tantalum-connect.jar --server http://127.0.0.1:8091 --allow . --allow-browser
 ```
+
+它在本机 MCP 里是内置的 `playwright` 一项（`npx -y @playwright/mcp@0.0.85 --browser chrome|msedge --executable-path … --user-data-dir … --output-dir …`），工具不当作 `mcp__playwright__*` 给模型，而是翻译成原来的 11 个 `browser_*`：服务器上的工具定义、参数和结果格式都不变（`ref` 换成 Playwright MCP 的 `target`，标签页编号从 1 起，操作后再取一次快照拼成原来的“页面、网址、第几个标签页、快照”）。`mcp.json` 里写了同名的 `playwright` 时用文件里的（换版本要自己确认参数没变）。
 
 | 参数 | 作用 |
 |---|---|
@@ -708,7 +726,7 @@ TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . 
 
 后四个要和 `--allow-browser` 一起用，单独给会拒绝启动并说明。启动说明里有一行浏览器的情况：没允许、用的是哪个浏览器和有没有窗口、资料目录在哪，或者“没有找到 Chrome 或 Edge”。
 
-**什么时候开、什么时候关：** 连接程序启动时不开浏览器，agent 第一次用到时才开。一台电脑一个浏览器，几个会话共用它和登录状态，各有自己的当前标签页；最多 10 个标签页，再多时关掉最久没用的。有窗口的不会因为空闲自动关；无头的空闲 10 分钟后关，下次用到重新打开。你自己关掉了窗口，或者浏览器崩溃了，下一次调用会重新打开（登录状态还在，标签页没了）。连接程序退出时浏览器一起关。
+**什么时候开、什么时候关：** 连接程序启动时启动 Playwright MCP，但不开浏览器，agent 第一次用到时才开。一台电脑一个浏览器，几个会话共用它、登录状态和标签页（以前每个会话记着自己的当前标签页，换成 Playwright MCP 以后不分了）。有窗口的不会因为空闲自动关；无头的按 Playwright MCP 的规则空闲一小时后关。Playwright MCP 崩溃时按本机 MCP 的规则重连。连接程序退出时浏览器一起关。
 
 **资料目录和登录状态：** 浏览器用连接程序自己的资料目录，和你平时用的 Chrome、Edge 分开，那边的东西它一样不碰。Cookie、登录状态存在这个目录里，连接程序重启后还在。**想清空全部登录状态，删掉这个目录。**
 
@@ -718,9 +736,9 @@ TANTALUM_TOKEN=tc_… tantalum-connect --server http://127.0.0.1:8091 --allow . 
 | Windows | `%LOCALAPPDATA%\Tantalum Connect\browser-profile` |
 | 其他 | `~/.local/share/tantalum-connect/browser-profile` |
 
-这个目录不在任何 `--allow` 目录里（家目录本身不许 `--allow`），文件工具进不去，`bash` 的沙箱也读不到。同一个资料目录同时只能给一个浏览器用：同一台电脑上开两个连接程序时，后一个用浏览器会得到“资料目录正被别的程序使用”。
+这个目录不在任何 `--allow` 目录里（家目录本身不许 `--allow`），文件工具进不去（命令没有沙箱，能读到它；命令每条先问你）。同一个资料目录同时只能给一个浏览器用：同一台电脑上开两个连接程序时，后一个用浏览器会得到“资料目录正被别的程序使用”。
 
-**工具：** 还是原来的 11 个，名字和参数不变：`browser_navigate`、`browser_navigate_back`、`browser_snapshot`（读页面，元素带 `[ref=e5]` 这样的编号）、`browser_click`、`browser_type`、`browser_press_key`、`browser_select_option`、`browser_wait_for`、`browser_take_screenshot`、`browser_tabs`、`browser_evaluate`。每次操作后返回新的页面快照（最多 50,000 字符）。截图送回服务器，存进你的附件（算在附件配额里），作为图片交给模型。没有上传文件、下载文件、执行任意 Playwright 代码的工具；页面触发下载时拒绝，不留文件。搜索没有专门的接口，模型用浏览器打开 `https://www.bing.com/search?q=<词>`（Google 常对自动化的浏览器返回限流页）。
+**工具：** 还是原来的 11 个，名字和参数不变：`browser_navigate`、`browser_navigate_back`、`browser_snapshot`（读页面，元素带 `[ref=e5]` 这样的编号）、`browser_click`、`browser_type`、`browser_press_key`、`browser_select_option`、`browser_wait_for`、`browser_take_screenshot`、`browser_tabs`、`browser_evaluate`。每次操作后返回新的页面快照（最多 50,000 字符）。截图送回服务器，存进你的附件（算在附件配额里），作为图片交给模型。没有上传文件、下载文件、执行任意 Playwright 代码的工具（Playwright MCP 自带的这些工具不给模型）。搜索没有专门的接口，模型用浏览器打开 `https://www.bing.com/search?q=<词>`（Google 常对自动化的浏览器返回限流页）。
 
 **能去哪些地址：** 只能打开 `http` 和 `https` 的网址；`file:`、`chrome:`、`javascript:`、`data:` 这些当场拒绝，浏览器不会借此读到你电脑上的文件。不拦内网和本机地址：浏览器在你的电脑上，用的是你的网络和系统的代理设置。服务器的 `tantalum.web.block-private-network` 只管服务器上的 `web_fetch`，不管你电脑上的浏览器。
 
@@ -946,7 +964,7 @@ mvn clean verify          # 不访问外网，不花钱
 (cd console && pnpm e2e)  # Playwright 端到端：自动起脚本化模型的后端（8097）和 vite（5174）
 ```
 
-`mvn verify` 在集成测试阶段还会跑 `LinkIT`（同一个 JVM 里起服务器和真的连接程序，测令牌、断网重连、被顶替、硬发越权调用被电脑拒）和 `MxcIT`（用真的 `mxc-exec-mac` 跑 `bash`：读不到允许目录外和 `~/.ssh`、没有 `--allow-write` 写不了、`--no-network` 上不了网、连不上本机端口、超时和取消后没有残留进程、环境变量里没有令牌。只在 macOS 上、程序存在时跑，否则跳过并写明原因；程序默认用打安装包时下载校验过的 `~/.cache/tantalum/mxc/1.0.1/mxc-exec-mac`，也可 `-Dtantalum.mxc=路径`），并用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。连接程序的往返和内存用 `LinkBench` 手动跑（先打安装包，有包时测包里的连接程序）：
+`mvn verify` 在集成测试阶段还会跑 `LinkIT`（同一个 JVM 里起服务器和真的连接程序，测令牌、断网重连、被顶替、硬发越权调用被电脑拒）、`LocalShellIT`（真的 bash；Windows CI 上真的 PowerShell：中文输出、命令里的双引号、退出码、到时和取消时结束子进程、令牌不进命令的环境变量）、`LocalMcpIT`（用一个 Java 写的测试 MCP 服务器，不要 Node：启动、清单、调用、图片、崩溃后重连、次数用完、退出时整棵进程树结束；Windows 上再经 `.cmd` 启动一次）和 `PlaywrightMcpIT`（有 Node 和 Chrome、Edge 时用真的 `@playwright/mcp` 跑 11 个浏览器工具，否则跳过），并用打好的 jar 跑 `JarCrashIT`：模型调用和工具调用进行中 `kill -9`，重启后检查已提交的事件不丢、索引补齐、运行收尾、模型和工具没有被再次调用。性能预算用 `mvn -P bench -pl tantalum-examples -am -DskipTests test-compile` 手动跑，超预算时失败。连接程序的往返和内存用 `LinkBench` 手动跑（先 `mvn package` 打出单个 jar，有 jar 时用 `java -jar` 跑它）：
 
 ```sh
 mvn -o -pl tantalum-connect -am verify -Djacoco.skip=true -Dtest=NONE -Dsurefire.failIfNoSpecifiedTests=false \
@@ -975,7 +993,7 @@ TANTALUM_SMOKE_CLAUDE=1 mvn -pl tantalum-examples -am verify -Dtest='ClaudeScena
 
 **模型拿到的东西钉住**（`PromptPinTest`）：系统提示和全部工具定义（名字、说明、参数、是否延后）按三种情形各存一份审过的文件：`tantalum-shell/src/test/resources/wire/prompt-{full,read-only,no-computer}.txt`、`tools-*.json`。改了提示或任何一个工具的说明，这个测试就失败，在差异里看得见；有意改时加 `-Dwire.record=true` 重新生成，并在提交里写明改了什么（照 DSH 的 `system-prompt.expected.md`、`tool-schemas.expected.json`）。没连电脑、只读时不可用的工具照样在列表里、标着延后，所以三份工具文件差不多大——这是为了提示缓存不因为电脑连没连而失效。
 
-**工具的边界和随机序列**（`tantalum-local` 的 `edge/` 包、`BashEdgeIT`）：不经过服务器和模型，直接调连接程序里真的工具。`FileEdgeTest` 一条测一个边界（GBK、UTF-16、只有回车的换行、指向外面的链接、重叠的匹配、Git 忽略的文件……）；`BashEdgeIT` 在真的 MXC 沙箱里测命令行的边界（二进制和颜色码、超长单行、进度条、后台进程、等输入、超时），只在 macOS 上跑；`FileToolsRandomTest` 照 pi 的做法，对一个临时目录随机做写、改、读、列、找、搜和“外部改动”，每一步和一份“应该是什么样”的副本比，默认 40 个种子各 30 步，失败时打印种子和步数：
+**工具的边界和随机序列**（`tantalum-local` 的 `edge/` 包、`BashEdgeIT`）：不经过服务器和模型，直接调连接程序里真的工具。`FileEdgeTest` 一条测一个边界（GBK、UTF-16、只有回车的换行、指向外面的链接、重叠的匹配、Git 忽略的文件……）；`BashEdgeIT` 用真的 bash 测命令行的边界（二进制和颜色码、超长单行、进度条、后台进程、等输入、超时），macOS 和 Linux 上跑；`FileToolsRandomTest` 照 pi 的做法，对一个临时目录随机做写、改、读、列、找、搜和“外部改动”，每一步和一份“应该是什么样”的副本比，默认 40 个种子各 30 步，失败时打印种子和步数：
 
 ```sh
 mvn -o -pl tantalum-local -am test -Dtest=FileToolsRandomTest -Dedge.count=500   # 多跑一些种子
@@ -1019,7 +1037,7 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 
 `--repeat N` 每个场景跑 N 次、报通过率（照 pi 的 `--runs-per-variant`）：时过时不过的标“不稳定”，全过的标“已饱和”（这个场景对这个模型已经没有区分力）。每轮结果是一个 `.json`（计划、提交号、系统提示的哈希、每次的步数、token、压缩次数、费用）和一张 `.md` 表；`--compare` 和上一轮逐个场景比通过率、步数、token，模型或系统提示不同时先写一句提示。计划里有没跑成的（服务器起不来、提交被拒、运行失败），表照出，但不给总通过率，退出码 2——免得少跑了几个也显示成“全过”；被钩子或插件拦下、被取消算这次没过，不算没跑成。需要单独配置的场景（`todo-compact` 的小窗口）自动另起一台服务器。
 
-要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
+要有 `python3`、`git`、Node.js、Chrome 或 Edge；只在 macOS 上跑过。服务器起的时候关掉“命令先问”（`--tantalum.local.command-approval.enabled=false`），场景里没有人回答。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
 
 2026-11-13 的基线（54 个场景；Haiku、Sonnet、Opus 各 5 次，Fable 2 次，本机 qwen 开思考 3 次；结果在 `results/*-suite.json`，以后用 `--compare` 和它比）：
 
@@ -1037,7 +1055,7 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 
 **每晚**：`tantalum-examples/scenarios/nightly.sh` 拉最新代码、打包、用本机模型把全部场景各跑 3 次，和前一晚比，结果放在 `results/nightly/`。不花钱。模型没响应时可以让它先启动模型：设环境变量 `TANTALUM_NIGHTLY_START` 为启动命令。用 launchd 每天 03:00 跑：照 `dev.tantalum.nightly.plist.template` 开头的两行命令装上（不会自动装）。
 
-**Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`，和连接程序用 runner 上装的 Edge 或 Chrome 跑的 `LocalBrowserIT`）、检查 `LocalBrowserIT` 和只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS 连接程序有意义的测试（MXC、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
+**Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`、PowerShell 的 `LocalShellIT`、经 `.cmd` 启动本机 MCP 的 `LocalMcpIT`）、检查只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS、Linux 有意义的测试（bash 的边界、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 
 第三方依赖和界面参考（DeepSeek Harness）的许可证见 `THIRD_PARTY_NOTICES.md`。
 
@@ -1059,13 +1077,13 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 | 启动和内存不随历史增长 | 有（只开一个会话） | 有（会话按需载入 + 每会话投影检查点） | 有：只常驻有活动的会话，空闲 30 分钟移出内存，其余按需载入（1.1 万事件冷载入 320 ms）；启动只补齐索引落后的部分，`ops-hardening`、`one-line-journal` spec | 空闲回收只在有事件时顺带做（见 BACKLOG） |
 | 长期记忆 | 无 | 没有自带，只有通用 MCP 桥和 3 个可选示例配置 | 有：每用户记忆文件 + 三个工具 + 共享知识层 + 设置面板，`memory` spec | 自动整理未做（决定 M5） |
 | 图片和文件附件 | 有（图片、`read` 读图） | 有（图片、文件、PDF、超预算省略） | 有：上传、规范化、每用户去重存储、Claude 图片和 PDF 文档块、OpenAI 兼容 `image_url`、超预算省略、`read_file` 读附件和图片、控制台附件条和灯箱、轨迹显示，`attachments` spec | 无引用附件的清理随会话删除一起做 |
-| MCP 接入 | 有（`builtin:mcp`） | 有 | 有：远程 HTTP 服务器、放行名单、共享凭据；没有 stdio、OAuth、每用户令牌 | 每用户令牌待定 |
+| MCP 接入 | 有（`builtin:mcp`） | 有 | 有：服务器上的远程 HTTP 服务器（管理员配，放行名单、共享凭据）；用户电脑上的 stdio 服务器（`mcp.json`，连接程序启动，`connector-jar` spec）；没有 OAuth、每用户令牌 | 每用户令牌待定 |
 | 文件读写（窗口读、写、改、列目录、找文件） | 有（`read`、`write`、`edit`、`ls`、`find`） | 有（读、写、改、glob，先读后写） | 有：窗口读取和续读、先读后写、原子写、保留换行和 BOM、对话页差异，`core-tools` spec；`local-workspace` 起在用户电脑上执行，只能进 `--allow` 的目录 | 代码索引 `code-index` spec |
-| 工具在用户自己的电脑上执行 | 可换执行方式（例子用 SSH） | 服务器主动 SSH 进去 | 有：连接程序主动连服务器，有期限可撤销的令牌，允许什么只由电脑决定、每个调用电脑再查一遍；文件、Git 查询、`bash`、浏览器；插件页总开关和子开关，`local-workspace`、`local-browser` spec | Windows 连接程序、连多台电脑 |
-| `bash` | 有（不隔离） | 有（沙箱） | 有：在用户电脑上的 MXC 沙箱里执行，读不到允许目录外的用户文件、只能写允许目录、网络整体开关、连不上本机端口，沙箱不可用就不提供 | Windows 的 `powershell` |
+| 工具在用户自己的电脑上执行 | 可换执行方式（例子用 SSH） | 服务器主动 SSH 进去 | 有：连接程序主动连服务器，有期限可撤销的令牌，允许什么只由电脑决定、每个调用电脑再查一遍；文件、Git 查询、`bash`/`powershell`、浏览器、本机 MCP；一个 jar，macOS、Windows、Linux 通用，服务器提供下载；插件页总开关和子开关，`local-workspace`、`local-browser`、`connector-jar` spec | 连多台电脑 |
+| `bash` | 有（不隔离） | 有（沙箱） | 有：在用户电脑上执行，macOS、Linux 上 `bash`，Windows 上 `powershell`；没有沙箱，每条命令默认先问用户（`connector-jar` spec） | |
 | 插件页、每个用户开关工具和插件 | 无 | 有（插件页） | 有：内置工具、MCP 服务器和工具、钩子插件，每人自己的开关；会话中途开关从下一次提问生效，不破坏思考签名 | |
 | 联网（搜索、抓取网页） | 无，靠 `bash` 跑 curl | 有：`web_search`（Exa、Perplexity、DeepSeek 可换）、`web_fetch`；浏览器是实验功能（每个会话一个 `@playwright/mcp`） | 有：服务器上的 `web_fetch`（HTML 转 Markdown、跳转每跳检查地址，管理员的内网限制开关），和用户电脑上的浏览器（连接程序驱动已装的 Chrome 或 Edge，有窗口、登录状态留在电脑上，11 个工具，截图进本人附件）；搜索用浏览器打开 Bing 结果页，没有搜索接口；`web-tools`、`local-browser` spec | `web_search` 接口（可换后端）、读 PDF |
-| 操作系统级沙箱 | 无 | 有（`sandbox-local`：Seatbelt、受限令牌、bwrap） | 有，只用于电脑上的 `bash`（macOS 用微软 MXC 的 Seatbelt 后端）；服务器上不再有读写文件、跑命令的工具 | Windows 上换 MXC 的 Windows 后端 |
+| 操作系统级沙箱 | 无 | 有（`sandbox-local`：Seatbelt、受限令牌、bwrap） | **没有**：2026-11-14 起去掉了 macOS 才有的 MXC，换成每条命令先问（Yi 定的）；服务器上没有读写文件、跑命令的工具 | |
 | 子 agent | 有 | 有 | **没有** | 子 agent spec |
 | 技能 | 有：多处目录，`/skill:name`，模型用 `read` 读 `SKILL.md` | 有：多处目录，`skill` 工具，`/name` | 有：用户电脑上一个目录（经连接程序读），system 里的清单只有名字和描述，`skill` 工具按需加载，输入框 `/name` 点名，每个技能可单独关，`skills-wiki` spec | 多个目录、项目里的技能未规划 |
 | 知识库 | 无 | 没查到 | 有：用户电脑上一个 wiki 目录，system 里列页的路径和标题、带 `index.md`，模型用读文件的工具按需读，`skills-wiki` spec | 不做上传和向量检索 |

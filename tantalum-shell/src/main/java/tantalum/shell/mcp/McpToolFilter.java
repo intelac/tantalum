@@ -7,7 +7,7 @@ import java.util.HexFormat;
 import java.util.regex.Pattern;
 
 /** 纯函数：哪些工具对模型可见，以及它们对外的名字。{@code readOnlyHint} 是服务器自己声明的，放行前管理员要确认服务器可信。 */
-final class McpToolFilter {
+public final class McpToolFilter {
 
     private static final Pattern PUBLIC_NAME = Pattern.compile("[A-Za-z0-9_-]{1,64}");
 
@@ -27,7 +27,7 @@ final class McpToolFilter {
      * {@code mcp__<server>__<tool>}。超长或含非法字符时替换并加原名的 SHA-256 前缀，不隐藏工具（pi、DSH 相同）。
      * 结果只取决于原名，重启后不变；调用时仍用原名。
      */
-    static String publicName(String server, String tool) {
+    public static String publicName(String server, String tool) {
         String name = "mcp__" + server + "__" + tool;
         if (PUBLIC_NAME.matcher(name).matches()) {
             return name;

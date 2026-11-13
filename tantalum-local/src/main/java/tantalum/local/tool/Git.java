@@ -1,7 +1,6 @@
 package tantalum.local.tool;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -123,13 +122,14 @@ final class Git {
     static Output run(Path dir, List<String> arguments) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>(BASE);
         command.addAll(arguments);
-        ProcessBuilder builder = new ProcessBuilder(command).directory(dir.toFile())
-                .redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
+        // 标准输入启动后马上关掉：不用 /dev/null，Windows 上没有它，git 起不来（connector-jar 要在 Windows 上也能用 Git 工具）
+        ProcessBuilder builder = new ProcessBuilder(command).directory(dir.toFile());
         Map<String, String> environment = builder.environment();
         environment.keySet().removeIf(name -> name.startsWith("GIT_") || name.equals("TANTALUM_TOKEN"));
         environment.put("GIT_TERMINAL_PROMPT", "0");
         environment.put("GIT_OPTIONAL_LOCKS", "0");
         Process process = builder.start();
+        process.getOutputStream().close();
         try (ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor()) {
             try {
                 Future<Capped> out = readers.submit(() -> capped(process.getInputStream(), process));

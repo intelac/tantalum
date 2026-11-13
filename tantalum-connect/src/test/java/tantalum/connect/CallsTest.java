@@ -268,12 +268,39 @@ class CallsTest {
         assertTrue(Tools.all().stream().anyMatch(tool -> tool.kind() == LocalTool.Kind.SHELL), "bash is in the list");
     }
 
-    /** {@code --allow-shell} 给了但沙箱不可用：照样拒绝，不会不隔离直接跑（L13）。 */
+    /** QAgent 问题 72：浏览器开着时，服务器直接发来的 mcp:playwright:* 一律拒绝，只能经 browser_* 用（逐个勾选管得到）。 */
     @Test
-    void anUnavailableSandboxRefusesBashEvenWithAllowShell() throws Exception {
-        Calls calls = new Calls(dirs, true, true, tantalum.local.sandbox.Sandbox.unavailable(tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.MXC_MISSING)), journal, Tools.all());
+    void theBrowsersOwnMcpToolsCannotBeCalledDirectly() throws Exception {
+        Calls calls = new Calls(dirs, true, false, journal, Tools.all());
+        calls.mcp(new tantalum.connect.mcp.McpHost(tantalum.connect.mcp.McpConfig.empty(), Map.of(), dirs.main(), state -> { }), "playwright");
+        calls.welcome("alice");
+        calls.call(call("m-1", "alice", "mcp:playwright:browser_run_code_unsafe"), replies::add);
+        assertEquals("Unknown tool: mcp:playwright:browser_run_code_unsafe", reply().text());
+        calls.call(call("m-2", "alice", "mcp:other:x"), replies::add);
+        assertTrue(reply().text().contains("No MCP server named other"));
+    }
+
+    /** {@code --allow-shell} 给了但电脑上找不到 shell：照样拒绝。 */
+    @Test
+    void aMissingShellRefusesBashEvenWithAllowShell() throws Exception {
+        Calls calls = new Calls(dirs, true, true, tantalum.local.shell.Shell.unavailable(tantalum.local.shell.Unavailable.of(
+                tantalum.local.shell.Unavailable.Code.NOT_FOUND, "shell", "bash")), journal, Tools.all());
         calls.welcome("alice");
         calls.call(call("b-1", "alice", "bash"), replies::add);
+        assertEquals(Calls.NO_SHELL, reply().text());
+    }
+
+    /** connector-jar：服务器按 hello 只给一种 shell 的工具；另一种的调用（mac 上来了 powershell）在电脑上也拒。 */
+    @Test
+    void theOtherShellsToolIsRefused() throws Exception {
+        tantalum.local.shell.Shell bash = new tantalum.local.shell.Shell() {
+            @Override public Status check() { return Status.ok(); }
+            @Override public tantalum.local.shell.ShellKind kind() { return tantalum.local.shell.ShellKind.BASH; }
+            @Override public Run run(String command, Path workdir, java.time.Duration timeout) { throw new AssertionError("not run"); }
+        };
+        Calls calls = new Calls(dirs, true, true, bash, journal, Tools.all());
+        calls.welcome("alice");
+        calls.call(call("p-1", "alice", "powershell"), replies::add);
         assertEquals(Calls.NO_SHELL, reply().text());
     }
 
@@ -498,8 +525,8 @@ class CallsTest {
     @Test
     void browserCallsPrintWhatWasTouchedButNeverWhatWasTyped() throws Exception {
         List<String> seen = new ArrayList<>();
-        Calls calls = new Calls(dirs, false, false, tantalum.local.sandbox.Sandbox.unavailable(
-                tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
+        Calls calls = new Calls(dirs, false, false, tantalum.local.shell.Shell.unavailable(
+                tantalum.local.shell.Unavailable.of(tantalum.local.shell.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
                 (session, tool, arguments) -> {
                     seen.add(session + " " + tool);
                     return LocalResult.ok("External web content follows.\nPAGE-CONTENT account 4242");
@@ -535,8 +562,8 @@ class CallsTest {
     /** 需求 9.3：网址和表达式里的控制字符换掉、截到 160 个字符，改不了用户的终端。 */
     @Test
     void longOrOddBrowserSubjectsAreMadeSafeForTheTerminal() throws Exception {
-        Calls calls = new Calls(dirs, false, false, tantalum.local.sandbox.Sandbox.unavailable(
-                tantalum.local.sandbox.Unavailable.of(tantalum.local.sandbox.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
+        Calls calls = new Calls(dirs, false, false, tantalum.local.shell.Shell.unavailable(
+                tantalum.local.shell.Unavailable.of(tantalum.local.shell.Unavailable.Code.SHELL_NOT_ALLOWED)), journal,
                 (session, tool, arguments) -> LocalResult.ok("ok"));
         calls.welcome("alice");
         calls.call(call("c-1", "alice", "browser_evaluate", "expression", "a\u001b[2Jb\n" + "x".repeat(400)), replies::add);

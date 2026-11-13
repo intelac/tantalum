@@ -2,8 +2,7 @@ package tantalum.connect;
 
 import java.util.HashMap;
 import java.util.Map;
-import tantalum.local.sandbox.Mxc;
-import tantalum.local.sandbox.Unavailable;
+import tantalum.local.shell.Unavailable;
 import tantalum.value.text.Bundle;
 import tantalum.value.text.Language;
 
@@ -20,11 +19,12 @@ final class Words {
         HELP,
         REFUSED_TOKEN_ON_COMMAND_LINE,
         REFUSED_UNKNOWN_OPTION,
+        REFUSED_REMOVED_OPTION,
+        REFUSED_MCP_CONFIG,
         REFUSED_NO_ALLOW,
         REFUSED_MISSING_VALUE,
         REFUSED_ALLOW_NOT_DIR,
         REFUSED_ALLOW_UNUSABLE,
-        REFUSED_READ_NOT_DIR,
         REFUSED_ENV_SECRET,
         REFUSED_ENV_NAME,
         REFUSED_ROOT,
@@ -49,13 +49,12 @@ final class Words {
         SUMMARY_WRITE_NO,
         SUMMARY_SHELL_YES,
         SUMMARY_SHELL_NO,
-        SUMMARY_SANDBOX,
-        SUMMARY_NETWORK_YES,
-        SUMMARY_NETWORK_NO,
-        SUMMARY_READ,
         SUMMARY_ENV,
+        SUMMARY_MCP,
+        SUMMARY_MCP_PROBLEM,
         SUMMARY_BROWSER_NO,
         SUMMARY_BROWSER_MISSING,
+        SUMMARY_BROWSER_NODE,
         SUMMARY_BROWSER_WINDOW,
         SUMMARY_BROWSER_HEADLESS,
         SUMMARY_BROWSER_PROFILE,
@@ -70,15 +69,8 @@ final class Words {
         LINK_PROTOCOL,
         LINK_UNREADABLE,
         LINK_CONNECTED,
-        SANDBOX_NOT_MACOS,
-        SANDBOX_MXC_INVALID,
-        SANDBOX_MXC_MISSING,
-        SANDBOX_TEMP_DIR,
-        SANDBOX_CHECK_FAILED,
-        SANDBOX_START_FAILED,
-        SANDBOX_RUN_FAILED,
-        SANDBOX_CHECK_INTERRUPTED,
-        SHELL_NOT_ALLOWED
+        SHELL_NOT_ALLOWED,
+        SHELL_NOT_FOUND
     }
 
     private final Bundle bundle;
@@ -99,21 +91,12 @@ final class Words {
         return bundle.text(key, params);
     }
 
-    /** 沙箱用不了的原因，按这个终端的语言说；{@code detail} 等参数是 MXC 或系统的输出，原样放进去。 */
-    String sandbox(Unavailable why) {
+    /** 命令用不了的原因，按这个终端的语言说。 */
+    String shell(Unavailable why) {
         Key key = switch (why.code()) {
-            case NOT_MACOS -> Key.SANDBOX_NOT_MACOS;
-            case MXC_INVALID -> Key.SANDBOX_MXC_INVALID;
-            case MXC_MISSING -> Key.SANDBOX_MXC_MISSING;
-            case TEMP_DIR -> Key.SANDBOX_TEMP_DIR;
-            case CHECK_FAILED -> Key.SANDBOX_CHECK_FAILED;
-            case START_FAILED -> Key.SANDBOX_START_FAILED;
-            case RUN_FAILED -> Key.SANDBOX_RUN_FAILED;
-            case CHECK_INTERRUPTED -> Key.SANDBOX_CHECK_INTERRUPTED;
             case SHELL_NOT_ALLOWED -> Key.SHELL_NOT_ALLOWED;
+            case NOT_FOUND -> Key.SHELL_NOT_FOUND;
         };
-        Map<String, Object> params = new HashMap<>(why.params());
-        params.put("program", Mxc.PROGRAM);
-        return say(key, params);
+        return say(key, why.params());
     }
 }

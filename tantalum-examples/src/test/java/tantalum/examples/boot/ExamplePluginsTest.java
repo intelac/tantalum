@@ -65,14 +65,15 @@ class ExamplePluginsTest {
     @Test
     void withoutTheSwitchNothingIsRegistered() throws Exception {
         try (TestServer server = server()) {
-            assertEquals(Map.of(), plugins(server, "alice"));
+            // commandApproval 是服务器自带的（connector-jar），不是示例
+            assertEquals(Map.of("commandApproval", "on"), plugins(server, "alice"));
         }
     }
 
     @Test
     void theExamplesAreListedAndPoliciesStartOff() throws Exception {
         try (TestServer server = server("--tantalum.examples.enabled=true")) {
-            assertEquals(Map.of("citationCheck", "on", "dailyQuota", "off", "pinnedContext", "on", "readOnly", "off",
+            assertEquals(Map.of("citationCheck", "on", "commandApproval", "on", "dailyQuota", "off", "pinnedContext", "on", "readOnly", "off",
                     "toolApproval", "off", "truncateOutput", "on"), plugins(server, "alice"),
                     "providerBackoff is left out without a status url");
             assertEquals(200, put(server, "alice", "/api/plugins/plugin/readOnly", "{\"enabled\":true}").statusCode());

@@ -11,8 +11,8 @@
   </parent>
 
   <!--
-    连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。运行时依赖 tantalum-local、JDK，
-    和驱动本机浏览器用的 Playwright for Java（local-browser；只有 tantalum.connect.browser 包用它）。
+    连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。一个 jar，macOS、Windows、Linux 通用（connector-jar），
+    运行时依赖 tantalum-local、JDK 25 和 MCP 的 Java SDK（本机 MCP 服务器，浏览器也是其中的 Playwright MCP）。
   -->
   <artifactId>tantalum-connect</artifactId>
 
@@ -22,14 +22,16 @@
       <artifactId>tantalum-local</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <!--
-      驱动用户电脑上已装的 Chrome 或 Edge。driver-bundle（约 200 MB）里是各平台的 Node：从源码或 jar 运行时第一次用浏览器
-      才解压本平台那一份；macOS 安装包里只带本平台的，这个 jar 不进包（见 src/package/build-mac.sh）。
-    -->
+    <!-- 本机 MCP 的宿主（connector-jar 需求 6）：和服务器的 mcp-client 同一个官方 SDK、同一个版本。 -->
     <dependency>
-      <groupId>com.microsoft.playwright</groupId>
-      <artifactId>playwright</artifactId>
-      <version>1.64.0</version>
+      <groupId>io.modelcontextprotocol.sdk</groupId>
+      <artifactId>mcp-core</artifactId>
+      <version>2.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.modelcontextprotocol.sdk</groupId>
+      <artifactId>mcp-json-jackson3</artifactId>
+      <version>2.1.0</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -68,11 +70,83 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>tantalum.connect.Main</mainClass>
+              <mainClass>tantalum.connect.Launcher</mainClass>
               <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
             </manifest>
           </archive>
         </configuration>
+      </plugin>
+      <!--
+        Launcher 单独按 Java 8 编译（connector-jar 需求 1.3）：旧的 Java 上也能跑到它，说明要 Java 25，而不是报 UnsupportedClassVersionError。
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>compile-launcher</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <release>8</release>
+              <compileSourceRoots>
+                <compileSourceRoot>${project.basedir}/src/launcher/java</compileSourceRoot>
+              </compileSourceRoots>
+              <compilerArgs>
+                <arg>-Xlint:-options</arg>
+              </compilerArgs>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        跨平台的单个 jar（connector-jar 需求 1.1）：tantalum-connect-<版本>-all.jar，带齐依赖，java -jar 就能跑。
+        服务器把它放在下载接口后面（发布时改名 tantalum-connect.jar 放在服务器 jar 旁边）。MCP SDK 经 ServiceLoader 找 JSON 映射，
+        所以要合并 META-INF/services。
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>all</shadedClassifierName>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>META-INF/MANIFEST.MF</exclude>
+                    <exclude>module-info.class</exclude>
+                    <exclude>META-INF/versions/*/module-info.class</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>tantalum.connect.Launcher</mainClass>
+                  <manifestEntries>
+                    <Implementation-Title>tantalum-connect</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                    <Multi-Release>true</Multi-Release>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <!-- LinkIT 起真的服务器和连接程序，有重连和到期的等待，放在 integration-test 阶段跑。 -->
       <plugin>
@@ -98,60 +172,4 @@
     </plugins>
   </build>
 
-  <profiles>
-    <!--
-      macOS（Apple 芯片）安装包（local-workspace 任务 22）：自带 jlink 裁剪的运行环境和 MXC 的 Tantalum Connect.app，打成 zip。
-        mvn -o -pl tantalum-connect -am package -Pmac -DskipTests
-      产物 target/tantalum-connect-<版本>-macos-arm64.zip。MXC 的发布包缓存在 ~/.cache/tantalum/mxc/1.0.1，构建时校验 SHA-256，
-      不进 Git 仓库；离线构建时可用环境变量 MXC_ZIP 指向已下载的 mxc-release-binaries.zip。细节见 src/package/build-mac.sh。
-    -->
-    <profile>
-      <id>mac</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-dependency-plugin</artifactId>
-            <version>3.8.1</version>
-            <executions>
-              <execution>
-                <id>package-input</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>copy-dependencies</goal>
-                </goals>
-                <configuration>
-                  <includeScope>runtime</includeScope>
-                  <overWriteSnapshots>true</overWriteSnapshots>
-                  <outputDirectory>${project.build.directory}/package/input</outputDirectory>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <version>3.6.3</version>
-            <executions>
-              <execution>
-                <id>build-mac</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-                <configuration>
-                  <executable>${project.basedir}/src/package/build-mac.sh</executable>
-                  <arguments>
-                    <argument>${project.build.directory}</argument>
-                    <argument>${project.version}</argument>
-                    <argument>${project.build.finalName}.jar</argument>
-                  </arguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
 </project>

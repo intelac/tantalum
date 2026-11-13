@@ -1,5 +1,6 @@
 package tantalum.local.tool;
 
+import tantalum.local.tool.ShellTool.Bash;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,13 +16,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.local.sandbox.Sandbox;
-import tantalum.local.sandbox.Tail;
+import tantalum.local.shell.Shell;
+import tantalum.local.shell.ShellKind;
+import tantalum.local.shell.Tail;
 import tantalum.value.json.Json;
 
 /**
  * {@code bash} 的参数和结果（L14）：超时默认 120 秒、最多 600 秒并声明给服务器；工作目录必须在允许的目录里，越界和不存在同一句话；
- * 退出码和超时变成错误结果。沙箱换成记录参数的假沙箱；真的 MXC 见 {@code MxcIT}。
+ * 退出码和超时变成错误结果。shell 换成记录参数的假的；真的见 {@code LocalShellIT}。
  */
 class BashTest {
 
@@ -31,12 +33,17 @@ class BashTest {
     private AllowedDirs dirs;
     private Path work;
     private final List<Object[]> runs = new ArrayList<>();
-    private Sandbox.Run next = new Sandbox.Run(0, new Tail.Text("", false, 0, 0), false);
+    private Shell.Run next = new Shell.Run(0, new Tail.Text("", false, 0, 0), false);
 
-    private final Sandbox fake = new Sandbox() {
+    private final Shell fake = new Shell() {
         @Override
         public Status check() {
             return Status.ok();
+        }
+
+        @Override
+        public ShellKind kind() {
+            return ShellKind.BASH;
         }
 
         @Override
@@ -105,16 +112,16 @@ class BashTest {
 
     @Test
     void exitCodesTimeoutsAndTruncationAreReported() throws Exception {
-        next = new Sandbox.Run(2, new Tail.Text("boom", false, 1, 1), false);
+        next = new Shell.Run(2, new Tail.Text("boom", false, 1, 1), false);
         assertEquals(new LocalResult("boom\n\nCommand exited with code 2.", true, List.of()), run(args("command", "x")));
 
-        next = new Sandbox.Run(-1, new Tail.Text("partial", true, 9000, 2000), true);
+        next = new Shell.Run(-1, new Tail.Text("partial", true, 9000, 2000), true);
         LocalResult timedOut = run(args("command", "x", "timeout", 3));
         assertTrue(timedOut.error());
         assertEquals("partial\n\n[Output truncated: showing the last 2000 of 9000 lines (limit 2000 lines or 50 KB).]\n\n"
                 + "Command timed out after 3 s. It and everything it started were stopped.", timedOut.text());
 
-        next = new Sandbox.Run(0, new Tail.Text("", false, 0, 0), false);
+        next = new Shell.Run(0, new Tail.Text("", false, 0, 0), false);
         assertEquals(LocalResult.ok("(no output)"), run(args("command", "true")));
         assertEquals("x", runs.getFirst()[0], "the command goes to the sandbox as given");
     }

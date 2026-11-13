@@ -190,7 +190,9 @@ class WireTest {
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
-        assertEquals(5, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals(6, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
+        assertEquals("mcpTools", PLAIN.readTree(Wire.encode(new McpTools(new McpServerState("s", McpServerState.State.READY, null,
+                List.of(new McpServerState.McpToolSpec("t", "d", null)))))).get("type").asString());
         assertEquals("browseResult", PLAIN.readTree(Wire.encode(new BrowseResult("b", null, List.of(), false, null))).get("type").asString());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
@@ -284,7 +286,8 @@ class WireTest {
         // 3：会话的工作目录和列子目录（workspaces，2026-11-10）；服务器仍接受 2
         // 4：技能和 wiki（skills-wiki，2026-11-12）；服务器仍接受 2、3
         // 5：浏览器搬到电脑上（local-browser，2026-11-12）；服务器仍接受 2–4
-        assertEquals(5, Wire.PROTOCOL);
+        // 6：跨平台的 jar，shell 的种类、jar 的哈希、本机 MCP（connector-jar，2026-11-14）；服务器仍接受 2–5
+        assertEquals(6, Wire.PROTOCOL);
         assertEquals(2, Wire.OLDEST);
         assertEquals(List.of(4400, 4401, 4403, 4409),
                 List.of(Wire.CLOSE_PROTOCOL, Wire.CLOSE_BAD_TOKEN, Wire.CLOSE_EXPIRED, Wire.CLOSE_REPLACED));

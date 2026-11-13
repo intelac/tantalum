@@ -191,7 +191,12 @@ public final class PluginGate {
 
     /** 这个用户现在开着的工具名，按名称排序（同 {@link ToolCatalog#specs()}）。 */
     public List<String> enabledTools(Principal user) {
-        return catalog.tools().stream().filter(tool -> toolEnabled(user, tool)).map(Tool::name).toList();
+        return catalog.tools(user).stream().filter(tool -> toolEnabled(user, tool)).map(Tool::name).toList();
+    }
+
+    /** 装没装这个插件（钩子、工具后处理、插件工作）。 */
+    public boolean hasPlugin(String plugin) {
+        return plugins.containsKey(plugin);
     }
 
     public boolean pluginEnabled(Principal user, String plugin) {
@@ -597,7 +602,7 @@ public final class PluginGate {
         boolean found = switch (kind) {
             case TOOL -> catalog.find(name).filter(tool -> groupOf(tool).isEmpty()).isPresent();
             case LOCAL, WEB -> groups.stream().anyMatch(group -> group.kind() == kind && (group.switches().contains(name)
-                    || group.choices().values().stream().anyMatch(tools -> tools.contains(name))));
+                    || group.choices().values().stream().anyMatch(tools -> tools.contains(name)) || group.acceptsSwitch(name)));
             case MCP -> mcpServers.contains(name);
             case PLUGIN -> plugins.containsKey(name);
         };

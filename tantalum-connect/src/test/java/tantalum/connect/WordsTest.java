@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import tantalum.local.sandbox.Unavailable;
+import tantalum.local.shell.Unavailable;
 import tantalum.value.text.BundleChecks;
 import tantalum.value.text.Language;
 
@@ -69,16 +69,16 @@ class WordsTest {
                 run(Map.of(), "--allow", dir, "--lang", "ja").strip());
     }
 
-    /** 沙箱用不了的原因按终端的语言说，MXC 的输出原样放进去；给模型的英文不受影响。 */
+    /** 命令用不了的原因按终端的语言说；给模型的英文不受影响。 */
     @Test
-    void sandboxReasonsInTheTerminalLanguage() {
-        Unavailable failed = Unavailable.of(Unavailable.Code.START_FAILED, "detail", "sandbox-exec: denied");
-        assertEquals("MXC がサンドボックスを起動できません：sandbox-exec: denied", new Words(Language.JA).sandbox(failed));
-        assertEquals("MXC 不能启动沙箱：sandbox-exec: denied", new Words(Language.ZH).sandbox(failed));
-        assertEquals("MXC could not start the sandbox: sandbox-exec: denied", failed.english());
+    void shellReasonsInTheTerminalLanguage() {
+        Unavailable missing = Unavailable.of(Unavailable.Code.NOT_FOUND, "shell", "bash");
+        assertEquals("このコンピューターに bash が見つかりません", new Words(Language.JA).shell(missing));
+        assertEquals("这台电脑上找不到 bash", new Words(Language.ZH).shell(missing));
+        assertEquals("cannot find bash on this computer", missing.english());
         for (Unavailable.Code code : Unavailable.Code.values()) {
-            String said = new Words(Language.JA).sandbox(Unavailable.of(code));
-            assertFalse(said.contains("{program}"), said);
+            String said = new Words(Language.JA).shell(Unavailable.of(code, "shell", "bash"));
+            assertFalse(said.contains("{"), said);
         }
     }
 }

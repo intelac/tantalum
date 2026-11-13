@@ -59,12 +59,15 @@ class ArchitectureTest {
 
     /**
      * 服务器上不读写用户的文件（local-workspace L6）：转发工具、连接和本机工作区只把调用交给电脑，自己不碰文件。
-     * {@code LocalTokens} 例外：它照 {@code PluginSwitches} 的做法在数据目录里打开 {@code users.db}，碰的是服务器自己的数据。
+     * {@code LocalTokens} 例外：它照 {@code PluginSwitches} 的做法在数据目录里打开 {@code users.db}，碰的是服务器自己的数据；
+     * {@code ConnectorJar} 例外：它读服务器旁边的连接程序 jar（提供下载、算版本）。
      */
     @ArchTest
     static final ArchRule localWorkspaceTouchesNoFiles = noClasses()
             .that().resideInAPackage("tantalum.shell.local..")
             .and().doNotHaveFullyQualifiedName("tantalum.shell.local.LocalTokens")
+            // 服务器提供下载的连接程序 jar（connector-jar）：读服务器自己旁边的文件，不碰用户的
+            .and().doNotHaveFullyQualifiedName("tantalum.shell.local.ConnectorJar")
             .should().dependOnClassesThat().haveFullyQualifiedName("java.nio.file.Files");
 
     /** 资源文件只经 {@code Bundle} 读：直接用 {@code ResourceBundle} 的默认读法会回退到系统语言（console-i18n I14）。 */

@@ -37,7 +37,7 @@
   {
     "name": "bash",
     "deferred": true,
-    "description": "Run a bash command on the user's computer, inside a sandbox, in the main allowed directory or workdir. The command can read the allowed directories and system tools, but not other files in the user's home. It can write only inside the allowed directories, and only if the user allowed file changes; $TMPDIR is always writable and is deleted afterwards. Network access may be off, and servers on the user's computer (localhost) are never reachable. Returns stdout and stderr together; output is truncated to the last 2000 lines or 50 KB. A non-zero exit code is an error. Prefer read_file, grep and edit_file for reading and changing files.",
+    "description": "Run a bash command on the user's computer, in the main allowed directory or workdir. The command runs as the user, without a sandbox, so it can reach any file the user's account can. The user is usually asked to approve each command before it runs and may deny it; if denied, do not retry it another way. Returns stdout and stderr together; output is truncated to the last 2000 lines or 50 KB. A non-zero exit code is an error. Prefer read_file, grep and edit_file for reading and changing files.",
     "schema": {
       "type": "object",
       "properties": {
@@ -526,6 +526,31 @@
         "type",
         "description",
         "content"
+      ]
+    }
+  },
+  {
+    "name": "powershell",
+    "deferred": true,
+    "description": "Run a PowerShell command on the user's Windows computer, in the main allowed directory or workdir. Use PowerShell syntax: cmdlets such as Get-ChildItem and Select-String, $env:NAME for environment variables, ';' to run commands one after another. The command runs as the user, without a sandbox, so it can reach any file the user's account can. The user is usually asked to approve each command before it runs and may deny it; if denied, do not retry it another way. Returns stdout and stderr together; output is truncated to the last 2000 lines or 50 KB. A non-zero exit code is an error. Prefer read_file, grep and edit_file for reading and changing files.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The PowerShell command to run."
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Seconds before the command and everything it started are stopped. Default 120, at most 600."
+        },
+        "workdir": {
+          "type": "string",
+          "description": "Working directory, relative to the main directory or absolute. Default: the main directory."
+        }
+      },
+      "required": [
+        "command"
       ]
     }
   },

@@ -149,6 +149,18 @@ public final class E2eModel implements ModelClient {
                 // waiting-state：问用户两个选项，允许补一句；回答原样复述
                 return results == 0 ? reply(List.of(), askUser()) : answer(chunks, "你选了：" + lastResult(prompt));
             }
+            if (text.contains("runcmd:")) {
+                // connector-jar 需求 5：“runcmd:工具 命令”，工具是 bash 或 powershell，先过“命令先问”；结果原样说出
+                String rest = text.substring(text.indexOf("runcmd:") + "runcmd:".length()).strip();
+                int space = rest.indexOf(' ');
+                return results == 0 ? reply(List.of(), call(rest.substring(0, space), Map.of("command", rest.substring(space + 1))))
+                        : answer(chunks, "命令结果：" + lastResult(prompt));
+            }
+            if (text.contains("mcpcall:")) {
+                // connector-jar 需求 6：调电脑上本机 MCP 服务器的一个工具（mcp__服务器__工具），结果原样说出
+                return results == 0 ? reply(List.of(), call(word(text, "mcpcall:"), Map.of("number", "42")))
+                        : answer(chunks, "MCP 结果：" + lastResult(prompt));
+            }
             if (text.contains("approve:")) {
                 String name = word(text, "approve:");
                 return results == 0 ? reply(List.of(), call("write_file", Map.of("path", "e2e/approve-" + name + ".txt", "content", name + "\n")))

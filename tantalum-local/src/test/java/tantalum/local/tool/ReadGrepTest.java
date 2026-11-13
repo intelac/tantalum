@@ -23,7 +23,7 @@ import tantalum.value.json.Json;
 class ReadGrepTest {
 
     /** 只在 Windows 上跳过的原因。 */
-    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：Windows 上显示的路径用 \\ 分隔，怎么显示归 Windows 连接程序 spec";
+    static final String MAC_CONNECTOR = "Windows 上显示的路径用 \\ 分隔，这里的断言按 / 写；连接程序本身在 Windows 上能用（connector-jar）";
 
     @TempDir
     Path temp;

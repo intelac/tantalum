@@ -15,8 +15,8 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.local.sandbox.Sandbox;
-import tantalum.local.sandbox.Unavailable;
+import tantalum.local.shell.Shell;
+import tantalum.local.shell.Unavailable;
 import tantalum.value.json.Json;
 
 /**
@@ -41,7 +41,7 @@ class BrowserToolsTest {
 
     private LocalContext context(Browser browser) throws Exception {
         return new LocalContext("s1", new AllowedDirs(List.of(dir)), new Observations(),
-                Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), null, browser);
+                Shell.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), null, browser);
     }
 
     private static Json args(String... pairs) {

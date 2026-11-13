@@ -77,7 +77,7 @@ class LocalApiTest {
         JsonNode body = JSON.readTree(response.body());
         String token = body.get("token").asString();
         assertTrue(token.startsWith(LocalTokens.PREFIX), token);
-        assertEquals("TANTALUM_TOKEN=" + token + " tantalum-connect --server http://127.0.0.1:" + server.port() + " --allow .",
+        assertEquals("TANTALUM_TOKEN=" + token + " java -jar tantalum-connect.jar --server http://127.0.0.1:" + server.port() + " --allow .",
                 body.get("command").asString());
         Instant expiresAt = Instant.parse(body.get("expiresAt").asString());
         assertTrue(!expiresAt.isBefore(before.plus(Duration.ofHours(1))) && expiresAt.isBefore(Instant.now().plus(Duration.ofHours(1)).plusSeconds(1)));
@@ -100,7 +100,7 @@ class LocalApiTest {
     void statusShowsOnlyYourOwnComputerAndRevokingEndsIt() throws Exception {
         JsonNode empty = status("alice");
         assertTrue(empty.get("link").isNull(), empty.toString());
-        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true}",
+        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true,\"local-mcp\":true}",
                 empty.get("switches").toString());
         // qagent-align 需求 2：浏览器下面的工具可以逐个勾，默认全勾；改和恢复默认用现成的开关接口
         assertEquals(11, empty.get("tools").get("browser").size(), empty.get("tools").toString());

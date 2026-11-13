@@ -47,6 +47,7 @@
     "local/not-connected",
     "local/protocol-old",
     "local/no-answer",
+    "local/connector-missing",
     "plugin/not-found",
     "plugin/locked",
     "param/invalid",
@@ -76,14 +77,7 @@
     "user/last-admin"
   ],
   "sandbox": [
-    "sandbox/not-macos",
-    "sandbox/mxc-invalid",
-    "sandbox/mxc-missing",
-    "sandbox/temp-dir",
-    "sandbox/check-failed",
-    "sandbox/start-failed",
-    "sandbox/run-failed",
-    "sandbox/check-interrupted",
-    "shell/not-allowed"
+    "shell/not-allowed",
+    "shell/not-found"
   ]
 }

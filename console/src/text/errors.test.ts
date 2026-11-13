@@ -51,10 +51,12 @@ describe("errorText", () => {
 });
 
 describe("sandboxText", () => {
-  it("every sandbox code is in the dictionary; detail is shown as written", () => {
+  it("every shell code is in the dictionary; the shell's name is shown as written", () => {
     expect(Object.keys(currentText().plugins.local.sandbox).sort()).toEqual([...codes.sandbox].sort());
-    for (const code of codes.sandbox) expect(sandboxText(currentText(), code, { path: "/opt/mxc", detail: "denied" }), code).toBeTruthy();
-    expect(sandboxText(currentText(), "sandbox/start-failed", { detail: "sandbox-exec: denied" })).toBe("MXC 不能启动沙箱：sandbox-exec: denied");
-    expect(sandboxText(currentText(), "sandbox/new-thing", {})).toBeUndefined();
+    for (const code of codes.sandbox) expect(sandboxText(currentText(), code, { shell: "bash" }), code).toBeTruthy();
+    expect(sandboxText(currentText(), "shell/not-found", { shell: "PowerShell (pwsh.exe or powershell.exe)" })).toBe(
+      "这台电脑上找不到 PowerShell (pwsh.exe or powershell.exe)",
+    );
+    expect(sandboxText(currentText(), "shell/new-thing", {})).toBeUndefined();
   });
 });

@@ -35,4 +35,9 @@ public interface ToolGroup {
 
     /** 会话文件 {@code ContextAssembled.toolSources} 里记的来源，如 {@code local}、{@code web}。 */
     String source();
+
+    /** 除了 {@link #switches()} 和逐个勾的工具，还认的开关名（本机工作区每个本机 MCP 服务器一个，名字随电脑变）。 */
+    default boolean acceptsSwitch(String name) {
+        return false;
+    }
 }

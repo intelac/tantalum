@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
 import tantalum.shell.boot.Engine;
+import tantalum.shell.local.CommandApprovalHook;
+import tantalum.shell.local.ConnectorJar;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalTokens;
 import tantalum.value.id.Principal;
@@ -35,10 +37,30 @@ public class LocalController {
 
     private final Engine engine;
     private final WebJson json;
+    private final ConnectorJar connector;
 
-    public LocalController(Engine engine, WebJson json) {
+    public LocalController(Engine engine, WebJson json,
+                           @org.springframework.beans.factory.annotation.Value("${tantalum.local.connector-jar:}") String connectorJar) {
         this.engine = engine;
         this.json = json;
+        this.connector = ConnectorJar.find(connectorJar, ConnectorJar.serverDir());
+    }
+
+    /**
+     * 下载连接程序（connector-jar 需求 2.1）：服务器旁边那个 {@code tantalum-connect.jar}。要登录（{@code SecurityConfig} 统一查）。
+     * 服务器上没放时 404，插件页第 1 步写原因。
+     */
+    @GetMapping("/api/local/connector.jar")
+    ResponseEntity<?> download() {
+        Optional<ConnectorJar.Info> info = connector.info();
+        if (info.isEmpty()) {
+            return json.error(ErrorCode.LOCAL_CONNECTOR_MISSING, "the connector jar is not on this server");
+        }
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=" + ConnectorJar.NAME)
+                .header("Content-Type", "application/java-archive")
+                .contentLength(info.get().size())
+                .body(new org.springframework.core.io.FileSystemResource(info.get().file()));
     }
 
     /**
@@ -55,7 +77,22 @@ public class LocalController {
             var list = tools.putArray(child);
             states.forEach((name, enabled) -> list.addObject().put("name", name).put("enabled", enabled));
         });
-        response.set("link", engine.localLinks().status(user).map(status -> json.tree(link(status))).orElse(NullNode.getInstance()));
+        response.set("link", engine.localLinks().status(user)
+                .map(status -> json.tree(link(status, connector, server -> engine.localWorkspace().mcpSwitch(user, server))))
+                .orElse(NullNode.getInstance()));
+        // 命令先问（connector-jar 需求 5.5）：内置的审批插件开没开；配置里整个去掉时不写
+        if (engine.plugins().hasPlugin(CommandApprovalHook.NAME)) {
+            response.put("commandApproval", engine.plugins().pluginEnabled(user, CommandApprovalHook.NAME));
+        }
+        // 能不能下载、哪个版本（connector-jar 需求 2）；不给服务器上的路径
+        Map<String, Object> download = new LinkedHashMap<>();
+        download.put("available", connector.info().isPresent());
+        connector.info().ifPresent(info -> {
+            download.put("version", info.version());
+            download.put("sha256", info.sha256());
+            download.put("size", info.size());
+        });
+        response.set("connector", json.tree(download));
         return json.json(200, response);
     }
 
@@ -73,7 +110,9 @@ public class LocalController {
         LocalTokens.Issued issued = engine.localLinks().tokens().issue(WebJson.currentUser(), VALIDITIES.get(validity));
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("token", issued.token());
-        response.put("command", "TANTALUM_TOKEN=" + issued.token() + " tantalum-connect --server " + server(request) + " --allow .");
+        // bash 的写法；插件页按看页面的电脑换成 PowerShell 的（connector-jar 需求 3.2）
+        response.put("command", "TANTALUM_TOKEN=" + issued.token() + " java -jar tantalum-connect.jar --server " + server(request) + " --allow .");
+        response.put("server", server(request));
         response.put("expiresAt", issued.expiresAt());
         return json.secret(200, response);
     }
@@ -93,7 +132,8 @@ public class LocalController {
         return scheme + "://" + request.getServerName() + (standard ? "" : ":" + port) + request.getContextPath();
     }
 
-    private static Map<String, Object> link(LocalLinks.Status status) {
+    private static Map<String, Object> link(LocalLinks.Status status, ConnectorJar connector,
+                                            java.util.function.Predicate<String> mcpEnabled) {
         Hello hello = status.hello();
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("device", hello.device());
@@ -109,6 +149,23 @@ public class LocalController {
         // 协议 2 的连接程序不认会话目录：控制台据此提示“连接程序要更新”
         view.put("protocol", hello.protocol());
         view.put("current", hello.protocol() >= Wire.PROTOCOL);
+        // 电脑上的是不是这里提供的那个 jar：不知道（服务器上没放）时不写
+        connector.matches(hello).ifPresent(matches -> view.put("connectorMatches", matches));
+        view.put("connector", hello.connector());
+        // 本机 MCP 服务器（协议 6 起）：名字、状态、原因、工具名和说明；插件页列出来，每个服务器一个开关
+        if (!hello.mcp().isEmpty()) {
+            view.put("mcp", hello.mcp().stream().map(server -> {
+                Map<String, Object> one = new LinkedHashMap<>();
+                one.put("name", server.name());
+                one.put("state", server.state().name().toLowerCase(java.util.Locale.ROOT));
+                one.put("enabled", mcpEnabled.test(server.name()));
+                if (server.reason() != null) {
+                    one.put("reason", server.reason());
+                }
+                one.put("tools", server.tools().stream().map(tool -> Map.of("name", tool.name(), "description", tool.description())).toList());
+                return one;
+            }).toList());
+        }
         view.put("connectedAt", status.connectedAt());
         view.put("expiresAt", status.expiresAt());
         return view;

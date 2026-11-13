@@ -1,5 +1,6 @@
 package tantalum.local.tool;
 
+import tantalum.local.tool.ShellTool.Bash;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;
@@ -16,8 +17,9 @@ import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.local.sandbox.Sandbox;
-import tantalum.local.sandbox.Tail;
+import tantalum.local.shell.Shell;
+import tantalum.local.shell.ShellKind;
+import tantalum.local.shell.Tail;
 import tantalum.value.json.Json;
 
 /**
@@ -34,12 +36,17 @@ class ResultTextContractTest {
 
     private Path work;
     private AllowedDirs dirs;
-    private Sandbox.Run next;
+    private Shell.Run next;
 
-    private final Sandbox fake = new Sandbox() {
+    private final Shell fake = new Shell() {
         @Override
         public Status check() {
             return Status.ok();
+        }
+
+        @Override
+        public ShellKind kind() {
+            return ShellKind.BASH;
         }
 
         @Override
@@ -68,7 +75,7 @@ class ResultTextContractTest {
     }
 
     private String bash(int exitCode, Tail.Text output, boolean timedOut) throws Exception {
-        next = new Sandbox.Run(exitCode, output, timedOut);
+        next = new Shell.Run(exitCode, output, timedOut);
         return new Bash().run(new LocalContext("s", dirs, new Observations(), fake), args("command", "x", "timeout", 5)).text();
     }
 

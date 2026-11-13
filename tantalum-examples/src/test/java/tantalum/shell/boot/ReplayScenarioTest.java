@@ -129,6 +129,8 @@ class ReplayScenarioTest {
 
         List<String> extra = new ArrayList<>();
         scenario.get("serverArgs").forEach(arg -> extra.add(arg.asString()));
+        // 录制时（scenarios/run.py）命令不先问；回放也一样，否则 bash 停在批准卡片上
+        extra.add("--tantalum.local.command-approval.enabled=false");
         Path data = temp.resolve("data");
         try (TestServer server = new TestServer(data, temp.resolve("ws"), model, extra.toArray(String[]::new));
              TestComputer ignored = TestComputer.connectForReplay(server.context.getBean(Engine.class).localLinks(), new Principal("alice"),

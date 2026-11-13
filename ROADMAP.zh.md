@@ -56,8 +56,8 @@ DeepSeek 在 *Exploring Super-agent Design* 和 [dsh-superagent-prototype](https
 
 - **安全加固**：0.1 后的整体 review 修完了五个阶段；以后每个版本前再做一次整体 review 和 [open-code-review](https://github.com/alibaba/open-code-review) 扫描。
 - **Windows**：服务器在 Windows 上已可运行（计划任务后台运行），靠 CI 验证；连接程序的 Windows 沙箱还没有。
-- **本机工作区的沙箱**：macOS 用微软 MXC（Seatbelt）；Linux 和 Windows 的命令沙箱待做。
-- **联网**：有 `web_fetch` 和每用户一个的无头浏览器；`web_search` 接口和读 PDF 以后另开。
+- **本机工作区的命令**：2026-11-14 起没有操作系统沙箱（以前 macOS 才有的 MXC 去掉了），三个系统一样，每条命令先问用户（`connector-jar`）。跨平台的沙箱以后再看。
+- **联网**：有服务器上的 `web_fetch` 和用户电脑上的浏览器（本机的 Playwright MCP）；`web_search` 接口和读 PDF 以后另开。
 - **journal 格式升版**：把 `RunState`、`SessionState` 真正按阶段分组（现在只是视图），升版时一起做。
 
 ## 不打算做的

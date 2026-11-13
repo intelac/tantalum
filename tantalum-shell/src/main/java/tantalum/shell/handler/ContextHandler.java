@@ -142,8 +142,8 @@ public final class ContextHandler implements Handler {
         AssembleContext assemble = (AssembleContext) command;
         ModelChoice model = choose(assemble, principal);
         // 全部工具加上这个用户现在开着的名单：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
-                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(), model, gate.pluginParams(principal));
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(principal), compaction(principal, model), sections,
+                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal));
     }
 
     /**
@@ -168,9 +168,9 @@ public final class ContextHandler implements Handler {
     }
 
     /** 每个工具从哪来，由 {@link PluginGate#source} 决定：{@code builtin}、{@code local}、{@code web} 或 {@code mcp:<服务器>}。 */
-    private Map<String, String> sources() {
+    private Map<String, String> sources(Principal principal) {
         Map<String, String> sources = new LinkedHashMap<>();
-        for (Tool tool : catalog.tools()) {
+        for (Tool tool : catalog.tools(principal)) {
             sources.put(tool.name(), gate.source(tool));
         }
         return sources;

@@ -10,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: true, wiki: true, browser: true };
+const ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: true, wiki: true, browser: true, "local-mcp": true };
 
 const LINK: LocalLink = {
   device: { name: "Yi's MacBook", os: "macos", osVersion: "26.2", arch: "arm64" },
@@ -142,7 +142,7 @@ describe("Skills and Knowledge base on the plugins page", () => {
 
   it.each([
     ["offline", "电脑没连上，连上后才能读这个目录"],
-    ["old", "连接程序需要更新"],
+    ["old", "连接程序需要更新：在电脑上停掉它"],
     ["late", "电脑没有按时回应"],
     ["outside", "这个目录不在电脑允许的范围里，启动连接程序时用 --allow 加上它"],
     ["unreadable", "这个目录读不出来"],

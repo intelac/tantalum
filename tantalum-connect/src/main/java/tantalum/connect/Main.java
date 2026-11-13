@@ -14,19 +14,26 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import tantalum.connect.Words.Key;
-import tantalum.connect.browser.Driver;
 import tantalum.connect.browser.Installed;
-import tantalum.connect.browser.LocalBrowser;
+import tantalum.connect.browser.BrowserSettings;
+import tantalum.connect.browser.NodeFinder;
+import tantalum.connect.browser.PlaywrightBrowser;
 import tantalum.connect.browser.Profile;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.local.sandbox.Mxc;
-import tantalum.local.sandbox.MxcPolicy;
-import tantalum.local.sandbox.Sandbox;
-import tantalum.local.sandbox.Unavailable;
+import tantalum.connect.mcp.McpConfig;
+import tantalum.connect.mcp.McpHost;
+import tantalum.local.shell.CommandEnv;
+import tantalum.local.shell.LocalShell;
+import tantalum.local.shell.Shell;
+import tantalum.local.shell.ShellFinder;
+import tantalum.local.shell.ShellKind;
+import tantalum.local.shell.Unavailable;
 import tantalum.local.tool.GitCheck;
 import tantalum.local.wire.Hello;
+import tantalum.local.wire.McpServerState;
 import tantalum.local.wire.Wire;
 import tantalum.value.text.Language;
 
@@ -43,8 +50,10 @@ public final class Main {
     static final String PATH = "/api/local/connect";
     /** 启动被拒（参数不对、目录不存在、没有令牌）。 */
     static final int REFUSED = 1;
-    /** 安装包的启动器经这个系统属性告诉程序包里的 {@code mxc-exec-mac} 在哪。 */
-    static final String BUNDLED_MXC = "tantalum.mxc";
+    /** 去掉了的参数：命令不再在沙箱里跑，这些限制不存在了（connector-jar）。给了就说清楚，不悄悄忽略。 */
+    static final List<String> REMOVED = List.of("--mxc", "--no-network", "--allow-read");
+    /** Playwright MCP 写临时文件的目录，在连接程序自己的目录下；浏览器每次调用后清空。 */
+    static final String PLAYWRIGHT_OUTPUT = "playwright-output";
     private static final Pattern ENV_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     /** 参数里夹着一整个令牌（如 {@code --allow=tc_…}）。令牌的随机部分是 43 个 base64url 字符。 */
     private static final Pattern EMBEDDED_TOKEN = Pattern.compile(TOKEN_PREFIX + "[A-Za-z0-9_-]{40,}");
@@ -88,21 +97,33 @@ public final class Main {
         }
         summary(setup, out, words);
         Journal journal = new Journal(out, Clock.systemDefaultZone());
-        // 浏览器这时不启动：第一次有 browser_* 调用才起驱动和浏览器
-        LocalBrowser browser = setup.browser() == null ? null
-                : new LocalBrowser(setup.browser(), new Driver(Profile.home()), Clock.systemUTC());
-        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.sandbox(), journal, browser);
-        // Ctrl+C：打断在跑的调用，关浏览器，再结束这个程序启动的全部进程（MXC 和命令、git、浏览器的驱动），最后删掉沙箱的临时目录
+        // 本机 MCP 服务器在后台启动，好了以后经连接补报工具（connector-jar 需求 6）；连接还没建起来时先记下，连上时 hello 里带着。
+        // 浏览器是其中内置的 playwright 一项（需求 7），它的工具不当作 mcp__ 工具报给服务器，由 browser_* 用
+        AtomicReference<Link> link = new AtomicReference<>();
+        boolean browserOn = setup.browser() != null;
+        McpHost mcp = new McpHost(setup.mcp(), setup.commandEnv(), setup.dirs().main(), state -> {
+            Link current = link.get();
+            if (current != null && !(browserOn && state.name().equals(PlaywrightBrowser.SERVER))) {
+                current.report(state);
+            }
+        });
+        PlaywrightBrowser browser = !browserOn ? null
+                : new PlaywrightBrowser((tool, arguments) -> mcp.call(McpHost.CALL_PREFIX + PlaywrightBrowser.SERVER + ":" + tool, arguments),
+                Profile.home().resolve(PLAYWRIGHT_OUTPUT));
+        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.shell(), journal, browser);
+        calls.mcp(mcp, browserOn ? PlaywrightBrowser.SERVER : null);
+        // Ctrl+C：打断在跑的调用，关本机 MCP 服务器（连同浏览器），再结束这个程序启动的全部进程（命令、git）
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             calls.stopAll();
-            if (browser != null) {
-                browser.close();
-            }
+            mcp.close();
             ProcessHandle.current().descendants().forEach(ProcessHandle::destroyForcibly);
-            setup.sandbox().close();
+            setup.shell().close();
         }, "stop-calls"));
         try {
-            return new Link(setup, calls, out, words).run();
+            Link running = new Link(setup, calls, out, words, () -> visible(mcp.states(), browserOn));
+            link.set(running);
+            mcp.start();
+            return running.run();
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
             return 0;
@@ -137,13 +158,18 @@ public final class Main {
     }
 
     /** 解析后的启动参数。 */
-    record Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
-                   boolean network, String name, Path mxc, boolean help, boolean insecure, BrowserOptions browser) {
+    record Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env,
+                   String name, boolean help, boolean insecure, BrowserOptions browser, Path mcpConfig) {
 
         /** 没有浏览器参数时。 */
-        Options(String server, List<Path> allow, boolean write, boolean shell, List<Path> read, List<String> env,
-                boolean network, String name, Path mxc, boolean help, boolean insecure) {
-            this(server, allow, write, shell, read, env, network, name, mxc, help, insecure, BrowserOptions.NONE);
+        Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env, String name, boolean help,
+                boolean insecure) {
+            this(server, allow, write, shell, env, name, help, insecure, BrowserOptions.NONE, null);
+        }
+
+        Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env, String name, boolean help,
+                boolean insecure, BrowserOptions browser) {
+            this(server, allow, write, shell, env, name, help, insecure, browser, null);
         }
 
         static Options parse(String[] args, Words words) throws Refused {
@@ -154,14 +180,12 @@ public final class Main {
             }
             String server = DEFAULT_SERVER;
             List<Path> allow = new ArrayList<>();
-            List<Path> read = new ArrayList<>();
             List<String> env = new ArrayList<>();
             boolean write = false;
             boolean shell = false;
-            boolean network = true;
             boolean insecure = false;
             String name = null;
-            Path mxc = null;
+            Path mcpConfig = null;
             boolean browser = false;
             boolean headless = false;
             Installed.Choice choice = null;
@@ -171,19 +195,17 @@ public final class Main {
                 String arg = args[i];
                 switch (arg) {
                     case "--help", "-h" -> {
-                        return new Options(server, List.of(), false, false, List.of(), List.of(), true, null, null, true, false);
+                        return new Options(server, List.of(), false, false, List.of(), null, true, false);
                     }
                     case "--server" -> server = value(args, ++i, arg, words);
                     case "--allow" -> allow.add(Path.of(value(args, ++i, arg, words)));
-                    case "--allow-read" -> read.add(Path.of(value(args, ++i, arg, words)));
                     case "--env" -> env.add(value(args, ++i, arg, words));
                     case "--name" -> name = value(args, ++i, arg, words);
-                    case "--mxc" -> mxc = Path.of(value(args, ++i, arg, words));
+                    case "--mcp-config" -> mcpConfig = Path.of(value(args, ++i, arg, words));
                     // 已经在 language() 里查过
                     case "--lang" -> i++;
                     case "--allow-write" -> write = true;
                     case "--allow-shell" -> shell = true;
-                    case "--no-network" -> network = false;
                     case "--insecure" -> insecure = true;
                     case "--allow-browser" -> browser = true;
                     case "--browser-headless" -> headless = true;
@@ -194,7 +216,8 @@ public final class Main {
                     }
                     case "--browser-path" -> browserPath = Path.of(value(args, ++i, arg, words));
                     case "--browser-profile" -> profile = Path.of(value(args, ++i, arg, words));
-                    default -> throw new Refused(words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
+                    default -> throw new Refused(REMOVED.contains(arg) ? words.say(Key.REFUSED_REMOVED_OPTION, Map.of("option", arg))
+                            : words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
                 }
             }
             if (allow.isEmpty()) {
@@ -208,8 +231,9 @@ public final class Main {
                     throw new Refused(words.say(Key.REFUSED_BROWSER_NEEDS_ALLOW, Map.of("option", stray)));
                 }
             }
-            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(read), List.copyOf(env), network, name, mxc, false,
-                    insecure, new BrowserOptions(browser, choice == null ? Installed.Choice.ANY : choice, browserPath, headless, profile));
+            return new Options(server, List.copyOf(allow), write, shell, List.copyOf(env), name, false,
+                    insecure, new BrowserOptions(browser, choice == null ? Installed.Choice.ANY : choice, browserPath, headless, profile),
+                    mcpConfig);
         }
 
         /** 以 {@code tc_} 开头、在哪里带着一整个令牌、或者是 {@code --token}。报错时不回显这个参数。 */
@@ -235,15 +259,20 @@ public final class Main {
     }
 
     /**
-     * 检查过的启动设置：WebSocket 地址、允许的目录、要发给服务器的 {@code hello}、令牌、跑命令的沙箱（没有 {@code --allow-shell}
-     * 或不可用时是不能用的沙箱）。{@link #toString()} 不带令牌，打印或写进异常都不会泄露。
+     * 检查过的启动设置：WebSocket 地址、允许的目录、要发给服务器的 {@code hello}、令牌、跑命令的 shell（没有 {@code --allow-shell}
+     * 或找不到时是不能用的那个）。{@link #toString()} 不带令牌，打印或写进异常都不会泄露。
      */
-    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox,
-                 LocalBrowser.Settings browser) {
+    record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell,
+                 BrowserSettings browser, McpConfig mcp, Path mcpFile, Map<String, String> commandEnv) {
+
+        /** 没有本机 MCP 时。 */
+        Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell, BrowserSettings browser) {
+            this(socket, options, dirs, hello, token, shell, browser, McpConfig.empty(), null, Map.of());
+        }
 
         /** 没有浏览器时。 */
-        Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Sandbox sandbox) {
-            this(socket, options, dirs, hello, token, sandbox, null);
+        Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell) {
+            this(socket, options, dirs, hello, token, shell, null);
         }
 
         @Override
@@ -252,7 +281,7 @@ public final class Main {
         }
     }
 
-    /** 检查目录、取令牌、检查沙箱、算出 {@code hello}。 */
+    /** 检查目录、取令牌、找 shell、算出 {@code hello}。 */
     static Setup setup(Options options, Map<String, String> env, Prompt prompt, Words words) throws Refused {
         URI socket = socket(options.server(), words);
         if (!options.insecure() && socket.getScheme().equals("ws") && !loopback(socket.getHost())) {
@@ -271,39 +300,45 @@ public final class Main {
         } catch (IOException | IllegalArgumentException failure) {
             throw new Refused(words.say(Key.REFUSED_ALLOW_UNUSABLE, Map.of("detail", String.valueOf(failure.getMessage()))));
         }
-        for (Path dir : options.read()) {
-            // --allow-read 和 --allow 一样：要是目录、不能是家目录或根目录
-            if (!Files.isDirectory(dir)) {
-                throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
-            }
-            try {
-                refuseTooBroad(dir, env, words);
-            } catch (IOException unreadable) {
-                throw new Refused(words.say(Key.REFUSED_READ_NOT_DIR, Map.of("dir", dir)));
-            }
-        }
         for (String name : options.env()) {
-            if (MxcPolicy.secret(name)) {
+            if (name.equalsIgnoreCase(CommandEnv.TOKEN)) {
                 throw new Refused(words.say(Key.REFUSED_ENV_SECRET, Map.of("name", name)));
             }
             if (!ENV_NAME.matcher(name).matches()) {
                 throw new Refused(words.say(Key.REFUSED_ENV_NAME, Map.of("name", name)));
             }
         }
-        LocalBrowser.Settings browser = browser(options.browser(), words);
+        Path npx = options.browser().allowed() ? NodeFinder.npx().orElse(null) : null;
+        BrowserSettings found = browser(options.browser(), npx, words);
         String token = token(env, prompt, words);
-        Sandbox sandbox = sandbox(options, dirs, env);
+        Map<String, String> commandEnv = CommandEnv.of(env, options.env());
+        Shell shell = shell(options, commandEnv);
         Hello.Browser state = !options.browser().allowed() ? Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED)
-                : browser == null ? Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)
-                : Hello.Browser.available(browser.name(), browser.headless());
-        return new Setup(socket, options, dirs, hello(options, dirs, sandbox.check(), state), token, sandbox, browser);
+                : found == null ? Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)
+                : npx == null ? Hello.Browser.unavailable(Hello.Browser.NODE_MISSING)
+                : Hello.Browser.available(found.name(), found.headless());
+        BrowserSettings browser = state.available() ? found : null;
+        Path mcpFile = options.mcpConfig() != null ? options.mcpConfig()
+                : McpConfig.defaultPath(env, System.getProperty("os.name", ""), Path.of(System.getProperty("user.home")));
+        if (options.mcpConfig() != null && !Files.isRegularFile(mcpFile)) {
+            throw new Refused(words.say(Key.REFUSED_MCP_CONFIG, Map.of("file", mcpFile)));
+        }
+        McpConfig mcp = McpConfig.read(mcpFile);
+        if (browser != null) {
+            // 内置的 playwright 一项；mcp.json 里有同名的就用文件里的
+            mcp = mcp.withDefault(browser.entry(Profile.home().resolve(PLAYWRIGHT_OUTPUT)));
+        }
+        Hello hello = hello(options, dirs, shell, state, jarSha256());
+        // hello 里先带“启动中”，好了再补报（McpHost 的状态和这里一致）
+        hello = hello.withMcp(visible(new McpHost(mcp, Map.of(), dirs.main(), ignored -> { }).states(), browser != null));
+        return new Setup(socket, options, dirs, hello, token, shell, browser, mcp, mcpFile, commandEnv);
     }
 
     /**
      * 有 {@code --allow-browser} 时找浏览器、建资料目录；只看文件，不启动浏览器。没允许、或者找不到 Chrome 和 Edge 时为 null：
      * 连接程序照常启动，只是没有浏览器，原因写进启动说明和插件页。{@code --browser-path} 指的文件不能用、资料目录建不了是写错了，拒绝启动。
      */
-    private static LocalBrowser.Settings browser(BrowserOptions options, Words words) throws Refused {
+    private static BrowserSettings browser(BrowserOptions options, Path npx, Words words) throws Refused {
         if (!options.allowed()) {
             return null;
         }
@@ -325,7 +360,12 @@ public final class Main {
         } catch (IOException | RuntimeException failure) {
             throw new Refused(words.say(Key.REFUSED_BROWSER_PROFILE, Map.of("dir", profile, "detail", String.valueOf(failure.getMessage()))));
         }
-        return new LocalBrowser.Settings(found.path(), found.name(), options.headless(), profile);
+        return new BrowserSettings(found.path(), found.name(), options.headless(), profile, npx);
+    }
+
+    /** 报给服务器的本机 MCP 服务器：浏览器开着时，内置的 playwright 一项不算（它的工具是 browser_*）。 */
+    static List<McpServerState> visible(List<McpServerState> states, boolean browserOn) {
+        return browserOn ? states.stream().filter(state -> !state.name().equals(PlaywrightBrowser.SERVER)).toList() : states;
     }
 
     /**
@@ -344,18 +384,38 @@ public final class Main {
     }
 
     /**
-     * 有 {@code --allow-shell} 时找 MXC 并检查。不可用时命令行不出现，原因写进启动说明和插件页，文件工具照常能用；
-     * 不会退回到不隔离直接跑。
+     * 有 {@code --allow-shell} 时找这台电脑的 shell（macOS、Linux 上 bash，Windows 上 PowerShell）。找不到时命令行不出现，原因写进
+     * 启动说明和插件页，文件工具照常能用。命令的环境变量是这个程序自己的，去掉像密钥的（{@link CommandEnv}）。
      */
-    private static Sandbox sandbox(Options options, AllowedDirs dirs, Map<String, String> env) {
+    private static Shell shell(Options options, Map<String, String> commandEnv) {
         if (!options.shell()) {
-            return Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED));
+            return Shell.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED));
         }
-        String bundled = System.getProperty(BUNDLED_MXC);
-        MxcPolicy policy = MxcPolicy.of(dirs, options.write(), options.read(), options.network(), options.env(), env);
-        Sandbox sandbox = Mxc.open(options.mxc(), bundled == null || bundled.isBlank() ? null : Path.of(bundled), policy);
-        sandbox.check();
-        return sandbox;
+        return LocalShell.open(ShellFinder.system(), ShellKind.current(), commandEnv);
+    }
+
+    /** 连接程序自己所在的 jar 的 SHA-256（十六进制小写）；从源码运行（不是 jar）或读不了时为 null。 */
+    static String jarSha256() {
+        try {
+            java.security.CodeSource source = Main.class.getProtectionDomain().getCodeSource();
+            if (source == null) {
+                return null;
+            }
+            Path file = Path.of(source.getLocation().toURI());
+            if (!Files.isRegularFile(file) || !file.getFileName().toString().endsWith(".jar")) {
+                return null;
+            }
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (java.io.InputStream in = Files.newInputStream(file)) {
+                byte[] buffer = new byte[64 * 1024];
+                for (int read = in.read(buffer); read >= 0; read = in.read(buffer)) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (IOException | java.net.URISyntaxException | java.security.NoSuchAlgorithmException | RuntimeException failure) {
+            return null;
+        }
     }
 
     private static URI socket(String server, Words words) throws Refused {
@@ -408,7 +468,7 @@ public final class Main {
     }
 
     /** Git 只看这台电脑装没装：哪个目录是仓库由每次调用按路径判断。 */
-    private static Hello hello(Options options, AllowedDirs dirs, Sandbox.Status shell, Hello.Browser browser) {
+    private static Hello hello(Options options, AllowedDirs dirs, Shell shell, Hello.Browser browser, String jarSha256) {
         List<Hello.Root> roots = new ArrayList<>();
         for (Path dir : dirs.all()) {
             roots.add(new Hello.Root(dir.toString()));
@@ -421,7 +481,7 @@ public final class Main {
             git = false;
         }
         return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
-                Hello.Shell.of(shell), options.network(), git, browser);
+                Hello.Shell.of(shell), true, git, browser, jarSha256, List.of());
     }
 
     static String version() {
@@ -460,17 +520,10 @@ public final class Main {
         }
         out.println(words.say(hello.git() ? Key.SUMMARY_GIT_YES : Key.SUMMARY_GIT_NO));
         out.println(words.say(hello.write() ? Key.SUMMARY_WRITE_YES : Key.SUMMARY_WRITE_NO));
-        Sandbox.Status shell = setup.sandbox().check();
-        out.println(shell.available() ? words.say(Key.SUMMARY_SHELL_YES)
-                : words.say(Key.SUMMARY_SHELL_NO, Map.of("reason", words.sandbox(shell.why()))));
-        if (setup.sandbox() instanceof Mxc mxc && shell.available()) {
-            out.println(words.say(Key.SUMMARY_SANDBOX, Map.of("program", mxc.program())));
-        }
+        Shell.Status shell = setup.shell().check();
+        out.println(shell.available() ? words.say(Key.SUMMARY_SHELL_YES, Map.of("program", String.valueOf(setup.shell().program())))
+                : words.say(Key.SUMMARY_SHELL_NO, Map.of("reason", words.shell(shell.why()))));
         if (setup.options().shell()) {
-            out.println(words.say(hello.network() ? Key.SUMMARY_NETWORK_YES : Key.SUMMARY_NETWORK_NO));
-            for (Path dir : setup.options().read()) {
-                out.println(words.say(Key.SUMMARY_READ, Map.of("dir", dir)));
-            }
             if (!setup.options().env().isEmpty()) {
                 out.println(words.say(Key.SUMMARY_ENV, Map.of("names", String.join(", ", setup.options().env()))));
             }
@@ -478,12 +531,22 @@ public final class Main {
         Hello.Browser browser = hello.browser();
         if (browser == null || Hello.Browser.NOT_ALLOWED.equals(browser.code())) {
             out.println(words.say(Key.SUMMARY_BROWSER_NO));
+        } else if (Hello.Browser.NODE_MISSING.equals(browser.code())) {
+            out.println(words.say(Key.SUMMARY_BROWSER_NODE));
         } else if (!browser.available()) {
             out.println(words.say(Key.SUMMARY_BROWSER_MISSING));
         } else {
             out.println(words.say(browser.headless() ? Key.SUMMARY_BROWSER_HEADLESS : Key.SUMMARY_BROWSER_WINDOW,
                     Map.of("name", browser.name())));
             out.println(words.say(Key.SUMMARY_BROWSER_PROFILE, Map.of("dir", setup.browser().profile())));
+        }
+        if (!setup.mcp().servers().isEmpty() || !setup.mcp().problems().isEmpty()) {
+            out.println(words.say(Key.SUMMARY_MCP, Map.of("names", setup.mcp().servers().isEmpty() ? "-"
+                    : String.join(", ", setup.mcp().servers().stream().map(entry -> entry.disabled() ? entry.name() + " (off)" : entry.name()).toList()),
+                    "file", String.valueOf(setup.mcpFile()))));
+            for (String problem : setup.mcp().problems()) {
+                out.println(words.say(Key.SUMMARY_MCP_PROBLEM, Map.of("problem", problem)));
+            }
         }
         out.println(words.say(Key.SUMMARY_FOOTER));
         out.flush();

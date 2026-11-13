@@ -28,7 +28,7 @@ import tantalum.value.text.Language;
 class MainTest {
 
     /** 只在 Windows 上跳过的原因。 */
-    static final String MAC_CONNECTOR = "连接程序目前只在 macOS 上运行：问候里的 git 检查经 Git.java，标准输入接 /dev/null，归 Windows 连接程序 spec";
+    static final String MAC_CONNECTOR = "断言按 macOS 写：符号链接要管理员权限、shell 是 /bin/bash；Windows 上的 PowerShell 见 LocalShellIT 和 CI 的冒烟测试";
 
     /** 已有的断言是中文的：固定用中文跑（console-i18n 任务 12）。 */
     private static final Words ZH = new Words(Language.ZH);
@@ -81,15 +81,23 @@ class MainTest {
         assertTrue(refused.getMessage().contains(missing.toString()), refused.getMessage());
         Path file = Files.writeString(temp.resolve("file.txt"), "x");
         assertThrows(Refused.class, () -> setup("--allow", file.toString()));
-        assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--allow-read", missing.toString()));
+    }
+
+    /** connector-jar：命令不再在沙箱里跑，沙箱的参数给了就说清楚已不支持，不悄悄忽略。 */
+    @Test
+    void removedSandboxOptionsAreExplained() {
+        for (String option : List.of("--mxc", "--no-network", "--allow-read")) {
+            Refused refused = assertThrows(Refused.class, () -> setup("--allow", work.toString(), option, "x"));
+            assertTrue(refused.getMessage().contains(option + " 已不再支持"), refused.getMessage());
+        }
     }
 
     /** 需求 7.3：{@code --help} 列出全部参数。 */
     @Test
     void helpListsEveryOption() {
         assertEquals(0, Main.run(new String[] {"--help"}, Map.of(), answering(null), out));
-        for (String option : List.of("--server", "--allow", "--allow-write", "--allow-shell", "--allow-read", "--env", "--no-network",
-                "--insecure", "--name", "--mxc", "--help", "TANTALUM_TOKEN", "--allow-browser", "--browser ", "--browser-path",
+        for (String option : List.of("--server", "--allow", "--allow-write", "--allow-shell", "--env",
+                "--insecure", "--name", "--help", "TANTALUM_TOKEN", "--allow-browser", "--browser ", "--browser-path",
                 "--browser-headless", "--browser-profile")) {
             assertTrue(printed().contains(option), option);
         }
@@ -185,13 +193,14 @@ class MainTest {
         assertFalse(printed().contains(TOKEN.substring(3)));
     }
 
-    /** L14：名字里有 KEY、TOKEN、SECRET、PASSWORD 的变量不能放行给命令。 */
+    /**
+     * connector-jar 需求 4.5：命令平时拿不到名字像密钥的变量，{@code --env} 是明确放行，所以这类名字可以写；连接程序的令牌怎样都不行。
+     */
     @Test
-    void secretLookingEnvironmentNamesAreRefused() throws Exception {
-        for (String name : List.of("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "DB_PASSWORD", "api_key", "TANTALUM_TOKEN")) {
-            assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--env", name), name);
-        }
-        assertEquals(List.of("JAVA_HOME", "MAVEN_OPTS"), setup("--allow", work.toString(), "--env", "JAVA_HOME", "--env", "MAVEN_OPTS")
+    void envPassesSecretsOnPurposeButNeverTheToken() throws Exception {
+        assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--env", "TANTALUM_TOKEN"));
+        assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--env", "tantalum_token"));
+        assertEquals(List.of("GITHUB_TOKEN", "JAVA_HOME"), setup("--allow", work.toString(), "--env", "GITHUB_TOKEN", "--env", "JAVA_HOME")
                 .options().env());
     }
 
@@ -208,16 +217,15 @@ class MainTest {
         assertEquals(List.of(new Hello.Root(work.toString()), new Hello.Root(other.toString())), hello.roots());
         assertTrue(hello.git(), "git is installed on this machine; neither directory is a repository");
         assertTrue(hello.write());
-        assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of()), hello.shell());
+        assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of(), "bash", null), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
-        assertEquals(5, hello.protocol(), "protocol 5: the browser on this computer");
+        assertEquals(6, hello.protocol(), "protocol 6: one jar for every system, local MCP");
 
-        Path missing = temp.resolve("no-mxc");
-        Hello shell = setup("--allow", work.toString(), "--allow-shell", "--no-network", "--mxc", missing.toString()).hello();
-        assertFalse(shell.shell().available());
-        assertTrue(shell.shell().reason().contains(missing.toString()) || shell.shell().reason().contains("macOS"), shell.shell().reason());
-        assertFalse(shell.network());
+        Hello shell = setup("--allow", work.toString(), "--allow-shell").hello();
+        assertTrue(shell.shell().available(), "this machine has /bin/bash");
+        assertEquals("bash", shell.shell().kind());
+        assertEquals("/bin/bash", shell.shell().path());
         assertFalse(shell.write());
     }
 
@@ -227,22 +235,6 @@ class MainTest {
         assertEquals(URI.create("wss://tantalum.example.com/api/local/connect"),
                 setup("--allow", work.toString(), "--server", "https://tantalum.example.com/").socket());
         assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--server", "ftp://example.com"));
-    }
-
-    /** review-fixes 需求 11.10：{@code --allow-read} 和 {@code --allow} 一样不能是家目录或根目录。 */
-    @Test
-    void allowReadFollowsTheSameRulesAsAllow() throws Exception {
-        Path home = Files.createDirectory(temp.resolve("home"));
-        Map<String, String> env = Map.of("TANTALUM_TOKEN", TOKEN, "HOME", home.toString());
-        Refused refused = assertThrows(Refused.class, () -> Main.setup(
-                Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", home.toString()}, ZH), env, answering(null), ZH));
-        assertTrue(refused.getMessage().contains("不能是家目录"), refused.getMessage());
-        Refused root = assertThrows(Refused.class, () -> Main.setup(
-                Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", "/"}, ZH), env, answering(null), ZH));
-        assertTrue(root.getMessage().contains("不能是根目录"), root.getMessage());
-        Path extra = Files.createDirectory(home.resolve("extra"));
-        assertEquals(List.of(extra), Main.setup(Main.Options.parse(new String[] {"--allow", work.toString(), "--allow-read", extra.toString()}, ZH),
-                env, answering(null), ZH).options().read());
     }
 
     /** review-fixes 需求 11.10：不在本机的服务器用明文 http 时令牌会明文经过网络，除非明确给 {@code --insecure}。 */
@@ -265,13 +257,12 @@ class MainTest {
     @Test
     void theSummarySaysWhatIsAllowed() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other"));
-        Main.summary(setup("--allow", work.toString(), "--allow", other.toString(), "--allow-shell", "--mxc",
-                temp.resolve("no-mxc").toString()), out, ZH);
+        Main.summary(setup("--allow", work.toString(), "--allow", other.toString()), out, ZH);
         String summary = printed();
         assertTrue(summary.contains("http://127.0.0.1:8091"), summary);
         assertTrue(summary.contains(work.toString()));
         assertTrue(summary.contains(other.toString()));
-        assertTrue(summary.contains("命令行：不可用，"), summary);
+        assertTrue(summary.contains("命令行：不可用，启动时没有加 --allow-shell"), summary);
         assertTrue(summary.contains("--allow-write"), "says how to allow file changes: " + summary);
     }
 
@@ -325,7 +316,7 @@ class MainTest {
         Hello hello = base.hello();
         Hello missing = new Hello(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(), hello.shell(),
                 hello.network(), hello.git(), Hello.Browser.unavailable(Hello.Browser.NOT_FOUND));
-        Main.summary(new Setup(base.socket(), base.options(), base.dirs(), missing, base.token(), base.sandbox(), null), out, ZH);
+        Main.summary(new Setup(base.socket(), base.options(), base.dirs(), missing, base.token(), base.shell(), null), out, ZH);
         assertTrue(printed().contains("浏览器：不可用，这台电脑上没有找到 Chrome 或 Edge"), printed());
         assertTrue(printed().contains("--browser-path"), printed());
     }

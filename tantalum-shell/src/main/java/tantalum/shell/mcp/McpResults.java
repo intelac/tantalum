@@ -15,7 +15,7 @@ import tantalum.value.attachment.ImageRef;
  * 纯函数：把 MCP 结果变成文字和图片。收文本和 PNG、JPEG、WebP、GIF 图片（照 DSH {@code mcp/mcp-client/src/tools.ts:333-397}），
  * 其他内容换成一行说明；文字总长按 UTF-8 字节截断，不切坏字符，图片不算在里面。图片的 base64 不进文字。
  */
-final class McpResults {
+public final class McpResults {
 
     /** 一次调用的结果。{@code images} 由 {@link McpTool} 交给 {@link ToolImages} 存进本人附件。 */
     record Result(String text, boolean error, List<ToolImages.Image> images) {
@@ -103,7 +103,7 @@ final class McpResults {
     }
 
     /** 保留首尾，结论往往在末尾（pi 相同）。总长含说明不超上限，不切坏字符。 */
-    static String truncate(String text, int maxBytes) {
+    public static String truncate(String text, int maxBytes) {
         byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
         if (bytes.length <= maxBytes) {
             return text;

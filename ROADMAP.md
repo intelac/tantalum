@@ -56,8 +56,8 @@ Timers as an event source: periodic reviews, the librarian's consolidation, chec
 
 - **Hardening**: the post-0.1 whole-codebase review is fixed in five phases; every release gets another review and an [open-code-review](https://github.com/alibaba/open-code-review) scan.
 - **Windows**: the server runs on Windows (as a scheduled task), verified by CI; the connector has no Windows sandbox yet.
-- **Local workspace sandbox**: macOS uses Microsoft MXC (Seatbelt); command sandboxes for Linux and Windows are to do.
-- **Web**: `web_fetch` and one headless browser per user exist; a `web_search` API and PDF reading come later.
+- **Local workspace commands**: since 2026-11-14 there is no OS sandbox (the macOS-only MXC was removed); on all three systems each command is shown to the user for approval first (`connector-jar`). A cross-platform sandbox may come later.
+- **Web**: `web_fetch` on the server and a browser on the user's own machine (local Playwright MCP) exist; a `web_search` API and PDF reading come later.
 - **Journal format bump**: group `RunState` and `SessionState` by phase for real (views only today), together with the next format version.
 
 ## Not planned

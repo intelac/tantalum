@@ -1,31 +1,35 @@
 import { useState } from "react";
-import type { LocalLink, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
+import type { LocalLink, LocalMcpServer, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
 import { lookup, type Text, useText } from "../text";
 import { errorLine, sandboxText } from "../text/errors";
 import { clockTime } from "../text/format";
 import { Button } from "../ui/Button";
 import { CopyButton } from "../ui/CopyButton";
 import { cx } from "../ui/cx";
+import { Switch } from "../ui/Switch";
 import { useNow } from "../ui/useNow";
 import { SkillsItem } from "../skills/SkillsItem";
 import { WikiItem } from "../skills/WikiItem";
 import { Row, Section } from "./Rows";
 import { ChoicesList, ChoicesNotes, ChoicesToggle, useToolChoices } from "./ToolChoices";
-import { useIssueToken, useLocal, useRevokeLocal, useToggleLocal } from "./useLocal";
+import { useIssueToken, useLocal, useRevokeLocal, useToggleCommandApproval, useToggleLocal, useToggleLocalMcp } from "./useLocal";
 
 const MASTER: LocalSwitch = "local-workspace";
-const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser"];
+const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser", "local-mcp"];
 /** 从这个协议版本起，连接程序会列技能和 wiki 页。 */
 const SKILL_LISTS = 4;
 /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
 const BROWSER_TOOLS = 5;
+/** 从这个协议版本起，连接程序是跨平台的 jar，报本机 MCP 服务器（connector-jar）。 */
+const MCP_TOOLS = 6;
 const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
 /**
- * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（技能、知识库各带一个目录，见 skills/；
- * 浏览器是电脑上已装的 Chrome 或 Edge，见 local-browser）；连接状态和到期倒计时；
- * “连接这台电脑”生成令牌和一行命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
+ * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器、本机 MCP
+ * 八个子开关（技能、知识库各带一个目录，见 skills/；浏览器是电脑上已装的 Chrome 或 Edge，由本机的 Playwright MCP 驱动；命令行下面
+ * 有“执行前先问我”；本机 MCP 下面每个服务器一个开关，见 connector-jar）；连接状态和到期倒计时、版本不一致的提示；
+ * 照 QAgent 的三步：下载连接程序、生成令牌、按这台电脑的系统给出命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
   const t = useText();
@@ -113,6 +117,8 @@ function Child({ name, status, open, onChange }: { name: LocalSwitch; status: Lo
       onChange={onChange}
       aside={pickable && choices.off.length > 0 ? <ChoicesNotes off={choices.off} label={label} /> : undefined}
     >
+      {name === "shell" && <ShellItem status={status} />}
+      {name === "local-mcp" && on && master && <McpItem link={status.link} />}
       {name === "skills" && on && <SkillsItem active={open && master} signal={signal} />}
       {name === "wiki" && on && <WikiItem active={open && master} signal={signal} />}
       {pickable && choices.open && <ChoicesList tools={choices.list} label={label} />}
@@ -137,8 +143,12 @@ export function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | n
   if (name === "browser") {
     // 旧的连接程序不认浏览器，也不送这一项
     if ((link.protocol ?? 0) < BROWSER_TOOLS || link.browser == null) return text.browserOld;
-    if (!link.browser.available) return link.browser.code === "browser/not-found" ? text.browserNotFound : text.browserNotAllowed;
+    if (!link.browser.available) {
+      if (link.browser.code === "browser/node-missing") return text.browserNode;
+      return link.browser.code === "browser/not-found" ? text.browserNotFound : text.browserNotAllowed;
+    }
   }
+  if (name === "local-mcp" && (link.protocol ?? 0) < MCP_TOOLS) return text.mcp.old;
   return null;
 }
 
@@ -162,7 +172,13 @@ function LinkState({ link }: { link: LocalLink | null }) {
   return (
     <span className="mt-1 block text-fg" role="status">
       <span className="block">{text.connected(link.device.name, osName(link.device.os, link.device.osVersion))}</span>
-      {link.current === false && <span className="block text-warning">{text.outdated}</span>}
+      {link.connectorMatches === false ? (
+        <span className="mt-1 block rounded-md bg-warning/10 px-2 py-1.5 text-warning" role="alert">
+          {text.mismatch}
+        </span>
+      ) : (
+        link.current === false && <span className="block text-warning">{text.outdated}</span>
+      )}
       <span className="block font-mono text-[11px] break-all text-fg-muted">{text.dirs(link.roots.map((root) => root.path).join("、"))}</span>
       <span className="block text-fg-muted">
         {text.write(link.write)} · {text.shell(link.shell.available)}
@@ -174,6 +190,95 @@ function LinkState({ link }: { link: LocalLink | null }) {
   );
 }
 
+/** “命令”一项下面：电脑上是哪种 shell、执行前先问我（内置的命令审批插件）。 */
+function ShellItem({ status }: { status: LocalStatus }) {
+  const text = useText().plugins.local;
+  const toggle = useToggleCommandApproval();
+  const shell = status.link?.shell;
+  return (
+    <div className="flex flex-col gap-1.5 pr-3 pb-2.5 pl-16 text-xs text-fg-muted">
+      {shell?.available === true && shell.kind != null && shell.path != null && (
+        <span className="font-mono text-[11px] break-all">{text.shellKind(shell.kind, shell.path)}</span>
+      )}
+      {status.commandApproval !== undefined && (
+        <label className="flex items-start gap-2">
+          <Switch checked={status.commandApproval} onChange={(enabled) => toggle.mutate(enabled)} label={text.askBefore} />
+          <span>
+            <span className="block text-fg">{text.askBefore}</span>
+            <span className="block">{text.askBeforeHint}</span>
+          </span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** “本机 MCP”一项下面：电脑报的每个服务器，状态、工具，各自一个开关（connector-jar 需求 6.7）。 */
+function McpItem({ link }: { link: LocalLink | null }) {
+  const text = useText().plugins.local;
+  const toggle = useToggleLocalMcp();
+  if (link === null || (link.protocol ?? 0) < MCP_TOOLS) return null;
+  const servers = link.mcp ?? [];
+  if (servers.length === 0) return <p className="pr-3 pb-2.5 pl-16 text-xs text-fg-faint">{text.mcp.none}</p>;
+  return (
+    <ul aria-label={text.switches["local-mcp"][0]} className="flex flex-col gap-2 pr-3 pb-2.5 pl-16">
+      {servers.map((server) => (
+        <McpServerRow key={server.name} server={server} onToggle={(enabled) => toggle.mutate({ server: server.name, enabled })} />
+      ))}
+    </ul>
+  );
+}
+
+function McpServerRow({ server, onToggle }: { server: LocalMcpServer; onToggle: (enabled: boolean) => void }) {
+  const text = useText().plugins.local;
+  const [open, setOpen] = useState(false);
+  const failed = server.state === "failed";
+  return (
+    <li className="flex flex-col gap-1 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <Switch checked={server.enabled} onChange={onToggle} label={text.mcp.toggle(server.name)} disabled={server.state === "disabled"} />
+        <span className="font-mono text-fg">{server.name}</span>
+        <span className={cx(failed ? "text-danger" : server.state === "ready" ? "text-fg-muted" : "text-warning")}>{text.mcp.states[server.state]}</span>
+        {server.tools.length > 0 && (
+          <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-accent hover:underline">
+            {text.mcp.tools(server.tools.length)}
+          </button>
+        )}
+      </div>
+      {server.reason != null && server.reason !== "" && (
+        <span className={cx("block font-mono text-[11px] break-all whitespace-pre-wrap", failed ? "text-danger" : "text-fg-faint")}>
+          {server.reason}
+        </span>
+      )}
+      {open && (
+        <ul aria-label={text.mcp.list(server.name)} className="flex flex-col gap-0.5 pl-2">
+          {server.tools.map((tool) => (
+            <li key={tool.name}>
+              <span className="font-mono text-fg">{tool.name}</span>
+              {tool.description !== "" && <span className="text-fg-faint"> — {tool.description}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/**
+ * 看页面的这台电脑是不是 Windows：给 PowerShell 的命令写法（connector-jar 需求 3.2）。看 `navigator.platform`（Win32），不看
+ * userAgent：自动化浏览器和一些设备模拟会把 userAgent 写成 Windows（Playwright 的 Desktop Chrome 在 macOS 上也是）。
+ */
+function windows(): boolean {
+  return typeof navigator !== "undefined" && /^Win/i.test(navigator.platform ?? "");
+}
+
+/** 按系统给出运行连接程序的命令：令牌放在环境变量里，不放在参数里。 */
+export function runCommand(token: string, server: string, onWindows: boolean): string {
+  return onWindows
+    ? `$env:TANTALUM_TOKEN="${token}"; java -jar tantalum-connect.jar --server ${server} --allow .`
+    : `TANTALUM_TOKEN=${token} java -jar tantalum-connect.jar --server ${server} --allow .`;
+}
+
 /** 选有效期、生成令牌；生成的令牌和命令只在这里显示一次，关掉插件页就没了。 */
 function Connect({ status }: { status: LocalStatus }) {
   const text = useText().plugins.local;
@@ -181,8 +286,27 @@ function Connect({ status }: { status: LocalStatus }) {
   const issue = useIssueToken();
   const revoke = useRevokeLocal();
   const issued = issue.data;
+  const connector = status.connector;
+  const command = issued === undefined ? "" : issued.server === undefined ? issued.command : runCommand(issued.token, issued.server, windows());
   return (
     <div className="flex flex-col gap-2">
+      <ol className="flex list-decimal flex-col gap-1 pl-4 text-xs text-fg-muted">
+        <li>
+          {connector?.available === false ? (
+            <span className="text-warning">{text.steps.missing}</span>
+          ) : (
+            <>
+              <a href="/api/local/connector.jar" download="tantalum-connect.jar" className="text-accent hover:underline">
+                {text.steps.download}
+              </a>
+              {connector?.version !== undefined && <span className="ml-1 font-mono text-[11px] text-fg-faint">{connector.version}</span>}
+              <span className="block">{text.steps.needs}</span>
+            </>
+          )}
+        </li>
+        <li>{text.steps.token}</li>
+        <li>{text.steps.run}</li>
+      </ol>
       <div className="flex flex-wrap items-center gap-2">
         <span id="local-validity" className="text-xs text-fg-muted">
           {text.validity}
@@ -239,8 +363,8 @@ function Connect({ status }: { status: LocalStatus }) {
           </div>
           <div className="flex items-start gap-1">
             <span className="shrink-0 py-1 text-[11px] text-fg-muted">{text.command}</span>
-            <code className="min-w-0 flex-1 rounded-xs bg-code px-2 py-1 font-mono text-[11px] break-all text-fg">{issued.command}</code>
-            <CopyButton text={issued.command} />
+            <code className="min-w-0 flex-1 rounded-xs bg-code px-2 py-1 font-mono text-[11px] break-all text-fg">{command}</code>
+            <CopyButton text={command} />
           </div>
           <ol aria-label={text.commandSteps} className="list-decimal pl-4 text-[11px] text-fg-muted">
             {text.commandHint.map((step) => (

@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.local.sandbox.Sandbox;
-import tantalum.local.sandbox.Unavailable;
+import tantalum.local.shell.Shell;
+import tantalum.local.shell.Unavailable;
 import tantalum.local.tool.Browser;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
@@ -27,6 +27,8 @@ import tantalum.local.skill.Skills;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.SkillTool;
 import tantalum.local.tool.ToolArguments;
+import tantalum.connect.mcp.McpHost;
+import tantalum.local.tool.ShellTool;
 import tantalum.local.tool.Tools;
 import tantalum.local.wire.Browse;
 import tantalum.local.wire.BrowseResult;
@@ -61,10 +63,13 @@ final class Calls {
     private final AllowedDirs dirs;
     private final boolean write;
     private final boolean shell;
-    private final Sandbox sandbox;
+    private final Shell commands;
     private final Journal journal;
     /** 这台电脑上的浏览器；没允许或没找到时为 null。 */
     private final Browser browser;
+    /** 本机 MCP 服务器；没有配置时为 null，{@code mcp:} 开头的调用一律拒绝。 */
+    private volatile McpHost mcp;
+    private volatile String hiddenServer;
     private final Map<String, LocalTool> tools;
     /**
      * 先读后写的记录。按会话分开记，所以每个会话一份；整台电脑共用一个实例，是为了让两个会话同时改同一个文件时也互斥。
@@ -74,33 +79,47 @@ final class Calls {
     private final Map<String, Thread> running = new ConcurrentHashMap<>();
     private volatile String user;
 
-    /** {@code shell}：有 {@code --allow-shell} 而且 {@code sandbox} 检查通过。 */
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal) {
-        this(dirs, write, shell, sandbox, journal, Tools.all());
+    /** {@code shell}：有 {@code --allow-shell} 而且电脑上找到了 shell（{@code commands} 可用）。 */
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal) {
+        this(dirs, write, shell, commands, journal, Tools.all());
     }
 
-    /** 测试用：没有命令沙箱、换一套工具。 */
+    /** 测试用：不能跑命令、换一套工具。 */
     Calls(AllowedDirs dirs, boolean write, boolean shell, Journal journal, List<LocalTool> tools) {
-        this(dirs, write, shell, Sandbox.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), journal, tools);
+        this(dirs, write, shell, Shell.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), journal, tools);
     }
 
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools) {
-        this(dirs, write, shell, sandbox, journal, tools, null);
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal, List<LocalTool> tools) {
+        this(dirs, write, shell, commands, journal, tools, null);
     }
 
     /** {@code browser}：有 {@code --allow-browser} 而且找到了浏览器时才有，否则为 null，浏览器调用一律拒绝。 */
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, Browser browser) {
-        this(dirs, write, shell, sandbox, journal, Tools.all(), browser);
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal, Browser browser) {
+        this(dirs, write, shell, commands, journal, Tools.all(), browser);
     }
 
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Sandbox sandbox, Journal journal, List<LocalTool> tools, Browser browser) {
+    Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal, List<LocalTool> tools, Browser browser) {
         this.browser = browser;
         this.dirs = dirs;
         this.write = write;
-        this.shell = shell && sandbox.check().available();
-        this.sandbox = sandbox;
+        this.shell = shell && commands.check().available();
+        this.commands = commands;
         this.journal = journal;
         this.tools = tools.stream().collect(Collectors.toUnmodifiableMap(LocalTool::name, tool -> tool));
+    }
+
+    /** 本机 MCP 的宿主（connector-jar 需求 6）：启动时交给这里，之后 {@code mcp:服务器:工具} 的调用转给它。 */
+    void mcp(McpHost host) {
+        mcp(host, null);
+    }
+
+    /**
+     * 同上；{@code browserServer} 是浏览器用的那一项（浏览器开着时是 {@code playwright}）：它的工具只经 {@code browser_*} 用，
+     * 服务器直接发来的 {@code mcp:playwright:*} 一律拒绝，免得绕过浏览器工具的逐个勾选（QAgent 问题 72）。
+     */
+    void mcp(McpHost host, String browserServer) {
+        this.mcp = host;
+        this.hiddenServer = browserServer;
     }
 
     /** {@code welcome} 里的用户：之后的调用都必须是发给这个用户的。 */
@@ -117,7 +136,13 @@ final class Calls {
             return;
         }
         LocalTool tool = tools.get(call.tool());
-        Thread worker = Thread.ofVirtual().name("call-" + call.id()).unstarted(() -> execute(call, tool, reply));
+        Thread worker = Thread.ofVirtual().name("call-" + call.id()).unstarted(() -> {
+            if (tool == null) {
+                executeMcp(call, reply);
+            } else {
+                execute(call, tool, reply);
+            }
+        });
         if (running.putIfAbsent(call.id(), worker) != null) {
             // 同一个 id 还在跑：不悄悄丢掉，回一个错误，服务器那边等的人知道这次没执行
             reply.accept(new Result(call.id(), DUPLICATE, true, List.of()));
@@ -131,16 +156,52 @@ final class Calls {
         if (user == null || !user.equals(call.user())) {
             return OTHER_USER;
         }
+        if (McpHost.owns(call.tool())) {
+            String hidden = hiddenServer;
+            if (hidden != null && call.tool().startsWith(McpHost.CALL_PREFIX + hidden + ":")) {
+                return "Unknown tool: " + call.tool();
+            }
+            return mcp == null ? "No MCP servers on this computer." : null;
+        }
         LocalTool tool = tools.get(call.tool());
         if (tool == null) {
             return "Unknown tool: " + call.tool();
         }
         return switch (tool.kind()) {
             case WRITE -> write ? null : NO_WRITE;
-            case SHELL -> shell ? null : NO_SHELL;
+            // 另一种 shell 的工具（mac 上来了 powershell）也拒：服务器按 hello 只给一种，这里再核对一遍
+            case SHELL -> shell && tool instanceof ShellTool shellTool && shellTool.shell() == commands.kind() ? null : NO_SHELL;
             case READ, GIT, SKILL -> null;
             case BROWSER -> browser != null ? null : NO_BROWSER;
         };
+    }
+
+    /** 本机 MCP 的调用：交给宿主，结果原样送回；取消时同普通工具。 */
+    private void executeMcp(Call call, Consumer<Result> reply) {
+        LocalResult result;
+        Outcome outcome;
+        try {
+            result = mcp.call(call.tool(), call.arguments());
+            outcome = result.error() ? Outcome.ERROR : Outcome.OK;
+        } catch (InterruptedException stopped) {
+            result = null;
+            outcome = Outcome.CANCELLED;
+        } catch (Throwable failure) {
+            System.err.println("[tantalum-connect] " + call.tool() + " failed: " + failure);
+            result = LocalResult.error("Tool failed on the computer; see the connector's output.");
+            outcome = Outcome.ERROR;
+        }
+        boolean cancelled = running.remove(call.id()) == null;
+        if (cancelled || result == null) {
+            journal.call(call.session(), call.tool(), call.arguments(), Outcome.CANCELLED);
+            return;
+        }
+        journal.call(call.session(), call.tool(), call.arguments(), outcome);
+        try {
+            reply.accept(Result.of(call.id(), result));
+        } catch (RuntimeException closed) {
+            // 连接已经断了
+        }
     }
 
     private void execute(Call call, LocalTool tool, Consumer<Result> reply) {
@@ -152,7 +213,7 @@ final class Calls {
                 result = LocalResult.error(DIR_NOT_ALLOWED + call.dir());
                 outcome = Outcome.DENIED;
             } else {
-                result = tool.invoke(new LocalContext(call.session(), scoped, observations, sandbox, call.skills(), browser), call.arguments());
+                result = tool.invoke(new LocalContext(call.session(), scoped, observations, commands, call.skills(), browser), call.arguments());
                 outcome = !result.error() ? Outcome.OK : outside(call, scoped) ? Outcome.DENIED : Outcome.ERROR;
             }
         } catch (InterruptedException stopped) {

@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -25,6 +26,8 @@ import tantalum.local.wire.Cancel;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
+import tantalum.local.wire.McpServerState;
+import tantalum.local.wire.McpTools;
 import tantalum.local.wire.Message;
 import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
@@ -49,7 +52,10 @@ final class Link {
 
     private final URI socket;
     private final String token;
-    private final Hello hello;
+    /** 每次连上时发的 {@code hello}：本机 MCP 服务器的状态取当时最新的。 */
+    private final Supplier<Hello> hello;
+    /** 本机 MCP 服务器现在的状态；欢迎之后整份再报一次，免得发 hello 和收到欢迎之间的变化丢了。 */
+    private final Supplier<List<McpServerState>> mcpStates;
     private final Calls calls;
     private final PrintStream out;
     private final Words words;
@@ -63,11 +69,22 @@ final class Link {
         this(setup.socket(), setup.token(), setup.hello(), calls, out, words, BACKOFF, SILENCE);
     }
 
+    /** 有本机 MCP 时：{@code states} 是宿主现在的状态。 */
+    Link(Main.Setup setup, Calls calls, PrintStream out, Words words, Supplier<List<McpServerState>> states) {
+        this(setup.socket(), setup.token(), () -> setup.hello().withMcp(states.get()), states, calls, out, words, BACKOFF, SILENCE);
+    }
+
     /** {@code backoff} 是每次重连前等多久，用完之后一直用最后一个。 */
     Link(URI socket, String token, Hello hello, Calls calls, PrintStream out, Words words, List<Duration> backoff, Duration silence) {
+        this(socket, token, () -> hello, List::of, calls, out, words, backoff, silence);
+    }
+
+    Link(URI socket, String token, Supplier<Hello> hello, Supplier<List<McpServerState>> mcpStates, Calls calls, PrintStream out,
+         Words words, List<Duration> backoff, Duration silence) {
         this.socket = socket;
         this.token = token;
         this.hello = hello;
+        this.mcpStates = mcpStates;
         this.calls = calls;
         this.out = out;
         this.words = words;
@@ -95,7 +112,7 @@ final class Link {
                 }
                 continue;
             }
-            session.send(hello);
+            session.send(hello.get());
             Ended ended = session.ended();
             calls.stopAll();
             if (stopped.isDone()) {
@@ -182,6 +199,14 @@ final class Link {
     record Ended(int code, String reason, Bye.Reason bye) {}
 
     /** 一次连接：收消息、发消息、看有没有断。 */
+    /** 本机 MCP 服务器有了变化：连着、已经被欢迎时发出去；没连着时不发，下次连上的 hello 里带着。 */
+    void report(McpServerState state) {
+        Session session = current;
+        if (session != null && session.welcomed) {
+            session.send(new McpTools(state));
+        }
+    }
+
     private final class Session implements WebSocket.Listener {
 
         private final CompletableFuture<Ended> ended = new CompletableFuture<>();
@@ -281,6 +306,10 @@ final class Link {
                 case Welcome welcome -> {
                     welcomed = true;
                     calls.welcome(welcome.user());
+                    List<McpServerState> states = mcpStates.get();
+                    if (!states.isEmpty()) {
+                        Thread.ofVirtual().start(() -> states.forEach(state -> send(new McpTools(state))));
+                    }
                     out.println(words.say(Words.Key.LINK_CONNECTED, Map.of("user", welcome.user(),
                             "time", welcome.expiresAt().atZone(ZoneId.systemDefault()).format(CLOCK))));
                 }

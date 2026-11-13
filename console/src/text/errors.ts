@@ -84,18 +84,7 @@ export function codeText(t: Text, code: string, params: Readonly<Record<string, 
 /** 本机命令行用不了的原因（console-i18n I12）：连接程序送来的代码；认不出时为 undefined。`detail`、`path` 原样放进去。 */
 export function sandboxText(t: Text, code: string, params: Readonly<Record<string, string>>): string | undefined {
   const s = t.plugins.local.sandbox;
-  switch (code) {
-    case "sandbox/mxc-invalid":
-      return s["sandbox/mxc-invalid"](params.path ?? "");
-    case "sandbox/temp-dir":
-      return s["sandbox/temp-dir"](params.detail ?? "");
-    case "sandbox/check-failed":
-      return s["sandbox/check-failed"](params.detail ?? "");
-    case "sandbox/start-failed":
-      return s["sandbox/start-failed"](params.detail ?? "");
-    case "sandbox/run-failed":
-      return s["sandbox/run-failed"](params.detail ?? "");
-  }
+  if (code === "shell/not-found") return s["shell/not-found"](params.shell ?? "");
   const plain = lookup(s, code);
   return typeof plain === "string" ? plain : undefined;
 }

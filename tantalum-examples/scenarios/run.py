@@ -28,7 +28,6 @@ MODELS = {"qwen": lambda: {"route": "local", "model": LOCAL["model"], "effort": 
           "opus": lambda: {"route": "claude", "model": "claude-opus-5-5", "effort": "medium"},
           "haiku": lambda: {"route": "claude", "model": "claude-haiku-5-5", "effort": "medium"},
           "fable": lambda: {"route": "claude", "model": "claude-fable-5-2", "effort": "high"}}
-MXC = os.path.expanduser("~/.cache/tantalum/mxc/1.0.1/mxc-exec-mac")
 
 def jar(module, suffix=""):
     """模块打好的 jar；没有就说明要先打包。"""
@@ -102,7 +101,6 @@ def start(extra=(), name=None):
     global DATA
     # 先把会失败的都查完再起进程，免得留下一台没人管的服务器
     cp = connector_classpath()
-    if not os.path.exists(MXC): raise SystemExit(f"the sandbox binary is missing at {MXC}; build the macOS connector package once (it downloads MXC) or pass --mxc")
     shell_jar, examples_jar = jar("tantalum-shell", "-exec"), jar("tantalum-examples")
     os.makedirs(WORK, exist_ok=True)
     DATA = f"{WORK}/data" + (f"-{name}" if name else "")
@@ -113,7 +111,9 @@ def start(extra=(), name=None):
         "org.springframework.boot.loader.launch.PropertiesLauncher", f"--server.port={PORT}", f"--tantalum.data-dir={DATA}", f"--tantalum.workspace={DATA}-ws",
         "--tantalum.examples.enabled=true", "--tantalum.provider=local", f"--tantalum.openai-routes.local.base-url={LOCAL['url']}",
         f"--tantalum.openai-routes.local.model={LOCAL['model']}", "--tantalum.openai-routes.local.thinking=chat-template", "--tantalum.openai-routes.local.context-window=131072",
-        "--tantalum.web.block-private-network=false", *extra]), env=env, stdout=open(f"{DATA}-server.log", "w"), stderr=subprocess.STDOUT)
+        "--tantalum.web.block-private-network=false",
+        # 场景里没有人回答命令审批（connector-jar 需求 5）：去掉内置的“命令先问”
+        "--tantalum.local.command-approval.enabled=false", *extra]), env=env, stdout=open(f"{DATA}-server.log", "w"), stderr=subprocess.STDOUT)
     started.append(server)
     admin = Client()
     for _ in range(90):
@@ -127,7 +127,7 @@ def start(extra=(), name=None):
     status, token = user.call("POST", "/api/local/tokens", {"validity": "1d"}); assert status == 200, token
     cenv = dict(os.environ, TANTALUM_TOKEN=token["token"])
     connector = subprocess.Popen(["java", "--enable-native-access=ALL-UNNAMED", "-cp", cp, "tantalum.connect.Main", "--server", BASE, "--allow", ROOT,
-        "--allow-write", "--allow-shell", "--mxc", MXC, "--allow-browser", "--browser-headless",
+        "--allow-write", "--allow-shell", "--allow-browser", "--browser-headless",
         "--browser-profile", f"{WORK}/browser-profile", "--lang", "en"], env=cenv, cwd=ROOT, stdout=open(f"{DATA}-connector.log", "w"), stderr=subprocess.STDOUT)
     started.append(connector)
     for _ in range(40):
@@ -421,16 +421,15 @@ def verify_recordings(ids):
 
 
 def main():
-    global MXC
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", default="qwen", choices=sorted(MODELS)); parser.add_argument("--only", default="", help="comma-separated scenario ids")
     parser.add_argument("--repeat", type=int, default=1, help="runs per scenario (pass rate, unstable, saturated)")
     parser.add_argument("--compare", default="", help="an earlier results .json to compare with")
     parser.add_argument("--record", action="store_true", help="write passing replayable scenarios into the replay fixtures (Claude only) and verify them")
     parser.add_argument("--tag", default="", help="suffix of the result files"); parser.add_argument("--keep", action="store_true", help="keep the temporary directory")
-    parser.add_argument("--local-url", default=LOCAL["url"]); parser.add_argument("--local-model", default=LOCAL["model"]); parser.add_argument("--mxc", default=MXC)
+    parser.add_argument("--local-url", default=LOCAL["url"]); parser.add_argument("--local-model", default=LOCAL["model"])
     args = parser.parse_args()
-    LOCAL.update(url=args.local_url, model=args.local_model); MXC = args.mxc
+    LOCAL.update(url=args.local_url, model=args.local_model)
     global MODEL_NAME; MODEL_NAME = args.model
     os.makedirs(os.path.join(HERE, "results"), exist_ok=True)
     wanted = [each for each in args.only.split(",") if each]

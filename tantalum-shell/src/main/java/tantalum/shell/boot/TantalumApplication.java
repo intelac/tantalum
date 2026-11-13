@@ -149,6 +149,18 @@ public class TantalumApplication {
         return engine;
     }
 
+    /**
+     * 内置的命令先问（connector-jar 需求 5）：用户电脑上的 {@code bash}、{@code powershell} 执行前在对话页上问。默认开，每个用户在插件页
+     * 关；{@code tantalum.local.command-approval.enabled=false} 整个去掉（评测场景、端到端测试里没有人回答）。排在最前，先于例子插件。
+     */
+    @Bean
+    @org.springframework.core.annotation.Order(0)
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty(name = "tantalum.local.command-approval.enabled",
+            matchIfMissing = true)
+    tantalum.kernel.hook.KernelHook commandApprovalHook() {
+        return new tantalum.shell.local.CommandApprovalHook();
+    }
+
     /** Web 服务器的实际端口（配置 0 时是随机的）告诉联网的地址规则。 */
     @Bean
     ApplicationListener<WebServerInitializedEvent> ownPort(ObjectProvider<Engine> engine) {

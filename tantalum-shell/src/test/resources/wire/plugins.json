@@ -55,6 +55,19 @@
     "blockPrivateNetwork" : true
   },
   "plugins" : [ {
+    "name" : "commandApproval",
+    "description" : {
+      "en" : "Before a command runs on your computer (bash or PowerShell), shows it on the conversation page and waits: allow, allow all commands in this session, or deny. Commands run as you, without a sandbox.",
+      "zh" : "在你的电脑上跑命令（bash 或 PowerShell）之前，先在对话页上给你看这条命令并等你决定：允许、这个会话都允许，或者拒绝。命令以你的身份运行，没有沙箱。",
+      "ja" : "コンピューターでコマンド（bash または PowerShell）を実行する前に、会話ページにそのコマンドを表示して判断を待ちます。許可、このセッションでは常に許可、拒否から選べます。コマンドはあなたとして実行され、サンドボックスはありません。"
+    },
+    "points" : [ "beforeToolCall", "onAnswer" ],
+    "group" : "rule",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
+  }, {
     "name" : "dailyQuota",
     "description" : "daily limit",
     "points" : [ "beforeModelCall" ],

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +35,8 @@ import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Message;
+import tantalum.local.wire.McpTools;
+import tantalum.local.wire.McpServerState;
 import tantalum.local.wire.Result;
 import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
@@ -406,7 +409,8 @@ public final class LocalLinks implements AutoCloseable {
     public final class Link {
 
         private final Principal principal;
-        private final Hello hello;
+        /** 连上时的 {@code hello}；本机 MCP 服务器的清单随 {@link McpTools} 更新（协议 6 起）。 */
+        private volatile Hello hello;
         private final Instant connectedAt;
         private final Instant expiresAt;
         private final Peer peer;
@@ -465,6 +469,22 @@ public final class LocalLinks implements AutoCloseable {
                     if (waiting != null) {
                         waiting.complete(result);
                     }
+                }
+                case McpTools update -> {
+                    List<McpServerState> servers = new ArrayList<>();
+                    boolean replaced = false;
+                    for (McpServerState server : hello.mcp()) {
+                        if (server.name().equals(update.server().name())) {
+                            servers.add(update.server());
+                            replaced = true;
+                        } else {
+                            servers.add(server);
+                        }
+                    }
+                    if (!replaced) {
+                        servers.add(update.server());
+                    }
+                    hello = hello.withMcp(servers);
                 }
                 default -> {
                     LOG.info("local link for {}: unexpected {} message; closing", principal.value(), message.getClass().getSimpleName());
