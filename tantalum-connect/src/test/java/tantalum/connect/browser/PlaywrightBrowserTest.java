@@ -124,8 +124,10 @@ class PlaywrightBrowserTest {
     void builtInArguments() {
         List<String> args = PlaywrightBrowser.args("msedge", java.nio.file.Path.of("/Apps/Edge"), java.nio.file.Path.of("/p"),
                 java.nio.file.Path.of("/o"), true);
-        assertEquals(List.of("-y", PlaywrightBrowser.PACKAGE, "--browser", "msedge", "--user-data-dir", "/p", "--output-dir", "/o",
-                "--image-responses", "allow", "--executable-path", "/Apps/Edge", "--headless"), args);
+        // 路径按本机的写法（Windows 上是 \\p）
+        assertEquals(List.of("-y", PlaywrightBrowser.PACKAGE, "--browser", "msedge", "--user-data-dir", java.nio.file.Path.of("/p").toString(),
+                "--output-dir", java.nio.file.Path.of("/o").toString(), "--image-responses", "allow", "--executable-path",
+                java.nio.file.Path.of("/Apps/Edge").toString(), "--headless"), args);
     }
 
     /** QAgent 问题 26：Playwright MCP 写进 --output-dir 的快照、截图文件每次调用后清掉，不只增不删。 */
