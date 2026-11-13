@@ -76,13 +76,22 @@ export function AppFrame({ sidebar, header, children }: Props) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [drawerOpen, close]);
 
+  /**
+   * 只有左键按下才开始拖。右键会弹出系统菜单、松开的事件收不到，拖动就一直不结束：之后鼠标只是移过分割线，侧栏也跟着动。
+   */
   function onDragStart(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return;
     dragging.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function onDrag(event: ReactPointerEvent<HTMLDivElement>): void {
     if (!dragging.current) return;
+    // 左键已经不按着了（松开的事件丢了）：当作拖完，不跟着移动
+    if ((event.buttons & 1) === 0) {
+      dragging.current = false;
+      return;
+    }
     setWidth(clampWidth(event.clientX));
   }
 
@@ -115,6 +124,9 @@ export function AppFrame({ sidebar, header, children }: Props) {
               onPointerMove={onDrag}
               onPointerUp={onDragEnd}
               onPointerCancel={onDragEnd}
+              onLostPointerCapture={() => {
+                dragging.current = false;
+              }}
               className="absolute top-0 -right-1 h-full w-2 cursor-col-resize select-none hover:bg-accent/30"
             />
           )}

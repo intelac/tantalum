@@ -116,6 +116,19 @@ describe("Dialog", () => {
 });
 
 describe("Menu", () => {
+  it("opens towards the left when the button sits at the right edge", async () => {
+    render(
+      <Menu label="行的操作" align="end" items={[{ id: "rename", label: "改名", onSelect: () => undefined }]}>
+        ⋯
+      </Menu>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "行的操作" }));
+    const menu = screen.getByRole("menu");
+    // 侧栏每一行的“⋯”在右边：菜单和按钮右对齐往左展开，不会被侧栏的右边裁掉
+    expect(menu.className).toContain("right-0");
+    expect(menu.className).not.toContain("left-0");
+  });
+
   it("opens, navigates with arrows, selects, and returns focus on Escape", async () => {
     const settings = vi.fn();
     const logout = vi.fn();

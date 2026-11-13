@@ -18,11 +18,13 @@ interface Props {
   label: string;
   /** 弹出方向，侧栏底部的菜单向上弹。 */
   direction?: "down" | "up";
+  /** 和按钮哪一边对齐。按钮靠右（侧栏里每一行的“⋯”）时用 end：菜单往左展开，不会被侧栏的右边裁掉。 */
+  align?: "start" | "end";
   buttonProps?: Omit<ButtonProps, "children" | "onClick">;
 }
 
 /** 弹出菜单。方向键移动，Enter 选中，Esc 或点击外部关闭；关闭后焦点回到触发按钮。 */
-export function Menu({ children, items, label, direction = "down", buttonProps }: Props) {
+export function Menu({ children, items, label, direction = "down", align = "start", buttonProps }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -89,7 +91,7 @@ export function Menu({ children, items, label, direction = "down", buttonProps }
           onKeyDown={onKeyDown}
           className={cx(
             "absolute z-40 min-w-44 rounded-md border border-line bg-raised p-1 shadow-lg",
-            "left-0",
+            align === "end" ? "right-0" : "left-0",
             direction === "up" ? "bottom-full mb-1" : "top-full mt-1",
           )}
         >

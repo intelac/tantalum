@@ -81,9 +81,10 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         )}
       </button>
       {menu !== null && (
-        // 菜单按钮平时藏着，悬停、键盘聚焦或选中时出现
-        <div className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-          <Menu label={t.projects.sessionMenu(title)} items={menu} buttonProps={{ variant: "icon", size: "sm" }}>
+        // 菜单按钮平时藏着，悬停、键盘聚焦或选中时出现。这一层有 translate，自成一层叠放：菜单开着（焦点在里面）时整层提到最上，
+        // 否则往左展开的菜单盖不过下面的行，点“归档”点到的是下一行
+        <div className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-within:z-50">
+          <Menu label={t.projects.sessionMenu(title)} items={menu} align="end" buttonProps={{ variant: "icon", size: "sm" }}>
             <MoreHorizontal size={14} />
           </Menu>
         </div>

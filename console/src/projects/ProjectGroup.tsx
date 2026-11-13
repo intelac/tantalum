@@ -61,9 +61,10 @@ export function ProjectGroup({
           </span>
         </button>
         {group.project !== null && !viewing && (
-          <div className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className="relative opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-within:z-50">
             <Menu
               label={t.projects.projectMenu(name)}
+              align="end"
               buttonProps={{ variant: "icon", size: "sm" }}
               items={[
                 { id: "new", label: t.projects.newHere, icon: <SquarePen size={16} />, onSelect: onNewHere },
@@ -88,7 +89,15 @@ export function ProjectGroup({
               onArchive={onArchiveSession}
             />
           ))}
-          {group.rows.length === 0 && <li className="px-3 py-1 text-xs text-fg-faint">{t.projects.empty}</li>}
+          {group.rows.length === 0 && (
+            <li className="px-3 py-1 text-xs text-fg-faint">
+              {t.projects.empty}
+              {/* 空的工作区直接给入口：“在此新建会话”只在“⋯”菜单里时不好找 */}
+              <button type="button" onClick={onNewHere} className="ml-1 text-accent hover:underline">
+                {t.projects.newHere}
+              </button>
+            </li>
+          )}
           {(group.hidden > 0 || shownMore) && (
             <li>
               <button

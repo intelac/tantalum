@@ -69,6 +69,30 @@ describe("ProjectSidebar", () => {
     );
   }
 
+  it("an empty workspace offers a new session right there", async () => {
+    const onNewSessionIn = vi.fn();
+    const empty = { ...WIKI, id: "p-empty", title: "空的", path: "/Users/you/empty" };
+    withQueries(
+      <ProjectSidebar
+        sessions={sessions}
+        projects={[QUATTRO, WIKI, empty]}
+        currentSession={null}
+        onSelectSession={() => undefined}
+        onNewSessionIn={onNewSessionIn}
+        onAddProject={() => undefined}
+      />,
+    );
+    // “在此新建会话”不只在“⋯”菜单里：空的工作区那一行直接给
+    await userEvent.click(screen.getByRole("button", { name: "在此新建会话" }));
+    expect(onNewSessionIn).toHaveBeenCalledWith(empty);
+  });
+
+  it("row menus open towards the left so the sidebar does not cut them off", async () => {
+    mount();
+    await userEvent.click(screen.getByRole("button", { name: "分支检查 的操作" }));
+    expect(screen.getByRole("menu").className).toContain("right-0");
+  });
+
   it("groups by workspace with counts and puts the ungrouped ones last", () => {
     mount();
     const headers = screen.getAllByRole("button", { expanded: true }).map((button) => button.textContent);
