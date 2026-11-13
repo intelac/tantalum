@@ -59,11 +59,18 @@ public final class Grep implements LocalTool {
     @Override public String name() { return "grep"; }
     @Override public String description() {
         return "Search files in the allowed directories on the user's computer with a Java regular expression. path is an optional "
-                + "directory or file, relative to the main directory or absolute. Default: the main directory. In a Git repository "
-                + "files ignored by Git are skipped; binary files are skipped.";
+                + "directory or file, relative to the main directory or absolute. Default: the main directory. glob limits the search "
+                + "to matching files, like find_files: *.py matches file names at any depth, src/**/*.ts matches paths under path. "
+                + "In a Git repository files ignored by Git are skipped; binary files are skipped.";
     }
     @Override public Kind kind() { return Kind.READ; }
-    @Override public Json schema() { return ToolArguments.schema(List.of("pattern"), List.of("path")); }
+    /** {@code glob} 照 pi 的 grep（{@code glob}）和 DSH 的 grep（{@code include}）：只搜文件名或路径对得上的文件。 */
+    @Override public Json schema() {
+        return ToolArguments.schema(List.of(
+                ToolArguments.Param.required("pattern", "string", "Java regular expression."),
+                ToolArguments.Param.optional("path", "string", "Directory or file to search, relative to the main directory or absolute. Default: the main directory."),
+                ToolArguments.Param.optional("glob", "string", "Only search files matching this glob, e.g. *.py or src/**/*.ts.")));
+    }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
 
     @Override
@@ -76,7 +83,10 @@ public final class Grep implements LocalTool {
         try {
             Pattern pattern = Pattern.compile(regex);
             Path start = context.dirs().resolve(path == null ? "." : path);
-            List<String> matches = search(pattern, start, context.dirs());
+            String glob = ToolArguments.string(arguments, "glob");
+            java.util.function.Predicate<Path> only = glob == null || glob.isBlank() ? file -> true
+                    : FindFiles.glob(glob, Files.isDirectory(start) ? start : start.getParent());
+            List<String> matches = search(pattern, start, context.dirs(), only);
             if (matches.isEmpty()) {
                 return LocalResult.ok("No matches.");
             }
@@ -112,7 +122,7 @@ public final class Grep implements LocalTool {
     }
 
     /** 单个文件读不了（权限、遍历途中被删）就跳过它，已找到的匹配不丢。 */
-    private List<String> search(Pattern pattern, Path start, AllowedDirs dirs) throws IOException {
+    private List<String> search(Pattern pattern, Path start, AllowedDirs dirs, java.util.function.Predicate<Path> only) throws IOException {
         List<String> matches = new ArrayList<>();
         List<Path> tracked = Files.isDirectory(start, java.nio.file.LinkOption.NOFOLLOW_LINKS) ? gitFiles(start) : null;
         // Files.walk 默认不跟随符号链接，指向目录外的链接不会被进入。
@@ -122,7 +132,7 @@ public final class Grep implements LocalTool {
                     throw new SearchInterrupted();
                 }
                 try {
-                    if (!Files.isRegularFile(file) || Files.isSymbolicLink(file) || Files.size(file) > MAX_FILE_BYTES) {
+                    if (!Files.isRegularFile(file) || Files.isSymbolicLink(file) || Files.size(file) > MAX_FILE_BYTES || !only.test(file)) {
                         continue;
                     }
                     searchFile(pattern, file, dirs, matches);

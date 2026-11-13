@@ -276,6 +276,34 @@ class FileEdgeTest {
         assertTrue(bad.text().startsWith("Invalid pattern: Unclosed character class"), bad.text());
     }
 
+    /** 照 pi 的 glob、DSH 的 include：只搜文件名或路径对得上的文件，规则同 find_files。 */
+    @Test
+    void grepCanBeLimitedToFilesMatchingAGlob() throws Exception {
+        Files.createDirectories(root.resolve("src/web"));
+        Files.writeString(root.resolve("a.py"), "needle\n");
+        Files.writeString(root.resolve("src/b.py"), "needle\n");
+        Files.writeString(root.resolve("src/web/c.ts"), "needle\n");
+        Files.writeString(root.resolve("notes.md"), "needle\n");
+        assertEquals("a.py:1:needle\nsrc/b.py:1:needle", sorted(unix(new Grep().run(context, args("pattern", "needle", "glob", "*.py")).text())));
+        assertEquals("src/web/c.ts:1:needle", unix(new Grep().run(context, args("pattern", "needle", "glob", "src/**/*.ts")).text()));
+        assertEquals("No matches.", new Grep().run(context, args("pattern", "needle", "glob", "*.java")).text());
+        LocalResult bad = new Grep().run(context, args("pattern", "needle", "glob", "[oops"));
+        assertTrue(bad.error(), bad.text());
+    }
+
+    /** 参数里有工具没有的名字：照常执行，结果末尾说明忽略了哪些（qwen 照 Claude Code 的写法给 grep 传过 head_limit 等）。 */
+    @Test
+    void argumentsATooDoesNotHaveAreNamedInTheResult() throws Exception {
+        Files.writeString(root.resolve("a.py"), "needle\n");
+        LocalResult result = new Grep().invoke(context, args("pattern", "needle", "head_limit", "20", "pattern_type", "regex"));
+        assertFalse(result.error());
+        assertEquals("a.py:1:needle\n\n(Ignored arguments this tool does not have: head_limit, pattern_type.)", unix(result.text()));
+        assertEquals("a.py:1:needle", unix(new Grep().invoke(context, args("pattern", "needle", "glob", "*.py")).text()), "known arguments: no note");
+        LocalResult failed = new ReadFile().invoke(context, args("path", "missing.txt", "encoding", "utf-8"));
+        assertTrue(failed.error());
+        assertTrue(failed.text().endsWith("(Ignored arguments this tool does not have: encoding.)"), failed.text());
+    }
+
     private static String sorted(String lines) {
         return String.join("\n", lines.lines().sorted().toList());
     }

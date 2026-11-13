@@ -95,4 +95,13 @@ public final class ToolArguments {
         schema.put("required", new Json.Arr(names));
         return new Json.Obj(schema);
     }
+
+    /** 参数里有、定义（{@code properties}）里没有的名字，按出现的顺序；参数或定义不是对象时为空。 */
+    public static List<String> unknown(Json schema, Json arguments) {
+        if (!(arguments instanceof Json.Obj given) || !(schema instanceof Json.Obj definition)
+                || !(definition.fields().get("properties") instanceof Json.Obj properties)) {
+            return List.of();
+        }
+        return given.fields().keySet().stream().filter(name -> !properties.fields().containsKey(name)).toList();
+    }
 }

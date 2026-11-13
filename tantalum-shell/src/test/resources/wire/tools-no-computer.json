@@ -432,15 +432,21 @@
   {
     "name": "grep",
     "deferred": true,
-    "description": "Search files in the allowed directories on the user's computer with a Java regular expression. path is an optional directory or file, relative to the main directory or absolute. Default: the main directory. In a Git repository files ignored by Git are skipped; binary files are skipped.",
+    "description": "Search files in the allowed directories on the user's computer with a Java regular expression. path is an optional directory or file, relative to the main directory or absolute. Default: the main directory. glob limits the search to matching files, like find_files: *.py matches file names at any depth, src/**/*.ts matches paths under path. In a Git repository files ignored by Git are skipped; binary files are skipped.",
     "schema": {
       "type": "object",
       "properties": {
         "pattern": {
-          "type": "string"
+          "type": "string",
+          "description": "Java regular expression."
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "Directory or file to search, relative to the main directory or absolute. Default: the main directory."
+        },
+        "glob": {
+          "type": "string",
+          "description": "Only search files matching this glob, e.g. *.py or src/**/*.ts."
         }
       },
       "required": [

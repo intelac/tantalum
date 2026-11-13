@@ -11,6 +11,11 @@ public record LocalResult(String text, boolean error, List<LocalImage> images) {
         images = images == null ? List.of() : List.copyOf(images);
     }
 
+    /** 在文字末尾另起一段加一句说明，图片和是否出错不变。 */
+    public LocalResult withNote(String note) {
+        return new LocalResult(text.isEmpty() ? note : text + "\n\n" + note, error, images);
+    }
+
     public static LocalResult ok(String text) {
         return new LocalResult(text, false, List.of());
     }

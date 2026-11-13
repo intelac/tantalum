@@ -152,7 +152,7 @@ final class Calls {
                 result = LocalResult.error(DIR_NOT_ALLOWED + call.dir());
                 outcome = Outcome.DENIED;
             } else {
-                result = tool.run(new LocalContext(call.session(), scoped, observations, sandbox, call.skills(), browser), call.arguments());
+                result = tool.invoke(new LocalContext(call.session(), scoped, observations, sandbox, call.skills(), browser), call.arguments());
                 outcome = !result.error() ? Outcome.OK : outside(call, scoped) ? Outcome.DENIED : Outcome.ERROR;
             }
         } catch (InterruptedException stopped) {

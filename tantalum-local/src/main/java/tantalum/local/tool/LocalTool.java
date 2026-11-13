@@ -1,6 +1,7 @@
 package tantalum.local.tool;
 
 import java.time.Duration;
+import java.util.List;
 import tantalum.value.json.Json;
 
 /**
@@ -46,4 +47,14 @@ public interface LocalTool {
 
     /** 在虚拟线程上执行，要响应中断。抛异常等同于错误结果。 */
     LocalResult run(LocalContext context, Json arguments) throws Exception;
+
+    /**
+     * 连接程序（和测试电脑）都经这里执行：照常 {@link #run}，参数里有定义之外的名字时在结果末尾说明忽略了哪些。
+     * 模型常照别家工具的参数名写（qwen 给 grep 传过 glob、head_limit、pattern_type——Claude Code 的写法），不说的话它以为限制生效了。
+     */
+    default LocalResult invoke(LocalContext context, Json arguments) throws Exception {
+        LocalResult result = run(context, arguments);
+        List<String> ignored = ToolArguments.unknown(schema(), arguments);
+        return ignored.isEmpty() ? result : result.withNote("(Ignored arguments this tool does not have: " + String.join(", ", ignored) + ".)");
+    }
 }

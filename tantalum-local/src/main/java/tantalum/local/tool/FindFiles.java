@@ -51,13 +51,13 @@ public final class FindFiles implements LocalTool {
         String path = ToolArguments.string(arguments, "path");
         String shown = path == null ? "." : path;
         try {
-            List<PathMatcher> matchers = matchers(pattern);
+            matchers(pattern);
             AllowedDirs dirs = context.dirs();
             Path start = dirs.resolve(shown);
             if (!Files.isDirectory(start, LinkOption.NOFOLLOW_LINKS)) {
                 return LocalResult.error("Not a directory: " + shown);
             }
-            boolean byName = !pattern.contains("/");
+            java.util.function.Predicate<Path> matches = glob(pattern, start);
             List<String> found = new ArrayList<>();
             Files.walkFileTree(start, new SimpleFileVisitor<>() {
                 @Override
@@ -71,8 +71,7 @@ public final class FindFiles implements LocalTool {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-                    Path candidate = byName ? file.getFileName() : start.relativize(file);
-                    if (attributes.isRegularFile() && matchers.stream().anyMatch(matcher -> matcher.matches(candidate))) {
+                    if (attributes.isRegularFile() && matches.test(file)) {
                         found.add(dirs.display(file));
                     }
                     return FileVisitResult.CONTINUE;
@@ -104,6 +103,19 @@ public final class FindFiles implements LocalTool {
         } catch (IOException failure) {
             return LocalResult.error("Cannot search " + shown + ": " + failure.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * find_files 的匹配规则：不带 {@code /} 的模式按文件名匹配任意深度，带 {@code /} 的按相对 {@code start} 的路径匹配。
+     * grep 的 {@code glob} 参数也用它，两个工具对同一个模式的理解一样。模式写错时抛 {@link PatternSyntaxException}。
+     */
+    static java.util.function.Predicate<Path> glob(String pattern, Path start) {
+        List<PathMatcher> matchers = matchers(pattern);
+        boolean byName = !pattern.contains("/");
+        return file -> {
+            Path candidate = byName ? file.getFileName() : start.relativize(file);
+            return matchers.stream().anyMatch(matcher -> matcher.matches(candidate));
+        };
     }
 
     /**

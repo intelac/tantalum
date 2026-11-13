@@ -284,7 +284,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         }
         try {
             Observations seen = observations.computeIfAbsent(call.session(), ignored -> new Observations());
-            return tool.get().run(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()).withBrowser(browser),
+            return tool.get().invoke(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()).withBrowser(browser),
                     call.arguments());
         } catch (Exception failure) {
             return LocalResult.error("Tool failed: " + failure);
