@@ -45,7 +45,8 @@ test.describe("本机工作区", () => {
     await card.getByRole("radio", { name: "1 小时" }).click();
     await card.getByRole("button", { name: "连接这台电脑" }).click();
     const command = (await card.locator("code").filter({ hasText: "TANTALUM_TOKEN=" }).textContent()) ?? "";
-    const token = /TANTALUM_TOKEN=(\S+)/.exec(command)?.[1] ?? "";
+    // macOS/Linux：TANTALUM_TOKEN=tc_… ；Windows（PowerShell）：$env:TANTALUM_TOKEN="tc_…";
+    const token = /TANTALUM_TOKEN="?([^"\s;]+)/.exec(command)?.[1] ?? "";
     const server = /--server (\S+)/.exec(command)?.[1] ?? "";
     expect(token).toMatch(/^tc_/);
     expect(server).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
