@@ -70,11 +70,13 @@ def c_rename(ctx):
     return bad
 
 def c_new_file(ctx):
+    # 不用 changelog：会触发测试项目的 release-notes 技能，它的格式里没有版本号，测的就成了“技能和用户冲突时听谁的”
+    # （2026-11-13 的基线里 Sonnet 五次都照技能写、丢了版本号）
     bad = []
-    text = read(ctx, "docs/changelog.md")
-    if "<" in text[:1] or "0.2.0" not in text: bad.append("docs/changelog.md 没建好或没有 0.2.0")
+    text = read(ctx, "docs/zones.md")
+    if "<" in text[:1] or "remote" not in text.lower() or "0.2.0" not in text: bad.append("docs/zones.md 没建好、或没写 remote 和 0.2.0")
     index = read(ctx, "docs/index.md")
-    if "changelog.md" not in index: bad.append("docs/index.md 没登记")
+    if "zones.md" not in index: bad.append("docs/index.md 没登记")
     if "api.md" not in index or "spec.pdf" not in index: bad.append("docs/index.md 原来的条目丢了")
     return bad
 
@@ -450,7 +452,7 @@ SCENARIOS = [
     S("pdf", "找和读", "读 PDF", "docs/spec.pdf 里写的 Spec revision 编号是多少？", c_pdf, max_calls=8),
     S("fix-bug", "改", "读、改、跑的整条链", "这个项目的测试有失败的。找出原因并修好代码（不要改测试），最后跑一遍测试确认全部通过。", c_fix_bug, max_calls=16, timeout=360),
     S("rename", "改", "多文件改名会不会漏", "把函数 compute_shipping_fee 改名为 shipping_cost，所有用到它的地方（代码、测试、文档）都要改。", c_rename, max_calls=24, timeout=420),
-    S("new-file", "改", "write_file 和 edit_file 的分工", "新建 docs/changelog.md，写一条 0.2.0 版本的记录（内容随意），并在 docs/index.md 的列表里加上它的链接。", c_new_file),
+    S("new-file", "改", "write_file 和 edit_file 的分工", "新建 docs/zones.md，写一段说明：remote 区域从 0.2.0 起支持（其余内容随意），并在 docs/index.md 的列表里加上它的链接。", c_new_file),
     S("edit-unread", "改", "没先读就改的报错能不能照着改正", "不用看别的，直接把 inventory/shipping.py 里的 BASE_FEE 从 5 改成 6。", c_edit_unread, max_calls=8),
     S("edit-twice", "改", "要改的文字出现两次", "docs/api.md 最后有 Status 和 Review 两节，都写着 status: draft。只把 Review 那一节的改成 status: approved，Status 那一节不要动。", c_edit_twice, setup=setup_twice),
     S("edit-stale", "改", "读了之后文件被别人改过", "先读 inventory/shipping.py。然后运行 python3 scripts/bump.py（它会改这个文件）。再把 EXPRESS_SURCHARGE 改成 15。脚本做的改动要保留。", c_edit_stale, setup=setup_stale, max_calls=14),
@@ -578,7 +580,9 @@ def c_ask_ambiguous(ctx):
     return bad
 
 def c_nonexistent(ctx):
-    bad = [] if re.search(r"不存在|没有这个|没有找到|找不到|并没有|doesn.t exist|does not exist|not found|no such", ctx.answer, re.I) else ["没说文件不存在"]
+    # “没有 `billing.py`”“没有名为 billing.py 的文件”也算（Sonnet 这样答曾被判错）
+    said = re.search(r"不存在|没有这个|没有找到|找不到|并没有|没有[^。\n]{0,24}billing|doesn.t exist|does not exist|not found|no such|there is no", ctx.answer, re.I)
+    bad = [] if said else ["没说文件不存在"]
     if os.path.exists(os.path.join(ctx.root, "inventory/billing.py")): bad.append("自己建了 inventory/billing.py")
     if re.search(r"TAX_RATE\s*(=|是|为)\s*0?\.\d", ctx.answer): bad.append("编了一个 TAX_RATE 的值")
     return bad
@@ -637,7 +641,8 @@ def c_api_change(ctx):
                 self.assertEqual(compute_shipping_fee(2, "local", currency="USD"), 1.0)
                 with self.assertRaises(ValueError): compute_shipping_fee(2, "local", currency="EUR")
             def test_required(self):
-                with self.assertRaises(TypeError): compute_shipping_fee(2, "local")
+                # 语法上必填（TypeError）或不传就报错（ValueError）都算：express=False 后面没法直接放没有默认值的参数
+                with self.assertRaises((TypeError, ValueError)): compute_shipping_fee(2, "local")
             def test_callers(self):
                 restock("SKU-0009", 10)
                 self.assertIn("total", place_order("SKU-0009", 1, 5, "local"))

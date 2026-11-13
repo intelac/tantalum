@@ -86,6 +86,25 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
         return new NeedWork(CitationWork.TYPE, input(wrong));
     }
 
+    private static final Pattern IPV4 = Pattern.compile("\\d{1,3}(\\.\\d{1,3}){3}");
+
+    /**
+     * 像引用、其实是网络地址的：{@code 127.0.0.1:8766}、{@code http://example.com:8080/x}、{@code user@db.internal:5432}。
+     * 前面是 {@code //} 或 {@code @}、后面紧跟 {@code /}、或者“文件名”是 IPv4 地址，都不当作代码引用（agent-eval 的网页场景发现：
+     * 回答里写测试站的地址被当成没读过的第 8766 行，两次更正后运行被拦下）。
+     */
+    static boolean address(String answer, Matcher match) {
+        int start = match.start();
+        if (start >= 2 && answer.startsWith("//", start - 2) || start >= 1 && answer.charAt(start - 1) == '@') {
+            return true;
+        }
+        int end = match.end();
+        if (end < answer.length() && answer.charAt(end) == '/') {
+            return true;
+        }
+        return IPV4.matcher(match.group(1)).matches();
+    }
+
     /** {@link CitationWork} 的输入 {@code {"wrong": [...]}}。钩子不能依赖做工作的类，所以写在这里。 */
     public static Json input(List<String> wrong) {
         return new Json.Obj(Map.of("wrong", new Json.Arr(wrong.stream().<Json>map(Json.Str::new).toList())));
@@ -96,6 +115,9 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
         Set<String> wrong = new LinkedHashSet<>();
         Matcher matcher = CITATION.matcher(answer);
         while (matcher.find()) {
+            if (address(answer, matcher)) {
+                continue;
+            }
             if (!evidence.covers(matcher.group(1), Long.parseLong(matcher.group(2)))) {
                 wrong.add(matcher.group());
             }

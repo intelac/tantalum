@@ -141,4 +141,14 @@ class CitationCheckTest {
     void absurdLineNumbersAreNotCitations() {
         assertSame(Allow.PLAIN, check(session("see Order.java:99999999999999999999 and Order.java:10")));
     }
+
+    /** 网络地址不是代码引用（agent-eval 发现：回答里写 127.0.0.1:8766 被当成没读过的第 8766 行，运行被拦下）。 */
+    @Test
+    void networkAddressesAreNotCitations() {
+        assertSame(Allow.PLAIN, check(session("the site is http://127.0.0.1:8766/docs/setup.html, also at 127.0.0.1:8766")));
+        assertSame(Allow.PLAIN, check(session("connect with postgres://app@db.internal:5432 or https://example.com:8443/api")));
+        assertSame(Allow.PLAIN, check(session("open localhost.localdomain:8080/health")));
+        // 真的代码引用照查
+        assertInstanceOf(NeedWork.class, check(session("the bug is in Price.java:77, the site is 127.0.0.1:8766")));
+    }
 }
