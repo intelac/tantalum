@@ -1021,14 +1021,17 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 
 要有 `python3`、`git`、Chrome 或 Edge，以及 MXC 的 `mxc-exec-mac`（打过一次 macOS 安装包就在 `~/.cache/tantalum/mxc/` 里，或用 `--mxc` 指定）；只在 macOS 上跑过。它不碰 `~/.local/share/tantalum`，数据都在一个临时目录里，跑完删掉。真模型的结果有随机性：一个场景没过先再跑一次，或者用 `--repeat`。
 
-2026-11-13 的基线（提交 `c67efbd`，37 个场景各 3 次）：
+2026-11-13 的基线（54 个场景；Haiku、Sonnet、Opus 各 5 次，Fable 2 次，本机 qwen 开思考 3 次；结果在 `results/*-suite.json`，以后用 `--compare` 和它比）：
 
-| 模型 | 通过 | 3 次全过的场景 | 费用 |
-|---|---|---|---|
-| Claude Sonnet 5.5 | 105 / 111 | 33 / 37 | 约 3.0 美元 |
-| 本机 qwen | 88 / 111 | 25 / 37 | 0 |
+| 模型 | 通过 | 去掉误判后 | 每次的费用 | 平均模型调用 | 平均耗时 |
+|---|---|---|---|---|---|
+| Claude Haiku 5.5 | 251 / 270 | 98% | 0.002 美元 | 5.3 | 13 秒 |
+| Claude Sonnet 5.5 | 248 / 270 | 97% | 0.017 美元 | 4.2 | 9 秒 |
+| Claude Opus 5.5 | 268 / 270 | 100% | 0.056 美元 | 4.8 | 16 秒 |
+| Claude Fable 5.2 | 107 / 108 | 99% | 0.143 美元 | 4.7 | 20 秒 |
+| 本机 qwen（开思考） | 155 / 162 | 96% | 0 | — | 约 60 秒 |
 
-Claude 没过的：`new-file` 三次都照技能的格式写、没写出“0.2.0”；两个清单任务各有一次没把最后一张待办清单标完（或只交了几项），`todo-compact` 有一次没走到压缩点；`web-404` 有一次被示例插件 `citationCheck` 拦下。qwen 没过的多半是拿到答案后还反复验证、超过步数（`binary`、`web-404`、`skill`、`run-tests`），和长任务做不完（`feature-tests`、`debug-log` 三次都没过，`fix-bug`、`split-module`、`todo-compact` 时过时不过）。以后改了工具、提示或循环，用 `--repeat 3 --compare 这份基线` 比。
+“去掉误判”指两样：示例插件 `citationCheck` 把回答里的 `127.0.0.1:8766` 当成没读过的代码行拦下了运行（已修，`32ce8e3`），以及三个判分太严的场景（说“没有 billing.py”没认、必填参数只认 TypeError、写 changelog 会触发测试项目的技能）——Sonnet 按新判分重跑这几个全过。各模型还没过的：Haiku 遇到说不清的要求不先问（`ask-ambiguous` 1/5）；Sonnet 最后一次写待办清单只交剩下的几项、不是整张（`todo-steps` 1/5）；qwen 抓不存在的网页反复重试（`web-404` 0/3）、看配置时步数用完（`secret-env` 0/3）。本机 qwen 关思考时同一批场景只过 79%：拿到答案后反复验证、超出步数；开思考后步数和 token 都更少，只是每次更慢。
 
 **什么时候跑真模型**：不用每次改完都跑。每次推送只跑不花钱的回放（工具结果、循环、压缩时机变了会报）。改了工具的说明或结果的写法、系统提示、压缩或循环的规则之后，挑相关的场景用 `--repeat 3 --compare 基线` 跑；要换默认模型或评估新模型时跑全部。`--model` 可选 `qwen`、`qwen-think`（本机开思考）、`claude`（Sonnet 5.5）、`opus`、`haiku`、`fable`；费用按 `run.py` 里的价格表算，写在结果里。
 
