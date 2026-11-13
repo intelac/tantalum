@@ -59,11 +59,23 @@ class GitToolsTest {
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command).directory(repo.toFile()).redirectErrorStream(true);
         builder.environment().put("GIT_CONFIG_GLOBAL", "/dev/null");
-        Process process = builder.start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        assertEquals(0, process.waitFor(), output);
-        return output;
+        // Windows 的 CI 机器上偶尔起不来进程（0xC0000142，DLL 初始化失败），和被测工具无关：同一条命令最多再试两次
+        for (int attempt = 1; ; attempt++) {
+            Process process = builder.start();
+            process.getOutputStream().close();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int code = process.waitFor();
+            if (code == DLL_INIT_FAILED && attempt < 3) {
+                Thread.sleep(200);
+                continue;
+            }
+            assertEquals(0, code, output);
+            return output;
+        }
     }
+
+    /** Windows 的 STATUS_DLL_INIT_FAILED（0xC0000142）作为退出码。 */
+    private static final int DLL_INIT_FAILED = 0xC0000142;
 
     private void commit(String message, String author) throws Exception {
         git("add", "-A");
