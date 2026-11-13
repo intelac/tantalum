@@ -15,6 +15,9 @@ import tantalum.value.json.Json;
  */
 public final class BrowserTools {
 
+    /** QAgent 问题 71：批准卡片上只有 e5 这种 ref，用户看不懂要点的是什么；照 Playwright MCP 的 element 参数。 */
+    private static final String ELEMENT = "What the element is, in a few words, like \"Submit button\"; shown to the user when they are asked to "
+            + "approve this action.";
     private static final String REFS = " Refs come from the latest browser_snapshot or action result.";
 
     private static final List<LocalTool> ALL = build();
@@ -35,8 +38,8 @@ public final class BrowserTools {
                         + "accessibility snapshot, where elements carry refs like [ref=e5] "
                         + "for browser_click, browser_type and browser_select_option. To search the web, open "
                         + "`https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a "
-                        + "rate-limit page instead of results. Use web_fetch instead when you only need the text of a known public page: "
-                        + "it is faster and uses fewer tokens.",
+                        + "rate-limit page instead of results. If a web_fetch tool is available, prefer it when you only need the text of a "
+                        + "known public page: it is faster and uses fewer tokens.",
                         object(List.of("url"), "url", string("The http or https URL to open.", PageUrl.MAX_LENGTH)),
                         arguments -> PageUrl.check(BrowserArguments.required(arguments, "url"))),
                 new BrowserTool("browser_navigate_back", "Go back to the previous page in the current tab. Returns the page snapshot.",
@@ -44,10 +47,10 @@ public final class BrowserTools {
                 new BrowserTool("browser_snapshot", "Read the current tab: its title, URL and accessibility snapshot with element refs. "
                         + "Use it to see the page again, for example after waiting.", object(List.of()), none),
                 new BrowserTool("browser_click", "Click an element by its ref, like e5." + REFS + " Returns the page snapshot.",
-                        object(List.of("ref"), "ref", plain("The element ref, like e5.")), ref),
+                        object(List.of("ref"), "ref", plain("The element ref, like e5."), "element", plain(ELEMENT)), ref),
                 new BrowserTool("browser_type", "Replace the text of an input or text area by its ref, optionally pressing Enter "
                         + "afterwards to submit." + REFS + " Returns the page snapshot.",
-                        object(List.of("ref", "text"), "ref", plain("The element ref, like e5."), "text", plain("The text to type."),
+                        object(List.of("ref", "text"), "ref", plain("The element ref, like e5."), "element", plain(ELEMENT), "text", plain("The text to type."),
                                 "submit", bool("Press Enter after typing.")),
                         arguments -> {
                             BrowserArguments.ref(arguments);
@@ -57,7 +60,7 @@ public final class BrowserTools {
                         + "Returns the page snapshot.", object(List.of("key"), "key", plain("The key, in Playwright key names.")),
                         arguments -> BrowserArguments.required(arguments, "key")),
                 new BrowserTool("browser_select_option", "Choose one or more options of a drop-down list by its ref." + REFS
-                        + " Returns the page snapshot.", object(List.of("ref", "values"), "ref", plain("The element ref, like e5."), "values",
+                        + " Returns the page snapshot.", object(List.of("ref", "values"), "ref", plain("The element ref, like e5."), "element", plain(ELEMENT), "values",
                         strings("The values or labels of the options to choose.")),
                         arguments -> {
                             BrowserArguments.ref(arguments);

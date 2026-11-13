@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, within, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QuestionItem, ToolStepItem } from "../../api/types";
@@ -88,6 +88,14 @@ describe("ApprovalCard", () => {
     expect(mount(QUESTION, step("jira__create", { title: "Bug" })).textContent).toContain('"title": "Bug"');
     cleanup();
     expect(mount(QUESTION, null).textContent).toContain('{"command":"mvn -o test"}');
+  });
+
+  // QAgent 问题 71：浏览器操作的元素说明单独一行写在参数上面
+  it("puts a browser action's element description above its arguments", () => {
+    const card = mount(QUESTION, step("browser_click", { ref: "e6", element: "提交按钮" }));
+    expect(within(card).getByText("提交按钮").tagName).toBe("P");
+    expect(card.textContent?.indexOf("提交按钮")).toBeLessThan(card.textContent?.indexOf('"ref"') ?? 0);
+    expect(card.textContent).toContain('"ref": "e6"');
   });
 
   it("a click sends that choice and disables every button until the question settles", async () => {

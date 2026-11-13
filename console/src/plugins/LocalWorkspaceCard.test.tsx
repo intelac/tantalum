@@ -77,6 +77,32 @@ async function card() {
 
 /** local-workspace 需求 6、L17：插件页的本机工作区卡片。 */
 describe("LocalWorkspaceCard", () => {
+  // QAgent 问题 44：取到过状态以后某次轮询失败，整张卡片被一句“读取失败”替换。现在照旧显示，顶上加一行。
+  it("keeps the card when a later refresh fails", async () => {
+    fakeBackend({ switches: ALL_ON, link: link() });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <LocalWorkspaceCard open />
+      </QueryClientProvider>,
+    );
+    await card();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve("") })));
+    await client.refetchQueries();
+    const region = await card();
+    await within(region).findByText("刷新失败，显示的是上一次的状态。");
+    expect(within(region).getByRole("switch", { name: "本机工作区" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  // N5（2026-11-14 实测）：本机 MCP 一项只说“在 mcp.json 里加”，不说文件在哪
+  it("says where the local MCP config file is", async () => {
+    fakeBackend({ switches: ALL_ON, link: link({ protocol: 6, mcp: [], mcpConfig: "/Users/yi/.config/tantalum/mcp.json" }) });
+    open();
+    const region = await card();
+    expect(await within(region).findByText("配置文件：/Users/yi/.config/tantalum/mcp.json")).toBeTruthy();
+  });
+
   it("says how to connect when no computer is connected", async () => {
     fakeBackend({ switches: ALL_ON, link: null });
     open();

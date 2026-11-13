@@ -69,6 +69,10 @@
         "ref": {
           "type": "string",
           "description": "The element ref, like e5."
+        },
+        "element": {
+          "type": "string",
+          "description": "What the element is, in a few words, like \"Submit button\"; shown to the user when they are asked to approve this action."
         }
       },
       "required": [
@@ -96,7 +100,7 @@
   {
     "name": "browser_navigate",
     "deferred": true,
-    "description": "Open a URL in a browser on the user's computer. The browser has its own profile, separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be visible to the user, who may also act in it, for example to log in when you ask. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a rate-limit page instead of results. Use web_fetch instead when you only need the text of a known public page: it is faster and uses fewer tokens.",
+    "description": "Open a URL in a browser on the user's computer. The browser has its own profile, separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be visible to the user, who may also act in it, for example to log in when you ask. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a rate-limit page instead of results. If a web_fetch tool is available, prefer it when you only need the text of a known public page: it is faster and uses fewer tokens.",
     "schema": {
       "type": "object",
       "properties": {
@@ -147,6 +151,10 @@
         "ref": {
           "type": "string",
           "description": "The element ref, like e5."
+        },
+        "element": {
+          "type": "string",
+          "description": "What the element is, in a few words, like \"Submit button\"; shown to the user when they are asked to approve this action."
         },
         "values": {
           "type": "array",
@@ -222,6 +230,10 @@
         "ref": {
           "type": "string",
           "description": "The element ref, like e5."
+        },
+        "element": {
+          "type": "string",
+          "description": "What the element is, in a few words, like \"Submit button\"; shown to the user when they are asked to approve this action."
         },
         "text": {
           "type": "string",
@@ -446,7 +458,7 @@
         },
         "glob": {
           "type": "string",
-          "description": "Only search files matching this glob, e.g. *.py or src/**/*.ts."
+          "description": "Only search files matching this glob, e.g. *.py or src/**/*.ts; start with ! to skip matching files, e.g. !*.min.js."
         }
       },
       "required": [

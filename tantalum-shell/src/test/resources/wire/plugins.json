@@ -89,5 +89,18 @@
     "byDefault" : true,
     "changed" : false,
     "params" : [ ]
+  }, {
+    "name" : "secretMask",
+    "description" : {
+      "en" : "Replaces API keys, tokens, passwords and private keys in tool results with [REDACTED] before the model, the record and the page see them.",
+      "zh" : "工具结果交给模型、写进记录、显示在页面上之前，把里面的 API key、令牌、密码和私钥换成 [REDACTED]。",
+      "ja" : "ツール結果をモデル・記録・ページに渡す前に、API キー、トークン、パスワード、秘密鍵を [REDACTED] に置き換えます。"
+    },
+    "points" : [ "afterToolExecution" ],
+    "group" : "output",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
   } ]
 }

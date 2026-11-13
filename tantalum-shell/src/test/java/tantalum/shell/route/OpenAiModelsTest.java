@@ -127,10 +127,10 @@ class OpenAiModelsTest {
         }
         status.set(200);
         body.set("<html>");
-        assertEquals("返回的不是模型列表",
+        assertEquals("not-a-list",
                 assertThrows(ModelList.Unreadable.class, () -> read(route(List.of(), true, 0, Map.of()), null)).getMessage());
         RouteSettings route = route(List.of(), true, 0, Map.of());
         server.stop(0);
-        assertEquals("连不上", assertThrows(ModelList.Unreadable.class, () -> read(route, null)).getMessage());
+        assertEquals("unreachable", assertThrows(ModelList.Unreadable.class, () -> read(route, null)).getMessage());
     }
 }

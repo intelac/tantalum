@@ -9,6 +9,7 @@ import { pick } from "../text/localText";
 import { Button } from "../ui/Button";
 import { cx } from "../ui/cx";
 import { Switch } from "../ui/Switch";
+import { useReportUnsaved } from "./unsaved";
 
 /**
  * 表单填的是哪一层的值：`own` 我自己的（“我的插件”），`default` 管理员定的默认（“插件默认值”），`assigned` 管理员给一个人指定的（运维）。
@@ -246,6 +247,7 @@ export function ParamForm({ name, params, mode, onSave, onReset, onClearSecret, 
   const t = useText();
   const text = t.plugins.params;
   const form = useParamDraft(params, mode);
+  useReportUnsaved(`params:${name}`, form.dirty);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ParamFailure | null>(null);
 

@@ -127,6 +127,7 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar --tantalum.provide
 | 思考参数 | 自动（见下） | `thinking`、`efforts`，见下 |
 | 其他 | `max-tokens`、`concurrency`、`context-window`、`bytes-per-token`、`fallbacks`、超时 | `max-tokens`（16384）、`concurrency`（1）、`context-window`、`bytes-per-token`（1.75）、`vision`、超时；`overrides[模型名].*` 单独写某个模型的 `thinking`、`efforts`、`default-effort`、`vision`、`context-window` |
 
+- Claude 的提示缓存默认 1 小时（`tantalum.claude.cache-ttl=1h`，可改成 `5m`）：等你批准、看回答常常超过 5 分钟，5 分钟的缓存过期后下一轮按全价重读。代价是写缓存的单价是基础价的 2 倍（5 分钟的是 1.25 倍）。
 - 路线名只用小写字母、数字、`-`，最长 32，`claude` 保留。名字不合规、重复、`thinking` 或档位写错、默认路线不存在，启动失败并写明哪一项。
 - **密钥只从环境变量读**，不进配置文件、日志、journal、接口返回和画面；接口也不返回路线地址和变量名。变量没设的路线不启用（启动日志写变量名，不写值）；默认路线的变量没设时启动失败。
 - 模型名里有 `/`、`.` 时 `overrides` 用 Spring 的方括号写法：`--tantalum.openai-routes.kimi.overrides[moonshotai/kimi-k2].thinking=thinking-type`。
@@ -532,6 +533,11 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 - 插件页“本机工作区 › 命令行”下面的“执行前先问我”就是这个开关，每个用户自己的；关掉后命令直接执行。管理员可以写进 `tantalum.hooks.required` 对所有人强制打开；`tantalum.local.command-approval.enabled=false` 整个去掉（评测场景用，那里没有人回答）。
 - 例子插件的“工具审批”（默认关）还在，两个都开时各问各的。
 - 照 DSH 的取舍不同：DSH 靠操作系统沙箱、只在沙箱拒了要放宽时才问；pi 不问。我们没有跨平台的沙箱，所以每条都问（Yi 2026-11-14 定的）。
+- 开着时模型事先就知道每条命令要你批准（上下文里“插件规则”一段），被拒绝后不会换个办法绕过去；例子插件“工具审批”也一样。
+
+### 密钥遮盖
+
+内置插件 `secretMask`，默认开：工具结果交给模型、写进记录、显示在页面上之前，把常见形式的密钥换成 `[REDACTED]`——`sk-…`、AWS 的 `AKIA…`、GitHub 的 `ghp_…`、Slack 的 `xox?-…`、JWT、PEM 私钥块、网址里的口令（`postgres://app:口令@host`），以及 `password=…`、`relay-key: …` 这类赋值（只换值，键名留着）。变量引用、函数调用、普通单词不换，读代码不受影响。工具出错时的报错原文总是遮盖。每个用户能在插件页关；`tantalum.secret-mask.enabled=false` 整个去掉。它只认形式：认不出的密钥照样会露出来，别把它当成唯一的防线。
 
 ### 本机 MCP
 

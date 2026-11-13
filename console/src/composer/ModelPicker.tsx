@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ModelChoice, ModelInfo, ModelsResponse } from "../api/types";
 import { currentText, lookup, useText } from "../text";
 import { cx } from "../ui/cx";
+import { routeReason } from "../settings/routeReason";
 import { findModel, levelFor } from "./useModels";
 
 interface Props {
@@ -119,7 +120,7 @@ export function ModelPicker({ models, choice, pending, toolChangesInHistory, onS
               <div key={route.name} role="group" aria-label={route.displayName} className="py-1">
                 <p className={cx("px-2 py-1 text-xs", route.status === "unavailable" ? "text-fg-faint" : "text-fg-muted")}>
                   {route.displayName}
-                  {route.status === "unavailable" && <span className="ml-1">{t.composer.picker.unavailable(route.error ?? "")}</span>}
+                  {route.status === "unavailable" && <span className="ml-1">{t.composer.picker.unavailable(routeReason(t, route.error))}</span>}
                 </p>
                 {shown.map((model) => {
                   const active = choice?.route === route.name && choice.model === model.id;

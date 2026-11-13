@@ -73,6 +73,13 @@ public final class ToolApprovalHook implements KernelHook, PluginInfo, Configura
                 .ja("リストにあるツールを呼び出す前に会話ページで確認し、回答まで待ちます。今回だけ許可、このセッションでは常に許可、または拒否を選べます。");
     }
 
+    /** 事先告诉模型（QAgent 问题 10：模型不知道每次改动都要批准，被拦下后换个办法再试）。 */
+    @Override
+    public String modelNote() {
+        return "Some tool calls (by default the ones that change files) wait for the user to approve them first; the user sees the call "
+                + "and allows or denies it. If a call is denied, do not try to do the same thing another way: ask the user what they want.";
+    }
+
     /** 策略插件：默认关，用户在插件页打开（管理员要对所有人强制开启时写进 {@code tantalum.hooks.required}）；开着时出错按拦截处理。 */
     @Override
     public boolean defaultEnabled() {

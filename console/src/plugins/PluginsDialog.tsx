@@ -14,7 +14,9 @@ import { byUse, toolText } from "./names";
 import { ParamForm } from "./ParamForm";
 import { Group, Row, Section, SwitchNotes } from "./Rows";
 import { type Toggle, useOwnParams, usePlugins, useResetPlugin, useTogglePlugin } from "./usePlugins";
+import { useUnsavedState } from "./unsaved";
 import { WebCard } from "./WebCard";
+import { Button } from "../ui/Button";
 
 interface Props {
   open: boolean;
@@ -42,21 +44,49 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
   const reset = useResetPlugin();
   const [tab, setTab] = useState<"mine" | "defaults">("mine");
   const [focus, setFocus] = useState<Focus | null>(null);
+  // 有没保存的修改时，关对话框、切页签先问（QAgent 问题 17）；pending 是被拦下的那个动作
+  const unsaved = useUnsavedState();
+  const [pending, setPending] = useState<(() => void) | null>(null);
+  const leave = (action: () => void) => {
+    if (unsaved.dirty) setPending(() => action);
+    else action();
+  };
   const data = plugins.data;
   const actions: Actions = {
     set: (change) => toggle.mutate(change),
     reset: (kind, name) => reset.mutate({ kind, name }),
     toDefaults: admin
       ? (kind, name) => {
-          setFocus({ kind, name });
-          setTab("defaults");
+          leave(() => {
+            setFocus({ kind, name });
+            setTab("defaults");
+          });
         }
       : undefined,
   };
   const failed = toggle.isError ? toggle.error : reset.isError ? reset.error : null;
   const split = splitLocked(data ?? { tools: [], mcp: [], plugins: [] });
-  return (
-    <Dialog open={open} onClose={onClose} title={t.plugins.title} className="max-w-[960px]">
+  return unsaved.provider(
+    <Dialog open={open} onClose={() => leave(onClose)} title={t.plugins.title} className="max-w-[960px]">
+      {pending !== null && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 border-b border-line bg-danger-soft px-4 py-2 text-sm sm:px-6">
+          <span className="text-fg">{t.plugins.leave.question}</span>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              const action = pending;
+              setPending(null);
+              action();
+            }}
+          >
+            {t.plugins.leave.discard}
+          </Button>
+          <Button size="sm" onClick={() => setPending(null)}>
+            {t.plugins.leave.keep}
+          </Button>
+        </div>
+      )}
       {admin && (
         <Tabs
           className="border-b border-line px-4 sm:px-6"
@@ -66,7 +96,7 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
             { id: "defaults", label: t.plugins.tabs.defaults },
           ]}
           selected={tab}
-          onSelect={(id) => setTab(id === "defaults" ? "defaults" : "mine")}
+          onSelect={(id) => leave(() => setTab(id === "defaults" ? "defaults" : "mine"))}
         />
       )}
       <div className="flex max-h-[calc(100dvh-9rem)] min-h-[50dvh] flex-col gap-6 overflow-y-auto px-4 pt-3 pb-6 sm:px-6">
@@ -143,7 +173,7 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
           </>
         )}
       </div>
-    </Dialog>
+    </Dialog>,
   );
 }
 

@@ -148,4 +148,12 @@ class PlaywrightBrowserTest {
             assertEquals(0, left.count());
         }
     }
+
+    /** QAgent 问题 71：模型给的元素说明照转给 Playwright MCP。 */
+    @Test
+    void theElementDescriptionIsPassedOn() throws Exception {
+        PlaywrightBrowser browser = browser(Map.of("browser_snapshot", LocalResult.ok(SNAPSHOT), "browser_tabs", LocalResult.ok(TABS)));
+        browser.call("s", "browser_click", args("ref", "e6", "element", "Learn more link"));
+        assertEquals("browser_click {\"target\":\"e6\",\"element\":\"Learn more link\"}", sent.getFirst());
+    }
 }

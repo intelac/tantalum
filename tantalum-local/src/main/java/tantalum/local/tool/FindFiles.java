@@ -110,6 +110,10 @@ public final class FindFiles implements LocalTool {
      * grep 的 {@code glob} 参数也用它，两个工具对同一个模式的理解一样。模式写错时抛 {@link PatternSyntaxException}。
      */
     static java.util.function.Predicate<Path> glob(String pattern, Path start) {
+        // QAgent 问题 53：以 ! 开头是排除（ripgrep 的 -g '!*.min.js' 写法），原来当成文件名里的 !，一个文件都不匹配
+        if (pattern.startsWith("!") && pattern.length() > 1) {
+            return glob(pattern.substring(1), start).negate();
+        }
         List<PathMatcher> matchers = matchers(pattern);
         boolean byName = !pattern.contains("/");
         return file -> {

@@ -177,7 +177,7 @@ class TantalumPropertiesTest {
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
         return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
-                        java.time.Duration.ofSeconds(1), 4, claudeWindow, 1.5, null, null, null),
+                        java.time.Duration.ofSeconds(1), 4, claudeWindow, 1.5, null, null, null, null),
                 java.util.Map.of("local", new TantalumProperties.OpenAiRoute(null, "http://127.0.0.1:8090/v1", null, "qwen", null, null,
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),

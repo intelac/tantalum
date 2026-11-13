@@ -13,7 +13,7 @@ public final class Route {
     private final ModelClient client;
     private final ModelList models;
     private final AtomicBoolean reading = new AtomicBoolean();
-    private volatile Listing listing = Listing.unavailable("还没读到");
+    private volatile Listing listing = Listing.unavailable("not-yet");
 
     Route(RouteSettings settings, ModelClient client, ModelList models) {
         this.settings = settings;

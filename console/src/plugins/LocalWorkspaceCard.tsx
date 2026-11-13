@@ -37,7 +37,8 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
   const local = useLocal(open);
   const toggle = useToggleLocal();
   const status = local.data;
-  if (local.isError) {
+  // 一次也没取到时才整张报错；取到过以后某次轮询失败，照旧显示上一次的状态，顶上加一行（QAgent 问题 44：整张卡片消失）
+  if (local.isError && status === undefined) {
     return (
       <p role="alert" className="text-sm text-danger">
         {text.loadFailed}
@@ -45,10 +46,16 @@ export function LocalWorkspaceCard({ open }: { open: boolean }) {
     );
   }
   if (status === undefined) return null;
+  const stale = local.isError;
   const master = status.switches[MASTER];
   const set = (name: LocalSwitch, enabled: boolean) => toggle.mutate({ name, enabled });
   return (
     <Section title={text.title}>
+      {stale && (
+        <li role="status" className="px-3 py-2 text-xs text-warning">
+          {text.refreshFailed}
+        </li>
+      )}
       <Row
         name={
           <>
@@ -219,13 +226,24 @@ function McpItem({ link }: { link: LocalLink | null }) {
   const toggle = useToggleLocalMcp();
   if (link === null || (link.protocol ?? 0) < MCP_TOOLS) return null;
   const servers = link.mcp ?? [];
-  if (servers.length === 0) return <p className="pr-3 pb-2.5 pl-16 text-xs text-fg-faint">{text.mcp.none}</p>;
+  // 配置文件在电脑上的哪里（N5：只写“mcp.json”，用户不知道去哪里加）；老的连接程序不报，就不写
+  const file = link.mcpConfig === undefined ? null : <p className="font-mono text-[11px] break-all text-fg-faint">{text.mcp.file(link.mcpConfig)}</p>;
+  if (servers.length === 0)
+    return (
+      <div className="pr-3 pb-2.5 pl-16 text-xs text-fg-faint">
+        <p>{text.mcp.none}</p>
+        {file}
+      </div>
+    );
   return (
-    <ul aria-label={text.switches["local-mcp"][0]} className="flex flex-col gap-2 pr-3 pb-2.5 pl-16">
-      {servers.map((server) => (
-        <McpServerRow key={server.name} server={server} onToggle={(enabled) => toggle.mutate({ server: server.name, enabled })} />
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2 pr-3 pb-2.5 pl-16">
+      <ul aria-label={text.switches["local-mcp"][0]} className="flex flex-col gap-2">
+        {servers.map((server) => (
+          <McpServerRow key={server.name} server={server} onToggle={(enabled) => toggle.mutate({ server: server.name, enabled })} />
+        ))}
+      </ul>
+      {file}
+    </div>
   );
 }
 

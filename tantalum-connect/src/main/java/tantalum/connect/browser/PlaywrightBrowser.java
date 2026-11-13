@@ -281,7 +281,10 @@ public final class PlaywrightBrowser implements Browser {
         String ref = BrowserArguments.ref(arguments);
         Map<String, Json> args = new LinkedHashMap<>();
         args.put("target", new Json.Str(ref));
-        args.put("element", new Json.Str(ref));
+        // 模型给了元素说明（QAgent 问题 71）就照转，没给用 ref
+        String element = arguments instanceof Json.Obj object && object.fields().get("element") instanceof Json.Str text
+                && !text.value().isBlank() ? text.value().strip() : ref;
+        args.put("element", new Json.Str(element));
         return args;
     }
 

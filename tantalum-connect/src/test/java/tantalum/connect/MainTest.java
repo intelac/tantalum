@@ -344,4 +344,15 @@ class MainTest {
         assertTrue(profile.getMessage().startsWith("浏览器的资料目录不能用：" + file.resolve("p")), profile.getMessage());
         assertFalse(Files.exists(temp.resolve("p")), "a refused start creates no profile directory");
     }
+
+    /** N2（2026-11-14 实测）：旧版留下的 browser-driver-* 启动时删掉，别的目录不动。 */
+    @Test
+    void oldBrowserDriversAreRemoved(@org.junit.jupiter.api.io.TempDir java.nio.file.Path home) throws Exception {
+        java.nio.file.Path driver = java.nio.file.Files.createDirectories(home.resolve("browser-driver-1.64.0/node/bin"));
+        java.nio.file.Files.writeString(driver.resolve("node"), "x");
+        java.nio.file.Path profile = java.nio.file.Files.createDirectories(home.resolve("browser-profile"));
+        Main.removeOldDrivers(home);
+        org.junit.jupiter.api.Assertions.assertFalse(java.nio.file.Files.exists(home.resolve("browser-driver-1.64.0")));
+        org.junit.jupiter.api.Assertions.assertTrue(java.nio.file.Files.isDirectory(profile));
+    }
 }

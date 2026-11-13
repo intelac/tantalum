@@ -7,6 +7,7 @@ import { QuestionItem } from "./QuestionItem";
 import { RunStatusRow } from "./RunStatusRow";
 import { TurnUsage } from "./TurnUsage";
 import { useRunStatus } from "../store/hooks";
+import { settleReply } from "./blocks";
 import { ToolChangeNotice } from "./ToolChangeNotice";
 
 interface Props {
@@ -23,8 +24,12 @@ interface Props {
 }
 
 /** 一次运行：工具变化、过程区、问用户的问题、回复、还在流式输出的部分，以及没有正常完成时的说明。 */
-export function RunBlock({ store, run, process, reply, notices = [], questions = [] }: Props) {
+export function RunBlock({ store, run, process: grouped, reply: trailing, notices = [], questions = [] }: Props) {
   const status = useRunStatus(store, run);
+  const { process, reply } =
+    status?.endReason === undefined
+      ? { process: grouped, reply: trailing }
+      : settleReply(grouped, trailing, (id) => store.getItem(id)?.kind === "text");
   return (
     <div className="py-1">
       {notices.map((id) =>

@@ -3,6 +3,7 @@ import { tokenCount } from "../composer/status";
 import { findModel, useModels } from "../composer/useModels";
 import { useText } from "../text";
 import { cx } from "../ui/cx";
+import { routeReason } from "./routeReason";
 import { CompactionPicker } from "./CompactionPicker";
 
 interface Props {
@@ -45,7 +46,7 @@ export function ModelPane({ config, choice = null }: Props) {
               <p className={cx("text-xs", route.status === "unavailable" ? "text-fg-faint" : "text-fg-muted")}>
                 {route.displayName}
                 <span className="ml-1">{route.cloud ? t.composer.cloud : t.composer.local}</span>
-                {route.status === "unavailable" && <span className="ml-1">{t.settings.routeUnavailable(route.error ?? "")}</span>}
+                {route.status === "unavailable" && <span className="ml-1">{t.settings.routeUnavailable(routeReason(t, route.error))}</span>}
               </p>
               <ul className="flex flex-col gap-0.5 text-sm">
                 {route.models.map((model) => (

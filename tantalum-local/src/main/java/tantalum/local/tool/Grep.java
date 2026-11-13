@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import java.util.stream.Stream;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.value.json.Json;
 
@@ -69,7 +68,7 @@ public final class Grep implements LocalTool {
         return ToolArguments.schema(List.of(
                 ToolArguments.Param.required("pattern", "string", "Java regular expression."),
                 ToolArguments.Param.optional("path", "string", "Directory or file to search, relative to the main directory or absolute. Default: the main directory."),
-                ToolArguments.Param.optional("glob", "string", "Only search files matching this glob, e.g. *.py or src/**/*.ts.")));
+                ToolArguments.Param.optional("glob", "string", "Only search files matching this glob, e.g. *.py or src/**/*.ts; start with ! to skip matching files, e.g. !*.min.js.")));
     }
     @Override public boolean isConcurrencySafe(Json arguments) { return true; }
 
@@ -121,30 +120,55 @@ public final class Grep implements LocalTool {
         return text.toString();
     }
 
-    /** 单个文件读不了（权限、遍历途中被删）就跳过它，已找到的匹配不丢。 */
+    /**
+     * 单个文件读不了（权限、遍历途中被删）就跳过它，已找到的匹配不丢；读不了的目录也跳过（QAgent 问题 39：原来用 {@code Files.walk}，
+     * 遇到一个没权限的子目录整次搜索就失败）。
+     */
     private List<String> search(Pattern pattern, Path start, AllowedDirs dirs, java.util.function.Predicate<Path> only) throws IOException {
         List<String> matches = new ArrayList<>();
         List<Path> tracked = Files.isDirectory(start, java.nio.file.LinkOption.NOFOLLOW_LINKS) ? gitFiles(start) : null;
-        // Files.walk 默认不跟随符号链接，指向目录外的链接不会被进入。
-        try (Stream<Path> files = tracked != null ? tracked.stream() : Files.walk(start).filter(file -> !skipped(start, file))) {
-            for (Path file : (Iterable<Path>) files::iterator) {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new SearchInterrupted();
-                }
-                try {
-                    if (!Files.isRegularFile(file) || Files.isSymbolicLink(file) || Files.size(file) > MAX_FILE_BYTES || !only.test(file)) {
-                        continue;
-                    }
-                    searchFile(pattern, file, dirs, matches);
-                } catch (IOException | UncheckedIOException unreadable) {
-                    continue;
-                }
-                if (matches.size() >= MAX_MATCHES) {
+        if (tracked != null) {
+            for (Path file : tracked) {
+                if (visit(pattern, file, dirs, only, matches)) {
                     break;
                 }
             }
+            return matches;
         }
+        // walkFileTree 默认不跟随符号链接，指向目录外的链接不会被进入。
+        Files.walkFileTree(start, new java.nio.file.SimpleFileVisitor<>() {
+            @Override
+            public java.nio.file.FileVisitResult preVisitDirectory(Path dir, java.nio.file.attribute.BasicFileAttributes attributes) {
+                return skipped(start, dir) ? java.nio.file.FileVisitResult.SKIP_SUBTREE : java.nio.file.FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attributes) {
+                return visit(pattern, file, dirs, only, matches) ? java.nio.file.FileVisitResult.TERMINATE
+                        : java.nio.file.FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public java.nio.file.FileVisitResult visitFileFailed(Path file, IOException unreadable) {
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
         return matches;
+    }
+
+    /** 搜一个文件；够数了返回 true。读不了的文件跳过。 */
+    private boolean visit(Pattern pattern, Path file, AllowedDirs dirs, java.util.function.Predicate<Path> only, List<String> matches) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new SearchInterrupted();
+        }
+        try {
+            if (Files.isRegularFile(file) && !Files.isSymbolicLink(file) && Files.size(file) <= MAX_FILE_BYTES && only.test(file)) {
+                searchFile(pattern, file, dirs, matches);
+            }
+        } catch (IOException | UncheckedIOException unreadable) {
+            return false;
+        }
+        return matches.size() >= MAX_MATCHES;
     }
 
     /** 不在仓库里时：路径上有 {@code .git}、{@code node_modules} 这类目录的跳过。 */

@@ -56,6 +56,13 @@ public final class CommandApprovalHook implements KernelHook, PluginInfo {
                         + "許可、このセッションでは常に許可、拒否から選べます。コマンドはあなたとして実行され、サンドボックスはありません。");
     }
 
+    /** 事先告诉模型（QAgent 问题 10）。 */
+    @Override
+    public String modelNote() {
+        return "Each bash or powershell command on the user's computer waits for the user to approve it; the user sees the full command. "
+                + "Run one clear command at a time, and if a command is denied, do not work around it: ask the user instead.";
+    }
+
     /** 默认开。 */
     @Override
     public boolean defaultEnabled() {

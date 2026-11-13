@@ -32,7 +32,7 @@ class ChoiceCheckTest {
                                 new Levels(Levels.CLAUDE, "medium"), true)),
                 "local", () -> List.of(RouteFixtures.model("local", "qwen", Levels.NONE, false, true)),
                 "down", () -> {
-                    throw new ModelList.Unreadable("连不上");
+                    throw new ModelList.Unreadable("unreachable");
                 });
         routes = Routes.create(List.of(RouteFixtures.claude(List.of()), RouteFixtures.openAi("local", null, OpenAiThinking.NONE, 0),
                 RouteFixtures.openAi("down", null, OpenAiThinking.NONE, 0)), "claude",

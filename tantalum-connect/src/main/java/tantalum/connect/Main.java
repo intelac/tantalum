@@ -64,6 +64,8 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) {
+        // MCP SDK 用 SLF4J，连接程序不带日志实现：不加这一句，允许浏览器时每次启动打三行“No SLF4J providers”警告（N3，2026-11-14）
+        System.setProperty("slf4j.internal.verbosity", "ERROR");
         System.exit(run(args, System.getenv(), Main::readQuietly, System.out));
     }
 
@@ -323,6 +325,7 @@ public final class Main {
         if (options.mcpConfig() != null && !Files.isRegularFile(mcpFile)) {
             throw new Refused(words.say(Key.REFUSED_MCP_CONFIG, Map.of("file", mcpFile)));
         }
+        removeOldDrivers(Profile.home());
         McpConfig mcp = McpConfig.read(mcpFile);
         if (browser != null) {
             // 内置的 playwright 一项；mcp.json 里有同名的就用文件里的
@@ -330,7 +333,8 @@ public final class Main {
         }
         Hello hello = hello(options, dirs, shell, state, jarSha256());
         // hello 里先带“启动中”，好了再补报（McpHost 的状态和这里一致）
-        hello = hello.withMcp(visible(new McpHost(mcp, Map.of(), dirs.main(), ignored -> { }).states(), browser != null));
+        hello = hello.withMcp(visible(new McpHost(mcp, Map.of(), dirs.main(), ignored -> { }).states(), browser != null))
+                .withMcpConfig(mcpFile.toAbsolutePath().toString());
         return new Setup(socket, options, dirs, hello, token, shell, browser, mcp, mcpFile, commandEnv);
     }
 
@@ -364,6 +368,25 @@ public final class Main {
     }
 
     /** 报给服务器的本机 MCP 服务器：浏览器开着时，内置的 playwright 一项不算（它的工具是 browser_*）。 */
+    /**
+     * 0.1 以前用 Playwright for Java 自己驱动浏览器，下载的驱动放在 {@code browser-driver-<版本>}（约 130 MB）；现在走 Playwright MCP，
+     * 用不上了，启动时删掉（N2，2026-11-14 实测看到）。只删这个前缀的目录，删不掉不影响启动。
+     */
+    static void removeOldDrivers(Path home) {
+        try (java.util.stream.Stream<Path> entries = Files.list(home)) {
+            for (Path dir : entries.filter(path -> path.getFileName().toString().startsWith("browser-driver-") && Files.isDirectory(path,
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS)).toList()) {
+                try (java.util.stream.Stream<Path> tree = Files.walk(dir)) {
+                    for (Path path : tree.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                        Files.deleteIfExists(path);
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // 目录不在、没权限：留着，不影响连接
+        }
+    }
+
     static List<McpServerState> visible(List<McpServerState> states, boolean browserOn) {
         return browserOn ? states.stream().filter(state -> !state.name().equals(PlaywrightBrowser.SERVER)).toList() : states;
     }
@@ -540,9 +563,12 @@ public final class Main {
                     Map.of("name", browser.name())));
             out.println(words.say(Key.SUMMARY_BROWSER_PROFILE, Map.of("dir", setup.browser().profile())));
         }
-        if (!setup.mcp().servers().isEmpty() || !setup.mcp().problems().isEmpty()) {
-            out.println(words.say(Key.SUMMARY_MCP, Map.of("names", setup.mcp().servers().isEmpty() ? "-"
-                    : String.join(", ", setup.mcp().servers().stream().map(entry -> entry.disabled() ? entry.name() + " (off)" : entry.name()).toList()),
+        // 内置的浏览器那一项上面“浏览器：”已经说了，这里不再列成本机 MCP（N4，2026-11-14 实测看到）
+        List<McpConfig.Entry> listed = setup.mcp().servers().stream()
+                .filter(entry -> setup.browser() == null || !entry.name().equals(PlaywrightBrowser.SERVER)).toList();
+        if (!listed.isEmpty() || !setup.mcp().problems().isEmpty()) {
+            out.println(words.say(Key.SUMMARY_MCP, Map.of("names", listed.isEmpty() ? "-"
+                    : String.join(", ", listed.stream().map(entry -> entry.disabled() ? entry.name() + " (off)" : entry.name()).toList()),
                     "file", String.valueOf(setup.mcpFile()))));
             for (String problem : setup.mcp().problems()) {
                 out.println(words.say(Key.SUMMARY_MCP_PROBLEM, Map.of("problem", problem)));

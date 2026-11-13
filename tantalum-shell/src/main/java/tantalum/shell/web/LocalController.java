@@ -152,6 +152,10 @@ public class LocalController {
         // 电脑上的是不是这里提供的那个 jar：不知道（服务器上没放）时不写
         connector.matches(hello).ifPresent(matches -> view.put("connectorMatches", matches));
         view.put("connector", hello.connector());
+        if (hello.mcpConfig() != null) {
+            // 本机 MCP 的配置文件在用户电脑上的位置，插件页告诉用户去哪里加服务器（N5）
+            view.put("mcpConfig", hello.mcpConfig());
+        }
         // 本机 MCP 服务器（协议 6 起）：名字、状态、原因、工具名和说明；插件页列出来，每个服务器一个开关
         if (!hello.mcp().isEmpty()) {
             view.put("mcp", hello.mcp().stream().map(server -> {

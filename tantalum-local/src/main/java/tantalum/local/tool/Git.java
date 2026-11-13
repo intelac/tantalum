@@ -38,6 +38,9 @@ final class Git {
     static final int MAX_LINE_CHARS = 2000;
     private static final int MAX_ERROR_CHARS = 1000;
     static final String NOT_A_REPOSITORY = "Not a Git repository inside the allowed directories: ";
+    /** 路径在仓库里，但仓库的顶层不在允许的目录里：Git 会读到允许范围外的文件，所以不查。 */
+    static final String OUTSIDE = "%s is inside the Git repository at %s, which is outside the allowed directories; Git tools only work "
+            + "on repositories whose top directory is allowed.";
     private static final List<String> BASE = List.of("git", "--no-pager", "-c", "core.fsmonitor=false", "-c", "core.quotePath=false");
     /** 比较、显示改动时都加：不启动外部 diff 程序和文本转换程序。 */
     static final List<String> NO_EXTERNAL = List.of("--no-color", "--no-ext-diff", "--no-textconv");
@@ -63,14 +66,15 @@ final class Git {
         Path target = path == null ? null : context.dirs().resolve(path);
         Path dir = target == null ? context.dirs().main() : Files.isDirectory(target) ? target : target.getParent();
         Output top = run(dir, List.of("rev-parse", "--show-toplevel"));
-        String shown = path == null ? "." : path;
+        // QAgent 问题 84：没给 path 时写主目录的真实位置，不写“.”；仓库顶层在允许范围外时照实说，不说“不是仓库”
+        String shown = path == null ? dir.toString() : path;
         if (!top.ok() || top.text().isBlank()) {
             throw new IllegalArgumentException(NOT_A_REPOSITORY + shown);
         }
         try {
             context.dirs().resolve(top.text().strip());
         } catch (IllegalArgumentException outside) {
-            throw new IllegalArgumentException(NOT_A_REPOSITORY + shown);
+            throw new IllegalArgumentException(OUTSIDE.formatted(shown, Path.of(top.text().strip())));
         }
         return new Place(dir, target);
     }

@@ -62,7 +62,14 @@ public final class ClaudeClient implements ModelClient {
      * 模型参数。{@code strictThinking} 让 thinking 签名不匹配时直接 400，未强制校验的账号也能暴露改动历史的问题，测试用。
      */
     public record Settings(String defaultModel, long maxTokens, String defaultEffort, boolean fallbacks, Duration firstChunk,
-                           Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {}
+                           Duration betweenChunks, OverflowRules overflow, boolean strictThinking, boolean hourCache) {
+
+        /** 缓存默认 1 小时（{@code tantalum.claude.cache-ttl}，QAgent 问题 87）。 */
+        public Settings(String defaultModel, long maxTokens, String defaultEffort, boolean fallbacks, Duration firstChunk,
+                        Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {
+            this(defaultModel, maxTokens, defaultEffort, fallbacks, firstChunk, betweenChunks, overflow, strictThinking, true);
+        }
+    }
 
     public ClaudeClient(AnthropicClient client, Settings settings) {
         this.client = client;
@@ -90,7 +97,7 @@ public final class ClaudeClient implements ModelClient {
         try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks)) {
             try {
                 StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(
-                        ClaudeRequest.params(prompt, options(prompt), media));
+                        request.params(prompt, options(prompt), media));
                 watchdog.watch(stream);
                 try (stream) {
                     stream.stream().forEach(event -> {

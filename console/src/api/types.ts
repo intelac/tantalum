@@ -850,6 +850,8 @@ export interface LocalLink {
   /** 连接程序的版本，以及是不是这台服务器提供下载的那个（connector-jar 需求 2.2）；服务器上没放 jar 时没有 `connectorMatches`。 */
   connector?: string;
   connectorMatches?: boolean;
+  /** 本机 MCP 配置文件在电脑上的位置（N5）；老的连接程序不报。 */
+  mcpConfig?: string;
   /** 电脑上 mcp.json 里的本机 MCP 服务器（协议 6 起）。 */
   mcp?: LocalMcpServer[];
   connectedAt: string;
@@ -990,7 +992,7 @@ export interface ModelInfo {
   points: CompactionPoint[];
 }
 
-/** 一条路线和它最近一次读到的列表；`unavailable` 是一次也没读到，`error` 只写类别（连不上、401、超时）。 */
+/** 一条路线和它最近一次读到的列表；`unavailable` 是一次也没读到，`error` 是代码（`unreachable`、`timeout`、`not-a-list`、`not-yet`）或 HTTP 状态码，用 `routeReason` 按语言显示。 */
 export interface RouteView {
   name: string;
   displayName: string;

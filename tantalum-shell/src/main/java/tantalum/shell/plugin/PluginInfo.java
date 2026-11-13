@@ -32,4 +32,12 @@ public interface PluginInfo {
     default boolean defaultEnabled() {
         return true;
     }
+
+    /**
+     * 开着时给模型的一段固定说明（英文，一两句），没有为 null。放进上下文的“插件说明”一段，开关变了由内核追加变化，不改 system。
+     * 用来让模型事先知道规矩，比如“改文件要用户批准”（QAgent 问题 10），不要写会变的内容。
+     */
+    default String modelNote() {
+        return null;
+    }
 }

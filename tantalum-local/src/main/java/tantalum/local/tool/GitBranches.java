@@ -28,7 +28,8 @@ public final class GitBranches implements LocalTool {
         try {
             boolean all = ToolArguments.bool(arguments, "all", false);
             Git.Place place = Git.place(context, ToolArguments.string(arguments, "path"));
-            List<String> command = new ArrayList<>(List.of("branch", "--list", "--no-color",
+            // QAgent 问题 6：按最近提交排，新的在前（原来按名字排，最新的反而在最后）
+            List<String> command = new ArrayList<>(List.of("branch", "--list", "--no-color", "--sort=-committerdate",
                     "--format=%(HEAD) %(refname:short) %(objectname:short) %(committerdate:short) %(subject)"));
             if (all) {
                 command.add("--all");

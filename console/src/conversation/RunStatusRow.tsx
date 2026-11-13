@@ -32,6 +32,12 @@ export function RunStatusRow({ store, run }: Props) {
         {danger && item.detail !== undefined && item.detail !== "" && text !== item.detail && (
           <p className="mt-1 font-mono text-xs break-all opacity-80">{item.detail}</p>
         )}
+        {item.endReason === "STOPPED" && item.detail !== undefined && item.detail !== "" && (
+          <p className="mt-1 text-xs break-all opacity-80">
+            {t.failure.pluginSaid}
+            <span className="font-mono">{item.detail}</span>
+          </p>
+        )}
         <a
           href={tracePath(item.session, run)}
           onClick={(event) => {

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Component, isValidElement } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cjkAutolink } from "./cjkAutolink";
 import { useText } from "../text";
 import { cx } from "../ui/cx";
 import { CodeBlock } from "./CodeBlock";
@@ -93,7 +94,7 @@ export function Markdown({ text, muted = false, className }: Props) {
   return (
     <div className={cx("md text-[15px]", muted && "md-muted", className)}>
       <Boundary text={text}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml urlTransform={safeUrl} components={COMPONENTS}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, cjkAutolink]} skipHtml urlTransform={safeUrl} components={COMPONENTS}>
           {text}
         </ReactMarkdown>
       </Boundary>

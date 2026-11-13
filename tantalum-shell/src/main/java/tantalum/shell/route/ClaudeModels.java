@@ -67,9 +67,9 @@ public final class ClaudeModels implements ModelList {
         } catch (AnthropicServiceException failure) {
             throw new Unreadable(Integer.toString(failure.statusCode()));
         } catch (AnthropicIoException failure) {
-            throw new Unreadable(timedOut(failure) ? "超时" : "连不上");
+            throw new Unreadable(timedOut(failure) ? "timeout" : "unreachable");
         } catch (RuntimeException malformed) {
-            throw new Unreadable("返回的不是模型列表");
+            throw new Unreadable("not-a-list");
         }
         List<String> dropped = listed.values().stream().filter(model -> !adaptive(model)).map(com.anthropic.models.models.ModelInfo::id).toList();
         if (!dropped.isEmpty()) {

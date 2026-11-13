@@ -205,8 +205,8 @@ export const zh = {
     generic: "运行失败",
     cancelled: "已取消",
     restarted: "服务重启，这次运行已中断。可以接着提问",
-    stopped: "被钩子停止",
-    stoppedWith: (detail: string) => `被钩子停止：${detail}`,
+    stopped: "被插件停下了",
+    pluginSaid: "插件给的原因（原文）：",
     dropped: "命令丢失，运行失败",
     switchCompaction: (label: string) => `换到 ${label} 之前压缩失败，请重试或换窗口更大的模型`,
   },
@@ -780,6 +780,8 @@ export const zh = {
     models: "能选的模型",
     modelsHint: "在输入框旁选模型和思考档位，每个会话各自记着，从下一次提问生效。换模型后缓存会重新建立。",
     routeUnavailable: (reason: string) => (reason === "" ? "暂时连不上" : `暂时连不上（${reason}）`),
+    /** 模型列表读不到的原因：服务器给代码（QAgent 问题 86），HTTP 状态码原样显示。 */
+    routeReasons: { "not-yet": "还没读到列表", timeout: "超时", unreachable: "连不上", "not-a-list": "返回的不是模型列表" } as Record<string, string>,
     imagesYes: "收图片",
     imagesNo: "不收图片",
     compactionFor: (name: string) => `压缩点按 ${name} 计算`,
@@ -925,6 +927,7 @@ export const zh = {
     hintNextQuestion: "只影响你自己，从你的下一次提问开始生效，在同一个会话里也是；关掉的工具立即不能再调用。",
     hintNewSession: "只影响你自己，从你的下一次提问开始生效。当前模型不支持会话中途增加工具：打开的工具从新会话开始可用；关掉的立即不能再调用。",
     hintParams: "没有参数的插件，拨开关就生效；有参数的，打开后在下面填好，点它自己的“保存”。",
+    leave: { question: "有没保存的修改，离开就丢了。", discard: "放弃修改", keep: "继续编辑" },
     hintAdmin: "你是管理员：锁定的插件对所有人一样，在“插件默认值”里改。",
     tabs: { label: "插件的页签", mine: "我的插件", defaults: "插件默认值" },
     groups: { rule: "规则", tool: "工具", output: "工具输出处理", locked: "只有管理员能改" },
@@ -1070,6 +1073,7 @@ export const zh = {
       askBeforeHint: "每条命令先在对话里给你看，你点“允许”才在电脑上执行。关掉后命令直接执行。",
       mcp: {
         none: "电脑上没有配置本机 MCP 服务器。在 mcp.json 里加，重启连接程序后出现在这里。",
+        file: (path: string) => `配置文件：${path}`,
         old: "连接程序需要更新才能用本机 MCP：下载新的 tantalum-connect.jar，用原来的命令重新运行",
         states: { starting: "启动中", ready: "可用", failed: "出错", disabled: "mcp.json 里停用了" },
         tools: (count: number) => `${count} 个工具`,
@@ -1108,6 +1112,7 @@ export const zh = {
       issueFailed: (message: string) => `没有生成令牌：${message}`,
       revokeFailed: (message: string) => `没有撤销：${message}`,
       loadFailed: "本机工作区的状态加载失败",
+      refreshFailed: "刷新失败，显示的是上一次的状态。",
       dir: {
         skills: "技能目录",
         wiki: "wiki 目录",

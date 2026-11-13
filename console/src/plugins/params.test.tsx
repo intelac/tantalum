@@ -235,6 +235,30 @@ describe("PluginsDialog with settings", () => {
     expect(calls.find((call) => call.method === "PUT")).toEqual({ method: "PUT", path: "/api/plugins/plugin/approval/params", body: '{"values":{"maxChars":300}}' });
   });
 
+  // QAgent 问题 17：改了参数没保存就关对话框或切页签，修改悄悄丢了。现在先问；“继续编辑”留在原处，“放弃修改”才离开。
+  it("asks before leaving with unsaved settings", async () => {
+    fakeBackend();
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+        <PluginsDialog open onClose={onClose} admin />
+      </QueryClientProvider>,
+    );
+    const form = within(await screen.findByRole("form", { name: "approval 的参数" }));
+    await userEvent.clear(form.getByLabelText("最多字数"));
+    await userEvent.type(form.getByLabelText("最多字数"), "300");
+    await userEvent.click(screen.getByRole("tab", { name: "插件默认值" }));
+    expect(screen.getByRole("alert").textContent).toContain("有没保存的修改");
+    expect(screen.getByRole("tab", { name: "我的插件" }).getAttribute("aria-selected")).toBe("true");
+    await userEvent.click(screen.getByRole("button", { name: "继续编辑" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((form.getByLabelText("最多字数") as HTMLInputElement).value).toBe("300");
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "放弃修改" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("takes an administrator from a locked row to that plugin's defaults", async () => {
     fakeBackend();
     open(true);

@@ -152,6 +152,6 @@ class ClaudeModelsTest {
         assertEquals("404", missing.getMessage());
         server.stop(0);
         ModelList.Unreadable down = assertThrows(ModelList.Unreadable.class, () -> models(List.of(), false).read());
-        assertEquals("连不上", down.getMessage());
+        assertEquals("unreachable", down.getMessage());
     }
 }

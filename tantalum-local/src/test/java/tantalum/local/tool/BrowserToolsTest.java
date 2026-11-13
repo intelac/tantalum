@@ -86,6 +86,10 @@ class BrowserToolsTest {
     }
 
     /** 需求 4.1、4.3：参数逐字钉住，键的顺序固定（工具定义不变，提示缓存才稳定）。和搬家前服务器上的 schema 一字不差。 */
+    /** QAgent 问题 71：带 ref 的三个工具多了可选的元素说明。 */
+    private static final String ELEMENT = "\"element\":{\"type\":\"string\",\"description\":\"What the element is, in a few words, "
+            + "like \"Submit button\"; shown to the user when they are asked to approve this action.\"}";
+
     @Test
     void schemasAreWhatTheServerSideBrowserHad() {
         Map<String, String> schemas = BrowserTools.all().stream()
@@ -96,14 +100,15 @@ class BrowserToolsTest {
         expected.put("browser_navigate_back", "{\"type\":\"object\",\"properties\":{}}");
         expected.put("browser_snapshot", "{\"type\":\"object\",\"properties\":{}}");
         expected.put("browser_click", "{\"type\":\"object\",\"properties\":{\"ref\":{\"type\":\"string\","
-                + "\"description\":\"The element ref, like e5.\"}},\"required\":[\"ref\"]}");
+                + "\"description\":\"The element ref, like e5.\"},"
+                + ELEMENT + "},\"required\":[\"ref\"]}");
         expected.put("browser_type", "{\"type\":\"object\",\"properties\":{\"ref\":{\"type\":\"string\",\"description\":\"The element ref, like e5.\"},"
-                + "\"text\":{\"type\":\"string\",\"description\":\"The text to type.\"},\"submit\":{\"type\":\"boolean\","
+                + ELEMENT + ",\"text\":{\"type\":\"string\",\"description\":\"The text to type.\"},\"submit\":{\"type\":\"boolean\","
                 + "\"description\":\"Press Enter after typing.\"}},\"required\":[\"ref\",\"text\"]}");
         expected.put("browser_press_key", "{\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\","
                 + "\"description\":\"The key, in Playwright key names.\"}},\"required\":[\"key\"]}");
         expected.put("browser_select_option", "{\"type\":\"object\",\"properties\":{\"ref\":{\"type\":\"string\","
-                + "\"description\":\"The element ref, like e5.\"},\"values\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1,"
+                + "\"description\":\"The element ref, like e5.\"}," + ELEMENT + ",\"values\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"minItems\":1,"
                 + "\"description\":\"The values or labels of the options to choose.\"}},\"required\":[\"ref\",\"values\"]}");
         expected.put("browser_wait_for", "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\","
                 + "\"description\":\"Wait until this text is visible.\"},\"textGone\":{\"type\":\"string\","

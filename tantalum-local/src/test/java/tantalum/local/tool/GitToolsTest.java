@@ -271,10 +271,10 @@ class GitToolsTest {
         Files.writeString(plain.resolve("a.txt"), "x");
         LocalContext none = new LocalContext("s", new AllowedDirs(List.of(plain)), new Observations());
         for (LocalTool tool : List.<LocalTool>of(log, diff, branches)) {
-            assertEquals(Git.NOT_A_REPOSITORY + ".", tool.run(none, args()).text(), tool.name());
+            assertEquals(Git.NOT_A_REPOSITORY + plain, tool.run(none, args()).text(), tool.name());
         }
         assertEquals(Git.NOT_A_REPOSITORY + "a.txt", blame.run(none, args("path", "a.txt")).text());
-        assertEquals(Git.NOT_A_REPOSITORY + ".", show.run(none, args("revision", "HEAD")).text());
+        assertEquals(Git.NOT_A_REPOSITORY + plain, show.run(none, args("revision", "HEAD")).text());
     }
 
     /**
@@ -296,7 +296,7 @@ class GitToolsTest {
         assertFalse(sub.error(), sub.text());
         assertEquals(2, sub.text().lines().count());
         assertTrue(blame.run(plainMain, args("path", "shop/repo/App.java")).text().contains("int a = 2"));
-        assertEquals(Git.NOT_A_REPOSITORY + ".", log.run(plainMain, args()).text(), "the main directory itself is not a repository");
+        assertEquals(Git.NOT_A_REPOSITORY + main, log.run(plainMain, args()).text(), "the main directory itself is not a repository");
         assertEquals(Git.NOT_A_REPOSITORY + "notes.txt", log.run(plainMain, args("path", "notes.txt")).text());
 
         // 第二个允许目录里的仓库
@@ -306,13 +306,13 @@ class GitToolsTest {
         assertTrue(second.text().contains("Bob: second: change a"));
     }
 
-    /** 只允许了仓库里的一个子目录：仓库顶层在允许的目录外，git show 能读到外面的文件，所以当作不是仓库。 */
+    /** 只允许了仓库里的一个子目录：仓库顶层在允许的目录外，git show 能读到外面的文件，所以不查，并照实说仓库在哪（QAgent 问题 84）。 */
     @Test
     void aRepositoryWhoseTopIsOutsideTheAllowedDirectoriesIsNotUsed() throws Exception {
         LocalContext docsOnly = new LocalContext("s", new AllowedDirs(List.of(repo.resolve("docs"))), new Observations());
         LocalResult output = show.run(docsOnly, args("revision", "HEAD:App.java"));
         assertTrue(output.error());
-        assertEquals(Git.NOT_A_REPOSITORY + ".", output.text());
+        assertEquals(Git.OUTSIDE.formatted(repo.resolve("docs"), repo), output.text());
     }
 
     @Test

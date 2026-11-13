@@ -31,7 +31,9 @@ import tantalum.value.text.LocalText;
 /**
  * 引用核对（{@code beforeRunEnd}）：回答里形如 {@code Order.java:42} 的引用，必须是这个会话里真的读到过的那一行。
  * 依据是会话里的工具结果：{@code read_file} 读过的行（参数里的 {@code offset} 起，按结果的行数或结尾的“Showing lines a-b”），
- * 以及 {@code grep} 结果里的 {@code 路径:行号:}。
+ * 任何工具结果里 {@code 路径:行号:} 开头的行（{@code grep}、bash 里的 {@code rg -n}），以及任何工具结果里原样出现过的
+ * {@code 文件:行号}（日志里的调用栈、工单里写的位置：模型照抄的是它看到的原文，不是凭空引用）。反斜杠路径和正斜杠等同。
+ * 后三条是 2026-11-14 对照 QAgent 问题清单第 5、19 条加的。
  *
  * <p>不读文件（2026-11-06 Yi 定：服务器上只有 {@code read_attachment} 读文件）。用户的代码在他自己的电脑上，服务器读不到；
  * 模型看到过什么都已经在会话里，拿工具结果核对既不用 I/O，又正好回答“这个引用有没有根据”。所以判断全在钩子里，是纯函数。
@@ -46,7 +48,7 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
     static final int MAX_CORRECTIONS = 2;
 
     /** 文件名带扩展名、冒号、行号；行号最多 9 位，再长的不是行号。 */
-    private static final Pattern CITATION = Pattern.compile("([\\w./-]+\\.\\w+):(\\d{1,9})(?!\\d)");
+    private static final Pattern CITATION = Pattern.compile("([\\w./\\\\-]+\\.\\w+):(\\d{1,9})(?!\\d)");
     /** {@code read_file} 没读完时结尾的说明，见 {@code tantalum.local.tool.ReadFile}。 */
     private static final Pattern SHOWING = Pattern.compile("\\[Showing lines (\\d+)-(\\d+) of \\d+");
     /** {@code grep} 的一行：{@code 路径:行号:内容}。 */
@@ -118,7 +120,7 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
             if (address(answer, matcher)) {
                 continue;
             }
-            if (!evidence.covers(matcher.group(1), Long.parseLong(matcher.group(2)))) {
+            if (!evidence.covers(matcher.group(1), Long.parseLong(matcher.group(2))) && !evidence.shown(matcher.group())) {
                 wrong.add(matcher.group());
             }
         }
@@ -160,11 +162,12 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
     }
 
     /** 会话里读到过的行：路径 → 行号区间。 */
-    record Evidence(Map<String, List<long[]>> lines) {
+    record Evidence(Map<String, List<long[]>> lines, List<String> texts) {
 
         static Evidence of(List<Message> messages) {
             Map<String, ToolCallBlock> calls = new HashMap<>();
             Map<String, List<long[]>> lines = new HashMap<>();
+            List<String> texts = new ArrayList<>();
             for (Message message : messages) {
                 for (ContentBlock block : message.content()) {
                     if (block instanceof ToolCallBlock call) {
@@ -173,11 +176,12 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
                         ToolCallBlock call = calls.get(result.toolCallId());
                         if (call != null) {
                             read(call, result.text(), lines);
+                            texts.add(result.text());
                         }
                     }
                 }
             }
-            return new Evidence(lines);
+            return new Evidence(lines, texts);
         }
 
         private static void read(ToolCallBlock call, String text, Map<String, List<long[]>> lines) {
@@ -199,16 +203,15 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
                     }
                     add(lines, path.value(), first, last);
                 }
-                case "grep" -> {
-                    Matcher hit = GREP_LINE.matcher(text);
-                    while (hit.find()) {
-                        long line = Long.parseLong(hit.group(2));
-                        add(lines, hit.group(1), line, line);
-                    }
-                }
                 default -> {
-                    // 别的工具的结果不当作依据
+                    // 下面的“路径:行号:”对所有工具都算
                 }
+            }
+            // grep、bash 里的 rg -n / grep -n、本机 MCP 的搜索：每行“路径:行号:内容”都算读过那一行
+            Matcher hit = GREP_LINE.matcher(text);
+            while (hit.find()) {
+                long line = Long.parseLong(hit.group(2));
+                add(lines, hit.group(1), line, line);
             }
         }
 
@@ -229,8 +232,14 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
             return false;
         }
 
+        /** 引用原样出现在某个工具结果里（前面不是路径的一部分，后面不再跟数字）：调用栈、工单里的位置。 */
+        boolean shown(String citation) {
+            Pattern exact = Pattern.compile("(?<![\\w.-])" + Pattern.quote(citation) + "(?!\\d)");
+            return texts.stream().anyMatch(text -> exact.matcher(text).find());
+        }
+
         private static String normalize(String path) {
-            String trimmed = path.strip();
+            String trimmed = path.strip().replace('\\', '/');
             while (trimmed.startsWith("./")) {
                 trimmed = trimmed.substring(2);
             }

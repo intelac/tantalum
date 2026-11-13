@@ -161,6 +161,17 @@ public class TantalumApplication {
         return new tantalum.shell.local.CommandApprovalHook();
     }
 
+    /**
+     * 内置的密钥遮盖（QAgent 问题 67）：工具结果里的密钥换成 [REDACTED]。默认开，每个用户在插件页关；
+     * {@code tantalum.secret-mask.enabled=false} 整个去掉。排在最前，先于截断这类工具后处理。
+     */
+    @Bean
+    @org.springframework.core.annotation.Order(0)
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty(name = "tantalum.secret-mask.enabled", matchIfMissing = true)
+    tantalum.shell.plugin.AfterToolHook secretMaskHook() {
+        return new tantalum.shell.mask.SecretMaskHook();
+    }
+
     /** Web 服务器的实际端口（配置 0 时是随机的）告诉联网的地址规则。 */
     @Bean
     ApplicationListener<WebServerInitializedEvent> ownPort(ObjectProvider<Engine> engine) {
@@ -213,7 +224,8 @@ public class TantalumApplication {
             case CLAUDE -> {
                 AnthropicClient sdk = AnthropicOkHttpClient.builder().apiKey(key).maxRetries(0).build();
                 yield new Routes.Built(new ClaudeClient(sdk, new ClaudeClient.Settings(route.defaultModel(), route.maxTokens(),
-                        route.defaultEffort(), route.fallbacks(), route.firstChunkTimeout(), route.betweenChunkTimeout(), rules, false)),
+                        route.defaultEffort(), route.fallbacks(), route.firstChunkTimeout(), route.betweenChunkTimeout(), rules, false,
+                        properties.claude() == null || properties.claude().cacheTtl().equals("1h"))),
                         new ClaudeModels(sdk, route.name(), route.allow(), route.defaultEffort(), route.fallbacks(), route.maxTokens(),
                                 LIST_TIMEOUT));
             }

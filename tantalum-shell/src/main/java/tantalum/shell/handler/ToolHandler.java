@@ -72,7 +72,7 @@ public final class ToolHandler implements Handler {
             context = new ToolContext(run.run().principal(), run.run().session(), workspaces.of(run.run().principal()),
                     dirs.apply(run.run().session()));
         } catch (RuntimeException failure) {
-            return finished(run, ToolOutput.error("Workspace unavailable: " + failure.getMessage()), null);
+            return finished(run, ToolOutput.error(tantalum.shell.mask.SecretMask.mask("Workspace unavailable: " + failure.getMessage())), null);
         }
         Ran ran = execute(tool.get(), context, run.call().arguments());
         return finished(run, gate.afterTool(context, tool.get(), run.call().arguments(), ran.output()), ran.startedAt());
@@ -117,6 +117,7 @@ public final class ToolHandler implements Handler {
 
     @Override
     public Event failed(Command command, Exception failure) {
-        return finished((RunTool) command, ToolOutput.error("Tool failed: " + failure), null);
+        // 异常原文不经过工具后处理，可能带着密码（QAgent 问题 8 的同类），这里总是遮盖，不看插件开关
+        return finished((RunTool) command, ToolOutput.error(tantalum.shell.mask.SecretMask.mask("Tool failed: " + failure)), null);
     }
 }

@@ -76,6 +76,8 @@ public final class PluginGate {
     private final Map<String, Plugin> plugins;
     /** 成员自己声明必须开启的插件（{@link PluginInfo#mandatory()}）；其余必须开启的是服务器配置定的。 */
     private final Set<String> lockedInCode;
+    /** 插件给模型的固定说明（{@link PluginInfo#modelNote()}），按插件名。 */
+    private final Map<String, String> modelNotes;
     /** 钩子插件声明的参数，没声明的不在里面。 */
     private final Map<String, List<Param>> pluginParams;
     /** 有内核钩子的插件：只有它们的参数记进组装上下文。 */
@@ -124,6 +126,7 @@ public final class PluginGate {
         this.workTypes = List.copyOf(workTypes);
         this.plugins = group(hooks, afterHooks, workTypes, required);
         this.lockedInCode = lockedInCode(hooks, afterHooks);
+        this.modelNotes = modelNotes(hooks, afterHooks);
         this.pluginParams = declared(hooks, afterHooks, workTypes);
         this.kernelPlugins = hooks.stream().map(KernelHook::plugin).collect(java.util.stream.Collectors.toUnmodifiableSet());
         this.dailyLimits = dailyLimits(hooks, afterHooks, workTypes);
@@ -206,6 +209,12 @@ public final class PluginGate {
 
     public List<String> enabledPlugins(Principal user) {
         return plugins.keySet().stream().filter(name -> pluginEnabled(user, name)).toList();
+    }
+
+    /** 这个用户开着的插件给模型的说明，按插件名排序；一个都没有时为空。QAgent 问题 10：模型不知道改文件要批准。 */
+    public List<String> modelNotes(Principal user) {
+        return modelNotes.entrySet().stream().filter(entry -> pluginEnabled(user, entry.getKey()))
+                .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).toList();
     }
 
     /**
@@ -766,6 +775,21 @@ public final class PluginGate {
     }
 
     /** 成员自己声明必须开启的插件。 */
+    private static Map<String, String> modelNotes(List<KernelHook> hooks, List<AfterToolHook> afterHooks) {
+        Map<String, String> notes = new LinkedHashMap<>();
+        for (KernelHook hook : hooks) {
+            if (hook instanceof PluginInfo info && info.modelNote() != null && !info.modelNote().isBlank()) {
+                notes.putIfAbsent(hook.plugin(), info.modelNote().strip());
+            }
+        }
+        for (AfterToolHook hook : afterHooks) {
+            if (hook instanceof PluginInfo info && info.modelNote() != null && !info.modelNote().isBlank()) {
+                notes.putIfAbsent(hook.plugin(), info.modelNote().strip());
+            }
+        }
+        return Map.copyOf(notes);
+    }
+
     private static Set<String> lockedInCode(List<KernelHook> hooks, List<AfterToolHook> afterHooks) {
         Set<String> names = new LinkedHashSet<>();
         hooks.stream().filter(hook -> hook instanceof PluginInfo info && info.mandatory()).forEach(hook -> names.add(hook.plugin()));

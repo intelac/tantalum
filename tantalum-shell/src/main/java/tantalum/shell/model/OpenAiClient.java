@@ -462,7 +462,9 @@ public final class OpenAiClient implements ModelClient {
     private static Map<String, Object> call(ToolCallBlock call) {
         Map<String, Object> function = new LinkedHashMap<>();
         function.put("name", call.name());
-        function.put("arguments", call.argumentsValid() ? call.rawArguments() : "{}");
+        // 不带参数的调用流里是空串；原样发回去，要合法 JSON 的服务（vLLM、llama.cpp 的模板）整轮失败（QAgent 问题 1 的同类）
+        boolean usable = call.argumentsValid() && call.rawArguments() != null && !call.rawArguments().isBlank();
+        function.put("arguments", usable ? call.rawArguments() : "{}");
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("id", call.id());
         entry.put("type", "function");

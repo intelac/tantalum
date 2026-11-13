@@ -327,9 +327,13 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
      */
     public record Claude(String model, long maxTokens, String effort, boolean fallbacks, Duration firstChunkTimeout,
                          Duration betweenChunkTimeout, int concurrency, long contextWindow, double bytesPerToken,
-                         String apiKeyEnv, List<String> models, String displayName) {
+                         String apiKeyEnv, List<String> models, String displayName, String cacheTtl) {
 
         public Claude {
+            cacheTtl = cacheTtl == null || cacheTtl.isBlank() ? "1h" : cacheTtl.strip();
+            if (!cacheTtl.equals("1h") && !cacheTtl.equals("5m")) {
+                throw new IllegalArgumentException("tantalum.claude.cache-ttl=" + cacheTtl + " must be 1h or 5m");
+            }
             requirePositive("bytesPerToken", bytesPerToken);
             if (!CLAUDE_EFFORTS.contains(effort)) {
                 throw new IllegalArgumentException("tantalum.claude.effort=" + effort + " is not a Claude effort; expected one of "

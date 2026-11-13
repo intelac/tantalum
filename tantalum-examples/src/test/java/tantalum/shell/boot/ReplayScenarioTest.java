@@ -131,6 +131,8 @@ class ReplayScenarioTest {
         scenario.get("serverArgs").forEach(arg -> extra.add(arg.asString()));
         // 录制时（scenarios/run.py）命令不先问；回放也一样，否则 bash 停在批准卡片上
         extra.add("--tantalum.local.command-approval.enabled=false");
+        // 密钥遮盖（qagent-fixes）是在录制之后加的：录下的结果是原文，回放也不遮，结果才能逐字对上
+        extra.add("--tantalum.secret-mask.enabled=false");
         Path data = temp.resolve("data");
         try (TestServer server = new TestServer(data, temp.resolve("ws"), model, extra.toArray(String[]::new));
              TestComputer ignored = TestComputer.connectForReplay(server.context.getBean(Engine.class).localLinks(), new Principal("alice"),

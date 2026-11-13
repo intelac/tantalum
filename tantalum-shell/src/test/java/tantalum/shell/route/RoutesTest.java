@@ -63,12 +63,12 @@ class RoutesTest {
         AtomicInteger reads = new AtomicInteger();
         ModelList flaky = () -> {
             if (reads.incrementAndGet() > 1) {
-                throw new ModelList.Unreadable("超时");
+                throw new ModelList.Unreadable("timeout");
             }
             return models("local", "qwen").read();
         };
         ModelList down = () -> {
-            throw new ModelList.Unreadable("连不上");
+            throw new ModelList.Unreadable("unreachable");
         };
         try (Routes routes = Routes.create(List.of(RouteFixtures.openAi("local", null, OpenAiThinking.CHAT_TEMPLATE, 0),
                 RouteFixtures.openAi("down", null, OpenAiThinking.NONE, 0)), "local", lists(Map.of("local", flaky, "down", down)),
@@ -76,12 +76,12 @@ class RoutesTest {
             routes.start(Duration.ofSeconds(2));
             await(() -> routes.route("local").orElseThrow().listing().status() == Listing.Status.STALE);
             Listing stale = routes.route("local").orElseThrow().listing();
-            assertEquals("超时", stale.error());
+            assertEquals("timeout", stale.error());
             assertEquals(List.of("qwen"), stale.models().stream().map(ModelInfo::id).toList(), "the last list is kept");
             assertTrue(routes.model(new ModelChoice("local", "qwen", "on")).isPresent());
             Listing never = routes.route("down").orElseThrow().listing();
             assertEquals(Listing.Status.UNAVAILABLE, never.status());
-            assertEquals("连不上", never.error());
+            assertEquals("unreachable", never.error());
             assertEquals(List.of(), never.models());
         }
     }

@@ -10,6 +10,7 @@ import { byUse, toolText } from "./names";
 import { failureOf, type ParamFailure, ParamFields, useParamDraft } from "./ParamForm";
 import { Group } from "./Rows";
 import { usePluginDefaults, useSetPluginDefault } from "./usePlugins";
+import { useReportUnsaved } from "./unsaved";
 
 /** 从“我的插件”里锁定的那一行跳过来时，要滚到并标出来的那一项。 */
 export interface Focus {
@@ -86,6 +87,7 @@ function Item({ item, focused }: { item: PluginDefault; focused: boolean }) {
     return fixed ? {} : result;
   }
   const dirty = Object.keys(change()).length > 0 || form.dirty;
+  useReportUnsaved(`defaults:${item.kind}:${item.name}`, dirty);
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();

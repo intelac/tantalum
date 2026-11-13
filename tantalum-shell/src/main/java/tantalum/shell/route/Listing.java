@@ -6,7 +6,7 @@ import java.util.Optional;
 
 /**
  * 一条路线最近一次读到的模型列表。{@code OK} 是最近一次读到了；{@code STALE} 是这次没读到、还用上次的；
- * {@code UNAVAILABLE} 是一次也没读到过，没有可选的模型。{@code error} 是给日志和画面的一句话，只写类别（“连不上”“401”“超时”），
+ * {@code UNAVAILABLE} 是一次也没读到过，没有可选的模型。{@code error} 是给日志和画面的一句话，只写类别（代码 {@code unreachable}、{@code timeout}、{@code not-a-list}、{@code not-yet} 或 HTTP 状态码，页面按语言显示；QAgent 问题 86），
  * 不写地址和响应体；{@code OK} 时为 null。
  */
 public record Listing(Status status, List<ModelInfo> models, Instant loadedAt, String error) {

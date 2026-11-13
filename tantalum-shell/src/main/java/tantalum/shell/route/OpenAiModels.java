@@ -78,11 +78,11 @@ public final class OpenAiModels implements ModelList {
         try {
             response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
         } catch (HttpTimeoutException slow) {
-            throw new Unreadable("超时");
+            throw new Unreadable("timeout");
         } catch (ConnectException | java.nio.channels.ClosedChannelException down) {
-            throw new Unreadable("连不上");
+            throw new Unreadable("unreachable");
         } catch (IOException other) {
-            throw new Unreadable(other instanceof java.io.InterruptedIOException ? "超时" : "连不上");
+            throw new Unreadable(other instanceof java.io.InterruptedIOException ? "timeout" : "unreachable");
         }
         if (response.statusCode() != 200) {
             throw new Unreadable(Integer.toString(response.statusCode()));
@@ -90,11 +90,11 @@ public final class OpenAiModels implements ModelList {
         try {
             JsonNode root = MAPPER.readTree(response.body());
             if (!root.path("data").isArray()) {
-                throw new Unreadable("返回的不是模型列表");
+                throw new Unreadable("not-a-list");
             }
             return root;
         } catch (JacksonException notJson) {
-            throw new Unreadable("返回的不是模型列表");
+            throw new Unreadable("not-a-list");
         }
     }
 

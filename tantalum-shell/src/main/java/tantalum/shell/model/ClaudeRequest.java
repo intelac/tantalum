@@ -68,7 +68,10 @@ final class ClaudeRequest {
     static final Set<String> TOOL_CHANGE_MODELS = Set.of("claude-opus-5", "claude-opus-5-5", "claude-opus-4-8", "claude-fable-5",
             "claude-fable-5-1", "claude-mythos-5", "claude-mythos-5-1", "claude-sonnet-5-5");
     /** 默认 5 分钟的缓存，每次命中会刷新；一条工具链里相邻两圈相隔几秒到几十秒。 */
-    private static final CacheControlEphemeral CACHE = CacheControlEphemeral.builder().build();
+    private static final CacheControlEphemeral FIVE_MINUTES = CacheControlEphemeral.builder().build();
+    private static final CacheControlEphemeral ONE_HOUR = CacheControlEphemeral.builder().ttl(CacheControlEphemeral.Ttl.TTL_1H).build();
+    /** 缓存断点的有效期，见 {@code tantalum.claude.cache-ttl}。 */
+    private final CacheControlEphemeral cache;
     /** 只有附件、没有文字的用户消息补的文字，Claude 不收空文字块。 */
     static final String SEE_ATTACHED = "(see attached)";
     /** Claude 的 PDF 上限：超过时不发文档块，只给只读路径。 */
@@ -88,6 +91,7 @@ final class ClaudeRequest {
         this.effort = settings.defaultEffort();
         this.fallbacks = settings.fallbacks();
         this.strictThinking = settings.strictThinking();
+        this.cache = settings.hourCache() ? ONE_HOUR : FIVE_MINUTES;
     }
 
     /**
@@ -137,12 +141,12 @@ final class ClaudeRequest {
      * 最后一个工具定义、system 块和最后一条消息的最后一个内容块上：工具和 system 在整个运行里不变，历史只追加，
      * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
      */
-    static MessageCreateParams params(Prompt prompt, RequestOptions options) {
+    MessageCreateParams params(Prompt prompt, RequestOptions options) {
         return params(prompt, options, AttachmentMedia.NONE);
     }
 
     /** 同上，附件内容从 {@code media} 取。 */
-    static MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media) {
+    MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media) {
         Map<String, Json> extra = ((Json.Obj) options.extra()).fields();
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(options.model())
@@ -156,7 +160,7 @@ final class ClaudeRequest {
         }
         if (!prompt.system().isBlank()) {
             params.systemOfTextBlockParams(List.of(
-                    TextBlockParam.builder().text(prompt.system()).cacheControl(CACHE).build()));
+                    TextBlockParam.builder().text(prompt.system()).cacheControl(cache).build()));
         }
         boolean toolChanges = extra.get("betas") instanceof Json.Arr list && list.items().contains(new Json.Str(TOOL_CHANGE_BETA));
         // 会话中途的 system 消息（钩子的说明，不需要 beta）和工具变化是同一批模型支持（官方文档 platform-availability）
@@ -262,7 +266,7 @@ final class ClaudeRequest {
         return -1;
     }
 
-    private static Tool tool(ToolSpec spec, boolean last) {
+    private Tool tool(ToolSpec spec, boolean last) {
         Tool.InputSchema.Builder schema = Tool.InputSchema.builder();
         if (spec.schema() instanceof Json.Obj object) {
             Map<String, JsonValue> fields = new HashMap<>();
@@ -279,24 +283,24 @@ final class ClaudeRequest {
             tool.putAdditionalProperty("defer_loading", JsonValue.from(true));
         }
         if (last) {
-            tool.cacheControl(CACHE);
+            tool.cacheControl(cache);
         }
         return tool.build();
     }
 
     /** 最后一条消息总是用户消息：文本、工具结果、图片和文档块都可能在最后，都能带缓存标记。 */
-    private static ContentBlockParam cached(ContentBlockParam block) {
+    private ContentBlockParam cached(ContentBlockParam block) {
         if (block.isText()) {
-            return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(CACHE).build());
+            return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(cache).build());
         }
         if (block.isToolResult()) {
-            return ContentBlockParam.ofToolResult(block.asToolResult().toBuilder().cacheControl(CACHE).build());
+            return ContentBlockParam.ofToolResult(block.asToolResult().toBuilder().cacheControl(cache).build());
         }
         if (block.isImage()) {
-            return ContentBlockParam.ofImage(block.asImage().toBuilder().cacheControl(CACHE).build());
+            return ContentBlockParam.ofImage(block.asImage().toBuilder().cacheControl(cache).build());
         }
         if (block.isDocument()) {
-            return ContentBlockParam.ofDocument(block.asDocument().toBuilder().cacheControl(CACHE).build());
+            return ContentBlockParam.ofDocument(block.asDocument().toBuilder().cacheControl(cache).build());
         }
         return block;
     }

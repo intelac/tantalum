@@ -188,7 +188,8 @@ describe("runOutcome", () => {
     expect(runOutcome({ ...base, endReason: "FAILED", detail: "output ring full" }).explanation).toBe("命令丢失，运行失败");
     expect(runOutcome({ ...base, endReason: "CANCELLED" }).explanation).toBe("已取消");
     expect(runOutcome({ ...base, endReason: "CANCELLED", detail: "interrupted by restart" }).explanation).toBe("服务重启，这次运行已中断。可以接着提问");
-    expect(runOutcome({ ...base, endReason: "STOPPED", detail: "policy" }).explanation).toBe("被钩子停止：policy");
+    // QAgent 问题 25/43：插件的英文原因不拼进中文的说明，另起一行写明是原文（见 RunStatusRow）
+    expect(runOutcome({ ...base, endReason: "STOPPED", detail: "policy" }).explanation).toBe("被插件停下了");
     expect(runOutcome({ ...base, endReason: "COMPLETED" }).explanation).toBeNull();
     expect(runOutcome({ ...base }).explanation).toBeNull();
   });

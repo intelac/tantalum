@@ -68,3 +68,19 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
   }
   return blocks;
 }
+
+/**
+ * 运行结束了、结尾却不是文本（被停下、到了上限、钩子拦下、最后又调了一次工具）时，最后一段文本才是这轮的回答，
+ * 从过程区拿出来当回复（QAgent 问题 59：真正的回答被折进过程区）。运行中不挪，免得文本在过程区和回复之间来回跳。
+ */
+export function settleReply(
+  process: readonly string[],
+  reply: readonly string[],
+  isText: (id: string) => boolean,
+): { process: readonly string[]; reply: readonly string[] } {
+  if (reply.length > 0) return { process, reply };
+  let last = process.length - 1;
+  while (last >= 0 && !isText(process[last] as string)) last--;
+  if (last < 0) return { process, reply };
+  return { process: [...process.slice(0, last), ...process.slice(last + 1)], reply: [process[last] as string] };
+}

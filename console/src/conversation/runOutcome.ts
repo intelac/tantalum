@@ -27,7 +27,8 @@ export function runOutcome(status: RunStatusItem | undefined, t: Text = currentT
     case "STOPPED":
       return {
         header: t.process.stopped(elapsed),
-        explanation: status.detail === undefined || status.detail === "" ? t.failure.stopped : t.failure.stoppedWith(status.detail),
+        // 插件写的原因是它自己的英文原文，不拼进这句（QAgent 问题 25/43：中文页面上整句英文）；原文由 RunStatusRow 另起一行标明
+        explanation: t.failure.stopped,
       };
   }
 }

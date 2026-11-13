@@ -62,7 +62,7 @@ public final class UpstreamProxy {
         if (list != null) {
             for (String entry : list.split("[,\\s]+")) {
                 if (!entry.isBlank()) {
-                    noProxy.add(stripPort(entry.strip().toLowerCase(Locale.ROOT)));
+                    noProxy.add(entry(entry.strip().toLowerCase(Locale.ROOT)));
                 }
             }
         }
@@ -86,6 +86,12 @@ public final class UpstreamProxy {
         for (String entry : noProxy) {
             if (entry.equals("*")) {
                 return true;
+            }
+            if (entry.indexOf('/') > 0) {
+                if (inRange(name, entry)) {
+                    return true;
+                }
+                continue;
             }
             String bare = entry.startsWith(".") ? entry.substring(1) : entry;
             if (name.equals(bare) || name.endsWith("." + bare)) {
@@ -142,6 +148,62 @@ public final class UpstreamProxy {
     /** 网址里的用户名密码只做百分号解码；{@code +} 是字面的加号，不是空格。 */
     private static String percentDecoded(String raw) {
         return URLDecoder.decode(raw.replace("+", "%2B"), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * {@code NO_PROXY} 的一项变成比较用的写法（QAgent 问题 22）：写成网址的（{@code https://jira.corp/}、{@code wiki.corp/confluence}）
+     * 去掉协议和路径，只留主机；网段（{@code 10.0.0.0/8}、{@code fd00::/8}）原样留着，比较时按 IP 字面量算。
+     */
+    static String entry(String raw) {
+        String entry = raw;
+        int scheme = entry.indexOf("://");
+        if (scheme >= 0) {
+            entry = entry.substring(scheme + 3);
+        }
+        int slash = entry.indexOf('/');
+        if (slash > 0 && !cidr(entry)) {
+            entry = entry.substring(0, slash);
+        }
+        return cidr(entry) ? entry : stripPort(entry);
+    }
+
+    /** 斜杠前是 IP 字面量、斜杠后是位数的才是网段。只认字面量，不查 DNS。 */
+    private static boolean cidr(String entry) {
+        int slash = entry.indexOf('/');
+        if (slash <= 0 || entry.length() - slash - 1 < 1 || entry.length() - slash - 1 > 3
+                || !entry.substring(slash + 1).chars().allMatch(Character::isDigit)) {
+            return false;
+        }
+        return literal(entry.substring(0, slash)) != null;
+    }
+
+    private static byte[] literal(String host) {
+        if (host.isEmpty() || !(Character.digit(host.charAt(0), 16) >= 0 || host.charAt(0) == ':')) {
+            return null;
+        }
+        try {
+            return java.net.InetAddress.ofLiteral(host).getAddress();
+        } catch (IllegalArgumentException notALiteral) {
+            return null;
+        }
+    }
+
+    /** 主机是 IP 字面量、和网段同一族、前 {@code bits} 位相同。 */
+    private static boolean inRange(String host, String cidr) {
+        int slash = cidr.indexOf('/');
+        byte[] address = literal(host);
+        byte[] network = literal(cidr.substring(0, slash));
+        if (address == null || network == null || address.length != network.length) {
+            return false;
+        }
+        int bits = Math.min(Integer.parseInt(cidr.substring(slash + 1)), address.length * 8);
+        for (int i = 0; i < bits; i++) {
+            int mask = 0x80 >> (i % 8);
+            if ((address[i / 8] & mask) != (network[i / 8] & mask)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** {@code NO_PROXY} 里的 {@code host:port} 只按主机比较；IPv6 字面量不动。 */

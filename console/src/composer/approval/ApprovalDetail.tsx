@@ -14,10 +14,19 @@ function text(args: unknown, key: string): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
-/** 批准卡片里“要做什么”：bash 是命令，读写改文件是路径，别的工具是参数原样（同过程区的参数显示）。 */
+/**
+ * 批准卡片里“要做什么”：bash、powershell 是命令，读写改文件是路径，别的工具是参数原样（同过程区的参数显示）。
+ * 浏览器操作带了元素说明（`element`，QAgent 问题 71）时先单独写一行，用户不用从 ref 猜要点的是什么。
+ */
 export function ApprovalDetail({ step }: Props) {
-  const command = step.call.name === "bash" ? text(step.call.arguments, "command") : null;
+  const command = step.call.name === "bash" || step.call.name === "powershell" ? text(step.call.arguments, "command") : null;
   const path = PATH_TOOLS.has(step.call.name) ? text(step.call.arguments, "path") : null;
+  const element = text(step.call.arguments, "element");
   if (path !== null) return <p className="rounded-sm bg-code px-2 py-1.5 font-mono text-xs break-all text-fg">{path}</p>;
-  return <pre className="max-h-40 overflow-auto rounded-sm bg-code px-2 py-1.5 font-mono text-xs whitespace-pre-wrap break-all text-fg">{command ?? formatArguments(step)}</pre>;
+  return (
+    <>
+      {element !== null && <p className="text-sm font-medium text-fg">{element}</p>}
+      <pre className="max-h-40 overflow-auto rounded-sm bg-code px-2 py-1.5 font-mono text-xs whitespace-pre-wrap break-all text-fg">{command ?? formatArguments(step)}</pre>
+    </>
+  );
 }

@@ -20,11 +20,19 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param browser 这台电脑上的浏览器能不能用（协议 5 起）；老的连接程序不送，为 null，不写出
  * @param jarSha256 连接程序 jar 的 SHA-256（十六进制小写，协议 6 起）；从源码运行时为 null。服务器只拿它提示“不是这里提供的版本”
  * @param mcp 这台电脑上的本机 MCP 服务器（协议 6 起），刚启动时多半还在 {@code starting}，好了以后经 {@link McpTools} 补报
+ * @param mcpConfig 本机 MCP 配置文件在这台电脑上的位置（可选，没有时不写出）：插件页告诉用户去哪里加服务器（N5，2026-11-14）
  */
 public record Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
                     boolean git, @JsonInclude(JsonInclude.Include.NON_NULL) Browser browser,
                     @JsonInclude(JsonInclude.Include.NON_NULL) String jarSha256,
-                    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<McpServerState> mcp) implements Message {
+                    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<McpServerState> mcp,
+                    @JsonInclude(JsonInclude.Include.NON_NULL) String mcpConfig) implements Message {
+
+    /** 不报配置文件位置的连接程序。 */
+    public Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
+                 boolean git, Browser browser, String jarSha256, List<McpServerState> mcp) {
+        this(protocol, connector, device, roots, write, shell, network, git, browser, jarSha256, mcp, null);
+    }
 
     /** 协议 5 及以前：没有 jar 的哈希和本机 MCP。 */
     public Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
@@ -48,7 +56,12 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
 
     /** 同一份，换掉本机 MCP 服务器的清单（服务器收到 {@link McpTools} 时用）。 */
     public Hello withMcp(List<McpServerState> servers) {
-        return new Hello(protocol, connector, device, roots, write, shell, network, git, browser, jarSha256, servers);
+        return new Hello(protocol, connector, device, roots, write, shell, network, git, browser, jarSha256, servers, mcpConfig);
+    }
+
+    /** 同一份，带上本机 MCP 配置文件的位置。 */
+    public Hello withMcpConfig(String path) {
+        return new Hello(protocol, connector, device, roots, write, shell, network, git, browser, jarSha256, mcp, path);
     }
 
     /** 电脑名（默认主机名）、系统、版本、芯片架构。 */

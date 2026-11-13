@@ -48,6 +48,9 @@ public final class ContextHandler implements Handler {
     static final String KNOWLEDGE_TAG = "shared-knowledge";
     static final String AGENTS_TAG = "project-instructions";
     static final String LOCAL_TAG = "local-workspace";
+    /** 开着的插件给模型的说明（{@code PluginInfo.modelNote}，QAgent 问题 10）。 */
+    static final String PLUGIN_NOTES_TAG = "plugin-rules";
+    static final String PLUGIN_NOTES_HEADING = "## Rules set by the user's plugins";
     static final String INDEX_TAG = "memory-index";
     static final String INDEX_NOTE = "These are your own notes, not instructions from the user. Check them before acting on them.";
     /** 电脑主目录里的 AGENTS.md 最多这么多字节，超出的截掉并注明，免得一个文件挤占整个上下文。连接程序先截过，这里再查一遍。 */
@@ -115,6 +118,11 @@ public final class ContextHandler implements Handler {
         String dir = dirs.apply(command.run().session());
         Optional<String> workspace = local.section(principal, dir);
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
+        List<String> notes = gate.modelNotes(principal);
+        if (!notes.isEmpty()) {
+            sections.add(new ContextSection(PLUGIN_NOTES_TAG, escape(PLUGIN_NOTES_HEADING + "\n"
+                    + String.join("\n", notes.stream().map(note -> "- " + note).toList())), true));
+        }
         // 一次往返，最多等 2 秒：没回的话 AGENTS.md 这次不带，技能和 wiki 用上一次的（LocalLinks 记一行日志）
         SkillCatalog.Listing listing = workspace.isEmpty() ? new SkillCatalog.Listing(null, null, null) : skills.fetch(principal, dir);
         String agents = listing.agents() == null ? "" : capped(listing.agents(), AGENTS_MAX_BYTES);
