@@ -4,19 +4,39 @@ name: Windows
 # 不用任何密钥：不引用仓库密钥，仓库只读，检出后不留令牌，只用 push、pull_request、workflow_dispatch 三种触发。
 # 真实模型的冒烟测试要 TANTALUM_SMOKE_* 和 API 密钥，这里都没有，所以不会打开。
 
-# 只改文档的提交不跑：根目录的 .md、docs 下的 .md、LICENSE。docs 下的脚本（docs/windows/*.ps1）照常触发。
+# 只在动了和平台有关的代码时跑（Yi 2026-11-14 定）：Java 的纯逻辑在 macOS 上测过就够了，Windows 上出问题的是 shell（PowerShell）、
+# 文件系统（路径、权限、文件被占用）、进程和服务器在 Windows 上的启动、数据目录、journal 文件。只改服务器的其余部分、控制台、
+# 文档时不跑。要手动跑一次：Actions 页面上的 “Run workflow”（workflow_dispatch）。
 on:
   push:
     branches: [main, windows-server]
-    paths-ignore:
-      - '*.md'
-      - 'docs/**/*.md'
-      - 'LICENSE'
+    paths:
+      - 'tantalum-local/**'
+      - 'tantalum-connect/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/journal/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/boot/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/store/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/attachment/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/local/**'
+      - 'tantalum-shell/src/test/java/tantalum/shell/journal/WindowsFilesTest.java'
+      - 'tantalum-shell/src/test/java/tantalum/shell/boot/DataDirCheckTest.java'
+      - '**/pom.xml'
+      - 'docs/windows/**'
+      - '.github/**'
   pull_request:
-    paths-ignore:
-      - '*.md'
-      - 'docs/**/*.md'
-      - 'LICENSE'
+    paths:
+      - 'tantalum-local/**'
+      - 'tantalum-connect/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/journal/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/boot/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/store/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/attachment/**'
+      - 'tantalum-shell/src/main/java/tantalum/shell/local/**'
+      - 'tantalum-shell/src/test/java/tantalum/shell/journal/WindowsFilesTest.java'
+      - 'tantalum-shell/src/test/java/tantalum/shell/boot/DataDirCheckTest.java'
+      - '**/pom.xml'
+      - 'docs/windows/**'
+      - '.github/**'
   workflow_dispatch:
 
 permissions:

@@ -347,7 +347,7 @@ store ready at /srv/tantalum in 1910 ms: 2 runs left unfinished by the previous 
 
 ## 在 Windows 上运行
 
-服务器在 Windows 10 22H2、Windows 11、Windows Server 2022/2025（x64）上照常运行（`windows-server` spec）。每次推送都在 GitHub Actions 的 `windows-latest` 上跑全部测试，见下面“测试”。arm64 没测过，不保证。
+服务器在 Windows 10 22H2、Windows 11、Windows Server 2022/2025（x64）上照常运行（`windows-server` spec）。动了和平台有关的代码时，推送后在 GitHub Actions 的 `windows-latest` 上跑全部测试，见下面“测试”。arm64 没测过，不保证。
 
 **要装什么：** JDK 25（例如 Temurin 25）。从源码构建时还要 Maven 3.9、Node 25 和 pnpm。下面的命令都在 PowerShell 里运行。
 
@@ -1080,7 +1080,7 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 
 **每晚**：`tantalum-examples/scenarios/nightly.sh` 拉最新代码、打包、用本机模型把全部场景各跑 3 次，和前一晚比，结果放在 `results/nightly/`。不花钱。模型没响应时可以让它先启动模型：设环境变量 `TANTALUM_NIGHTLY_START` 为启动命令。用 launchd 每天 03:00 跑：照 `dev.tantalum.nightly.plist.template` 开头的两行命令装上（不会自动装）。
 
-**Windows：** GitHub 上每次推送都由 `.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`、PowerShell 的 `LocalShellIT`、经 `.cmd` 启动本机 MCP 的 `LocalMcpIT`）、检查只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS、Linux 有意义的测试（bash 的边界、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
+**Windows：** 推送里动了和平台有关的代码时（`tantalum-local`、`tantalum-connect`、服务器的 `journal`、`boot`、`store`、`attachment`、`local` 包、任何 `pom.xml`、`docs/windows`、`.github`；2026-11-14 起，只改服务器其余部分、控制台、文档的不跑，Actions 页面上可以手动跑），`.github/workflows/windows.yml` 在 `windows-latest` 上跑一遍：控制台构建和 vitest、`mvn verify`（含 `JarCrashIT`、PowerShell 的 `LocalShellIT`、经 `.cmd` 启动本机 MCP 的 `LocalMcpIT`）、检查只在 Windows 上跑的 `WindowsFilesTest`、`DataDirCheckTest` 没被跳过（`.github/scripts/assert-not-skipped.ps1`）、计划任务脚本的 `selftest`、Playwright 端到端。不用任何密钥：仓库令牌只读、检出后不保留，真实模型的冒烟测试不会打开。只对 macOS、Linux 有意义的测试（bash 的边界、`git` 的 `/dev/null`、路径分隔符）在 Windows 上跳过并写明原因；检查 600/700 的断言只在 POSIX 上做，Windows 的 ACL 由 `WindowsFilesTest` 检查。
 
 第三方依赖和界面参考（DeepSeek Harness）的许可证见 `THIRD_PARTY_NOTICES.md`。
 
