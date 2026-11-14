@@ -327,13 +327,30 @@ class EgressTest {
         return head.toString(StandardCharsets.ISO_8859_1);
     }
 
+    /**
+     * 连上为止。Windows 的监听队列比 macOS 短，一口气开 512 条时，出口还没来得及接收的会被系统直接拒绝
+     * （2026-11-14 Windows CI：Connection refused）；这不是出口拒的，稍等再连。
+     */
+    private static Socket connect(int port) throws Exception {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return new Socket(InetAddress.getLoopbackAddress(), port);
+            } catch (java.net.ConnectException refused) {
+                if (attempt == 50) {
+                    throw refused;
+                }
+                Thread.sleep(20);
+            }
+        }
+    }
+
     @Test
     void moreThan512ConnectionsGet503() throws Exception {
         Egress egress = egress(new AddressRules(false), UpstreamProxy.none());
         List<Socket> held = new ArrayList<>();
         try {
             for (int i = 0; i < Egress.MAX_CONNECTIONS; i++) {
-                held.add(new Socket(InetAddress.getLoopbackAddress(), egress.port()));
+                held.add(connect(egress.port()));
             }
             // 前 512 条都在等请求头；第 513 条马上得到 503
             String refused = raw(egress.port(), "");
