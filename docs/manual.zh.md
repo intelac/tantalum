@@ -728,6 +728,8 @@ TANTALUM_TOKEN=tc_… java -jar tantalum-connect.jar --server http://127.0.0.1:8
 
 **工具：** 还是原来的 11 个，名字和参数不变：`browser_navigate`、`browser_navigate_back`、`browser_snapshot`（读页面，元素带 `[ref=e5]` 这样的编号）、`browser_click`、`browser_type`、`browser_press_key`、`browser_select_option`、`browser_wait_for`、`browser_take_screenshot`、`browser_tabs`、`browser_evaluate`。每次操作后返回新的页面快照（最多 50,000 字符）。截图送回服务器，存进你的附件（算在附件配额里），作为图片交给模型。没有上传文件、下载文件、执行任意 Playwright 代码的工具（Playwright MCP 自带的这些工具不给模型）。搜索没有专门的接口，模型用浏览器打开 `https://www.bing.com/search?q=<词>`（Google 常对自动化的浏览器返回限流页）。
 
+**按需出现（2026-11-15，`browser-on-demand` spec）：** 会话开始时只给模型 `browser_navigate` 和 `browser_tabs` 两个（页面可能已经开着，所以标签页也算入口）；模型调过其中一个以后，其余 9 个从同一轮的下一次调用模型起就有，整个会话里不再撤掉，压缩后也留着。不用浏览器的对话每次请求少带约 3.7 KB 的工具说明（约 1,000 token）。实现上走的是现有的“工具变化”：Claude 支持的模型用 `defer_loading` 和 `tool_addition`，前缀缓存不坏；OpenAI 兼容的路线从加上那次起换工具列表，缓存失效一次。对话页这一轮里出一行“工具变化：新增 浏览器（9 个工具）”。几种例外：这次用的模型不支持会话中途的工具变化（部分 Claude 模型）时 11 个一开始全给；插件页里两个入口都去掉了勾时其余的一开始就给；去掉勾的工具照旧不给。规则写进组装上下文的事件（`ContextAssembled.unlocks`），什么时候加上由 journal 里的工具结果决定，回放和 `check` 结果相同；旧会话没有规则，照旧。
+
 **能去哪些地址：** 只能打开 `http` 和 `https` 的网址；`file:`、`chrome:`、`javascript:`、`data:` 这些当场拒绝，浏览器不会借此读到你电脑上的文件。不拦内网和本机地址：浏览器在你的电脑上，用的是你的网络和系统的代理设置。服务器的 `tantalum.web.block-private-network` 只管服务器上的 `web_fetch`，不管你电脑上的浏览器。
 
 **终端里的记录：** 每个浏览器调用在连接程序的终端里打一行：时间、会话、工具、对象、结果，例如 `10:01:07 s-1a2b3c browser_navigate https://board.example/ ok`。对象是网址、元素编号、键名或表达式的开头；`browser_type` 输入的文字、`browser_select_option` 选的值不打出来，页面内容和截图也不打。

@@ -1,5 +1,10 @@
 package tantalum.kernel.step;
 
+import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContext;
+import tantalum.value.model.ToolSpec;
+import tantalum.value.model.ToolChangeBlock;
+import tantalum.kernel.projection.ToolUnlocks;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -128,6 +133,7 @@ public final class ToolSteps {
         if (round.allFinished()) {
             List<ContentBlock> results = new ArrayList<>(round.results());
             out.append(run.ref(), new Message(Role.USER, results, false));
+            unlock(out, run, round);
             run = run.withTools(null);
             out.put(run);
             ModelSteps.callModel(out, run, null);
@@ -151,6 +157,28 @@ public final class ToolSteps {
             return;
         }
         out.await(run.withTools(round), AWAITING_TOOLS, sent);
+    }
+
+    /**
+     * 按需出现的工具（browser-on-demand 需求 2）：这一轮执行过的工具命中规则，就在调模型之前开着规则里的工具，追加一条工具变化。
+     * 被钩子拦下、参数无效的（{@link ToolSlot.Status#BLOCKED}）没执行，不算；执行了、结果出错的算（模型要用浏览器）。
+     * 和钩子补丁的工具变化在同一个位置（工具结果之后、调模型之前），两种请求都已经支持。
+     */
+    private static void unlock(Outcome out, RunState run, ToolRound round) {
+        SessionState session = out.session(run.ref());
+        SessionContext context = session.context();
+        List<String> called = round.slots().stream().filter(slot -> slot.status() == ToolSlot.Status.DONE)
+                .map(slot -> slot.call().name()).toList();
+        List<String> added = ToolUnlocks.after(context, called);
+        if (added.isEmpty()) {
+            return;
+        }
+        List<String> active = context.tools().stream().map(ToolSpec::name)
+                .filter(name -> context.toolActive(name) || added.contains(name)).toList();
+        List<String> seen = new ArrayList<>(session.toolsSeen());
+        added.stream().filter(name -> !seen.contains(name)).forEach(seen::add);
+        out.put(session.append(new Message(Role.SYSTEM, List.of(new ToolChangeBlock(added, List.of())), false))
+                .withContext(context.withActive(active, context.activePlugins())).withToolsSeen(List.copyOf(seen)));
     }
 
     private static void askNext(Outcome out, RunState run) {

@@ -270,10 +270,16 @@ public final class E2eModel implements ModelClient {
         };
     }
 
+    /** 最近一条带工具结果的消息里的第一个结果。后面可能跟着系统消息（browser-on-demand 的工具变化、钩子的说明），跳过它们。 */
     private static String lastResult(Prompt prompt) {
-        for (ContentBlock block : prompt.messages().getLast().content()) {
-            if (block instanceof ToolResultBlock result) {
-                return result.text();
+        for (Message message : prompt.messages().reversed()) {
+            for (ContentBlock block : message.content()) {
+                if (block instanceof ToolResultBlock result) {
+                    return result.text();
+                }
+            }
+            if (message.role() != tantalum.value.model.Role.SYSTEM) {
+                return "";
             }
         }
         return "";

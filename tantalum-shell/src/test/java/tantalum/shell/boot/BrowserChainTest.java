@@ -142,13 +142,23 @@ class BrowserChainTest {
         throw new AssertionError("run " + run + " did not end");
     }
 
+    /** 这次请求模型能用这个工具：一开始就没标 deferred，或者历史里的工具变化加上了它、之后没再去掉（同 OpenAI 那边的算法）。 */
     private static boolean offered(Prompt prompt, String tool) {
-        return prompt.tools().stream().filter(spec -> spec.name().equals(tool)).noneMatch(ToolSpec::deferred)
-                && prompt.tools().stream().anyMatch(spec -> spec.name().equals(tool));
+        boolean on = prompt.tools().stream().anyMatch(spec -> spec.name().equals(tool) && !spec.deferred());
+        for (var message : prompt.messages()) {
+            for (var block : message.content()) {
+                if (block instanceof ToolChangeBlock change) {
+                    on = change.added().contains(tool) || (on && !change.removed().contains(tool));
+                }
+            }
+        }
+        return on && prompt.tools().stream().anyMatch(spec -> spec.name().equals(tool));
     }
 
+    /** 最近一次请求里最后一个工具结果（后面可能跟着工具变化）。 */
     private ToolResultBlock result() {
-        return (ToolResultBlock) prompts.getLast().messages().getLast().content().getLast();
+        return prompts.getLast().messages().reversed().stream().flatMap(message -> message.content().reversed().stream())
+                .filter(ToolResultBlock.class::isInstance).map(ToolResultBlock.class::cast).findFirst().orElseThrow();
     }
 
     /** 需求 4.4、7.2、7.6：电脑连着并说浏览器可用时，模型有这些工具、知道是哪个浏览器；调用转到电脑，结果第一行是“不可信”。 */
@@ -158,7 +168,9 @@ class BrowserChainTest {
             ask("open", 1);
             Prompt first = prompts.getFirst();
             assertTrue(offered(first, "browser_navigate"), first.tools().toString());
-            assertTrue(offered(first, "browser_take_screenshot"));
+            // browser-on-demand：其余的在调过 browser_navigate 以后、同一轮的下一次请求里才有
+            assertFalse(offered(first, "browser_take_screenshot"));
+            assertTrue(offered(prompts.getLast(), "browser_take_screenshot"));
             assertTrue(first.system().contains("Browser: Google Chrome, window visible to the user."), first.system());
             assertTrue(first.system().contains("## Web content"), "the standing note that web content is untrusted");
             assertEquals(1, browserCalls.size());
@@ -246,8 +258,9 @@ class BrowserChainTest {
             assertTrue(prompts.getLast().system().contains("Browser:"), "the browser itself is still on");
         }
         String journal = Files.readString(temp.resolve("data/sessions/alice/s1.jsonl"));
-        long withIt = journal.lines().filter(line -> line.contains("\"type\":\"ContextAssembled\"") && line.contains("\"enabledTools\""))
-                .filter(line -> JSON.readTree(line).get("payload").get("enabledTools").toString().contains("browser_evaluate")).count();
+        // browser-on-demand：browser_evaluate 不在开着的名单里，记在按需出现的规则里（第一次有，去掉勾以后没有）
+        long withIt = journal.lines().filter(line -> line.contains("\"type\":\"ContextAssembled\"") && line.contains("\"unlocks\""))
+                .filter(line -> JSON.readTree(line).get("payload").get("unlocks").toString().contains("browser_evaluate")).count();
         assertEquals(1, withIt, "the first question had the tool, the second did not");
         server.close();
         ByteArrayOutputStream out = new ByteArrayOutputStream();

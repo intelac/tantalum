@@ -166,6 +166,12 @@ def c_form(ctx):
 def c_wait(ctx):
     return used(ctx, "browser_navigate") + says(ctx, FACTS["slow"])
 
+def c_tabs_shot(ctx):
+    # browser-on-demand：第二个会话开始只有 browser_navigate、browser_tabs，页面已经开着，要从 browser_tabs 进去再截图，不该重新打开
+    bad = used(ctx, "browser_tabs") + used(ctx, "browser_take_screenshot") + says(ctx, "Rate limits")
+    if ctx.tools.get("browser_navigate", 0) > 1: bad.append("第二个会话又打开了一次页面（页面本来就开着）")
+    return bad
+
 # ---- 技能、提问、记忆 ----
 def c_skill(ctx):
     return used(ctx, "skill") + ([] if ctx.answer.lstrip().startswith(FACTS["skill"]) or FACTS["skill"] in ctx.answer else [f"没按技能的格式写（缺 {FACTS['skill']}）"])
@@ -471,6 +477,9 @@ SCENARIOS = [
     S("web-huge", "联网", "很大的页被截断", f"{SITE}/huge 这一页最后的 Final note 写的是什么？", c_web_huge, max_calls=12),
     S("form", "浏览器", "元素编号、填表提交", f"用浏览器打开 {SITE}/form，Name 填 zhao，Quantity 选 5，提交，告诉我确认页上的 Confirmation 编号。", c_form, max_calls=14, timeout=300),
     S("wait", "浏览器", "等动态内容", f"用浏览器打开 {SITE}/slow，页面加载完成后显示的 token 是什么？", c_wait, max_calls=10, timeout=300),
+    S("tabs-shot", "浏览器", "按需加载：从标签页进去再截图", f"用浏览器打开 {SITE}/docs/rate-limits.html，打开就行，告诉我打开了。", c_tabs_shot,
+      max_calls=10, timeout=300,
+      followup="（新会话）我的浏览器里已经开着一个页面，不要重新打开它。给这个页面截一张图，告诉我它的标题。"),
     S("skill", "技能", "技能清单会不会用", "给这个项目写一份 0.2.0 的 release notes：新增了批量折扣，修了折扣计算的 bug。直接回复在对话里，不要写文件。", c_skill, max_calls=8),
     S("wiki", "技能", "知识库会不会用", "我们回滚一次发布要用哪个开关？查一下知识库。", c_wiki, max_calls=8),
     S("ask", "提问和记忆", "ask_user 的选项格式", "notes/todo.txt 这个文件我不确定还要不要。你先问我是删除还是保留，再照我说的做。", c_ask, answers={"*": "删除"}, max_calls=10),
@@ -1004,6 +1013,6 @@ SCENARIOS += [
 ANSWER_ONLY = {"find-def", "big-file", "tree", "odd-files", "binary", "pdf", "run-tests", "noisy", "slow", "stdin", "network", "git-history",
                "git-blame", "git-dirty", "web", "web-404", "web-redirect", "web-huge", "form", "wait", "skill", "wiki", "memory", "parallel",
                "secret-env", "missing-cmd", "needle-log", "doc-qa",
-               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git"}
+               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot"}
 for _scenario in SCENARIOS:
     _scenario["world"] = _scenario["id"] not in ANSWER_ONLY

@@ -95,6 +95,18 @@ public final class LocalWorkspace implements ToolGroup {
         return tool instanceof LocalTool;
     }
 
+    /**
+     * 浏览器按需出现（browser-on-demand，Yi 2026-11-14）：开始只给 {@code browser_navigate}、{@code browser_tabs}（页面可能已经开着，
+     * 要从标签页进去），调过其中一个以后再给其余 9 个。11 个工具的定义不变。
+     */
+    static final List<String> BROWSER_ENTRY = List.of("browser_navigate", "browser_tabs");
+
+    @Override
+    public List<tantalum.value.model.ToolUnlock> unlocks() {
+        List<String> rest = CHOICES.get(BROWSER).stream().filter(name -> !BROWSER_ENTRY.contains(name)).toList();
+        return List.of(new tantalum.value.model.ToolUnlock(BROWSER_ENTRY, rest));
+    }
+
     @Override
     public Map<String, List<String>> choices() {
         return CHOICES;

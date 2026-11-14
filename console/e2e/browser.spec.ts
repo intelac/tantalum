@@ -3,7 +3,7 @@ import { BROWSER_USER, composer, login, openNewSession, send, USER } from "./app
 
 // 本机浏览器（local-browser 任务 20）：第六个账号连着的测试电脑说“浏览器可用：Google Chrome，有窗口”，电脑上是一个假浏览器
 // （真浏览器由连接程序的 LocalBrowserIT 测）。别的账号的测试电脑没给 --allow-browser。
-// E2eModel 的 browse: 让模型调 browser_navigate，capture: 让它调 browser_take_screenshot。
+// E2eModel 的 browse: 让模型调 browser_navigate，capture: 让它调 browser_take_screenshot（要先 browse:，截图这类工具调过入口才有）。
 // “浏览器”开关按用户持久保存：改过的用例结束时恢复。
 
 async function setBrowser(page: Page, enabled: boolean) {
@@ -57,6 +57,8 @@ test.describe("本机浏览器", () => {
     await openNewSession(page, BROWSER_USER);
     await send(page, "browse: the board");
     await expect(page.getByText("浏览器结果：Page: Board")).toBeVisible();
+    // browser-on-demand：开始只给打开网页和标签页两个，调过以后同一轮里加上其余 9 个，对话里出一行工具变化
+    await expect(page.getByText(/工具变化：新增 浏览器（9 个工具）/)).toBeVisible();
     await expect(composer(page)).toBeEnabled();
     await send(page, "capture: the board");
     await expect(page.getByText("截图结果：Screenshot of https://board.example/")).toBeVisible();

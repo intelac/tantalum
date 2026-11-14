@@ -7,6 +7,7 @@ import tantalum.value.id.CommandId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.model.ToolUnlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
@@ -14,15 +15,17 @@ import tantalum.value.state.ContextSection;
  * 提示词组装完成：完整的 system prompt 和工具列表。{@code sections} 是 system 里会变的几段（共享知识、AGENTS.md、记忆索引），
  * 会话已冻结 system 时内核只把它们的变化追加给模型。{@code compaction} 是这次组装时的压缩设置，没配窗口时为 null，表示不压缩。
  * {@code tools} 是服务器上的全部工具；{@code enabledTools}、{@code enabledPlugins} 是这个用户当时开着的工具和钩子插件
- *，为 null 表示全部开着。{@code toolSources} 是每个工具从哪来：{@code builtin} 或 {@code mcp:<服务器名>}
+ *，为 null 表示全部开着。{@code toolSources} 是每个工具从哪来：{@code builtin}、{@code local}、{@code web}（旧事件里还有 {@code mcp:<服务器名>}）
  *，内核不读它，画面用来说明工具为什么不能用了。
  * {@code model} 是这次提问实际用的路线、模型和档位（“配上了什么”），旧事件为 null。
  * {@code pluginParams} 是这次组装时每个钩子插件的参数 {@code {插件: {键: 值}}}，没有密码；没有带参数的钩子插件、或旧事件为 null。
  * 钩子只从这里拿参数，回放时拿到的和当时一样。
+ * {@code unlocks} 是按需出现的工具（browser-on-demand）：{@code add} 里的不在 {@code enabledTools} 里，调过 {@code after} 里的才开；
+ * 没有时为 null，不写出（旧事件也是 null）。
  */
 public record ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
                                List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
-                               Map<String, String> toolSources, ModelChoice model, Json.Obj pluginParams)
+                               Map<String, String> toolSources, ModelChoice model, Json.Obj pluginParams, List<ToolUnlock> unlocks)
         implements ResultEvent {
 
     public static final String TYPE = "ContextAssembled";
@@ -34,6 +37,14 @@ public record ContextAssembled(CommandId command, String system, List<ToolSpec> 
         enabledTools = enabledTools == null ? null : List.copyOf(enabledTools);
         enabledPlugins = enabledPlugins == null ? null : List.copyOf(enabledPlugins);
         toolSources = toolSources == null ? Map.of() : Map.copyOf(toolSources);
+        unlocks = unlocks == null || unlocks.isEmpty() ? null : List.copyOf(unlocks);
+    }
+
+    /** 没有按需出现的工具时（旧事件、测试）。 */
+    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
+                            List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
+                            Map<String, String> toolSources, ModelChoice model, Json.Obj pluginParams) {
+        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, toolSources, model, pluginParams, null);
     }
 
     /** 不记插件参数时（旧事件、测试）。 */

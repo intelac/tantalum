@@ -97,7 +97,10 @@ final class TranscriptPass {
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
-            case ToolFinished finished -> toolFinished(finished);
+            case ToolFinished finished -> {
+                toolFinished(finished);
+                unlockedTools();
+            }
             case ContextAssembled assembled -> toolChanges(assembled);
             default -> { }
         }
@@ -154,6 +157,28 @@ final class TranscriptPass {
                     put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(),
                             change.removed().stream().filter(offered::contains).toList(),
                             change.removed().stream().filter(name -> !offered.contains(name)).toList(), sources));
+                }
+            }
+        }
+    }
+
+    /**
+     * 按需出现的工具（browser-on-demand 需求 2.5）：一轮工具执行完、内核在调模型前加上了工具，这一步追加的工具变化出一个条目，
+     * 和提问时的工具变化一样。这一步可能还有压缩条目（下标 0），所以从 1 起编号。
+     */
+    private void unlockedTools() {
+        SessionState earlier = before == null ? null : before.sessions().get(session);
+        SessionState now = state.sessions().get(session);
+        RunId run = envelope.run();
+        if (earlier == null || now == null || run == null || now.messages().size() < earlier.messages().size()) {
+            return;
+        }
+        int index = 1;
+        for (Message message : now.messages().subList(earlier.messages().size(), now.messages().size())) {
+            for (ContentBlock block : message.content()) {
+                if (block instanceof ToolChangeBlock change && !change.added().isEmpty()) {
+                    put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(), List.of(), List.of(),
+                            Map.of()));
                 }
             }
         }

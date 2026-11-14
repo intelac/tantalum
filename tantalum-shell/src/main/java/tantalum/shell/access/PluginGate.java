@@ -187,6 +187,24 @@ public final class PluginGate {
         return Optional.empty();
     }
 
+    /**
+     * 按需出现的工具的规则，只留这个用户开着的（browser-on-demand 需求 1）：入口和要加的都只算 {@code enabled} 里的，两边都不空才算一条。
+     * 入口全被去掉了勾时没有这条，其余的一开始就给（需求 1.4）。
+     */
+    public List<tantalum.value.model.ToolUnlock> unlocks(List<String> enabled) {
+        List<tantalum.value.model.ToolUnlock> rules = new ArrayList<>();
+        for (ToolGroup group : groups) {
+            for (tantalum.value.model.ToolUnlock rule : group.unlocks()) {
+                List<String> after = rule.after().stream().filter(enabled::contains).toList();
+                List<String> add = rule.add().stream().filter(enabled::contains).toList();
+                if (!after.isEmpty() && !add.isEmpty()) {
+                    rules.add(new tantalum.value.model.ToolUnlock(after, add));
+                }
+            }
+        }
+        return List.copyOf(rules);
+    }
+
     /** 这个用户现在开着的工具名，按名称排序（同 {@link ToolCatalog#specs()}）。 */
     public List<String> enabledTools(Principal user) {
         return catalog.tools().stream().filter(tool -> toolEnabled(user, tool)).map(Tool::name).toList();

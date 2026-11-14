@@ -61,7 +61,7 @@
   },
   {
     "name": "browser_click",
-    "deferred": false,
+    "deferred": true,
     "description": "Click an element by its ref, like e5. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
     "schema": {
       "type": "object",
@@ -82,7 +82,7 @@
   },
   {
     "name": "browser_evaluate",
-    "deferred": false,
+    "deferred": true,
     "description": "Run a JavaScript expression in the current tab to read something from the page, like `document.querySelector('h1').innerText`. The result comes back as JSON, at most 50,000 characters.",
     "schema": {
       "type": "object",
@@ -100,7 +100,7 @@
   {
     "name": "browser_navigate",
     "deferred": false,
-    "description": "Open a URL in a browser on the user's computer. The browser has its own profile, separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be visible to the user, who may also act in it, for example to log in when you ask. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a rate-limit page instead of results. If a web_fetch tool is available, prefer it when you only need the text of a known public page: it is faster and uses fewer tokens.",
+    "description": "Open a URL in a browser on the user's computer. The browser has its own profile, separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be visible to the user, who may also act in it, for example to log in when you ask. Returns the page's accessibility snapshot, where elements carry refs like [ref=e5] for browser_click, browser_type and browser_select_option; those and the other browser tools become available once you have called this or browser_tabs. To search the web, open `https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a rate-limit page instead of results. If a web_fetch tool is available, prefer it when you only need the text of a known public page: it is faster and uses fewer tokens.",
     "schema": {
       "type": "object",
       "properties": {
@@ -117,7 +117,7 @@
   },
   {
     "name": "browser_navigate_back",
-    "deferred": false,
+    "deferred": true,
     "description": "Go back to the previous page in the current tab. Returns the page snapshot.",
     "schema": {
       "type": "object",
@@ -126,7 +126,7 @@
   },
   {
     "name": "browser_press_key",
-    "deferred": false,
+    "deferred": true,
     "description": "Press a key in the current tab, like Enter, Escape, ArrowDown or Control+A. Returns the page snapshot.",
     "schema": {
       "type": "object",
@@ -143,7 +143,7 @@
   },
   {
     "name": "browser_select_option",
-    "deferred": false,
+    "deferred": true,
     "description": "Choose one or more options of a drop-down list by its ref. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
     "schema": {
       "type": "object",
@@ -173,7 +173,7 @@
   },
   {
     "name": "browser_snapshot",
-    "deferred": false,
+    "deferred": true,
     "description": "Read the current tab: its title, URL and accessibility snapshot with element refs. Use it to see the page again, for example after waiting.",
     "schema": {
       "type": "object",
@@ -208,7 +208,7 @@
   },
   {
     "name": "browser_take_screenshot",
-    "deferred": false,
+    "deferred": true,
     "description": "Take a PNG screenshot of the current tab, the visible part or the full page. The image is saved in the user's attachments and shown to you.",
     "schema": {
       "type": "object",
@@ -222,7 +222,7 @@
   },
   {
     "name": "browser_type",
-    "deferred": false,
+    "deferred": true,
     "description": "Replace the text of an input or text area by its ref, optionally pressing Enter afterwards to submit. Refs come from the latest browser_snapshot or action result. Returns the page snapshot.",
     "schema": {
       "type": "object",
@@ -252,7 +252,7 @@
   },
   {
     "name": "browser_wait_for",
-    "deferred": false,
+    "deferred": true,
     "description": "Wait until a text appears, a text disappears, or a number of seconds has passed (at most 30). Returns the page snapshot.",
     "schema": {
       "type": "object",

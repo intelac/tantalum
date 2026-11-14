@@ -36,7 +36,8 @@ public final class BrowserTools {
                         + "separate from the user's everyday browser; logins made in it are kept between conversations. Its window may be "
                         + "visible to the user, who may also act in it, for example to log in when you ask. Returns the page's "
                         + "accessibility snapshot, where elements carry refs like [ref=e5] "
-                        + "for browser_click, browser_type and browser_select_option. To search the web, open "
+                        + "for browser_click, browser_type and browser_select_option; those and the other browser tools become available "
+                        + "once you have called this or browser_tabs. To search the web, open "
                         + "`https://www.bing.com/search?q=<words>` (URL-encode the words). Google often shows automated browsers a "
                         + "rate-limit page instead of results. If a web_fetch tool is available, prefer it when you only need the text of a "
                         + "known public page: it is faster and uses fewer tokens.",

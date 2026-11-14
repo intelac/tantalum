@@ -35,4 +35,9 @@ public interface ToolGroup {
 
     /** 会话文件 {@code ContextAssembled.toolSources} 里记的来源，如 {@code local}、{@code web}。 */
     String source();
+
+    /** 这一组按需出现的工具（browser-on-demand）：调过 {@code after} 里的才给 {@code add} 里的。默认没有。 */
+    default List<tantalum.value.model.ToolUnlock> unlocks() {
+        return List.of();
+    }
 }

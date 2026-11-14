@@ -32,6 +32,7 @@ import tantalum.value.event.Event;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.model.ToolUnlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 
@@ -149,8 +150,16 @@ public final class ContextHandler implements Handler {
         AssembleContext assemble = (AssembleContext) command;
         ModelChoice model = choose(assemble, principal);
         // 全部工具加上这个用户现在开着的名单：会话的工具列表从头到尾不变，开关的变化由内核追加成消息
+        List<String> enabled = gate.enabledTools(principal);
+        // 按需出现的工具（browser-on-demand）：模型支持会话中途的工具变化时，规则里要加的先不开，调过入口后内核再开
+        List<ToolUnlock> unlocks = routes.describe(model).map(ModelInfo::toolChanges).orElse(false) ? gate.unlocks(enabled) : List.of();
+        if (!unlocks.isEmpty()) {
+            java.util.Set<String> later = new java.util.HashSet<>();
+            unlocks.forEach(rule -> later.addAll(rule.add()));
+            enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
+        }
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
-                gate.enabledTools(principal), gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal));
+                enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
     }
 
     /**

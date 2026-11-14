@@ -77,4 +77,30 @@ class TranscriptToolChangeTest {
         assertEquals(fixture.items(ToolChange.class), replayed.items(TranscriptFixture.SESSION).stream()
                 .filter(ToolChange.class::isInstance).toList());
     }
+
+    /** browser-on-demand 需求 2.5：调过入口工具，内核在同一轮里加上其余的，对话里在那个位置出一条“新增”，回放相同。 */
+    @Test
+    void toolsAddedAfterAnEntryCallAreListedInTheSameRun() {
+        TranscriptFixture fixture = new TranscriptFixture();
+        fixture.feed(null, fixture.prompt("open the page"));
+        RunId run = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
+        List<ToolSpec> tools = List.of(spec("browser_click"), spec("browser_navigate"), spec("browser_type"));
+        fixture.feed(run, new ContextAssembled(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
+                List.of("browser_navigate"), List.of(), Map.of(), null, null,
+                List.of(new tantalum.value.model.ToolUnlock(List.of("browser_navigate"), List.of("browser_click", "browser_type")))));
+        assertEquals(List.of(), fixture.items(ToolChange.class));
+        fixture.feed(run, fixture.reply(TranscriptFixture.call("a", "browser_navigate")));
+        tantalum.value.command.RunTool tool = fixture.runTools().getFirst();
+        fixture.feed(run, new tantalum.value.event.ToolFinished(tool.id(), "a", "page", false, null));
+
+        ToolChange change = fixture.items(ToolChange.class).getFirst();
+        assertEquals(List.of("browser_click", "browser_type"), change.added());
+        assertEquals(List.of(), change.disabled());
+        assertEquals(run, change.run());
+
+        Transcript replayed = new Transcript();
+        TranscriptReplay.run(replayed, fixture.kernel(), fixture.envelopes);
+        assertEquals(fixture.items(ToolChange.class), replayed.items(TranscriptFixture.SESSION).stream()
+                .filter(ToolChange.class::isInstance).toList());
+    }
 }

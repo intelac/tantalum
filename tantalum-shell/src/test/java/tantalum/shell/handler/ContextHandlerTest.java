@@ -447,4 +447,70 @@ class ContextHandlerTest {
                 assembled.toolSources());
         assertFalse(assembled.enabledTools().contains("read_file"), "not connected");
     }
+
+    // ---- browser-on-demand：浏览器按需出现 ----
+
+    private static final List<String> ENTRY = List.of("browser_navigate", "browser_tabs");
+
+    /** 一条 Claude 路线，允许 Sonnet 5.5（支持会话中途的工具变化）和 Haiku 5.5（不支持）。 */
+    private static final Routes TWO_MODELS = Routes.create(List.of(new RouteSettings("claude", "Claude", RouteSettings.Kind.CLAUDE,
+            "ANTHROPIC_API_KEY", "claude-sonnet-5-5", List.of("claude-sonnet-5-5", "claude-haiku-5-5"), 64_000, 1_000_000, 1.5, 4,
+            Duration.ofSeconds(300), Duration.ofSeconds(300), "medium", false, null, true, null, null, true, java.util.Map.of())),
+            "claude", (route, key) -> {
+                throw new AssertionError("no real client");
+            }, RouteClients.of("claude", (prompt, chunks) -> null), name -> null, true, Clock.systemUTC()).start(Duration.ofSeconds(2));
+
+    private ContextAssembled browserContext(ModelChoice model) throws Exception {
+        ToolCatalog catalog = new ToolCatalog();
+        LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog,
+                new PluginGate(catalog, switches, List.of(local), List.of(), List.of(), List.of(), java.util.Set.of()),
+                memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), TWO_MODELS, NOBODY);
+        try (TestComputer ignored = TestComputer.connectEverything(links, ALICE, Instant.now().plus(Duration.ofHours(1)), mac)) {
+            return assertInstanceOf(ContextAssembled.class, handler.handle(assemble(model, null)));
+        }
+    }
+
+    private static List<String> browser(List<String> tools) {
+        return tools.stream().filter(name -> name.startsWith("browser_")).toList();
+    }
+
+    /** 需求 1.1、1.2：开始只开两个入口，其余 9 个在全集里、由规则在调过入口后加上。 */
+    @Test
+    void onlyTheEntryBrowserToolsAreOnAtTheStart() throws Exception {
+        ContextAssembled event = browserContext(SONNET);
+        assertEquals(ENTRY, browser(event.enabledTools()));
+        assertEquals(11, browser(event.tools().stream().map(tantalum.value.model.ToolSpec::name).toList()).size());
+        assertEquals(1, event.unlocks().size());
+        assertEquals(ENTRY, event.unlocks().getFirst().after());
+        assertEquals(9, event.unlocks().getFirst().add().size());
+        assertFalse(event.unlocks().getFirst().add().contains("browser_navigate"));
+        assertTrue(event.enabledTools().contains("grep"), "other tools are untouched");
+    }
+
+    /** 需求 3.1：不支持会话中途工具变化的模型，11 个一开始都给，没有规则。 */
+    @Test
+    void aModelWithoutToolChangesGetsEveryBrowserToolAtOnce() throws Exception {
+        ContextAssembled event = browserContext(new ModelChoice("claude", "claude-haiku-5-5", "medium"));
+        assertEquals(11, browser(event.enabledTools()).size());
+        assertNull(event.unlocks());
+    }
+
+    /** 需求 1.1、1.4：去掉勾的工具不进规则；两个入口都去掉时没有规则，其余的一开始就给。 */
+    @Test
+    void untickedToolsStayOutAndWithoutAnEntryEverythingIsGiven() throws Exception {
+        switches.set(ALICE, Kind.LOCAL, "browser_evaluate", false);
+        ContextAssembled oneOff = browserContext(SONNET);
+        assertFalse(oneOff.unlocks().getFirst().add().contains("browser_evaluate"));
+        assertEquals(8, oneOff.unlocks().getFirst().add().size());
+
+        switches.set(ALICE, Kind.LOCAL, "browser_navigate", false);
+        ContextAssembled tabsOnly = browserContext(SONNET);
+        assertEquals(List.of("browser_tabs"), tabsOnly.unlocks().getFirst().after());
+
+        switches.set(ALICE, Kind.LOCAL, "browser_tabs", false);
+        ContextAssembled noEntry = browserContext(SONNET);
+        assertNull(noEntry.unlocks());
+        assertEquals(8, browser(noEntry.enabledTools()).size());
+    }
 }

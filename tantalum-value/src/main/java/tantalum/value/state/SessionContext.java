@@ -6,6 +6,7 @@ import tantalum.value.hook.Params;
 import tantalum.value.json.Json;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.model.ToolUnlock;
 
 /**
  * 会话第一次发给模型的 system 和工具，之后固定不变：thinking 签名绑定它们，一改旧块就失效。
@@ -15,10 +16,11 @@ import tantalum.value.model.ToolSpec;
  * {@code hooks} 是钩子补丁的状态：说明和工具都以追加的 system 消息告诉模型，这里记下上次告诉过什么；
  * null 表示钩子还没追加过东西（旧会话、压缩后重新冻结）。
  * {@code pluginParams} 是最近一次组装时每个钩子插件的参数 {@code {插件: {键: 值}}}，null 表示没记过（旧会话、没有带参数的钩子插件）。
+ * {@code unlocks} 是最近一次组装时按需出现的工具的规则（browser-on-demand），null 表示没有。
  */
 public record SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
                              List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks,
-                             Json.Obj pluginParams) {
+                             Json.Obj pluginParams, List<ToolUnlock> unlocks) {
 
     /**
      * 钩子补丁的状态。{@code texts} 是上次发给模型的每个钩子的说明（按注册顺序），按钩子比较变没变；
@@ -51,6 +53,13 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
         initialTools = initialTools == null ? null : List.copyOf(initialTools);
         activeTools = activeTools == null ? null : List.copyOf(activeTools);
         activePlugins = activePlugins == null ? null : List.copyOf(activePlugins);
+        unlocks = unlocks == null || unlocks.isEmpty() ? null : List.copyOf(unlocks);
+    }
+
+    public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
+                          List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks,
+                          Json.Obj pluginParams) {
+        this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams, null);
     }
 
     public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections) {
@@ -69,27 +78,37 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
 
     /** 只换告知过模型的可变内容，system 和工具不动。 */
     public SessionContext withSections(List<ContextSection> newSections) {
-        return new SessionContext(system, tools, compaction, newSections, initialTools, activeTools, activePlugins, hooks, pluginParams);
+        return new SessionContext(system, tools, compaction, newSections, initialTools, activeTools, activePlugins, hooks, pluginParams, unlocks);
     }
 
     /** 换压缩设置；不影响发给模型的内容。 */
     public SessionContext withCompaction(CompactionSettings newCompaction) {
-        return new SessionContext(system, tools, newCompaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams);
+        return new SessionContext(system, tools, newCompaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams, unlocks);
     }
 
     /** 换现在开着的工具和插件；工具全集和会话开始时的名单不动。 */
     public SessionContext withActive(List<String> tools, List<String> plugins) {
-        return new SessionContext(system, this.tools, compaction, sections, initialTools, tools, plugins, hooks, pluginParams);
+        return new SessionContext(system, this.tools, compaction, sections, initialTools, tools, plugins, hooks, pluginParams, unlocks);
     }
 
     /** 换钩子补丁的状态。 */
     public SessionContext withHooks(HookState newHooks) {
-        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, newHooks, pluginParams);
+        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, newHooks, pluginParams, unlocks);
     }
 
     /** 换钩子插件的参数；不影响发给模型的内容。 */
     public SessionContext withPluginParams(Json.Obj params) {
-        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, params);
+        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, params, unlocks);
+    }
+
+    /** 换按需出现的工具的规则；不影响发给模型的内容。 */
+    public SessionContext withUnlocks(List<ToolUnlock> newUnlocks) {
+        return new SessionContext(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams, newUnlocks);
+    }
+
+    /** 按需出现的工具的规则，没有时是空表。 */
+    public List<ToolUnlock> unlockRules() {
+        return unlocks == null ? List.of() : unlocks;
     }
 
     /** 这个插件的那一包参数；没记过时是 {@link Params#NONE}，钩子用自己构造时的值。 */

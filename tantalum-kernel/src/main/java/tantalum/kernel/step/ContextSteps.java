@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 import tantalum.kernel.projection.ContextDiff;
 import tantalum.kernel.projection.ContextUpdate;
+import tantalum.kernel.projection.ToolUnlocks;
 import tantalum.kernel.projection.ToolsGone;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.command.AssembleContext;
@@ -85,12 +86,15 @@ public final class ContextSteps {
         if (frozen == null) {
             // 开着的名单只认全集里有的名字，和之后每次组装的算法一样
             List<String> all = event.tools().stream().map(ToolSpec::name).toList();
-            List<String> enabled = event.enabledTools() == null ? null : all.stream().filter(event.enabledTools()::contains).toList();
+            // 按需出现的工具：这个会话里加上过的（压缩后重新冻结时）照样开着
+            Set<String> kept = ToolUnlocks.kept(event.unlocks(), session.toolsSeen());
+            List<String> enabled = event.enabledTools() == null ? null
+                    : all.stream().filter(name -> event.enabledTools().contains(name) || kept.contains(name)).toList();
             List<String> active = enabled != null ? enabled : all;
             List<String> gone = session.toolsSeen().stream().filter(name -> !active.contains(name)).toList();
             SessionState next = gone.isEmpty() ? session : session.append(ContextUpdate.message(ToolsGone.text(gone)));
             out.put(next.withContext(new SessionContext(event.system(), event.tools(), event.compaction(), event.sections(),
-                    enabled, enabled, event.enabledPlugins()).withPluginParams(event.pluginParams()))
+                    enabled, enabled, event.enabledPlugins()).withPluginParams(event.pluginParams()).withUnlocks(event.unlocks()))
                     .withToolsSeen(seen(session, active)));
             return;
         }
@@ -102,7 +106,9 @@ public final class ContextSteps {
             context = context.withSections(event.sections());
         }
         List<String> all = frozen.tools().stream().map(ToolSpec::name).toList();
-        List<String> active = event.enabledTools() == null ? all : all.stream().filter(event.enabledTools()::contains).toList();
+        Set<String> kept = ToolUnlocks.kept(event.unlocks(), session.toolsSeen());
+        List<String> active = event.enabledTools() == null ? all
+                : all.stream().filter(name -> event.enabledTools().contains(name) || kept.contains(name)).toList();
         List<String> added = active.stream().filter(name -> !frozen.toolActive(name)).toList();
         List<String> removed = all.stream().filter(name -> frozen.toolActive(name) && !active.contains(name)).toList();
         if (!added.isEmpty() || !removed.isEmpty()) {
@@ -123,6 +129,10 @@ public final class ContextSteps {
         if (!added.isEmpty() || !removed.isEmpty() || !Objects.equals(frozen.activePlugins(), event.enabledPlugins())) {
             context = context.withActive(frozen.activeTools() == null && event.enabledTools() == null ? null : active,
                     event.enabledPlugins());
+        }
+        // 按需出现的工具的规则：换成这次的，不告诉模型
+        if (!Objects.equals(frozen.unlocks(), event.unlocks())) {
+            context = context.withUnlocks(event.unlocks());
         }
         // 钩子插件的参数只给钩子看，不告诉模型；变了才换，没变不产生状态变化
         if (!Objects.equals(frozen.pluginParams(), event.pluginParams())) {
