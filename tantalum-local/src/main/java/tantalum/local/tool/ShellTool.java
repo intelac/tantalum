@@ -56,7 +56,9 @@ public abstract sealed class ShellTool implements LocalTool permits ShellTool.Ba
         @Override public String description() {
             return "Run a PowerShell command on the user's Windows computer, in the main allowed directory or workdir. Use "
                     + "PowerShell syntax: cmdlets such as Get-ChildItem and Select-String, $env:NAME for environment variables, ';' "
-                    + "to run commands one after another." + common();
+                    + "to run commands one after another. Tables and default output are laid out about 120 columns wide and wide "
+                    + "columns are cut with '\u2026'; for the full values use Format-List, ConvertTo-Json, or "
+                    + "Format-Table -AutoSize | Out-String -Width 4096." + common();
         }
         @Override String commandHint() { return "The PowerShell command to run."; }
     }

@@ -74,14 +74,24 @@ class LocalShellIT {
     }
 
     /**
-     * PowerShell 的输出被重定向时，表格按控制台宽度排版，宽的列可能用“…”截掉（PowerShell 自己的行为，tool-scenarios-2 需求 6.4c；
-     * DSH 的 pwsh-local 只设了编码）。只在 Windows CI 上有意义；bash 那边只是确认长行原样回来。
+     * PowerShell 的输出被重定向时，表格按约 120 列排版，宽的列用“…”截掉（PowerShell 自己的行为；2026-11-14 Windows CI 上看到：
+     * 300 个 x 加 END 只剩前一百多个 x 和“…”）。DSH 的 pwsh-local 只设了编码，没处理。我们不改命令（包一层会改变 exit 和错误流），
+     * 工具说明里告诉模型宽数据用 Out-String -Width、Format-List 或 ConvertTo-Json（tool-scenarios-2 需求 6.4c）。
+     * 这里钉住两件事：默认确实会截（说明里那句话是真的），说明里推荐的写法拿得到完整内容。bash 那边长行原样回来。
      */
     @Test
-    void aWideTableColumnIsNotCutByThePowerShellFormatter() throws Exception {
-        Shell.Run run = run("printf 'Value %0300d END\\n' 0",
-                "[pscustomobject]@{ Name = 'a'; Value = ('x' * 300) + 'END' } | Format-Table", 30);
-        assertTrue(run.output().text().contains("END"), run.output().text());
+    void aWideTableColumnIsCutByThePowerShellFormatterButTheSuggestedFormsAreNot() throws Exception {
+        String row = "[pscustomobject]@{ Name = 'a'; Value = ('x' * 300) + 'END' }";
+        Shell.Run plain = run("printf 'Value %0300d END\\n' 0", row + " | Format-Table", 30);
+        if (windows) {
+            assertFalse(plain.output().text().contains("END"), "PowerShell no longer cuts wide columns; update the powershell tool description");
+            for (String suggested : List.of(" | Format-Table -AutoSize | Out-String -Width 4096", " | Format-List", " | ConvertTo-Json")) {
+                Shell.Run whole = run("", row + suggested, 30);
+                assertTrue(whole.output().text().contains("END"), suggested + ": " + whole.output().text());
+            }
+        } else {
+            assertTrue(plain.output().text().contains("END"), plain.output().text());
+        }
     }
 
     @Test
