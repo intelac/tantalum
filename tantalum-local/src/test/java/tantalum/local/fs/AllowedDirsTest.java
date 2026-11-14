@@ -275,4 +275,21 @@ class AllowedDirsTest {
         assertEquals(AllowedDirs.NOT_FOUND + "a.py" + hint,
                 assertThrows(IllegalArgumentException.class, () -> inSrc.resolve("a.py")).getMessage());
     }
+
+    // ---- 只读的目录：命令的完整输出（tool-scenarios-2 需求 6.2） ----
+
+    @Test
+    void aReadableDirCanBeReadButNotWrittenOrListedAmongTheAllowedOnes() throws Exception {
+        Path output = Files.createDirectory(temp.resolve("output"));
+        Files.writeString(output.resolve("command-output-1.log"), "line 1");
+        AllowedDirs withOutput = dirs.withReadable(output);
+        assertEquals(output.resolve("command-output-1.log"), withOutput.resolve(output.resolve("command-output-1.log").toString()));
+        assertThrows(IllegalArgumentException.class, () -> withOutput.resolveForWrite(output.resolve("command-output-1.log").toString()));
+        assertThrows(IllegalArgumentException.class, () -> withOutput.resolveForWrite(output.resolve("new.txt").toString()));
+        assertEquals(List.of(root), withOutput.all());
+        assertFalse(withOutput.contains(output.resolve("command-output-1.log")));
+        assertThrows(IllegalArgumentException.class, () -> withOutput.resolve(temp.resolve("secret.txt").toString()));
+        // 换起点（会话目录）后还能读
+        assertEquals(output.resolve("command-output-1.log"), withOutput.from(".").resolve(output.resolve("command-output-1.log").toString()));
+    }
 }

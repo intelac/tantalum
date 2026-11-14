@@ -30,7 +30,7 @@ public interface Shell extends AutoCloseable {
     }
 
     /**
-     * 一次命令的结果。{@code output} 是标准输出和错误输出合在一起的末尾一段（见 {@link Tail}）。超时时 {@code exitCode} 没有意义。
+     * 一次命令的结果。{@code output} 是标准输出和错误输出合在一起，太长时留头留尾（见 {@link Capture}）。超时时 {@code exitCode} 没有意义。
      */
     record Run(int exitCode, Tail.Text output, boolean timedOut) {}
 

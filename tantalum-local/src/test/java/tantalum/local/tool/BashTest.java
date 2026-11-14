@@ -125,4 +125,21 @@ class BashTest {
         assertEquals(LocalResult.ok("(no output)"), run(args("command", "true")));
         assertEquals("x", runs.getFirst()[0], "the command goes to the sandbox as given");
     }
+
+    /** 留头留尾时写明各留了几行、完整输出在哪、怎么读；退出码照旧写在最后（tool-scenarios-2 需求 6）。 */
+    @Test
+    void headAndTailAndTheFullOutputFileAreReported() throws Exception {
+        Path output = Files.createDirectory(temp.toRealPath().resolve("output"));
+        Path full = Files.writeString(output.resolve("command-output-1.log"), "all");
+        dirs = dirs.withReadable(output);
+        next = new Shell.Run(1, new Tail.Text("ERROR first\n[... 1000 lines omitted ...]\nlast", true, 3000, 2000, false, 200, full, false), false);
+        LocalResult result = run(args("command", "x"));
+        assertTrue(result.error());
+        assertEquals("ERROR first\n[... 1000 lines omitted ...]\nlast\n\n[Output truncated: showing the first 200 and the last 1800 of "
+                + "3000 lines (limit 2000 lines or 50 KB). Full output saved to " + full + "; read parts of it with read_file (offset "
+                + "and limit) or search it with grep.]\n\nCommand exited with code 1.", result.text());
+        // 模型照着路径能读到
+        LocalResult read = new ReadFile().run(new LocalContext("s", dirs, new Observations()), args("path", full.toString()));
+        assertTrue(!read.error() && read.text().contains("all"), read.text());
+    }
 }

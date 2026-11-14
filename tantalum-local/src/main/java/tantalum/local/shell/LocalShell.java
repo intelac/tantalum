@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>PowerShell：{@code -NoLogo -NoProfile -NonInteractive -EncodedCommand}，命令前加一行把输出设成无 BOM 的 UTF-8
  *       （DSH {@code packages/shell/pwsh-local/src/index.ts:44-49} 用 {@code -Command} 加同样一行）。用 {@code -EncodedCommand}
  *       （UTF-16LE 的 Base64）而不是 {@code -Command}：Java 在 Windows 上拼命令行时不转义参数里的双引号，命令里有 {@code "} 就会被拆坏。</li>
- *   <li>输入一开始就关掉，标准输出和错误合在一起，只留末尾（{@link Tail}）。</li>
+ *   <li>输入一开始就关掉，标准输出和错误合在一起；太长时留头留尾，完整的存进 {@link Spill}（{@link Capture}）。</li>
  *   <li>到时或线程被打断时结束整个进程树：{@link ProcessHandle#descendants()} 逐个结束再结束 shell 本身，三个平台通用
  *       （pi 在 Windows 上用 {@code taskkill /F /T}，{@code utils/shell.js:157-188}；DSH 用 Job Object）。</li>
  * </ul>
@@ -31,19 +31,39 @@ public final class LocalShell implements Shell {
     private final ShellKind kind;
     private final Path program;
     private final Map<String, String> env;
+    /** 放完整输出的目录；null 时只留头尾（测试、建不了临时目录时）。 */
+    private final Spill spill;
 
     public LocalShell(ShellKind kind, Path program, Map<String, String> env) {
+        this(kind, program, env, null);
+    }
+
+    public LocalShell(ShellKind kind, Path program, Map<String, String> env, Spill spill) {
         this.kind = kind;
         this.program = program;
         this.env = Map.copyOf(env);
+        this.spill = spill;
     }
 
     /** 按系统找 shell；找不到时返回不可用的，原因写明。 */
     public static Shell open(ShellFinder finder, ShellKind kind, Map<String, String> env) {
+        return open(finder, kind, env, null);
+    }
+
+    /** 同上，太长的输出完整地存进 {@code spill}。 */
+    public static Shell open(ShellFinder finder, ShellKind kind, Map<String, String> env, Spill spill) {
         return finder.find(kind)
-                .<Shell>map(program -> new LocalShell(kind, program, env))
+                .<Shell>map(program -> new LocalShell(kind, program, env, spill))
                 .orElseGet(() -> Shell.unavailable(kind, Unavailable.of(Unavailable.Code.NOT_FOUND, "shell",
                         kind == ShellKind.POWERSHELL ? "PowerShell (pwsh.exe or powershell.exe)" : "bash")));
+    }
+
+    /** 连接程序退出时删掉存完整输出的目录。 */
+    @Override
+    public void close() {
+        if (spill != null) {
+            spill.close();
+        }
     }
 
     @Override
@@ -85,9 +105,9 @@ public final class LocalShell implements Shell {
         Process process = builder.start();
         try {
             process.getOutputStream().close();
-            Tail tail = new Tail();
+            Capture capture = new Capture(spill);
             InputStream output = process.getInputStream();
-            Thread reader = Thread.ofVirtual().name("shell-output").start(() -> drain(output, tail));
+            Thread reader = Thread.ofVirtual().name("shell-output").start(() -> drain(output, capture));
             boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!finished) {
                 stop(process);
@@ -98,7 +118,7 @@ public final class LocalShell implements Shell {
                 output.close();
                 reader.join(Duration.ofSeconds(1));
             }
-            return new Run(finished ? process.exitValue() : -1, tail.text(), !finished);
+            return new Run(finished ? process.exitValue() : -1, capture.text(), !finished);
         } catch (InterruptedException stopped) {
             stop(process);
             throw stopped;
@@ -109,11 +129,11 @@ public final class LocalShell implements Shell {
         }
     }
 
-    private static void drain(InputStream output, Tail tail) {
+    private static void drain(InputStream output, Capture capture) {
         byte[] buffer = new byte[8192];
         try (output) {
             for (int read = output.read(buffer); read >= 0; read = output.read(buffer)) {
-                tail.write(buffer, 0, read);
+                capture.write(buffer, 0, read);
             }
         } catch (IOException closed) {
             // 进程结束或这边关了管道

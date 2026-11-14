@@ -69,8 +69,9 @@ test.describe("插件参数", () => {
     await expect(form.getByText("有没保存的改动")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    await send(page, `readfile:big.md ${stamp}`);
-    await expect(page.getByText(/读到：big-e2e-head x+\s*\(300 more characters truncated\)/)).toBeVisible({ timeout: 30_000 });
+    // 超过 100 字符：留开头和结尾各一半，中间写明省掉多少（tool-scenarios-2 需求 6.4a）
+    await send(page, `grepfile:big.md ${stamp}`);
+    await expect(page.getByText(/找到：big\.md:1:big-e2e-head x+\s*\[\.\.\. \d+ characters omitted \.\.\.\]\s*x+$/)).toBeVisible({ timeout: 30_000 });
 
     // 刷新后还是 100；恢复默认后回到 100000，同一个会话里下一次就不截了
     await page.reload();
@@ -80,8 +81,8 @@ test.describe("插件参数", () => {
     await again.getByRole("button", { name: "参数恢复默认" }).click();
     await expect(again.getByLabel("工具结果最多多少字符")).toHaveValue("100000");
     await page.keyboard.press("Escape");
-    await send(page, `readfile:big.md again${stamp}`);
-    await expect(page.getByText(/读到：big-e2e-head x{387}$/)).toBeVisible({ timeout: 30_000 });
+    await send(page, `grepfile:big.md again${stamp}`);
+    await expect(page.getByText(/找到：big\.md:1:big-e2e-head x{387}$/)).toBeVisible({ timeout: 30_000 });
     await page.close();
   });
 

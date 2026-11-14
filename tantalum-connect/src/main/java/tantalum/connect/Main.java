@@ -30,6 +30,7 @@ import tantalum.local.shell.LocalShell;
 import tantalum.local.shell.Shell;
 import tantalum.local.shell.ShellFinder;
 import tantalum.local.shell.ShellKind;
+import tantalum.local.shell.Spill;
 import tantalum.local.shell.Unavailable;
 import tantalum.local.tool.GitCheck;
 import tantalum.local.wire.Hello;
@@ -314,7 +315,16 @@ public final class Main {
         BrowserSettings found = browser(options.browser(), npx, words);
         String token = token(env, prompt, words);
         Map<String, String> commandEnv = CommandEnv.of(env, options.env());
-        Shell shell = shell(options, commandEnv);
+        Spill spill = options.shell() ? spill() : null;
+        Shell shell = shell(options, commandEnv, spill);
+        if (spill != null) {
+            // 命令的完整输出存在这里，read_file 和 grep 能按路径读（tool-scenarios-2 需求 6.2）
+            try {
+                dirs = dirs.withReadable(spill.root());
+            } catch (IOException failure) {
+                throw new Refused(words.say(Key.REFUSED_ALLOW_UNUSABLE, Map.of("detail", String.valueOf(failure.getMessage()))));
+            }
+        }
         Hello.Browser state = !options.browser().allowed() ? Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED)
                 : found == null ? Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)
                 : npx == null ? Hello.Browser.unavailable(Hello.Browser.NODE_MISSING)
@@ -410,11 +420,20 @@ public final class Main {
      * 有 {@code --allow-shell} 时找这台电脑的 shell（macOS、Linux 上 bash，Windows 上 PowerShell）。找不到时命令行不出现，原因写进
      * 启动说明和插件页，文件工具照常能用。命令的环境变量是这个程序自己的，去掉像密钥的（{@link CommandEnv}）。
      */
-    private static Shell shell(Options options, Map<String, String> commandEnv) {
+    private static Shell shell(Options options, Map<String, String> commandEnv, Spill spill) {
         if (!options.shell()) {
             return Shell.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED));
         }
-        return LocalShell.open(ShellFinder.system(), ShellKind.current(), commandEnv);
+        return LocalShell.open(ShellFinder.system(), ShellKind.current(), commandEnv, spill);
+    }
+
+    /** 放命令完整输出的临时目录；建不了时不存完整输出，只留头尾。 */
+    private static Spill spill() {
+        try {
+            return Spill.temporary();
+        } catch (IOException failure) {
+            return null;
+        }
     }
 
     /** 连接程序自己所在的 jar 的 SHA-256（十六进制小写）；从源码运行（不是 jar）或读不了时为 null。 */

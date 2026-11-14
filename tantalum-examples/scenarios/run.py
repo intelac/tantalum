@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 WORK = tempfile.mkdtemp(prefix="tantalum-scenarios-")
 ROOT = os.path.join(WORK, "inventory")
+OUTSIDE = os.path.join(WORK, "notebook")   # outside 那组服务器多允许的一个目录，不在 Git 仓库里
 PORT, SITE_PORT = 8094, 8766
 BASE = f"http://127.0.0.1:{PORT}"
 LOCAL = {"url": "http://127.0.0.1:8090/v1", "model": "qwen3.8-flash-next-unsloth-ud-q4_k_xl"}
@@ -126,8 +127,17 @@ def start(extra=(), name=None):
     user = Client(); assert user.call("POST", "/api/auth/login", {"username": "dev", "password": user_pw})[0] == 200
     status, token = user.call("POST", "/api/local/tokens", {"validity": "1d"}); assert status == 200, token
     cenv = dict(os.environ, TANTALUM_TOKEN=token["token"])
-    connector = subprocess.Popen(["java", "--enable-native-access=ALL-UNNAMED", "-cp", cp, "tantalum.connect.Main", "--server", BASE, "--allow", ROOT,
-        "--allow-write", "--allow-shell", "--allow-browser", "--browser-headless",
+    # 只读临时目录里的 mcp.json，不读电脑上的 ~/.config/tantalum/mcp.json（tool-scenarios-2 需求 1.3）
+    mcp_config = f"{DATA}-mcp.json"
+    with open(mcp_config, "w") as f: json.dump({"mcpServers": {}}, f)
+    allow = ["--allow", ROOT]
+    if name == "outside":
+        # 允许目录里另有一个不在 Git 仓库里的目录（not-git 场景）
+        os.makedirs(OUTSIDE, exist_ok=True)
+        fixture.write(OUTSIDE, "plan.md", "# Notebook\n\nNot under version control.\n")
+        allow += ["--allow", OUTSIDE]
+    connector = subprocess.Popen(["java", "--enable-native-access=ALL-UNNAMED", "-cp", cp, "tantalum.connect.Main", "--server", BASE, *allow,
+        "--allow-write", "--allow-shell", "--allow-browser", "--browser-headless", "--mcp-config", mcp_config,
         "--browser-profile", f"{WORK}/browser-profile", "--lang", "en"], env=cenv, cwd=ROOT, stdout=open(f"{DATA}-connector.log", "w"), stderr=subprocess.STDOUT)
     started.append(connector)
     for _ in range(40):
@@ -165,13 +175,21 @@ def journal(session):
             if texts: answer = "\n".join(texts)
             for block in payload.get("content", []):
                 if block.get("kind") == "toolCall":
-                    call = {"name": block.get("name"), "args": block.get("arguments") if block.get("arguments") is not None else block.get("rawArguments"), "result": None, "error": None}
+                    call = {"id": block.get("id"), "reply": model_calls, "name": block.get("name"), "args": block.get("arguments") if block.get("arguments") is not None else block.get("rawArguments"), "result": None, "error": None}
                     by_id[block.get("id")] = call; calls.append(call)
         elif entry.get("type") == "ToolFinished" and payload.get("toolCallId") in by_id:
             by_id[payload["toolCallId"]].update(result=payload.get("text") or "", error=bool(payload.get("error")))
     return calls, answer, model_calls, tokens, extra
 
-def ask(user, session, text, model, timeout, answers, max_calls, posted=None):
+APPROVAL_PREFIX = "command-"   # CommandApprovalHook.QUESTION_PREFIX：审批卡片的问题 ID 是它加工具调用的 ID
+
+def detail_text(question):
+    detail = question.get("detail")
+    if isinstance(detail, dict): detail = next(iter(detail.values()), "")
+    return str(detail or "")
+
+def ask(user, session, text, model, timeout, answers, max_calls, posted=None, approve=None, approvals=None):
+    """approve：审批卡片怎么答（"once"、"session"、"deny"，或 命令 -> 其中之一）；答过的记进 approvals（调用 ID、命令、选择）。"""
     request = secrets.token_hex(6)
     # 同一会话里的后几轮：等的是这一次提问新开的那一轮，不是上一轮
     status, runs = user.call("GET", f"/api/sessions/{session}/runs")
@@ -190,6 +208,13 @@ def ask(user, session, text, model, timeout, answers, max_calls, posted=None):
         for question in (questions or {}).get("questions", []) if status == 200 else []:
             if question["id"] in answered: continue
             answered.add(question["id"])
+            if question["id"].startswith(APPROVAL_PREFIX):
+                command = detail_text(question).split("\n\n")[0]
+                choice = (approve(command) if callable(approve) else approve) or "once"
+                user.call("POST", f"/api/sessions/{session}/questions/{question['id']}", {"choice": choice})
+                if posted is not None: posted.append({"choice": choice})
+                if approvals is not None: approvals.append({"call": question["id"][len(APPROVAL_PREFIX):], "command": command, "choice": choice})
+                continue
             wanted = answers.get("*", "")
             choice = next((c["id"] for c in question.get("choices", []) if wanted and (wanted in str(c.get("label")) or wanted == c["id"])), None)
             # 场景没写答案时选第一个选项（模型自己多问了一句）；写了答案但对不上选项时当作自由回答
@@ -214,24 +239,27 @@ def run_one(user, scenario, model, recording=False):
     fixture.REQUESTS.clear()
     session = "s-" + secrets.token_hex(4)
     started = time.time()
-    prompt = scenario["prompt"] + (RECORD_NOTE if recording else "")
-    problem = ask(user, session, prompt, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
+    prompt = scenario["prompt"].replace("{outside}", OUTSIDE) + (RECORD_NOTE if recording else "")
+    approvals = []
+    problem = ask(user, session, prompt, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted, scenario["approve"], approvals)
     sessions = [session]
     # 同一会话的后几轮（多轮对话场景）
     for turn in scenario["turns"]:
         if problem is not None: break
-        problem = ask(user, session, turn, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted)
+        problem = ask(user, session, turn, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted, scenario["approve"], approvals)
     if problem is None and scenario["followup"]:
         time.sleep(6)   # 记忆落盘
         session2 = "s-" + secrets.token_hex(4); sessions.append(session2)
         problem = ask(user, session2, scenario["followup"], model, scenario["timeout"], scenario["answers"], scenario["max_calls"])
-    ctx = Ctx(); ctx.root = ROOT; ctx.seconds = time.time() - started
+    ctx = Ctx(); ctx.root = ROOT; ctx.outside = OUTSIDE; ctx.approvals = approvals; ctx.seconds = time.time() - started
     ctx.calls, ctx.answer, ctx.model_calls, tokens, ctx.compactions, prompt_sha = [], "", 0, collections.Counter(), 0, None
     for each in sessions:
         calls, answer, model_calls, used, extra = journal(each)
         ctx.calls += calls; ctx.answer = answer or ctx.answer; ctx.model_calls += model_calls; tokens.update(used)
         ctx.compactions += extra["compactions"]; prompt_sha = prompt_sha or extra["promptSha256"]
     ctx.tools = collections.Counter(call["name"] for call in ctx.calls)
+    # 会话记录原文：判分查插件留下的痕迹（比如引用核对要模型改引用）
+    ctx.journal = "".join(open(p, encoding="utf-8").read() for p in (f"{DATA}/sessions/dev/{s}.jsonl" for s in sessions) if os.path.exists(p))
     failed = ([problem] if problem else [])
     try: failed += scenario["check"](ctx)
     except Exception as failure: failed.append(f"check crashed: {failure!r}")
@@ -244,17 +272,24 @@ def run_one(user, scenario, model, recording=False):
             "tools": dict(ctx.tools), "errors": [{"tool": c["name"], "args": c["args"], "text": (c["result"] or "")[:400]} for c in ctx.calls if c["error"]],
             "repeats": max(seen.values()) if seen else 0, "seconds": round(ctx.seconds), "tokens": dict(tokens), "answer": ctx.answer[:1500],
             "calls": [{"name": c["name"], "args": c["args"], "error": c["error"], "result": (c["result"] or "")[:600]} for c in ctx.calls], "sessions": sessions,
+            "approvals": approvals,
             "full_calls": ctx.calls if recording else None, "_record": (base, after_setup, posted) if recording else None}
 
 # 单独起服务器的配置（scenarios.py 里 S(..., server=名字)）。small-window：窗口很小、压缩点很低，长任务中途一定压缩
 SERVERS = {
     None: [],
     "small-window": ["--tantalum.compaction.window-from-model=false", "--tantalum.compaction.reserve-tokens=2000",
-                     "--tantalum.openai-routes.local.context-window=12000", "--tantalum.openai-routes.local.max-tokens=1024",
+                     "--tantalum.openai-routes.local.context-window=12700", "--tantalum.openai-routes.local.max-tokens=1024",
                      "--tantalum.claude.context-window=18000", "--tantalum.claude.max-tokens=2048"],
+    # 开着“命令先问”（connector-jar 需求 5）：运行器按场景的 approve 答卡片
+    "approval": ["--tantalum.local.command-approval.enabled=true"],
+    # 连接程序多允许一个不在 Git 仓库里的目录（not-git 场景），见 start()
+    "outside": [],
 }
 # 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比），按模型分：本机 12k 窗口用满（压缩点 10k；qwen 压缩一次后系统提示、工具、摘要和保留的消息就有九千二左右，压缩点低于这个数时每一步都要再压，10k、11k 的窗口一轮压六到十次、丢进度；qwen 光系统提示和
-# 工具就 5.4k；9k 时也能压缩，但一轮要压七八次、模型会丢进度）；Claude 第一次调用就有九千多 token，18k 窗口取 50%（9k）
+# 工具就 5.4k；9k 时也能压缩，但一轮要压七八次、模型会丢进度）；Claude 第一次调用就有九千多 token，18k 窗口取 50%（9k）。
+# 2026-11-14 本机窗口 12000 → 12700：11-13 以后系统提示和工具定义多了约 2.8 KB（约 700 token：grep 的 glob、浏览器的 element、
+# 命令没有沙箱的说明、记忆说明），压缩从一轮 1–2 次变成 2–5 次；补回同样的余量，场景测的仍是“压缩后待办能不能接着做完”
 PERCENT = {"small-window": {"qwen": 100, "qwen-think": 100, "claude": 50, "opus": 50, "haiku": 50, "fable": 50}}
 # 每百万 token 的美元价（输入、输出、读缓存、写缓存）；本机模型不花钱
 # 每百万 token 的美元价：输入、输出、读缓存、写缓存（写 5 分钟缓存按输入的 1.25 倍）。2026-11-13 照 claude-api 技能的价格表；
@@ -316,7 +351,9 @@ SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|sk-ant-|api[
 
 def replayable(scenario):
     # 用到测试站的（注入网页等）也不录：回放时没有这个站
-    return scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"] and SITE_URL not in scenario["prompt"]
+    # 审批、多一个允许目录的服务器配置回放里没有（回放的“电脑”不答审批卡片、只有一个目录），这两组不录
+    return (scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"] and SITE_URL not in scenario["prompt"]
+            and scenario["server"] not in ("approval", "outside"))
 
 def tree(root):
     """项目里的文件（不含 .git、__pycache__、node_modules 的内容）：相对路径 → 字节。"""

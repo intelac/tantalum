@@ -22,6 +22,8 @@ public final class AllowedDirs {
     private final List<Path> dirs;
     /** 相对路径从这里算：主目录，或用 {@link #from} 换成的会话目录。 */
     private final Path start;
+    /** 只能读的目录（真实路径）：命令的完整输出存在这里。不在 {@link #all} 里，不能写。 */
+    private final List<Path> readable;
 
     /** 目录必须已存在。一个都没有、不存在或不是目录时抛 {@link IllegalArgumentException}。 */
     public AllowedDirs(List<Path> dirs) throws IOException {
@@ -40,11 +42,23 @@ public final class AllowedDirs {
         }
         this.dirs = List.copyOf(real);
         this.start = this.dirs.getFirst();
+        this.readable = List.of();
     }
 
-    private AllowedDirs(List<Path> dirs, Path start) {
+    private AllowedDirs(List<Path> dirs, Path start, List<Path> readable) {
         this.dirs = dirs;
         this.start = start;
+        this.readable = readable;
+    }
+
+    /**
+     * 多一个只能读的目录：{@link #resolve} 认它（{@code read_file}、{@code grep} 能按路径读），{@link #resolveForWrite} 不认，
+     * 不出现在 {@link #all}（不报给服务器，{@code find_files} 不搜它）。用于命令的完整输出（tool-scenarios-2 需求 6.2）。
+     */
+    public AllowedDirs withReadable(Path dir) throws IOException {
+        List<Path> more = new ArrayList<>(readable);
+        more.add(dir.toRealPath());
+        return new AllowedDirs(dirs, start, List.copyOf(more));
     }
 
     /**
@@ -56,7 +70,7 @@ public final class AllowedDirs {
         if (!Files.isDirectory(real)) {
             throw new IllegalArgumentException(NOT_FOUND + dir);
         }
-        return new AllowedDirs(dirs, real);
+        return new AllowedDirs(dirs, real, readable);
     }
 
     /** 相对路径找不到时补的一句：从哪算起、下一步怎么找。不含任何真实路径。 */
@@ -110,7 +124,7 @@ public final class AllowedDirs {
      */
     public Path resolveForWrite(String path) {
         Path candidate = main().resolve(path).normalize();
-        if (!inside(candidate) || dirs.contains(candidate)) {
+        if (!writable(candidate) || dirs.contains(candidate)) {
             throw new IllegalArgumentException(notFound(path));
         }
         if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
@@ -129,7 +143,7 @@ public final class AllowedDirs {
         } catch (IOException failure) {
             throw new IllegalArgumentException(notFound(path));
         }
-        if (!inside(real) || !Files.isDirectory(real)) {
+        if (!writable(real) || !Files.isDirectory(real)) {
             throw new IllegalArgumentException(notFound(path));
         }
         return real.resolve(existing.relativize(candidate));
@@ -146,10 +160,24 @@ public final class AllowedDirs {
 
     /** {@code path}（已经是绝对路径）是不是在某个允许的目录里。只比路径，不解析符号链接。 */
     public boolean contains(Path path) {
-        return inside(path);
+        return writable(path);
     }
 
+    /** 能读：在允许的目录或只读的目录里。 */
     private boolean inside(Path path) {
+        if (writable(path)) {
+            return true;
+        }
+        for (Path dir : readable) {
+            if (path.startsWith(dir)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 在允许的目录里（能写；只读的目录不算）。 */
+    private boolean writable(Path path) {
         for (Path dir : dirs) {
             if (path.startsWith(dir)) {
                 return true;

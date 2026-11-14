@@ -166,6 +166,11 @@ public final class E2eModel implements ModelClient {
                 return results == 0 ? reply(List.of(), call("write_file", Map.of("path", "e2e/approve-" + name + ".txt", "content", name + "\n")))
                         : answer(chunks, "结果：" + lastResult(prompt));
             }
+            if (text.contains("grepfile:")) {
+                // plugin-settings：在一个文件里 grep big-e2e-head，原样说出结果（read_file 的结果 truncateOutput 不截，演示截断用 grep）
+                return results == 0 ? reply(List.of(), call("grep", Map.of("pattern", "big-e2e-head", "path", word(text, "grepfile:"))))
+                        : answer(chunks, "找到：" + lastResult(prompt));
+            }
             if (text.contains("readfile:")) {
                 // workspaces：按相对路径读一个文件，原样说出结果；会话在工作区里时从工作区目录读
                 return results == 0 ? reply(List.of(), call("read_file", Map.of("path", word(text, "readfile:"))))

@@ -53,6 +53,37 @@ class LocalShellIT {
         assertEquals("a \"b\" c", run.output().text().strip());
     }
 
+    /**
+     * 输出很长、错误在第一行：结果里留着第一行，完整输出在文件里（tool-scenarios-2 需求 6）。两种 shell 走同一段代码，这里各真跑一次。
+     */
+    @Test
+    void aLongOutputKeepsItsFirstLineAndTheWholeIsSavedToAFile() throws Exception {
+        Map<String, String> env = CommandEnv.of(System.getenv(), List.of());
+        try (Spill spill = new Spill(temp.resolve("output"))) {
+            Shell saving = LocalShell.open(ShellFinder.system(), ShellKind.current(), env, spill);
+            Shell.Run run = saving.run(windows
+                    ? "Write-Output 'FATAL E-1'; 1..5000 | ForEach-Object { \"step $_\" }; exit 2"
+                    : "echo 'FATAL E-1'; for i in $(seq 1 5000); do echo \"step $i\"; done; exit 2", temp, Duration.ofSeconds(60));
+            assertEquals(2, run.exitCode());
+            assertTrue(run.output().truncated());
+            assertTrue(run.output().text().startsWith("FATAL E-1"), run.output().text().substring(0, 60));
+            assertTrue(run.output().text().strip().endsWith("step 5000"));
+            String full = Files.readString(run.output().full());
+            assertTrue(full.startsWith("FATAL E-1") && full.contains("step 2500") && full.strip().endsWith("step 5000"));
+        }
+    }
+
+    /**
+     * PowerShell 的输出被重定向时，表格按控制台宽度排版，宽的列可能用“…”截掉（PowerShell 自己的行为，tool-scenarios-2 需求 6.4c；
+     * DSH 的 pwsh-local 只设了编码）。只在 Windows CI 上有意义；bash 那边只是确认长行原样回来。
+     */
+    @Test
+    void aWideTableColumnIsNotCutByThePowerShellFormatter() throws Exception {
+        Shell.Run run = run("printf 'Value %0300d END\\n' 0",
+                "[pscustomobject]@{ Name = 'a'; Value = ('x' * 300) + 'END' } | Format-Table", 30);
+        assertTrue(run.output().text().contains("END"), run.output().text());
+    }
+
     @Test
     void exitCodeIsReported() throws Exception {
         assertEquals(3, run("exit 3", "exit 3", 30).exitCode());

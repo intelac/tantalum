@@ -130,9 +130,9 @@ class ExampleParamsTest {
         TruncateOutputHook hook = new TruncateOutputHook(4);
         ToolContext none = new ToolContext(USER, SESSION, new Workspace(dir));
         ToolOutput output = ToolOutput.ok("abcdefgh");
-        assertTrue(hook.afterToolExecution(none, "t", new Json.Null(), output).text().startsWith("abcd\n"));
+        assertEquals("ab\n[... 4 characters omitted ...]\ngh", hook.afterToolExecution(none, "t", new Json.Null(), output).text());
         ToolContext two = none.with(params("maxChars", num(2)), Secrets.NONE);
-        assertTrue(hook.afterToolExecution(two, "t", new Json.Null(), output).text().startsWith("ab\n"));
+        assertEquals("a\n[... 6 characters omitted ...]\nh", hook.afterToolExecution(two, "t", new Json.Null(), output).text());
         ToolContext wide = none.with(params("maxChars", num(100)), Secrets.NONE);
         assertSame(output, hook.afterToolExecution(wide, "t", new Json.Null(), output));
     }

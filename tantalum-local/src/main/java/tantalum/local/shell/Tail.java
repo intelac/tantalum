@@ -1,6 +1,7 @@
 package tantalum.local.shell;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Arrays;
 
 /**
@@ -13,10 +14,17 @@ public final class Tail {
     public static final int MAX_BYTES = 50 * 1024;
 
     /**
-     * 留下的文字。{@code totalLines} 是全部输出的行数，{@code shownLines} 是留下的行数；{@code truncated} 时开头被截掉了，
-     * {@code cutLine} 时截在一行的中间（整段留下的文字里没有换行：一行就超过了 50 KB）。
+     * 留下的文字。{@code totalLines} 是全部输出的行数，{@code shownLines} 是留下的行数；{@code truncated} 时有一部分没留下，
+     * {@code cutLine} 时截在一行的中间（整段留下的文字里没有换行：一行就超过了 50 KB）。{@link Capture} 另外填：
+     * {@code headLines} 开头留下的行数（0 表示只留了末尾）、{@code full} 完整输出存在电脑上的文件（没存时为 null）、
+     * {@code fullCut} 那个文件到了大小上限、后面没写进去。
      */
-    public record Text(String text, boolean truncated, long totalLines, int shownLines, boolean cutLine) {
+    public record Text(String text, boolean truncated, long totalLines, int shownLines, boolean cutLine, int headLines, Path full,
+            boolean fullCut) {
+        public Text(String text, boolean truncated, long totalLines, int shownLines, boolean cutLine) {
+            this(text, truncated, totalLines, shownLines, cutLine, 0, null, false);
+        }
+
         public Text(String text, boolean truncated, long totalLines, int shownLines) {
             this(text, truncated, totalLines, shownLines, false);
         }
@@ -34,6 +42,7 @@ public final class Tail {
         this(MAX_LINES, MAX_BYTES);
     }
 
+    /** 上限不同的末尾：{@link Capture} 把一部分额度给开头。 */
     Tail(int maxLines, int maxBytes) {
         this.maxLines = maxLines;
         this.maxBytes = maxBytes;

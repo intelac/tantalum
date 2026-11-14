@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  *       Slack 的 {@code xox?-}、Google 的 {@code AIza}、JWT（{@code eyJ…}.{@code …}.{@code …}）、PEM 私钥块；</li>
  *   <li>网址里的口令（{@code postgres://app:口令@host}）；</li>
  *   <li>赋值：键名里带 password、secret、token、api key、relay key、private key、client secret 这类词，后面 {@code =} 或 {@code :}
- *       跟着的值。只换值，键名和引号留着，模型知道“这里原来有个密钥”。值太短、是变量引用（{@code $X}、{@code ${x}}）、函数调用、
+ *       跟着的值。键名只是光秃秃的 token、secret 时值要 16 位以上（文章里的“Loaded token: LT-90210”不算）。只换值，键名和引号留着，模型知道“这里原来有个密钥”。值太短、是变量引用（{@code $X}、{@code ${x}}）、函数调用、
  *       纯小写单词（{@code required}、{@code none}）的不换，免得读代码时把 {@code token = request.header(...)} 也遮掉。</li>
  * </ul>
  */
@@ -54,11 +54,24 @@ public final class SecretMask {
         StringBuilder out = new StringBuilder();
         while (assignment.find()) {
             String value = assignment.group(3);
-            String replacement = secretLooking(value) ? assignment.group(1) + assignment.group(2) + REDACTED : assignment.group();
+            String replacement = secretLooking(value) && longEnough(assignment.group(1), value) ? assignment.group(1) + assignment.group(2) + REDACTED : assignment.group();
             assignment.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
         assignment.appendTail(out);
         return out.toString();
+    }
+
+    /** 光秃秃的键名（只有 token、secret 这类词，没有前缀后缀）：文章里常见（“Loaded token: LT-90210”），值要像真的令牌才遮。 */
+    private static final Pattern BARE = Pattern.compile("(?i)token|secret|auth[_-]?key|access[_-]?key|private[_-]?key");
+    static final int BARE_MIN = 16;
+
+    /**
+     * 键名只是一个光秃秃的词（不是 password 那一类）时值至少 {@value #BARE_MIN} 位（tool-scenarios-2 第一轮：网页上的
+     * “Loaded token: LT-90210”被遮掉，模型拿不到答案）。带前缀的键名（{@code API_TOKEN}、{@code relay-key}）照旧 6 位起。
+     */
+    private static boolean longEnough(String key, String value) {
+        String name = key.replaceAll("[\"'\\s:=]+$", "");
+        return !BARE.matcher(name).matches() || value.length() >= BARE_MIN;
     }
 
     /** 值像密钥：不是已经遮掉的、不是变量引用、不是纯小写单词或标识符调用、不是全是星号。 */

@@ -382,7 +382,7 @@ class ConcurrencyStressTest {
         }
         assertTrue(cancelled > 0, "round " + round + ": no cancel landed during a model call; the slow path was not exercised");
 
-        // 2. 只读策略在并发下也拦住了每一次写；截断钩子改了每个用户的 b.txt。
+        // 2. 只读策略在并发下也拦住了每一次写；截断钩子截了每个用户的 grep 结果，read_file 的不截。
         // write_file 写新文件不用先读，电脑也允许写，策略没拦住就会留下 out.txt
         for (int i = 0; i < USERS; i++) {
             assertFalse(Files.exists(workspace.resolve(user(i) + "/out.txt")), "write_file must never execute for " + user(i));
@@ -398,8 +398,10 @@ class ConcurrencyStressTest {
                         while (ids.find()) {
                             assertEquals(user, ids.group(1), user + " received a mixed result: " + result.text());
                         }
-                        if (result.text().contains("filler")) {
-                            assertTrue(result.text().contains("more characters truncated"), "b.txt was not truncated: " + result.text());
+                        // grep 的结果超过上限被截（留首尾）；read_file 读 b.txt 的结果不截，整份都在（tool-scenarios-2 需求 6.4a）
+                        if (result.text().contains("filler") && !result.text().contains("characters omitted")) {
+                            assertTrue(result.text().contains((marker(user) + " filler ").repeat(20)), "b.txt was cut without saying so: "
+                                    + result.text());
                         }
                     }
                 }

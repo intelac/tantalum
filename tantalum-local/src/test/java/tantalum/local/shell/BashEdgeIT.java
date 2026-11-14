@@ -107,13 +107,15 @@ class BashEdgeIT {
         assertTrue(System.nanoTime() - quick < 1_500_000_000L, "a job that let go of the output does not delay the command");
     }
 
+    /** 留开头 200 行和末尾 1800 行，中间写明省掉几行；退出码在最后（tool-scenarios-2 需求 6，以前只留末尾 2000 行）。 */
     @Test
-    void aFailingCommandKeepsTheEndOfALongOutputAndTheExitCode() throws Exception {
+    void aFailingCommandKeepsTheStartAndTheEndOfALongOutputAndTheExitCode() throws Exception {
         LocalResult result = bash("seq 1 3000; exit 7");
         assertTrue(result.error());
-        assertTrue(result.text().startsWith("1001\n"));
-        assertTrue(result.text().endsWith("3000\n\n[Output truncated: showing the last 2000 of 3000 lines (limit 2000 lines or 50 KB).]"
-                + "\n\nCommand exited with code 7."), result.text().substring(result.text().length() - 200));
+        assertTrue(result.text().startsWith("1\n2\n"));
+        assertTrue(result.text().contains("\n200\n[... 1000 lines omitted ...]\n1201\n"), result.text().substring(0, 1200));
+        assertTrue(result.text().endsWith("3000\n\n[Output truncated: showing the first 200 and the last 1800 of 3000 lines (limit 2000 "
+                + "lines or 50 KB).]\n\nCommand exited with code 7."), result.text().substring(result.text().length() - 200));
     }
 
     @Test

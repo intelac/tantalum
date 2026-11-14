@@ -61,4 +61,17 @@ class SecretMaskTest {
             assertEquals(text, SecretMask.mask(text), text);
         }
     }
+
+    /**
+     * tool-scenarios-2 第一轮（2026-11-14，场景 wait）：网页上写着“Loaded token: LT-90210”，被当成密钥遮掉，模型拿不到答案。
+     * 键名只是一个光秃秃的 token、secret 这类词时，值要像真的令牌（16 位以上）才遮；带前缀的键名、password 照旧。
+     */
+    @Test
+    void aBareWordInProseIsNotAKeyUnlessTheValueIsLong() {
+        assertEquals("Loaded token: LT-90210", SecretMask.mask("Loaded token: LT-90210"));
+        assertEquals("The secret: blue-42 is the answer", SecretMask.mask("The secret: blue-42 is the answer"));
+        assertEquals("token: [REDACTED]", SecretMask.mask("token: tc_SXb6rLnWVzxgG7Eags"));
+        assertEquals("API_TOKEN=[REDACTED]", SecretMask.mask("API_TOKEN=tok-SECRET-4410"));
+        assertEquals("password: [REDACTED]", SecretMask.mask("password: hunter22x"));
+    }
 }

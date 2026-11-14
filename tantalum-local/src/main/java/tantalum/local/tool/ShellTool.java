@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import tantalum.local.shell.Capture;
 import tantalum.local.shell.Shell;
 import tantalum.local.shell.ShellKind;
 import tantalum.local.shell.Tail;
@@ -14,7 +15,8 @@ import tantalum.value.json.Json;
  * 在用户电脑上跑一条命令：macOS、Linux 上 {@code bash}，Windows 上 {@code powershell}，按系统只给一个（connector-jar 需求 4，
  * 同 DSH 按平台只装一个）。参数 {@code command}、{@code timeout}（秒，默认 120，最多 600，照 DSH {@code shell/bash-local/src/index.ts:102-106}，
  * 超过上限按上限算）、{@code workdir}（默认主目录，必须在允许的目录里）。
- * 标准输出和错误输出合在一起，只留最后 2000 行或 50 KB 并写明截断（照 pi {@code CA/src/core/tools/bash.ts:283}）；
+ * 标准输出和错误输出合在一起，最多 2000 行或 50 KB；太长时留开头 200 行和末尾，完整的存进电脑上的临时文件、写明路径
+ * （tool-scenarios-2 需求 6，照 DSH 的 spill 文件；只留末尾是 pi {@code CA/src/core/tools/bash.ts:283} 的做法）；
  * 退出码不是 0 算错误结果，写明退出码。超时、取消、断开时结束整个进程树（{@link Shell#run}）。没有沙箱，执行前由服务器上的审批问用户。
  */
 public abstract sealed class ShellTool implements LocalTool permits ShellTool.Bash, ShellTool.PowerShell {
@@ -31,9 +33,10 @@ public abstract sealed class ShellTool implements LocalTool permits ShellTool.Ba
     static String common() {
         return " The command runs as the user, without a sandbox, so it can reach any file the user's account can. The user is "
                 + "usually asked to approve each command before it runs and may deny it; if denied, do not retry it another way. "
-                + "Returns stdout and stderr together; output is truncated to the last " + Tail.MAX_LINES + " lines or "
-                + Tail.MAX_BYTES / 1024 + " KB. A non-zero exit code is an error. Prefer read_file, grep and edit_file for reading "
-                + "and changing files.";
+                + "Returns stdout and stderr together. Long output keeps the first " + Capture.HEAD_LINES + " and the last lines, "
+                + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB in all; the full output is then saved to a file whose "
+                + "path the result gives, to read with read_file or search with grep. A non-zero exit code is an error. Prefer "
+                + "read_file, grep and edit_file for reading and changing files.";
     }
 
     /** macOS、Linux 上的 {@code bash}。 */
@@ -112,12 +115,16 @@ public abstract sealed class ShellTool implements LocalTool permits ShellTool.Ba
         Shell.Run run = context.shell().run(command, workdir, Duration.ofSeconds(seconds));
         StringBuilder text = new StringBuilder(clean(run.output().text()));
         Tail.Text output = run.output();
-        if (output.truncated() && output.cutLine()) {
+        String limit = " (limit " + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB).";
+        if (output.truncated() && output.headLines() > 0) {
+            note(text, "[Output truncated: showing the first " + output.headLines() + " and the last "
+                    + (output.shownLines() - output.headLines()) + " of " + output.totalLines() + " lines" + limit + full(context, output) + "]");
+        } else if (output.truncated() && output.cutLine()) {
             note(text, "[Output truncated: line " + output.totalLines() + " alone is longer than " + Tail.MAX_BYTES / 1024
-                    + " KB; showing only its end (limit " + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB).]");
+                    + " KB; showing only its end" + limit + full(context, output) + "]");
         } else if (output.truncated()) {
-            note(text, "[Output truncated: showing the last " + output.shownLines() + " of " + output.totalLines() + " lines (limit "
-                    + Tail.MAX_LINES + " lines or " + Tail.MAX_BYTES / 1024 + " KB).]");
+            note(text, "[Output truncated: showing the last " + output.shownLines() + " of " + output.totalLines() + " lines" + limit
+                    + full(context, output) + "]");
         }
         if (run.timedOut()) {
             note(text, "Command timed out after " + seconds + " s. It and everything it started were stopped.");
@@ -160,6 +167,16 @@ public abstract sealed class ShellTool implements LocalTool permits ShellTool.Ba
         }
         out.setLength(out.length() - 1);
         return out.toString();
+    }
+
+    /** 完整输出存在哪、怎么读（tool-scenarios-2 需求 6.2）；没存时为空。 */
+    private static String full(LocalContext context, Tail.Text output) {
+        if (output.full() == null) {
+            return "";
+        }
+        return " Full output saved to " + context.dirs().display(output.full()) + (output.fullCut() ? " (only its first "
+                + Capture.FILE_MAX / (1024 * 1024) + " MB)" : "") + "; read parts of it with read_file (offset and limit) or search it "
+                + "with grep.";
     }
 
     private static void note(StringBuilder text, String line) {

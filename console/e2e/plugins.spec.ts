@@ -84,7 +84,7 @@ test.describe("插件页", () => {
   test("列出内置工具、MCP 服务器和规则插件，开关只改自己的", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     const dialog = await openPlugins(page);
-    await expect(dialog.getByText("读文件")).toBeVisible();
+    await expect(dialog.getByText("读文件", { exact: true })).toBeVisible();
     await expect(dialog.getByText(/从你的下一次提问开始生效/)).toBeVisible();
     const mcp = dialog.getByRole("region", { name: "MCP 服务器" });
     await expect(mcp.getByText("demo")).toBeVisible();

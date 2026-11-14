@@ -44,21 +44,37 @@ public final class TruncateOutputHook implements AfterToolHook, PluginInfo, Conf
     @Override
     public LocalText description() {
         // 例子插件示范带三种语言的写法：控制台按看的人的语言选，没有就用英文
-        return LocalText.en("Truncates tool results over the limit and notes how many characters were cut.")
-                .zh("工具结果超过上限时截断，并注明截掉了多少字符。")
-                .ja("上限を超えたツール結果を切り詰め、削った文字数を書き添えます。");
+        return LocalText.en("Shortens tool results over the limit, keeping the beginning and the end and noting how many characters "
+                        + "were left out in between. File reads are left whole.")
+                .zh("工具结果超过上限时保留开头和结尾，中间注明省掉了多少字符。读文件的结果不截。")
+                .ja("上限を超えたツール結果は先頭と末尾を残し、間で省いた文字数を書き添えます。ファイルの読み取り結果は切り詰めません。");
     }
 
-    /** 不在代理对中间切开，否则截断处是一个坏字符。 */
+    /** 模型按行号读文件的结果：不截（照 DSH {@code dsh-spill-policy} 跳过 {@code read}，免得截了再读、读了又截）。 */
+    static final String READ_FILE = "read_file";
+
+    /**
+     * 超过上限时留首尾、中间写明省掉了多少字符（照 DSH {@code dsh-spill-policy}“保留首尾”；tool-scenarios-2 需求 6.4a）。
+     * 工具自己写在末尾的话（退出码、完整输出存在哪个文件）因此不会被这一层切掉。开头给一半，末尾给另一半；不在代理对中间切开。
+     * 不另存完整结果：这个插件在服务器上，模型用的读文件工具在用户电脑上，读不到服务器的文件；命令的完整输出由连接程序那一层存。
+     */
     @Override
     public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) {
         String text = output.text();
         int maxChars = (int) Math.min(Integer.MAX_VALUE, context.params().number("maxChars", this.maxChars));
-        if (text.length() <= maxChars) {
+        if (text.length() <= maxChars || READ_FILE.equals(tool)) {
             return output;
         }
-        int cut = Character.isHighSurrogate(text.charAt(maxChars - 1)) ? maxChars - 1 : maxChars;
-        int dropped = text.length() - cut;
-        return new ToolOutput(text.substring(0, cut) + "\n(" + dropped + " more characters truncated)", output.error());
+        int head = maxChars / 2;
+        if (head > 0 && Character.isHighSurrogate(text.charAt(head - 1))) {
+            head--;
+        }
+        int tailStart = text.length() - (maxChars - maxChars / 2);
+        if (tailStart < text.length() && Character.isLowSurrogate(text.charAt(tailStart))) {
+            tailStart++;
+        }
+        int omitted = tailStart - head;
+        return new ToolOutput(text.substring(0, head) + "\n[... " + omitted + " characters omitted ...]\n" + text.substring(tailStart),
+                output.error(), output.images());
     }
 }
