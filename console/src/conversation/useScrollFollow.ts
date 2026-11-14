@@ -14,6 +14,10 @@ interface ScrollFollow {
   stick: boolean;
   toBottom: () => void;
   onScroll: () => void;
+  /** 读者要离开底部（轮次导航跳转之前）：停止跟随，免得新内容把位置拉回底部。 */
+  release: () => void;
+  /** 加载上一页（轮次导航的“加载更早”）。 */
+  loadOlder: () => void;
 }
 
 /** {@code changed} 是内容变了的信号（这里是渲染块数组）；{@code onLoadOlder} 完成后新的内容会出现在最前面。 */
@@ -44,6 +48,11 @@ export function useScrollFollow(changed: unknown, hasMore: boolean, onLoadOlder:
     setStick(true);
   }, []);
 
+  const release = useCallback(() => {
+    stickRef.current = false;
+    setStick(false);
+  }, []);
+
   const onScroll = useCallback(() => {
     const element = scroller.current;
     if (element === null) return;
@@ -55,14 +64,17 @@ export function useScrollFollow(changed: unknown, hasMore: boolean, onLoadOlder:
     if (element.scrollTop <= LOAD_THRESHOLD) loadOlder();
   }, [loadOlder]);
 
-  // 内容高度变化（分片、展开、图片）时，如果还贴着底部就跟过去。
+  // 内容高度变化（分片、展开、图片）或视区高度变化（输入框随多行文字变高）时，如果还贴着底部就跟过去（DSH：钉在底部时
+  // ResizeObserver 跟随新的底部）。只看内容不看视区时，输入框变高把底部挤出视区，之后的滚动事件会误判成读者离开了底部。
   useEffect(() => {
     const element = content.current;
+    const view = scroller.current;
     if (element === null || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       if (stickRef.current) toBottom();
     });
     observer.observe(element);
+    if (view !== null) observer.observe(view);
     return () => observer.disconnect();
   }, [toBottom]);
 
@@ -84,5 +96,5 @@ export function useScrollFollow(changed: unknown, hasMore: boolean, onLoadOlder:
     if (element !== null && element.clientHeight > 0 && element.scrollHeight <= element.clientHeight + LOAD_THRESHOLD) loadOlder();
   }, [changed, loadOlder]);
 
-  return { scroller, content, stick, toBottom, onScroll };
+  return { scroller, content, stick, toBottom, onScroll, release, loadOlder };
 }

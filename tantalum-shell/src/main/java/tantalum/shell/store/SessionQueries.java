@@ -134,4 +134,16 @@ public final class SessionQueries {
         }
         return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();
     }
+
+    /** 按内容搜到的会话：命中那条的角色和片段（session-find-pin R3）。 */
+    public record ContentHit(SessionId session, String role, String snippet) {}
+
+    /** 片段最多几个字。 */
+    public static final int SNIPPET = 120;
+
+    /** 按内容搜这个用户的会话，最多 {@code limit} 个。读索引，比刚落盘的记录最多晚一次批量写入。 */
+    public List<ContentHit> search(Principal principal, String query, int limit) throws SQLException {
+        return index.search(principal, query, limit).stream()
+                .map(hit -> new ContentHit(hit.session(), hit.role(), Snippet.around(hit.text(), query, SNIPPET))).toList();
+    }
 }

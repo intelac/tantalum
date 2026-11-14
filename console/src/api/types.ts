@@ -160,6 +160,16 @@ export interface SessionSummary {
   dir?: string | null;
   /** 归档了（workspaces W8）。 */
   archived?: boolean;
+  /** 置顶了（session-find-pin R1）。和归档互斥。 */
+  pinned?: boolean;
+}
+
+/** 按内容搜到的一个会话（session-find-pin R3）。 */
+export interface ContentHit {
+  session: string;
+  role: "user" | "assistant";
+  /** 以命中处为中心的一段原文。 */
+  snippet: string;
 }
 
 /** 一个工作区：用户电脑上的一个目录加一个名字，每人一份（workspaces W2）。 */

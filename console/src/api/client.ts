@@ -31,6 +31,7 @@ import type {
   RunView,
   SavedParams,
   SessionSummary,
+  ContentHit,
   SubmitMode,
   TodayUsageView,
   TraceCall,
@@ -168,6 +169,15 @@ export function renameSession(session: string, title: string): Promise<{ title: 
 
 export function setArchived(session: string, archived: boolean): Promise<{ archived: boolean }> {
   return call(`/api/sessions/${encodeURIComponent(session)}/archived`, { method: "PUT", body: JSON.stringify({ archived }) });
+}
+
+export function setPinned(session: string, pinned: boolean): Promise<{ pinned: boolean }> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/pinned`, { method: "PUT", body: JSON.stringify({ pinned }) });
+}
+
+/** 按内容搜会话，最多 20 个（session-find-pin R3）。查询变了由调用方中止。 */
+export function searchContent(query: string, signal?: AbortSignal): Promise<{ hits: ContentHit[]; more: boolean }> {
+  return call(`/api/sessions/search?q=${encodeURIComponent(query)}`, { signal });
 }
 
 export function listProjects(): Promise<{ projects: Project[] }> {

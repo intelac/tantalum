@@ -23,7 +23,7 @@ export function UserBubble({ store, id }: Props) {
   // 排队时被移除的只留在数据里占位
   if (item === undefined || item.kind !== "user" || item.removed === true) return null;
   return (
-    <div className="group flex flex-col items-end gap-1 py-2">
+    <div data-turn={id} className="group flex scroll-mt-4 flex-col items-end gap-1 py-2">
       <AttachmentView attachments={item.attachments ?? []} />
       {item.text !== "" && (
         <div className="max-w-[85%] rounded-xl bg-bubble px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-fg">

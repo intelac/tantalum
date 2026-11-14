@@ -81,9 +81,10 @@ public class ApiController {
     @GetMapping("/api/sessions")
     ResponseEntity<String> sessions() throws SQLException {
         Principal user = WebJson.currentUser();
-        Set<SessionId> archived = engine.archive().all(user);
+        Set<SessionId> archived = engine.marks().allArchived(user);
+        Set<SessionId> pinned = engine.marks().allPinned(user);
         List<Map<String, Object>> sessions = engine.queries().sessions(user).stream()
-                .map(summary -> describe(summary, archived.contains(summary.id()))).toList();
+                .map(summary -> describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()))).toList();
         return json.json(200, Map.of("sessions", sessions));
     }
 
@@ -193,7 +194,7 @@ public class ApiController {
         }
         Principal user = WebJson.currentUser();
         try {
-            if (engine.archive().archived(user, id.get())) {
+            if (engine.marks().archived(user, id.get())) {
                 return json.error(ErrorCode.SESSION_ARCHIVED, "the session is archived");
             }
         } catch (SQLException failure) {
@@ -415,7 +416,7 @@ public class ApiController {
         }
     }
 
-    private static Map<String, Object> describe(SessionSummary summary, boolean archived) {
+    private static Map<String, Object> describe(SessionSummary summary, boolean archived, boolean pinned) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", summary.id().value());
         view.put("title", summary.title());
@@ -425,6 +426,7 @@ public class ApiController {
         view.put("awaitingAnswer", AwaitingAnswer.NAME.equals(summary.runStatus()));
         view.put("dir", summary.dir());
         view.put("archived", archived);
+        view.put("pinned", pinned);
         return view;
     }
 

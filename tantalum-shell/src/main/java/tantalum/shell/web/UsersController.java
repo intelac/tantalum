@@ -59,7 +59,7 @@ public class UsersController {
             Principal user = new Principal(account.name());
             Map<String, Object> view = view(account);
             view.put("usageToday", usage(engine.queries().usageOn(user, today)));
-            Set<SessionId> archived = engine.archive().all(user);
+            Set<SessionId> archived = engine.marks().allArchived(user);
             List<SessionSummary> sessions = engine.queries().sessions(user).stream().filter(session -> !archived.contains(session.id())).toList();
             view.put("sessions", sessions.size());
             view.put("running", sessions.stream().filter(session -> !SessionSummary.IDLE.equals(session.runStatus())).count());

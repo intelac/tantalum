@@ -7,10 +7,11 @@ import { errorLine } from "../text/errors";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Menu } from "../ui/Menu";
-import { PAGE, groupSessions, searchSessions } from "./group";
+import { PAGE, groupSessions, mergeHits, searchSessions } from "./group";
+import { useContentSearch } from "./useContentSearch";
 import { ProjectGroup } from "./ProjectGroup";
 import { RenameDialog } from "./RenameDialog";
-import { useDeleteProject, useRenameProject, useRenameSession, useSetArchived } from "./useProjects";
+import { useDeleteProject, useRenameProject, useRenameSession, useSetArchived, useSetPinned } from "./useProjects";
 import { useCollapsed, useViewOptions } from "./viewState";
 import { useViewedUser } from "../api/viewing";
 
@@ -49,6 +50,8 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
   const renameProject = useRenameProject();
   const deleteProject = useDeleteProject();
   const archive = useSetArchived();
+  const pin = useSetPinned();
+  const content = useContentSearch(query);
   // 只读查看别人的会话时不能加工作区（行上的改名、归档在 SessionRow、ProjectGroup 里关掉）
   const viewing = useViewedUser() !== null;
 
@@ -59,7 +62,8 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
   }, [notice]);
 
   const groups = useMemo(() => groupSessions(sessions, projects, view, extra, currentSession), [sessions, projects, view, extra, currentSession]);
-  const found = query.trim() === "" ? null : searchSessions(sessions, projects, query, view.showArchived);
+  const found =
+    query.trim() === "" ? null : mergeHits(searchSessions(sessions, projects, query, view.showArchived), content.result, sessions, projects, view.showArchived);
 
   function onArchive(session: SessionSummary, archived: boolean): void {
     if (archived && (session.runStatus !== "idle" || session.awaitingAnswer === true)) {
@@ -94,6 +98,7 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
     onSelect: onSelectSession,
     onRename: (session: SessionSummary) => setRenaming({ kind: "session", session }),
     onArchive,
+    onPin: (session: SessionSummary, pinned: boolean) => pin.mutate({ id: session.id, pinned }, { onError: (failure) => setNotice({ text: errorLine(failure) }) }),
   };
 
   return (
@@ -141,11 +146,13 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
                 key={hit.session.id}
                 session={hit.session}
                 selected={hit.session.id === currentSession}
-                detail={hit.project?.title ?? t.projects.ungrouped}
+                detail={hit.snippet ?? hit.project?.title ?? t.projects.ungrouped}
                 {...rowProps}
               />
             ))}
-            {found.hits.length === 0 && <li className="px-3 py-2 text-xs text-fg-faint">{t.projects.noResults}</li>}
+            {content.loading && <li className="px-3 py-2 text-xs text-fg-faint">{t.projects.contentSearching}</li>}
+            {content.failed && <li className="px-3 py-2 text-xs text-warning">{t.projects.contentSearchFailed}</li>}
+            {found.hits.length === 0 && !content.loading && <li className="px-3 py-2 text-xs text-fg-faint">{t.projects.noResults}</li>}
             {found.more && <li className="px-3 py-2 text-xs text-fg-faint">{t.projects.moreResults}</li>}
           </ul>
         ) : view.mode === "flat" ? (
@@ -168,6 +175,7 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
                   onSelectSession={onSelectSession}
                   onRenameSession={rowProps.onRename}
                   onArchiveSession={onArchive}
+                  onPinSession={rowProps.onPin}
                   shownMore={(extra[group.key] ?? 0) > 0}
                   onShowMore={(reset) => setExtra((current) => ({ ...current, [group.key]: reset ? 0 : (current[group.key] ?? 0) + PAGE }))}
                   onNewHere={() => project !== null && onNewSessionIn(project)}

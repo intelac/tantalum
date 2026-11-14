@@ -6,6 +6,7 @@ import java.time.ZoneOffset;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
@@ -16,6 +17,8 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.model.ContentBlock;
+import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
@@ -30,7 +33,13 @@ import tantalum.value.state.SessionState;
  */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                          Instant answerDeadline, CommandId answerTimer, String dir, String rename) {
+                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text) {
+
+    /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
+    public record Text(String role, String text) {}
+
+    public static final String USER = "user";
+    public static final String ASSISTANT = "assistant";
 
     /** 一个事件带来的用量，{@code seq} 在同一用户内唯一。 */
     public record Usage(long seq, LocalDate day, TokenUsage amount) {}
@@ -56,7 +65,25 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 phase == null ? SessionSummary.IDLE : phase.name(), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
                 timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
-                dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null);
+                dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
+                text != null && !text.isBlank() ? new Text(USER, text) : replyText(envelope));
+    }
+
+    /** 模型回复里给人看的文字：全部文本块按顺序接起来；没有时为 null。 */
+    private static Text replyText(EventEnvelope envelope) {
+        if (!(envelope.event() instanceof ModelReplied replied)) {
+            return null;
+        }
+        StringBuilder joined = new StringBuilder();
+        for (ContentBlock block : replied.content()) {
+            if (block instanceof TextBlock part && !part.text().isBlank()) {
+                if (!joined.isEmpty()) {
+                    joined.append('\n');
+                }
+                joined.append(part.text());
+            }
+        }
+        return joined.isEmpty() ? null : new Text(ASSISTANT, joined.toString());
     }
 
     private static String dir(KernelState state, SessionId session) {

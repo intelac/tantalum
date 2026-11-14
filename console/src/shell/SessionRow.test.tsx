@@ -36,4 +36,36 @@ describe("SessionRow", () => {
     expect(running?.getAttribute("aria-current")).toBe("page");
     expect(untitled?.textContent).toContain("新会话");
   });
+
+  // session-find-pin R1.5、R2
+  it("offers pin, copy and archive in the menu; a pinned row shows a pin and offers unpin", async () => {
+    const onPin = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(
+      <ul>
+        <SessionRow session={{ ...base, pinned: true }} selected={false} onSelect={vi.fn()} now={now} onRename={vi.fn()} onArchive={vi.fn()} onPin={onPin} />
+      </ul>,
+    );
+    expect(screen.getByRole("img", { name: "已置顶" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: /的操作/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "取消置顶" }));
+    expect(onPin).toHaveBeenCalledWith(expect.objectContaining({ id: "s1" }), false);
+    await userEvent.click(screen.getByRole("button", { name: /的操作/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "复制会话号" }));
+    expect(writeText).toHaveBeenCalledWith("s1");
+    expect(await screen.findByText("已复制")).toBeTruthy();
+  });
+
+  it("has no pin item for an archived session", async () => {
+    render(
+      <ul>
+        <SessionRow session={{ ...base, archived: true, pinned: true }} selected={false} onSelect={vi.fn()} now={now} onRename={vi.fn()} onArchive={vi.fn()} onPin={vi.fn()} />
+      </ul>,
+    );
+    expect(screen.queryByRole("img", { name: "已置顶" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /的操作/ }));
+    expect(screen.queryByRole("menuitem", { name: /置顶/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "取消归档" })).toBeTruthy();
+  });
 });

@@ -40,9 +40,12 @@ final class IndexBatch {
 
     record SubmissionRow(Principal principal, IndexChange.Submission submission) {}
 
+    record TextRow(Principal principal, SessionId session, long seq, IndexChange.Text text) {}
+
     final Map<SessionId, Row> sessions = new LinkedHashMap<>();
     final List<UsageRow> usage = new ArrayList<>();
     final List<SubmissionRow> submissions = new ArrayList<>();
+    final List<TextRow> texts = new ArrayList<>();
     private int events;
 
     void add(IndexChange change) {
@@ -68,6 +71,9 @@ final class IndexBatch {
         }
         if (change.submission() != null) {
             submissions.add(new SubmissionRow(change.principal(), change.submission()));
+        }
+        if (change.text() != null) {
+            texts.add(new TextRow(change.principal(), change.session(), change.seq(), change.text()));
         }
         events++;
     }

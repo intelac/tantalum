@@ -1,7 +1,7 @@
 // 工作区、会话改名和归档的读写（workspaces 需求 1、5、6）。改完让会话列表和工作区列表失效，侧栏跟着刷新。
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addProject, deleteProject, listProjects, renameProject, renameSession, setArchived } from "../api/client";
+import { addProject, deleteProject, listProjects, renameProject, renameSession, setArchived, setPinned } from "../api/client";
 import type { SessionSummary } from "../api/types";
 import { SESSIONS_KEY } from "../shell/useSessions";
 
@@ -50,7 +50,19 @@ export function useSetArchived() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: ({ id, archived }: { id: string; archived: boolean }) => setArchived(id, archived),
-    onMutate: ({ id, archived }) => patchSession(queries, id, { archived }),
+    // 归档同时取消置顶，取消归档不恢复（session-find-pin R1.2）
+    onMutate: ({ id, archived }) => patchSession(queries, id, archived ? { archived, pinned: false } : { archived }),
+    onError: (_failure, _input, before) => restore(queries, before),
+    onSettled: () => queries.invalidateQueries({ queryKey: SESSIONS_KEY }),
+  });
+}
+
+/** 置顶或取消置顶（session-find-pin R1）。先改缓存，失败退回。 */
+export function useSetPinned() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => setPinned(id, pinned),
+    onMutate: ({ id, pinned }) => patchSession(queries, id, { pinned }),
     onError: (_failure, _input, before) => restore(queries, before),
     onSettled: () => queries.invalidateQueries({ queryKey: SESSIONS_KEY }),
   });

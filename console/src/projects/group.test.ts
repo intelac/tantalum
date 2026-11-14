@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project, SessionSummary } from "../api/types";
-import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, projectOf, searchSessions } from "./group";
+import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, projectOf, searchSessions } from "./group";
 
 // workspaces 任务 18（W4、W9、W10、W13）。
 
@@ -85,5 +85,70 @@ describe("searchSessions", () => {
     const found = searchSessions(many, [], "same", false);
     expect(found.hits).toHaveLength(SEARCH_LIMIT);
     expect(found.more).toBe(true);
+  });
+});
+
+// session-find-pin R1.4、R3.3。
+describe("pinned sessions", () => {
+  it("come first in their group, each part newest first, and are never hidden by the page size", () => {
+    const sessions = Array.from({ length: PAGE + 3 }, (_, i) => session(`s${i}`, i + 1));
+    sessions[0] = { ...sessions[0], pinned: true };
+    sessions[2] = { ...sessions[2], pinned: true };
+    const [group] = groupSessions(sessions, [], BY_PROJECT, {}, null);
+    expect(group.rows.map((row) => row.id).slice(0, 3)).toEqual(["s2", "s0", `s${PAGE + 2}`]);
+    expect(group.rows.map((row) => row.id)).toContain("s0");
+    const [flat] = groupSessions(sessions, [], { mode: "flat", showArchived: false }, {}, null);
+    expect(flat.rows.map((row) => row.id).slice(0, 2)).toEqual(["s2", "s0"]);
+  });
+});
+
+describe("mergeHits", () => {
+  const sessions = [session("a", 1, { title: "invoice" }), session("b", 2), session("c", 3, { archived: true }), session("d", 4)];
+  const local = searchSessions(sessions, [], "invoice", false);
+
+  it("keeps local hits first and appends content hits once, with their snippet", () => {
+    const merged = mergeHits(
+      local,
+      {
+        hits: [
+          { session: "a", role: "user", snippet: "x" },
+          { session: "d", role: "assistant", snippet: "the invoice total" },
+          { session: "gone", role: "user", snippet: "y" },
+          { session: "c", role: "user", snippet: "archived" },
+        ],
+        more: false,
+      },
+      sessions,
+      [],
+      false,
+    );
+    expect(merged.hits.map((hit) => [hit.session.id, hit.snippet])).toEqual([
+      ["a", undefined],
+      ["d", "the invoice total"],
+    ]);
+    expect(merged.more).toBe(false);
+  });
+
+  it("shows archived content hits when archived sessions are shown, and passes on more", () => {
+    const merged = mergeHits(local, { hits: [{ session: "c", role: "user", snippet: "archived" }], more: true }, sessions, [], true);
+    expect(merged.hits.map((hit) => hit.session.id)).toEqual(["a", "c"]);
+    expect(merged.more).toBe(true);
+  });
+
+  it("stops at the limit", () => {
+    const many = Array.from({ length: SEARCH_LIMIT + 2 }, (_, i) => session(`m${i}`, i % 60));
+    const merged = mergeHits(
+      { hits: [], more: false },
+      { hits: many.map((s) => ({ session: s.id, role: "user" as const, snippet: "z" })), more: false },
+      many,
+      [],
+      false,
+    );
+    expect(merged.hits).toHaveLength(SEARCH_LIMIT);
+    expect(merged.more).toBe(true);
+  });
+
+  it("is the local result while content search has not answered", () => {
+    expect(mergeHits(local, null, sessions, [], false)).toBe(local);
   });
 });

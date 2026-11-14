@@ -14,6 +14,7 @@ interface Props {
   onSelectSession: (id: string) => void;
   onRenameSession: (session: SessionSummary) => void;
   onArchiveSession: (session: SessionSummary, archived: boolean) => void;
+  onPinSession?: (session: SessionSummary, pinned: boolean) => void;
   /** 再显示 {@link PAGE} 条；{@code reset} 为 true 时收回到最初的条数。 */
   onShowMore: (reset: boolean) => void;
   shownMore: boolean;
@@ -31,6 +32,7 @@ export function ProjectGroup({
   onSelectSession,
   onRenameSession,
   onArchiveSession,
+  onPinSession,
   onShowMore,
   shownMore,
   onNewHere,
@@ -87,6 +89,7 @@ export function ProjectGroup({
               onSelect={onSelectSession}
               onRename={onRenameSession}
               onArchive={onArchiveSession}
+              onPin={onPinSession}
             />
           ))}
           {group.rows.length === 0 && (

@@ -3,6 +3,7 @@ import type { Block } from "./blocks";
 import { CompactionMark } from "./CompactionMark";
 import { JumpToBottom } from "./JumpToBottom";
 import { RunBlock } from "./RunBlock";
+import { TurnRail } from "./TurnRail";
 import { UserBubble } from "./UserBubble";
 import { useScrollFollow } from "./useScrollFollow";
 
@@ -15,9 +16,9 @@ interface Props {
   onLoadOlder: () => Promise<void>;
 }
 
-/** 消息列表，内容列 680 px 居中。每个条目自己订阅 store，列表只在顺序变化时重绘。 */
+/** 消息列表，内容列 680 px 居中，右侧轮次导航。每个条目自己订阅 store，列表只在顺序变化时重绘。 */
 export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
-  const { scroller, content, stick, toBottom, onScroll } = useScrollFollow(blocks, hasMore, onLoadOlder);
+  const { scroller, content, stick, toBottom, onScroll, release, loadOlder } = useScrollFollow(blocks, hasMore, onLoadOlder);
   return (
     <div className="relative h-full">
       <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto overscroll-contain px-4">
@@ -41,6 +42,7 @@ export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
           )}
         </div>
       </div>
+      <TurnRail store={store} blocks={blocks} scroller={scroller} hasMore={hasMore} onLoadOlder={loadOlder} onJump={release} />
       {!stick && <JumpToBottom onClick={toBottom} />}
     </div>
   );

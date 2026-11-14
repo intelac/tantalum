@@ -22,7 +22,7 @@ import tantalum.value.model.TextBlock;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** workspaces 任务 9（设计第 6 节、需求 1、5、6）：工作区接口、提问带工作区、会话改名和归档。 */
+/** workspaces 任务 9（设计第 6 节、需求 1、5、6）：工作区接口、提问带工作区、会话改名和归档。session-find-pin：置顶、按内容搜。 */
 class WorkspacesApiTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -167,5 +167,45 @@ class WorkspacesApiTest {
 
         assertEquals(200, send("alice", "PUT", "/api/sessions/s1/archived", "{\"archived\":false}").statusCode());
         assertEquals(200, ask("alice", "s1", "again", null).statusCode());
+    }
+
+    /** session-find-pin R1：置顶进列表；已归档的不能置顶；归档取消置顶，取消归档不恢复。 */
+    @Test
+    void pinningIsPerPersonAndArchivingUnpins() throws Exception {
+        ask("alice", "s1", "hi", null);
+        assertFalse(idle("alice", "s1").get("pinned").asBoolean());
+        assertEquals(404, send("bob", "PUT", "/api/sessions/s1/pinned", "{\"pinned\":true}").statusCode());
+        assertEquals(400, send("alice", "PUT", "/api/sessions/s1/pinned", "{\"pinned\":1}").statusCode());
+        assertEquals(200, send("alice", "PUT", "/api/sessions/s1/pinned", "{\"pinned\":true}").statusCode());
+        assertTrue(session("alice", "s1").get("pinned").asBoolean());
+
+        assertEquals(200, send("alice", "PUT", "/api/sessions/s1/archived", "{\"archived\":true}").statusCode());
+        assertFalse(session("alice", "s1").get("pinned").asBoolean());
+        assertEquals("session/archived", code(send("alice", "PUT", "/api/sessions/s1/pinned", "{\"pinned\":true}")));
+        assertEquals(200, send("alice", "PUT", "/api/sessions/s1/archived", "{\"archived\":false}").statusCode());
+        assertFalse(session("alice", "s1").get("pinned").asBoolean());
+        assertEquals(200, send("alice", "PUT", "/api/sessions/s1/pinned", "{\"pinned\":false}").statusCode());
+    }
+
+    /** session-find-pin R3：按内容搜只看自己的会话，带片段和角色；空的、太长的搜索词 400。 */
+    @Test
+    void searchingByContentFindsOnlyYourOwnSessions() throws Exception {
+        ask("alice", "s1", "where is the invoice total", null);
+        ask("bob", "b1", "invoice for bob", null);
+        idle("alice", "s1");
+        idle("bob", "b1");
+        JsonNode found = JSON.readTree(server.get("alice", "/api/sessions/search?q=INVOICE").body());
+        long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (found.get("hits").isEmpty() && System.nanoTime() < until) {
+            Thread.sleep(20);
+            found = JSON.readTree(server.get("alice", "/api/sessions/search?q=INVOICE").body());
+        }
+        assertEquals(1, found.get("hits").size(), found.toString());
+        assertEquals("s1", found.get("hits").get(0).get("session").asString());
+        assertEquals("user", found.get("hits").get(0).get("role").asString());
+        assertEquals("where is the invoice total", found.get("hits").get(0).get("snippet").asString());
+        assertFalse(found.get("more").asBoolean());
+        assertEquals(400, server.get("alice", "/api/sessions/search?q=%20").statusCode());
+        assertEquals(400, server.get("alice", "/api/sessions/search?q=" + "x".repeat(201)).statusCode());
     }
 }

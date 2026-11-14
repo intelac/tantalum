@@ -14,7 +14,7 @@ import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.param.ParamStore;
 import tantalum.shell.param.SecretBox;
 import tantalum.shell.param.SecretKey;
-import tantalum.shell.project.Archive;
+import tantalum.shell.project.SessionMarks;
 import tantalum.shell.project.Projects;
 import tantalum.shell.settings.UserSettings;
 import tantalum.shell.tool.Workspaces;
@@ -24,7 +24,7 @@ import tantalum.shell.tool.Workspaces;
  * 每打开一样就记进 {@code opened}，后面的步骤失败时 {@link Engine} 倒序关。
  */
 record Stores(Storage storage, Workspaces workspaces, LocalTokens localTokens, PluginSwitches switches, ParamStore params,
-              UserSettings userSettings, Projects projects, Archive archive, MemoryStores memories) {
+              UserSettings userSettings, Projects projects, SessionMarks marks, MemoryStores memories) {
 
     private static final Logger LOG = LoggerFactory.getLogger(Stores.class);
 
@@ -44,17 +44,17 @@ record Stores(Storage storage, Workspaces workspaces, LocalTokens localTokens, P
         UserSettings userSettings = openUserSettings(properties.dataDir(), clock);
         opened.add(userSettings);
         Projects projects;
-        Archive archive;
+        SessionMarks marks;
         try {
             projects = Projects.open(properties.dataDir(), clock);
             opened.add(projects);
-            archive = Archive.open(properties.dataDir(), clock);
-            opened.add(archive);
+            marks = SessionMarks.open(properties.dataDir(), clock);
+            opened.add(marks);
         } catch (SQLException failure) {
-            throw new IOException("cannot open projects or the archive in " + properties.dataDir(), failure);
+            throw new IOException("cannot open projects or the session marks in " + properties.dataDir(), failure);
         }
         MemoryStores memories = new MemoryStores(workspaces, properties.dataDir(), properties.memory(), clock);
-        return new Stores(storage, workspaces, localTokens, switches, params, userSettings, projects, archive, memories);
+        return new Stores(storage, workspaces, localTokens, switches, params, userSettings, projects, marks, memories);
     }
 
     private static UserSettings openUserSettings(Path dataDir, Clock clock) throws IOException {

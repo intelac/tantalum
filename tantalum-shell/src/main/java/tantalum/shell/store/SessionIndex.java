@@ -35,8 +35,8 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    /** 5：用量表多了折算后的量（qagent-align 需求 3）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 5;
+    /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。版本不同时删掉索引，从会话文件重建。 */
+    static final int VERSION = 6;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
@@ -141,6 +141,16 @@ public final class SessionIndex implements AutoCloseable {
                   counted     INTEGER NOT NULL,
                   PRIMARY KEY (principal, seq)
                 ) WITHOUT ROWID""");
+        statement.execute("""
+                CREATE TABLE IF NOT EXISTS texts (
+                  session   TEXT NOT NULL,
+                  seq       INTEGER NOT NULL,
+                  principal TEXT NOT NULL,
+                  role      TEXT NOT NULL,
+                  text      TEXT NOT NULL,
+                  PRIMARY KEY (session, seq)
+                ) WITHOUT ROWID""");
+        statement.execute("CREATE INDEX IF NOT EXISTS texts_by_principal ON texts (principal)");
         statement.execute("PRAGMA user_version=" + VERSION);
     }
 
@@ -164,6 +174,7 @@ public final class SessionIndex implements AutoCloseable {
             writeSessions(batch);
             writeUsage(batch);
             writeSubmissions(batch);
+            writeTexts(batch);
             connection.commit();
         } catch (SQLException failure) {
             connection.rollback();
@@ -241,6 +252,48 @@ public final class SessionIndex implements AutoCloseable {
             }
             insert.executeBatch();
         }
+    }
+
+    private void writeTexts(IndexBatch batch) throws SQLException {
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT OR IGNORE INTO texts (session, seq, principal, role, text) VALUES (?, ?, ?, ?, ?)")) {
+            for (IndexBatch.TextRow row : batch.texts) {
+                insert.setString(1, row.session().value());
+                insert.setLong(2, row.seq());
+                insert.setString(3, row.principal().value());
+                insert.setString(4, row.text().role());
+                insert.setString(5, row.text().text());
+                insert.addBatch();
+            }
+            insert.executeBatch();
+        }
+    }
+
+    /** 一条内容命中：会话、命中那条的角色和全文。 */
+    public record TextHit(SessionId session, String role, String text) {}
+
+    /**
+     * 按内容搜这个人的会话（session-find-pin R3）：不分 ASCII 大小写的子串匹配，每个会话取最近一条命中，
+     * 按会话最近活动排，最多 {@code limit} 个。文字的主人和会话的主人必须是同一个人。
+     */
+    public synchronized List<TextHit> search(Principal principal, String query, int limit) throws SQLException {
+        String pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        List<TextHit> hits = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT t.session, t.role, t.text, max(t.seq) FROM texts t
+                JOIN sessions s ON s.session = t.session AND s.principal = t.principal
+                WHERE t.principal = ? AND t.text LIKE ? ESCAPE '\\'
+                GROUP BY t.session ORDER BY s.last_activity DESC, t.session LIMIT ?""")) {
+            select.setString(1, principal.value());
+            select.setString(2, pattern);
+            select.setInt(3, limit);
+            try (ResultSet result = select.executeQuery()) {
+                while (result.next()) {
+                    hits.add(new TextHit(new SessionId(result.getString(1)), result.getString(2), result.getString(3)));
+                }
+            }
+        }
+        return hits;
     }
 
     /** 重放完一个文件后写实际大小。文件可能比记录的短（残缺尾部被截掉），所以这里不取最大值。 */

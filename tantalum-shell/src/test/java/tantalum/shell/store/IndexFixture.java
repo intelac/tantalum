@@ -30,6 +30,7 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.model.ContentBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
@@ -104,6 +105,12 @@ final class IndexFixture {
     void reply(Pending pending, Instant at, TokenUsage usage) throws Exception {
         send(pending.principal, pending.session, pending.run, at,
                 new ModelReplied(pending.command, List.of(new TextBlock("ok")), StopReason.END_TURN, "m", usage, null, null, null));
+    }
+
+    /** 回复给定的内容块（session-find-pin：内容搜索只收文本块）。 */
+    void reply(Pending pending, Instant at, List<ContentBlock> content) throws Exception {
+        send(pending.principal, pending.session, pending.run, at,
+                new ModelReplied(pending.command, content, StopReason.END_TURN, "m", new TokenUsage(1, 1, 0, 0), null, null, null));
     }
 
     /** 改名，不在运行里。 */
