@@ -49,6 +49,16 @@ final class Link {
     static final int ENDED_BY_SERVER = 2;
 
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DAY_CLOCK = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+
+    /**
+     * 到期时间：今天到期只写时刻，不是今天的带上日期。一天的令牌原来只写“07:35 到期”，早上 8 点看像是已经过期
+     * （QAgent 问题 28“连接程序日志的错误”，2026-11-14 实测看到）。
+     */
+    static String expiry(java.time.Instant expiresAt, java.time.Instant now, ZoneId zone) {
+        java.time.ZonedDateTime at = expiresAt.atZone(zone);
+        return at.toLocalDate().equals(now.atZone(zone).toLocalDate()) ? at.format(CLOCK) : at.format(DAY_CLOCK);
+    }
 
     private final URI socket;
     private final String token;
@@ -311,7 +321,7 @@ final class Link {
                         Thread.ofVirtual().start(() -> states.forEach(state -> send(new McpTools(state))));
                     }
                     out.println(words.say(Words.Key.LINK_CONNECTED, Map.of("user", welcome.user(),
-                            "time", welcome.expiresAt().atZone(ZoneId.systemDefault()).format(CLOCK))));
+                            "time", expiry(welcome.expiresAt(), java.time.Instant.now(), ZoneId.systemDefault()))));
                 }
                 case Call call -> calls.call(call, this::send);
                 case Cancel cancel -> calls.cancel(cancel.id());

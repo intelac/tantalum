@@ -18,8 +18,15 @@ public final class Profile {
 
     private Profile() {}
 
-    /** 这台电脑上连接程序自己的目录。 */
+    /**
+     * 这台电脑上连接程序自己的目录。系统属性 {@code tantalum.connect.home} 可以换掉它：测试用，免得测试清旧驱动、建资料目录时
+     * 动到真实的主目录（2026-11-14 发现测试删过本机真实的旧驱动目录）。
+     */
     public static Path home() {
+        String override = System.getProperty("tantalum.connect.home");
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
+        }
         return home(System.getProperty("os.name", ""), System.getenv(), Path.of(System.getProperty("user.home", "")));
     }
 

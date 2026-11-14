@@ -148,12 +148,25 @@
           </execution>
         </executions>
       </plugin>
+      <!-- 测试里连接程序自己的目录（浏览器资料、Playwright 输出、清旧驱动）放在 target 下，不动真实的主目录 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <tantalum.connect.home>${project.build.directory}/connect-home</tantalum.connect.home>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
       <!-- LinkIT 起真的服务器和连接程序，有重连和到期的等待，放在 integration-test 阶段跑。 -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
         <version>3.5.2</version>
         <configuration>
+          <systemPropertyVariables>
+            <tantalum.connect.home>${project.build.directory}/connect-home</tantalum.connect.home>
+          </systemPropertyVariables>
           <argLine>@{argLine} --enable-native-access=ALL-UNNAMED</argLine>
           <properties>
             <configurationParameters>junit.jupiter.execution.timeout.default = 60 s

@@ -40,4 +40,13 @@ class LinkTest {
         assertNull(Link.fatal(new Ended(1001, "no pong", null), ZH));
         assertNull(Link.fatal(new Ended(1008, "no hello", null), ZH));
     }
+
+    /** QAgent 问题 28（2026-11-14 实测）：明天到期的令牌只写“07:35 到期”，看着像已经过期。 */
+    @Test
+    void anExpiryOnAnotherDayShowsTheDate() {
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Shanghai");
+        java.time.Instant now = java.time.Instant.parse("2026-11-14T00:30:00Z");
+        org.junit.jupiter.api.Assertions.assertEquals("11-15 07:35", Link.expiry(java.time.Instant.parse("2026-11-14T23:35:00Z"), now, zone));
+        org.junit.jupiter.api.Assertions.assertEquals("09:00", Link.expiry(java.time.Instant.parse("2026-11-14T01:00:00Z"), now, zone));
+    }
 }
