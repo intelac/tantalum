@@ -1,4 +1,4 @@
-package tantalum.connect.mcp;
+package tantalum.connect.browser;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;

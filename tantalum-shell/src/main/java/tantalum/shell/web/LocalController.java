@@ -78,7 +78,7 @@ public class LocalController {
             states.forEach((name, enabled) -> list.addObject().put("name", name).put("enabled", enabled));
         });
         response.set("link", engine.localLinks().status(user)
-                .map(status -> json.tree(link(status, connector, server -> engine.localWorkspace().mcpSwitch(user, server))))
+                .map(status -> json.tree(link(status, connector)))
                 .orElse(NullNode.getInstance()));
         // 命令先问（connector-jar 需求 5.5）：内置的审批插件开没开；配置里整个去掉时不写
         if (engine.plugins().hasPlugin(CommandApprovalHook.NAME)) {
@@ -132,8 +132,7 @@ public class LocalController {
         return scheme + "://" + request.getServerName() + (standard ? "" : ":" + port) + request.getContextPath();
     }
 
-    private static Map<String, Object> link(LocalLinks.Status status, ConnectorJar connector,
-                                            java.util.function.Predicate<String> mcpEnabled) {
+    private static Map<String, Object> link(LocalLinks.Status status, ConnectorJar connector) {
         Hello hello = status.hello();
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("device", hello.device());
@@ -152,24 +151,6 @@ public class LocalController {
         // 电脑上的是不是这里提供的那个 jar：不知道（服务器上没放）时不写
         connector.matches(hello).ifPresent(matches -> view.put("connectorMatches", matches));
         view.put("connector", hello.connector());
-        if (hello.mcpConfig() != null) {
-            // 本机 MCP 的配置文件在用户电脑上的位置，插件页告诉用户去哪里加服务器（N5）
-            view.put("mcpConfig", hello.mcpConfig());
-        }
-        // 本机 MCP 服务器（协议 6 起）：名字、状态、原因、工具名和说明；插件页列出来，每个服务器一个开关
-        if (!hello.mcp().isEmpty()) {
-            view.put("mcp", hello.mcp().stream().map(server -> {
-                Map<String, Object> one = new LinkedHashMap<>();
-                one.put("name", server.name());
-                one.put("state", server.state().name().toLowerCase(java.util.Locale.ROOT));
-                one.put("enabled", mcpEnabled.test(server.name()));
-                if (server.reason() != null) {
-                    one.put("reason", server.reason());
-                }
-                one.put("tools", server.tools().stream().map(tool -> Map.of("name", tool.name(), "description", tool.description())).toList());
-                return one;
-            }).toList());
-        }
         view.put("connectedAt", status.connectedAt());
         view.put("expiresAt", status.expiresAt());
         return view;

@@ -17,7 +17,6 @@ import tantalum.local.tool.LocalImage;
 import tantalum.local.tool.LocalResult;
 import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
-import tantalum.local.wire.McpServerState;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.boot.Engine;
 import tantalum.shell.boot.TantalumApplication;
@@ -26,7 +25,6 @@ import tantalum.shell.journal.ResultWriter;
 import tantalum.shell.journal.SessionPaths;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.TestComputer;
-import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.route.RouteClients;
 import tantalum.value.event.ContextAssembled;
@@ -76,8 +74,7 @@ public final class E2eServer {
      */
     public static final String BROWSER_USER = "e2e6";
     /**
-     * 第七个账号：跨平台连接程序的端到端测试（connector-jar）。它的测试电脑说协议 6、Windows、PowerShell 可用、两个本机 MCP 服务器
-     * （{@code tickets} 可用、有一个工具；{@code broken} 出错），报的版本 0.0.9 和服务器提供的 0.1.0 不一样（插件页提示换新）。
+     * 第七个账号：跨平台连接程序的端到端测试（connector-jar）。它的测试电脑说协议 6、Windows、PowerShell 可用，报的版本 0.0.9 和服务器提供的 0.1.0 不一样（插件页提示换新）。
      */
     public static final String CONNECTOR_USER = "e2e7";
     public static final int DEFAULT_PORT = 8097;
@@ -105,9 +102,6 @@ public final class E2eServer {
         seed(data, workspace);
         E2eModel.webPage = "http://127.0.0.1:" + webSite().getAddress().getPort() + WEB_PAGE_PATH;
         adminOffServer(port + 1, root.resolve("admin-off"));
-        TestMcpServer mcp = new TestMcpServer(
-                new TestMcpServer.Definition("lookup", true, arguments -> TestMcpServer.text("ticket 42 is owned by e2e-owner")),
-                new TestMcpServer.Definition("delete_all", null, arguments -> TestMcpServer.text("deleted")));
 
         ConfigurableApplicationContext app = new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(context -> {
@@ -151,7 +145,6 @@ public final class E2eServer {
                         "--tantalum.console.welcome=这里是端到端测试用的助手，随便问。",
                         "--tantalum.console.welcome-by-language.en=This is the end-to-end test assistant. Ask anything.",
                         "--tantalum.console.welcome-by-language.ja=エンドツーエンドテスト用のアシスタントです。",
-                        "--tantalum.mcp.servers.demo.url=" + mcp.url(),
                         // 空闲 2 秒就回收：整套端到端测试都在不断回收、重新载入的情况下跑。
                         "--tantalum.residency.idle=2s",
                         // connector-jar：插件页第 1 步能下载的连接程序（一个只有清单的小 jar，版本 0.1.0）
@@ -168,10 +161,7 @@ public final class E2eServer {
                 Files.createDirectories(workspace.resolve(CONNECTOR_USER)), roots -> new Hello(Wire.PROTOCOL, "0.0.9",
                         new Hello.Device("E2E PC", "windows-11", "10.0", "amd64"), roots, true,
                         new Hello.Shell(true, null, null, null, "powershell", "C:\\Program Files\\PowerShell\\7\\pwsh.exe"), true, true,
-                        Hello.Browser.unavailable(Hello.Browser.NODE_MISSING), "0".repeat(64), List.of(
-                        new McpServerState("tickets", McpServerState.State.READY, null, List.of(new McpServerState.McpToolSpec(
-                                "find_ticket", "Find a ticket by number.", null))),
-                        new McpServerState("broken", McpServerState.State.FAILED, "cannot start: spawn uvx ENOENT", List.of()))));
+                        Hello.Browser.unavailable(Hello.Browser.NODE_MISSING), "0".repeat(64)));
         System.out.println("E2E server ready on http://127.0.0.1:" + port + " data=" + root);
         Thread.currentThread().join();
     }
@@ -202,7 +192,7 @@ public final class E2eServer {
         return site;
     }
 
-    /** 管理员在配置里关掉了浏览器的服务（web-tools 需求 5.3）：只给插件页看，不连电脑、不接 MCP。 */
+    /** 管理员在配置里关掉了浏览器的服务（web-tools 需求 5.3）：只给插件页看，不连电脑。 */
     private static void adminOffServer(int port, Path root) throws Exception {
         Path data = root.resolve("data");
         try (UserStore store = UserStore.open(data)) {

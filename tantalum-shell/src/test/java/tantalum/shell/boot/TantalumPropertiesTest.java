@@ -181,7 +181,7 @@ class TantalumPropertiesTest {
                 java.util.Map.of("local", new TantalumProperties.OpenAiRoute(null, "http://127.0.0.1:8090/v1", null, "qwen", null, null,
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),
-                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), null, compaction, TantalumProperties.Index.defaults(),
+                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), compaction, TantalumProperties.Index.defaults(),
                 Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null);
     }
 

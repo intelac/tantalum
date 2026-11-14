@@ -19,7 +19,7 @@
 
 ## 0.1 有什么
 
-多用户控制台（中文、English、日本語）· 每会话自选模型和思考档位（Claude，或任何 OpenAI 兼容接口，比如本机 llama.cpp）· 只追加的 journal，回放和 `check` · 轨迹页 · MCP 客户端 · 自动压缩上下文 · 附件和图片 · 排队的消息能改、能删、能直接交给正在跑的这一轮 · 工具审批卡片顶替输入框 · 每轮用量、今日用量对每日上限、上下文明细 · 每人一份长期记忆 · 八个钩子的插件机制和示例插件（只读策略、工具审批、每日额度、退避、引用检查）· 插件参数、密码、管理员默认值和锁定 · 本机工作区：一个跨平台的连接程序 jar，从插件页下载，命令（bash 或 PowerShell）每条先问，还能在你电脑上启动 MCP 服务器 · 技能（`skill` 工具，输入框里 `/名字`）和用 wiki 目录做的知识库，都从用户电脑上的一个目录读 · 服务器上抓网页，用户自己电脑上的浏览器（本机的 Playwright MCP 驱动已装的 Chrome 或 Edge，有窗口，登录状态留在那台电脑上）· macOS、Linux、Windows 都能跑。
+多用户控制台（中文、English、日本語）· 每会话自选模型和思考档位（Claude，或任何 OpenAI 兼容接口，比如本机 llama.cpp）· 只追加的 journal，回放和 `check` · 轨迹页 · 自动压缩上下文 · 附件和图片 · 排队的消息能改、能删、能直接交给正在跑的这一轮 · 工具审批卡片顶替输入框 · 每轮用量、今日用量对每日上限、上下文明细 · 每人一份长期记忆 · 八个钩子的插件机制和示例插件（只读策略、工具审批、每日额度、退避、引用检查）· 插件参数、密码、管理员默认值和锁定 · 本机工作区：一个跨平台的连接程序 jar，从插件页下载，命令（bash 或 PowerShell）每条先问，还能在你电脑上启动 MCP 服务器 · 技能（`skill` 工具，输入框里 `/名字`）和用 wiki 目录做的知识库，都从用户电脑上的一个目录读 · 服务器上抓网页，用户自己电脑上的浏览器（本机的 Playwright MCP 驱动已装的 Chrome 或 Edge，有窗口，登录状态留在那台电脑上）· macOS、Linux、Windows 都能跑。
 
 ## 运行
 
@@ -50,7 +50,7 @@ java -jar tantalum-0.1.0.jar --tantalum.provider=local \
 | `tantalum-kernel` | 纯逻辑：迁移表和钩子，无 I/O |
 | `tantalum-shell` | 所有 I/O：环、journal、处理器、模型客户端、web |
 | `tantalum-local` | 在用户电脑上跑的工具（文件、Git、bash 或 PowerShell）、线上格式 |
-| `tantalum-connect` | 用户在自己电脑上跑的连接程序：一个 jar，macOS、Windows、Linux 通用，服务器提供下载；能在电脑上启动 MCP 服务器（浏览器是其中的 Playwright MCP） |
+| `tantalum-connect` | 用户在自己电脑上跑的连接程序：一个 jar，macOS、Windows、Linux 通用，服务器提供下载；还经 Playwright MCP 驱动电脑上的浏览器 |
 | `tantalum-examples` | 示例插件 |
 | `console/` | 网页控制台（React） |
 
@@ -58,6 +58,6 @@ java -jar tantalum-0.1.0.jar --tantalum.provider=local \
 
 ## 文档
 
-- 完整手册：[docs/manual.zh.md](docs/manual.zh.md)。配置、模型路线、用户、journal 格式、运维、Windows、记忆、附件、本机工作区、联网、MCP、写插件、测试。
+- 完整手册：[docs/manual.zh.md](docs/manual.zh.md)。配置、模型路线、用户、journal 格式、运维、Windows、记忆、附件、本机工作区、联网、写插件、测试。
 - Windows：[docs/windows](docs/windows)。
 - 许可：MIT，见 [LICENSE](LICENSE)。第三方声明：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

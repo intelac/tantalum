@@ -89,7 +89,7 @@ class LocalBrowserToolsTest {
             tools.put(tool.name(), tool);
         }
         workspace = new LocalWorkspace(switches, links);
-        gate = new PluginGate(catalog, switches, List.of(workspace), List.of(), List.of(), List.of(), List.of(), java.util.Set.of());
+        gate = new PluginGate(catalog, switches, List.of(workspace), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }
 

@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 交给命令和本机 MCP 子进程的环境变量：连接程序自己的环境变量，去掉名字像密钥的（含 {@code KEY}、{@code TOKEN}、{@code SECRET}、
+ * 交给命令和浏览器（Playwright MCP）子进程的环境变量：连接程序自己的环境变量，去掉名字像密钥的（含 {@code KEY}、{@code TOKEN}、{@code SECRET}、
  * {@code PASSWORD}，不分大小写）和 {@code TANTALUM_} 开头的。照 DSH：子进程继承宿主的环境变量、去掉像凭据的
  * （{@code packages/mcp/mcp-client/src/transport.ts:15-23}）。没有沙箱以后只给几个变量会让常见命令跑不起来（{@code JAVA_HOME}、
  * Windows 的 {@code APPDATA} 这类），所以不再只给白名单。

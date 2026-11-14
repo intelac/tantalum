@@ -1,4 +1,4 @@
-package tantalum.connect.mcp;
+package tantalum.connect.browser;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -17,53 +17,47 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import tantalum.local.tool.LocalImage;
 import tantalum.local.tool.LocalResult;
-import tantalum.local.wire.McpServerState.McpToolSpec;
 import tantalum.local.wire.Wire;
 import tantalum.value.json.Json;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 一个本机 MCP 服务器子进程和连着它的客户端（connector-jar 需求 6.2、6.5、6.6）。
+ * Playwright MCP 子进程和连着它的客户端（connector-jar 需求 7；原来是本机 MCP 的通用代码，remove-generic-mcp 后只给浏览器用）。
  * <ul>
- *   <li>官方 Java SDK 的 stdio 传输；子类改 {@code getProcessBuilder()}：工作目录、只用给它的环境变量（{@link tantalum.local.shell.CommandEnv}
- *       加配置里的 {@code env}）。</li>
+ *   <li>官方 Java SDK 的 stdio 传输；子类改 {@code getProcessBuilder()}：工作目录、只用给它的环境变量（{@link tantalum.local.shell.CommandEnv}）。</li>
  *   <li>Windows 上命令不是 {@code .exe} 时经 {@code cmd.exe /d /s /c} 启动：{@code npx} 实际是 {@code npx.cmd}，Java 直接起不了
  *       （pi 用 {@code cross-spawn} 解决同一个问题，{@code pi-mcp/dist/transports/stdio.js:3}）。</li>
  *   <li>stderr 留最后 64 KB（pi {@code stdio.js:6,194-197}），出错时末尾 2000 字符随原因。</li>
  *   <li>SDK 关闭时只结束直接子进程，{@code npx} 起的 {@code node} 会留下：启动时记下子进程，关闭时先结束整棵树。</li>
  * </ul>
  */
-final class McpProcess implements AutoCloseable {
+final class PlaywrightProcess implements AutoCloseable {
 
     static final Duration INIT_TIMEOUT = Duration.ofSeconds(30);
     static final int STDERR_BYTES = 64 * 1024;
     static final int REASON_CHARS = 2000;
-    /** 一次结果里文字的上限：服务器那边还会按 {@code mcp-client} 的规则再截。 */
+    /** 一次结果里文字的上限：服务器那边还会再截。 */
     static final int MAX_TEXT_CHARS = 1_000_000;
     /** 同一时刻只启动一个：靠前后对比本进程的子进程认出新起的那个。 */
     private static final Object STARTING = new Object();
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private final McpConfig.Entry entry;
+    private final ServerCommand command;
     private final StringBuilder stderr = new StringBuilder();
     private McpSyncClient client;
     private volatile ProcessHandle process;
     private List<McpSchema.Tool> tools = List.of();
 
-    McpProcess(McpConfig.Entry entry) {
-        this.entry = entry;
+    PlaywrightProcess(ServerCommand command) {
+        this.command = command;
     }
 
     /** 起进程、初始化、列工具。失败时抛异常，原因带 stderr 的末尾；已经起来的进程结束掉。 */
-    void start(Map<String, String> env, Path mainDir, Duration callTimeout, Consumer<List<McpSchema.Tool>> onToolsChanged) {
-        List<String> line = commandLine(entry.command(), entry.args(), System.getProperty("os.name", ""));
-        Map<String, String> all = new java.util.HashMap<>(env);
-        all.putAll(entry.env());
-        Path cwd = entry.cwd() == null ? mainDir : mainDir.resolve(entry.cwd());
-        ServerParameters parameters = ServerParameters.builder(line.getFirst()).args(line.subList(1, line.size())).env(all).build();
+    void start(Map<String, String> env, Path cwd, Duration callTimeout) {
+        List<String> line = commandLine(command.command(), command.args(), System.getProperty("os.name", ""));
+        ServerParameters parameters = ServerParameters.builder(line.getFirst()).args(line.subList(1, line.size())).env(env).build();
         StdioClientTransport transport = new StdioClientTransport(parameters, McpJsonDefaults.getMapper()) {
             @Override
             protected ProcessBuilder getProcessBuilder() {
@@ -74,8 +68,7 @@ final class McpProcess implements AutoCloseable {
         };
         transport.setStdErrorHandler(this::stderr);
         client = McpClient.sync(transport).clientInfo(new McpSchema.Implementation("tantalum-connect", "0.1.0"))
-                .requestTimeout(callTimeout).initializationTimeout(INIT_TIMEOUT)
-                .toolsChangeConsumer(onToolsChanged).build();
+                .requestTimeout(callTimeout).initializationTimeout(INIT_TIMEOUT).build();
         // 初始化放到别的线程：这边认出新起的子进程，它在初始化完成前就退出了（命令写错、启动就崩）不用等满超时
         java.util.concurrent.CompletableFuture<Void> init;
         synchronized (STARTING) {
@@ -94,11 +87,11 @@ final class McpProcess implements AutoCloseable {
             if (process != null && !process.isAlive()) {
                 sleep(200);
                 init.cancel(true);
-                throw new IllegalStateException("the MCP server exited while starting");
+                throw new IllegalStateException("Playwright MCP exited while starting");
             }
             if (System.nanoTime() > deadline) {
                 init.cancel(true);
-                throw new IllegalStateException("the MCP server did not finish starting within " + INIT_TIMEOUT.toSeconds() + " seconds");
+                throw new IllegalStateException("Playwright MCP did not finish starting within " + INIT_TIMEOUT.toSeconds() + " seconds");
             }
             sleep(50);
         }
@@ -115,7 +108,7 @@ final class McpProcess implements AutoCloseable {
             Thread.sleep(millis);
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while starting the MCP server");
+            throw new IllegalStateException("interrupted while starting Playwright MCP");
         }
     }
 
@@ -151,15 +144,6 @@ final class McpProcess implements AutoCloseable {
 
     List<McpSchema.Tool> tools() {
         return tools;
-    }
-
-    /** 给服务器的工具清单：名字、说明、参数原样。 */
-    static List<McpToolSpec> specs(List<McpSchema.Tool> tools) {
-        return tools.stream().map(tool -> new McpToolSpec(tool.name(), tool.description(), toJson(tool.inputSchema()))).toList();
-    }
-
-    static Json toJson(Object value) {
-        return value == null ? null : Wire.json(JSON.writeValueAsString(value));
     }
 
     boolean alive() {

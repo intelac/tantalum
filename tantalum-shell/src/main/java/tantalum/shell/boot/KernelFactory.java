@@ -55,7 +55,7 @@ final class KernelFactory {
     /**
      * 只回答调度问题的规则：和服务器注册同样的内置工具、转发工具、记忆工具、{@code web_fetch} 和插件工具的调度描述，
      * 不打开附件库、不连电脑、不起出口、不开记忆库。
-     * MCP 工具恒为独占（{@code McpTool}），没有它们时答案相同，所以不用连 MCP 服务器；浏览器工具同样独占，不用登记。
+     * 浏览器工具恒为独占，不用登记。
      */
     static ToolSafety safety(TantalumProperties properties, List<Tool> plugins) {
         List<ToolDispatch> dispatches = new ArrayList<>();

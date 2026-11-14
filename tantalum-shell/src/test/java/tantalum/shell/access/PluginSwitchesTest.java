@@ -42,9 +42,9 @@ class PluginSwitchesTest {
     void turningOffAndOnAgain() throws Exception {
         try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
             switches.set(ALICE, Kind.TOOL, "write_file", false);
-            switches.set(ALICE, Kind.MCP, "browser", false);
+            switches.set(ALICE, Kind.PLUGIN, "quota", false);
             assertFalse(switches.enabled(ALICE, Kind.TOOL, "write_file"));
-            assertEquals(Set.of(new Key(Kind.TOOL, "write_file"), new Key(Kind.MCP, "browser")), switches.off(ALICE));
+            assertEquals(Set.of(new Key(Kind.TOOL, "write_file"), new Key(Kind.PLUGIN, "quota")), switches.off(ALICE));
             switches.set(ALICE, Kind.TOOL, "write_file", true);
             assertTrue(switches.enabled(ALICE, Kind.TOOL, "write_file"));
             // 种类不同、名字相同是两个开关
@@ -109,9 +109,31 @@ class PluginSwitchesTest {
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(data.resolve(UserStore.FILE))));
     }
 
+    /**
+     * remove-generic-mcp 需求 1.3：以前存的 MCP 服务器开关（种类 {@code mcp}）和默认值，读的时候跳过，不报错、不影响别的开关。
+     * 本机 MCP 的 {@code local-mcp} 记录种类是 {@code local}，留在表里没人问。
+     */
+    @Test
+    void oldMcpRowsAreSkipped() throws Exception {
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            switches.set(ALICE, Kind.TOOL, "write_file", false);
+        }
+        try (java.sql.Connection raw = java.sql.DriverManager.getConnection("jdbc:sqlite:" + data.resolve(UserStore.FILE));
+                java.sql.Statement statement = raw.createStatement()) {
+            statement.execute("INSERT INTO plugin_settings (user, kind, name, updated_at, enabled) VALUES ('alice', 'mcp', 'github', 'x', 0)");
+            statement.execute("INSERT INTO plugin_settings (user, kind, name, updated_at, enabled) VALUES ('alice', 'local', 'local-mcp', 'x', 0)");
+            statement.execute("INSERT INTO plugin_defaults (kind, name, enabled, locked, reason, updated_at) VALUES ('mcp', 'github', 0, 1, '', 'x')");
+        }
+        try (PluginSwitches switches = PluginSwitches.open(data, CLOCK)) {
+            assertEquals(Set.of(new Key(Kind.TOOL, "write_file"), new Key(Kind.LOCAL, "local-mcp")), switches.off(ALICE));
+            assertTrue(switches.enabled(ALICE, Kind.TOOL, "read_file"));
+        }
+    }
+
     @Test
     void kindsAreReadFromTheirKeys() {
-        assertEquals(Kind.MCP, Kind.of("mcp"));
+        assertThrows(IllegalArgumentException.class, () -> Kind.of("mcp"));
+        assertEquals(Kind.LOCAL, Kind.of("local"));
         assertEquals("plugin", Kind.PLUGIN.key());
         assertThrows(IllegalArgumentException.class, () -> Kind.of("hook"));
     }

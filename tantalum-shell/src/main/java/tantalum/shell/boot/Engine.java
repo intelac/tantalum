@@ -21,7 +21,6 @@ import tantalum.shell.journal.EventCodec;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.Receipts;
-import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
@@ -220,10 +219,6 @@ public final class Engine implements AutoCloseable {
         return toolbox.skillMentions();
     }
 
-    public McpRegistry mcp() {
-        return toolbox.mcp();
-    }
-
     /** 联网的开关组，插件页接口用它。 */
     public WebAccess webAccess() {
         return toolbox.webAccess();
@@ -248,19 +243,14 @@ public final class Engine implements AutoCloseable {
         return codec;
     }
 
-    /** 注册了的全部工具（不含 MCP 的），按名称排序，给诊断和测试用。 */
+    /** 注册了的全部工具，按名称排序，给诊断和测试用。 */
     public List<Tool> tools() {
-        return toolbox.catalog().tools().stream().filter(tool -> toolbox.catalog().isRegistered(tool.name())).toList();
+        return toolbox.catalog().tools();
     }
 
     /** 内存里的内核状态，给诊断和测试用。 */
     public KernelState state() {
         return queries.view().current();
-    }
-
-    /** 某个 MCP 工具当前是否对模型可见。 */
-    public boolean mcpHas(String tool) {
-        return toolbox.mcp().find(tool).isPresent();
     }
 
     /**
@@ -304,7 +294,7 @@ public final class Engine implements AutoCloseable {
 
     /**
      * 关闭：入口返回 503 → 断开 SSE → 不再启动新的 Handler，等在途的最多 {@code shutdown-wait}，到时中断 →
-     * 关浏览器，再关出口（浏览器的连接都经出口，需求 2.8）→ 排空输入环、各用户通道和两个下游环 → 关 MCP 和存储。
+     * 关浏览器，再关出口（浏览器的连接都经出口，需求 2.8）→ 排空输入环、各用户通道和两个下游环 → 关存储。
      * 每一步失败都不跳过后面的。
      * 已返回 200 的提交在排空输入环时落盘；没走完的运行留在文件里，下次启动时以“因重启中断”收尾。
      */
@@ -328,7 +318,6 @@ new Shutdown.Step("close egress", () -> {
                 new Shutdown.Step("fail pending receipts", receipts::failAll),
                 new Shutdown.Step("drain cleanroom ring", () -> pipeline.cleanroomRing().shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> pipeline.output().shutdown(DRAIN)),
-                new Shutdown.Step("close mcp", toolbox.mcp()),
                 new Shutdown.Step("close plugin settings", stores.switches()),
                 new Shutdown.Step("close plugin params", stores.params()),
                 new Shutdown.Step("close local tokens", stores.localTokens()),

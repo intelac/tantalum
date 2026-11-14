@@ -20,7 +20,7 @@ import tantalum.shell.store.RecordCheck;
 
 /**
  * {@code java -jar tantalum.jar check [--tantalum.data-dir=…]}：用这个版本的内核检查数据目录里的会话。
- * 读和服务器相同的配置、用相同的钩子插件，但不建模型客户端、不连 MCP、不开端口，也不取存储锁，服务器运行时也能跑。
+ * 读和服务器相同的配置、用相同的钩子插件，但不建模型客户端、不开端口，也不取存储锁，服务器运行时也能跑。
  * 类路径上以自动配置注册的插件（比如 {@code loader.path} 里的示例 jar）也装上：少了它们，插件当时做过决定的会话都会报不一致。
  * 嵌入 Tantalum 的应用有自己的插件时，用自己的 Spring 配置调 {@link RecordCheck#run}。
  */

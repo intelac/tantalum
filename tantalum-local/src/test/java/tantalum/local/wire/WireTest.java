@@ -186,13 +186,26 @@ class WireTest {
         return new TreeSet<>(PLAIN.readTree(Wire.encode(message)).propertyNames());
     }
 
+    /**
+     * remove-generic-mcp 需求 3.1、3.2：11-14 之前的协议 6 连接程序在 hello 里带本机 MCP，还会发 {@code mcpTools}。
+     * 新服务器读得懂这两样（MCP 部分忽略），不会因为解不开而断开连接。
+     */
+    @Test
+    void anOldConnectorsMcpFieldsAndMessagesAreIgnored() {
+        String oldHello = Wire.encode(hello()).replace("\"git\":true", "\"git\":true,\"mcp\":[{\"name\":\"tickets\",\"state\":\"ready\","
+                + "\"tools\":[{\"name\":\"search\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\"}}]}],"
+                + "\"mcpConfig\":\"/Users/yi/.tantalum/mcp.json\"");
+        assertTrue(oldHello.contains("mcpConfig"), oldHello);
+        assertEquals(hello(), Wire.decode(oldHello));
+        assertEquals(new Retired(), Wire.decode("{\"type\":\"mcpTools\",\"server\":{\"name\":\"tickets\",\"state\":\"failed\","
+                + "\"reason\":\"spawn uvx ENOENT\",\"tools\":[]}}"));
+    }
+
     @Test
     void typesAndValuesAreWrittenAsTheDesignSays() {
         assertEquals("contextResult", PLAIN.readTree(Wire.encode(new ContextResult("x", null))).get("type").asString());
         assertEquals("hello", PLAIN.readTree(Wire.encode(hello())).get("type").asString());
         assertEquals(6, PLAIN.readTree(Wire.encode(hello())).get("protocol").asInt());
-        assertEquals("mcpTools", PLAIN.readTree(Wire.encode(new McpTools(new McpServerState("s", McpServerState.State.READY, null,
-                List.of(new McpServerState.McpToolSpec("t", "d", null)))))).get("type").asString());
         assertEquals("browseResult", PLAIN.readTree(Wire.encode(new BrowseResult("b", null, List.of(), false, null))).get("type").asString());
         for (Bye.Reason reason : Bye.Reason.values()) {
             assertEquals(reason.name().toLowerCase(Locale.ROOT), PLAIN.readTree(Wire.encode(new Bye(reason))).get("reason").asString());
@@ -286,7 +299,7 @@ class WireTest {
         // 3：会话的工作目录和列子目录（workspaces，2026-11-10）；服务器仍接受 2
         // 4：技能和 wiki（skills-wiki，2026-11-12）；服务器仍接受 2、3
         // 5：浏览器搬到电脑上（local-browser，2026-11-12）；服务器仍接受 2–4
-        // 6：跨平台的 jar，shell 的种类、jar 的哈希、本机 MCP（connector-jar，2026-11-14）；服务器仍接受 2–5
+        // 6：跨平台的 jar，shell 的种类、jar 的哈希（connector-jar，2026-11-14）；服务器仍接受 2–5
         assertEquals(6, Wire.PROTOCOL);
         assertEquals(2, Wire.OLDEST);
         assertEquals(List.of(4400, 4401, 4403, 4409),

@@ -36,8 +36,9 @@ public final class Wire {
      * 5（2026-11-12）：浏览器搬到电脑上。{@code hello.browser} 说明能不能用，11 个 {@code browser_*} 工具，
      * {@code result.images[].name} 是截图的文件名。服务器对 2–4 不发浏览器调用，那台电脑上就没有浏览器。
      * 6（2026-11-14，connector-jar）：跨平台的 jar，命令不再在沙箱里跑。{@code hello.shell.kind} 是 {@code bash} 或 {@code powershell}，
-     * {@code hello.jarSha256} 用来提示版本不一致，{@code hello.mcp} 和新消息 {@code mcpTools} 报本机 MCP 服务器和它们的工具，
-     * 调用名字以 {@code mcp__} 开头的就是它们的。服务器对 5 及以前照旧：shell 当 bash，没有本机 MCP，插件页提示换新 jar。
+     * {@code hello.jarSha256} 用来提示版本不一致。服务器对 5 及以前照旧：shell 当 bash，插件页提示换新 jar。
+     * 11-14 之前的 6 还带本机 MCP（{@code hello.mcp}、{@code hello.mcpConfig}、消息 {@code mcpTools}），remove-generic-mcp 去掉了：
+     * 版本号没加，新服务器忽略这几样（{@link Retired}），旧 jar 的文件、命令、浏览器照常用。
      */
     public static final int PROTOCOL = 6;
 
@@ -69,7 +70,7 @@ public final class Wire {
         return WRITER.writeValueAsString(message);
     }
 
-    /** JSON 文本转成 {@link Json}（保留键的顺序和数字原文）；不是 JSON 时抛 {@link IllegalArgumentException}。本机 MCP 的工具参数用它。 */
+    /** JSON 文本转成 {@link Json}（保留键的顺序和数字原文）；不是 JSON 时抛 {@link IllegalArgumentException}。连接程序把 Playwright MCP 的结果转回来时用它。 */
     public static Json json(String text) {
         try {
             return MAPPER.readValue(text, Json.class);

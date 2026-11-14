@@ -268,16 +268,18 @@ class CallsTest {
         assertTrue(Tools.all().stream().anyMatch(tool -> tool.kind() == LocalTool.Kind.SHELL), "bash is in the list");
     }
 
-    /** QAgent 问题 72：浏览器开着时，服务器直接发来的 mcp:playwright:* 一律拒绝，只能经 browser_* 用（逐个勾选管得到）。 */
+    /**
+     * QAgent 问题 72：Playwright MCP 自己的工具（如 {@code browser_run_code_unsafe}）不能被服务器直接调用，只能经 {@code browser_*}。
+     * 以前 {@code mcp:playwright:*} 单独拒绝；remove-generic-mcp 后连接程序根本不认 {@code mcp:} 开头的调用。
+     */
     @Test
-    void theBrowsersOwnMcpToolsCannotBeCalledDirectly() throws Exception {
+    void mcpCallsAreUnknownTools() throws Exception {
         Calls calls = new Calls(dirs, true, false, journal, Tools.all());
-        calls.mcp(new tantalum.connect.mcp.McpHost(tantalum.connect.mcp.McpConfig.empty(), Map.of(), dirs.main(), state -> { }), "playwright");
         calls.welcome("alice");
         calls.call(call("m-1", "alice", "mcp:playwright:browser_run_code_unsafe"), replies::add);
         assertEquals("Unknown tool: mcp:playwright:browser_run_code_unsafe", reply().text());
         calls.call(call("m-2", "alice", "mcp:other:x"), replies::add);
-        assertTrue(reply().text().contains("No MCP server named other"));
+        assertEquals("Unknown tool: mcp:other:x", reply().text());
     }
 
     /** {@code --allow-shell} 给了但电脑上找不到 shell：照样拒绝。 */

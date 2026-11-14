@@ -319,7 +319,7 @@ export interface CompactionItem extends ItemBase {
 
 /**
  * 会话中途工具变了：新增了哪些，哪些不能用了。disabled 是用户在插件页关了（来源为 local 的是本机工作区没连上或没允许），
- * gone 是服务器上已经没有（插件删了或没加载）。sources 是这几个工具的来源：builtin、local 或 mcp:<服务器名>。
+ * gone 是服务器上已经没有（插件删了或没加载）。sources 是这几个工具的来源：builtin、local、web；旧会话里还有 mcp:<服务器名>。
  */
 export interface ToolChangeItem extends ItemBase {
   kind: "toolChange";
@@ -697,7 +697,7 @@ export interface MemoryList {
 }
 
 /** 插件页（core-tools 需求 7）：当前用户自己的开关。 */
-export type PluginKind = "tool" | "mcp" | "plugin" | "local" | "web";
+export type PluginKind = "tool" | "plugin" | "local" | "web";
 
 /** 每个开关都带的状态（plugin-settings 需求 6）。旧服务器不给时当“没改过、没锁”。 */
 export interface SwitchState {
@@ -713,15 +713,8 @@ export interface SwitchState {
 export interface PluginTool extends SwitchState {
   name: string;
   description: string;
-  /** 内置工具声明的参数；MCP 的工具没有。 */
+  /** 内置工具声明的参数。 */
   params?: ParamView[];
-}
-
-export interface McpServerView extends SwitchState {
-  name: string;
-  /** READY、CONNECTING、RECONNECTING、UNAUTHORIZED、FAILED、CLOSED，未知时 UNKNOWN。 */
-  state: string;
-  tools: PluginTool[];
 }
 
 /** 钩子插件分两组：只处理工具结果的是 `output`，其余是 `rule`。 */
@@ -767,9 +760,9 @@ export interface SavedParams {
 
 /** “插件默认值”里的一项（管理员）：`builtin` 自带的默认，`byAdmin` 管理员定的默认（没定就没有）。参数不含密码。 */
 export interface PluginDefault {
-  kind: "tool" | "mcp" | "plugin";
+  kind: "tool" | "plugin";
   name: string;
-  group: "tool" | "mcp" | PluginGroup;
+  group: "tool" | PluginGroup;
   builtin: boolean;
   byAdmin?: boolean;
   lock?: PluginLock;
@@ -787,7 +780,7 @@ export interface PluginDefaultChange {
 /** 管理员给一个人指定的参数（只有“管理员的”参数）。 */
 export interface AssignedParams {
   user: string;
-  items: { kind: "tool" | "mcp" | "plugin"; name: string; params: ParamView[] }[];
+  items: { kind: "tool" | "plugin"; name: string; params: ParamView[] }[];
 }
 
 /** 一个人今天（UTC）的用量；`total` 是每日额度插件算的那个数。 */
@@ -820,13 +813,12 @@ export interface Plugins {
   /** 打开的工具能否在同一个会话的下一次提问就用上；不能时要等新会话。 */
   midSessionChanges: boolean;
   tools: PluginTool[];
-  mcp: McpServerView[];
   web: WebPlugins;
   plugins: HookPlugin[];
 }
 
 /** 本机工作区的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关（local-workspace L17、local-browser）。 */
-export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki" | "browser" | "local-mcp";
+export type LocalSwitch = "local-workspace" | "fs-read" | "git" | "file-edit" | "shell" | "skills" | "wiki" | "browser";
 
 /**
  * 连着的电脑在连上时说的：电脑、允许的目录（第一个是主目录）、能不能改文件和跑命令、有没有 git。都由连接程序的启动参数和那台电脑决定。
@@ -860,21 +852,8 @@ export interface LocalLink {
   /** 连接程序的版本，以及是不是这台服务器提供下载的那个（connector-jar 需求 2.2）；服务器上没放 jar 时没有 `connectorMatches`。 */
   connector?: string;
   connectorMatches?: boolean;
-  /** 本机 MCP 配置文件在电脑上的位置（N5）；老的连接程序不报。 */
-  mcpConfig?: string;
-  /** 电脑上 mcp.json 里的本机 MCP 服务器（协议 6 起）。 */
-  mcp?: LocalMcpServer[];
   connectedAt: string;
   expiresAt: string;
-}
-
-/** 一个本机 MCP 服务器：状态、出错原因、工具、这个用户开没开（开关名 `local-mcp:名字`）。 */
-export interface LocalMcpServer {
-  name: string;
-  state: "starting" | "ready" | "failed" | "disabled";
-  reason?: string | null;
-  enabled: boolean;
-  tools: { name: string; description: string }[];
 }
 
 /** GET /api/local：开关和现在的连接，没连上时 link 为 null。 */

@@ -10,7 +10,6 @@ import java.util.regex.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.loop.Evictor;
-import tantalum.shell.mcp.McpProperties;
 import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.model.OpenAiThinking;
 import tantalum.shell.route.Levels;
@@ -25,7 +24,7 @@ import tantalum.shell.settings.CompactionPolicy;
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
                                  String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes, MemoryLimits memory,
-                                 Knowledge knowledge, McpProperties mcp,
+                                 Knowledge knowledge,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
                                  AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights) {
 

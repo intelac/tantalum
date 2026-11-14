@@ -1,10 +1,8 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { HookPlugin, McpServerView, ParamView, PluginKind, PluginTool } from "../api/types";
+import type { HookPlugin, ParamView, PluginKind, PluginTool } from "../api/types";
 import { lookup, type Text, useLanguage, useText } from "../text";
 import { errorLine } from "../text/errors";
 import { pick } from "../text/localText";
-import { cx } from "../ui/cx";
 import { Dialog } from "../ui/Dialog";
 import { Tabs } from "../ui/Tabs";
 import { DefaultsPane, type Focus } from "./DefaultsPane";
@@ -65,7 +63,7 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
       : undefined,
   };
   const failed = toggle.isError ? toggle.error : reset.isError ? reset.error : null;
-  const split = splitLocked(data ?? { tools: [], mcp: [], plugins: [] });
+  const split = splitLocked(data ?? { tools: [], plugins: [] });
   return unsaved.provider(
     <Dialog open={open} onClose={() => leave(onClose)} title={t.plugins.title} className="max-w-[960px]">
       {pending !== null && (
@@ -137,13 +135,6 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
                       ))}
                     </Section>
                   )}
-                  {(split.servers.length > 0 || data.mcp.length === 0) && (
-                    <Section title={t.plugins.mcp} empty={data.mcp.length === 0 ? t.plugins.noMcp : undefined}>
-                      {split.servers.map((server) => (
-                        <ServerRow key={server.name} server={server} actions={actions} />
-                      ))}
-                    </Section>
-                  )}
                 </>
               )}
             </Group>
@@ -160,9 +151,6 @@ export function PluginsDialog({ open, onClose, admin = false }: Props) {
                   ))}
                   {byUse(split.locked.tools, t.plugins).map((tool) => (
                     <ToolRow key={tool.name} tool={tool} actions={actions} />
-                  ))}
-                  {split.locked.servers.map((server) => (
-                    <ServerRow key={server.name} server={server} actions={actions} />
                   ))}
                   {split.locked.output.map((plugin) => (
                     <HookRow key={plugin.name} plugin={plugin} actions={actions} />
@@ -221,69 +209,6 @@ function ToolRow({ tool, actions }: { tool: PluginTool; actions: Actions }) {
       }
     >
       {tool.enabled && <OwnParams kind="tool" name={tool.name} label={label} params={tool.params} />}
-    </Row>
-  );
-}
-
-function ServerRow({ server, actions }: { server: McpServerView; actions: Actions }) {
-  const t = useText();
-  const [open, setOpen] = useState(false);
-  const state = lookup(t.plugins.states, server.state) ?? server.state;
-  const Chevron = open ? ChevronDown : ChevronRight;
-  const toDefaults = actions.toDefaults;
-  return (
-    <Row
-      name={
-        <span className="flex items-center gap-2">
-          <span className="font-mono">{server.name}</span>
-          <span className={cx("rounded-xs px-1.5 py-0.5 text-[11px]", server.state === "READY" ? "bg-accent-soft text-fg" : "bg-muted text-fg-muted")}>
-            {state}
-          </span>
-        </span>
-      }
-      detail={
-        <button type="button" className="inline-flex items-center gap-1 hover:text-fg" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <Chevron size={12} aria-hidden="true" />
-          {open ? t.plugins.hideTools : t.plugins.showTools(server.tools.length)}
-        </button>
-      }
-      label={server.name}
-      checked={server.enabled}
-      disabled={server.lock !== undefined}
-      onChange={(enabled) => actions.set({ kind: "mcp", name: server.name, enabled })}
-      aside={
-        <SwitchNotes
-          state={server}
-          label={server.name}
-          onDefaults={toDefaults && (() => toDefaults("mcp", server.name))}
-          onReset={() => actions.reset("mcp", server.name)}
-        />
-      }
-    >
-      {open && (
-        <ul className="mx-3 mb-2 flex flex-col divide-y divide-line rounded-md border border-line">
-          {server.tools.length === 0 && <li className="px-3 py-2 text-xs text-fg-muted">{t.plugins.noServerTools}</li>}
-          {server.tools.map((tool) => (
-            <Row
-              key={tool.name}
-              name={<span className="font-mono text-xs break-all">{tool.name}</span>}
-              detail={tool.description === "" ? undefined : tool.description}
-              label={tool.name}
-              checked={tool.enabled}
-              disabled={!server.enabled || tool.lock !== undefined}
-              onChange={(enabled) => actions.set({ kind: "tool", name: tool.name, enabled })}
-              aside={
-                <SwitchNotes
-                  state={tool}
-                  label={tool.name}
-                  onDefaults={toDefaults && (() => toDefaults("tool", tool.name))}
-                  onReset={() => actions.reset("tool", tool.name)}
-                />
-              }
-            />
-          ))}
-        </ul>
-      )}
     </Row>
   );
 }

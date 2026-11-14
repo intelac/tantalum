@@ -21,10 +21,9 @@ import tantalum.connect.browser.Installed;
 import tantalum.connect.browser.BrowserSettings;
 import tantalum.connect.browser.NodeFinder;
 import tantalum.connect.browser.PlaywrightBrowser;
+import tantalum.connect.browser.PlaywrightHost;
 import tantalum.connect.browser.Profile;
 import tantalum.local.fs.AllowedDirs;
-import tantalum.connect.mcp.McpConfig;
-import tantalum.connect.mcp.McpHost;
 import tantalum.local.shell.CommandEnv;
 import tantalum.local.shell.LocalShell;
 import tantalum.local.shell.Shell;
@@ -34,7 +33,6 @@ import tantalum.local.shell.Spill;
 import tantalum.local.shell.Unavailable;
 import tantalum.local.tool.GitCheck;
 import tantalum.local.wire.Hello;
-import tantalum.local.wire.McpServerState;
 import tantalum.local.wire.Wire;
 import tantalum.value.text.Language;
 
@@ -53,6 +51,8 @@ public final class Main {
     static final int REFUSED = 1;
     /** 去掉了的参数：命令不再在沙箱里跑，这些限制不存在了（connector-jar）。给了就说清楚，不悄悄忽略。 */
     static final List<String> REMOVED = List.of("--mxc", "--no-network", "--allow-read");
+    /** 本机 MCP 的配置文件，remove-generic-mcp 去掉了（Yi 2026-11-14）。 */
+    static final String REMOVED_MCP = "--mcp-config";
     /** Playwright MCP 写临时文件的目录，在连接程序自己的目录下；浏览器每次调用后清空。 */
     static final String PLAYWRIGHT_OUTPUT = "playwright-output";
     private static final Pattern ENV_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
@@ -100,32 +100,26 @@ public final class Main {
         }
         summary(setup, out, words);
         Journal journal = new Journal(out, Clock.systemDefaultZone());
-        // 本机 MCP 服务器在后台启动，好了以后经连接补报工具（connector-jar 需求 6）；连接还没建起来时先记下，连上时 hello 里带着。
-        // 浏览器是其中内置的 playwright 一项（需求 7），它的工具不当作 mcp__ 工具报给服务器，由 browser_* 用
-        AtomicReference<Link> link = new AtomicReference<>();
-        boolean browserOn = setup.browser() != null;
-        McpHost mcp = new McpHost(setup.mcp(), setup.commandEnv(), setup.dirs().main(), state -> {
-            Link current = link.get();
-            if (current != null && !(browserOn && state.name().equals(PlaywrightBrowser.SERVER))) {
-                current.report(state);
-            }
-        });
-        PlaywrightBrowser browser = !browserOn ? null
-                : new PlaywrightBrowser((tool, arguments) -> mcp.call(McpHost.CALL_PREFIX + PlaywrightBrowser.SERVER + ":" + tool, arguments),
-                Profile.home().resolve(PLAYWRIGHT_OUTPUT));
+        // 浏览器由 Playwright MCP 驱动（connector-jar 需求 7）：后台启动，好了以后 browser_* 才能用
+        PlaywrightHost playwright = setup.browser() == null ? null : new PlaywrightHost(
+                setup.browser().command(Profile.home().resolve(PLAYWRIGHT_OUTPUT)), setup.commandEnv(), setup.dirs().main());
+        PlaywrightBrowser browser = playwright == null ? null
+                : new PlaywrightBrowser(playwright::call, Profile.home().resolve(PLAYWRIGHT_OUTPUT));
         Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(), setup.shell(), journal, browser);
-        calls.mcp(mcp, browserOn ? PlaywrightBrowser.SERVER : null);
-        // Ctrl+C：打断在跑的调用，关本机 MCP 服务器（连同浏览器），再结束这个程序启动的全部进程（命令、git）
+        // Ctrl+C：打断在跑的调用，关浏览器，再结束这个程序启动的全部进程（命令、git）
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             calls.stopAll();
-            mcp.close();
+            if (playwright != null) {
+                playwright.close();
+            }
             ProcessHandle.current().descendants().forEach(ProcessHandle::destroyForcibly);
             setup.shell().close();
         }, "stop-calls"));
         try {
-            Link running = new Link(setup, calls, out, words, () -> visible(mcp.states(), browserOn));
-            link.set(running);
-            mcp.start();
+            Link running = new Link(setup, calls, out, words);
+            if (playwright != null) {
+                playwright.start();
+            }
             return running.run();
         } catch (InterruptedException stopped) {
             Thread.currentThread().interrupt();
@@ -162,17 +156,12 @@ public final class Main {
 
     /** 解析后的启动参数。 */
     record Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env,
-                   String name, boolean help, boolean insecure, BrowserOptions browser, Path mcpConfig) {
+                   String name, boolean help, boolean insecure, BrowserOptions browser) {
 
         /** 没有浏览器参数时。 */
         Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env, String name, boolean help,
                 boolean insecure) {
-            this(server, allow, write, shell, env, name, help, insecure, BrowserOptions.NONE, null);
-        }
-
-        Options(String server, List<Path> allow, boolean write, boolean shell, List<String> env, String name, boolean help,
-                boolean insecure, BrowserOptions browser) {
-            this(server, allow, write, shell, env, name, help, insecure, browser, null);
+            this(server, allow, write, shell, env, name, help, insecure, BrowserOptions.NONE);
         }
 
         static Options parse(String[] args, Words words) throws Refused {
@@ -188,7 +177,6 @@ public final class Main {
             boolean shell = false;
             boolean insecure = false;
             String name = null;
-            Path mcpConfig = null;
             boolean browser = false;
             boolean headless = false;
             Installed.Choice choice = null;
@@ -204,7 +192,6 @@ public final class Main {
                     case "--allow" -> allow.add(Path.of(value(args, ++i, arg, words)));
                     case "--env" -> env.add(value(args, ++i, arg, words));
                     case "--name" -> name = value(args, ++i, arg, words);
-                    case "--mcp-config" -> mcpConfig = Path.of(value(args, ++i, arg, words));
                     // 已经在 language() 里查过
                     case "--lang" -> i++;
                     case "--allow-write" -> write = true;
@@ -219,7 +206,8 @@ public final class Main {
                     }
                     case "--browser-path" -> browserPath = Path.of(value(args, ++i, arg, words));
                     case "--browser-profile" -> profile = Path.of(value(args, ++i, arg, words));
-                    default -> throw new Refused(REMOVED.contains(arg) ? words.say(Key.REFUSED_REMOVED_OPTION, Map.of("option", arg))
+                    default -> throw new Refused(arg.equals(REMOVED_MCP) ? words.say(Key.REFUSED_REMOVED_MCP)
+                            : REMOVED.contains(arg) ? words.say(Key.REFUSED_REMOVED_OPTION, Map.of("option", arg))
                             : words.say(Key.REFUSED_UNKNOWN_OPTION, Map.of("option", arg)));
                 }
             }
@@ -235,8 +223,7 @@ public final class Main {
                 }
             }
             return new Options(server, List.copyOf(allow), write, shell, List.copyOf(env), name, false,
-                    insecure, new BrowserOptions(browser, choice == null ? Installed.Choice.ANY : choice, browserPath, headless, profile),
-                    mcpConfig);
+                    insecure, new BrowserOptions(browser, choice == null ? Installed.Choice.ANY : choice, browserPath, headless, profile));
         }
 
         /** 以 {@code tc_} 开头、在哪里带着一整个令牌、或者是 {@code --token}。报错时不回显这个参数。 */
@@ -266,11 +253,11 @@ public final class Main {
      * 或找不到时是不能用的那个）。{@link #toString()} 不带令牌，打印或写进异常都不会泄露。
      */
     record Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell,
-                 BrowserSettings browser, McpConfig mcp, Path mcpFile, Map<String, String> commandEnv) {
+                 BrowserSettings browser, Map<String, String> commandEnv) {
 
-        /** 没有本机 MCP 时。 */
+        /** 测试用：浏览器子进程的环境变量为空。 */
         Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell, BrowserSettings browser) {
-            this(socket, options, dirs, hello, token, shell, browser, McpConfig.empty(), null, Map.of());
+            this(socket, options, dirs, hello, token, shell, browser, Map.of());
         }
 
         /** 没有浏览器时。 */
@@ -330,22 +317,9 @@ public final class Main {
                 : npx == null ? Hello.Browser.unavailable(Hello.Browser.NODE_MISSING)
                 : Hello.Browser.available(found.name(), found.headless());
         BrowserSettings browser = state.available() ? found : null;
-        Path mcpFile = options.mcpConfig() != null ? options.mcpConfig()
-                : McpConfig.defaultPath(env, System.getProperty("os.name", ""), Path.of(System.getProperty("user.home")));
-        if (options.mcpConfig() != null && !Files.isRegularFile(mcpFile)) {
-            throw new Refused(words.say(Key.REFUSED_MCP_CONFIG, Map.of("file", mcpFile)));
-        }
         removeOldDrivers(Profile.home());
-        McpConfig mcp = McpConfig.read(mcpFile);
-        if (browser != null) {
-            // 内置的 playwright 一项；mcp.json 里有同名的就用文件里的
-            mcp = mcp.withDefault(browser.entry(Profile.home().resolve(PLAYWRIGHT_OUTPUT)));
-        }
         Hello hello = hello(options, dirs, shell, state, jarSha256());
-        // hello 里先带“启动中”，好了再补报（McpHost 的状态和这里一致）
-        hello = hello.withMcp(visible(new McpHost(mcp, Map.of(), dirs.main(), ignored -> { }).states(), browser != null))
-                .withMcpConfig(mcpFile.toAbsolutePath().toString());
-        return new Setup(socket, options, dirs, hello, token, shell, browser, mcp, mcpFile, commandEnv);
+        return new Setup(socket, options, dirs, hello, token, shell, browser, commandEnv);
     }
 
     /**
@@ -377,7 +351,6 @@ public final class Main {
         return new BrowserSettings(found.path(), found.name(), options.headless(), profile, npx);
     }
 
-    /** 报给服务器的本机 MCP 服务器：浏览器开着时，内置的 playwright 一项不算（它的工具是 browser_*）。 */
     /**
      * 0.1 以前用 Playwright for Java 自己驱动浏览器，下载的驱动放在 {@code browser-driver-<版本>}（约 130 MB）；现在走 Playwright MCP，
      * 用不上了，启动时删掉（N2，2026-11-14 实测看到）。只删这个前缀的目录，删不掉不影响启动。
@@ -395,10 +368,6 @@ public final class Main {
         } catch (IOException | RuntimeException ignored) {
             // 目录不在、没权限：留着，不影响连接
         }
-    }
-
-    static List<McpServerState> visible(List<McpServerState> states, boolean browserOn) {
-        return browserOn ? states.stream().filter(state -> !state.name().equals(PlaywrightBrowser.SERVER)).toList() : states;
     }
 
     /**
@@ -523,7 +492,7 @@ public final class Main {
             git = false;
         }
         return new Hello(Wire.PROTOCOL, version(), device(options.name()), roots, options.write(),
-                Hello.Shell.of(shell), true, git, browser, jarSha256, List.of());
+                Hello.Shell.of(shell), true, git, browser, jarSha256);
     }
 
     static String version() {
@@ -581,17 +550,6 @@ public final class Main {
             out.println(words.say(browser.headless() ? Key.SUMMARY_BROWSER_HEADLESS : Key.SUMMARY_BROWSER_WINDOW,
                     Map.of("name", browser.name())));
             out.println(words.say(Key.SUMMARY_BROWSER_PROFILE, Map.of("dir", setup.browser().profile())));
-        }
-        // 内置的浏览器那一项上面“浏览器：”已经说了，这里不再列成本机 MCP（N4，2026-11-14 实测看到）
-        List<McpConfig.Entry> listed = setup.mcp().servers().stream()
-                .filter(entry -> setup.browser() == null || !entry.name().equals(PlaywrightBrowser.SERVER)).toList();
-        if (!listed.isEmpty() || !setup.mcp().problems().isEmpty()) {
-            out.println(words.say(Key.SUMMARY_MCP, Map.of("names", listed.isEmpty() ? "-"
-                    : String.join(", ", listed.stream().map(entry -> entry.disabled() ? entry.name() + " (off)" : entry.name()).toList()),
-                    "file", String.valueOf(setup.mcpFile()))));
-            for (String problem : setup.mcp().problems()) {
-                out.println(words.say(Key.SUMMARY_MCP_PROBLEM, Map.of("problem", problem)));
-            }
         }
         out.println(words.say(Key.SUMMARY_FOOTER));
         out.flush();

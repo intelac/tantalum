@@ -76,15 +76,19 @@ final class CompactionScenario {
     /** 全部暗号数字部分之和：4000 × 10 + 137 × 55。 */
     static final String CODE_SUM = "47535";
 
+    /** 跳转那一篇要调用的工具。 */
+    static final String HOP_TOOL = "next_note";
+
     static void writeNotes(Path userDir) throws Exception {
         writeNotes(userDir, 0);
     }
 
     /**
      * 写十个笔记到用户目录。每个笔记：填充文字、暗号、规则、下一个文件名。
-     * {@code mcpHopAfter} 不为 0 时，那一篇的 NEXT 行要求先调用 MCP 工具 {@code mcp__demo__next_note} 才知道下一个文件。
+     * {@code hopAfter} 不为 0 时，那一篇的 NEXT 行要求先调用工具 {@value #HOP_TOOL} 才知道下一个文件
+     * （原来是 MCP 工具，remove-generic-mcp 后由测试注册的插件工具提供）。
      */
-    static void writeNotes(Path userDir, int mcpHopAfter) throws Exception {
+    static void writeNotes(Path userDir, int hopAfter) throws Exception {
         Random random = new Random(20261101);
         for (int n = 1; n <= FILES; n++) {
             StringBuilder text = new StringBuilder("Note " + n + " of " + FILES + ".\n\n");
@@ -101,8 +105,8 @@ final class CompactionScenario {
             }
             text.append("\n\nSECRET CODE OF NOTE ").append(n).append(": ").append(code(n)).append('\n');
             text.append("RULE ").append(n).append(": your final report must contain the tag ").append(tag(n)).append(" exactly.\n");
-            if (n == mcpHopAfter) {
-                text.append("NEXT: the name of the next file is not written here. Call the tool mcp__demo__next_note with key \"after-note")
+            if (n == hopAfter) {
+                text.append("NEXT: the name of the next file is not written here. Call the tool " + HOP_TOOL + " with key \"after-note")
                         .append(String.format("%02d", n)).append("\" and read the file it names.\n");
             } else {
                 text.append(n < FILES ? "NEXT: read note" + String.format("%02d", n + 1) + ".txt\n" : "NEXT: nothing, this was the last note.\n");
@@ -156,8 +160,8 @@ final class CompactionScenario {
             for (ContentBlock block : reply.content()) {
                 if (block instanceof ToolCallBlock call && call.name().equals("read_file")) {
                     reads++;
-                } else if (block instanceof ToolCallBlock call && call.name().startsWith("mcp__")) {
-                    // MCP 跳转是任务要求的一步，不算重读。
+                } else if (block instanceof ToolCallBlock call && call.name().equals(HOP_TOOL)) {
+                    // 跳转是任务要求的一步，不算重读。
                 } else if (block instanceof ToolCallBlock) {
                     searches++;
                 } else if (block instanceof TextBlock text && text.text().contains("## Goal") && text.text().contains("## Key context")) {

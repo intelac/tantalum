@@ -42,7 +42,6 @@ import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.auth.UserStore;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.mcp.TestMcpServer;
 import tantalum.shell.store.SessionStore;
 import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
@@ -55,11 +54,13 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 需求 9.3：打包的 jar 被 {@code kill -9}，用同一个 jar 重启。
- * 被杀时 alice 有一个已结束的会话和一个正在等模型的会话，bob 有一个正在等 MCP 工具的会话；
+ * 被杀时 alice 有一个已结束的会话和一个正在等模型的会话，bob 有一个正在等工具的会话（web_fetch 抓一个不回话的本地网页）；
  * 杀掉之后再把索引里已结束的那个会话改回落后的样子（偏移、提交记录、用量都缺一截）。
  * 重启后：会话文件只多不少，索引补齐，两个运行收尾为“因重启中断”，模型和工具都没有再被调用；
  * 两个会话都能继续，发给模型的历史里每个工具调用都有结果。
  * 只在 {@code mvn verify} 的 integration-test 阶段跑，那时 jar 已经打好。
+ * 工具原来用测试 MCP 服务器；通用 MCP 去掉后（remove-generic-mcp）换成 jar 自带的 web_fetch 和一个本地测试网站，
+ * 网站记下每次被抓的路径，就是“工具被调用了几次”。
  */
 class JarCrashIT {
 
@@ -76,8 +77,11 @@ class JarCrashIT {
         final CountDownLatch modelHung = new CountDownLatch(1);
         final CountDownLatch release = new CountDownLatch(1);
         final HttpServer server;
+        /** 工具抓的本地网站，形如 http://127.0.0.1:端口。 */
+        final String site;
 
-        FakeModel() throws IOException {
+        FakeModel(String site) throws IOException {
+            this.site = site;
             server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
             server.createContext("/", this::handle);
@@ -120,8 +124,8 @@ class JarCrashIT {
             String marker = last.substring(last.indexOf('['), last.indexOf(']') + 1);
             calls.computeIfAbsent(marker, key -> new AtomicInteger()).incrementAndGet();
             switch (marker) {
-                case "[done]" -> send(exchange, toolResult ? text("ticket 42 belongs to e2e-owner") : call("c-done", "mcp__demo__lookup"));
-                case "[hang-tool]" -> send(exchange, toolResult ? text("slow finished") : call("c-slow", "mcp__demo__slow"));
+                case "[done]" -> send(exchange, toolResult ? text("ticket 42 belongs to e2e-owner") : fetch("c-done", site + "/lookup"));
+                case "[hang-tool]" -> send(exchange, toolResult ? text("slow finished") : fetch("c-slow", site + "/slow"));
                 case "[hang-model]" -> {
                     modelHung.countDown();
                     try {
@@ -170,12 +174,13 @@ class JarCrashIT {
             return chunks(delta, "stop");
         }
 
-        private static List<ObjectNode> call(String id, String name) {
+        /** 调 web_fetch 抓一个网址。 */
+        private static List<ObjectNode> fetch(String id, String url) {
             ObjectNode delta = JSON.createObjectNode();
             ObjectNode call = delta.putArray("tool_calls").addObject();
             call.put("index", 0);
             call.put("id", id);
-            call.putObject("function").put("name", name).put("arguments", "{}");
+            call.putObject("function").put("name", "web_fetch").put("arguments", JSON.createObjectNode().put("url", url).toString());
             return chunks(delta, "tool_calls");
         }
 
@@ -198,6 +203,53 @@ class JarCrashIT {
             stream.append("data: [DONE]\n\n");
             byte[] bytes = stream.toString().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("content-type", "text/event-stream");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        }
+
+        @Override
+        public void close() {
+            release.countDown();
+            server.stop(0);
+        }
+    }
+
+    /** web_fetch 抓的本地网站：{@code /lookup} 立刻回答，{@code /slow} 挂住直到放行；记下每次请求的路径（只记这两个）。 */
+    private static final class FakeSite implements AutoCloseable {
+        final List<String> calls = new CopyOnWriteArrayList<>();
+        final CountDownLatch hung = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+        final HttpServer server;
+
+        FakeSite() throws IOException {
+            server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            server.createContext("/lookup", exchange -> {
+                calls.add("lookup");
+                page(exchange, "ticket 42 is owned by e2e-owner");
+            });
+            server.createContext("/slow", exchange -> {
+                calls.add("slow");
+                hung.countDown();
+                try {
+                    release.await(120, TimeUnit.SECONDS);
+                } catch (InterruptedException stopping) {
+                    Thread.currentThread().interrupt();
+                }
+                page(exchange, "slow finished");
+            });
+            server.start();
+        }
+
+        String base() {
+            return "http://127.0.0.1:" + server.getAddress().getPort();
+        }
+
+        private static void page(HttpExchange exchange, String text) throws IOException {
+            byte[] bytes = ("<!doctype html><html><head><title>t</title></head><body><p>" + text + "</p></body></html>")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("content-type", "text/html; charset=utf-8");
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
@@ -259,7 +311,7 @@ class JarCrashIT {
         }
     }
 
-    private Process start(String name, int port, Path data, Path workspace, FakeModel model, TestMcpServer mcp) throws IOException {
+    private Process start(String name, int port, Path data, Path workspace, FakeModel model) throws IOException {
         Path jar = Path.of(System.getProperty("tantalum.jar"));
         assertTrue(Files.isRegularFile(jar), "packaged jar missing: " + jar);
         ProcessBuilder builder = new ProcessBuilder(
@@ -273,7 +325,8 @@ class JarCrashIT {
                 "--tantalum.openai-routes.local.base-url=" + model.baseUrl(),
                 // 默认并发 1 是给本地模型的；这里 alice 挂住的模型调用不能挡住 bob。
                 "--tantalum.openai-routes.local.concurrency=4",
-                "--tantalum.mcp.servers.demo.url=" + mcp.url())
+                // 测试网站在 127.0.0.1 上：内网默认拦，这里放开
+                "--tantalum.web.block-private-network=false")
                 .redirectErrorStream(true).redirectOutput(temp.resolve(name + ".log").toFile());
         builder.environment().remove("ANTHROPIC_API_KEY");
         return builder.start();
@@ -356,23 +409,11 @@ class JarCrashIT {
             users.add("alice", TestServer.PASSWORD);
             users.add("bob", TestServer.PASSWORD);
         }
-        CountDownLatch toolHung = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        try (FakeModel model = new FakeModel();
-             TestMcpServer mcp = new TestMcpServer(
-                     new TestMcpServer.Definition("lookup", true, arguments -> TestMcpServer.text("ticket 42 is owned by e2e-owner")),
-                     new TestMcpServer.Definition("slow", true, arguments -> {
-                         toolHung.countDown();
-                         try {
-                             release.await(120, TimeUnit.SECONDS);
-                         } catch (InterruptedException stopping) {
-                             Thread.currentThread().interrupt();
-                         }
-                         return TestMcpServer.text("slow finished");
-                     }))) {
+        try (FakeSite site = new FakeSite();
+             FakeModel model = new FakeModel(site.base())) {
             int port = freePort();
             String base = "http://127.0.0.1:" + port;
-            Process first = start("first", port, data, workspace, model, mcp);
+            Process first = start("first", port, data, workspace, model);
             String doneSubmission;
             String doneMessages;
             JsonNode doneSummary;
@@ -386,7 +427,7 @@ class JarCrashIT {
                 alice.submit("s-model", "r2", "[hang-model] think hard");
                 bob.submit("s-tool", "r3", "[hang-tool] run the slow tool");
                 assertTrue(model.modelHung.await(30, TimeUnit.SECONDS), "alice's model call never started");
-                assertTrue(toolHung.await(30, TimeUnit.SECONDS), "bob's tool call never started");
+                assertTrue(site.hung.await(30, TimeUnit.SECONDS), "bob's tool call never started");
                 modelRun = alice.latestRun("s-model").get("run").asString();
                 toolRun = bob.latestRun("s-tool").get("run").asString();
                 assertEquals("AwaitingModel", alice.latestRun("s-model").get("phase").asString());
@@ -411,7 +452,7 @@ class JarCrashIT {
                 assertTrue(Files.readString(file).contains("\"request\":{\"value\":\"" + submission.getValue() + "\"}"), submission.toString());
             }
             Map<String, Integer> callsAtCrash = model.counts();
-            List<String> toolsAtCrash = List.copyOf(mcp.calls);
+            List<String> toolsAtCrash = List.copyOf(site.calls);
             assertEquals(Map.of("[done]", 2, "[hang-model]", 1, "[hang-tool]", 1), callsAtCrash);
             assertEquals(List.of("lookup", "slow"), toolsAtCrash);
             assertTrue(beforeRestart.get("s-model").getLast().endsWith("ContextAssembled"), beforeRestart.toString());
@@ -433,7 +474,7 @@ class JarCrashIT {
                 }
             }
 
-            Process second = start("second", port, data, workspace, model, mcp);
+            Process second = start("second", port, data, workspace, model);
             try {
                 User alice = login(base, "alice");
                 User bob = login(base, "bob");
@@ -468,7 +509,7 @@ class JarCrashIT {
                 // 重启没有重新调用模型和工具。
                 Thread.sleep(1000);
                 assertEquals(callsAtCrash, model.counts());
-                assertEquals(toolsAtCrash, List.copyOf(mcp.calls));
+                assertEquals(toolsAtCrash, List.copyOf(site.calls));
 
                 // 两个会话都能继续，发给模型的历史里每个工具调用都有结果。
                 alice.submit("s-model", "r4", "[after] go on");
@@ -477,12 +518,12 @@ class JarCrashIT {
                 assertEquals("COMPLETED", bob.awaitEnded("s-tool", 2).get("endReason").asString());
                 assertEquals(callsAtCrash.values().stream().mapToInt(Integer::intValue).sum() + 2, model.total());
                 assertEquals(2, model.calls.get("[after]").get());
-                assertEquals(toolsAtCrash, List.copyOf(mcp.calls));
+                assertEquals(toolsAtCrash, List.copyOf(site.calls));
                 assertTrue(model.unpaired.isEmpty(), "tool calls without results: " + model.unpaired);
             } finally {
                 second.destroy();
                 assertTrue(second.waitFor(60, TimeUnit.SECONDS), "graceful stop took too long");
-                release.countDown();
+                site.release.countDown();
             }
             assertFalse(Files.readString(temp.resolve("second.log")).contains("Exception"), "see " + temp.resolve("second.log"));
         }

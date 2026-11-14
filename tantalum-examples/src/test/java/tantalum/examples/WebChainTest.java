@@ -46,7 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 联网的内核链路（web-tools 需求 3.4、5.2、W11）：真服务器、本地测试网站，不访问外网。
  * 在插件页关掉“抓网页”，下一次提问模型收到“不再可用”的工具变化，来源 web；
- * {@code web_fetch} 抓到的正文进会话文件，重启后读会话不再访问网站。MCP 图片的同一项检查在 {@code McpIntegrationTest}；
+ * {@code web_fetch} 抓到的正文进会话文件，重启后读会话不再访问网站。
  * 浏览器截图“会话文件里只有附件引用”的检查随浏览器搬到了 shell 的 {@code BrowserChainTest}（local-browser）。
  */
 class WebChainTest {

@@ -27,10 +27,11 @@ public final class LocalWorkspace implements ToolGroup {
     public static final String WIKI = "wiki";
     /** “浏览器”子开关：电脑上的 Chrome 或 Edge，11 个 {@code browser_*} 工具（local-browser）。 */
     public static final String BROWSER = "browser";
-    /** “本机 MCP”子开关：电脑上 {@code mcp.json} 里的服务器（connector-jar 需求 6）；每个服务器另有 {@code local-mcp:名字} 一个开关。 */
-    public static final String MCP = "local-mcp";
-    /** 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器、本机 MCP 八个子开关，默认都开。 */
-    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI, BROWSER, MCP);
+    /**
+     * 插件页上的开关：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器七个子开关，默认都开。以前还有“本机 MCP”
+     * （{@code local-mcp}、{@code local-mcp:名字}），remove-generic-mcp 去掉了；存着的旧记录读的时候跳过。
+     */
+    public static final List<String> SWITCHES = List.of(MASTER, "fs-read", "git", "file-edit", "shell", SKILLS, WIKI, BROWSER);
     /** {@code ContextAssembled.toolSources} 里的来源。 */
     public static final String SOURCE = "local";
     /** 从这个协议版本起，连接程序按会话的工作目录解析相对路径。 */
@@ -39,8 +40,8 @@ public final class LocalWorkspace implements ToolGroup {
     public static final int SKILL_LISTS = 4;
     /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
     public static final int BROWSER_TOOLS = 5;
-    /** 从这个协议版本起，连接程序跨平台（bash 或 PowerShell）、报 jar 的哈希和本机 MCP 服务器（connector-jar）。 */
-    public static final int MCP_TOOLS = 6;
+    /** 从这个协议版本起，连接程序是跨平台的单个 jar（bash 或 PowerShell）、报 jar 的哈希（connector-jar）。 */
+    public static final int JAR_PROTOCOL = 6;
 
     /** “浏览器”下面可以逐个勾的工具（qagent-align 需求 2），顺序同定义。 */
     private static final Map<String, List<String>> CHOICES = Map.of(BROWSER,
@@ -91,28 +92,7 @@ public final class LocalWorkspace implements ToolGroup {
 
     @Override
     public boolean owns(Tool tool) {
-        return tool instanceof LocalTool || tool instanceof LocalMcpTool;
-    }
-
-    /** 每个本机 MCP 服务器的开关：{@code local-mcp:名字}，名字的规则同连接程序的 {@code mcp.json}。 */
-    @Override
-    public boolean acceptsSwitch(String name) {
-        return name.startsWith(MCP + ":") && name.substring(MCP.length() + 1).matches("[A-Za-z0-9_-]{1,32}");
-    }
-
-    /** 这个用户有没有关掉某个本机 MCP 服务器（只看它自己的开关，默认开）。 */
-    public boolean mcpSwitch(Principal user, String server) {
-        return switches.enabled(user, LOCAL, mcpSwitch(server));
-    }
-
-    /** 某个本机 MCP 服务器的开关名。 */
-    public static String mcpSwitch(String server) {
-        return MCP + ":" + server;
-    }
-
-    /** 本机 MCP 服务器这个用户开没开：总开关、“本机 MCP”、这个服务器自己的，默认都开。 */
-    public boolean mcpEnabled(Principal user, String server) {
-        return switches.enabled(user, LOCAL, MASTER) && switches.enabled(user, LOCAL, MCP) && switches.enabled(user, LOCAL, mcpSwitch(server));
+        return tool instanceof LocalTool;
     }
 
     @Override
@@ -126,12 +106,6 @@ public final class LocalWorkspace implements ToolGroup {
      */
     @Override
     public boolean enabled(Principal user, Tool tool) {
-        if (tool instanceof LocalMcpTool mcp) {
-            // 电脑现在报着这个工具（重连中也算），三个开关都开
-            return mcpEnabled(user, mcp.serverName()) && links.status(user).map(status -> status.hello().mcp().stream()
-                    .anyMatch(server -> server.name().equals(mcp.serverName())
-                            && server.tools().stream().anyMatch(spec -> spec.name().equals(mcp.remoteName())))).orElse(false);
-        }
         return tool instanceof LocalTool local && enabled(user, local.kind()) && picked(user, local.name())
                 && (local.kind() != Kind.SHELL || links.status(user).map(status -> shellTool(status.hello()).equals(local.name())).orElse(false));
     }
@@ -269,7 +243,7 @@ public final class LocalWorkspace implements ToolGroup {
         text.append(" File changes: ").append(write ? "allowed." : "not allowed.");
         // 协议 6 起没有沙箱、网络拦不住，只写是哪种 shell；老的连接程序照旧，这一段和以前逐字相同
         String shellText = !shell ? "not available."
-                : hello.protocol() < MCP_TOOLS ? "bash, network " + (hello.network() ? "on." : "off.")
+                : hello.protocol() < JAR_PROTOCOL ? "bash, network " + (hello.network() ? "on." : "off.")
                 : ShellKind.POWERSHELL.wire().equals(shellTool(hello)) ? "PowerShell (use the powershell tool)." : "bash.";
         text.append(" Shell: ").append(shellText);
         // 能用时才写这一句（不能用时模型的工具列表里本来就没有 browser_*）：没有浏览器的电脑上这一段和以前逐字相同

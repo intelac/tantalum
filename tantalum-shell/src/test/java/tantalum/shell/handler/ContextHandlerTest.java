@@ -435,27 +435,15 @@ class ContextHandlerTest {
             @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) { return ToolOutput.ok(""); }
         };
         catalog.register(fetch);
-        Tool navigate = new Tool() {
-            @Override public String name() { return "browser_navigate"; }
-            @Override public String description() { return "d"; }
-            @Override public Json schema() { return new Json.Null(); }
-            @Override public String server() { return "mcp-browser"; }
-            @Override public ToolOutput run(tantalum.shell.plugin.ToolContext context, Json arguments) { return ToolOutput.ok(""); }
-        };
-        catalog.setSource(new ToolCatalog.ToolSource() {
-            @Override public List<Tool> tools() { return List.of(navigate); }
-            @Override public Optional<Tool> find(String name) { return name.equals("browser_navigate") ? Optional.of(navigate) : Optional.empty(); }
-            @Override public String serverName(Tool tool) { return "browser"; }
-        });
         Workspaces workspaces = Workspaces.shared(dir);
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
-                new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, false)), List.of(),
+                new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, false)),
                         List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
                 noCompaction(), NO_WINDOW, NOBODY);
 
         ContextAssembled assembled = assertInstanceOf(ContextAssembled.class, handler.handle(COMMAND));
 
-        assertEquals(java.util.Map.of("grep", "builtin", "read_file", "local", "web_fetch", "web", "browser_navigate", "mcp:browser"),
+        assertEquals(java.util.Map.of("grep", "builtin", "read_file", "local", "web_fetch", "web"),
                 assembled.toolSources());
         assertFalse(assembled.enabledTools().contains("read_file"), "not connected");
     }

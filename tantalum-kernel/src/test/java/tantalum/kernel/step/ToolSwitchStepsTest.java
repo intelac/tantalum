@@ -102,7 +102,7 @@ class ToolSwitchStepsTest {
         assertEquals(List.of("quota"), loop.session().context().activePlugins());
     }
 
-    /** 会话开始之后才出现的工具（新连上的 MCP）不在全集里，开着也不加进来。 */
+    /** 会话开始之后才出现的工具（比如新装的插件）不在全集里，开着也不加进来。 */
     @Test
     void toolsOutsideTheWholeSetAreIgnored() {
         LoopFixture loop = new LoopFixture();

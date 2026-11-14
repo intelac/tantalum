@@ -214,7 +214,7 @@ public sealed interface TranscriptItem {
     /**
      * 会话中途工具变了：从这里起新增了哪些工具、哪些不能用了。不能用的分两种：{@code disabled} 是
      * 服务器上还有、用户在插件页关了（本机工作区的工具也可能是电脑没连上或没允许）；{@code gone} 是服务器上已经没有
-     * （插件删了或没加载、MCP 服务器不在了）。{@code sources} 是这几个工具各自的来源（{@code ContextAssembled.toolSources}），
+     * （插件删了或没加载；旧会话里还有 MCP 服务器不在了的）。{@code sources} 是这几个工具各自的来源（{@code ContextAssembled.toolSources}），
      * 画面据此写原因，如来源为 {@code local} 时写“本机工作区没有连上或没有允许”。
      */
     /**

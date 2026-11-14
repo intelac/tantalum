@@ -43,7 +43,6 @@
     "changed" : false,
     "params" : [ ]
   } ],
-  "mcp" : [ ],
   "web" : {
     "switches" : {
       "web" : true,

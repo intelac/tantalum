@@ -66,27 +66,6 @@ export function useResetLocalTools() {
   });
 }
 
-/** 本机 MCP 服务器的开关（`local-mcp:名字`）：先在界面上改，失败时退回。 */
-export function useToggleLocalMcp() {
-  const queries = useQueryClient();
-  return useMutation({
-    mutationFn: ({ server, enabled }: { server: string; enabled: boolean }) => setPlugin("local", `local-mcp:${server}`, enabled),
-    onMutate: async ({ server, enabled }) => {
-      await queries.cancelQueries({ queryKey: LOCAL_KEY });
-      const before = queries.getQueryData<LocalStatus>(LOCAL_KEY);
-      if (before?.link?.mcp !== undefined) {
-        const mcp = before.link.mcp.map((one) => (one.name === server ? { ...one, enabled } : one));
-        queries.setQueryData(LOCAL_KEY, { ...before, link: { ...before.link, mcp } });
-      }
-      return { before };
-    },
-    onError: (_error, _toggle, context) => {
-      if (context?.before !== undefined) queries.setQueryData(LOCAL_KEY, context.before);
-    },
-    onSettled: () => queries.invalidateQueries({ queryKey: LOCAL_KEY }),
-  });
-}
-
 /** 命令先问：内置插件 commandApproval 的开关。 */
 export function useToggleCommandApproval() {
   const queries = useQueryClient();

@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { openNewSession, processHeader, send } from "./app";
 
-// 轨迹页：E2eModel 的 trace: 剧本先 429 再成功，之后一批并行工具（一个被 E2eTraceHook 拦下，一个是 MCP），
+// 轨迹页：E2eModel 的 trace: 剧本先 429 再成功，之后一批并行工具（两个 read_file，一个被 E2eTraceHook 拦下；一个 grep），
 // E2eTraceHook 在模型调用前加补丁，结束前要一轮引用核对工作。
 
 function rows(page: Page): Locator {
@@ -20,7 +20,7 @@ async function tabNames(page: Page): Promise<string[]> {
 async function runTraceScenario(page: Page): Promise<string> {
   const session = await openNewSession(page);
   await send(page, `trace: 读一下文件 ${Date.now()}`);
-  await expect(page.getByText("问候在 notes/hello.md:3，工单 42 归 e2e-owner。")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("问候在 notes/hello.md:3，回应在 notes/world.md:3。")).toBeVisible({ timeout: 30_000 });
   await expect(processHeader(page, /^已完成/)).toBeVisible({ timeout: 30_000 });
   await page.getByRole("tab", { name: "轨迹" }).click();
   await expect(page).toHaveURL(new RegExp(`/s/${session}/trace$`));
@@ -36,7 +36,7 @@ test.describe("轨迹页", () => {
     await expect(row(page, "助手").first()).toContainText("2/4");
     await expect(row(page, "工具")).toHaveCount(3);
     await expect(row(page, "工具", /被拦下/)).toHaveCount(1);
-    await expect(row(page, "工具", /demo\/lookup/)).toHaveCount(1);
+    await expect(row(page, "工具", /grep/)).toHaveCount(1);
 
     const expected: [string, RegExp | undefined, string[]][] = [
       ["用户", undefined, ["概述", "来源"]],
@@ -95,20 +95,21 @@ test.describe("轨迹页", () => {
     await page.getByRole("tab", { name: "对话" }).click();
     const header = processHeader(page, /^已完成/);
     if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
-    await page.getByRole("button", { name: /^mcp__demo__lookup/ }).click();
+    await page.getByRole("button", { name: /^grep/ }).click();
     await page.getByRole("link", { name: "在轨迹中查看" }).click();
     await expect(page).toHaveURL(new RegExp(`/s/${session}/trace\\?record=t%3A`));
-    await expect(row(page, "工具", /demo\/lookup/)).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("complementary", { name: "事件详情" })).toContainText("demo/lookup");
+    await expect(row(page, "工具", /grep/)).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("complementary", { name: "事件详情" })).toContainText("from world");
   });
 
   test("搜索覆盖收起的调用，跳转时展开", async ({ page }) => {
     await runTraceScenario(page);
     await page.getByRole("button", { name: "收起所有调用" }).click();
     await expect(row(page, "工具")).toHaveCount(0);
-    await page.getByRole("searchbox", { name: "搜索轨迹" }).fill("e2e-owner");
+    await page.getByRole("searchbox", { name: "搜索轨迹" }).fill("hello back");
     await page.getByRole("searchbox", { name: "搜索轨迹" }).press("Enter");
-    await expect(row(page, "工具", /demo\/lookup/)).toHaveAttribute("aria-selected", "true");
+    // 只有 grep 的结果里有这句（notes/world.md 的正文）
+    await expect(row(page, "工具", /grep/)).toHaveAttribute("aria-selected", "true");
   });
 
   test("手机宽度：检查器盖在记录表上，页面没有横向滚动", async ({ page }) => {
@@ -130,9 +131,9 @@ test.describe("轨迹页", () => {
     await expect(overview.getByRole("button", { name: /^插件工作，/ })).toBeVisible();
 
     // 点中工具段：选中对应记录，检查器打开。
-    await overview.getByRole("button", { name: /^工具，demo\/lookup/ }).click();
-    await expect(row(page, "工具", /demo\/lookup/)).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("complementary", { name: "事件详情" })).toContainText("demo/lookup");
+    await overview.getByRole("button", { name: /^工具，grep/ }).click();
+    await expect(row(page, "工具", /grep/)).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("complementary", { name: "事件详情" })).toContainText("from world");
 
     // 在轨道上从左往右拖到一半：记录表只留这段时间里的记录。
     await page.getByRole("button", { name: "使用等宽操作" }).click();
@@ -173,7 +174,7 @@ test.describe("轨迹页", () => {
     await send(page, `第一问 ${stamp}`);
     await expect(processHeader(page, /^已完成/)).toBeVisible({ timeout: 30_000 });
     await send(page, `trace: 读一下文件 ${stamp}`);
-    await expect(page.getByText("问候在 notes/hello.md:3，工单 42 归 e2e-owner。")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("问候在 notes/hello.md:3，回应在 notes/world.md:3。")).toBeVisible({ timeout: 30_000 });
     await expect(processHeader(page, /^已完成/)).toHaveCount(2, { timeout: 30_000 });
     await page.getByRole("tab", { name: "轨迹" }).click();
     await expect(page).toHaveURL(new RegExp(`/s/${session}/trace$`));

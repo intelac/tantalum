@@ -103,15 +103,8 @@ class PluginGateTest {
         catalog = new ToolCatalog();
         catalog.register(tool("read_file", "workspace"));
         catalog.register(tool("write_file", "workspace"));
-        // 和 McpTool 一样：server() 带前缀（并发名额的命名空间），开关按配置里的服务器名
-        Tool snapshot = tool("browser__snapshot", "mcp:browser");
-        catalog.setSource(new ToolCatalog.ToolSource() {
-            @Override public List<Tool> tools() { return List.of(snapshot); }
-            @Override public String serverName(Tool tool) { return "browser"; }
-            @Override public Optional<Tool> find(String name) { return name.equals(snapshot.name()) ? Optional.of(snapshot) : Optional.empty(); }
-        });
         switches = PluginSwitches.inMemory(Clock.systemUTC());
-        gate = new PluginGate(catalog, switches, List.of("browser", "search"), List.of(new CitationHook(), new QuotaHook()),
+        gate = new PluginGate(catalog, switches, List.of(new CitationHook(), new QuotaHook()),
                 List.of(marker()), List.of(citationWork()));
     }
 
@@ -121,32 +114,21 @@ class PluginGateTest {
 
     @Test
     void everythingIsEnabledByDefault() {
-        assertEquals(List.of("browser__snapshot", "read_file", "write_file"), gate.enabledTools(ALICE));
+        assertEquals(List.of("read_file", "write_file"), gate.enabledTools(ALICE));
         assertEquals(List.of("citations", "quota"), gate.enabledPlugins(ALICE));
     }
 
     @Test
-    void mcpToolsAreListedUnderTheirConfiguredServer() {
+    void builtInToolsAreListed() {
         PluginGate.Overview overview = gate.overview(ALICE);
-        assertEquals(List.of("browser", "search"), overview.mcp().stream().map(PluginGate.ServerView::name).toList());
-        assertEquals(List.of("browser__snapshot"), overview.mcp().get(0).tools().stream().map(PluginGate.ToolView::name).toList());
         assertEquals(List.of("read_file", "write_file"), overview.tools().stream().map(PluginGate.ToolView::name).toList());
     }
 
     @Test
     void aToolCanBeTurnedOffForOneUser() {
         gate.set(ALICE, Kind.TOOL, "write_file", false);
-        assertEquals(List.of("browser__snapshot", "read_file"), gate.enabledTools(ALICE));
-        assertEquals(List.of("browser__snapshot", "read_file", "write_file"), gate.enabledTools(BOB));
-    }
-
-    /** MCP 服务器关掉等于关掉它的全部工具；内置工具不受服务器开关影响。 */
-    @Test
-    void turningOffAnMcpServerHidesItsTools() {
-        gate.set(ALICE, Kind.MCP, "browser", false);
-        assertEquals(List.of("read_file", "write_file"), gate.enabledTools(ALICE));
-        switches.set(ALICE, Kind.MCP, "workspace", false);
-        assertTrue(gate.enabledTools(ALICE).contains("read_file"));
+        assertEquals(List.of("read_file"), gate.enabledTools(ALICE));
+        assertEquals(List.of("read_file", "write_file"), gate.enabledTools(BOB));
     }
 
     /** 需求 8 第 3 条：关掉的工具在执行时立即拒绝，不执行。 */
@@ -195,7 +177,7 @@ class PluginGateTest {
 
     @Test
     void aDefaultOffPluginStaysOffUntilTheUserTurnsItOn() {
-        PluginGate policies = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new ReadOnlyPolicy(), new CitationHook()),
+        PluginGate policies = new PluginGate(catalog, switches, List.of(), List.of(new ReadOnlyPolicy(), new CitationHook()),
                 List.of(), List.of(), java.util.Set.of());
         assertEquals(List.of("citations"), policies.enabledPlugins(ALICE));
         PluginGate.PluginView view = policies.overview(ALICE).plugins().stream().filter(p -> p.name().equals("readOnly")).findFirst().orElseThrow();
@@ -212,14 +194,14 @@ class PluginGateTest {
     /** 管理员用 tantalum.hooks.required 强制开启（A2）：默认关的插件对所有人开着，不能关；拼错的名字拒绝启动。 */
     @Test
     void anAdminCanRequireADefaultOffPlugin() {
-        PluginGate required = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new ReadOnlyPolicy()),
+        PluginGate required = new PluginGate(catalog, switches, List.of(), List.of(new ReadOnlyPolicy()),
                 List.of(), List.of(), java.util.Set.of("readOnly"));
         assertEquals(List.of("readOnly"), required.enabledPlugins(BOB));
         assertTrue(required.plugins().getFirst().mandatory());
         assertThrows(IllegalArgumentException.class, () -> required.set(ALICE, Kind.PLUGIN, "readOnly", false));
 
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class, () -> new PluginGate(catalog, switches,
-                List.of(), List.of(), List.of(new ReadOnlyPolicy()), List.of(), List.of(), java.util.Set.of("readonly")));
+                List.of(), List.of(new ReadOnlyPolicy()), List.of(), List.of(), java.util.Set.of("readonly")));
         assertTrue(typo.getMessage().contains("readonly"), typo.getMessage());
     }
 
@@ -235,11 +217,7 @@ class PluginGateTest {
     @Test
     void unknownNamesAreRejected() {
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.TOOL, "nope", false));
-        assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.MCP, "nope", false));
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.set(ALICE, Kind.PLUGIN, "nope", false));
-        // 配置了但还没连上的服务器可以先关掉
-        gate.set(ALICE, Kind.MCP, "search", false);
-        assertFalse(switches.enabled(ALICE, Kind.MCP, "search"));
     }
 
     /** 不在名单上的插件（不该出现）一律不执行。 */
@@ -274,7 +252,7 @@ class PluginGateTest {
                 throw new IllegalStateException("boom");
             }
         };
-        PluginGate strictGate = new PluginGate(catalog, switches, List.of(), List.of(answering), List.of(lax, strict, marker()), List.of());
+        PluginGate strictGate = new PluginGate(catalog, switches, List.of(answering), List.of(lax, strict, marker()), List.of());
         assertEquals(List.of("onAnswer"), strictGate.overview(ALICE).plugins().stream()
                 .filter(p -> p.name().equals("answers")).findFirst().orElseThrow().points());
         ToolOutput output = strictGate.afterTool(context(ALICE), tool("read_file", "workspace"), new Json.Obj(java.util.Map.of()), ToolOutput.ok("text"));
@@ -283,7 +261,7 @@ class PluginGateTest {
         assertFalse(output.text().contains("/secret/path"), "only the class name reaches the model");
         assertEquals(0, afterRuns.get(), "the hook after the failing one did not run");
 
-        PluginGate laxGate = new PluginGate(catalog, switches, List.of(), List.of(), List.of(lax, marker()), List.of());
+        PluginGate laxGate = new PluginGate(catalog, switches, List.of(), List.of(lax, marker()), List.of());
         ToolOutput kept = laxGate.afterTool(context(ALICE), tool("read_file", "workspace"), new Json.Obj(java.util.Map.of()), ToolOutput.ok("text"));
         assertEquals("text +marked", kept.text(), "a lax hook's failure keeps the previous output and the rest run");
     }

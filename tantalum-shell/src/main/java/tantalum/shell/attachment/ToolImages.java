@@ -11,7 +11,7 @@ import tantalum.value.attachment.ImageRef;
 import tantalum.value.id.Principal;
 
 /**
- * 工具结果里的图片（设计“{@code ToolImages}”）：本机工作区读到的图片、MCP 工具返回的图片、浏览器截图，都照附件规则
+ * 工具结果里的图片（设计“{@code ToolImages}”）：本机工作区读到的图片、浏览器截图，都照附件规则
  * 嗅探类型、缩小、去重、算配额，存进本人的附件目录，交给模型的是 {@link ImageRef}，会话文件里也只有引用。
  * 模型不收图片时由各条模型路线换成一行文字，这里总是存（换模型以后图片还在，附件里也看得到）。
  */

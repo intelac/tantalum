@@ -27,7 +27,6 @@ import tantalum.local.skill.Skills;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.SkillTool;
 import tantalum.local.tool.ToolArguments;
-import tantalum.connect.mcp.McpHost;
 import tantalum.local.tool.ShellTool;
 import tantalum.local.tool.Tools;
 import tantalum.local.wire.Browse;
@@ -67,9 +66,6 @@ final class Calls {
     private final Journal journal;
     /** 这台电脑上的浏览器；没允许或没找到时为 null。 */
     private final Browser browser;
-    /** 本机 MCP 服务器；没有配置时为 null，{@code mcp:} 开头的调用一律拒绝。 */
-    private volatile McpHost mcp;
-    private volatile String hiddenServer;
     private final Map<String, LocalTool> tools;
     /**
      * 先读后写的记录。按会话分开记，所以每个会话一份；整台电脑共用一个实例，是为了让两个会话同时改同一个文件时也互斥。
@@ -108,20 +104,6 @@ final class Calls {
         this.tools = tools.stream().collect(Collectors.toUnmodifiableMap(LocalTool::name, tool -> tool));
     }
 
-    /** 本机 MCP 的宿主（connector-jar 需求 6）：启动时交给这里，之后 {@code mcp:服务器:工具} 的调用转给它。 */
-    void mcp(McpHost host) {
-        mcp(host, null);
-    }
-
-    /**
-     * 同上；{@code browserServer} 是浏览器用的那一项（浏览器开着时是 {@code playwright}）：它的工具只经 {@code browser_*} 用，
-     * 服务器直接发来的 {@code mcp:playwright:*} 一律拒绝，免得绕过浏览器工具的逐个勾选（QAgent 问题 72）。
-     */
-    void mcp(McpHost host, String browserServer) {
-        this.mcp = host;
-        this.hiddenServer = browserServer;
-    }
-
     /** {@code welcome} 里的用户：之后的调用都必须是发给这个用户的。 */
     void welcome(String user) {
         this.user = user;
@@ -136,13 +118,7 @@ final class Calls {
             return;
         }
         LocalTool tool = tools.get(call.tool());
-        Thread worker = Thread.ofVirtual().name("call-" + call.id()).unstarted(() -> {
-            if (tool == null) {
-                executeMcp(call, reply);
-            } else {
-                execute(call, tool, reply);
-            }
-        });
+        Thread worker = Thread.ofVirtual().name("call-" + call.id()).unstarted(() -> execute(call, tool, reply));
         if (running.putIfAbsent(call.id(), worker) != null) {
             // 同一个 id 还在跑：不悄悄丢掉，回一个错误，服务器那边等的人知道这次没执行
             reply.accept(new Result(call.id(), DUPLICATE, true, List.of()));
@@ -156,13 +132,6 @@ final class Calls {
         if (user == null || !user.equals(call.user())) {
             return OTHER_USER;
         }
-        if (McpHost.owns(call.tool())) {
-            String hidden = hiddenServer;
-            if (hidden != null && call.tool().startsWith(McpHost.CALL_PREFIX + hidden + ":")) {
-                return "Unknown tool: " + call.tool();
-            }
-            return mcp == null ? "No MCP servers on this computer." : null;
-        }
         LocalTool tool = tools.get(call.tool());
         if (tool == null) {
             return "Unknown tool: " + call.tool();
@@ -174,34 +143,6 @@ final class Calls {
             case READ, GIT, SKILL -> null;
             case BROWSER -> browser != null ? null : NO_BROWSER;
         };
-    }
-
-    /** 本机 MCP 的调用：交给宿主，结果原样送回；取消时同普通工具。 */
-    private void executeMcp(Call call, Consumer<Result> reply) {
-        LocalResult result;
-        Outcome outcome;
-        try {
-            result = mcp.call(call.tool(), call.arguments());
-            outcome = result.error() ? Outcome.ERROR : Outcome.OK;
-        } catch (InterruptedException stopped) {
-            result = null;
-            outcome = Outcome.CANCELLED;
-        } catch (Throwable failure) {
-            System.err.println("[tantalum-connect] " + call.tool() + " failed: " + failure);
-            result = LocalResult.error("Tool failed on the computer; see the connector's output.");
-            outcome = Outcome.ERROR;
-        }
-        boolean cancelled = running.remove(call.id()) == null;
-        if (cancelled || result == null) {
-            journal.call(call.session(), call.tool(), call.arguments(), Outcome.CANCELLED);
-            return;
-        }
-        journal.call(call.session(), call.tool(), call.arguments(), outcome);
-        try {
-            reply.accept(Result.of(call.id(), result));
-        } catch (RuntimeException closed) {
-            // 连接已经断了
-        }
     }
 
     private void execute(Call call, LocalTool tool, Consumer<Result> reply) {

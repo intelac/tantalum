@@ -168,7 +168,7 @@ class PluginParamsTest {
     }
 
     private PluginGate gate(Set<String> required) {
-        return new PluginGate(catalog, switches, List.of(), List.of("browser"),
+        return new PluginGate(catalog, switches, List.of(),
                 List.of(new QuotaHook(), new GuardHook(), new AuditHook()), List.of(new GuardAfter(), new TrimAfter()),
                 List.of(new GuardWork()), required);
     }
@@ -212,7 +212,7 @@ class PluginParamsTest {
     void theSameKeyDeclaredDifferentlyStopsTheStart() {
         AfterToolHook other = new ConflictingAfter();
         IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, () -> new PluginGate(catalog, switches, List.of(),
-                List.of(), List.of(new GuardHook()), List.of(other), List.of(), Set.of()));
+                List.of(new GuardHook()), List.of(other), List.of(), Set.of()));
         assertTrue(failure.getMessage().contains("plugin guard"), failure.getMessage());
         assertTrue(failure.getMessage().contains("tools"), failure.getMessage());
     }
@@ -221,25 +221,6 @@ class PluginParamsTest {
         @Override public String plugin() { return "guard"; }
         @Override public List<Param> params() { return List.of(Param.list("tools", List.of("something_else"))); }
         @Override public ToolOutput afterToolExecution(ToolContext context, String tool, Json arguments, ToolOutput output) { return output; }
-    }
-
-    /** MCP 的工具声明了也不认：没有表单，调用时拿到的是空参数。 */
-    @Test
-    void paramsOfAnMcpToolAreIgnored() throws Exception {
-        Tool remote = new SearchTool() {
-            @Override public String name() { return "browser__search"; }
-            @Override public String server() { return "mcp:browser"; }
-        };
-        catalog.setSource(new ToolCatalog.ToolSource() {
-            @Override public List<Tool> tools() { return List.of(remote); }
-            @Override public String serverName(Tool tool) { return "browser"; }
-            @Override public Optional<Tool> find(String name) { return name.equals(remote.name()) ? Optional.of(remote) : Optional.empty(); }
-        });
-        PluginGate withMcp = gate(Set.of());
-        assertEquals(List.of(), withMcp.overview(ALICE).mcp().getFirst().tools().getFirst().params());
-        withMcp.runTool(context(ALICE), remote, new Json.Null());
-        assertFalse(seen.getLast().params().has("maxChars"));
-        assertThrows(PluginGate.UnknownPlugin.class, () -> withMcp.saveParams(ALICE, Kind.TOOL, "browser__search", Map.of("maxChars", num(200))));
     }
 
     // ---- 任务 10：锁 ----
@@ -284,12 +265,9 @@ class PluginParamsTest {
         assertFalse(toolView(BOB, "search").byDefault());
     }
 
-    /** MCP 服务器也能定默认和锁；开关组不归这里管。 */
+    /** 开关组不归这里管。 */
     @Test
-    void defaultsCoverServersButNotSwitchGroups() {
-        gate.setDefault(Kind.MCP, "browser", false, true, "");
-        assertFalse(switches.enabled(ALICE, Kind.MCP, "browser"));
-        assertThrows(LockedPlugin.class, () -> gate.set(ALICE, Kind.MCP, "browser", true));
+    void defaultsDoNotCoverSwitchGroups() {
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.setDefault(Kind.WEB, "fetch", false, true, ""));
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.setDefault(Kind.PLUGIN, "nope", false, true, ""));
     }
@@ -380,7 +358,6 @@ class PluginParamsTest {
         InvalidParam unknown = assertThrows(InvalidParam.class, () -> gate.saveParams(ALICE, Kind.PLUGIN, "trim", Map.of("nope", num(5))));
         assertEquals("unknown", unknown.reason());
         assertThrows(PluginGate.UnknownPlugin.class, () -> gate.saveParams(ALICE, Kind.PLUGIN, "nope", Map.of()));
-        assertThrows(PluginGate.UnknownPlugin.class, () -> gate.saveParams(ALICE, Kind.MCP, "browser", Map.of()));
     }
 
     /** 归管理员的参数用户改不了；管理员按人指定，没指定的人用默认。 */
@@ -475,7 +452,7 @@ class PluginParamsTest {
         gate.setDefault(Kind.PLUGIN, "quota", true, false, "");
         gate.saveDefaults(Kind.TOOL, "search", Map.of("maxChars", num(900)));
         List<PluginGate.DefaultView> defaults = gate.defaults();
-        assertEquals(List.of("tool:read_file", "tool:search", "mcp:browser", "plugin:audit", "plugin:guard", "plugin:quota", "plugin:trim"),
+        assertEquals(List.of("tool:read_file", "tool:search", "plugin:audit", "plugin:guard", "plugin:quota", "plugin:trim"),
                 defaults.stream().map(view -> view.kind().key() + ":" + view.name()).toList());
         PluginGate.DefaultView quota = defaults.stream().filter(view -> view.name().equals("quota")).findFirst().orElseThrow();
         assertFalse(quota.builtin());
@@ -551,7 +528,7 @@ class PluginParamsTest {
     /** 密码不进会话记录：有别的参数的插件只记别的；只有密码的插件整个不记。 */
     @Test
     void secretsNeverEnterTheRecord() {
-        PluginGate vault = new PluginGate(catalog, switches, List.of(), List.of(), List.of(new VaultHook(), new BadgeHook()),
+        PluginGate vault = new PluginGate(catalog, switches, List.of(), List.of(new VaultHook(), new BadgeHook()),
                 List.of(), List.of(), Set.of());
         vault.saveParams(ALICE, Kind.PLUGIN, "vault", Map.of("apiKey", new Json.Str("hunter2-plain")));
         vault.saveParams(ALICE, Kind.PLUGIN, "badge", Map.of("apiKey", new Json.Str("hunter2-badge")));

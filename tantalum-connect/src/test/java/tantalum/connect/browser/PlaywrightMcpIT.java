@@ -1,7 +1,5 @@
 package tantalum.connect.browser;
 
-import tantalum.connect.mcp.McpConfig;
-import tantalum.connect.mcp.McpHost;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,7 +44,7 @@ import tantalum.value.json.Json;
 
 /**
  * connector-jar 需求 7、9.3：真的 {@code @playwright/mcp}（用这台电脑上的 {@code npx}）驱动真的 Chrome 或 Edge、无头、本机测试站。
- * 走的是工具的定义加 {@link PlaywrightBrowser} 加本机 MCP 宿主，和连接程序收到一个调用后走的路一样。没有 Node.js 或 Chrome、Edge
+ * 走的是工具的定义加 {@link PlaywrightBrowser} 加 {@link PlaywrightHost}，和连接程序收到一个调用后走的路一样。没有 Node.js 或 Chrome、Edge
  * 时跳过并写明原因（CI 上跳过）。断言搬自原来的 {@code LocalBrowserIT}：模型看到的结果和以前一样。
  */
 @Timeout(300)
@@ -57,7 +55,7 @@ class PlaywrightMcpIT {
     @TempDir
     Path temp;
 
-    private final List<McpHost> hosts = new ArrayList<>();
+    private final List<PlaywrightHost> hosts = new ArrayList<>();
     private Optional<Path> npx;
     private Optional<Installed.Found> installed;
     private HttpServer site;
@@ -117,7 +115,7 @@ class PlaywrightMcpIT {
 
     @AfterEach
     void stop() throws Exception {
-        for (McpHost host : hosts) {
+        for (PlaywrightHost host : hosts) {
             host.close();
         }
         if (site != null) {
@@ -128,21 +126,20 @@ class PlaywrightMcpIT {
         }
     }
 
-    /** 一个无头的浏览器，资料目录在临时目录下的 {@code name}：内置的那一项，经本机 MCP 宿主。 */
+    /** 一个无头的浏览器，资料目录在临时目录下的 {@code name}，和连接程序一样经 {@link PlaywrightHost}。 */
     private PlaywrightBrowser browser(String profile) throws Exception {
         Installed.Found found = installed.orElseThrow();
         BrowserSettings settings = new BrowserSettings(found.path(), found.name(), true, Profile.prepare(temp.resolve(profile)), npx.get());
-        java.util.List<tantalum.local.wire.McpServerState> reports = new java.util.concurrent.CopyOnWriteArrayList<>();
-        McpHost host = new McpHost(McpConfig.empty().withDefault(settings.entry(temp.resolve("out"))),
-                tantalum.local.shell.CommandEnv.of(System.getenv(), List.of()), temp, reports::add);
+        PlaywrightHost host = new PlaywrightHost(settings.command(temp.resolve("out")),
+                tantalum.local.shell.CommandEnv.of(System.getenv(), List.of()), temp);
         hosts.add(host);
         host.start();
         long deadline = System.nanoTime() + Duration.ofSeconds(120).toNanos();
-        while (reports.stream().noneMatch(state -> state.state() == tantalum.local.wire.McpServerState.State.READY)) {
-            assertTrue(System.nanoTime() < deadline, "playwright MCP did not start: " + reports);
+        while (host.state() != PlaywrightHost.State.READY) {
+            assertTrue(System.nanoTime() < deadline, "playwright MCP did not start: " + host.state() + " " + host.reason());
             Thread.sleep(100);
         }
-        return new PlaywrightBrowser((tool, arguments) -> host.call(McpHost.CALL_PREFIX + PlaywrightBrowser.SERVER + ":" + tool, arguments));
+        return new PlaywrightBrowser(host::call);
     }
 
     private LocalResult call(PlaywrightBrowser browser, String session, String tool, Object... pairs) throws Exception {

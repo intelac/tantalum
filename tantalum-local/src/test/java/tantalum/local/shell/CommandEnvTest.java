@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** 命令和本机 MCP 子进程的环境变量（connector-jar 需求 4.5）。 */
+/** 命令和浏览器（Playwright MCP）子进程的环境变量（connector-jar 需求 4.5）。 */
 class CommandEnvTest {
 
     private static final Map<String, String> HOST = Map.of(

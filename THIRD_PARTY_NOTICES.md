@@ -20,7 +20,7 @@
 | sqlite-jdbc（含 SQLite） | 3.54.1.0 | Apache-2.0（SQLite 本身为公有领域） | journal 和用户存储 |
 | Bouncy Castle `bcprov-jdk18on` | 1.86 | MIT（Bouncy Castle Licence） | Argon2id 口令哈希 |
 | anthropic-java（含 OkHttp、Kotlin 标准库、Jackson 2） | 3.3.0 | MIT；OkHttp 与 Kotlin 为 Apache-2.0 | 调用 Claude |
-| MCP Java SDK `mcp-core`、`mcp-json-jackson3`（含 Reactor、json-schema-validator） | 2.1.0 | MIT；Reactor 为 Apache-2.0；json-schema-validator 为 Apache-2.0 | 连接 MCP 服务器 |
+| MCP Java SDK `mcp-core`、`mcp-json-jackson3`（含 Reactor、json-schema-validator） | 2.1.0 | MIT；Reactor 为 Apache-2.0；json-schema-validator 为 Apache-2.0 | 连接程序驱动 Playwright MCP（浏览器） |
 | TwelveMonkeys ImageIO `imageio-jpeg`、`imageio-webp`、`imageio-metadata`（含 `imageio-core`、`common-lang`、`common-io`、`common-image`） | 3.15.3 | BSD-3-Clause | 附件：解 WebP、更完整的 JPEG 解码、读 EXIF 方向 |
 | Apache PDFBox（含 `pdfbox-io`、`fontbox`、`commons-logging` 1.3.6） | 3.0.8 | Apache-2.0 | 附件：数 PDF 页数。jar 内的 `META-INF/NOTICE` 随 jar 一起分发 |
 | Playwright for Java `playwright`（含 `gson` 2.13.2、`jspecify` 1.0.1） | 1.64.0 | Apache-2.0；gson、jspecify 为 Apache-2.0 | 连接程序驱动用户电脑上的浏览器（`local-browser`）；只在连接程序里，服务器的 jar 里没有 |

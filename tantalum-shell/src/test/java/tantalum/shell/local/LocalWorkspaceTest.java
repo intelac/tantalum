@@ -63,7 +63,7 @@ class LocalWorkspaceTest {
         Workspaces workspaces = Workspaces.perUser(Files.createDirectories(temp.resolve("ws")));
         MemoryTools.all(new MemoryStores(workspaces, temp.resolve("data"), new MemoryLimits(2, 16 * 1024, 64), Clock.systemUTC()))
                 .forEach(catalog::register);
-        gate = new PluginGate(catalog, switches, List.of(new LocalWorkspace(switches, links)), List.of(), List.of(), List.of(), List.of(), java.util.Set.of());
+        gate = new PluginGate(catalog, switches, List.of(new LocalWorkspace(switches, links)), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }
 
@@ -152,8 +152,8 @@ class LocalWorkspaceTest {
         LocalWorkspace workspace = new LocalWorkspace(switches, links);
         switches.set(ALICE, Kind.LOCAL, "shell", false);
         assertEquals(Map.of("local-workspace", true, "fs-read", true, "git", true, "file-edit", true, "shell", false, "skills", true,
-                "wiki", true, "browser", true, "local-mcp", true), workspace.switches(ALICE));
-        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser", "local-mcp"),
+                "wiki", true, "browser", true), workspace.switches(ALICE));
+        assertEquals(List.of("local-workspace", "fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser"),
                 List.copyOf(workspace.switches(ALICE).keySet()));
         assertEquals(Optional.empty(), workspace.section(ALICE));
     }

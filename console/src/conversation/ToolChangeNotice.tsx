@@ -7,7 +7,7 @@ interface Props {
   id: string;
 }
 
-/** 名字太多时只列前几个：一个 MCP 服务器不在了，几十个工具一起不能用。 */
+/** 名字太多时只列前几个：一组工具一起不能用（比如电脑断开、旧会话里 MCP 服务器不在了）。 */
 const SHOWN = 5;
 
 function names(list: readonly string[]): string {

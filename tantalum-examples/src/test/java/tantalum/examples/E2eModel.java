@@ -29,7 +29,6 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code tools}：思考 → grep → 思考 → 两个并行 read_file → 回答；</li>
  *   <li>{@code slow}：一段一段慢慢回答，取消时返回已发出的部分；</li>
  *   <li>{@code fail}：供应商出错；</li>
- *   <li>{@code external}：调用 MCP 工具 lookup，然后回答；{@code forbidden}：调用未放行的 MCP 工具 delete_all；</li>
  *   <li>{@code remember}：调用 memory_write 写一条记忆，然后回答“已记住。”；</li>
  *   <li>{@code fetch:}（联网）：调用 web_fetch 抓 {@link E2eServer} 自带的本地测试页（{@link #webPage}），然后回答“抓到了网页。”；</li>
  *   <li>{@code browse:}（本机浏览器）：调用 browser_navigate，然后回答“浏览器结果：”加结果里 {@code Page:} 那一行；
@@ -44,7 +43,7 @@ import tantalum.value.model.ToolResultBlock;
  *   <li>{@code approve:}（工具审批，A4）：调用 write_file 写 {@code e2e/approve-<后面的词>.txt}，然后回答“结果：”加工具结果；
  *       用户打开 toolApproval 插件后，调用前在对话页上问；</li>
  *   <li>{@code readedit:}（本机工作区）：读电脑上的 {@code a.txt}，把 hello 改成 hi，回答“改好了：”加改动结果；</li>
- *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、MCP lookup），
+ *   <li>{@code trace:}（轨迹页）：第一次调用 429，重试后一批并行工具（read_file、被钩子拦下的 read_file secret、grep），
  *       然后带引用回答；配合 {@link E2eTraceHook}；</li>
  *   <li>带附件的提问：回答“看到了附件：名字、名字。”（附件页的端到端测试）；</li>
  *   <li>其它：一句思考，然后复述用户的话。</li>
@@ -125,14 +124,6 @@ public final class E2eModel implements ModelClient {
             if (text.contains("fail")) {
                 return new ModelOutcome.Failed(FailureReason.SERVER_ERROR, false, null, "", "scripted failure");
             }
-            if (text.contains("external")) {
-                return results == 0 ? reply(think(chunks, "这要查外部系统。"), call("mcp__demo__lookup", Map.of()))
-                        : answer(chunks, "外部系统查到了负责人。");
-            }
-            if (text.contains("forbidden")) {
-                return results == 0 ? reply(List.of(), call("mcp__demo__delete_all", Map.of()))
-                        : answer(chunks, "这个工具不可用。");
-            }
             if (text.contains("remember")) {
                 return remember(results, chunks);
             }
@@ -155,11 +146,6 @@ public final class E2eModel implements ModelClient {
                 int space = rest.indexOf(' ');
                 return results == 0 ? reply(List.of(), call(rest.substring(0, space), Map.of("command", rest.substring(space + 1))))
                         : answer(chunks, "命令结果：" + lastResult(prompt));
-            }
-            if (text.contains("mcpcall:")) {
-                // connector-jar 需求 6：调电脑上本机 MCP 服务器的一个工具（mcp__服务器__工具），结果原样说出
-                return results == 0 ? reply(List.of(), call(word(text, "mcpcall:"), Map.of("number", "42")))
-                        : answer(chunks, "MCP 结果：" + lastResult(prompt));
             }
             if (text.contains("approve:")) {
                 String name = word(text, "approve:");
@@ -209,12 +195,13 @@ public final class E2eModel implements ModelClient {
             return new ModelOutcome.Failed(FailureReason.RATE_LIMITED, true, Duration.ofMillis(300), "", "HTTP 429: slow down");
         }
         if (results == 0) {
-            return reply(think(chunks, "并行读两个文件，再查一下外部系统。"),
+            // 第三个原来是 MCP 工具，通用 MCP 去掉后换成 grep（remove-generic-mcp）
+            return reply(think(chunks, "并行读两个文件，再找一下回应在哪。"),
                     call("read_file", Map.of("path", "notes/hello.md")),
                     call("read_file", Map.of("path", "notes/secret.md")),
-                    call("mcp__demo__lookup", Map.of()));
+                    call("grep", Map.of("pattern", "from world")));
         }
-        return answer(chunks, "问候在 notes/hello.md:3，工单 42 归 e2e-owner。");
+        return answer(chunks, "问候在 notes/hello.md:3，回应在 notes/world.md:3。");
     }
 
     private ModelOutcome remember(int results, ChunkListener chunks) throws InterruptedException {

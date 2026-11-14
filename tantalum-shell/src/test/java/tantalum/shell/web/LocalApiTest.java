@@ -100,7 +100,7 @@ class LocalApiTest {
     void statusShowsOnlyYourOwnComputerAndRevokingEndsIt() throws Exception {
         JsonNode empty = status("alice");
         assertTrue(empty.get("link").isNull(), empty.toString());
-        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true,\"local-mcp\":true}",
+        assertEquals("{\"local-workspace\":true,\"fs-read\":true,\"git\":true,\"file-edit\":true,\"shell\":true,\"skills\":true,\"wiki\":true,\"browser\":true}",
                 empty.get("switches").toString());
         // qagent-align 需求 2：浏览器下面的工具可以逐个勾，默认全勾；改和恢复默认用现成的开关接口
         assertEquals(11, empty.get("tools").get("browser").size(), empty.get("tools").toString());

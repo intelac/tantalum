@@ -92,7 +92,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
      * 连一台什么都给的电脑，只为看服务器给模型的工具和提示（agent-eval 需求 3）：写、Git、命令行、浏览器都报“可用”。
      * 真的调用 {@code bash} 和浏览器会被这台电脑拒绝（它没有沙箱也没有浏览器）。
      */
-    /** 按给定的 {@code hello} 连上（connector-jar 的端到端测试：协议 6、PowerShell、本机 MCP、别的 jar）。允许的目录就是 {@code main}。 */
+    /** 按给定的 {@code hello} 连上（connector-jar 的端到端测试：协议 6、PowerShell、别的 jar）。允许的目录就是 {@code main}。 */
     public static TestComputer connectAs(LocalLinks links, Principal user, Instant expiresAt, Path main,
                                          java.util.function.Function<List<Hello.Root>, Hello> hello) throws IOException {
         Path real = main.toRealPath();
@@ -272,14 +272,6 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     }
 
     private LocalResult run(Call call) {
-        if (call.tool().startsWith("mcp:")) {
-            // 本机 MCP（connector-jar）：hello 里报了的服务器和工具回一句固定的话，别的说不认识
-            String[] parts = call.tool().split(":", 3);
-            boolean known = parts.length == 3 && hello.mcp().stream().anyMatch(server -> server.name().equals(parts[1])
-                    && server.tools().stream().anyMatch(spec -> spec.name().equals(parts[2])));
-            return known ? LocalResult.ok("local mcp " + parts[1] + "/" + parts[2] + " answered " + tantalum.local.wire.Wire.text(call.arguments()))
-                    : LocalResult.error("No MCP tool " + call.tool() + " on this computer.");
-        }
         Optional<LocalTool> tool = Tools.all().stream().filter(candidate -> candidate.name().equals(call.tool())).findFirst();
         if (tool.isEmpty()) {
             return LocalResult.error("Unknown tool: " + call.tool());

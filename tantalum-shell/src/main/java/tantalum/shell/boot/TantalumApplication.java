@@ -139,6 +139,7 @@ public class TantalumApplication {
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
                 EventCodec.withBuiltins(), Clock.systemUTC());
         RetiredBrowser.atStartup(environment::containsProperty, properties.dataDir());
+        RetiredMcp.atStartup(environment);
         // 停用或删掉的账号不能再连电脑：握手时查，之后每次心跳再查
         engine.localLinks().accounts(principal -> usable(users, principal.value()));
         // 联网访问自己永远被拦：先用配置的端口，Web 服务器起来后换成实际端口（见 ownPort）

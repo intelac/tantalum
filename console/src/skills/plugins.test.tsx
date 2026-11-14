@@ -10,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: true, wiki: true, browser: true, "local-mcp": true };
+const ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: true, wiki: true, browser: true };
 
 const LINK: LocalLink = {
   device: { name: "Yi's MacBook", os: "macos", osVersion: "26.2", arch: "arm64" },

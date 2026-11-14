@@ -112,9 +112,13 @@ class ArchitectureTest {
             .that().resideOutsideOfPackage("tantalum.shell.plugin..")
             .should().haveSimpleName("AfterToolHook");
 
+    /**
+     * 服务器不连 MCP 服务器（remove-generic-mcp）：MCP SDK 只在连接程序里驱动 Playwright MCP（{@code tantalum.connect.browser}）。
+     * 要用别的 MCP 服务器，写插件包装它。
+     */
     @ArchTest
-    static final ArchRule mcpSdkStaysInItsPackage = noClasses()
-            .that().resideInAPackage("tantalum..").and().resideOutsideOfPackage("tantalum.shell.mcp..")
+    static final ArchRule theServerDoesNotUseTheMcpSdk = noClasses()
+            .that().resideInAPackage("tantalum..")
             .should().dependOnClassesThat().resideInAPackage("io.modelcontextprotocol..");
 
     /**

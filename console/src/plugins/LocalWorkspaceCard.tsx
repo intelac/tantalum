@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { LocalLink, LocalMcpServer, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
+import type { LocalLink, LocalStatus, LocalSwitch, LocalValidity } from "../api/types";
 import { lookup, type Text, useText } from "../text";
 import { errorLine, sandboxText } from "../text/errors";
 import { clockTime } from "../text/format";
@@ -12,23 +12,21 @@ import { SkillsItem } from "../skills/SkillsItem";
 import { WikiItem } from "../skills/WikiItem";
 import { Row, Section } from "./Rows";
 import { ChoicesList, ChoicesNotes, ChoicesToggle, useToolChoices } from "./ToolChoices";
-import { useIssueToken, useLocal, useRevokeLocal, useToggleCommandApproval, useToggleLocal, useToggleLocalMcp } from "./useLocal";
+import { useIssueToken, useLocal, useRevokeLocal, useToggleCommandApproval, useToggleLocal } from "./useLocal";
 
 const MASTER: LocalSwitch = "local-workspace";
-const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser", "local-mcp"];
+const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills", "wiki", "browser"];
 /** 从这个协议版本起，连接程序会列技能和 wiki 页。 */
 const SKILL_LISTS = 4;
 /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
 const BROWSER_TOOLS = 5;
-/** 从这个协议版本起，连接程序是跨平台的 jar，报本机 MCP 服务器（connector-jar）。 */
-const MCP_TOOLS = 6;
 const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
 /**
- * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器、本机 MCP
- * 八个子开关（技能、知识库各带一个目录，见 skills/；浏览器是电脑上已装的 Chrome 或 Edge，由本机的 Playwright MCP 驱动；命令行下面
- * 有“执行前先问我”；本机 MCP 下面每个服务器一个开关，见 connector-jar）；连接状态和到期倒计时、版本不一致的提示；
+ * 插件页的“本机工作区”（local-workspace L17，需求 6）：总开关和读文件、Git 查询、改文件、命令行、技能、知识库、浏览器
+ * 七个子开关（技能、知识库各带一个目录，见 skills/；浏览器是电脑上已装的 Chrome 或 Edge，由本机的 Playwright MCP 驱动；命令行下面
+ * 有“执行前先问我”）；连接状态和到期倒计时、版本不一致的提示；
  * 照 QAgent 的三步：下载连接程序、生成令牌、按这台电脑的系统给出命令（只显示这一次）；“撤销”断开电脑。页面开着时每 2 秒取一次状态。
  */
 export function LocalWorkspaceCard({ open }: { open: boolean }) {
@@ -125,7 +123,6 @@ function Child({ name, status, open, onChange }: { name: LocalSwitch; status: Lo
       aside={pickable && choices.off.length > 0 ? <ChoicesNotes off={choices.off} label={label} /> : undefined}
     >
       {name === "shell" && <ShellItem status={status} />}
-      {name === "local-mcp" && on && master && <McpItem link={status.link} />}
       {name === "skills" && on && <SkillsItem active={open && master} signal={signal} />}
       {name === "wiki" && on && <WikiItem active={open && master} signal={signal} />}
       {pickable && choices.open && <ChoicesList tools={choices.list} label={label} />}
@@ -155,7 +152,6 @@ export function refusal(t: Text, name: LocalSwitch, link: LocalLink): string | n
       return link.browser.code === "browser/not-found" ? text.browserNotFound : text.browserNotAllowed;
     }
   }
-  if (name === "local-mcp" && (link.protocol ?? 0) < MCP_TOOLS) return text.mcp.old;
   return null;
 }
 
@@ -217,68 +213,6 @@ function ShellItem({ status }: { status: LocalStatus }) {
         </label>
       )}
     </div>
-  );
-}
-
-/** “本机 MCP”一项下面：电脑报的每个服务器，状态、工具，各自一个开关（connector-jar 需求 6.7）。 */
-function McpItem({ link }: { link: LocalLink | null }) {
-  const text = useText().plugins.local;
-  const toggle = useToggleLocalMcp();
-  if (link === null || (link.protocol ?? 0) < MCP_TOOLS) return null;
-  const servers = link.mcp ?? [];
-  // 配置文件在电脑上的哪里（N5：只写“mcp.json”，用户不知道去哪里加）；老的连接程序不报，就不写
-  const file = link.mcpConfig === undefined ? null : <p className="font-mono text-[11px] break-all text-fg-faint">{text.mcp.file(link.mcpConfig)}</p>;
-  if (servers.length === 0)
-    return (
-      <div className="pr-3 pb-2.5 pl-16 text-xs text-fg-faint">
-        <p>{text.mcp.none}</p>
-        {file}
-      </div>
-    );
-  return (
-    <div className="flex flex-col gap-2 pr-3 pb-2.5 pl-16">
-      <ul aria-label={text.switches["local-mcp"][0]} className="flex flex-col gap-2">
-        {servers.map((server) => (
-          <McpServerRow key={server.name} server={server} onToggle={(enabled) => toggle.mutate({ server: server.name, enabled })} />
-        ))}
-      </ul>
-      {file}
-    </div>
-  );
-}
-
-function McpServerRow({ server, onToggle }: { server: LocalMcpServer; onToggle: (enabled: boolean) => void }) {
-  const text = useText().plugins.local;
-  const [open, setOpen] = useState(false);
-  const failed = server.state === "failed";
-  return (
-    <li className="flex flex-col gap-1 text-xs">
-      <div className="flex flex-wrap items-center gap-2">
-        <Switch checked={server.enabled} onChange={onToggle} label={text.mcp.toggle(server.name)} disabled={server.state === "disabled"} />
-        <span className="font-mono text-fg">{server.name}</span>
-        <span className={cx(failed ? "text-danger" : server.state === "ready" ? "text-fg-muted" : "text-warning")}>{text.mcp.states[server.state]}</span>
-        {server.tools.length > 0 && (
-          <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-accent hover:underline">
-            {text.mcp.tools(server.tools.length)}
-          </button>
-        )}
-      </div>
-      {server.reason != null && server.reason !== "" && (
-        <span className={cx("block font-mono text-[11px] break-all whitespace-pre-wrap", failed ? "text-danger" : "text-fg-faint")}>
-          {server.reason}
-        </span>
-      )}
-      {open && (
-        <ul aria-label={text.mcp.list(server.name)} className="flex flex-col gap-0.5 pl-2">
-          {server.tools.map((tool) => (
-            <li key={tool.name}>
-              <span className="font-mono text-fg">{tool.name}</span>
-              {tool.description !== "" && <span className="text-fg-faint"> — {tool.description}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
   );
 }
 

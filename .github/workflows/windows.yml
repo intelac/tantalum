@@ -83,11 +83,11 @@ jobs:
       - name: Maven verify
         # 覆盖率门槛留在 macOS 的全量回归上：bash 的边界这类只在 macOS、Linux 跑的代码在这里跳过，比例会偏低（设计“windows.yml”）。
         run: mvn -B -ntp verify "-Djacoco.haltOnFailure=false"
-      - name: PowerShell, local MCP, browser and Windows-only tests were not skipped
+      - name: PowerShell, browser host and Windows-only tests were not skipped
         if: success() || failure()
         # runner 上装着 Node.js 和 Edge、Chrome：真的 Playwright MCP 也在这里跑（connector-jar）
         run: |
-          ./.github/scripts/assert-not-skipped.ps1 LocalShellIT LocalMcpIT PlaywrightMcpIT WindowsFilesTest DataDirCheckTest
+          ./.github/scripts/assert-not-skipped.ps1 LocalShellIT PlaywrightHostIT PlaywrightMcpIT WindowsFilesTest DataDirCheckTest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # 检查本身也要会失败：一个没跑过的类名必须让它退出码 1
           ./.github/scripts/assert-not-skipped.ps1 NoSuchTest

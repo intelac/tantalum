@@ -191,66 +191,6 @@ class LinkIT {
         }
     }
 
-    /**
-     * connector-jar 需求 6：电脑上 {@code mcp.json} 的本机 MCP 服务器。连上后后台启动，好了补报 {@code mcpTools}；服务器按用户列出
-     * {@code mcp__test__echo}，调用经连接到电脑上的子进程再回来。服务器上看不到这台电脑以外的东西，别的用户也看不到这些工具。
-     */
-    @Test
-    void localMcpToolsReachTheServerAndAnswer() throws Exception {
-        List<String> java = List.of(ProcessHandle.current().info().command().orElse("java"), "-cp", System.getProperty("java.class.path"),
-                tantalum.connect.mcp.StdioTestServer.class.getName());
-        StringBuilder args = new StringBuilder();
-        for (String arg : java.subList(1, java.size())) {
-            args.append(args.isEmpty() ? "" : ", ").append('"').append(arg.replace("\\", "\\\\")).append('"');
-        }
-        Path config = Files.writeString(work.resolve("mcp.json"), "{\"mcpServers\": {\"test\": {\"command\": \""
-                + java.getFirst().replace("\\", "\\\\") + "\", \"args\": [" + args + "], \"env\": {\"MCP_TEST\": \"x\"}}}}");
-        Main.Setup setup = setup(token("mia"), "--mcp-config", config.toString());
-        assertEquals(List.of("test"), setup.hello().mcp().stream().map(tantalum.local.wire.McpServerState::name).toList());
-        Calls calls = new Calls(setup.dirs(), setup.hello().write(), false, new Journal(out, Clock.systemDefaultZone()), Tools.all());
-        java.util.concurrent.atomic.AtomicReference<Link> holder = new java.util.concurrent.atomic.AtomicReference<>();
-        tantalum.connect.mcp.McpHost host = new tantalum.connect.mcp.McpHost(setup.mcp(), setup.commandEnv(), setup.dirs().main(), state -> {
-            Link current = holder.get();
-            if (current != null) {
-                current.report(state);
-            }
-        });
-        calls.mcp(host);
-        Link link = new Link(setup.socket(), setup.token(), () -> setup.hello().withMcp(host.states()), host::states, calls, out, ZH,
-                List.of(Duration.ofMillis(100)), Link.SILENCE);
-        holder.set(link);
-        started.add(link);
-        try {
-            host.start();
-            Thread.ofVirtual().start(() -> {
-                try {
-                    link.run();
-                } catch (InterruptedException ignored) {
-                    // 测试结束
-                }
-            });
-            awaitConnected("mia");
-            Principal mia = new Principal("mia");
-            tantalum.shell.local.LocalMcpSource source = new tantalum.shell.local.LocalMcpSource(links, null);
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
-            while (source.tools(mia).stream().noneMatch(tool -> tool.name().equals("mcp__test__echo"))) {
-                if (System.nanoTime() > deadline) {
-                    throw new AssertionError("no local MCP tools reached the server: " + source.servers(mia));
-                }
-                Thread.sleep(50);
-            }
-            assertEquals(tantalum.local.wire.McpServerState.State.READY, source.servers(mia).getFirst().state());
-            assertTrue(source.tools(new Principal("alice")).isEmpty(), "another user does not see them");
-
-            LocalResult echo = call("mia", "mcp:test:echo", "text", "你好");
-            assertFalse(echo.error(), echo.text());
-            assertTrue(echo.text().endsWith("|x|你好"), echo.text());
-            assertTrue(printed().contains("mcp:test:echo"), printed());
-        } finally {
-            host.close();
-        }
-    }
-
     /** 需求 2.3：没有 {@code --allow-write} 时服务器硬发 {@code write_file}，电脑拒绝，文件没写出来。 */
     @Test
     void aForcedWriteIsRefusedByTheComputer() throws Exception {

@@ -63,7 +63,7 @@ public final class ToolHandler implements Handler {
     @Override
     public Event handle(Command command) throws InterruptedException {
         RunTool run = (RunTool) command;
-        Optional<Tool> tool = catalog.find(run.run().principal(), run.call().name());
+        Optional<Tool> tool = catalog.find(run.call().name());
         if (tool.isEmpty()) {
             return finished(run, ToolOutput.error("Unknown tool: " + run.call().name()), null);
         }

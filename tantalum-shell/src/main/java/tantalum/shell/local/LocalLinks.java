@@ -34,9 +34,8 @@ import tantalum.local.wire.Cancel;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
+import tantalum.local.wire.Retired;
 import tantalum.local.wire.Message;
-import tantalum.local.wire.McpTools;
-import tantalum.local.wire.McpServerState;
 import tantalum.local.wire.Result;
 import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
@@ -409,7 +408,7 @@ public final class LocalLinks implements AutoCloseable {
     public final class Link {
 
         private final Principal principal;
-        /** 连上时的 {@code hello}；本机 MCP 服务器的清单随 {@link McpTools} 更新（协议 6 起）。 */
+        /** 连上时的 {@code hello}。 */
         private volatile Hello hello;
         private final Instant connectedAt;
         private final Instant expiresAt;
@@ -470,22 +469,8 @@ public final class LocalLinks implements AutoCloseable {
                         waiting.complete(result);
                     }
                 }
-                case McpTools update -> {
-                    List<McpServerState> servers = new ArrayList<>();
-                    boolean replaced = false;
-                    for (McpServerState server : hello.mcp()) {
-                        if (server.name().equals(update.server().name())) {
-                            servers.add(update.server());
-                            replaced = true;
-                        } else {
-                            servers.add(server);
-                        }
-                    }
-                    if (!replaced) {
-                        servers.add(update.server());
-                    }
-                    hello = hello.withMcp(servers);
-                }
+                // 11-14 之前的协议 6 连接程序报本机 MCP 服务器用的，remove-generic-mcp 后不用了：收下不管，不断开（需求 3.2）
+                case Retired ignored -> { }
                 default -> {
                     LOG.info("local link for {}: unexpected {} message; closing", principal.value(), message.getClass().getSimpleName());
                     peer.close(1002, "unexpected message");

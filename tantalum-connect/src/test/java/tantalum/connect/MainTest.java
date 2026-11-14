@@ -92,6 +92,16 @@ class MainTest {
         }
     }
 
+    /** remove-generic-mcp 需求 2.2：{@code --mcp-config} 给了就说清楚已不支持，浏览器照常能用；帮助里不再有它。 */
+    @Test
+    void theRemovedMcpConfigOptionIsExplained() {
+        Refused refused = assertThrows(Refused.class, () -> setup("--allow", work.toString(), "--mcp-config", "mcp.json"));
+        assertTrue(refused.getMessage().startsWith("--mcp-config 已不再支持"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("--allow-browser"), refused.getMessage());
+        assertEquals(0, Main.run(new String[] {"--help"}, Map.of(), answering(null), out));
+        assertFalse(printed().contains("mcp"), printed());
+    }
+
     /** 需求 7.3：{@code --help} 列出全部参数。 */
     @Test
     void helpListsEveryOption() {
@@ -220,7 +230,7 @@ class MainTest {
         assertEquals(new Hello.Shell(false, "--allow-shell was not given", "shell/not-allowed", Map.of(), "bash", null), hello.shell());
         assertTrue(hello.network());
         assertEquals("Yi's MacBook", hello.device().name());
-        assertEquals(6, hello.protocol(), "protocol 6: one jar for every system, local MCP");
+        assertEquals(6, hello.protocol(), "protocol 6: one jar for every system");
 
         Hello shell = setup("--allow", work.toString(), "--allow-shell").hello();
         assertTrue(shell.shell().available(), "this machine has /bin/bash");

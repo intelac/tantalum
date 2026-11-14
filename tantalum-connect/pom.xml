@@ -12,7 +12,7 @@
 
   <!--
     连接程序：在用户的电脑上运行，主动连到服务器，在允许的目录里执行工具。一个 jar，macOS、Windows、Linux 通用（connector-jar），
-    运行时依赖 tantalum-local、JDK 25 和 MCP 的 Java SDK（本机 MCP 服务器，浏览器也是其中的 Playwright MCP）。
+    运行时依赖 tantalum-local、JDK 25 和 MCP 的 Java SDK（只用来驱动浏览器的 Playwright MCP；remove-generic-mcp 起没有本机 MCP）。
   -->
   <artifactId>tantalum-connect</artifactId>
 
@@ -22,7 +22,7 @@
       <artifactId>tantalum-local</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <!-- 本机 MCP 的宿主（connector-jar 需求 6）：和服务器的 mcp-client 同一个官方 SDK、同一个版本。 -->
+    <!-- 驱动 Playwright MCP（浏览器，connector-jar 需求 7）：官方 Java SDK。 -->
     <dependency>
       <groupId>io.modelcontextprotocol.sdk</groupId>
       <artifactId>mcp-core</artifactId>

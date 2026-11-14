@@ -127,9 +127,6 @@ def start(extra=(), name=None):
     user = Client(); assert user.call("POST", "/api/auth/login", {"username": "dev", "password": user_pw})[0] == 200
     status, token = user.call("POST", "/api/local/tokens", {"validity": "1d"}); assert status == 200, token
     cenv = dict(os.environ, TANTALUM_TOKEN=token["token"])
-    # 只读临时目录里的 mcp.json，不读电脑上的 ~/.config/tantalum/mcp.json（tool-scenarios-2 需求 1.3）
-    mcp_config = f"{DATA}-mcp.json"
-    with open(mcp_config, "w") as f: json.dump({"mcpServers": {}}, f)
     allow = ["--allow", ROOT]
     if name == "outside":
         # 允许目录里另有一个不在 Git 仓库里的目录（not-git 场景）
@@ -137,7 +134,7 @@ def start(extra=(), name=None):
         fixture.write(OUTSIDE, "plan.md", "# Notebook\n\nNot under version control.\n")
         allow += ["--allow", OUTSIDE]
     connector = subprocess.Popen(["java", "--enable-native-access=ALL-UNNAMED", "-cp", cp, "tantalum.connect.Main", "--server", BASE, *allow,
-        "--allow-write", "--allow-shell", "--allow-browser", "--browser-headless", "--mcp-config", mcp_config,
+        "--allow-write", "--allow-shell", "--allow-browser", "--browser-headless",
         "--browser-profile", f"{WORK}/browser-profile", "--lang", "en"], env=cenv, cwd=ROOT, stdout=open(f"{DATA}-connector.log", "w"), stderr=subprocess.STDOUT)
     started.append(connector)
     for _ in range(40):

@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.boot.Engine;
-import tantalum.shell.mcp.McpRegistry;
 import tantalum.shell.param.ParamRules.InvalidParam;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.route.ModelInfo;
@@ -43,24 +41,10 @@ public class PluginController {
     ResponseEntity<String> list() {
         Principal user = WebJson.currentUser();
         PluginGate.Overview overview = engine.plugins().overview(user);
-        Map<String, String> states = engine.mcp().servers().stream()
-                .collect(Collectors.toMap(McpRegistry.ServerStatus::name, McpRegistry.ServerStatus::state));
         Map<String, Object> response = new LinkedHashMap<>();
         // 打开的工具能不能在同一个会话的下一次提问就用上；OpenAI 兼容的路线直接换工具列表，总是可以
         response.put("midSessionChanges", engine.routes().describe(engine.routes().defaultChoice()).map(ModelInfo::toolChanges).orElse(true));
         response.put("tools", overview.tools().stream().map(tool -> tool(tool, true)).toList());
-        response.put("mcp", overview.mcp().stream().map(server -> {
-            Map<String, Object> view = new LinkedHashMap<>();
-            view.put("name", server.name());
-            view.put("state", states.getOrDefault(server.name(), "UNKNOWN"));
-            view.put("enabled", server.enabled());
-            view.put("byDefault", server.byDefault());
-            view.put("changed", server.changed());
-            PluginViews.lock(view, server.lock());
-            // MCP 的工具没有参数（没有单独的一行放表单）
-            view.put("tools", server.tools().stream().map(tool -> tool(tool, false)).toList());
-            return view;
-        }).toList());
         // 联网这一组：两项都被管理员关掉时照样返回，页面照样显示；不返回代理地址和凭据
         Map<String, Object> web = new LinkedHashMap<>();
         web.put("switches", engine.webAccess().switches(user));

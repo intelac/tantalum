@@ -70,7 +70,6 @@ public final class PluginGate {
     private final ToolCatalog catalog;
     private final PluginSwitches switches;
     private final List<ToolGroup> groups;
-    private final List<String> mcpServers;
     private final List<AfterToolHook> afterHooks;
     private final List<WorkType> workTypes;
     private final Map<String, Plugin> plugins;
@@ -88,24 +87,24 @@ public final class PluginGate {
     private final ParamResolver resolver;
 
     /** 没有本机工作区、联网这些开关组时（嵌入使用和测试）。 */
-    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<String> mcpServers, List<KernelHook> hooks,
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<KernelHook> hooks,
                       List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
-        this(catalog, switches, List.of(), mcpServers, hooks, afterHooks, workTypes, Set.of());
+        this(catalog, switches, List.of(), hooks, afterHooks, workTypes, Set.of());
     }
 
     /** 参数不落盘（嵌入使用和测试）。 */
-    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups, List<String> mcpServers,
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
                       List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, Set<String> required) {
-        this(catalog, switches, groups, mcpServers, hooks, afterHooks, workTypes, required, unsavedParams());
+        this(catalog, switches, groups, hooks, afterHooks, workTypes, required, unsavedParams());
     }
 
     /**
-     * {@code mcpServers} 是配置了的 MCP 服务器名，没连上的也算，用户可以先关掉。{@code groups} 是本机工作区、联网这些开关组：
+     * {@code groups} 是本机工作区、联网这些开关组：
      * 组里的工具不看单个工具的开关，只问自己的组。{@code required} 是管理员设成必须开启的插件
      * （{@code tantalum.hooks.required}），名字不认识时抛 {@link IllegalArgumentException}：拼错了等于策略没生效，不能悄悄放过。
      * {@code params} 是参数的值和密码存的地方。同一个插件里两个成员把同一个键声明得不一样，也抛 {@link IllegalArgumentException}。
      */
-    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups, List<String> mcpServers,
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
                       List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, Set<String> required,
                       ParamStore params) {
         if (groups.stream().map(ToolGroup::kind).distinct().count() != groups.size()) {
@@ -121,7 +120,6 @@ public final class PluginGate {
         this.catalog = catalog;
         this.switches = switches;
         this.groups = List.copyOf(groups);
-        this.mcpServers = List.copyOf(mcpServers);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
         this.plugins = group(hooks, afterHooks, workTypes, required);
@@ -154,7 +152,7 @@ public final class PluginGate {
     /** 没有用户开关的入口：一切都开着（嵌入使用和测试）。仍然是唯一的调用入口。 */
     public static PluginGate allOn(ToolCatalog catalog, List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
         try {
-            return new PluginGate(catalog, PluginSwitches.inMemory(Clock.systemUTC()), List.of(), hooks, afterHooks, workTypes);
+            return new PluginGate(catalog, PluginSwitches.inMemory(Clock.systemUTC()), hooks, afterHooks, workTypes);
         } catch (SQLException impossible) {
             throw new IllegalStateException(impossible);
         }
@@ -162,25 +160,22 @@ public final class PluginGate {
 
     // ---- 名单 ----
 
-    /** 内置工具看自己的开关；MCP 工具还要看所属服务器的开关；本机工作区、联网的工具问自己的 {@link ToolGroup}。 */
+    /** 内置工具看自己的开关；本机工作区、联网的工具问自己的 {@link ToolGroup}。 */
     public boolean toolEnabled(Principal user, Tool tool) {
         Optional<ToolGroup> group = groupOf(tool);
         if (group.isPresent()) {
             return group.get().enabled(user, tool);
         }
-        if (!switches.enabled(user, Kind.TOOL, tool.name())) {
-            return false;
-        }
-        return catalog.isRegistered(tool.name()) || switches.enabled(user, Kind.MCP, catalog.serverName(tool));
+        return switches.enabled(user, Kind.TOOL, tool.name());
     }
 
     /**
      * 这个工具从哪来（写进 {@code ContextAssembled.toolSources}）：开关组的写组的来源（{@code local}、
-     * {@code web}），内置的写 {@code builtin}，MCP 的写 {@code mcp:} 加配置里的服务器名；不写地址、令牌、电脑名和目录。
+     * {@code web}），其余写 {@code builtin}；不写地址、令牌、电脑名和目录。旧会话里还有 {@code mcp:<服务器>}（remove-generic-mcp 之前）。
      */
     public String source(Tool tool) {
         return groupOf(tool).map(ToolGroup::source)
-                .orElseGet(() -> catalog.isRegistered(tool.name()) ? "builtin" : "mcp:" + catalog.serverName(tool));
+                .orElse("builtin");
     }
 
     private Optional<ToolGroup> groupOf(Tool tool) {
@@ -194,7 +189,7 @@ public final class PluginGate {
 
     /** 这个用户现在开着的工具名，按名称排序（同 {@link ToolCatalog#specs()}）。 */
     public List<String> enabledTools(Principal user) {
-        return catalog.tools(user).stream().filter(tool -> toolEnabled(user, tool)).map(Tool::name).toList();
+        return catalog.tools().stream().filter(tool -> toolEnabled(user, tool)).map(Tool::name).toList();
     }
 
     /** 装没装这个插件（钩子、工具后处理、插件工作）。 */
@@ -325,25 +320,21 @@ public final class PluginGate {
     public record ParamView(Param param, Json value, String source, boolean editable, boolean set, boolean stale) {}
 
     /**
-     * 一个开关在插件页上的样子：开关本身的状态，不叠加服务器的开关。{@code byDefault} 是没动过时开不开（管理员定的默认算在内），
+     * 一个开关在插件页上的样子：{@code byDefault} 是没动过时开不开（管理员定的默认算在内），
      * {@code changed} 是这个人选的和默认不一样，{@code lock} 没锁时为 null。
      */
     public record ToolView(String name, String description, boolean enabled, boolean byDefault, boolean changed, Lock lock,
                            List<ParamView> params) {}
 
-    public record ServerView(String name, boolean enabled, boolean byDefault, boolean changed, Lock lock, List<ToolView> tools) {}
-
     /** {@code group}：挂点全是工具后处理的是 {@code output}，其余是 {@code rule}。 */
     public record PluginView(String name, LocalText description, List<String> points, String group, boolean enabled, boolean byDefault,
                              boolean changed, Lock lock, List<ParamView> params) {}
 
-    public record Overview(List<ToolView> tools, List<ServerView> mcp, List<PluginView> plugins) {}
+    public record Overview(List<ToolView> tools, List<PluginView> plugins) {}
 
-    /** 这个用户的插件页：内置工具、MCP 服务器和它们现在的工具、钩子插件。开关组（本机工作区、联网）的工具不在这里，在各自的卡片上。 */
+    /** 这个用户的插件页：内置工具、钩子插件。开关组（本机工作区、联网）的工具不在这里，在各自的卡片上。 */
     public Overview overview(Principal user) {
         List<ToolView> builtins = new ArrayList<>();
-        Map<String, List<ToolView>> byServer = new LinkedHashMap<>();
-        mcpServers.forEach(server -> byServer.put(server, new ArrayList<>()));
         for (Tool tool : catalog.tools()) {
             if (groupOf(tool).isPresent()) {
                 continue;
@@ -352,41 +343,31 @@ public final class PluginGate {
             ToolView view = new ToolView(tool.name(), tool.description(), switches.enabled(user, Kind.TOOL, tool.name()),
                     byDefault(Kind.TOOL, tool.name()), changed(user, Kind.TOOL, tool.name()), lock,
                     paramViews(user, Kind.TOOL, tool.name(), toolParams(tool), lock != null));
-            if (catalog.isRegistered(tool.name())) {
-                builtins.add(view);
-            } else {
-                byServer.computeIfAbsent(catalog.serverName(tool), ignored -> new ArrayList<>()).add(view);
-            }
+            builtins.add(view);
         }
-        List<ServerView> servers = byServer.entrySet().stream()
-                .map(entry -> new ServerView(entry.getKey(), switches.enabled(user, Kind.MCP, entry.getKey()),
-                        byDefault(Kind.MCP, entry.getKey()), changed(user, Kind.MCP, entry.getKey()), lock(Kind.MCP, entry.getKey()),
-                        List.copyOf(entry.getValue())))
-                .toList();
         List<PluginView> views = plugins.values().stream().map(plugin -> {
             Lock lock = lock(Kind.PLUGIN, plugin.name());
             return new PluginView(plugin.name(), plugin.description(), plugin.points(), group(plugin),
                     pluginEnabled(user, plugin.name()), byDefault(Kind.PLUGIN, plugin.name()), changed(user, Kind.PLUGIN, plugin.name()),
                     lock, paramViews(user, Kind.PLUGIN, plugin.name(), declared(Kind.PLUGIN, plugin.name()), lock != null));
         }).toList();
-        return new Overview(List.copyOf(builtins), servers, views);
+        return new Overview(List.copyOf(builtins), views);
     }
 
     /**
      * 管理员的“插件默认值”里的一项。{@code builtin} 是自带的默认，{@code byAdmin} 是管理员定的默认（没定为 null），
-     * {@code lock} 同插件页；{@code params} 是参数的默认值，不含密码。{@code group}：{@code tool}、{@code mcp}、{@code rule}、{@code output}。
+     * {@code lock} 同插件页；{@code params} 是参数的默认值，不含密码。{@code group}：{@code tool}、{@code rule}、{@code output}。
      */
     public record DefaultView(Kind kind, String name, String group, boolean builtin, Boolean byAdmin, Lock lock, List<ParamView> params) {}
 
-    /** 所有能定默认的开关：内置工具、MCP 服务器、钩子插件。MCP 服务器里的单个工具和开关组不在这里。 */
+    /** 所有能定默认的开关：内置工具、钩子插件。开关组不在这里。 */
     public List<DefaultView> defaults() {
         List<DefaultView> views = new ArrayList<>();
         for (Tool tool : catalog.tools()) {
-            if (groupOf(tool).isEmpty() && catalog.isRegistered(tool.name())) {
+            if (groupOf(tool).isEmpty()) {
                 views.add(defaultView(Kind.TOOL, tool.name(), "tool", true, toolParams(tool)));
             }
         }
-        mcpServers.forEach(server -> views.add(defaultView(Kind.MCP, server, "mcp", true, List.of())));
         plugins.values().forEach(plugin -> views.add(defaultView(Kind.PLUGIN, plugin.name(), group(plugin),
                 plugin.mandatory() || plugin.defaultEnabled(), declared(Kind.PLUGIN, plugin.name()))));
         return List.copyOf(views);
@@ -482,9 +463,9 @@ public final class PluginGate {
 
     // ---- 参数的声明 ----
 
-    /** 内置的、有自己开关的工具才有参数；开关组和 MCP 的工具没有（它们没有单独的一行可以放表单）。 */
+    /** 内置的、有自己开关的工具才有参数；开关组的工具没有（它们没有单独的一行可以放表单）。 */
     private List<Param> toolParams(Tool tool) {
-        if (!catalog.isRegistered(tool.name()) || groupOf(tool).isPresent()) {
+        if (groupOf(tool).isPresent()) {
             return List.of();
         }
         return Declared.of("tool " + tool.name(), tool);
@@ -493,7 +474,7 @@ public final class PluginGate {
     /** 这一项声明的参数。只有内置工具和钩子插件能有；不认识的名字和别的种类抛 {@link UnknownPlugin}。 */
     private List<Param> declared(Kind kind, String name) {
         if (kind == Kind.TOOL) {
-            Tool tool = catalog.find(name).filter(found -> groupOf(found).isEmpty() && catalog.isRegistered(found.name()))
+            Tool tool = catalog.find(name).filter(found -> groupOf(found).isEmpty())
                     .orElseThrow(() -> new UnknownPlugin(kind, name));
             return toolParams(tool);
         }
@@ -593,7 +574,7 @@ public final class PluginGate {
 
     /**
      * 管理员定默认和锁定：{@code enabled} 为 null 是不改默认（用自带的）；{@code reason} 只在锁定时留着。
-     * 只管内置工具、MCP 服务器和钩子插件；代码或配置里定了必须开启的，这里改不了，抛 {@link LockedPlugin}。
+     * 只管内置工具和钩子插件；代码或配置里定了必须开启的，这里改不了，抛 {@link LockedPlugin}。
      */
     public void setDefault(Kind kind, String name, Boolean enabled, boolean locked, String reason) {
         if (kind == Kind.LOCAL || kind == Kind.WEB) {
@@ -611,8 +592,7 @@ public final class PluginGate {
         boolean found = switch (kind) {
             case TOOL -> catalog.find(name).filter(tool -> groupOf(tool).isEmpty()).isPresent();
             case LOCAL, WEB -> groups.stream().anyMatch(group -> group.kind() == kind && (group.switches().contains(name)
-                    || group.choices().values().stream().anyMatch(tools -> tools.contains(name)) || group.acceptsSwitch(name)));
-            case MCP -> mcpServers.contains(name);
+                    || group.choices().values().stream().anyMatch(tools -> tools.contains(name))));
             case PLUGIN -> plugins.containsKey(name);
         };
         if (!found) {

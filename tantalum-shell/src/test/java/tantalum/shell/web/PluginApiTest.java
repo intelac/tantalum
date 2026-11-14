@@ -2,6 +2,7 @@ package tantalum.shell.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -108,7 +109,7 @@ class PluginApiTest {
             assertFalse(tool.get("name").asString().equals("web_fetch") || tool.get("name").asString().startsWith("browser_"),
                     "web tools are on their own card: " + tool);
         }
-        assertEquals(0, body.get("mcp").size());
+        assertNull(body.get("mcp"), "remove-generic-mcp: no MCP servers on the plugin page");
         assertTrue(body.get("midSessionChanges").isBoolean());
         JsonNode quota = named(body.get("plugins"), "dailyQuota");
         assertEquals("{\"source\":\"code\",\"reason\":\"\"}", quota.get("lock").toString());

@@ -31,7 +31,7 @@ export function Section({ title, label, empty, children }: { title?: string; lab
 
 /**
  * 一行：开关在左，名字和一句说明在中间，右边是锁定条或“我改的 · 恢复默认”（`aside`）。
- * 窄屏时右边这一段换到说明下面，开关不挤掉。`children` 在整行下面：参数表单、MCP 服务器的工具。
+ * 窄屏时右边这一段换到说明下面，开关不挤掉。`children` 在整行下面：参数表单、子开关下面的设置和工具列表。
  */
 export function Row({ name, detail, label, checked, disabled, onChange, aside, children }: {
   name: ReactNode;

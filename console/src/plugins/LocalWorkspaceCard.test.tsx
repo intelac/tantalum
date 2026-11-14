@@ -11,7 +11,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false, browser: true, "local-mcp": true };
+const ALL_ON = { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true, skills: false, wiki: false, browser: true };
 
 function link(extra: Partial<LocalLink> = {}): LocalLink {
   return {
@@ -93,14 +93,6 @@ describe("LocalWorkspaceCard", () => {
     await within(region).findByText("刷新失败，显示的是上一次的状态。");
     expect(within(region).getByRole("switch", { name: "本机工作区" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  // N5（2026-11-14 实测）：本机 MCP 一项只说“在 mcp.json 里加”，不说文件在哪
-  it("says where the local MCP config file is", async () => {
-    fakeBackend({ switches: ALL_ON, link: link({ protocol: 6, mcp: [], mcpConfig: "/Users/yi/.config/tantalum/mcp.json" }) });
-    open();
-    const region = await card();
-    expect(await within(region).findByText("配置文件：/Users/yi/.config/tantalum/mcp.json")).toBeTruthy();
   });
 
   it("says how to connect when no computer is connected", async () => {
@@ -374,7 +366,7 @@ describe("LocalWorkspaceCard", () => {
     });
   });
 
-  // connector-jar 需求 2、3、5.5、6.7、7.2：跨平台的 jar、三步、执行前先问我、本机 MCP。
+  // connector-jar 需求 2、3、5.5、6.7、7.2：跨平台的 jar、三步、执行前先问我。
   describe("connector-jar", () => {
     it("shows the three steps with the download link and its version", async () => {
       fakeBackend({ switches: ALL_ON, link: null, connector: { available: true, version: "0.1.0", sha256: "a".repeat(64), size: 1 } });
@@ -421,39 +413,20 @@ describe("LocalWorkspaceCard", () => {
       expect(calls.find((call) => call.path === "/api/plugins/plugin/commandApproval")?.body).toBe('{"enabled":false}');
     });
 
-    it("lists the local MCP servers with their tools and a switch each", async () => {
-      const calls = fakeBackend({
-        switches: ALL_ON,
-        link: link({
-          protocol: 6,
-          current: true,
-          mcp: [
-            { name: "sqlite", state: "ready", enabled: true, tools: [{ name: "query", description: "Run SQL" }] },
-            { name: "broken", state: "failed", reason: "cannot start: spawn uvx ENOENT", enabled: true, tools: [] },
-          ],
-        }),
-      });
+    it("says to install Node.js when the browser cannot start without it", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 6, current: true, browser: { available: false, code: "browser/node-missing" } }) });
       open();
       const region = await card();
-      const list = await within(region).findByRole("list", { name: "本机 MCP" });
-      expect(within(list).getByText("可用")).toBeTruthy();
-      expect(within(list).getByText("cannot start: spawn uvx ENOENT")).toBeTruthy();
-      await userEvent.click(within(list).getByRole("button", { name: "1 个工具" }));
-      expect(within(list).getByText("query")).toBeTruthy();
-      await userEvent.click(within(list).getByRole("switch", { name: "本机 MCP 服务器 sqlite" }));
-      await waitFor(() => expect(calls.some((call) => call.method === "PUT" && call.path === "/api/plugins/local/local-mcp%3Asqlite")).toBe(true));
+      expect(await within(region).findByText(/这台电脑上没有找到 Node.js/)).toBeTruthy();
     });
 
-    it("says what to do when there are no servers, an old connector, or no Node.js for the browser", async () => {
-      fakeBackend({ switches: ALL_ON, link: link({ protocol: 6, current: true, mcp: [], browser: { available: false, code: "browser/node-missing" } }) });
+    // 2026-11-14 去掉通用 MCP：本机工作区只剩七个子开关，没有“本机 MCP”
+    it("has no local MCP switch", async () => {
+      fakeBackend({ switches: ALL_ON, link: link({ protocol: 6, current: true }) });
       open();
       const region = await card();
-      expect(await within(region).findByText(/电脑上没有配置本机 MCP 服务器/)).toBeTruthy();
-      expect(within(region).getByText(/这台电脑上没有找到 Node.js/)).toBeTruthy();
-      cleanup();
-      fakeBackend({ switches: ALL_ON, link: link({ protocol: 5, current: false }) });
-      open();
-      expect(await within(await card()).findByText(/连接程序需要更新才能用本机 MCP/)).toBeTruthy();
+      await within(region).findByRole("switch", { name: "浏览器" });
+      expect(within(region).queryByRole("switch", { name: /MCP/ })).toBeNull();
     });
   });
 });

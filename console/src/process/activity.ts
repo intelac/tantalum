@@ -24,7 +24,7 @@ const PREFIXES: readonly (readonly [string, ActivityKind])[] = [
   ["browser_", "web"],
 ];
 
-/** 工具归哪一类；不认识的（包括 MCP 工具）都是 tool。 */
+/** 工具归哪一类；不认识的（包括旧会话里的 MCP 工具）都是 tool。 */
 export function kindOf(toolName: string): ActivityKind {
   // 用 hasOwn：工具名是外面来的，不能让 "constructor" 这样的名字查到原型上的东西
   if (Object.hasOwn(KINDS, toolName)) return KINDS[toolName] as ActivityKind;

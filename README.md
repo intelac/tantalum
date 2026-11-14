@@ -19,7 +19,7 @@ A runtime, not a framework. A framework decides how the model thinks and how pro
 
 ## 0.1 in one list
 
-Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · MCP client · automatic context compaction · attachments and images · queued messages you can edit, remove or hand to the running turn · tool approval card in place of the input box · usage per turn, today's usage against the daily limit, and a context breakdown · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace through one cross-platform connector jar downloaded from the plugin page, with each command (bash or PowerShell) shown to the user for approval first, and MCP servers started on the user's own machine · skills (a `skill` tool and `/name` in the composer) and a wiki folder as knowledge base, both read from one directory on the user's machine · web fetch on the server, and a browser on the user's own machine (a local Playwright MCP server drives the installed Chrome or Edge, with a visible window and logins that stay on that machine) · runs on macOS, Linux and Windows.
+Multi-user console (Chinese, English, Japanese) · per-session choice of model and thinking level (Claude, or any OpenAI-compatible endpoint such as a local llama.cpp) · append-only journal with replay and `check` · trace view · automatic context compaction · attachments and images · queued messages you can edit, remove or hand to the running turn · tool approval card in place of the input box · usage per turn, today's usage against the daily limit, and a context breakdown · per-user long-term memory · plugins with eight hooks and example plugins (read-only policy, tool approval, daily quota, backoff, citation check) · plugin settings, secrets, admin defaults and locks · local workspace through one cross-platform connector jar downloaded from the plugin page, with each command (bash or PowerShell) shown to the user for approval first, and MCP servers started on the user's own machine · skills (a `skill` tool and `/name` in the composer) and a wiki folder as knowledge base, both read from one directory on the user's machine · web fetch on the server, and a browser on the user's own machine (a local Playwright MCP server drives the installed Chrome or Edge, with a visible window and logins that stay on that machine) · runs on macOS, Linux and Windows.
 
 ## Run
 
@@ -50,7 +50,7 @@ The ledger is the center. From it, three things grow as projections rather than 
 | `tantalum-kernel` | Pure logic: transition table and hooks, no I/O |
 | `tantalum-shell` | All I/O: rings, journal, handlers, model clients, web |
 | `tantalum-local` | Tools that run on the user's computer (files, Git, bash or PowerShell), wire format |
-| `tantalum-connect` | The connector the user runs on their own computer: one jar for macOS, Windows and Linux, downloaded from the server; it can start MCP servers on that computer (the browser is Playwright MCP among them) |
+| `tantalum-connect` | The connector the user runs on their own computer: one jar for macOS, Windows and Linux, downloaded from the server; it also drives that computer's browser through Playwright MCP |
 | `tantalum-examples` | Example plugins |
 | `console/` | Web console (React) |
 
@@ -58,6 +58,6 @@ Dependencies point one way, `value ← kernel ← shell`, enforced by ArchUnit. 
 
 ## Docs
 
-- Full manual (Chinese): [docs/manual.zh.md](docs/manual.zh.md). Covers configuration, model routes, users, the journal format, operations, Windows, memory, attachments, local workspace, skills and knowledge base, web, MCP, writing plugins and testing.
+- Full manual (Chinese): [docs/manual.zh.md](docs/manual.zh.md). Covers configuration, model routes, users, the journal format, operations, Windows, memory, attachments, local workspace, skills and knowledge base, web, writing plugins and testing.
 - Windows: [docs/windows](docs/windows).
 - License: MIT, see [LICENSE](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

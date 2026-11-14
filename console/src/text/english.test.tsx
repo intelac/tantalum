@@ -25,10 +25,9 @@ import { NAMES } from "./language";
 const CJK = /[぀-ヿ㐀-鿿＀-￯]/;
 const items = itemsJsonl.trim().split("\n").map((line) => JSON.parse(line) as Item);
 const trace = JSON.parse(traceJson) as TracePage;
-// 带一个三种语言写了说明的钩子插件和一个 MCP 服务器（说明是 MCP 服务器写的英文）
+// 带一个三种语言写了说明的钩子插件
 const plugins: Plugins = {
   ...(JSON.parse(pluginsJson) as Plugins),
-  mcp: [{ name: "docs", enabled: true, state: "FAILED", tools: [{ name: "mcp__docs__search", description: "Search the docs", enabled: true }] }],
   plugins: [{ name: "dailyQuota", description: { en: "Daily token limit", zh: "每天的上限", ja: "1 日の上限" }, points: ["beforeModelCall", "work:quota"], lock: { source: "config", reason: "" }, enabled: true }],
 };
 

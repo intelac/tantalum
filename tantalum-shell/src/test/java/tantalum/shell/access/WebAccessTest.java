@@ -60,7 +60,7 @@ class WebAccessTest {
         if (fetchAllowed) {
             catalog.register(webTool("web_fetch", WebAccess.FETCH));
         }
-        return new PluginGate(catalog, switches, List.of(new WebAccess(switches, fetchAllowed, false)), List.of(),
+        return new PluginGate(catalog, switches, List.of(new WebAccess(switches, fetchAllowed, false)),
                 List.of(), List.of(), List.of(), Set.of());
     }
 
@@ -151,7 +151,7 @@ class WebAccessTest {
 
         ToolCatalog catalog = new ToolCatalog();
         catalog.register(plugin);
-        PluginGate gate = new PluginGate(catalog, switches, List.of(web), List.of(), List.of(), List.of(), List.of(), Set.of());
+        PluginGate gate = new PluginGate(catalog, switches, List.of(web), List.of(), List.of(), List.of(), Set.of());
         gate.set(ALICE, Kind.WEB, WebAccess.MASTER, false);
         assertEquals(List.of("browser"), List.copyOf(gate.enabledTools(ALICE)), "the web switch does not turn off a plugin tool");
         assertEquals("builtin", gate.source(plugin));

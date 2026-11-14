@@ -34,7 +34,7 @@ class ConnectorJarTest {
 
     private static Hello hello(int protocol, String version, String sha) {
         return new Hello(protocol, version, new Hello.Device("pc", "windows-11", "10.0", "amd64"), List.of(), false,
-                new Hello.Shell(false, "--allow-shell was not given"), true, false, null, sha, List.of());
+                new Hello.Shell(false, "--allow-shell was not given"), true, false, null, sha);
     }
 
     @Test

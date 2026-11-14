@@ -20,14 +20,6 @@ const PLUGINS: Plugins = {
     { name: "read_attachment", description: "Read a file the user attached.", enabled: true },
     { name: "memory_write", description: "Save a long-term memory.", enabled: false },
   ],
-  mcp: [
-    {
-      name: "playwright",
-      state: "READY",
-      enabled: true,
-      tools: [{ name: "mcp__playwright__browser_navigate", description: "Navigate to a URL", enabled: true }],
-    },
-  ],
   web: { switches: { web: true, "web-fetch": true }, admin: { "web-fetch": true }, blockPrivateNetwork: false },
   plugins: [
     { name: "dailyQuota", description: "每个用户每天的 token 用量上限，超过就停止。", points: ["beforeModelCall"], lock: { source: "config", reason: "" }, enabled: true },
@@ -61,7 +53,7 @@ function fakeBackend(plugins: Plugins, putStatus = 200) {
       }
       const [, , , kind, name] = input.split("/");
       const enabled = (JSON.parse(init?.body as string) as { enabled: boolean }).enabled;
-      current = applyToggle(current, { kind: kind as "tool" | "mcp" | "plugin" | "web", name: decodeURIComponent(name!), enabled });
+      current = applyToggle(current, { kind: kind as "tool" | "plugin" | "web", name: decodeURIComponent(name!), enabled });
       return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("{}") });
     }),
   );
@@ -84,7 +76,7 @@ describe("PluginsDialog", () => {
     expect(within(builtins).getByText("读附件")).toBeTruthy();
     expect(within(builtins).getByRole("switch", { name: "写记忆" }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByRole("region", { name: "本机工作区" })).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "MCP 服务器" })).getByText("已连接")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "MCP 服务器" })).toBeNull();
     const hooks = screen.getByRole("region", { name: "规则" });
     expect(within(hooks).getByText("挂在：运行结束前、插件工作 citation")).toBeTruthy();
     expect(screen.getByText(/只影响你自己，从你的下一次提问开始生效/)).toBeTruthy();
@@ -94,13 +86,12 @@ describe("PluginsDialog", () => {
     fakeBackend({
       ...PLUGINS,
       tools: [...PLUGINS.tools, { name: "ask_user", description: "Ask the user.", enabled: true, lock: { source: "admin", reason: "合规要求" } }],
-      mcp: [...PLUGINS.mcp, { name: "jira", state: "READY", enabled: false, lock: { source: "admin", reason: "" }, tools: [] }],
       plugins: [...PLUGINS.plugins, { name: "redact", description: "", points: ["afterTool"], group: "output", enabled: true, lock: { source: "code", reason: "" } }],
     });
     open();
     const locked = await screen.findByRole("group", { name: "只有管理员能改" });
-    // 规则插件、内置工具、MCP 服务器、输出插件，按这个顺序
-    expect(within(locked).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["dailyQuota", "问用户", "jira", "redact"]);
+    // 规则插件、内置工具、输出插件，按这个顺序
+    expect(within(locked).getAllByRole("switch").map((item) => item.getAttribute("aria-label"))).toEqual(["dailyQuota", "问用户", "redact"]);
     expect(within(locked).getAllByRole("switch").every((item) => (item as HTMLButtonElement).disabled)).toBe(true);
     expect(within(locked).getByText(/合规要求/)).toBeTruthy();
     // 原来的组里不再有它们
@@ -108,8 +99,7 @@ describe("PluginsDialog", () => {
     expect(within(screen.getByRole("group", { name: "规则" })).getByRole("switch", { name: "citationCheck" })).toBeTruthy();
     const tools = screen.getByRole("group", { name: "工具" });
     expect(within(tools).queryByRole("switch", { name: "问用户" })).toBeNull();
-    expect(within(tools).queryByRole("switch", { name: "jira" })).toBeNull();
-    expect(within(tools).getByRole("switch", { name: "playwright" })).toBeTruthy();
+    expect(within(tools).getByRole("switch", { name: "读附件" })).toBeTruthy();
     // 输出插件只有锁住的那一个：“工具输出处理”这一组空了，不显示
     expect(screen.queryByRole("group", { name: "工具输出处理" })).toBeNull();
     // 四组的顺序
@@ -174,14 +164,6 @@ describe("PluginsDialog", () => {
     expect(calls.some((call) => call.method === "PUT")).toBe(false);
   });
 
-  it("lists a server's tools on request and grays them out when the server is off", async () => {
-    fakeBackend({ ...PLUGINS, mcp: [{ ...PLUGINS.mcp[0]!, enabled: false }] });
-    open();
-    await userEvent.click(await screen.findByRole("button", { name: /1 个工具/ }));
-    const tool = screen.getByRole("switch", { name: "mcp__playwright__browser_navigate" });
-    expect((tool as HTMLButtonElement).disabled).toBe(true);
-  });
-
   it("says tools turned on wait for a new session when the model cannot change them mid-session", async () => {
     fakeBackend({ ...PLUGINS, midSessionChanges: false });
     open();
@@ -199,10 +181,9 @@ describe("PluginsDialog", () => {
 });
 
 // console-i18n 任务 4：用服务器真实的 /api/plugins（PluginApiTest 写出的 wire/plugins.json）渲染，每个内置工具都是字典里的名字和说明，
-// 给模型看的英文说明不出现；MCP 工具的说明是 MCP 服务器写的，原样显示。
+// 给模型看的英文说明不出现。
 describe("built-in tools from the real server", () => {
   const real = JSON.parse(pluginsJson) as Plugins;
-  const withMcp: Plugins = { ...real, mcp: [{ name: "docs", enabled: true, state: "READY", tools: [{ name: "mcp__docs__search", description: "Search the docs index", enabled: true }] }] };
 
   it("every built-in tool has a dictionary entry", () => {
     expect(real.tools.length).toBeGreaterThan(0);
@@ -210,7 +191,7 @@ describe("built-in tools from the real server", () => {
   });
 
   it("shows dictionary names and details, never the model-facing description", async () => {
-    fakeBackend(withMcp);
+    fakeBackend(real);
     open();
     const builtins = await screen.findByRole("region", { name: "内置工具" });
     for (const tool of real.tools) {
@@ -219,18 +200,16 @@ describe("built-in tools from the real server", () => {
       expect(within(builtins).getByText(detail)).toBeTruthy();
       expect(document.body.textContent).not.toContain(tool.description);
     }
-    await userEvent.click(screen.getByRole("button", { name: currentText().plugins.showTools(1) }));
-    expect(await screen.findByText("Search the docs index")).toBeTruthy();
   });
 });
 
 describe("applyToggle", () => {
-  it("changes a tool wherever it is listed and leaves the rest alone", () => {
-    const next = applyToggle(PLUGINS, { kind: "tool", name: "mcp__playwright__browser_navigate", enabled: false });
-    expect(next.mcp[0]!.tools[0]!.enabled).toBe(false);
-    expect(next.mcp[0]!.enabled).toBe(true);
-    expect(next.tools).toEqual(PLUGINS.tools);
-    expect(applyToggle(PLUGINS, { kind: "mcp", name: "playwright", enabled: false }).mcp[0]!.enabled).toBe(false);
+  it("changes only the switch it names and leaves the rest alone", () => {
+    const next = applyToggle(PLUGINS, { kind: "tool", name: "read_attachment", enabled: false });
+    expect(next.tools[0]!.enabled).toBe(false);
+    expect(next.tools[1]).toEqual(PLUGINS.tools[1]);
+    expect(next.plugins).toEqual(PLUGINS.plugins);
+    expect(applyToggle(PLUGINS, { kind: "web", name: "web-fetch", enabled: false }).web.switches["web-fetch"]).toBe(false);
     expect(applyToggle(PLUGINS, { kind: "plugin", name: "citationCheck", enabled: false }).plugins[1]!.enabled).toBe(false);
   });
 });

@@ -19,7 +19,7 @@ test.describe("统计页签", () => {
     await expect(turn).toContainText("2 个步骤");
 
     await turn.click();
-    await expect(table.getByRole("row").filter({ hasText: /^第 1 步/ })).toContainText("read_file ×2, demo/lookup");
+    await expect(table.getByRole("row").filter({ hasText: /^第 1 步/ })).toContainText("read_file ×2, grep");
     await expect(table.getByRole("row").filter({ hasText: /^第 2 步/ })).toContainText("问候在 notes/hello.md:3");
     // 第 1 步的请求重试过一次，模型用时是两次尝试之和，首 token 和速度取最后一次。
     await expect(table.getByRole("row").filter({ hasText: /^第 1 步/ })).toContainText(/毫秒|秒/);

@@ -32,10 +32,10 @@ describe("groups", () => {
 
   it("orders the defaults as rules, tools, output handling and leaves empty groups out", () => {
     const item = (name: string, kind: PluginDefault["kind"], group: PluginDefault["group"]): PluginDefault => ({ kind, name, group, builtin: true, params: [] });
-    const groups = groupDefaults([item("grep", "tool", "tool"), item("docs", "mcp", "mcp"), item("guard", "plugin", "rule")]);
+    const groups = groupDefaults([item("grep", "tool", "tool"), item("ask_user", "tool", "tool"), item("guard", "plugin", "rule")]);
     expect(groups.map((entry) => [entry.group, entry.items.map((each) => each.name)])).toEqual([
       ["rule", ["guard"]],
-      ["tool", ["grep", "docs"]],
+      ["tool", ["grep", "ask_user"]],
     ]);
   });
 });
@@ -134,7 +134,6 @@ describe("ParamForm", () => {
 const PLUGINS: Plugins = {
   midSessionChanges: true,
   tools: [{ name: "read_attachment", description: "", enabled: true, byDefault: true, changed: false }],
-  mcp: [],
   web: { switches: { web: true, "web-fetch": true }, admin: { "web-fetch": true }, blockPrivateNetwork: false },
   plugins: [
     { name: "guard", description: "", points: ["beforeToolCall"], group: "rule", enabled: true, byDefault: true, changed: false, lock: { source: "admin", reason: "合规要求" }, params: [] },

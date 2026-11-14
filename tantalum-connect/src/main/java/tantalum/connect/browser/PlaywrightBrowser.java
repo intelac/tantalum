@@ -31,8 +31,6 @@ import tantalum.value.json.Json;
  */
 public final class PlaywrightBrowser implements Browser {
 
-    /** 本机 MCP 里浏览器那一项的名字；{@code mcp.json} 里有同名的就用那个。 */
-    public static final String SERVER = "playwright";
     /** 内置的 Playwright MCP 版本：翻译按它的参数和输出写，升级时一起测（{@code PlaywrightMcpIT}）。 */
     public static final String PACKAGE = "@playwright/mcp@0.0.85";
 
@@ -44,21 +42,21 @@ public final class PlaywrightBrowser implements Browser {
     private static final Pattern ERROR = Pattern.compile("### Error\\n(?:Error: )?(.*?)(?:\\n### |\\z)", Pattern.DOTALL);
     private static final Pattern MISSING_REF = Pattern.compile("Ref (\\S+) not found");
 
-    /** 调一个本机 MCP 工具：{@code tool} 是 Playwright MCP 自己的工具名。 */
+    /** 调 Playwright MCP 的一个工具：{@code tool} 是它自己的工具名（{@link PlaywrightHost#call}）。 */
     @FunctionalInterface
-    public interface Mcp {
+    public interface Tools {
         LocalResult call(String tool, Json arguments) throws InterruptedException;
     }
 
-    private final Mcp mcp;
+    private final Tools mcp;
     /** Playwright MCP 写快照、截图文件的目录（{@code --output-dir}）；每次调用后清空，不让它只增不删（QAgent 问题 26）。可以为 null。 */
     private final java.nio.file.Path output;
 
-    public PlaywrightBrowser(Mcp mcp) {
+    public PlaywrightBrowser(Tools mcp) {
         this(mcp, null);
     }
 
-    public PlaywrightBrowser(Mcp mcp, java.nio.file.Path output) {
+    public PlaywrightBrowser(Tools mcp, java.nio.file.Path output) {
         this.mcp = mcp;
         this.output = output;
         clean();
