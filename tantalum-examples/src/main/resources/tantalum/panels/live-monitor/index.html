@@ -7,16 +7,18 @@
 <link rel="stylesheet" href="monitor.css">
 </head>
 <body>
-<header>
+<div class="bar">
   <span class="live"><span class="dot"></span><span id="live"></span></span>
-  <span id="now" class="now"></span>
-  <button id="pause" type="button"></button>
-</header>
-<p id="skipped" class="skipped" hidden></p>
-<main>
-  <svg id="map" viewBox="0 0 640 830" role="img" preserveAspectRatio="xMidYMin meet"></svg>
-  <p id="empty" class="empty"></p>
-</main>
+  <span class="track"><span id="trackLabel"></span> <span id="trip" class="mono"></span></span>
+  <span class="acts"><span id="clock" class="mono clock"></span><button id="pause" type="button" class="ico"></button></span>
+</div>
+<div class="nowline"><span id="now"></span><span id="skipped" class="skipped" hidden></span><span id="narrow" class="narrow"></span></div>
+<main><svg id="map" viewBox="0 0 1010 710" role="img" preserveAspectRatio="xMidYMid meet"></svg><p id="empty" class="empty"></p></main>
+<div class="legend">
+  <span><span class="sw"></span><span id="legendPath"></span></span>
+  <span><span class="sw p"></span><span id="legendPlugin"></span></span>
+  <span><span class="sw g"></span><span id="legendFlow"></span></span>
+</div>
 <script src="bridge.js"></script>
 <script src="monitor.js"></script>
 </body>

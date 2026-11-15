@@ -1,37 +1,86 @@
-:root { --bg: #ffffff; --fg: #1f2329; --muted: #6b7280; --faint: #9a9ea6; --line: #d9dade; --zone: #f6f6f3; --zone-line: #e1dfd9;
-        --box: #ffffff; --box-line: #d7d8dc; --accent: #3b6cf0; --accent-soft: #e7efff; --done: #eef4ff; --done-line: #9db9ee;
-        --plug: #7b4fd6; --plug-soft: #f3edff; color-scheme: light; }
-:root[data-theme="dark"] { --bg: #1a1a1e; --fg: #e8e9ec; --muted: #9a9ea6; --faint: #6f737c; --line: #3a3b42; --zone: #212227; --zone-line: #33343b;
-        --box: #24252b; --box-line: #3a3b42; --accent: #6b8ff5; --accent-soft: #24304d; --done: #1f2840; --done-line: #3e5797;
-        --plug: #a88cf0; --plug-soft: #2b2540; color-scheme: dark; }
+/* Same look as the approved mockup (flow.html): light zones, white boxes, a blue path that flows, a glowing dot with a trail,
+   the current box pulsing, plugin boxes in purple. Dark mode redefines the same tokens. */
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --fg: #1f1f1d; --dim: #6b6a66; --faint: #9a9893; --line: #e3e2de; --soft-line: #f0efec;
+  --zone: #f6f6f3; --zone-line: #e1dfd9; --zlabel: #77756f; --edge: #cfcdc7;
+  --box: #ffffff; --box-line: #dddbd5; --sub: #8f8d87;
+  --blue: #2f6fde; --done: #eef4ff; --done-line: #9db9ee; --cur: #e7efff;
+  --plug: #7b4fd6; --plug-box: #f7f2ff; --plug-line: #ddd0fb; --plug-done: #efe6ff; --plug-done-line: #b79cf2;
+  --idle: #fafaf8; --idle-line: #e8e6e1; --idle-text: #a8a6a0; --live: #2e8b57;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #161618; --panel: #1c1c1f; --fg: #e9e9ec; --dim: #a3a3a9; --faint: #74747b; --line: #2d2d32; --soft-line: #26262a;
+  --zone: #1f1f23; --zone-line: #34343a; --zlabel: #8c8c93; --edge: #44444b;
+  --box: #26262b; --box-line: #3b3b42; --sub: #85858c;
+  --blue: #6b97f2; --done: #1d2a44; --done-line: #3e5c99; --cur: #22345a;
+  --plug: #ad8df2; --plug-box: #2a2338; --plug-line: #4a3b6e; --plug-done: #33284d; --plug-done-line: #6a52a8;
+  --idle: #202024; --idle-line: #2e2e33; --idle-text: #5f5f66; --live: #4fbf7d;
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 12px/1.45 -apple-system, "PingFang SC", "Hiragino Sans", "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-.live { display: inline-flex; align-items: center; gap: 5px; color: #2e9e5b; font-weight: 600; white-space: nowrap; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: blink 1.4s infinite; }
-.paused .dot { animation: none; opacity: .4; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--panel); color: var(--fg);
+  font: 13px/1.45 -apple-system, "PingFang SC", "Hiragino Sans", "Helvetica Neue", sans-serif; }
+body { display: flex; flex-direction: column; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.bar { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 40px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.live { display: flex; align-items: center; gap: 6px; color: var(--live); font-weight: 600; font-size: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); animation: blink 1.4s infinite; }
+.paused .dot { animation: none; opacity: .35; }
 @keyframes blink { 50% { opacity: .25; } }
-.now { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font-weight: 600; }
-button { font: inherit; color: var(--fg); background: var(--box); border: 1px solid var(--box-line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.skipped { margin: 0; padding: 4px 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
-main { position: relative; padding: 6px 8px; }
-/* the whole diagram fits the panel: as wide as it can be without getting taller than the space below the header */
-svg { width: 100%; height: calc(100vh - 56px); display: block; }
-.empty { position: absolute; inset: 40% 16px auto; text-align: center; color: var(--muted); margin: 0; }
+.track { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--dim); font-size: 12px; }
+.acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.clock { color: var(--faint); }
+.ico { min-width: 28px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--box);
+  color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; }
+.ico:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.nowline { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 4px 14px; background: var(--bg);
+  border-bottom: 1px solid var(--soft-line); }
+#now { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--blue); font-weight: 600; font-size: 12.5px; }
+.skipped { color: var(--faint); font-size: 12px; white-space: nowrap; }
+main { position: relative; flex: 1; min-height: 0; padding: 6px 10px; background: var(--panel); }
+svg { width: 100%; height: 100%; display: block; }
+svg text { font-family: -apple-system, "PingFang SC", "Hiragino Sans", sans-serif; }
+.empty { position: absolute; left: 0; right: 0; top: 42%; margin: 0; text-align: center; color: var(--dim); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--soft-line);
+  font-size: 12px; color: var(--dim); }
+.sw { display: inline-block; width: 22px; height: 0; border-top: 2.4px solid var(--blue); vertical-align: middle; margin-right: 6px; }
+.sw.g { border-top: 1.3px dashed var(--edge); }
+.sw.p { border-top: 1.6px dashed var(--plug); }
+
+/* diagram */
 .zone { fill: var(--zone); stroke: var(--zone-line); stroke-dasharray: 5 4; }
-.zlabel { font-size: 11px; font-weight: 600; fill: var(--muted); }
-.edge { fill: none; stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 5 6; animation: flow 1.2s linear infinite; }
-.edge.hit { stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 8 6; animation-duration: .7s; }
+.zlabel { font-size: 11.5px; font-weight: 600; fill: var(--zlabel); }
+.base { fill: none; stroke: var(--edge); stroke-width: 1.3; stroke-dasharray: 5 6; animation: flow 1.2s linear infinite; }
+.hit { fill: none; stroke: var(--blue); stroke-width: 2.6; stroke-dasharray: 8 6; animation: flow .7s linear infinite; opacity: 0; transition: opacity .3s; }
+.hit.on { opacity: 1; }
+.plugline { fill: none; stroke: var(--plug); stroke-width: 1.8; stroke-dasharray: 4 4; animation: flow .6s linear infinite; opacity: 0; transition: opacity .3s; }
+.plugline.on { opacity: 1; }
 @keyframes flow { to { stroke-dashoffset: -22; } }
-.node rect { fill: var(--box); stroke: var(--box-line); stroke-width: 1.2; transition: fill .3s, stroke .3s; }
-.node .t { font-size: 12.5px; font-weight: 600; fill: var(--fg); }
-.node .s { font-size: 10px; fill: var(--faint); }
-.node .v { font-size: 10px; fill: var(--accent); }
-.node.done rect { fill: var(--done); stroke: var(--done-line); }
-.node.cur rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.2; }
-.node.cur .t { fill: var(--accent); }
-.node.plug rect { fill: var(--plug-soft); stroke: var(--plug); stroke-dasharray: 4 3; }
-.node.plug .t, .node.plug .s { fill: var(--plug); }
-#token { fill: var(--box); stroke: var(--accent); stroke-width: 3; }
-@media (prefers-reduced-motion: reduce) { .edge, .dot { animation: none; } }
+.node rect.box { fill: var(--box); stroke: var(--box-line); stroke-width: 1.2; transition: fill .35s, stroke .35s; }
+.node text.t { font-size: 12.5px; font-weight: 600; fill: var(--fg); }
+.node text.s { font-size: 10.5px; fill: var(--sub); }
+.node text.v { font-size: 10.5px; fill: var(--blue); opacity: 0; transition: opacity .3s; }
+.node.done rect.box { fill: var(--done); stroke: var(--done-line); }
+.node.done text.v { opacity: 1; }
+.node.cur rect.box { fill: var(--cur); stroke: var(--blue); stroke-width: 2.2; }
+.node.cur text.t { fill: var(--blue); }
+.node.cur text.v { opacity: 1; }
+.node .halo { fill: none; stroke: var(--blue); stroke-width: 8; opacity: 0; }
+.node.cur .halo { animation: halo 1.1s ease-in-out infinite; }
+@keyframes halo { 0%, 100% { opacity: .08; } 50% { opacity: .3; } }
+.node.plug rect.box { fill: var(--plug-box); stroke: var(--plug-line); }
+.node.plug text.t, .node.plug text.s { fill: var(--plug); }
+.node.plug.done rect.box { fill: var(--plug-done); stroke: var(--plug-done-line); }
+.node.idle rect.box { fill: var(--idle); stroke: var(--idle-line); }
+.node.idle text.t { fill: var(--idle-text); }
+.badge circle { fill: var(--blue); }
+.badge text { fill: #ffffff; font-size: 11px; font-weight: 700; }
+.badge { opacity: 0; transition: opacity .3s; }
+.badge.on { opacity: 1; }
+#token { fill: var(--panel); stroke: var(--blue); stroke-width: 3; filter: drop-shadow(0 0 6px rgba(47, 111, 222, .8)); }
+#trail { fill: var(--blue); opacity: .35; }
+@media (prefers-reduced-motion: reduce) { .base, .hit, .plugline, .dot, .node.cur .halo { animation: none; } }
+.narrow { display: none; color: var(--faint); font-size: 12px; white-space: nowrap; }
+/* the diagram is drawn at 1010 px: beside the chat it gets small, so say how to see it properly */
+@media (max-width: 760px) { .narrow { display: inline; } }
