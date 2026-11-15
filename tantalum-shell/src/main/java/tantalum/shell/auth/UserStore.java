@@ -53,6 +53,9 @@ public final class UserStore implements AutoCloseable {
         PrivateFiles.restrict(file);
         Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file);
         try (Statement statement = connection.createStatement()) {
+            // 别的连接（服务之外的命令行、同一个文件上的插件开关）正在写时等一会儿，不要立刻报“database is locked”：
+            // 否则这一下读不了登录表，无关用户的事件流也被断开（2026-11-15 Windows CI 上 LoginStreamsTest 看到）。同 PluginSwitches
+            statement.execute("PRAGMA busy_timeout = 5000");
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                       name          TEXT PRIMARY KEY,
