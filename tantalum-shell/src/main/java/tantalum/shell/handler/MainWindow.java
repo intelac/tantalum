@@ -1,7 +1,12 @@
 package tantalum.shell.handler;
 
 import java.nio.charset.StandardCharsets;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import tantalum.shell.local.LocalTool;
+import tantalum.shell.plugin.Tool;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
@@ -24,12 +29,22 @@ public final class MainWindow {
             conversation stays here; older turns move out in small batches. When you are asked to summarize, write it as the \
             conversation state: what is being discussed, decisions and open questions, every option or list you gave (with its \
             numbers), and what words like "that one" or "the second" refer to. Older facts come back through memory, so search \
-            it when the user refers to something no longer here. Start a separate conversation or delegate for long work.""";
+            it when the user refers to something no longer here. Tools that change files, run commands, use Git or drive the             browser are not offered here: delegate that work (the delegated conversation has them) or suggest a separate             conversation.""";
+
+    /** 主窗口不给的本机工具：改文件、跑命令、Git、操作浏览器（Yi 11-16 让我定）。读文件、技能、知识库、联网、记忆、委派照给。 */
+    static final Set<tantalum.local.tool.LocalTool.Kind> DOING = EnumSet.of(tantalum.local.tool.LocalTool.Kind.WRITE,
+            tantalum.local.tool.LocalTool.Kind.SHELL, tantalum.local.tool.LocalTool.Kind.GIT, tantalum.local.tool.LocalTool.Kind.BROWSER);
 
     private MainWindow() {}
 
     public static boolean is(SessionId session) {
         return session.value().startsWith(PREFIX);
+    }
+
+    /** 这些工具里主窗口不给的那些的名字。工具定义照常全给（会话的工具列表不变），只是不在开着的名单里。 */
+    static Set<String> withheld(List<Tool> tools) {
+        return tools.stream().filter(tool -> tool instanceof LocalTool local && DOING.contains(local.kind())).map(Tool::name)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /**

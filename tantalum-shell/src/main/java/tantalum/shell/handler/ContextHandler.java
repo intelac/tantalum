@@ -180,6 +180,13 @@ public final class ContextHandler implements Handler {
             unlocks.forEach(rule -> later.addAll(rule.add()));
             enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
         }
+        if (main) {
+            java.util.Set<String> withheld = MainWindow.withheld(catalog.tools());
+            enabled = enabled.stream().filter(name -> !withheld.contains(name)).toList();
+            unlocks = unlocks.stream().map(rule -> new ToolUnlock(rule.after().stream().filter(name -> !withheld.contains(name)).toList(),
+                    rule.add().stream().filter(name -> !withheld.contains(name)).toList()))
+                    .filter(rule -> !rule.after().isEmpty() && !rule.add().isEmpty()).toList();
+        }
         CompactionSettings settings = compaction(principal, model);
         if (main && settings != null) {
             settings = MainWindow.settings(settings, system.toString(), catalog.specs(), mainWindowTokens);

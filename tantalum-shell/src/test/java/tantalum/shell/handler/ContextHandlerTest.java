@@ -475,14 +475,37 @@ class ContextHandlerTest {
             }, RouteClients.of("claude", (prompt, chunks) -> null), name -> null, true, Clock.systemUTC()).start(Duration.ofSeconds(2));
 
     private ContextAssembled browserContext(ModelChoice model) throws Exception {
+        return browserContext(model, new SessionId("s"));
+    }
+
+    private ContextAssembled browserContext(ModelChoice model, SessionId session) throws Exception {
         ToolCatalog catalog = new ToolCatalog();
         LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
         ContextHandler handler = new ContextHandler(local, "Base.", catalog,
                 new PluginGate(catalog, switches, List.of(local), List.of(), List.of(), List.of(), java.util.Set.of()),
                 memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), TWO_MODELS, NOBODY);
         try (TestComputer ignored = TestComputer.connectEverything(links, ALICE, Instant.now().plus(Duration.ofHours(1)), mac)) {
-            return assertInstanceOf(ContextAssembled.class, handler.handle(assemble(model, null)));
+            return assertInstanceOf(ContextAssembled.class, handler.handle(new AssembleContext(new CommandId("c"),
+                    new RunRef(ALICE, session, new RunId("r")), model, null)));
         }
+    }
+
+    /** memory-final-plan 第 11 节：主窗口不开改文件、命令、Git、浏览器；读文件和服务器上的工具照开，工具定义照样全给。 */
+    @Test
+    void theMainWindowLeavesOutToolsThatDoThings() throws Exception {
+        ContextAssembled everyday = browserContext(SONNET);
+        ContextAssembled main = browserContext(SONNET, new SessionId("main-2026-11-16"));
+        List<String> doing = List.of("edit_file", "write_file", "bash", "git_log", "git_diff", "browser_navigate", "browser_tabs");
+        for (String name : doing) {
+            assertTrue(everyday.enabledTools().contains(name), name);
+            assertFalse(main.enabledTools().contains(name), name);
+        }
+        for (String name : List.of("read_file", "grep", "list_dir", "find_files")) {
+            assertTrue(main.enabledTools().contains(name), name);
+        }
+        assertNull(main.unlocks(), "no browser rule without the browser");
+        assertEquals(everyday.tools(), main.tools());
+        assertTrue(main.system().contains("are not offered here"));
     }
 
     private static List<String> browser(List<String> tools) {
