@@ -105,7 +105,7 @@ try {
   $upload = Call 'POST' '/api/sessions/s-win/attachments?name=clean.png&type=image/png' $png $web 'application/octet-stream'
   Check ($upload.StatusCode -eq 200) "attachment upload (HTTP $($upload.StatusCode))"
   $attachment = (Text $upload | ConvertFrom-Json).id
-  $memory = Call 'POST' '/api/memory' @{ name = 'windows-note'; type = 'user'; description = '从 Windows 写的'; content = '记住：路径有空格和中文' } $web
+  $memory = Call 'POST' '/api/plugin-api/memory/entries' @{ name = 'windows-note'; type = 'user'; description = '从 Windows 写的'; content = '记住：路径有空格和中文' } $web
   Check ($memory.StatusCode -eq 201) "memory write (HTTP $($memory.StatusCode))"
   $switch = Call 'PUT' '/api/plugins/tool/memory_write' @{ enabled = $false } $web
   Check ($switch.StatusCode -eq 200) "plugin switch off (HTTP $($switch.StatusCode))"
@@ -121,7 +121,7 @@ try {
   $web = Login
   $bytes = (Call 'GET' "/api/attachments/$attachment" $null $web)
   Check ($bytes.StatusCode -eq 200 -and $bytes.RawContentLength -gt 0) 'the attachment is still there'
-  $note = Call 'GET' '/api/memory/windows-note' $null $web
+  $note = Call 'GET' '/api/plugin-api/memory/entries/windows-note' $null $web
   Check ($note.StatusCode -eq 200 -and (Text $note | ConvertFrom-Json).content -eq '记住：路径有空格和中文') 'the memory is still there'
   $tools = (Text (Call 'GET' '/api/plugins' $null $web) | ConvertFrom-Json).tools
   Check ((($tools | Where-Object name -eq 'memory_write').enabled) -eq $false) 'the plugin switch is still off'
