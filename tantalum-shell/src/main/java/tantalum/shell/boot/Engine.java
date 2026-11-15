@@ -32,6 +32,8 @@ import tantalum.shell.project.Projects;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
+import tantalum.shell.panel.Panel;
+import tantalum.shell.panel.PanelRegistry;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
@@ -64,6 +66,7 @@ public final class Engine implements AutoCloseable {
     private final Receipts receipts = new Receipts();
     /** 关闭开始后入口返回 503。 */
     private final AtomicBoolean closing = new AtomicBoolean();
+    private PanelRegistry panels = PanelRegistry.empty();
 
     /**
      * 打开存储，建环，把 Handler 接上，收尾上次没结束的运行，然后开门。失败时已经打开的倒序关掉再抛。
@@ -72,6 +75,13 @@ public final class Engine implements AutoCloseable {
     public Engine(TantalumProperties properties, Routes routes,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   EventCodec codec, Clock clock) throws IOException {
+        this(properties, routes, tools, hooks, workTypes, afterHooks, List.of(), codec, clock);
+    }
+
+    /** 同上，另有插件的面板（plugin-panel）。 */
+    public Engine(TantalumProperties properties, Routes routes,
+                  List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
+                  List<Panel> panels, EventCodec codec, Clock clock) throws IOException {
         long started = System.nanoTime();
         this.clock = clock;
         this.codec = codec;
@@ -86,7 +96,8 @@ public final class Engine implements AutoCloseable {
         List<SessionIndex.Session> unfinished;
         try {
             openedStores = Stores.open(properties, codec, clock, opened);
-            openedToolbox = Toolbox.open(properties, openedStores, routes, tools, hooks, workTypes, afterHooks, clock, opened);
+            this.panels = new PanelRegistry(panels, Engine.class.getClassLoader());
+            openedToolbox = Toolbox.open(properties, openedStores, routes, tools, hooks, workTypes, afterHooks, panels, clock, opened);
             unfinished = openedStores.storage().catchUp();
             openedQueries = Queries.open(openedStores, codec);
             openedPipeline = Pipeline.open(properties, openedStores, openedToolbox, openedQueries, clock, receipts, closing::get, hooks, opened);
@@ -150,6 +161,11 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 会话、运行和回放的读取。 */
+    /** 装上的插件面板（plugin-panel）。 */
+    public PanelRegistry panels() {
+        return panels;
+    }
+
     public SessionQueries queries() {
         return queries.queries();
     }

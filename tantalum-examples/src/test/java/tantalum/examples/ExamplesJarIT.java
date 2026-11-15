@@ -72,7 +72,7 @@ class ExamplesJarIT {
                 listed.add(plugin.get("name").asString() + "=" + plugin.get("enabled").asBoolean());
             }
             // commandApproval 是服务器自带的（connector-jar），不是示例
-            assertEquals(List.of("citationCheck=true", "commandApproval=true", "dailyQuota=false", "pinnedContext=true", "readOnly=false", "secretMask=true", "toolApproval=false",
+            assertEquals(List.of("citationCheck=true", "commandApproval=true", "dailyQuota=false", "pinnedContext=true", "readOnly=false", "run-overview=true", "secretMask=true", "toolApproval=false",
                     "truncateOutput=true"), listed);
             assertTrue(Files.readString(temp.resolve("server.log")).contains("example plugins from tantalum-examples"));
         } finally {

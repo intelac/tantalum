@@ -52,6 +52,7 @@ export class TraceStore {
   private readonly sessions = new Map<string, SessionTrace>();
   private readonly listeners = new Map<string, Set<Listener>>();
   private readonly dirty = new Set<string>();
+  private readonly live = new Map<string, Set<(record: TraceRecord) => void>>();
   private scheduled = false;
 
   /** {@code schedule} 决定何时通知：默认按帧合并，一批推送只重算一次行；测试传同步执行。 */
@@ -81,6 +82,20 @@ export class TraceStore {
     };
   }
 
+  /** 实时推送来的记录（SSE `trace`，只算真放进去了的新版本），插件面板的消息桥用（plugin-panel 需求 4.3）。 */
+  subscribeLive(session: string, listener: (record: TraceRecord) => void): () => void {
+    let set = this.live.get(session);
+    if (set === undefined) {
+      set = new Set();
+      this.live.set(session, set);
+    }
+    set.add(listener);
+    return () => {
+      set.delete(listener);
+      if (set.size === 0) this.live.delete(session);
+    };
+  }
+
   /** 按 `pos` 排好的记录；变化时才换新数组。 */
   getRecords(session: string): readonly TraceRecord[] {
     return this.sessions.get(session)?.sorted ?? EMPTY;
@@ -105,6 +120,7 @@ export class TraceStore {
     if (paging.loaded && paging.hasMore && paging.before !== undefined && runStart(record.run) < paging.before) return;
     if (!this.put(trace, record, seq)) return;
     this.resort(session, trace);
+    for (const listener of this.live.get(session) ?? []) listener(record);
   }
 
   /**

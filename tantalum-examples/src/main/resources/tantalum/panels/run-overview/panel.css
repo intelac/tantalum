@@ -1,0 +1,17 @@
+:root { --bg: #ffffff; --fg: #1f2329; --muted: #6b7280; --line: #e5e7eb; --error: #d33a2f; --hover: #f3f4f6; color-scheme: light; }
+:root[data-theme="dark"] { --bg: #1a1a1e; --fg: #e8e9ec; --muted: #9a9ea6; --line: #2c2d33; --error: #ef6b61; --hover: #24252b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 -apple-system, "PingFang SC", "Hiragino Sans", "Segoe UI", sans-serif; }
+main { padding: 10px 12px; }
+#status { margin: 0 0 8px; font-weight: 600; }
+#status.error { color: var(--error); }
+.muted { color: var(--muted); }
+ol { list-style: none; margin: 0; padding: 0; }
+.node { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer; }
+.node:hover, .node:focus-visible { background: var(--hover); outline: none; }
+.node.step, .node.compaction { margin-top: 6px; font-weight: 600; }
+.node .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.node.error .name { color: var(--error); }
+.node .mark { color: var(--error); font-weight: 700; }
+.node.running .name::after { content: " …"; color: var(--muted); }

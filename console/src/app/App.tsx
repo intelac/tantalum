@@ -36,6 +36,9 @@ import { loginPath, navigate, newSessionId, runsPath, sessionPath, statsPath, tr
 import { ArrowLeft } from "lucide-react";
 import { ObservePage } from "../observe/ObservePage";
 import { RunPage } from "../observe/RunPage";
+import { PanelLayout } from "../panel/PanelLayout";
+import { PanelMenu } from "../panel/PanelMenu";
+import { useOpenPanel, usePanels } from "../panel/usePanels";
 import { Button } from "../ui/Button";
 import { readStored, sessionArea, writeStored } from "../ui/storage";
 
@@ -136,6 +139,11 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
   const summary = list.find((item) => item.id === session);
   const title = sessionTitle(summary, t);
   const tabs = TABS.map(({ id, key }) => ({ id, label: t.tabs[key] }));
+  // 插件面板（plugin-panel）：每个会话记住开着哪个
+  const panels = usePanels();
+  const openPanel = useOpenPanel(session, panels.data);
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => setMaximized(false), [openPanel.panel?.name, session]);
   // 刚开始查看一个人时地址上是一个新的空会话：直接打开他最近的那个
   const first = list[0]?.id;
   useEffect(() => {
@@ -158,6 +166,7 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
           <h1 className="min-w-0 flex-1 truncate text-sm font-medium" title={title}>
             {title}
           </h1>
+          <PanelMenu panels={panels.data ?? []} open={openPanel.panel?.name ?? null} onOpen={openPanel.open} />
           <Tabs
             label={t.tabs.conversation}
             tabs={tabs}
@@ -235,28 +244,40 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
             <ObservePage query={route.query} />
           ) : route.page === "run" ? (
             <RunPage key={`${route.session}/${route.run}`} session={route.session} run={route.run} />
-          ) : route.page === "trace" ? (
-            <TracePage key={session} store={trace} session={session} run={route.run} record={route.record} />
-          ) : route.page === "stats" ? (
-            <StatsPage key={session} store={trace} session={session} />
           ) : (
-            <div className="flex h-full min-h-0 flex-col">
-              <ConversationPage store={store} session={session} />
-              {/* 计划横条（todo-tool 需求 3）：只读查看时也显示 */}
-              <SessionPlan store={store} session={session} />
-              {viewed !== null ? (
-                // 只读：没有输入框，也就没有排队、批准卡片、模型选择和压缩
-                <ViewingBar selected={summary !== undefined} any={list.length > 0} />
+            <PanelLayout
+              panel={openPanel.panel}
+              session={session}
+              run={route.page === "trace" ? route.run : undefined}
+              trace={trace}
+              maximized={maximized}
+              onMaximize={setMaximized}
+              onClose={() => openPanel.open(null)}
+            >
+              {route.page === "trace" ? (
+                <TracePage key={session} store={trace} session={session} run={route.run} record={route.record} />
+              ) : route.page === "stats" ? (
+                <StatsPage key={session} store={trace} session={session} />
               ) : (
-                <ComposerDock
-                  store={store}
-                  session={session}
-                  config={config.data}
-                  onOpenPlugins={() => setPluginsOpen(true)}
-                  onAddProject={() => setAddOpen(true)}
-                />
+                <div className="flex h-full min-h-0 flex-col">
+                  <ConversationPage store={store} session={session} />
+                  {/* 计划横条（todo-tool 需求 3）：只读查看时也显示 */}
+                  <SessionPlan store={store} session={session} />
+                  {viewed !== null ? (
+                    // 只读：没有输入框，也就没有排队、批准卡片、模型选择和压缩
+                    <ViewingBar selected={summary !== undefined} any={list.length > 0} />
+                  ) : (
+                    <ComposerDock
+                      store={store}
+                      session={session}
+                      config={config.data}
+                      onOpenPlugins={() => setPluginsOpen(true)}
+                      onAddProject={() => setAddOpen(true)}
+                    />
+                  )}
+                </div>
               )}
-            </div>
+            </PanelLayout>
           )}
         </div>
       </div>

@@ -609,6 +609,17 @@ export const en: Text = {
       text: "Copy original text",
     },
   },
+  panel: {
+    menu: "Panels",
+    region: (title: string) => `Panel: ${title}`,
+    maximize: "Maximize",
+    restore: "Restore",
+    close: "Close panel",
+    resize: "Resize panel",
+    failed: "The panel did not load.",
+    retry: "Retry",
+    reported: (message: string) => `Panel error: ${message}`,
+  },
   observe: {
     title: "Observe",
     back: "Back to chat",
@@ -1090,6 +1101,7 @@ export const en: Text = {
       afterToolExecution: "Tool results",
     },
     work: (type) => `Plugin work ${type}`,
+    panel: (name) => `Panel ${name}`,
     web: {
       title: "Web access",
       detail: "Fetch web pages on the server. Web content is treated as information, never as instructions. The browser runs on your own computer; see Local workspace.",

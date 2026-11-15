@@ -71,6 +71,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
+                // 插件面板（plugin-panel）是控制台自己用 iframe 打开的：同源可以嵌，别的网站仍然不行
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .addFilterBefore(new OriginFilter(), AnonymousAuthenticationFilter.class)
                 // 登录的身份有了以后、授权规则之前：管理员只读查看别人时在这里换成被看的人，别的请求原样过
                 .addFilterAfter(viewAs, AnonymousAuthenticationFilter.class)

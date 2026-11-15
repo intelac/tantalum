@@ -17,6 +17,7 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.panel.Panel;
 import tantalum.shell.param.ParamResolver;
 import tantalum.shell.param.ParamResolver.Resolved;
 import tantalum.shell.param.ParamRules;
@@ -107,6 +108,13 @@ public final class PluginGate {
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
                       List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, Set<String> required,
                       ParamStore params) {
+        this(catalog, switches, groups, hooks, afterHooks, workTypes, List.of(), required, params);
+    }
+
+    /** 同上，另有插件的面板（plugin-panel）：面板也是所属插件的成员，只有面板的插件在插件页上照样有开关。 */
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
+                      List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, List<Panel> panels,
+                      Set<String> required, ParamStore params) {
         if (groups.stream().map(ToolGroup::kind).distinct().count() != groups.size()) {
             throw new IllegalArgumentException("two tool groups share one switch kind");
         }
@@ -122,7 +130,7 @@ public final class PluginGate {
         this.groups = List.copyOf(groups);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
-        this.plugins = group(hooks, afterHooks, workTypes, required);
+        this.plugins = group(hooks, afterHooks, workTypes, panels, required);
         this.lockedInCode = lockedInCode(hooks, afterHooks);
         this.modelNotes = modelNotes(hooks, afterHooks);
         this.pluginParams = declared(hooks, afterHooks, workTypes);
@@ -825,7 +833,7 @@ public final class PluginGate {
     }
 
     private static Map<String, Plugin> group(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
-                                             Set<String> required) {
+                                             List<Panel> panels, Set<String> required) {
         Map<String, List<String>> points = new LinkedHashMap<>();
         Map<String, LocalText> descriptions = new LinkedHashMap<>();
         Map<String, Boolean> mandatory = new LinkedHashMap<>();
@@ -846,6 +854,10 @@ public final class PluginGate {
         for (WorkType type : workTypes) {
             points.computeIfAbsent(type.plugin(), ignored -> new ArrayList<>()).add("work:" + type.name());
             descriptions.merge(type.plugin(), type.description(), PluginGate::first);
+        }
+        for (Panel panel : panels) {
+            points.computeIfAbsent(panel.plugin(), ignored -> new ArrayList<>()).add("panel:" + panel.name());
+            info(panel, panel.plugin(), descriptions, mandatory, byDefault);
         }
         List<String> unknown = required.stream().filter(name -> !points.containsKey(name)).sorted().toList();
         if (!unknown.isEmpty()) {

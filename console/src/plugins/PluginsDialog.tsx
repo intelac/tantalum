@@ -215,6 +215,7 @@ function ToolRow({ tool, actions }: { tool: PluginTool; actions: Actions }) {
 
 function pointName(point: string, text: Text["plugins"]): string {
   if (point.startsWith("work:")) return text.work(point.slice("work:".length));
+  if (point.startsWith("panel:")) return text.panel(point.slice("panel:".length));
   return lookup(text.pointNames, point) ?? point;
 }
 

@@ -112,6 +112,8 @@ public final class E2eServer {
                     generic.registerBean(E2eController.class);
                     // 轨迹页的端到端测试：示例插件的引用核对工作，加一个只对 trace: 提问起作用的钩子。
                     generic.registerBean(CitationWork.class);
+                    // 示例面板“本轮概览”（plugin-panel 的端到端测试）
+                    generic.registerBean(RunOverviewPanel.class);
                     generic.registerBean(E2eTraceHook.class);
                     generic.registerBean(E2eScopeHook.class);
                     // 工具审批的端到端测试（A4）：默认关，用例在插件页打开；审批写文件，在对话页上问

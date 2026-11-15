@@ -1095,3 +1095,11 @@ export interface RunNode {
   tally?: Tally;
   children?: RunNode[];
 }
+
+/** 插件面板（plugin-panel）：`title` 是按语言的文字（和插件说明一样的写法）。 */
+export interface PanelInfo {
+  name: string;
+  title: LocalText;
+  icon: string;
+  url: string;
+}

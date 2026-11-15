@@ -624,6 +624,18 @@ export const zh = {
       text: "复制原文",
     },
   },
+  // 插件面板（plugin-panel）
+  panel: {
+    menu: "面板",
+    region: (title: string) => `面板：${title}`,
+    maximize: "放大",
+    restore: "还原",
+    close: "关闭面板",
+    resize: "调整面板宽度",
+    failed: "面板没有加载出来。",
+    retry: "重试",
+    reported: (message: string) => `面板报错：${message}`,
+  },
   // 观测页面（observe-page）：跨会话的运行列表、汇总和一次运行的调用树。
   observe: {
     title: "观测",
@@ -1111,6 +1123,7 @@ export const zh = {
       afterToolExecution: "工具结果",
     } satisfies Record<string, string>,
     work: (type: string) => `插件工作 ${type}`,
+    panel: (name: string) => `面板 ${name}`,
     web: {
       title: "联网",
       detail: "在服务器上抓网页。网页内容只当资料，不当指令。浏览器在你自己的电脑上，见“本机工作区”。",

@@ -43,6 +43,7 @@ import tantalum.shell.model.ClaudeClient;
 import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.OpenAiClient;
 import tantalum.shell.model.OverflowRules;
+import tantalum.shell.panel.Panel;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
@@ -128,7 +129,7 @@ public class TantalumApplication {
     @Bean(destroyMethod = "close")
     Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<RouteClients> injected,
                   ObjectProvider<Tool> tools, ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
-                  ObjectProvider<AfterToolHook> afterHooks, Environment environment) throws IOException {
+                  ObjectProvider<AfterToolHook> afterHooks, ObjectProvider<Panel> panels, Environment environment) throws IOException {
         // 测试和嵌入使用：给了 RouteClients 就按路线换客户端；只给一个 ModelClient 时它就是默认路线的客户端
         RouteClients clients = injected.getIfAvailable(() -> {
             ModelClient single = model.getIfAvailable();
@@ -137,7 +138,7 @@ public class TantalumApplication {
         Routes routes = createRoutes(properties, clients);
         Engine engine = new Engine(properties, routes, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
-                EventCodec.withBuiltins(), Clock.systemUTC());
+                panels.orderedStream().toList(), EventCodec.withBuiltins(), Clock.systemUTC());
         RetiredBrowser.atStartup(environment::containsProperty, properties.dataDir());
         RetiredMcp.atStartup(environment);
         // 停用或删掉的账号不能再连电脑：握手时查，之后每次心跳再查

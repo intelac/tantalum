@@ -18,6 +18,7 @@ import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
 import tantalum.shell.net.UpstreamProxy;
+import tantalum.shell.panel.Panel;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
@@ -42,7 +43,8 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
     private static final Duration LIST_STARTUP_WAIT = Duration.ofSeconds(5);
 
     static Toolbox open(TantalumProperties properties, Stores stores, Routes routes, List<Tool> tools, List<KernelHook> hooks,
-                        List<WorkType> workTypes, List<AfterToolHook> afterHooks, Clock clock, List<AutoCloseable> opened) throws IOException {
+                        List<WorkType> workTypes, List<AfterToolHook> afterHooks, List<Panel> panels, Clock clock,
+                        List<AutoCloseable> opened) throws IOException {
         ToolCatalog catalog = new ToolCatalog();
         LocalLinks localLinks = new LocalLinks(stores.localTokens(), clock, LocalLinks.Timing.DEFAULT);
         opened.add(localLinks);
@@ -71,7 +73,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         Routes started = routes.start(LIST_STARTUP_WAIT);
         CompactionPolicy compaction = new CompactionPolicy(stores.userSettings(), properties.compactionLimits());
         PluginGate gate = new PluginGate(catalog, stores.switches(), List.of(localWorkspace, webAccess),
-                hooks, afterHooks, workTypes, Set.copyOf(properties.hooks().required()), stores.params());
+                hooks, afterHooks, workTypes, panels, Set.copyOf(properties.hooks().required()), stores.params());
         return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog,
                 new SkillMentions(localWorkspace, skillCatalog), addressRules, egress, webAccess,
                 started, compaction, gate);

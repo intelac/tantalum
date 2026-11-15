@@ -73,8 +73,8 @@ class ExamplePluginsTest {
     @Test
     void theExamplesAreListedAndPoliciesStartOff() throws Exception {
         try (TestServer server = server("--tantalum.examples.enabled=true")) {
-            assertEquals(Map.of("citationCheck", "on", "commandApproval", "on", "dailyQuota", "off", "pinnedContext", "on", "readOnly", "off", "secretMask", "on",
-                    "toolApproval", "off", "truncateOutput", "on"), plugins(server, "alice"),
+            assertEquals(Map.of("citationCheck", "on", "commandApproval", "on", "dailyQuota", "off", "pinnedContext", "on", "readOnly", "off",
+                    "run-overview", "on", "secretMask", "on", "toolApproval", "off", "truncateOutput", "on"), plugins(server, "alice"),
                     "providerBackoff is left out without a status url");
             assertEquals(200, put(server, "alice", "/api/plugins/plugin/readOnly", "{\"enabled\":true}").statusCode());
             assertEquals("on", plugins(server, "alice").get("readOnly"));

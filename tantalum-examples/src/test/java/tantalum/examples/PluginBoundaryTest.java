@@ -51,12 +51,13 @@ class PluginBoundaryTest {
     private static final Set<String> DECLARATIONS = Set.of("tantalum.shell.plugin.PluginInfo",
             "tantalum.shell.plugin.Configurable", "tantalum.shell.plugin.Param", "tantalum.shell.plugin.DailyLimit");
 
-    /** 插件只用插件 SDK；把它们注册成 Spring bean 的自动配置在 {@code tantalum.examples.boot}，只有那里碰 Spring。 */
+    /** 插件只用插件 SDK（{@code tantalum.shell.plugin} 和面板的 {@code tantalum.shell.panel}）；把它们注册成 Spring bean 的自动配置在 {@code tantalum.examples.boot}，只有那里碰 Spring。 */
     @ArchTest
     static final ArchRule examplesOnlyUsePublicPluginApi = classes()
             .that().resideInAPackage("tantalum.examples..").and().resideOutsideOfPackage("tantalum.examples.boot..").and(MAIN_CODE)
             .should().onlyDependOnClassesThat().resideInAnyPackage(
-                    "tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..", "tantalum.shell.plugin..", "java..")
+                    "tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..", "tantalum.shell.plugin..", "tantalum.shell.panel..",
+                    "java..")
             .andShould().onlyDependOnClassesThat().resideOutsideOfPackage("tantalum.examples.boot..");
 
     /** 自动配置也只用插件 SDK 和 Spring 的配置注解，不碰 shell 的内部实现。 */
@@ -64,7 +65,7 @@ class PluginBoundaryTest {
     static final ArchRule autoConfigurationOnlyUsesThePluginApiAndSpring = classes()
             .that().resideInAPackage("tantalum.examples.boot..").and(MAIN_CODE)
             .should().onlyDependOnClassesThat().resideInAnyPackage("tantalum.examples..", "tantalum.value..", "tantalum.kernel.hook..",
-                    "tantalum.shell.plugin..", "java..", "org.springframework..", "org.slf4j..");
+                    "tantalum.shell.plugin..", "tantalum.shell.panel..", "java..", "org.springframework..", "org.slf4j..");
 
     /**
      * K5：钩子只依赖 value、{@code kernel.hook} 和 JDK 里不做 I/O 的部分（java.lang、java.util、java.time，

@@ -21,6 +21,8 @@ export default defineConfig({
           });
         },
       },
+      // 插件面板的文件（plugin-panel）也在后端
+      "/panels": { target: API, changeOrigin: true },
     },
   },
   test: {

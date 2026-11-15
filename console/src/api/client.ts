@@ -28,6 +28,7 @@ import type {
   PluginKind,
   Plugins,
   Project,
+  PanelInfo,
   RunListPage,
   RunNode,
   RunsSummary,
@@ -319,6 +320,11 @@ export function getRunsSummary(query: string): Promise<RunsSummary> {
 /** 一次运行的调用树；不存在或不是自己的是 404。 */
 export function getRunTree(session: string, run: string): Promise<{ root: RunNode }> {
   return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/runs/${encodeURIComponent(run)}/tree`));
+}
+
+/** 这个人能用的插件面板（所属插件开着的）。 */
+export function listPanels(): Promise<{ panels: PanelInfo[] }> {
+  return call(asViewed("/api/panels"));
 }
 
 export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {

@@ -37,7 +37,11 @@ export function useTogglePlugin() {
     onError: (_error, _toggle, context) => {
       if (context?.before !== undefined) queries.setQueryData(PLUGINS_KEY, context.before);
     },
-    onSettled: () => queries.invalidateQueries({ queryKey: PLUGINS_KEY }),
+    onSettled: () => {
+      void queries.invalidateQueries({ queryKey: PLUGINS_KEY });
+      // 插件开关也决定有哪些面板（plugin-panel）
+      void queries.invalidateQueries({ queryKey: ["panels"] });
+    },
   });
 }
 
@@ -46,7 +50,10 @@ export function useResetPlugin() {
   const queries = useQueryClient();
   return useMutation({
     mutationFn: ({ kind, name }: { kind: PluginKind; name: string }) => resetPlugin(kind, name),
-    onSettled: () => queries.invalidateQueries({ queryKey: PLUGINS_KEY }),
+    onSettled: () => {
+      void queries.invalidateQueries({ queryKey: PLUGINS_KEY });
+      void queries.invalidateQueries({ queryKey: ["panels"] });
+    },
   });
 }
 

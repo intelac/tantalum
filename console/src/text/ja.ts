@@ -604,6 +604,17 @@ export const ja: Text = {
       text: "原文をコピー",
     },
   },
+  panel: {
+    menu: "パネル",
+    region: (title: string) => `パネル：${title}`,
+    maximize: "最大化",
+    restore: "元に戻す",
+    close: "パネルを閉じる",
+    resize: "パネルの幅を変える",
+    failed: "パネルを読み込めませんでした。",
+    retry: "再試行",
+    reported: (message: string) => `パネルのエラー：${message}`,
+  },
   observe: {
     title: "観測",
     back: "会話に戻る",
@@ -1085,6 +1096,7 @@ export const ja: Text = {
       afterToolExecution: "ツールの結果",
     },
     work: (type) => `プラグイン処理 ${type}`,
+    panel: (name) => `パネル ${name}`,
     web: {
       title: "Web アクセス",
       detail: "サーバー上で Web ページを取得します。Web の内容は資料として扱い、指示としては扱いません。ブラウザーはあなたのコンピューター上で動きます（「ローカルワークスペース」を参照）。",

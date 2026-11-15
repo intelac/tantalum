@@ -20,9 +20,11 @@ import tantalum.examples.PinnedContextHook;
 import tantalum.examples.ProviderBackoffHook;
 import tantalum.examples.ProviderStatusWork;
 import tantalum.examples.ReadOnlyHook;
+import tantalum.examples.RunOverviewPanel;
 import tantalum.examples.ToolApprovalHook;
 import tantalum.examples.TruncateOutputHook;
 import tantalum.kernel.hook.KernelHook;
+import tantalum.shell.panel.Panel;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.WorkType;
 
@@ -57,6 +59,7 @@ public class ExamplePlugins {
         if (settings.providerBackoff().enabled() && hasText(settings.providerBackoff().statusUrl())) names.add("providerBackoff");
         if (settings.citationCheck().enabled()) names.add("citationCheck");
         if (settings.truncateOutput().enabled()) names.add("truncateOutput");
+        names.add(RunOverviewPanel.NAME);
         return names;
     }
 
@@ -124,5 +127,12 @@ public class ExamplePlugins {
     @ConditionalOnBooleanProperty(name = PREFIX + "truncate-output.enabled", matchIfMissing = true)
     AfterToolHook exampleTruncateOutputHook() {
         return new TruncateOutputHook(settings.truncateOutput().maxChars());
+    }
+
+    /** 示例面板（plugin-panel 需求 5）：只用消息桥，当作写面板的范例。 */
+    @Bean
+    @ConditionalOnBooleanProperty(name = PREFIX + "run-overview.enabled", matchIfMissing = true)
+    Panel exampleRunOverviewPanel() {
+        return new RunOverviewPanel();
     }
 }
