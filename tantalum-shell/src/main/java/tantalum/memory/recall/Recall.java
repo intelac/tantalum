@@ -119,8 +119,9 @@ public final class Recall {
             }
         }
         List<Candidate> candidates = new ArrayList<>();
+        List<tantalum.memory.Forgetting.Forgotten> gone = tantalum.memory.Forgetting.forgotten(ledger);
         for (MemoryItem item : live) {
-            if (superseded.contains(item.id()) || !inScope(item, dir)) {
+            if (superseded.contains(item.id()) || !inScope(item, dir) || tantalum.memory.Forgetting.shadowed(gone, item)) {
                 continue;
             }
             MemoryItem page = item.page() == null ? null : pages.get(item.page());

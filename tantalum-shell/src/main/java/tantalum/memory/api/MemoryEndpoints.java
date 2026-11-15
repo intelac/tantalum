@@ -69,6 +69,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
             case "pending" -> path.size() == 1 && method.equals("GET") ? pending(request.user()) : missing();
             case "items" -> items(request, method, path);
             case "now" -> now(request, method, path);
+            case "forget" -> path.size() == 1 && method.equals("POST") ? forget(request) : missing();
             default -> missing();
         };
     }
@@ -188,6 +189,18 @@ public final class MemoryEndpoints implements PluginEndpoints {
             case ALREADY -> PluginResponse.ok(obj("done", new Json.Bool(true), "already", new Json.Bool(true)));
             case MISSING -> PluginResponse.error(404, NOT_FOUND, "no such pending item", Map.of());
         };
+    }
+
+    // ---- 忘掉（memory-final-plan 第 10 节①“不再使用”） ----
+
+    /** {@code POST forget {"text": "…"}}：按一句话忘掉，返回 {@code {forgotten: 条数}}。 */
+    private PluginResponse forget(PluginRequest request) {
+        String text = request.body() instanceof Json.Obj input ? text(input, "text") : null;
+        if (text == null || text.isBlank() || text.length() > 2000) {
+            return PluginResponse.error(400, INVALID, "text is required and at most 2000 characters", Map.of());
+        }
+        int forgotten = tantalum.memory.Forgetting.forget(stores.ledger(request.user()), text, MemoryItem.Actor.USER);
+        return PluginResponse.ok(obj("forgotten", num(forgotten)));
     }
 
     // ---- 工作记忆（memory-final-plan 第 5 节） ----

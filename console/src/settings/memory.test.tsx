@@ -147,4 +147,17 @@ describe("MemoryPane", () => {
     expect(screen.getByRole("region", { name: "在做的事" })).toBeTruthy();
     expect(screen.getByText(/可能过期/)).toBeTruthy();
   });
+
+  // memory-final-plan 第 10 节①：按一句话忘掉，发到服务器，说忘掉了几条
+  it("forgets by a sentence", async () => {
+    const calls = await openMemoryPane([
+      { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
+      { method: "POST", path: "/api/plugin-api/memory/forget", status: 200, body: '{"forgotten":2}' },
+    ]);
+    await userEvent.type(await screen.findByRole("textbox", { name: /按一句话忘掉/ }), "我的车牌号");
+    await userEvent.click(screen.getByRole("button", { name: "忘掉" }));
+    expect(await screen.findByText("忘掉了 2 条。")).toBeTruthy();
+    const post = calls.find((call) => call.path === "/api/plugin-api/memory/forget");
+    expect(JSON.parse(post?.body ?? "{}")).toEqual({ text: "我的车牌号" });
+  });
 });

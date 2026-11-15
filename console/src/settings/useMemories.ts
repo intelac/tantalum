@@ -6,6 +6,7 @@ import {
   confirmPending,
   createMemory,
   deleteMemory,
+  forgetMemory,
   getMemory,
   getNow,
   getPending,
@@ -15,6 +16,7 @@ import {
   withdrawPending,
 } from "../api/client";
 import type { WorkingItem } from "../api/types";
+import { NOTES_KEY } from "./useNotes";
 
 export const MEMORY_KEY = ["memory"] as const;
 
@@ -86,5 +88,18 @@ export function useUpdateNow() {
     mutationFn: ({ item, change }: { item: WorkingItem; change: { status?: WorkingItem["status"]; title?: string } }) =>
       updateNow(item.id, item.version, change),
     onSettled: () => queries.invalidateQueries({ queryKey: NOW_KEY }),
+  });
+}
+
+/** 按一句话忘掉；做完让记忆、笔记、工作记忆都重新取。 */
+export function useForget() {
+  const queries = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => forgetMemory(text),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: MEMORY_KEY });
+      void queries.invalidateQueries({ queryKey: NOW_KEY });
+      void queries.invalidateQueries({ queryKey: NOTES_KEY });
+    },
   });
 }

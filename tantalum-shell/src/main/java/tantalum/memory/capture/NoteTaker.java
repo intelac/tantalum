@@ -169,6 +169,7 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             if (run != null) {
                 note(run);
                 catchUp(run.user());
+                tidy(run.user());
             }
         }
     }
@@ -235,6 +236,22 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
     /** 这一轮读过外部内容（见 {@link Quotes#tainted}）。 */
     static boolean tainted(List<RunSegment> segments) {
         return Quotes.tainted(segments);
+    }
+
+    /** 每人每天整理一次（{@link tantalum.memory.Librarian}），在处理通知的后台线程上做；出错只记日志。 */
+    void tidy(Principal user) {
+        if (closed) {
+            return;
+        }
+        try {
+            tantalum.memory.Librarian.Result result = new tantalum.memory.Librarian(notes.apply(user).ledger(), zone).daily();
+            if (result != null && result.merged() > 0) {
+                LOG.info("memory librarian for {}: merged {} duplicate(s){}", user.value(), result.merged(),
+                        result.rolledBack() ? ", rolled back because recall got worse" : "");
+            }
+        } catch (RuntimeException failure) {
+            LOG.warn("memory librarian for {} failed: {}", user.value(), failure.toString());
+        }
     }
 
     /**

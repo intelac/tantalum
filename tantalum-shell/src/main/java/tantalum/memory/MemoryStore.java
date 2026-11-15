@@ -230,10 +230,13 @@ public final class MemoryStore {
             if (page.isEmpty()) {
                 return false;
             }
-            for (MemoryItem claim : ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && name.equals(item.page()))) {
+            List<MemoryItem> claims = ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && name.equals(item.page()));
+            for (MemoryItem claim : claims) {
                 ledger.tombstone(claim.id(), actor, "memory deleted");
             }
             ledger.tombstone(page.get().id(), actor, "memory deleted");
+            // 不再使用（memory-final-plan 第 10 节①）：衍生的、当天卡里复述的、工作记忆里的一起标掉
+            Forgetting.cascade(ledger, claims, actor);
             return true;
         }
     }

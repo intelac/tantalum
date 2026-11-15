@@ -1058,6 +1058,12 @@ export const ja: Text = {
       source: (source) =>
         ({ tool_web: "Web ページから", tool_file: "ファイルから", tool_other: "ツールから", assistant_inferred: "モデルの推測", other_person: "ほかの人の話" })[String(source)] ?? String(source),
     },
+    forget: {
+      label: "一文で忘れる：同じ意味の記憶、そこから派生したもの、メモで言い直したものを消します。言い方を変えても戻りません。",
+      placeholder: "例：私の車のナンバー",
+      submit: "忘れる",
+      done: (count) => (count === 0 ? "該当する記憶はありませんでした。メモの言い直しは消しました。" : `${count} 件忘れました。`),
+    },
     notes: {
       title: "毎日のノート",
       hint: "各ターンの後に自動で記録された要点です。会話ごと、1 日 1 つ。編集も削除もできます。削除したものは書き戻されません。",

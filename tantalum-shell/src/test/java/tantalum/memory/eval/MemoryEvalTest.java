@@ -124,6 +124,7 @@ class MemoryEvalTest {
             case "pendingConfirm" -> pendingConfirm();
             case "migration" -> migration();
             case "recall" -> recall();
+            case "masked" -> masked();
             case "refusal" -> refusal();
             case "todo" -> throw new AssertionError("the check is written when " + question.phase() + " defines the interface");
             default -> throw new HarnessError("unknown check " + question.check());
@@ -429,6 +430,16 @@ class MemoryEvalTest {
         }
         assertFalse(everything.toString().contains("7Q2KD"), "a note or a derived entry still has the forgotten plate number");
         mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "停车证要用哪个车牌办？"), "7Q2KD", "after forgetting the source");
+    }
+
+    private void masked() {
+        String user = world.person(EvalWorld.PLAIN, "alice");
+        world.ask(EvalWorld.PLAIN, user, world.session(), "我车牌是京A-7Q2KD，帮我记一下。");
+        world.model.chat(steps(Step.call("history_search", Map.of("query", "车牌"))));
+        mustSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我以前说过车牌吗？"), "7Q2KD", "control: before forgetting");
+        forget(user, "person-alice");
+        world.model.chat(steps(Step.call("history_search", Map.of("query", "车牌"))));
+        mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我以前说过车牌吗？"), "7Q2KD", "history after forgetting");
     }
 
     // ---- 稳 ----

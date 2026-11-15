@@ -7,7 +7,7 @@ import { relativeTime } from "../text/format";
 import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
-import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
+import { useCreateMemory, useDeleteMemory, useForget, useMemories, useMemory } from "./useMemories";
 import { CaptureStatus, NotesList, NoteView } from "./NotesSection";
 import { NowSection } from "./NowSection";
 import { PendingSection } from "./PendingSection";
@@ -102,7 +102,46 @@ function ListView({ onOpen, onAdd }: { onOpen: (name: string) => void; onAdd: ()
           {t.memory.add}
         </Button>
       </div>
+      <ForgetForm />
     </div>
+  );
+}
+
+/** 按一句话忘掉（memory-final-plan 第 10 节①）：意思一样的记忆、从它来的、笔记里复述它的都去掉，以后换说法也找不回来。 */
+function ForgetForm() {
+  const t = useText().memory.forget;
+  const forget = useForget();
+  const [text, setText] = useState("");
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (text.trim() === "") return;
+    forget.mutate(text.trim(), { onSuccess: () => setText("") });
+  }
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-1.5 border-t border-line pt-3">
+      <label className="text-xs text-fg-muted" htmlFor="memory-forget">
+        {t.label}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="memory-forget"
+          className="min-w-0 flex-1 rounded-sm border border-line bg-raised px-2 py-1 text-sm text-fg"
+          value={text}
+          maxLength={2000}
+          placeholder={t.placeholder}
+          onChange={(event) => setText(event.target.value)}
+        />
+        <Button type="submit" size="sm" variant="secondary" disabled={forget.isPending || text.trim() === ""}>
+          {t.submit}
+        </Button>
+      </div>
+      {forget.data !== undefined && <p className="text-xs text-fg-faint">{t.done(forget.data.forgotten)}</p>}
+      {forget.error !== null && (
+        <p role="alert" className="text-xs text-danger">
+          {errorLine(forget.error)}
+        </p>
+      )}
+    </form>
   );
 }
 

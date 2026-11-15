@@ -115,6 +115,11 @@ public final class Ledger {
         return tombstones.containsKey(id);
     }
 
+    /** 留墓碑的时刻；没有墓碑为空。 */
+    public synchronized Optional<java.time.Instant> tombstonedAt(String id) {
+        return Optional.ofNullable(tombstones.get(id)).map(LedgerCodec.Tombstone::at);
+    }
+
     public synchronized Optional<MemoryItem> get(String id) {
         return Optional.ofNullable(latest.get(id));
     }

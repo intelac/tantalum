@@ -1063,6 +1063,12 @@ export const en: Text = {
       source: (source) =>
         ({ tool_web: "from a web page", tool_file: "from a file", tool_other: "from a tool", assistant_inferred: "inferred by the model", other_person: "said by someone else" })[String(source)] ?? String(source),
     },
+    forget: {
+      label: "Forget by a sentence: memories that say the same, ones derived from them, and notes that restate them are removed and will not come back under other words.",
+      placeholder: "For example: my licence plate",
+      submit: "Forget",
+      done: (count) => (count === 0 ? "No such memory was found; notes restating it were cleaned." : `Forgot ${count}.`),
+    },
     notes: {
       title: "Daily notes",
       hint: "Points noted automatically after each turn, one note per conversation per day. You can edit or delete them; deleted ones are not written back.",

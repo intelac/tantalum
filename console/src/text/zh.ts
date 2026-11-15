@@ -1085,6 +1085,12 @@ export const zh = {
       source: (source: string) =>
         ({ tool_web: "来自网页", tool_file: "来自文件", tool_other: "来自工具", assistant_inferred: "模型推断", other_person: "别人说的" })[String(source)] ?? String(source),
     },
+    forget: {
+      label: "按一句话忘掉：意思一样的记忆、从它来的、笔记里复述它的都去掉，以后换说法也找不回来。",
+      placeholder: "比如：我的车牌号",
+      submit: "忘掉",
+      done: (count: number) => (count === 0 ? "没有找到这样的记忆，笔记里复述它的已去掉。" : `忘掉了 ${count} 条。`),
+    },
     notes: {
       title: "每天的笔记",
       hint: "每轮对话结束后自动记下的要点，一个会话一天一篇。可以改，也可以删；删掉的不会再写回来。",

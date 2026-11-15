@@ -25,9 +25,17 @@ public final class HistorySearchTool implements Tool {
     static final int LIMIT = 8;
 
     private final Function<ToolContext, PluginServices> services;
+    private final Function<ToolContext, List<tantalum.memory.Forgetting.Forgotten>> forgotten;
 
     public HistorySearchTool(Function<ToolContext, PluginServices> services) {
+        this(services, context -> List.of());
+    }
+
+    /** {@code forgotten} 给这个人忘掉过的说法（结果里按它过滤）。 */
+    public HistorySearchTool(Function<ToolContext, PluginServices> services,
+                             Function<ToolContext, List<tantalum.memory.Forgetting.Forgotten>> forgotten) {
         this.services = services;
+        this.forgotten = forgotten;
     }
 
     @Override public String name() { return NAME; }
@@ -63,6 +71,10 @@ public final class HistorySearchTool implements Tool {
                 found.computeIfAbsent(key, ignored -> new Found(hit)).matched++;
             }
         }
+        // 忘掉的事（memory-final-plan 第 10 节①）：在忘掉之前说过它的原话也不给
+        List<tantalum.memory.Forgetting.Forgotten> gone = forgotten.apply(context);
+        found.values().removeIf(each -> gone.stream().anyMatch(item -> (each.hit.at() == null || each.hit.at().isBefore(item.at()))
+                && Overlap.of(item.text(), each.hit.text()) >= 0.5));
         List<Found> ranked = new ArrayList<>(found.values());
         ranked.sort(Comparator.comparingInt((Found each) -> each.matched).reversed().thenComparing(each -> each.hit.at(), Comparator.reverseOrder()));
         if (ranked.isEmpty()) {

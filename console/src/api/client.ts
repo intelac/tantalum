@@ -334,6 +334,11 @@ export function withdrawPending(id: string): Promise<{ done: boolean }> {
   return call(`/api/plugin-api/memory/items/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: "{}" });
 }
 
+/** 按一句话忘掉（memory-final-plan 第 10 节①）：意思一样的记忆、衍生的、笔记里复述的一起去掉。 */
+export function forgetMemory(text: string): Promise<{ forgotten: number }> {
+  return call("/api/plugin-api/memory/forget", { method: "POST", body: JSON.stringify({ text }) });
+}
+
 export function getNow(): Promise<{ items: WorkingItem[] }> {
   return call("/api/plugin-api/memory/now");
 }
