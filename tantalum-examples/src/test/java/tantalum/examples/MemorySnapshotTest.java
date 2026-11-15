@@ -106,7 +106,8 @@ class MemorySnapshotTest {
         }
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        Kernel kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, Limits.DEFAULT);
+        // 回放用和实时一样的钩子：记忆插件的找回钩子（memory-final-plan 第 9 节）在第二个运行前要过一次工作，回放要得出同样的决定
+        Kernel kernel = new Kernel(table, new HookChain(List.of(new tantalum.memory.recall.RecallHook())), (tool, args) -> true, Limits.DEFAULT);
         List<Prompt> replayed = Replay.run(kernel, journal).commands().stream()
                 .filter(CallModel.class::isInstance).map(command -> ((CallModel) command).prompt()).toList();
         assertEquals(model.prompts, replayed);

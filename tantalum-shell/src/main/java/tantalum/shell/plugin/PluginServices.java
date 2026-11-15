@@ -15,9 +15,14 @@ import tantalum.value.json.Json;
 public interface PluginServices {
 
     /** 用哪条模型路线和模型；都为 null 时：有本机路线 {@code local} 用它，否则默认路线；模型为 null 时用那条路线的默认模型。 */
-    record ModelPick(String route, String model) {
+    record ModelPick(String route, String model, String effort) {
 
-        public static final ModelPick DEFAULT = new ModelPick(null, null);
+        public static final ModelPick DEFAULT = new ModelPick(null, null, null);
+
+        /** 用路线默认的思考档位。 */
+        public ModelPick(String route, String model) {
+            this(route, model, null);
+        }
     }
 
     /** 过去对话里的一句：会话、哪一方（{@code user}/{@code assistant}）、原文、时刻。 */

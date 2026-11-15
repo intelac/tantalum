@@ -63,7 +63,7 @@ public final class NowText {
 
     static String line(MemoryItem item, Instant now) {
         StringBuilder line = new StringBuilder("- [").append(item.id()).append(" v").append(item.version()).append("] ")
-                .append(oneLine(item.attr(WorkingMemory.TITLE) == null ? item.text() : item.attr(WorkingMemory.TITLE)));
+                .append(oneLine(item.text()));
         List<String> details = new ArrayList<>();
         if (!WorkingMemory.ACTIVE.equals(WorkingMemory.status(item))) {
             details.add(WorkingMemory.status(item));

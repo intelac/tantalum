@@ -32,6 +32,9 @@ public final class MemoryReadTool implements Tool {
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {
+        if (context.offRecord()) {
+            return ToolOutput.error(ToolTrust.OFF_RECORD);
+        }
         String name = ToolArguments.string(arguments, "name");
         if (name == null) {
             return MemoryTools.missing("name");

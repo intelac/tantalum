@@ -1,0 +1,59 @@
+package tantalum.memory.recall;
+
+import java.time.ZoneId;
+import java.util.List;
+import java.util.function.Function;
+import tantalum.memory.MemoryStores;
+import tantalum.memory.MemoryTools;
+import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolArguments;
+import tantalum.shell.plugin.ToolContext;
+import tantalum.shell.plugin.ToolDispatch;
+import tantalum.shell.plugin.ToolOutput;
+import tantalum.value.id.Principal;
+import tantalum.value.json.Json;
+
+/**
+ * {@code memory_search}（memory-final-plan 第 9 节第 5 步）：在这个人的记忆里按关键词找页面上的说法和当天卡，带出处。
+ * 范围同自动找回：个人的加当前目录的项目；被取代的不给，没确认的标出来。换说法、换语言多找几次。
+ */
+public final class MemorySearchTool implements Tool {
+
+    public static final String NAME = "memory_search";
+
+    private final MemoryStores stores;
+    private final Function<Principal, ZoneId> zones;
+
+    public MemorySearchTool(MemoryStores stores, Function<Principal, ZoneId> zones) {
+        this.stores = stores;
+        this.zones = zones;
+    }
+
+    @Override public String name() { return NAME; }
+    @Override public String description() {
+        return "Search this user's memory (entries and daily notes) by keywords; results show where each came from. Words like "
+                + "'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying "
+                + "you do not know.";
+    }
+    @Override public Json schema() { return ToolArguments.schema(List.of("query"), List.of()); }
+    @Override public String server() { return MemoryTools.SERVER; }
+    @Override public String plugin() { return MemoryTools.PLUGIN; }
+    @Override public int serverConcurrency() { return 16; }
+    @Override public boolean isConcurrencySafe(Json arguments) { return true; }
+    @Override public ToolDispatch dispatch() { return ToolDispatch.parallel(NAME, MemoryTools.SERVER, 16); }
+
+    @Override
+    public ToolOutput run(ToolContext context, Json arguments) {
+        String query = ToolArguments.string(arguments, "query");
+        if (query == null || query.isBlank()) {
+            return ToolOutput.error("Missing argument: query");
+        }
+        if (context.offRecord()) {
+            return ToolOutput.error("This conversation is off the record: memory is not read or written.");
+        }
+        ZoneId zone = zones.apply(context.principal());
+        List<Recall.Hit> hits = new Recall(stores.ledger(context.principal())).search(query, "", context.dir(), zone);
+        String text = RecallText.of(hits, zone);
+        return ToolOutput.ok(text == null ? "Nothing in memory matches \"" + query + "\". Try other words or another language." : text);
+    }
+}

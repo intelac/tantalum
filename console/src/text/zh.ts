@@ -222,7 +222,7 @@ export const zh = {
   },
   composer: {
     offRecord: "不进记忆",
-    offRecordHint: "这个会话不记笔记、不留下任何记忆，发出第一句后就不能改了。记忆里已有的照样能用。",
+    offRecordHint: "这个会话不读也不写你的记忆、不记笔记，发出第一句后就不能改了。",
     placeholder: "给 Tantalum 发消息",
     send: "发送",
     stop: "停止",
@@ -1170,6 +1170,8 @@ export const zh = {
       memory_delete: ["删记忆", "删除一条长期记忆。"],
       memory_note: ["记一条", "记下一条偏好、事实、决定或注意到的事；带上你的原话才算你亲口说的。"],
       now: ["工作记忆", "看和改在做的事、答应的事、在等的事、最近注意到的。"],
+      memory_search: ["找记忆", "按关键词在记忆里找，带出处。"],
+      history_search: ["找过去的对话", "在过去的对话原话里找，包括已经压缩掉的。"],
     } satisfies Record<string, readonly [string, string]>,
     pointNames: {
       beforeModelCall: "调模型前",

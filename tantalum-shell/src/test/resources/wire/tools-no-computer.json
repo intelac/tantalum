@@ -467,6 +467,22 @@
     }
   },
   {
+    "name": "history_search",
+    "deferred": false,
+    "description": "Search this user's past conversations word for word, including parts that were compacted or left the context. Returns the matching lines with their session and time. Use it when memory_search finds nothing.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
     "name": "list_dir",
     "deferred": true,
     "description": "List the entries of a directory in the allowed directories on the user's computer, one level deep. Directories end with /. To find files by name at any depth, use find_files.",
@@ -533,6 +549,22 @@
       },
       "required": [
         "name"
+      ]
+    }
+  },
+  {
+    "name": "memory_search",
+    "deferred": false,
+    "description": "Search this user's memory (entries and daily notes) by keywords; results show where each came from. Words like 'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying you do not know.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
       ]
     }
   },

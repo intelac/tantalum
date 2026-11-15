@@ -55,6 +55,9 @@ public final class NowTool implements Tool {
         }
         try {
             WorkingMemory working = stores.working(context.principal());
+            if (context.offRecord()) {
+                return ToolOutput.error(ToolTrust.OFF_RECORD);
+            }
             if (action.equals("list")) {
                 String text = NowText.render(working, stores.of(context.principal()), working.ledger().clock().instant());
                 return ToolOutput.ok(text == null ? "Working memory is empty." : text);

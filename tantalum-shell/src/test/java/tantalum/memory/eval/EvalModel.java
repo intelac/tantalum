@@ -79,7 +79,7 @@ final class EvalModel implements ModelClient {
                         : String.join("\n", notes.stream().map(n -> "- [" + n.kind() + "] " + n.text() + " «" + n.quote() + "»").toList()), usage);
             }
             case COMPACT -> replied(SUMMARY, usage);
-            case OTHER -> replied(call.lastUser(), usage);
+            case OTHER -> replied(call.system().startsWith(REWRITE) ? rewrite(call.lastUser()) : call.lastUser(), usage);
             case CHAT -> {
                 Step step = chat.apply(call);
                 if (step.tool() == null) {
@@ -92,6 +92,24 @@ final class EvalModel implements ModelClient {
                 yield new ModelOutcome.Replied(blocks, StopReason.TOOL_USE, "eval", usage);
             }
         };
+    }
+
+    /** 找回前改写问题的调用（RecallWork 的 system 开头）。 */
+    static final String REWRITE = "Rewrite the user's latest message";
+
+    /** 本机模型改写时会给的中英日关键词，这里按词表给（第一层只测管道，翻得好不好是第二层的事）。 */
+    private static final Map<String, String> KEYWORDS = Map.of("cluster", "集群 クラスタ", "production", "生产环境 本番", "database", "数据库",
+            "language", "语言", "meeting", "周会", "plate", "车牌", "decide", "定了");
+
+    static String rewrite(String latest) {
+        String asked = latest.substring(latest.lastIndexOf("Latest:") < 0 ? 0 : latest.lastIndexOf("Latest:") + 7).strip();
+        StringBuilder words = new StringBuilder();
+        KEYWORDS.forEach((english, other) -> {
+            if (asked.toLowerCase(java.util.Locale.ROOT).contains(english)) {
+                words.append(' ').append(english).append(' ').append(other);
+            }
+        });
+        return asked + " |" + words;
     }
 
     private static ModelOutcome replied(String text, TokenUsage usage) {

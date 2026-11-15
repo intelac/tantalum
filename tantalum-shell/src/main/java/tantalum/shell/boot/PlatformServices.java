@@ -104,7 +104,7 @@ public final class PlatformServices implements PluginServices {
             LOG.warn("plugin {} asked for route {}, which does not exist", request.plugin(), routeName);
             return Optional.empty();
         }
-        ModelChoice choice = new ModelChoice(routeName, pick.model() != null ? pick.model() : route.get().settings().defaultModel(), null);
+        ModelChoice choice = new ModelChoice(routeName, pick.model() != null ? pick.model() : route.get().settings().defaultModel(), pick.effort());
         String who = request.user() == null ? "-" : request.user().value();
         long started = System.nanoTime();
         // 插件自己的上限（memory-final-plan 第 9 节）：每人每个插件每天这么多 token，不混进每日额度；0 是不限
@@ -280,8 +280,12 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
         try {
-            return bound.stores().storage().index.search(user, query, limit + 1).stream()
-                    .filter(hit -> !hit.session().equals(excluding))
+            // 不进记忆的会话不进插件能搜的范围（memory-final-plan 第 11 节）；侧栏自己的搜索照样搜得到
+            java.util.Set<SessionId> offRecord = new java.util.HashSet<>();
+            bound.queries().sessions(user).stream().filter(tantalum.shell.conversation.SessionSummary::offRecord)
+                    .forEach(summary -> offRecord.add(summary.id()));
+            return bound.stores().storage().index.search(user, query, limit + 1 + offRecord.size()).stream()
+                    .filter(hit -> !hit.session().equals(excluding) && !offRecord.contains(hit.session()))
                     .limit(limit)
                     .map(hit -> new ConversationHit(hit.session(), hit.role(), hit.text(), null))
                     .toList();

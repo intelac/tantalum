@@ -27,7 +27,16 @@ public final class MemoryContext implements ContextContributor {
 
     @Override
     public java.util.Set<String> sectionNames() {
-        return java.util.Set.of(INDEX_TAG);
+        return java.util.Set.of(INDEX_TAG, tantalum.memory.recall.RecallText.TAG);
+    }
+
+    /** 不进记忆的会话不读记忆（memory-final-plan 第 11 节）：固定说明照旧，索引不给。 */
+    @Override
+    public Optional<Contribution> contribute(Principal user, Situation situation) {
+        if (situation.offRecord()) {
+            return Optional.of(new Contribution(MemoryGuidance.TEXT.strip(), INDEX_TAG, null, true));
+        }
+        return contribute(user);
     }
 
     @Override

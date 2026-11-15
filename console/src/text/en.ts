@@ -211,7 +211,7 @@ export const en: Text = {
   },
   composer: {
     offRecord: "Off the record",
-    offRecordHint: "This conversation takes no notes and leaves nothing in memory. It is fixed once you send the first message. What is already in memory can still be used.",
+    offRecordHint: "This conversation neither reads nor writes your memory and takes no notes. It is fixed once you send the first message.",
     placeholder: "Message Tantalum",
     send: "Send",
     stop: "Stop",
@@ -1147,6 +1147,8 @@ export const en: Text = {
       memory_delete: ["Delete memory", "Deletes a long-term memory."],
       memory_note: ["Note one thing", "Notes a preference, fact, decision or something noticed; it counts as yours only with your exact words."],
       now: ["Working memory", "Shows and updates what is being done, promised, waited for and recently noticed."],
+      memory_search: ["Search memory", "Searches memory by keywords and shows where each result came from."],
+      history_search: ["Search past conversations", "Searches what was said in past conversations, including compacted parts."],
     },
     pointNames: {
       beforeModelCall: "Before model call",

@@ -98,7 +98,33 @@ public final class NoteFiler {
         if (shelf != null) {
             MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, source, MemoryItem.Actor.AGENT, note.text(),
                     store.ledger().clock().instant()).withQuote(note.quote()).withProvenance(provenance).withPendingConfirm(pendingConfirm);
-            return store.addClaim(shelf.page(), shelf.type(), shelf.description(), claim).isPresent();
+            List<MemoryItem> replaced = List.of();
+            if (!pendingConfirm && note.kind() == NotePrompt.Kind.DECISION) {
+                // 和你认可过的决定冲突：标出来、等你确认（memory-final-plan 第 9 节“写入”）
+                Optional<MemoryItem> approved = tantalum.memory.recall.Overlap.approvedConflict(store.ledger(), note.text());
+                if (approved.isPresent()) {
+                    java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
+                    attrs.put(MemoryStore.CONFLICTS_WITH, approved.get().id());
+                    claim = claim.withPendingConfirm(true).withAttrs(attrs);
+                }
+            } else if (!pendingConfirm && note.kind() == NotePrompt.Kind.PREFERENCE) {
+                // 你对自己偏好的新说法自动取代旧说法，不问你
+                replaced = tantalum.memory.recall.Overlap.supersededPreferences(store.ledger(), shelf.page(), note.text());
+                if (!replaced.isEmpty()) {
+                    java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
+                    attrs.put("supersedes", replaced.getFirst().id());
+                    claim = claim.withAttrs(attrs);
+                }
+            }
+            Optional<MemoryItem> added = store.addClaim(shelf.page(), shelf.type(), shelf.description(), claim);
+            added.ifPresent(written -> {
+                for (MemoryItem old : List.copyOf(tantalum.memory.recall.Overlap.supersededPreferences(store.ledger(), shelf.page(), written.text()))) {
+                    if (!old.id().equals(written.id()) && written.attr("supersedes") != null) {
+                        store.ledger().put(old.withSupersededBy(written.id()), old.version());
+                    }
+                }
+            });
+            return added.isPresent();
         }
         MemoryItem.Kind kind = switch (note.kind()) {
             case TASK -> MemoryItem.Kind.TASK;

@@ -41,7 +41,8 @@ public final class ToolTrust {
     }
 
     /** 不进记忆的会话里给模型的话。 */
-    static final String OFF_RECORD = "This conversation is off the record: nothing is kept in memory. Tell the user if they asked you to remember something.";
+    static final String OFF_RECORD = "This conversation is off the record: memory is not read or written. Tell the user if they asked you to "
+            + "remember or recall something.";
 
     /** 等确认时给模型的话。 */
     static String pendingNote(Verdict verdict) {

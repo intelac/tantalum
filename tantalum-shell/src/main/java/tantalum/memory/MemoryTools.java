@@ -12,7 +12,7 @@ public final class MemoryTools {
 
     /** 插件名，也是插件页上的那一行。 */
     public static final String PLUGIN = "memory";
-    static final String SERVER = "memory";
+    public static final String SERVER = "memory";
     static final int CONCURRENCY = 16;
 
     private MemoryTools() {}
@@ -20,7 +20,8 @@ public final class MemoryTools {
     /** 记忆是本地数据库，三个工具都可以并行；不用打开记忆库就能给出。 */
     public static List<ToolDispatch> dispatch() {
         return List.of(dispatch(MemoryWriteTool.NAME), dispatch(MemoryReadTool.NAME), dispatch(MemoryDeleteTool.NAME),
-                dispatch(MemoryNoteTool.NAME), dispatch(NowTool.NAME));
+                dispatch(MemoryNoteTool.NAME), dispatch(NowTool.NAME), dispatch(tantalum.memory.recall.MemorySearchTool.NAME),
+                dispatch(tantalum.memory.recall.HistorySearchTool.NAME));
     }
 
     static ToolDispatch dispatch(String name) {

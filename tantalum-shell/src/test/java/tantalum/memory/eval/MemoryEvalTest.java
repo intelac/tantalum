@@ -603,9 +603,9 @@ class MemoryEvalTest {
 
     private void refusal() {
         String user = world.person(EvalWorld.PLAIN, "alice");
-        mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我的护照号是多少？"), "<memory-recall>", "nothing to recall");
+        mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我的护照号是多少？"), "<memory-recall>\n", "nothing to recall");
         List<Call> control = world.ask(EvalWorld.PLAIN, user, world.session(), "我们数据库用的是什么？");
-        mustSee(control, "<memory-recall>", "control: something to recall");
+        mustSee(control, "<memory-recall>\n", "control: something to recall");
         mustSee(control, world.seed.text("a-db"), "control: something to recall");
     }
 }

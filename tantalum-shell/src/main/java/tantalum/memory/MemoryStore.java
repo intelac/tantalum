@@ -22,7 +22,7 @@ public final class MemoryStore {
 
     private static final Logger LOG = LoggerFactory.getLogger(MemoryStore.class);
     static final String TYPE = "type";
-    static final String DESCRIPTION = "description";
+    public static final String DESCRIPTION = "description";
 
     /** 写入结果：成功时说明是新建还是覆盖，失败时给出能直接转给模型或用户的原因。 */
     public sealed interface WriteResult {

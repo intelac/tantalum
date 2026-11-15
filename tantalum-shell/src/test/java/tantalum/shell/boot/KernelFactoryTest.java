@@ -73,7 +73,7 @@ class KernelFactoryTest {
         assertEquals(List.of("read_attachment", "ask_user", "todo_write"), BuiltinTools.dispatch().stream().map(ToolDispatch::name).toList());
         assertEquals(LocalTool.all(null, null, java.time.Duration.ofSeconds(1)).stream().map(tool -> tool.dispatch().name()).toList(),
                 LocalTool.dispatches().stream().map(ToolDispatch::name).toList());
-        assertEquals(List.of("memory_write", "memory_read", "memory_delete", "memory_note", "now"),
+        assertEquals(List.of("memory_write", "memory_read", "memory_delete", "memory_note", "now", "memory_search", "history_search"),
                 MemoryTools.dispatch().stream().map(ToolDispatch::name).toList());
         assertEquals(new WebFetchTool(null).server(), WebFetchTool.DISPATCH.server());
         assertEquals(16, WebFetchTool.DISPATCH.serverConcurrency());

@@ -8,6 +8,13 @@
     "changed" : false,
     "params" : [ ]
   }, {
+    "name" : "history_search",
+    "description" : "Search this user's past conversations word for word, including parts that were compacted or left the context. Returns the matching lines with their session and time. Use it when memory_search finds nothing.",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
+  }, {
     "name" : "memory_delete",
     "description" : "Delete one of your memory entries by name, for example when the user asks you to forget something.",
     "enabled" : true,
@@ -24,6 +31,13 @@
   }, {
     "name" : "memory_read",
     "description" : "Read the full body of one of your memory entries by name (see the memory index).",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
+  }, {
+    "name" : "memory_search",
+    "description" : "Search this user's memory (entries and daily notes) by keywords; results show where each came from. Words like 'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying you do not know.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
@@ -96,11 +110,11 @@
   }, {
     "name" : "memory",
     "description" : {
-      "en" : "Long-term memory, daily notes, and automatic note-taking.",
-      "zh" : "长期记忆、每天的笔记和自动记下。",
-      "ja" : "長期記憶、毎日のメモ、自動メモ。"
+      "en" : "Recall what is relevant from memory before the model answers.",
+      "zh" : "回答前从记忆里想起相关的。",
+      "ja" : "回答の前に、記憶から関係のあることを思い出します。"
     },
-    "points" : [ "runFinished", "endpoints", "context" ],
+    "points" : [ "beforeModelCall", "work:memory-recall", "runFinished", "endpoints", "context" ],
     "group" : "rule",
     "enabled" : true,
     "byDefault" : true,

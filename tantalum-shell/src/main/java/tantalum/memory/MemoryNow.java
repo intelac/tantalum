@@ -27,6 +27,11 @@ public final class MemoryNow implements ContextContributor {
     }
 
     @Override
+    public Optional<Contribution> contribute(Principal user, Situation situation) {
+        return situation.offRecord() ? Optional.of(new Contribution(null, NowText.TAG, null, true)) : contribute(user);
+    }
+
+    @Override
     public Optional<Contribution> contribute(Principal user) {
         String text = NowText.render(stores.working(user), stores.of(user), clock.instant());
         return Optional.of(new Contribution(null, NowText.TAG, text, true));

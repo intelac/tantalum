@@ -66,6 +66,30 @@ public class MemoryPlugin {
         return new tantalum.memory.MemoryNoteTool(stores, trust);
     }
 
+    /** 找回（memory-final-plan 第 9 节）：钩子在一轮第一次调模型前要一次工作；工作读记忆账，必要时用本机模型（关思考）改写问题。 */
+    @Bean
+    tantalum.memory.recall.RecallHook memoryRecallHook() {
+        return new tantalum.memory.recall.RecallHook();
+    }
+
+    @Bean
+    tantalum.memory.recall.RecallWork memoryRecallWork(MemoryStores stores, CaptureSettings settings, ObjectProvider<PluginServices> services) {
+        PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model(), "off");
+        return new tantalum.memory.recall.RecallWork(stores, (user, system, text) -> services.getObject().complete(
+                new PluginServices.Completion(user, MemoryTools.PLUGIN, "rewrite", PluginServices.Priority.FOREGROUND, system, text, pick, 160)),
+                user -> ZoneId.systemDefault());
+    }
+
+    @Bean
+    tantalum.memory.recall.MemorySearchTool memorySearchTool(MemoryStores stores) {
+        return new tantalum.memory.recall.MemorySearchTool(stores, user -> ZoneId.systemDefault());
+    }
+
+    @Bean
+    tantalum.memory.recall.HistorySearchTool historySearchTool(ObjectProvider<PluginServices> services) {
+        return new tantalum.memory.recall.HistorySearchTool(context -> services.getObject());
+    }
+
     @Bean
     tantalum.memory.MemoryNow memoryNow(MemoryStores stores) {
         return new tantalum.memory.MemoryNow(stores, Clock.systemUTC());

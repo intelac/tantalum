@@ -73,12 +73,13 @@ public final class E2eModel implements ModelClient {
             if (excerpt.contains("nothing to note")) {
                 return new ModelOutcome.Replied(List.of(new TextBlock("NOTHING")), StopReason.END_TURN, MODEL, null);
             }
-            // 新的笔记格式（memory-final-plan 第 7 节）：每条带一句原话，取用户这一轮开头的几个字，代码核对得上
+            // 新的笔记格式（memory-final-plan 第 7 节）：每条带一句原话，取用户这一轮开头的几个字，代码核对得上；
+            // 只记 note（进当天卡），不进页面和工作记忆：e2e 的用户一直没有记忆，回答前不会多一步找回
             int said = excerpt.indexOf("User: ");
             String words = said < 0 ? "" : excerpt.substring(said + 6).lines().findFirst().orElse("").strip();
             String quote = words.substring(0, Math.min(8, words.length()));
             return new ModelOutcome.Replied(List.of(new TextBlock("- [note] The user tested memory notes in the end-to-end suite «" + quote
-                    + "»\n- [task] 下一步：看记忆页 «" + quote + "»")), StopReason.END_TURN, MODEL, null);
+                    + "»\n- [note] 下一步：看记忆页 «" + quote + "»")), StopReason.END_TURN, MODEL, null);
         }
         promptSize = promptSize(prompt);
         int lastUser = lastUserText(prompt.messages());
