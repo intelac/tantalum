@@ -23,6 +23,8 @@ import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.UserLane;
 import tantalum.shell.store.IndexCatchUp;
 import tantalum.shell.store.RecordReplay;
+import tantalum.shell.store.RunCollector;
+import tantalum.shell.store.RunRebuild;
 import tantalum.shell.store.IndexWriter;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.UsageLedger;
@@ -50,6 +52,9 @@ final class Storage implements AutoCloseable {
     final SessionFiles files;
     final AttachmentStore attachments;
     final RecordReplay records;
+    /** 运行表的实时写入（run-tree 需求 3）：净室放出的轨迹记录攒成运行的行，交给索引写入线程。 */
+    final RunCollector runs;
+    final RunRebuild runRebuild;
 
     private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits,
                     Deque<AutoCloseable> opened) throws IOException {
@@ -71,6 +76,9 @@ final class Storage implements AutoCloseable {
         opened.push(files);
         attachments = new AttachmentStore(dataDir, attachmentLimits, new ImageNormalizer(attachmentLimits));
         records = new RecordReplay(paths, reader);
+        runRebuild = new RunRebuild(paths, records, indexWriter::onRun);
+        opened.push(runRebuild);
+        runs = new RunCollector(indexWriter::onRun, runRebuild);
     }
 
     static Storage open(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits)
@@ -138,6 +146,7 @@ final class Storage implements AutoCloseable {
     @Override
     public void close() throws IOException {
         Shutdown.run(List.of(
+                new Shutdown.Step("stop run rebuilds", runRebuild),
                 new Shutdown.Step("flush index", indexWriter),
                 new Shutdown.Step("close index", index),
                 new Shutdown.Step("close session files", files),

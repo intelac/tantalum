@@ -12,6 +12,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.trace.RunRow;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
@@ -71,6 +72,13 @@ public final class IndexWriter implements AutoCloseable {
         }
     }
 
+    /** 运行开始或结束（run-tree 需求 3）。轨迹记录落盘后才放出来，所以和 {@link #onStep} 一样不会比文件超前。不做 I/O，不等待。 */
+    public void onRun(RunRow run) {
+        if (!abandoned) {
+            queue.add(run);
+        }
+    }
+
     /** 文件写入线程调用：序号不超过 {@code seq} 的事件已落盘，文件到 {@code offset}。总在对应事件进入 cleanroom 之前。 */
     public void onDurable(Principal principal, SessionId session, long seq, long offset) {
         if (!abandoned) {
@@ -94,6 +102,7 @@ public final class IndexWriter implements AutoCloseable {
                 switch (item) {
                     case null -> write(false);
                     case IndexChange change -> accept(change);
+                    case RunRow run -> accept(run);
                     case Barrier barrier -> {
                         write(true);
                         barrier.done().countDown();
@@ -133,6 +142,20 @@ public final class IndexWriter implements AutoCloseable {
         }
         // 改名要马上出现在侧栏：和运行结束一样立刻写
         if (change.runEnded() || change.rename() != null || pending.events() >= flushEvents) {
+            write(false);
+        }
+    }
+
+    private void accept(RunRow run) {
+        if (abandoned) {
+            return;
+        }
+        if (pending.isEmpty()) {
+            deadline = System.nanoTime() + flushNanos;
+        }
+        pending.add(run);
+        // 运行结束和会话的运行结束一样立刻写，观测页面马上看得到
+        if (run.end() != null || pending.events() >= flushEvents) {
             write(false);
         }
     }

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tantalum.shell.trace.RunRow;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
@@ -46,6 +47,8 @@ final class IndexBatch {
     final List<UsageRow> usage = new ArrayList<>();
     final List<SubmissionRow> submissions = new ArrayList<>();
     final List<TextRow> texts = new ArrayList<>();
+    /** 同一运行在一批里只留最后一次。 */
+    final Map<RunId, RunRow> runs = new LinkedHashMap<>();
     private int events;
 
     void add(IndexChange change) {
@@ -75,6 +78,11 @@ final class IndexBatch {
         if (change.text() != null) {
             texts.add(new TextRow(change.principal(), change.session(), change.seq(), change.text()));
         }
+        events++;
+    }
+
+    void add(RunRow run) {
+        runs.put(run.run(), run);
         events++;
     }
 

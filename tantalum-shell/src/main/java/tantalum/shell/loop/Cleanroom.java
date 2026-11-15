@@ -179,6 +179,13 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
             for (TraceRecord traced : projected.records()) {
                 notifyListener(seq, index++, envelope, traced);
             }
+            if (!projected.records().isEmpty()) {
+                try {
+                    facts.onRecords(seq, envelope.principal(), projected.records());
+                } catch (RuntimeException failure) {
+                    LOG.error("trace batch listener failed", failure);
+                }
+            }
         }, () -> processed.accept(envelope));
         return true;
     }

@@ -263,9 +263,15 @@ curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace'             
 curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?before=<seq>' # 更早的一页
 curl -b cookie 'http://127.0.0.1:8080/api/sessions/<session>/trace?run=<run>'    # 从最新一直到这个运行
 curl -b cookie http://127.0.0.1:8080/api/sessions/<session>/trace/calls/<command> # 一次模型调用的完整输入
+curl -b cookie http://127.0.0.1:8080/api/sessions/<session>/runs/<run>/tree     # 一次运行的调用树
+curl -b cookie 'http://127.0.0.1:8080/api/runs?end=failed&sort=ms'               # 跨会话的运行列表
 ```
 
 **轨迹记录**（`/api/sessions/<session>/trace`）按运行从新到旧分页，一页至少 20 个运行或 400 条记录，不拆开一个运行。记录有 10 种：`run`、`system`、`user`、`context`、`compacted`、`request`、`tool`、`work`、`hook`、`question`（运行停下来问用户；为某次工具调用问的带 `tool`，是那条工具记录的 `id`），每条带 `id`、`pos`（创建它的事件“序号.下标”）、所属的轮和步、开始和结束时刻。记录里不放 prompt 的消息、system 原文和工具 Schema，这些按需从 `/trace/calls/<command>` 取。实时的变化通过 SSE 的 `trace` 消息推送，客户端按 `id` 覆盖；页面和推送来自同一个投影，所以刷新前后看到的一样。
+
+**调用树**（`/api/sessions/<session>/runs/<run>/tree`）把一次运行整理成一棵树：根是运行，下面是步骤（`step`）、压缩组（`compaction`）和不属于任何一步的记录（用户输入、上下文变化）；步骤下面是模型请求、工具调用、钩子、插件工作、提问，请求下面是每次尝试。每个节点有 `id`、`parent`、`kind`、`name`（模型、工具名、钩子名）、`start`、`end`、`ms`、`state`（`ok`、`error`、`running`、`waiting`、`cancelled`）、`detail`（错误原因，最多 200 个字符）、`record`（对应的轨迹记录，正文从轨迹接口取）。树里不放提示词、回复、工具参数和结果。运行、步骤、压缩组带 `tally` 汇总：token（含重试和压缩摘要，`summaryTokens` 是摘要部分）、上下文、请求数、尝试和重试数、模型用时、首 token、工具次数和错误、各工具次数、工具用时（并行的不重复计）、钩子数和钩子出错数、用到的模型、总时长。口径和统计页签相同。
+
+**运行列表**（`/api/runs`）列出当前用户所有会话的运行，默认按开始时间从新到旧、一页 50 条（`limit` 最多 200），`next` 是下一页的 `cursor`。参数：`from`、`to`（ISO 时刻，含起不含止）、`end`（`completed`、`failed`、`cancelled`、`stopped`、`running`，可用逗号写多个）、`toolErrors`（`true`/`false`）、`tool`（工具名，MCP 工具写 `服务/工具`）、`model`（`供应商/模型`）、`session`、`sort`（`started`、`ms`、`tokens`）。每条带会话标题、第一句提问（最多 200 个字符）和整次运行的 `tally`。运行表存在索引库里：运行开始时写一行，结束时更新；索引库删掉后启动时从会话文件重建。
 
 **journal 里和轨迹有关的字段**，旧版本写的行没有这些字段，读出来是空，显示“未记录”：
 

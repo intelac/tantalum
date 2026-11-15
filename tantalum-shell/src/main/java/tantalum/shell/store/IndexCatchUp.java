@@ -18,6 +18,7 @@ import tantalum.kernel.Kernel;
 import tantalum.shell.journal.SessionCorruptException;
 import tantalum.shell.journal.SessionFileReader;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.trace.Trace;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
@@ -49,12 +50,16 @@ public final class IndexCatchUp {
                 }
                 IndexBatch batch = new IndexBatch();
                 EventEnvelope[] first = new EventEnvelope[1];
+                // 运行表和实时一样由轨迹记录算出（run-tree 需求 3.4）；整个文件从头重放，所以每个运行的开头都见得到
+                Trace trace = new Trace();
+                RunCollector runs = new RunCollector(batch::add, (ignoredOwner, ignoredSession, ignoredRun) -> { });
                 try {
                     records.each(null, file, (envelope, before, decision) -> {
                         if (first[0] == null) {
                             first[0] = envelope;
                         }
                         batch.add(IndexChange.of(envelope, before, decision.newState()));
+                        runs.onRecords(envelope.seq(), envelope.principal(), trace.apply(envelope, before, decision));
                     });
                 } catch (SessionCorruptException corrupt) {
                     LOG.warn("index skips a corrupt session file: {}", corrupt.getMessage());

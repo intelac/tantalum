@@ -38,14 +38,17 @@ public final class SessionQueries {
     private final ColdReads cold;
     private final TurnQuery turns;
     private final TraceQuery trace;
+    private final RunQuery runs;
 
-    public SessionQueries(StateView view, Transcript transcript, SessionIndex index, ColdReads cold, TurnQuery turns, TraceQuery trace) {
+    public SessionQueries(StateView view, Transcript transcript, SessionIndex index, ColdReads cold, TurnQuery turns, TraceQuery trace,
+                          RunQuery runs) {
         this.view = view;
         this.transcript = transcript;
         this.index = index;
         this.cold = cold;
         this.turns = turns;
         this.trace = trace;
+        this.runs = runs;
     }
 
     /** 回放出的每次模型调用和轨迹。 */
@@ -56,6 +59,11 @@ public final class SessionQueries {
     /** 整个会话的轨迹记录和请求详情，每次重放会话文件。 */
     public TraceQuery trace() {
         return trace;
+    }
+
+    /** 运行的调用树和跨会话的运行列表（run-tree）。 */
+    public RunQuery runs() {
+        return runs;
     }
 
     public Optional<RunState> run(Principal principal, RunId id) {

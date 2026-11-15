@@ -37,6 +37,8 @@ import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.UsageLedger;
 import tantalum.shell.trace.Trace;
 import tantalum.shell.trace.TraceJson;
+import tantalum.shell.trace.RunTree;
+import tantalum.shell.trace.Tally;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPrompt;
@@ -302,6 +304,60 @@ class WireFormatTest {
         assertEquals(java.util.Set.of("run", "system", "user", "context", "compacted", "request", "tool", "work", "hook"),
                 page.records().stream().map(record -> TraceJson.toMap(codec.mapper(), record).get("kind")).collect(java.util.stream.Collectors.toSet()));
         check("trace.json", pageJson(page));
+    }
+
+    /** 调用树的汇总和统计页签同一个场景的数字相同（console/src/stats/metrics.test.ts 断言的那些，run-tree 需求 2）。 */
+    @Test
+    void runTreeTalliesMatchTheStatsTab(@TempDir Path dir) throws Exception {
+        TranscriptFixture fx = traceScenario();
+        TracePage page = withJournal(fx, dir, (replay, paths) -> new TraceQuery(paths, replay, new RecordCodec(codec))
+                .page(TranscriptFixture.USER, TranscriptFixture.SESSION, null).orElseThrow());
+        Map<RunId, List<TraceRecord>> byRun = new java.util.LinkedHashMap<>();
+        page.records().forEach(record -> byRun.computeIfAbsent(record.head().run(), ignored -> new ArrayList<>()).add(record));
+        Map<String, RunTree> trees = new java.util.HashMap<>();
+        byRun.forEach((run, records) -> trees.put(run.value(), RunTree.of(run, records)));
+
+        RunTree.Node first = trees.get("s_0").root();
+        List<RunTree.Node> steps = first.children().stream().filter(node -> node.kind() == RunTree.Kind.STEP).toList();
+        Tally step1 = steps.get(0).tally();
+        assertEquals(400L, step1.context());
+        assertEquals(600L, step1.ttftMs());
+        assertEquals(1_800L, step1.modelMs());
+        assertEquals(800L, step1.toolMs());
+        assertEquals(List.of(new Tally.ToolCount("read_file", 1, 0), new Tally.ToolCount("github/search", 1, 1),
+                new Tally.ToolCount("rm", 1, 1)), step1.tools());
+        assertEquals(2, step1.attempts());
+        assertEquals(1, step1.retries());
+        Tally step2 = steps.get(1).tally();
+        assertEquals(700L, step2.context());
+        assertEquals(null, step2.ttftMs());
+        assertEquals(1_000L, step2.modelMs());
+        Tally run1 = first.tally();
+        assertEquals(700L, run1.context());
+        assertEquals(50L, run1.tokens().output());
+        assertEquals(2_800L, run1.modelMs());
+        assertEquals(600L, run1.ttftMs());
+        assertEquals(3, run1.toolCalls());
+        assertEquals(2, run1.toolErrors());
+        // 请求下面是各次尝试，第一次是 429
+        RunTree.Node request = steps.get(0).children().stream().filter(node -> node.kind() == RunTree.Kind.REQUEST).findFirst().orElseThrow();
+        assertEquals(List.of(RunTree.State.ERROR, RunTree.State.OK), request.children().stream().map(RunTree.Node::state).toList());
+
+        // 第 3 轮：先压缩组、后第 1 步；压缩的摘要请求只进 summaryTokens，减掉后和统计页签一样没有输出
+        RunTree.Node third = trees.get("s_13").root();
+        assertEquals(List.of(RunTree.Kind.COMPACTION, RunTree.Kind.STEP), third.children().stream().map(RunTree.Node::kind)
+                .filter(kind -> kind == RunTree.Kind.COMPACTION || kind == RunTree.Kind.STEP).toList());
+        assertEquals(20L, third.tally().summaryTokens().output());
+        assertEquals(0L, third.tally().tokens().minus(third.tally().summaryTokens()).output());
+        assertEquals(null, third.tally().context());
+
+        // 手动压缩：没有轮号，只有一个压缩组
+        RunTree.Node manual = trees.get("s_21").root();
+        assertEquals("MANUAL_COMPACTION", manual.name());
+        assertEquals(List.of(RunTree.Kind.COMPACTION), manual.children().stream().map(RunTree.Node::kind)
+                .filter(kind -> kind == RunTree.Kind.COMPACTION || kind == RunTree.Kind.STEP).toList());
+        // 最后一轮被中断
+        assertEquals(RunTree.State.CANCELLED, trees.get("s_23").root().state());
     }
 
     @Test

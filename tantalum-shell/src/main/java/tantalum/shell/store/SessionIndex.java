@@ -35,8 +35,8 @@ import tantalum.value.model.TokenUsage;
 public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
-    /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 6;
+    /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。7：运行表（run-tree 需求 3）。版本不同时删掉索引，从会话文件重建。 */
+    static final int VERSION = 7;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
@@ -151,6 +151,7 @@ public final class SessionIndex implements AutoCloseable {
                   PRIMARY KEY (session, seq)
                 ) WITHOUT ROWID""");
         statement.execute("CREATE INDEX IF NOT EXISTS texts_by_principal ON texts (principal)");
+        RunTable.create(statement);
         statement.execute("PRAGMA user_version=" + VERSION);
     }
 
@@ -175,6 +176,7 @@ public final class SessionIndex implements AutoCloseable {
             writeUsage(batch);
             writeSubmissions(batch);
             writeTexts(batch);
+            RunTable.write(connection, batch.runs.values());
             connection.commit();
         } catch (SQLException failure) {
             connection.rollback();
@@ -294,6 +296,11 @@ public final class SessionIndex implements AutoCloseable {
             }
         }
         return hits;
+    }
+
+    /** 这个人的运行，一页（run-tree 需求 4）。游标不合法时抛 {@link IllegalArgumentException}。 */
+    public synchronized RunTable.Page runs(Principal principal, RunTable.Filter filter) throws SQLException {
+        return RunTable.list(connection, principal, filter);
     }
 
     /** 重放完一个文件后写实际大小。文件可能比记录的短（残缺尾部被截掉），所以这里不取最大值。 */

@@ -21,6 +21,7 @@ import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.DeadlineTimers;
 import tantalum.shell.loop.Evictor;
 import tantalum.shell.loop.ExternalGate;
+import tantalum.shell.loop.FactListener;
 import tantalum.shell.loop.HandlerDispatcher;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.InputRing;
@@ -34,13 +35,16 @@ import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.SubmissionLedger;
 import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.store.SessionQueries;
+import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTimer;
+import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
+import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
@@ -92,7 +96,18 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         }, done);
         // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取
         Intake[] intakeSlot = new Intake[1];
-        Cleanroom cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, queries.projections(), queries.hub(), queries.view(), results,
+        // 推送之外，运行表也收轨迹记录（run-tree 需求 3）
+        FactListener facts = FactListener.both(queries.hub(), new FactListener() {
+            @Override
+            public void onFact(long seq, int index, Fact fact) {
+            }
+
+            @Override
+            public void onRecords(long seq, Principal owner, List<TraceRecord> records) {
+                storage.runs.onRecords(seq, owner, records);
+            }
+        });
+        Cleanroom cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, queries.projections(), facts, queries.view(), results,
                 storage.indexWriter::onStep, evictor, saved, envelope -> processed(envelope, receipts, intakeSlot[0], lanes));
         // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> closing.getAsBoolean() || lanes.halted() || cleanroom.broken() || input.broken()

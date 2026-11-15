@@ -7,6 +7,7 @@ import tantalum.shell.loop.Projections;
 import tantalum.shell.loop.StateView;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.ColdReads;
+import tantalum.shell.store.RunQuery;
 import tantalum.shell.store.SessionQueries;
 import tantalum.shell.store.TraceQuery;
 import tantalum.shell.store.TurnQuery;
@@ -23,7 +24,8 @@ record Queries(StateView view, Transcript transcript, Projections projections, T
         TurnQuery turns = new TurnQuery(storage.paths, storage.records, codec.mapper());
         SseHub hub = new SseHub(1024, 4096, turns::messagesAfter, codec.mapper());
         SessionQueries queries = new SessionQueries(view, transcript, storage.index, new ColdReads(storage.paths, storage.records::read),
-                turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)));
+                turns, new TraceQuery(storage.paths, storage.records, new RecordCodec(codec)),
+                new RunQuery(storage.paths, storage.records, storage.index));
         return new Queries(view, transcript, projections, turns, hub, queries);
     }
 }
