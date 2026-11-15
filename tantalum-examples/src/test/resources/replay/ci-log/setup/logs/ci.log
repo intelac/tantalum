@@ -1,0 +1,17 @@
+[ci] python3 -m unittest discover -s tests -v
+test_one_row_per_weight (test_reports.ReportsTest.test_one_row_per_weight) ... FAIL
+test_two_decimals (test_reports.ReportsTest.test_two_decimals) ... ok
+
+======================================================================
+FAIL: test_one_row_per_weight (test_reports.ReportsTest.test_one_row_per_weight)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests/test_reports.py", line 8, in test_one_row_per_weight
+    self.assertEqual(len(shipping_table([1.0, 2.0, 3.5], "local").splitlines()), 3)
+AssertionError: 5 != 3
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.004s
+
+FAILED (failures=1)
+[ci] job failed with exit code 1

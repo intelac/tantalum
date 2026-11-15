@@ -271,7 +271,13 @@ class ReplayScenarioTest {
         if (!Files.isDirectory(from)) return;
         try (Stream<Path> files = Files.walk(from)) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
-                Path target = to.resolve(from.relativize(file).toString());
+                // 以 . 开头的配置文件（.env）存成 dot.xxx：根目录的 .gitignore 挡住了 .env，改名才进得了仓库
+                String relative = from.relativize(file).toString();
+                String name = file.getFileName().toString();
+                if (name.startsWith("dot.")) {
+                    relative = relative.substring(0, relative.length() - name.length()) + name.substring(3);
+                }
+                Path target = to.resolve(relative);
                 Files.createDirectories(target.getParent());
                 Files.copy(file, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }

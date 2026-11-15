@@ -377,6 +377,9 @@ def normalize(text):
 
 def write_files(target, files):
     for path, data in files.items():
+        # .env 这类被根目录 .gitignore 挡住的配置文件存成 dot.env，回放时还原（ReplayScenarioTest.overlay）
+        head, name = os.path.split(path)
+        if name.startswith(".env"): path = os.path.join(head, "dot" + name)
         full = os.path.join(target, path); os.makedirs(os.path.dirname(full), exist_ok=True)
         open(full, "wb").write(data)
 

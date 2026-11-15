@@ -1,0 +1,4 @@
+# 录下的回放要原样进仓库：样例项目里的日志、数据目录不能被根目录的 *.log、data/ 挡住。
+# 以 . 开头的配置文件（比如 .env）在 setup 里改名成 dot.xxx 存，回放时还原（ReplayScenarioTest.overlay）。
+!*.log
+!data/

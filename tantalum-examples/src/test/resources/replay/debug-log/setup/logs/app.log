@@ -1,0 +1,12 @@
+2026-11-12 09:14:02 INFO  starting inventory cli
+2026-11-12 09:14:02 INFO  args: order SKU-0003 3 national
+2026-11-12 09:14:02 ERROR unhandled exception
+Traceback (most recent call last):
+  File "inventory/cli.py", line 20, in main
+    print(place_order(sku, quantity, 9.5, zone)["total"])
+  File "inventory/orders.py", line 10, in place_order
+    reserve_stock(sku, quantity)
+  File "inventory/stock.py", line 17, in reserve_stock
+    if quantity > available:
+TypeError: '>' not supported between instances of 'str' and 'int'
+2026-11-12 09:14:03 INFO  exit 1
