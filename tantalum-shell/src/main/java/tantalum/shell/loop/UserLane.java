@@ -1,7 +1,5 @@
 package tantalum.shell.loop;
 
-import tantalum.value.text.Failures;
-
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -19,13 +17,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tantalum.shell.journal.Sequence;
 import tantalum.shell.journal.Line;
+import tantalum.shell.journal.Sequence;
+import tantalum.shell.monitor.Probe;
+import tantalum.shell.monitor.Probes;
+import tantalum.shell.monitor.Stage;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.PrincipalState;
+import tantalum.value.text.Failures;
 
 /**
  * 一个用户的写入通道。有事件时一个虚拟线程，没事件就退出。取走队列里的全部工作，事件按到达顺序取号后放行给 cleanroom，
@@ -69,6 +71,7 @@ public final class UserLane {
 
     private final Principal principal;
     private final Sequence sequence;
+    private volatile Probe probe = Probe.NONE;
     private final Writer writer;
     private final Exit exit;
     private final Loader loader;
@@ -166,7 +169,12 @@ public final class UserLane {
                 pinned.add(envelope.session());
                 states.putIfAbsent(envelope.session(), seen);
             }
+            long writeStart = System.nanoTime();
             write(released);
+            long fsync = (System.nanoTime() - writeStart) / 1_000_000;
+            for (Released step : released) {
+                Probes.event(probe, Stage.JOURNAL, step.envelope(), () -> "fsync " + fsync + " ms");
+            }
         } catch (Throwable failure) {
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -190,7 +198,9 @@ public final class UserLane {
         List<EventEnvelope> numbered = new ArrayList<>(batch.size());
         try {
             for (EventEnvelope envelope : batch) {
-                numbered.add(envelope.withSeq(sequence.next(principal)));
+                EventEnvelope withSeq = envelope.withSeq(sequence.next(principal));
+                numbered.add(withSeq);
+                Probes.event(probe, Stage.LANE, withSeq, () -> "seq " + withSeq.seq());
             }
         } catch (RuntimeException failure) {
             exit.failed(failure);
@@ -317,5 +327,10 @@ public final class UserLane {
                 write.get();
             }
         }
+    }
+
+    /** 实时监视的埋点（live-monitor）。 */
+    void watch(Probe probe) {
+        this.probe = probe;
     }
 }

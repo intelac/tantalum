@@ -34,14 +34,17 @@ import tantalum.local.wire.Cancel;
 import tantalum.local.wire.Context;
 import tantalum.local.wire.ContextResult;
 import tantalum.local.wire.Hello;
-import tantalum.local.wire.Retired;
 import tantalum.local.wire.Message;
 import tantalum.local.wire.Result;
+import tantalum.local.wire.Retired;
 import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.Welcome;
 import tantalum.local.wire.Wire;
+import tantalum.shell.monitor.Probe;
+import tantalum.shell.monitor.Stage;
 import tantalum.value.id.Principal;
+import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 
 /**
@@ -105,6 +108,13 @@ public final class LocalLinks implements AutoCloseable {
         this.timing = timing;
         long every = timing.ping().toMillis();
         timers.scheduleWithFixedDelay(this::heartbeat, every, every, TimeUnit.MILLISECONDS);
+    }
+
+    private volatile Probe probe = Probe.NONE;
+
+    /** 实时监视的埋点（live-monitor）：发给连接程序和拿回结果时报。 */
+    public void watch(Probe probe) {
+        this.probe = probe;
     }
 
     public LocalTokens tokens() {
@@ -230,8 +240,17 @@ public final class LocalLinks implements AutoCloseable {
                     link.sessionDirs() ? dir : null, link.skillLists() ? skills : null))) {
                 return LocalResult.error(DISCONNECTED);
             }
+            SessionId watched = session == null ? null : new SessionId(session);
+            long sent = System.nanoTime();
+            if (probe.watching(principal)) {
+                probe.at(principal, Stage.REMOTE_SEND, watched, null, null, null, tool, null);
+            }
             try {
-                return reply.get(Math.max(0, left), TimeUnit.NANOSECONDS).toLocal();
+                LocalResult result = reply.get(Math.max(0, left), TimeUnit.NANOSECONDS).toLocal();
+                if (probe.watching(principal)) {
+                    probe.at(principal, Stage.REMOTE_DONE, watched, null, null, null, tool, (System.nanoTime() - sent) / 1_000_000 + " ms");
+                }
+                return result;
             } catch (TimeoutException late) {
                 link.send(new Cancel(id));
                 return LocalResult.error("Tool timed out after " + timeout + ". Its outcome is unknown.");

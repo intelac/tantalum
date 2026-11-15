@@ -11,6 +11,30 @@ export const MAX_TRACE_BATCH = 500;
 
 export type GetWhat = "tree" | "trace" | "runs" | "summary";
 
+/** 一条实时监视消息（live-monitor），和服务器的 `MonitorMessage` 一一对应。 */
+export interface MonitorMessage {
+  stage:
+    | "INTAKE"
+    | "INPUT"
+    | "LANE"
+    | "KERNEL"
+    | "JOURNAL"
+    | "PUSH"
+    | "OUTPUT"
+    | "HANDLER_START"
+    | "HANDLER_END"
+    | "REMOTE_SEND"
+    | "REMOTE_DONE";
+  session?: string;
+  run?: string;
+  seq?: number;
+  command?: string;
+  name?: string;
+  detail?: string;
+  at: number;
+  dropped: number;
+}
+
 export interface PanelContext {
   session: string;
   run?: string;
@@ -22,7 +46,7 @@ export interface PanelContext {
 export type FromPanel =
   | { tantalum: 1; type: "ready" }
   | { tantalum: 1; type: "get"; id: string | number; what: GetWhat; params?: Record<string, unknown> }
-  | { tantalum: 1; type: "subscribe"; what: "trace" }
+  | { tantalum: 1; type: "subscribe"; what: "trace" | "monitor" }
   | { tantalum: 1; type: "open"; target: { run: string } | { record: string } }
   | { tantalum: 1; type: "error"; message: string };
 
@@ -30,7 +54,8 @@ export type ToPanel =
   | ({ tantalum: 1; type: "init" } & PanelContext)
   | ({ tantalum: 1; type: "context" } & PanelContext)
   | { tantalum: 1; type: "result"; id: string | number; ok: boolean; status?: number; body?: unknown; error?: string }
-  | { tantalum: 1; type: "trace"; records: TraceRecord[] };
+  | { tantalum: 1; type: "trace"; records: TraceRecord[] }
+  | { tantalum: 1; type: "monitor"; messages: MonitorMessage[] };
 
 const WHATS: readonly string[] = ["tree", "trace", "runs", "summary"];
 
@@ -50,7 +75,7 @@ export function parseFromPanel(data: unknown): FromPanel | null {
       return { tantalum: 1, type: "get", id, what: message.what as GetWhat, params: params as Record<string, unknown> | undefined };
     }
     case "subscribe":
-      return message.what === "trace" ? { tantalum: 1, type: "subscribe", what: "trace" } : null;
+      return message.what === "trace" || message.what === "monitor" ? { tantalum: 1, type: "subscribe", what: message.what } : null;
     case "open": {
       const target = message.target as Record<string, unknown> | null | undefined;
       if (target === null || typeof target !== "object") return null;

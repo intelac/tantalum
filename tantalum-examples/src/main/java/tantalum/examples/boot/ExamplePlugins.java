@@ -16,6 +16,7 @@ import org.springframework.core.annotation.Order;
 import tantalum.examples.CitationCheckHook;
 import tantalum.examples.CitationWork;
 import tantalum.examples.DailyQuotaHook;
+import tantalum.examples.LiveMonitorPanel;
 import tantalum.examples.PinnedContextHook;
 import tantalum.examples.ProviderBackoffHook;
 import tantalum.examples.ProviderStatusWork;
@@ -60,6 +61,7 @@ public class ExamplePlugins {
         if (settings.citationCheck().enabled()) names.add("citationCheck");
         if (settings.truncateOutput().enabled()) names.add("truncateOutput");
         names.add(RunOverviewPanel.NAME);
+        names.add(LiveMonitorPanel.NAME);
         return names;
     }
 
@@ -134,5 +136,12 @@ public class ExamplePlugins {
     @ConditionalOnBooleanProperty(name = PREFIX + "run-overview.enabled", matchIfMissing = true)
     Panel exampleRunOverviewPanel() {
         return new RunOverviewPanel();
+    }
+
+    /** 示例面板“实时监视”（live-monitor 需求 4）。 */
+    @Bean
+    @ConditionalOnBooleanProperty(name = PREFIX + "live-monitor.enabled", matchIfMissing = true)
+    Panel exampleLiveMonitorPanel() {
+        return new LiveMonitorPanel();
     }
 }

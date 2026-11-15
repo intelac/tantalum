@@ -3,7 +3,16 @@
 // 能请宿主在控制台内跳转。不碰 React，依赖都从外面给，方便测。
 
 import type { TraceRecord } from "../api/types";
-import { MAX_MESSAGE_BYTES, MAX_TRACE_BATCH, PROTOCOL, parseFromPanel, type FromPanel, type PanelContext, type ToPanel } from "./protocol";
+import {
+  MAX_MESSAGE_BYTES,
+  MAX_TRACE_BATCH,
+  PROTOCOL,
+  parseFromPanel,
+  type FromPanel,
+  type MonitorMessage,
+  type PanelContext,
+  type ToPanel,
+} from "./protocol";
 
 export interface BridgeApi {
   tree(session: string, run: string): Promise<unknown>;
@@ -18,6 +27,8 @@ export interface BridgeDeps {
   context: () => PanelContext;
   api: BridgeApi;
   subscribeLive: (session: string, listener: (record: TraceRecord) => void) => () => void;
+  /** 实时监视流（所有会话的，桥自己按当前会话过滤）。 */
+  subscribeMonitor?: (listener: (message: MonitorMessage) => void) => () => void;
   /** 控制台内的地址。 */
   navigate: (target: { run: string } | { record: string }, session: string) => void;
   onReady: () => void;
@@ -53,6 +64,9 @@ export class PanelBridge {
   private subscribedSession: string | null = null;
   private pending: TraceRecord[] = [];
   private flushing = false;
+  private unsubscribeMonitor: (() => void) | null = null;
+  private monitorPending: MonitorMessage[] = [];
+  private monitorFlushing = false;
   private ready = false;
   private disposed = false;
 
@@ -88,6 +102,8 @@ export class PanelBridge {
     this.disposed = true;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.unsubscribeMonitor?.();
+    this.unsubscribeMonitor = null;
   }
 
   private handle(message: FromPanel): void {
@@ -102,7 +118,8 @@ export class PanelBridge {
         void this.get(message.id, message.what, message.params ?? {}, context);
         return;
       case "subscribe":
-        this.subscribe(context.session);
+        if (message.what === "monitor") this.subscribeToMonitor();
+        else this.subscribe(context.session);
         return;
       case "open":
         if ("run" in message.target && !runOfSession(message.target.run, context.session)) {
@@ -154,6 +171,27 @@ export class PanelBridge {
       this.flushing = true;
       (this.deps.schedule ?? ((flush) => requestAnimationFrame(flush)))(() => this.flush());
     });
+  }
+
+  /** 监视消息按当前会话过滤（会话变了自动跟着换，不用重新订阅），按帧合并。 */
+  private subscribeToMonitor(): void {
+    if (this.unsubscribeMonitor !== null || this.deps.subscribeMonitor === undefined) return;
+    this.unsubscribeMonitor = this.deps.subscribeMonitor((message) => {
+      if (message.session !== this.deps.context().session) return;
+      this.monitorPending.push(message);
+      if (this.monitorFlushing) return;
+      this.monitorFlushing = true;
+      (this.deps.schedule ?? ((flush) => requestAnimationFrame(flush)))(() => this.flushMonitor());
+    });
+  }
+
+  private flushMonitor(): void {
+    this.monitorFlushing = false;
+    const messages = this.monitorPending;
+    this.monitorPending = [];
+    for (let start = 0; start < messages.length; start += MAX_TRACE_BATCH) {
+      this.post({ tantalum: PROTOCOL, type: "monitor", messages: messages.slice(start, start + MAX_TRACE_BATCH) });
+    }
   }
 
   private flush(): void {

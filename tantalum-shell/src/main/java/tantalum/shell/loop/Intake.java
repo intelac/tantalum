@@ -10,6 +10,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import tantalum.kernel.compaction.Compactor;
+import tantalum.shell.monitor.Probes;
+import tantalum.shell.monitor.Stage;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
@@ -219,7 +221,9 @@ public final class Intake {
         if (verdict != ExternalGate.Verdict.ADMITTED) {
             return status(verdict);
         }
-        if (!input.tryPublish(envelope(principal, run.session(), run.run(), new Cancel(new RequestId(UUID.randomUUID().toString()))))) {
+        EventEnvelope cancel = envelope(principal, run.session(), run.run(), new Cancel(new RequestId(UUID.randomUUID().toString())));
+        Probes.event(input.probe(), Stage.INTAKE, cancel, null);
+        if (!input.tryPublish(cancel)) {
             gate.release(principal);
             return 429;
         }
@@ -265,7 +269,9 @@ public final class Intake {
             if (needsNewRun) {
                 newRuns.add(claim.submission());
             }
-            if (!input.tryPublish(envelope(principal, session, null, event.apply(claim.submission())))) {
+            EventEnvelope submitted = envelope(principal, session, null, event.apply(claim.submission()));
+            Probes.event(input.probe(), Stage.INTAKE, submitted, null);
+            if (!input.tryPublish(submitted)) {
                 abandon(principal, request, claim.submission(), true);
                 return Submission.rejected(429);
             }

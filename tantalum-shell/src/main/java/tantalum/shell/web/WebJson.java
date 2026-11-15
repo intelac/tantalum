@@ -26,6 +26,11 @@ final class WebJson {
         this.mapper = engine.codec().mapper();
     }
 
+    /** 一个值的 JSON 文字（SSE 的数据用）。 */
+    String write(Object value) {
+        return mapper.writeValueAsString(value);
+    }
+
     ResponseEntity<String> json(int status, Object body) {
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(mapper.writeValueAsString(body));
     }

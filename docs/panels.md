@@ -46,7 +46,7 @@ iframe 的 `sandbox` 只有 `allow-scripts`，所以：
 |---|---|---|
 | `ready` | | 处理函数都注册好了；控制台回 `init` |
 | `get` | `id`、`what`、`params` | 只读请求，控制台回 `result` |
-| `subscribe` | `what: "trace"` | 开始接收当前会话的实时轨迹记录 |
+| `subscribe` | `what: "trace"` 或 `"monitor"` | 开始接收当前会话的实时轨迹记录，或流水线的实时阶段 |
 | `open` | `target: {run}` 或 `{record}` | 请控制台打开这次运行的详情或轨迹页的这条记录（只限当前会话） |
 | `error` | `message` | 显示在面板上方的错误条里 |
 
@@ -58,6 +58,7 @@ iframe 的 `sandbox` 只有 `allow-scripts`，所以：
 | `context` | 同 `init`，会话、运行、主题、语言变了时再发 |
 | `result` | `id`、`ok`、`status`、`body` 或 `error` |
 | `trace` | `records`：当前会话刚变化的轨迹记录（同一条只给最新版本，一批最多 500 条），格式同 `/api/sessions/{s}/trace` |
+| `monitor` | `messages`：当前会话的事件刚走过的流水线阶段，按到达的先后（一批最多 500 条），见下面 |
 
 `get` 的白名单（都限定在当前会话，用当前用户的身份）：
 
@@ -67,6 +68,22 @@ iframe 的 `sandbox` 只有 `allow-scripts`，所以：
 | `trace` | `before` 或 `run`（可选） | `GET /api/sessions/{s}/trace` |
 | `runs` | `limit`（1–200，默认 20） | `GET /api/runs?session={s}` |
 | `summary` | | `GET /api/runs/summary?session={s}&tz=<浏览器时区>` |
+
+## 实时监视消息
+
+订阅 `monitor` 后，控制台打开一条只在内存里的监视流（`/api/monitor/stream`，没有面板订阅时关掉），把当前会话的消息转给面板。每条消息：
+
+| 字段 | 含义 |
+|---|---|
+| `stage` | `INTAKE`（提交被接受）、`INPUT`（进输入环，含处理器结果回来）、`LANE`（用户通道取号）、`KERNEL`（内核走完一步）、`JOURNAL`（落盘）、`PUSH`（推给页面）、`OUTPUT`（命令进输出环）、`HANDLER_START`、`HANDLER_END`、`REMOTE_SEND`、`REMOTE_DONE`（发给用户电脑的连接程序、拿回结果） |
+| `session`、`run`、`seq` | 会话、运行、事件序号（取号以后才有） |
+| `command` | 命令 ID（命令和处理器的阶段，以及处理器结果回到输入环时） |
+| `name` | 事件或命令的类型，工具调用时是工具名 |
+| `detail` | 一句数值说明，如 `seq 42`、`AWAITING_TOOLS → CALLING_MODEL, 1 command, 35 µs`、`fsync 2 ms`、`1830 ms` |
+| `at` | 毫秒时刻 |
+| `dropped` | 这条之前因为跟不上丢了几条（服务器每个订阅最多排 2048 条） |
+
+阶段名是约定：服务器的组件以后改名、重构，阶段不变。示例面板“实时监视”（`live-monitor`）把它画成架构图上的光点。
 
 ## 辅助脚本
 
@@ -78,7 +95,7 @@ iframe 的 `sandbox` 只有 `allow-scripts`，所以：
 ```
 
 ```js
-tantalum.on("init", (context) => { /* context.session, context.theme … */ tantalum.subscribe(); });
+tantalum.on("init", (context) => { /* context.session, context.theme … */ tantalum.subscribe(); /* 或 subscribe("monitor") */ });
 tantalum.on("context", (context) => { /* 会话或主题变了 */ });
 tantalum.on("trace", (message) => { /* message.records */ });
 tantalum.ready();

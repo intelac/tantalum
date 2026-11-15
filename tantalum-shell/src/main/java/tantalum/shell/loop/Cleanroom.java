@@ -8,17 +8,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.Kernel;
 import tantalum.shell.conversation.TranscriptItem;
+import tantalum.shell.monitor.Probe;
+import tantalum.shell.monitor.Probes;
+import tantalum.shell.monitor.Stage;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.Command;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
-import tantalum.value.decision.StepRecord;
 import tantalum.value.decision.PhaseChanged;
+import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
+import tantalum.value.state.RunState;
 
 /**
  * Cleanroom Ring 的消费者：按序调内核，算出这一步的结果行，交给 {@link Release}：结果行落盘后才发布命令、事实、条目和轨迹记录的变化
@@ -41,6 +45,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private final Evictor evictor;
     private final Release release;
     private final Consumer<EventEnvelope> processed;
+    private volatile Probe probe = Probe.NONE;
     private KernelState state;
     /** 内核或状态发布抛出后置位：之后的事件全部跳过，入口返回 503，而不是让消费者线程静默死掉。 */
     private volatile boolean broken;
@@ -154,7 +159,10 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private boolean step(EventEnvelope envelope) {
         long seq = envelope.seq();
         KernelState before = state;
+        long kernelStart = System.nanoTime();
         Decision decision = kernel.step(before, envelope);
+        long kernelMicros = (System.nanoTime() - kernelStart) / 1_000;
+        Probes.event(probe, Stage.KERNEL, envelope, () -> kernelDetail(envelope, before, decision, kernelMicros));
         StepRecord record = StepRecord.of(envelope, before, decision);
         state = decision.newState();
         view.publish(state);
@@ -167,6 +175,8 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
             for (Command command : decision.commands()) {
                 if (!output.test(command)) {
                     results.reportDropped(command, "output ring full");
+                } else {
+                    Probes.command(probe, Stage.OUTPUT, command, null);
                 }
             }
             int index = 0;
@@ -186,6 +196,8 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
                     LOG.error("trace batch listener failed", failure);
                 }
             }
+            Probes.event(probe, Stage.PUSH, envelope,
+                    () -> projected.items().size() + " items, " + projected.records().size() + " records");
         }, () -> processed.accept(envelope));
         return true;
     }
@@ -220,5 +232,29 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         } catch (RuntimeException failure) {
             LOG.error("trace listener failed", failure);
         }
+    }
+
+    /** 实时监视的埋点（live-monitor）：内核走完一步、推送、命令进输出环时报。内核本身不知道。 */
+    public void watch(Probe probe) {
+        this.probe = probe;
+    }
+
+    /** “状态 A → B，n 个命令，k µs”：从内核交出的结果里取。 */
+    static String kernelDetail(EventEnvelope envelope, KernelState before, Decision decision, long micros) {
+        RunId run = envelope.run();
+        if (run == null && !decision.commands().isEmpty()) {
+            run = decision.commands().getFirst().run().run();
+        }
+        RunState was = run == null ? null : before.runs().get(run);
+        RunState now = run == null ? null : decision.newState().runs().get(run);
+        StringBuilder detail = new StringBuilder();
+        String from = was == null ? "–" : was.phase().name();
+        String to = now == null ? "–" : now.phase().name();
+        if (!from.equals(to)) {
+            detail.append(from).append(" → ").append(to).append(", ");
+        }
+        int commands = decision.commands().size();
+        detail.append(commands).append(commands == 1 ? " command, " : " commands, ").append(micros).append(" µs");
+        return detail.toString();
     }
 }

@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.journal.Sequence;
+import tantalum.shell.monitor.Probe;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -84,7 +85,17 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
     }
 
     private UserLane newLane(Principal principal) {
-        return new UserLane(principal, sequence, writer, this, loader, residency);
+        UserLane lane = new UserLane(principal, sequence, writer, this, loader, residency);
+        lane.watch(probe);
+        return lane;
+    }
+
+    private volatile Probe probe = Probe.NONE;
+
+    /** 实时监视的埋点（live-monitor）：用户通道取号和落盘时报。 */
+    public void watch(Probe probe) {
+        this.probe = probe;
+        lanes.values().forEach(lane -> lane.watch(probe));
     }
 
     /** 处理完的一步交给这个用户的通道：和他的事件同一个写入者，结果行落盘后放行。 */

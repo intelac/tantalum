@@ -120,6 +120,27 @@ describe("PanelBridge", () => {
   });
 });
 
+describe("monitor forwarding", () => {
+  it("forwards only the current session's monitor messages, batched, and unsubscribes on dispose", () => {
+    let listener: ((message: import("./protocol").MonitorMessage) => void) | null = null;
+    const stop = vi.fn();
+    const { bridge, sent, send } = setup({
+      subscribeMonitor: (next) => {
+        listener = next;
+        return stop;
+      },
+    });
+    send({ tantalum: 1, type: "subscribe", what: "monitor" });
+    const message = (stage: "LANE" | "KERNEL", session: string) => ({ stage, session, at: 1, dropped: 0 });
+    listener!(message("LANE", "s1"));
+    listener!(message("KERNEL", "s2"));
+    expect(sent).toEqual([{ tantalum: 1, type: "monitor", messages: [message("LANE", "s1")] }]);
+    send({ tantalum: 1, type: "subscribe", what: "monitor" });
+    bridge.dispose();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("runOfSession", () => {
   it("accepts <session>_<number> only", () => {
     expect(runOfSession("s1_4", "s1")).toBe(true);

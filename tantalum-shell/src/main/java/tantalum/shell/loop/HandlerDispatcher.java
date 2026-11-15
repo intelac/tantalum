@@ -5,6 +5,9 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.shell.handler.Handler;
+import tantalum.shell.monitor.Probe;
+import tantalum.shell.monitor.Probes;
+import tantalum.shell.monitor.Stage;
 import tantalum.value.command.AbortCommands;
 import tantalum.value.command.Command;
 import tantalum.value.event.Event;
@@ -52,9 +55,21 @@ public final class HandlerDispatcher implements EventHandler<OutputRing.Slot> {
         closing = true;
     }
 
+    private volatile Probe probe = Probe.NONE;
+
+    /** 实时监视的埋点（live-monitor）：处理器开始和结束时报。 */
+    public void watch(Probe probe) {
+        this.probe = probe;
+    }
+
     private void run(Handler handler, Command command) {
         try {
+            Probes.command(probe, Stage.HANDLER_START, command, null);
+            long started = System.nanoTime();
             Event result = execute(handler, command);
+            long millis = (System.nanoTime() - started) / 1_000_000;
+            Probes.command(probe, Stage.HANDLER_END, command,
+                    () -> millis + " ms" + (result == null ? "" : ", " + result.getClass().getSimpleName()));
             if (inFlight.isShutdownAbort(command.id())) {
                 LOG.info("not recording the result of {} interrupted by shutdown; restart closes run {}",
                         command.getClass().getSimpleName(), command.run().run().value());

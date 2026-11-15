@@ -11,6 +11,7 @@ import type { TraceStore } from "../trace/TraceStore";
 import { Button } from "../ui/Button";
 import { browserZone } from "../observe/filters";
 import { PanelBridge } from "./bridge";
+import { subscribeMonitor } from "./monitorStream";
 import type { PanelContext } from "./protocol";
 
 export const READY_TIMEOUT_MS = 10_000;
@@ -61,6 +62,7 @@ export function PanelFrame({ panel, title, session, run, trace }: Props) {
         summary: (query) => getRunsSummary(query),
       },
       subscribeLive: (s, listener) => trace.subscribeLive(s, listener),
+      subscribeMonitor,
       navigate: (target, s) => navigate("run" in target ? runPath(s, target.run) : traceRecordPath(s, target.record)),
       onReady: () => setReady(true),
       onError: (message) => setReported(message),

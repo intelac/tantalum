@@ -34,6 +34,7 @@ import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.SubmissionLedger;
 import tantalum.shell.memory.KnowledgeBase;
+import tantalum.shell.monitor.Probe;
 import tantalum.shell.store.SessionQueries;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
@@ -61,6 +62,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
 
     static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
                          BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened) {
+        return open(properties, stores, toolbox, queries, clock, receipts, closing, hooks, opened, Probe.NONE);
+    }
+
+    /** 同上，{@code probe} 是实时监视的埋点（live-monitor），接到各个环节上。 */
+    static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
+                         BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened, Probe probe) {
         Storage storage = stores.storage();
         Loop loop = properties.loop();
         Kernel kernel = KernelFactory.kernel(properties, toolbox.catalog().safety(), hooks);
@@ -118,6 +125,11 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         Intake intake = new Intake(input, gate, ledger, queries.view(), residency, storage::claim,
                 (principal, session) -> queries.queries().session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
         intakeSlot[0] = intake;
+        input.watch(probe);
+        lanes.watch(probe);
+        cleanroom.watch(probe);
+        handlers.watch(probe);
+        toolbox.localLinks().watch(probe);
         input.connect(lanes);
         cleanroomRing.connect(cleanroom);
         lanes.onHalt(receipts::failAll);

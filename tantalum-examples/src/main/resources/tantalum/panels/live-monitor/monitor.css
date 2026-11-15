@@ -1,0 +1,37 @@
+:root { --bg: #ffffff; --fg: #1f2329; --muted: #6b7280; --faint: #9a9ea6; --line: #d9dade; --zone: #f6f6f3; --zone-line: #e1dfd9;
+        --box: #ffffff; --box-line: #d7d8dc; --accent: #3b6cf0; --accent-soft: #e7efff; --done: #eef4ff; --done-line: #9db9ee;
+        --plug: #7b4fd6; --plug-soft: #f3edff; color-scheme: light; }
+:root[data-theme="dark"] { --bg: #1a1a1e; --fg: #e8e9ec; --muted: #9a9ea6; --faint: #6f737c; --line: #3a3b42; --zone: #212227; --zone-line: #33343b;
+        --box: #24252b; --box-line: #3a3b42; --accent: #6b8ff5; --accent-soft: #24304d; --done: #1f2840; --done-line: #3e5797;
+        --plug: #a88cf0; --plug-soft: #2b2540; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 12px/1.45 -apple-system, "PingFang SC", "Hiragino Sans", "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.live { display: inline-flex; align-items: center; gap: 5px; color: #2e9e5b; font-weight: 600; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: blink 1.4s infinite; }
+.paused .dot { animation: none; opacity: .4; }
+@keyframes blink { 50% { opacity: .25; } }
+.now { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font-weight: 600; }
+button { font: inherit; color: var(--fg); background: var(--box); border: 1px solid var(--box-line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.skipped { margin: 0; padding: 4px 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+main { position: relative; padding: 6px 8px; }
+/* the whole diagram fits the panel: as wide as it can be without getting taller than the space below the header */
+svg { width: 100%; height: calc(100vh - 56px); display: block; }
+.empty { position: absolute; inset: 40% 16px auto; text-align: center; color: var(--muted); margin: 0; }
+.zone { fill: var(--zone); stroke: var(--zone-line); stroke-dasharray: 5 4; }
+.zlabel { font-size: 11px; font-weight: 600; fill: var(--muted); }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.3; stroke-dasharray: 5 6; animation: flow 1.2s linear infinite; }
+.edge.hit { stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 8 6; animation-duration: .7s; }
+@keyframes flow { to { stroke-dashoffset: -22; } }
+.node rect { fill: var(--box); stroke: var(--box-line); stroke-width: 1.2; transition: fill .3s, stroke .3s; }
+.node .t { font-size: 12.5px; font-weight: 600; fill: var(--fg); }
+.node .s { font-size: 10px; fill: var(--faint); }
+.node .v { font-size: 10px; fill: var(--accent); }
+.node.done rect { fill: var(--done); stroke: var(--done-line); }
+.node.cur rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.2; }
+.node.cur .t { fill: var(--accent); }
+.node.plug rect { fill: var(--plug-soft); stroke: var(--plug); stroke-dasharray: 4 3; }
+.node.plug .t, .node.plug .s { fill: var(--plug); }
+#token { fill: var(--box); stroke: var(--accent); stroke-width: 3; }
+@media (prefers-reduced-motion: reduce) { .edge, .dot { animation: none; } }

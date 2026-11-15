@@ -48,6 +48,7 @@ public final class ViewAs extends OncePerRequestFilter {
             Pattern.compile("/api/sessions/[^/]+/runs/[^/]+/tree"),
             Pattern.compile("/api/runs"),
             Pattern.compile("/api/panels"),
+            Pattern.compile("/api/monitor/stream"),
             Pattern.compile("/api/runs/[^/]+"),
             Pattern.compile("/api/runs/[^/]+/turns"),
             Pattern.compile("/api/runs/[^/]+/turns/[^/]+"),

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live monitor</title>
+<link rel="stylesheet" href="monitor.css">
+</head>
+<body>
+<header>
+  <span class="live"><span class="dot"></span><span id="live"></span></span>
+  <span id="now" class="now"></span>
+  <button id="pause" type="button"></button>
+</header>
+<p id="skipped" class="skipped" hidden></p>
+<main>
+  <svg id="map" viewBox="0 0 640 830" role="img" preserveAspectRatio="xMidYMin meet"></svg>
+  <p id="empty" class="empty"></p>
+</main>
+<script src="bridge.js"></script>
+<script src="monitor.js"></script>
+</body>
+</html>

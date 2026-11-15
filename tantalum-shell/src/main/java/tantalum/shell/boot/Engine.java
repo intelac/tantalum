@@ -15,25 +15,26 @@ import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.WebAccess;
 import tantalum.shell.attachment.AttachmentStore;
 import tantalum.shell.handler.Handler;
+import tantalum.shell.journal.EventCodec;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalWorkspace;
-import tantalum.shell.journal.EventCodec;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.Receipts;
 import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.monitor.Monitor;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
+import tantalum.shell.panel.Panel;
+import tantalum.shell.panel.PanelRegistry;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
-import tantalum.shell.project.SessionMarks;
 import tantalum.shell.project.Projects;
+import tantalum.shell.project.SessionMarks;
 import tantalum.shell.route.Routes;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
-import tantalum.shell.panel.Panel;
-import tantalum.shell.panel.PanelRegistry;
 import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
@@ -67,6 +68,8 @@ public final class Engine implements AutoCloseable {
     /** 关闭开始后入口返回 503。 */
     private final AtomicBoolean closing = new AtomicBoolean();
     private PanelRegistry panels = PanelRegistry.empty();
+    /** 实时监视（live-monitor）：只在内存里，没人看时埋点几乎不做事。 */
+    private final Monitor monitor = new Monitor(Clock.systemUTC());
 
     /**
      * 打开存储，建环，把 Handler 接上，收尾上次没结束的运行，然后开门。失败时已经打开的倒序关掉再抛。
@@ -100,7 +103,8 @@ public final class Engine implements AutoCloseable {
             openedToolbox = Toolbox.open(properties, openedStores, routes, tools, hooks, workTypes, afterHooks, panels, clock, opened);
             unfinished = openedStores.storage().catchUp();
             openedQueries = Queries.open(openedStores, codec);
-            openedPipeline = Pipeline.open(properties, openedStores, openedToolbox, openedQueries, clock, receipts, closing::get, hooks, opened);
+            openedPipeline = Pipeline.open(properties, openedStores, openedToolbox, openedQueries, clock, receipts, closing::get, hooks, opened,
+                    monitor);
         } catch (RuntimeException | IOException failure) {
             closeAll(opened, failure);
             throw failure;
@@ -161,6 +165,10 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 会话、运行和回放的读取。 */
+    public Monitor monitor() {
+        return monitor;
+    }
+
     /** 装上的插件面板（plugin-panel）。 */
     public PanelRegistry panels() {
         return panels;

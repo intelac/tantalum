@@ -48,9 +48,9 @@
         send({ type: "get", id: id, what: what, params: params || {} });
       });
     },
-    /** Live trace records of the current session arrive as "trace" messages. */
-    subscribe: function () { send({ type: "subscribe", what: "trace" }); },
-    /** "init" | "context" | "trace" */
+    /** what: "trace" (default) for live trace records, "monitor" for live pipeline stages; they arrive as messages of that type. */
+    subscribe: function (what) { send({ type: "subscribe", what: what || "trace" }); },
+    /** "init" | "context" | "trace" | "monitor" */
     on: function (type, handler) { (handlers[type] = handlers[type] || []).push(handler); },
     /** target: { run: "<run id>" } or { record: "<trace record id>" } */
     open: function (target) { send({ type: "open", target: target }); },
