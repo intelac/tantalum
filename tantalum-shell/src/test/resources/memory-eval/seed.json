@@ -1,0 +1,62 @@
+{
+  "about": "记忆评测的种子数据（memory-final-plan 第 14 节）。第一层（代码判分，MemoryEvalTest）和第二层（真模型，tantalum-examples/scenarios/memory_eval.py）共用。daysAgo 按跑的时候倒推；scope 里的 {alpha} 换成跑的时候登记的项目路径。pendingConfirm 是等用户点“确认 / 撤销”的条目（外部来源，还没生效）。要答的事实只写在 text 里，页面的 description 只写题目（description 进记忆索引，事实写进去就测不出“想起”）。quote 是当时的原话，第二层的“只给原话”对照组用它。",
+  "users": {
+    "alice": [
+      {"id": "a-db-page", "kind": "page", "page": "decision-database", "type": "decision", "description": "数据库选型", "daysAgo": 20},
+      {"id": "a-db", "kind": "claim", "page": "decision-database", "status": "approved", "daysAgo": 20,
+       "text": "数据库定了 PostgreSQL 16，不用 MySQL：要用 JSONB 和行级安全。",
+       "quote": "数据库就用 PostgreSQL 16 吧，不用 MySQL，我们要 JSONB 和行级安全。"},
+
+      {"id": "a-deploy-page", "kind": "page", "page": "project-deploy", "type": "project", "description": "部署环境", "daysAgo": 15},
+      {"id": "a-k8s", "kind": "claim", "page": "project-deploy", "daysAgo": 15,
+       "text": "生产环境跑在 Kubernetes 上，集群名叫 kestrel，在法兰克福机房。",
+       "quote": "生产环境在 Kubernetes 上，集群叫 kestrel，放在法兰克福。"},
+
+      {"id": "a-lang-page", "kind": "page", "page": "preference-language", "type": "preference", "description": "回答的语言和风格", "daysAgo": 12},
+      {"id": "a-lang-old", "kind": "claim", "page": "preference-language", "daysAgo": 12,
+       "text": "回答请用英文。", "quote": "以后回答请用英文。"},
+      {"id": "a-lang-new", "kind": "claim", "page": "preference-language", "daysAgo": 1, "attrs": {"supersedes": "a-lang-old"},
+       "text": "以后回答用简体中文，尽量简洁（取代之前的“用英文”）。", "quote": "以后用简体中文、尽量简洁，别再用英文了。"},
+
+      {"id": "a-release-page", "kind": "page", "page": "decision-release", "type": "decision", "description": "发布安排", "daysAgo": 3},
+      {"id": "a-release", "kind": "claim", "page": "decision-release", "daysAgo": 3,
+       "text": "发布日期改到 12 月 1 日，因为支付接口的验收推迟了。", "quote": "发布改到 12 月 1 号吧，支付接口验收推迟了。"},
+      {"id": "a-build-page", "kind": "page", "page": "decision-build", "type": "decision", "description": "构建工具", "daysAgo": 10},
+      {"id": "a-gradle", "kind": "claim", "page": "decision-build", "daysAgo": 10,
+       "text": "否决了把 Maven 换成 Gradle 的提议：迁移成本太高。", "quote": "Gradle 就算了，迁移成本太高，继续用 Maven。"},
+
+      {"id": "a-me-page", "kind": "page", "page": "person-alice", "type": "person", "description": "关于我", "daysAgo": 5},
+      {"id": "a-plate", "kind": "claim", "page": "person-alice", "daysAgo": 5,
+       "text": "我的车牌号是 京A-7Q2KD。", "quote": "我车牌是京A-7Q2KD，帮我记一下。"},
+      {"id": "a-parking-page", "kind": "page", "page": "errand-parking", "type": "project", "description": "办停车证", "daysAgo": 4},
+      {"id": "a-plate-derived", "kind": "claim", "page": "errand-parking", "daysAgo": 4, "derivedFrom": ["a-plate"], "source": "assistant_inferred",
+       "text": "停车证要用车牌 京A-7Q2KD 办，物业周三收材料。"},
+      {"id": "a-plate-card", "kind": "card", "daysAgo": 5, "source": "assistant_inferred",
+       "attrs": {"session": "s-old-car", "title": "办停车证", "run": "s-old-car_0", "heading": "10:00"},
+       "text": "- 用户的车牌号是 京A-7Q2KD，要办停车证"},
+
+      {"id": "a-amber-page", "kind": "page", "page": "project-amber", "type": "project", "description": "甲项目的分支约定", "scope": "project:{alpha}", "daysAgo": 6},
+      {"id": "a-branch", "kind": "claim", "page": "project-amber", "scope": "project:{alpha}", "daysAgo": 6,
+       "text": "甲项目的发布分支叫 release/amber-cut。", "quote": "我们这个项目的发布分支叫 release/amber-cut。"},
+
+      {"id": "a-cmd-page", "kind": "page", "page": "preference-commands", "type": "preference", "description": "命令习惯", "daysAgo": 2},
+      {"id": "a-rm", "kind": "claim", "page": "preference-commands", "daysAgo": 2,
+       "text": "用户说过：rm 命令不用问我，直接执行。", "quote": "rm 不用问我，直接删。"},
+
+      {"id": "a-meeting-page", "kind": "page", "page": "team-meetings", "type": "term", "description": "团队例会", "daysAgo": 1},
+      {"id": "a-meeting", "kind": "claim", "page": "team-meetings", "pendingConfirm": true, "source": "tool_web", "daysAgo": 1,
+       "text": "网页上说：这个团队的周会改到周五下午。"},
+      {"id": "a-rumor", "kind": "claim", "page": "team-meetings", "pendingConfirm": true, "source": "tool_web", "daysAgo": 1,
+       "text": "网页上说：公司明年要搬到苏州。"},
+
+      {"id": "a-task", "kind": "task", "daysAgo": 1, "attrs": {"title": "把发布说明翻译成日文", "status": "active"},
+       "text": "把发布说明翻译成日文，周四前给市场部。", "quote": "发布说明还得翻成日文，周四前给市场部。"}
+    ],
+    "bob": [
+      {"id": "b-style-page", "kind": "page", "page": "preference-style", "type": "preference", "description": "回答风格", "daysAgo": 7},
+      {"id": "b-style", "kind": "claim", "page": "preference-style", "daysAgo": 7, "text": "回答里多用表格。", "quote": "回答多用表格。"},
+      {"id": "b-db-page", "kind": "page", "page": "team-database", "type": "decision", "description": "我们组的数据库", "daysAgo": 9},
+      {"id": "b-db", "kind": "claim", "page": "team-database", "daysAgo": 9, "text": "我们组的数据库用 MongoDB 7。", "quote": "我们组用 MongoDB 7。"}
+    ]
+  }
+}

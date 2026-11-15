@@ -1057,6 +1057,18 @@ python3 tantalum-examples/scenarios/run.py --model qwen --only todo-steps,todo-c
 
 “去掉误判”指两样：示例插件 `citationCheck` 把回答里的 `127.0.0.1:8766` 当成没读过的代码行拦下了运行（已修，`32ce8e3`），以及三个判分太严的场景（说“没有 billing.py”没认、必填参数只认 TypeError、写 changelog 会触发测试项目的技能）——Sonnet 按新判分重跑这几个全过。各模型还没过的：Haiku 遇到说不清的要求不先问（`ask-ambiguous` 1/5）；Sonnet 最后一次写待办清单只交剩下的几项、不是整张（`todo-steps` 1/5）；qwen 抓不存在的网页反复重试（`web-404` 0/3）、看配置时步数用完（`secret-env` 0/3）。本机 qwen 关思考时同一批场景只过 79%：拿到答案后反复验证、超出步数；开思考后步数和 token 都更少，只是每次更慢。
 
+**记忆评测**：题目和种子数据在 `tantalum-shell/src/test/resources/memory-eval/`（`questions.json`、`seed.json`），两层共用。
+
+- **第一层**，代码判分、进 CI：`MemoryEvalTest`，真服务器加脚本化模型，只看该进模型的记忆进没进模型的输入、记忆账里留下了什么。每道题标 `phase`（到哪一步该过）和 `status`：`pass` 必须过；`expected-fail` 没过时显示为跳过并写明原因，过了反而报错，提醒改成 `pass`。结果表在 `tantalum-shell/target/memory-eval/tier1.md`。
+- **第二层**，真模型、定期跑（记忆的找回和遗忘做完时各跑一次）：
+
+```sh
+python3 tantalum-examples/scenarios/memory_eval.py --model qwen --judge none            # 只用关键词判分，不花钱
+python3 tantalum-examples/scenarios/memory_eval.py --model claude --arms memory,none,raw  # 裁判默认 Sonnet 5.5
+```
+
+每道题 3 种说法、各跑 `--repeat` 次；每问一次换一个新用户、重新写种子，模型上一问改了记忆不会带进下一问。判分是关键词加模型裁判（按题里的评分标准）；要纠正前提、要拒答的题关键词判不了，没有裁判时记“没判”。对照组：`none` 关掉记忆，`raw` 不用记忆、把种子里的原话贴在问题前面。
+
 **什么时候跑真模型**：不用每次改完都跑。每次推送只跑不花钱的回放（工具结果、循环、压缩时机变了会报）。改了工具的说明或结果的写法、系统提示、压缩或循环的规则之后，挑相关的场景用 `--repeat 3 --compare 基线` 跑；要换默认模型或评估新模型时跑全部。`--model` 可选 `qwen`、`qwen-think`（本机开思考）、`claude`（Sonnet 5.5）、`opus`、`haiku`、`fable`；费用按 `run.py` 里的价格表算，写在结果里。
 
 **每晚**：`tantalum-examples/scenarios/nightly.sh` 拉最新代码、打包、用本机模型把全部场景各跑 3 次，和前一晚比，结果放在 `results/nightly/`。不花钱。模型没响应时可以让它先启动模型：设环境变量 `TANTALUM_NIGHTLY_START` 为启动命令。用 launchd 每天 03:00 跑：照 `dev.tantalum.nightly.plist.template` 开头的两行命令装上（不会自动装）。
