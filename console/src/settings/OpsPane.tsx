@@ -10,6 +10,7 @@ import { ParamForm } from "../plugins/ParamForm";
 import { usePluginDefaults } from "../plugins/usePlugins";
 import { Button } from "../ui/Button";
 import { DefaultLimit, LimitCell } from "./LimitCell";
+import { PluginUsageSection } from "./PluginUsageSection";
 import { UsageCell } from "./UsageCell";
 import { useAssignedParams, useCreateUser, useResetUserPassword, useUpdateUser, useUsers } from "./useUsers";
 
@@ -85,6 +86,7 @@ export function OpsPane({ self }: Props) {
         </div>
       )}
       {(list.data?.weights ?? []).length > 0 && <Weights rows={list.data?.weights ?? []} />}
+      {list.data !== undefined && <PluginUsageSection />}
       {notice !== null && (
         <p role="status" className="text-sm text-fg-muted">
           {notice}

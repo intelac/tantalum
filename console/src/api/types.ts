@@ -999,6 +999,22 @@ export interface CompactionPoint {
   tokens: number;
 }
 
+/** 插件调模型的用量（`/api/admin/plugin-usage`）：每人、每个插件、每种用途一行，最近 `days` 天。 */
+export interface PluginUsageRow {
+  user: string;
+  plugin: string;
+  purpose: string;
+  calls: number;
+  failures: number;
+  input: number;
+  output: number;
+}
+
+export interface PluginUsageList {
+  days: number;
+  totals: PluginUsageRow[];
+}
+
 /** 当前登录用户自己的设置。窗口未知时 `points` 为空。`model` 是上次在选择器里选的，现在不可用时为 null。 */
 export interface UserSettingsView {
   compaction: {

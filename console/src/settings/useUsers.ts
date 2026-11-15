@@ -1,7 +1,7 @@
 // “用户”页的数据（ops-hardening-2 需求 3.2）：列表一份缓存，任何写入后让它失效。页面不订阅 SSE，打开时查询即可。
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { assignParams, createUser, listAssignedParams, listUsers, resetUserPassword, setPluginDefault, updateUser } from "../api/client";
+import { assignParams, createUser, listAssignedParams, listPluginUsage, listUsers, resetUserPassword, setPluginDefault, updateUser } from "../api/client";
 import type { DailyLimitSource, ParamValue } from "../api/types";
 import { DEFAULTS_KEY } from "../plugins/usePlugins";
 
@@ -12,6 +12,11 @@ export const USERS_POLL_MS = 10_000;
 
 export function useUsers() {
   return useQuery({ queryKey: USERS_KEY, queryFn: listUsers, refetchInterval: USERS_POLL_MS });
+}
+
+/** 插件调模型的用量，最近 {@code days} 天；和用户表一起刷新。 */
+export function usePluginUsage(days: number) {
+  return useQuery({ queryKey: ["plugin-usage", days], queryFn: () => listPluginUsage(days), refetchInterval: USERS_POLL_MS });
 }
 
 /**

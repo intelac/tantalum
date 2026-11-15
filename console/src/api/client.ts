@@ -1,7 +1,7 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { reportHalted } from "./connection";
-import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, Plugins, Project, RunListPage, RunNode, RunsSummary, RunView, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, Turn, TurnSummary, User, UserList, UserSettingsView, WorkingItem } from "./types";
+import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, PluginUsageList, Plugins, Project, RunListPage, RunNode, RunsSummary, RunView, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, Turn, TurnSummary, User, UserList, UserSettingsView, WorkingItem } from "./types";
 import { asViewed, setViewedUser, viewedUser } from "./viewing";
 
 /**
@@ -100,6 +100,11 @@ export function changePassword(current: string, next: string): Promise<{ changed
 // 用户管理（管理员；需求 2.4）
 export function listUsers(): Promise<UserList> {
   return call("/api/users");
+}
+
+/** 插件调模型的用量（管理员）：最近 `days` 天，每人、每个插件、每种用途一行。 */
+export function listPluginUsage(days: number): Promise<PluginUsageList> {
+  return call(`/api/admin/plugin-usage?days=${days}`);
 }
 
 export function createUser(user: { name: string; password: string; admin: boolean }): Promise<Account> {

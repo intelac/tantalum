@@ -105,6 +105,45 @@ describe("UsersPane", () => {
   });
 });
 
+// memory-final-plan 第 10 节：运维页能看到插件自己调模型的用量，可以换天数。
+describe("OpsPane plugin usage", () => {
+  const rows = (days: number) =>
+    JSON.stringify({
+      days,
+      totals: [
+        { user: "alice", plugin: "memory", purpose: "rewrite", calls: 4, failures: 0, input: 800, output: 40 },
+        { user: "yi", plugin: "memory", purpose: "capture", calls: 12, failures: 2, input: 24000, output: 3100 },
+      ],
+    });
+
+  it("lists the usage, largest first, and switches the period", async () => {
+    const calls = open(
+      [
+        { path: "/api/users", status: 200, body: JSON.stringify(USERS) },
+        { path: "/api/admin/plugin-usage?days=7", status: 200, body: rows(7) },
+        { path: "/api/admin/plugin-usage?days=30", status: 200, body: JSON.stringify({ days: 30, totals: [] }) },
+      ],
+      true,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
+    const section = within(await screen.findByRole("region", { name: "插件用模型的用量" }));
+    await section.findByText("capture");
+    const lines = section.getAllByRole("row").slice(1).map((row) => row.textContent ?? "");
+    expect(lines[0]).toContain("yi");
+    expect(lines[0]).toContain("24,000");
+    expect(lines[1]).toContain("rewrite");
+    await userEvent.click(section.getByRole("radio", { name: "30" }));
+    await section.findByText("这段时间插件没有调过模型。");
+    expect(calls.some((call) => call.path === "/api/admin/plugin-usage?days=30")).toBe(true);
+  });
+
+  it("says so when the usage cannot be read", async () => {
+    open([{ path: "/api/users", status: 200, body: JSON.stringify(USERS) }], true);
+    await userEvent.click(screen.getByRole("button", { name: "运维" }));
+    await screen.findByText("插件用量读不到。");
+  });
+});
+
 // plugin-settings 任务 34：今天用量，按人指定管理员的参数。
 describe("OpsPane usage and assigned settings", () => {
   const usage = { input: 1200, output: 300, cacheRead: 5000, cacheWrite: 0, total: 1500 };
