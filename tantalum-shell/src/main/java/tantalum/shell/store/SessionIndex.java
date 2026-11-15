@@ -36,7 +36,7 @@ public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
     /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。7：运行表（run-tree 需求 3）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 8;
+    static final int VERSION = 9;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
@@ -288,16 +288,22 @@ public final class SessionIndex implements AutoCloseable {
      * 按会话最近活动排，最多 {@code limit} 个。文字的主人和会话的主人必须是同一个人。
      */
     public synchronized List<TextHit> search(Principal principal, String query, int limit) throws SQLException {
+        return search(principal, query, limit, false);
+    }
+
+    /** 同上；{@code tools} 为真时也搜工具调用的结果（插件的 history_search 用；侧栏的搜索不搜）。 */
+    public synchronized List<TextHit> search(Principal principal, String query, int limit, boolean tools) throws SQLException {
         String pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
         List<TextHit> hits = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement("""
                 SELECT t.session, t.role, t.text, max(t.seq) FROM texts t
                 JOIN sessions s ON s.session = t.session AND s.principal = t.principal
-                WHERE t.principal = ? AND t.text LIKE ? ESCAPE '\\'
+                WHERE t.principal = ? AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
                 GROUP BY t.session ORDER BY s.last_activity DESC, t.session LIMIT ?""")) {
             select.setString(1, principal.value());
             select.setString(2, pattern);
-            select.setInt(3, limit);
+            select.setBoolean(3, tools);
+            select.setInt(4, limit);
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
                     hits.add(new TextHit(new SessionId(result.getString(1)), result.getString(2), result.getString(3)));

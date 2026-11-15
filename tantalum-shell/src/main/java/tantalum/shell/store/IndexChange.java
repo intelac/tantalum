@@ -9,6 +9,7 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.ToolFinished;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.CommandId;
@@ -48,6 +49,9 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
 
     public static final String USER = "user";
     public static final String ASSISTANT = "assistant";
+    /** 工具调用的结果（memory-final-plan 第 9 节：history_search 也搜工具调用）：工具名、截短遮盖后的结果。侧栏的内容搜索不算它。 */
+    public static final String TOOL = "tool";
+    static final int TOOL_TEXT_CHARS = 600;
 
     /** 一个事件带来的用量，{@code seq} 在同一用户内唯一。 */
     public record Usage(long seq, LocalDate day, TokenUsage amount) {}
@@ -74,7 +78,29 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
                 timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
-                text != null && !text.isBlank() ? new Text(USER, text) : replyText(envelope), offRecord(after, envelope.session()));
+                text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
+                        ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()));
+    }
+
+    /** 一次工具调用的结果：“工具名: 结果”（截短、遮盖密钥）；找不到是哪个工具时只有结果。 */
+    private static Text toolText(ToolFinished finished, KernelState before, SessionId session) {
+        String name = null;
+        SessionState state = before.sessions().get(session);
+        if (state != null) {
+            for (int i = state.messages().size() - 1; i >= 0 && name == null; i--) {
+                for (ContentBlock block : state.messages().get(i).content()) {
+                    if (block instanceof tantalum.value.model.ToolCallBlock call && call.id().equals(finished.toolCallId())) {
+                        name = call.name();
+                    }
+                }
+            }
+        }
+        String body = finished.text() == null ? "" : tantalum.shell.mask.SecretMask.mask(finished.text()).replaceAll("\\s+", " ").strip();
+        if (body.length() > TOOL_TEXT_CHARS) {
+            body = body.substring(0, TOOL_TEXT_CHARS) + "…";
+        }
+        String line = (name == null ? "" : name + (finished.error() ? " failed: " : ": ")) + body;
+        return line.isBlank() ? null : new Text(TOOL, line);
     }
 
     /** 模型回复里给人看的文字：全部文本块按顺序接起来；没有时为 null。 */

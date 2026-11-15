@@ -298,7 +298,7 @@ public final class PlatformServices implements PluginServices {
             java.util.Set<SessionId> offRecord = new java.util.HashSet<>();
             bound.queries().sessions(user).stream().filter(tantalum.shell.conversation.SessionSummary::offRecord)
                     .forEach(summary -> offRecord.add(summary.id()));
-            return bound.stores().storage().index.search(user, query, limit + 1 + offRecord.size()).stream()
+            return bound.stores().storage().index.search(user, query, limit + 1 + offRecord.size(), true).stream()
                     .filter(hit -> !hit.session().equals(excluding) && !offRecord.contains(hit.session()))
                     .limit(limit)
                     .map(hit -> new ConversationHit(hit.session(), hit.role(), hit.text(), null))
