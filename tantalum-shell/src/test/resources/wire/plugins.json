@@ -80,6 +80,36 @@
     },
     "params" : [ ]
   }, {
+    "name" : "memory",
+    "description" : {
+      "en" : "Long-term memory, daily notes, and automatic note-taking.",
+      "zh" : "长期记忆、每天的笔记和自动记下。",
+      "ja" : "長期記憶、毎日のメモ、自動メモ。"
+    },
+    "points" : [ "runFinished", "endpoints", "context" ],
+    "group" : "rule",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ {
+      "key" : "capture",
+      "type" : "toggle",
+      "label" : {
+        "en" : "Take notes automatically",
+        "zh" : "自动记下",
+        "ja" : "自動でメモ"
+      },
+      "hint" : {
+        "en" : "After each turn, note what is worth remembering in today's notes.",
+        "zh" : "每轮结束后，把值得记住的写进当天的笔记。",
+        "ja" : "毎回の終わりに、覚えておく価値のあることを今日のメモに書きます。"
+      },
+      "owner" : "user",
+      "value" : true,
+      "source" : "builtin",
+      "editable" : true
+    } ]
+  }, {
     "name" : "notes",
     "description" : "",
     "points" : [ "beforeRunEnd" ],

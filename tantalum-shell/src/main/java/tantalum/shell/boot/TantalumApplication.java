@@ -45,6 +45,10 @@ import tantalum.shell.model.OpenAiClient;
 import tantalum.shell.model.OverflowRules;
 import tantalum.shell.panel.Panel;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.ContextContributor;
+import tantalum.shell.plugin.PluginEndpoints;
+import tantalum.shell.plugin.PromptAttacher;
+import tantalum.shell.plugin.RunFinishedListener;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.route.ClaudeModels;
@@ -126,10 +130,26 @@ public class TantalumApplication {
         return store;
     }
 
+    /** 平台给插件的服务（memory-plugin）：插件构造时注入，引擎起来后接上。 */
+    @Bean
+    PlatformServices platformServices() {
+        return new PlatformServices();
+    }
+
+    private static List<Object> members(ObjectProvider<?>... providers) {
+        List<Object> all = new java.util.ArrayList<>();
+        for (ObjectProvider<?> provider : providers) {
+            provider.orderedStream().forEach(all::add);
+        }
+        return all;
+    }
+
     @Bean(destroyMethod = "close")
     Engine engine(TantalumProperties properties, UserStore users, ObjectProvider<ModelClient> model, ObjectProvider<RouteClients> injected,
                   ObjectProvider<Tool> tools, ObjectProvider<KernelHook> hooks, ObjectProvider<WorkType> workTypes,
-                  ObjectProvider<AfterToolHook> afterHooks, ObjectProvider<Panel> panels, Environment environment) throws IOException {
+                  ObjectProvider<AfterToolHook> afterHooks, ObjectProvider<Panel> panels, ObjectProvider<RunFinishedListener> runListeners,
+                  ObjectProvider<PromptAttacher> attachers, ObjectProvider<PluginEndpoints> endpoints,
+                  ObjectProvider<ContextContributor> contributors, PlatformServices services, Environment environment) throws IOException {
         // 测试和嵌入使用：给了 RouteClients 就按路线换客户端；只给一个 ModelClient 时它就是默认路线的客户端
         RouteClients clients = injected.getIfAvailable(() -> {
             ModelClient single = model.getIfAvailable();
@@ -138,7 +158,10 @@ public class TantalumApplication {
         Routes routes = createRoutes(properties, clients);
         Engine engine = new Engine(properties, routes, List.copyOf(tools.orderedStream().toList()),
                 hooks.orderedStream().toList(), workTypes.orderedStream().toList(), afterHooks.orderedStream().toList(),
-                panels.orderedStream().toList(), EventCodec.withBuiltins(), Clock.systemUTC());
+                panels.orderedStream().toList(), members(runListeners, attachers, endpoints, contributors), EventCodec.withBuiltins(),
+                Clock.systemUTC());
+        // 插件构造时拿到的服务现在才接上引擎（memory-plugin）
+        services.bind(engine);
         RetiredBrowser.atStartup(environment::containsProperty, properties.dataDir());
         RetiredMcp.atStartup(environment);
         // 停用或删掉的账号不能再连电脑：握手时查，之后每次心跳再查

@@ -10,8 +10,6 @@ import java.util.regex.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.loop.Evictor;
-import tantalum.shell.memory.MemoryLimits;
-import tantalum.shell.memory.capture.CaptureSettings;
 import tantalum.shell.model.OpenAiThinking;
 import tantalum.shell.route.Levels;
 import tantalum.shell.route.RouteSettings;
@@ -24,11 +22,10 @@ import tantalum.shell.settings.CompactionPolicy;
  */
 @ConfigurationProperties("tantalum")
 public record TantalumProperties(Path dataDir, Path workspace, String workspaceMode, String systemPrompt, Duration toolTimeout,
-                                 String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes, MemoryLimits memory,
+                                 String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes,
                                  Knowledge knowledge,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights,
-                                 CaptureSettings memoryCapture) {
+                                 AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights) {
 
     /** Claude 路线的名字，固定。 */
     public static final String CLAUDE_ROUTE = "claude";
@@ -63,7 +60,6 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                     + openaiRoutes.keySet().stream().map(name -> " or " + name).collect(java.util.stream.Collectors.joining()));
         }
         usageWeights = usageWeights == null ? Map.of() : java.util.Collections.unmodifiableMap(new TreeMap<>(usageWeights));
-        memoryCapture = memoryCapture == null ? CaptureSettings.defaults() : memoryCapture;
         for (String route : usageWeights.keySet()) {
             if (!route.equals(CLAUDE_ROUTE) && !openaiRoutes.containsKey(route)) {
                 throw new IllegalArgumentException("tantalum.usage-weights." + route + " names no route; expected claude"

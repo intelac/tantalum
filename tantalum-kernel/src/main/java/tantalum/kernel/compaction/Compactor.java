@@ -5,10 +5,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import tantalum.kernel.attachment.ImageBudget;
 import tantalum.kernel.compaction.Units.Unit;
 import tantalum.kernel.projection.ContextUpdate;
-import tantalum.kernel.attachment.ImageBudget;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
@@ -16,6 +17,7 @@ import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.Compacting.Trigger;
 import tantalum.value.state.CompactionSettings;
@@ -23,7 +25,6 @@ import tantalum.value.state.Plan;
 import tantalum.value.state.SessionState;
 import tantalum.value.state.UsageAnchor;
 import tantalum.value.todo.TodoList;
-import tantalum.value.model.ToolResultBlock;
 
 /** 规则 1、2、4、5、6 的纯函数：要不要压、切在哪、压缩后的视图、给摘要调用的头部。 */
 public final class Compactor {
@@ -286,7 +287,8 @@ public final class Compactor {
             return false;
         }
         for (ContentBlock block : message.content()) {
-            if (!(block instanceof TextBlock) && !(block instanceof AttachmentBlock) && !(block instanceof SkillBlock)) {
+            if (!(block instanceof TextBlock) && !(block instanceof AttachmentBlock) && !(block instanceof SkillBlock)
+                    && !(block instanceof AttachedBlock)) {
                 return false;
             }
         }

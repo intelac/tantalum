@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { openNewSession, processHeader, send } from "./app";
 
 // 每天的笔记（memory-capture）：聊完一轮，后台自动记下要点（E2eModel 对记笔记的提示词回两条固定要点），记忆页能看、能改、能删；
-// 关掉“自动记下”以后不再记。
+// 在插件页的参数里关掉“自动记下”以后不再记。
 
 async function openMemory(page: Page) {
   await page.getByRole("button", { name: "设置", exact: true }).first().click();
@@ -39,13 +39,13 @@ test.describe("每天的笔记", () => {
     await expect(notes.getByRole("button", { name: new RegExp(prompt) })).toHaveCount(0);
   });
 
-  test("关掉自动记下以后，新的一轮不再记", async ({ page }) => {
+  test("在插件页的参数里关掉自动记下以后，新的一轮不再记", async ({ page }) => {
     await openNewSession(page);
+    // 开关是记忆插件在插件页上的参数（memory-plugin 需求 2.3、3.2）
+    const off = await page.request.put("/api/plugins/plugin/memory/params", { data: { values: { capture: false } } });
+    expect(off.ok()).toBe(true);
     let dialog = await openMemory(page);
-    const toggle = dialog.getByRole("switch", { name: "自动记下" });
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(dialog.getByText("自动记下关着。可以在插件页“记忆”的参数里打开。")).toBeVisible();
     await page.keyboard.press("Escape");
 
     const prompt = `不要记 ${Date.now()}`;
@@ -56,7 +56,6 @@ test.describe("每天的笔记", () => {
     await expect(dialog.getByRole("region", { name: "每天的笔记" }).getByRole("button", { name: new RegExp(prompt) })).toHaveCount(0);
 
     // 恢复，免得影响别的用例
-    await dialog.getByRole("switch", { name: "自动记下" }).click();
-    await expect(dialog.getByRole("switch", { name: "自动记下" })).toHaveAttribute("aria-checked", "true");
+    expect((await page.request.delete("/api/plugins/plugin/memory/params")).ok()).toBe(true);
   });
 });

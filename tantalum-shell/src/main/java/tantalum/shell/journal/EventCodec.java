@@ -22,8 +22,8 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
-import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.QueueChanged;
+import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
@@ -32,6 +32,7 @@ import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.event.WorkDone;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.HookTextBlock;
@@ -55,11 +56,11 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationContext;
 import tools.jackson.databind.ValueDeserializer;
-import tools.jackson.databind.annotation.JsonSerialize;
-import tools.jackson.databind.util.StdConverter;
 import tools.jackson.databind.ValueSerializer;
+import tools.jackson.databind.annotation.JsonSerialize;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.module.SimpleModule;
+import tools.jackson.databind.util.StdConverter;
 
 /** 事件与 JSON 互转。按类型名和版本查注册表，未注册的一律报错，不跳过。 */
 public final class EventCodec {
@@ -76,7 +77,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = ToolChangeBlock.class, name = "toolChange"),
         @JsonSubTypes.Type(value = ModelChangeBlock.class, name = "modelChange"),
         @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText"),
-        @JsonSubTypes.Type(value = SkillBlock.class, name = "skill")
+        @JsonSubTypes.Type(value = SkillBlock.class, name = "skill"),
+        @JsonSubTypes.Type(value = AttachedBlock.class, name = "attached")
     })
     private interface ContentBlockMixin {}
 
@@ -110,6 +112,10 @@ public final class EventCodec {
         /** 没点名技能时不写出，同上。 */
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         List<SkillUse> skills();
+
+        /** 插件没附内容时不写出，同上（memory-plugin）。 */
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        List<AttachedBlock> attached();
     }
 
     /** 同上，工具结果里的图片。 */

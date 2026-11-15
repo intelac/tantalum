@@ -1,6 +1,6 @@
-import { BookOpen, ChevronDown, ChevronRight, TriangleAlert } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Paperclip, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import type { SkillNote } from "../api/types";
+import type { AttachedNote, SkillNote } from "../api/types";
 import { AttachmentView } from "../attachment/AttachmentView";
 import type { ConversationStore } from "../store/ConversationStore";
 import { useItem } from "../store/hooks";
@@ -16,6 +16,7 @@ interface Props {
 /**
  * 右对齐的浅蓝气泡，圆角 20 px；附件在气泡上方；下方时间和复制。排队中的提交带标签。只有附件时没有文字气泡。
  * 文字里点名的技能在气泡下面各占一行：读到的能展开看全文，没读到的写明原因（skills-wiki 需求 5.7、5.8）。
+ * 插件附的内容也各占一行，写明是哪个插件附的，能展开看全文（memory-plugin 需求 1.2）。
  */
 export function UserBubble({ store, id }: Props) {
   const t = useText();
@@ -33,11 +34,42 @@ export function UserBubble({ store, id }: Props) {
       {(item.skills ?? []).map((skill) => (
         <SkillLine key={skill.name} skill={skill} />
       ))}
+      {(item.attached ?? []).map((note) => (
+        <AttachedLine key={note.plugin} note={note} />
+      ))}
       <div className="flex h-6 items-center gap-1 text-xs text-fg-faint">
         {item.queued && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted">{t.conversation.queued}</span>}
         <span>{clockTime(item.at)}</span>
         <CopyButton text={item.text} className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" />
       </div>
+    </div>
+  );
+}
+
+/** 气泡下面插件附的一段：默认收起，展开是纯文字。 */
+function AttachedLine({ note }: { note: AttachedNote }) {
+  const t = useText();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex max-w-[85%] flex-col items-end gap-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex items-center gap-1.5 rounded-xs px-1 py-0.5 text-xs text-fg-muted hover:bg-hover"
+      >
+        <Paperclip size={13} aria-hidden="true" className="shrink-0" />
+        <span>{t.conversation.attachedBy(note.plugin)}</span>
+        {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+      </button>
+      {open && (
+        <pre
+          aria-label={t.conversation.attachedContent(note.plugin)}
+          className="max-h-80 w-full overflow-auto rounded-sm bg-code p-2 text-left font-mono text-xs whitespace-pre-wrap text-fg"
+        >
+          {note.text}
+        </pre>
+      )}
     </div>
   );
 }

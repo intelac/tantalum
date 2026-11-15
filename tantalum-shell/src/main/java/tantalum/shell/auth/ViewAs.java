@@ -49,9 +49,8 @@ public final class ViewAs extends OncePerRequestFilter {
             Pattern.compile("/api/runs"),
             Pattern.compile("/api/panels"),
             Pattern.compile("/api/monitor/stream"),
-            Pattern.compile("/api/memory/notes"),
-            Pattern.compile("/api/memory/notes/[^/]+/[^/]+"),
-            Pattern.compile("/api/memory/capture"),
+            // 插件的接口（memory-plugin）：哪些能看由插件自己说（PluginEndpoints.viewable），控制器再查一遍
+            Pattern.compile("/api/plugin-api/[^/]+/.+"),
             Pattern.compile("/api/runs/[^/]+"),
             Pattern.compile("/api/runs/[^/]+/turns"),
             Pattern.compile("/api/runs/[^/]+/turns/[^/]+"),

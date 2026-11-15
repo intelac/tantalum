@@ -18,6 +18,7 @@ import tantalum.value.decision.Decision;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
@@ -38,7 +39,13 @@ public final class Trace {
     }
 
     /** 排队中的提交，运行开始时变成用户记录。 */
-    public record Queued(long seq, Instant at, String text, Mode mode, List<AttachmentRef> attachments, List<SkillNote> skills) {}
+    public record Queued(long seq, Instant at, String text, Mode mode, List<AttachmentRef> attachments, List<SkillNote> skills,
+                         List<AttachedBlock> attached) {
+
+        public Queued {
+            attached = attached == null ? List.of() : List.copyOf(attached);
+        }
+    }
 
     /** 一个会话的状态。 */
     static final class Book {

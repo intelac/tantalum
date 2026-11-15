@@ -8,22 +8,28 @@ import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
-import { CaptureSwitch, NotesList, NoteView } from "./NotesSection";
+import { CaptureStatus, NotesList, NoteView } from "./NotesSection";
+import { usePlugins } from "../plugins/usePlugins";
 import { errorLine } from "../text/errors";
 
 type View = { kind: "list" } | { kind: "entry"; name: string } | { kind: "add" } | { kind: "note"; day: string; session: string };
 
 const TYPES: MemoryType[] = ["user", "feedback", "project", "reference"];
 
-/** 看、删、手工新增当前用户的记忆。列表按更新时间倒序，正文按需加载。 */
+/** 看、删、手工新增当前用户的记忆。列表按更新时间倒序，正文按需加载。记忆插件关着或没装时只说明一句（memory-plugin 需求 3.1）。 */
 export function MemoryPane() {
+  const t = useText();
+  const plugins = usePlugins();
   const [view, setView] = useState<View>({ kind: "list" });
+  if (plugins.data !== undefined && !plugins.data.plugins.some((plugin) => plugin.name === "memory" && plugin.enabled)) {
+    return <p className="text-sm text-fg-muted">{t.memory.pluginOff}</p>;
+  }
   if (view.kind === "entry") return <EntryView name={view.name} onBack={() => setView({ kind: "list" })} />;
   if (view.kind === "add") return <AddForm onDone={() => setView({ kind: "list" })} />;
   if (view.kind === "note") return <NoteView day={view.day} session={view.session} onBack={() => setView({ kind: "list" })} />;
   return (
     <div className="flex flex-col gap-5">
-      <CaptureSwitch />
+      <CaptureStatus />
       <ListView onOpen={(name) => setView({ kind: "entry", name })} onAdd={() => setView({ kind: "add" })} />
       <NotesList onOpen={(day, session) => setView({ kind: "note", day, session })} />
     </div>

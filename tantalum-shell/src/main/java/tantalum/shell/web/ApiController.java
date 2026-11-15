@@ -31,10 +31,9 @@ import tantalum.shell.boot.TantalumProperties;
 import tantalum.shell.conversation.ItemJson;
 import tantalum.shell.conversation.MessagePage;
 import tantalum.shell.conversation.SessionSummary;
-import tantalum.shell.project.Project;
-import tantalum.value.state.AwaitingAnswer;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.loop.Intake;
+import tantalum.shell.project.Project;
 import tantalum.shell.route.ChoiceCheck;
 import tantalum.shell.route.ModelInfo;
 import tantalum.shell.route.Route;
@@ -47,7 +46,9 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.ModelChoice;
+import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.Ended;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -254,8 +255,12 @@ public class ApiController {
             Thread.currentThread().interrupt();
             return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
         }
+        // 插件在提交时附的内容（memory-plugin）：插话不问
+        List<AttachedBlock> attached = mode.equals("steer") || content == null || content.isBlank() ? List.of()
+                : engine.attachers().collect(user, id.get(), content,
+                        engine.queries().session(user, id.get()).map(view -> view.state().view()).orElse(List.of()));
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
-                content == null ? "" : content, attachments, model, dir, skills);
+                content == null ? "" : content, attachments, model, dir, skills, attached);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
 

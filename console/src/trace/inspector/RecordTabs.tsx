@@ -53,6 +53,7 @@ function RunPages(run: RunHead, t: Text["trace"]) {
 function UserPages(user: UserInput, t: Text["trace"]) {
   const attachments = user.attachments ?? [];
   const skills = user.skills ?? [];
+  const attached = user.attached ?? [];
   return [
     {
       id: "summary",
@@ -63,12 +64,30 @@ function UserPages(user: UserInput, t: Text["trace"]) {
           <Markdown text={user.text} />
           {attachments.length > 0 && <AttachmentList attachments={attachments} />}
           {skills.length > 0 && <SkillList skills={skills} />}
+          {attached.length > 0 && (
+            <Section title={t.attachedTexts}>
+              <ul className="flex flex-col gap-2 text-xs">
+                {attached.map((note) => (
+                  <li key={note.plugin} className="flex flex-col gap-1">
+                    <span className="font-mono text-fg">{note.plugin}</span>
+                    <pre className="max-h-80 overflow-auto rounded-sm bg-code p-2 font-mono whitespace-pre-wrap text-fg">{note.text}</pre>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
         </>
       ),
     },
     { id: "source", label: t.tab.source, render: () => <Fields rows={[[t.tab.source, sourceText(user.source)]]} /> },
-    ...(attachments.length > 0 || skills.length > 0
-      ? [{ id: "raw", label: t.tab.raw, render: () => <JsonTree value={skills.length > 0 ? { attachments, skills } : attachments} /> }]
+    ...(attachments.length > 0 || skills.length > 0 || attached.length > 0
+      ? [
+          {
+            id: "raw",
+            label: t.tab.raw,
+            render: () => <JsonTree value={skills.length > 0 || attached.length > 0 ? { attachments, skills, attached } : attachments} />,
+          },
+        ]
       : []),
   ];
 }

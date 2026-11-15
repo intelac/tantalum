@@ -15,9 +15,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import tantalum.kernel.tool.ToolSafety;
+import tantalum.memory.MemoryTools;
 import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.local.LocalTool;
-import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.tool.BuiltinTools;
 import tantalum.value.json.Json;
@@ -51,7 +51,8 @@ class KernelFactoryTest {
 
     @Test
     void theSafetyAnswersFromTheDescriptionsWithoutOpeningAnything() throws Exception {
-        ToolSafety safety = KernelFactory.safety(properties("tantalum.web.fetch.enabled", "true"), List.of());
+        // 记忆工具是记忆插件的 bean（memory-plugin），和别的插件工具一样随 plugins 传进来
+        ToolSafety safety = KernelFactory.safety(properties("tantalum.web.fetch.enabled", "true"), MemoryTools.all(null));
         assertTrue(safety.isConcurrencySafe("read_attachment", args("id", "a")));
         assertFalse(safety.isConcurrencySafe("ask_user", args()));
         assertTrue(safety.isConcurrencySafe("read_file", args("path", "a.txt")));

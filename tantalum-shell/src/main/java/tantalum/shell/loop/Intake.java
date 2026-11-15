@@ -31,6 +31,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.question.Answer;
 import tantalum.value.state.OwnerRef;
@@ -135,6 +136,13 @@ public final class Intake {
     /** 同上，{@code skills} 是调用方在文字里找到并已经读好的点名技能，随这次提交进 journal。 */
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills) {
+        return submit(principal, session, request, mode, text, attachments, model, dir, skills, List.of());
+    }
+
+    /** 同上，{@code attached} 是插件在提交时附的内容（memory-plugin）；插话不带。 */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills,
+                             List<AttachedBlock> attached) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -151,8 +159,8 @@ public final class Intake {
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
             case "steer" -> new SteerSubmitted(submission, request, text, attachments, skills);
-            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model, skills);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir, skills);
+            case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model, skills, attached);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir, skills, attached);
         });
     }
 

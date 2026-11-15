@@ -55,7 +55,7 @@ async function openMemoryPane(routes: Route[]) {
 
 describe("MemoryPane", () => {
   it("lists entries newest first with type tags and the quota", async () => {
-    await openMemoryPane([{ path: "/api/memory", status: 200, body: JSON.stringify(LIST) }]);
+    await openMemoryPane([{ path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) }]);
     await screen.findByText("cobol-rules");
     const names = screen.getAllByRole("button").map((button) => button.textContent ?? "").filter((text) => text.includes("迁移") || text.includes("Java 25"));
     expect(names[0]).toContain("cobol-rules");
@@ -65,19 +65,19 @@ describe("MemoryPane", () => {
   });
 
   it("shows the empty state", async () => {
-    await openMemoryPane([{ path: "/api/memory", status: 200, body: '{"entries":[],"used":0,"max":200}' }]);
+    await openMemoryPane([{ path: "/api/plugin-api/memory/entries", status: 200, body: '{"entries":[],"used":0,"max":200}' }]);
     await screen.findByText(/还没有记忆/);
   });
 
   it("opens an entry, renders its Markdown body and deletes it after confirmation", async () => {
     const calls = await openMemoryPane([
-      { path: "/api/memory", status: 200, body: JSON.stringify(LIST) },
+      { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
       {
-        path: "/api/memory/java-version",
+        path: "/api/plugin-api/memory/entries/java-version",
         status: 200,
         body: JSON.stringify({ ...LIST.entries[1], content: "## Rule\n\nAlways **Java 25**." }),
       },
-      { method: "DELETE", path: "/api/memory/java-version", status: 204, body: "" },
+      { method: "DELETE", path: "/api/plugin-api/memory/entries/java-version", status: 204, body: "" },
     ]);
     await userEvent.click(await screen.findByRole("button", { name: /java-version/ }));
     await screen.findByRole("heading", { name: "Rule" });
@@ -90,15 +90,15 @@ describe("MemoryPane", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "确定" }));
-    await waitFor(() => expect(calls.some((call) => call.method === "DELETE" && call.path === "/api/memory/java-version")).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.method === "DELETE" && call.path === "/api/plugin-api/memory/entries/java-version")).toBe(true));
     // 删除后回到列表（假后端的列表不变，这里只看视图切换）。
     await screen.findByText("COBOL 迁移约束");
   });
 
   it("adds an entry and shows the server's rejection reason verbatim", async () => {
     const calls = await openMemoryPane([
-      { path: "/api/memory", status: 200, body: '{"entries":[],"used":0,"max":200}' },
-      { method: "POST", path: "/api/memory", status: 400, body: '{"error":"memory must not contain credentials (API keys, tokens, passwords, private keys)"}' },
+      { path: "/api/plugin-api/memory/entries", status: 200, body: '{"entries":[],"used":0,"max":200}' },
+      { method: "POST", path: "/api/plugin-api/memory/entries", status: 400, body: '{"error":"memory must not contain credentials (API keys, tokens, passwords, private keys)"}' },
     ]);
     await userEvent.click(await screen.findByRole("button", { name: "新增记忆" }));
     await userEvent.type(screen.getByLabelText("名称"), "deploy-key");
@@ -110,5 +110,14 @@ describe("MemoryPane", () => {
     const post = calls.find((call) => call.method === "POST");
     expect(post).toBeDefined();
     expect(JSON.parse(post?.body ?? "{}")).toEqual({ name: "deploy-key", type: "reference", description: "deploy key", content: "password=hunter2secret" });
+  });
+
+  it("says the memory plugin is off instead of showing the pane (memory-plugin 3.1)", async () => {
+    await openMemoryPane([
+      { path: "/api/plugins", status: 200, body: JSON.stringify({ tools: [], plugins: [{ name: "memory", enabled: false, points: [], params: [] }] }) },
+      { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
+    ]);
+    expect(await screen.findByText("记忆插件没开。可以在插件页打开“记忆”。")).toBeTruthy();
+    expect(screen.queryByText("COBOL 迁移约束")).toBeNull();
   });
 });

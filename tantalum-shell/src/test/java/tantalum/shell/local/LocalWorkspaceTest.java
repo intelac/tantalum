@@ -21,9 +21,6 @@ import tantalum.local.wire.Hello;
 import tantalum.local.wire.Wire;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches;
-import tantalum.shell.memory.MemoryLimits;
-import tantalum.shell.memory.MemoryStores;
-import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.tool.BuiltinTools;
 import tantalum.shell.tool.ToolCatalog;
@@ -41,7 +38,7 @@ class LocalWorkspaceTest {
     private static final List<String> READ = List.of("find_files", "grep", "list_dir", "read_file");
     private static final List<String> GIT = List.of("git_blame", "git_branches", "git_diff", "git_log", "git_show");
     private static final List<String> WRITE = List.of("edit_file", "write_file");
-    private static final List<String> SERVER = List.of("ask_user", "memory_delete", "memory_read", "memory_write", "read_attachment", "todo_write");
+    private static final List<String> SERVER = List.of("ask_user", "read_attachment", "todo_write");
 
     @TempDir
     Path temp;
@@ -60,9 +57,6 @@ class LocalWorkspaceTest {
         ToolCatalog catalog = new ToolCatalog();
         BuiltinTools.of(null).forEach(catalog::register);
         LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
-        Workspaces workspaces = Workspaces.perUser(Files.createDirectories(temp.resolve("ws")));
-        MemoryTools.all(new MemoryStores(workspaces, temp.resolve("data"), new MemoryLimits(2, 16 * 1024, 64), Clock.systemUTC()))
-                .forEach(catalog::register);
         gate = new PluginGate(catalog, switches, List.of(new LocalWorkspace(switches, links)), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }

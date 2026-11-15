@@ -1,4 +1,4 @@
-// 记忆页里的“自动记下”开关和每天的笔记（memory-capture 需求 3、4）：按日期列出，打开看全文（每段能跳回那一轮），能改、能删。
+// 记忆页里的“自动记下”状态和每天的笔记（memory-capture 需求 3、4）：按日期列出，打开看全文（每段能跳回那一轮），能改、能删。
 // 只读查看别人时能看，开关和编辑、删除都不给。
 
 import { ChevronLeft } from "lucide-react";
@@ -12,33 +12,21 @@ import { errorLine } from "../text/errors";
 import { relativeTime } from "../text/format";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
-import { Switch } from "../ui/Switch";
-import { useCapture, useDeleteNote, useNote, useNotes, useSaveNote, useSetCapture } from "./useNotes";
+import { useCapture, useDeleteNote, useNote, useNotes, useSaveNote } from "./useNotes";
 
-export function CaptureSwitch() {
+/** “自动记下”现在开没开；开关在插件页“记忆”的参数里（memory-plugin 需求 3.2），这里只说明。 */
+export function CaptureStatus() {
   const t = useText().memory.notes;
   const capture = useCapture();
-  const update = useSetCapture();
-  const viewing = useViewedUser() !== null;
   if (capture.data === undefined) return null;
-  const server = capture.data.server;
+  const line = !capture.data.server ? t.serverOff : capture.data.enabled ? t.captureHint : t.captureOff;
   return (
     <div className="flex flex-col gap-1 rounded-md border border-line px-3 py-2">
-      <label className="flex items-center gap-3 text-sm text-fg">
-        <Switch
-          checked={server && capture.data.enabled}
-          disabled={!server || viewing || update.isPending}
-          onChange={(enabled) => update.mutate(enabled)}
-          label={t.capture}
-        />
+      <p className="text-sm text-fg">
         {t.capture}
-      </label>
-      <p className="text-xs text-fg-faint">{server ? t.captureHint : t.serverOff}</p>
-      {update.isError && (
-        <p role="alert" className="text-xs text-danger">
-          {errorLine(update.error)}
-        </p>
-      )}
+        <span className="ml-2 text-xs text-fg-muted">{capture.data.server && capture.data.enabled ? t.on : t.off}</span>
+      </p>
+      <p className="text-xs text-fg-faint">{line}</p>
     </div>
   );
 }

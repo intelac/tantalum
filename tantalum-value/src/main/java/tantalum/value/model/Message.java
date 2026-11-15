@@ -28,6 +28,17 @@ public record Message(Role role, List<ContentBlock> content, boolean interrupted
         return new Message(Role.USER, content, false);
     }
 
+    /** 同上，再接插件附加的内容（memory-plugin），按插件的顺序。 */
+    public static Message user(String text, List<AttachmentRef> attachments, List<SkillBlock> skills, List<AttachedBlock> attached) {
+        Message withSkills = user(text, attachments, skills);
+        if (attached.isEmpty()) {
+            return withSkills;
+        }
+        List<ContentBlock> content = new ArrayList<>(withSkills.content());
+        content.addAll(attached);
+        return new Message(Role.USER, content, false);
+    }
+
     /** 同上，再接用户点名的技能内容，按点名的顺序。 */
     public static Message user(String text, List<AttachmentRef> attachments, List<SkillBlock> skills) {
         Message plain = user(text, attachments);

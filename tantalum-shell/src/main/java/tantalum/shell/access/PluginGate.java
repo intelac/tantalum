@@ -18,19 +18,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.panel.Panel;
-import tantalum.shell.param.ParamResolver;
 import tantalum.shell.param.ParamResolver.Resolved;
-import tantalum.shell.param.ParamRules;
+import tantalum.shell.param.ParamResolver;
 import tantalum.shell.param.ParamRules.InvalidParam;
-import tantalum.shell.param.ParamStore;
+import tantalum.shell.param.ParamRules;
 import tantalum.shell.param.ParamStore.Scope;
+import tantalum.shell.param.ParamStore;
 import tantalum.shell.param.SecretBox;
 import tantalum.shell.plugin.AfterToolHook;
 import tantalum.shell.plugin.Configurable;
+import tantalum.shell.plugin.ContextContributor;
 import tantalum.shell.plugin.DailyLimit;
 import tantalum.shell.plugin.Kind;
 import tantalum.shell.plugin.Param;
+import tantalum.shell.plugin.PluginEndpoints;
 import tantalum.shell.plugin.PluginInfo;
+import tantalum.shell.plugin.PromptAttacher;
+import tantalum.shell.plugin.RunFinishedListener;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
@@ -39,8 +43,8 @@ import tantalum.shell.plugin.WorkType;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookPoint;
-import tantalum.value.id.Principal;
 import tantalum.value.hook.Params;
+import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.state.KernelState;
 import tantalum.value.text.Failures;
@@ -115,6 +119,16 @@ public final class PluginGate {
     public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
                       List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, List<Panel> panels,
                       Set<String> required, ParamStore params) {
+        this(catalog, switches, groups, hooks, afterHooks, workTypes, panels, List.of(), required, params);
+    }
+
+    /**
+     * 同上，另有 memory-plugin 的插件成员：运行结束的听众、提交时附加内容、插件接口、上下文的一份
+     * （{@link RunFinishedListener}、{@link PromptAttacher}、{@link PluginEndpoints}、{@link ContextContributor}）。
+     */
+    public PluginGate(ToolCatalog catalog, PluginSwitches switches, List<ToolGroup> groups,
+                      List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes, List<Panel> panels,
+                      List<Object> members, Set<String> required, ParamStore params) {
         if (groups.stream().map(ToolGroup::kind).distinct().count() != groups.size()) {
             throw new IllegalArgumentException("two tool groups share one switch kind");
         }
@@ -130,10 +144,10 @@ public final class PluginGate {
         this.groups = List.copyOf(groups);
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
-        this.plugins = group(hooks, afterHooks, workTypes, panels, required);
+        this.plugins = group(hooks, afterHooks, workTypes, panels, members, required);
         this.lockedInCode = lockedInCode(hooks, afterHooks);
         this.modelNotes = modelNotes(hooks, afterHooks);
-        this.pluginParams = declared(hooks, afterHooks, workTypes);
+        this.pluginParams = declared(hooks, afterHooks, workTypes, members);
         this.kernelPlugins = hooks.stream().map(KernelHook::plugin).collect(java.util.stream.Collectors.toUnmodifiableSet());
         this.dailyLimits = dailyLimits(hooks, afterHooks, workTypes);
         this.store = params;
@@ -166,10 +180,24 @@ public final class PluginGate {
         }
     }
 
+    /** 同上，只有 memory-plugin 的插件成员（测试和嵌入用）。 */
+    public static PluginGate allOn(ToolCatalog catalog, List<Object> members) {
+        try {
+            return new PluginGate(catalog, PluginSwitches.inMemory(Clock.systemUTC()), List.of(), List.of(), List.of(), List.of(), List.of(),
+                    members, Set.of(), unsavedParams());
+        } catch (SQLException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     // ---- 名单 ----
 
     /** 内置工具看自己的开关；本机工作区、联网的工具问自己的 {@link ToolGroup}。 */
     public boolean toolEnabled(Principal user, Tool tool) {
+        // 插件的工具（memory-plugin）：插件关着就没有
+        if (tool.plugin() != null && !pluginEnabled(user, tool.plugin())) {
+            return false;
+        }
         Optional<ToolGroup> group = groupOf(tool);
         if (group.isPresent()) {
             return group.get().enabled(user, tool);
@@ -818,8 +846,11 @@ public final class PluginGate {
     }
 
     /** 每个钩子插件的参数：钩子、工具后处理、插件工作的并在一起，按这个顺序。 */
-    private static Map<String, List<Param>> declared(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes) {
+    private static Map<String, List<Param>> declared(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
+                                                     List<Object> members) {
         Map<String, Map<String, Param>> merged = new LinkedHashMap<>();
+        members.forEach(member -> Declared.merge("plugin " + memberPlugin(member), member,
+                merged.computeIfAbsent(memberPlugin(member), ignored -> new LinkedHashMap<>())));
         hooks.forEach(hook -> Declared.merge("plugin " + hook.plugin(), hook, merged.computeIfAbsent(hook.plugin(), ignored -> new LinkedHashMap<>())));
         afterHooks.forEach(hook -> Declared.merge("plugin " + hook.plugin(), hook, merged.computeIfAbsent(hook.plugin(), ignored -> new LinkedHashMap<>())));
         workTypes.forEach(type -> Declared.merge("plugin " + type.plugin(), type, merged.computeIfAbsent(type.plugin(), ignored -> new LinkedHashMap<>())));
@@ -833,7 +864,7 @@ public final class PluginGate {
     }
 
     private static Map<String, Plugin> group(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
-                                             List<Panel> panels, Set<String> required) {
+                                             List<Panel> panels, List<Object> members, Set<String> required) {
         Map<String, List<String>> points = new LinkedHashMap<>();
         Map<String, LocalText> descriptions = new LinkedHashMap<>();
         Map<String, Boolean> mandatory = new LinkedHashMap<>();
@@ -859,6 +890,10 @@ public final class PluginGate {
             points.computeIfAbsent(panel.plugin(), ignored -> new ArrayList<>()).add("panel:" + panel.name());
             info(panel, panel.plugin(), descriptions, mandatory, byDefault);
         }
+        for (Object member : members) {
+            points.computeIfAbsent(memberPlugin(member), ignored -> new ArrayList<>()).add(memberPoint(member));
+            info(member, memberPlugin(member), descriptions, mandatory, byDefault);
+        }
         List<String> unknown = required.stream().filter(name -> !points.containsKey(name)).sorted().toList();
         if (!unknown.isEmpty()) {
             throw new IllegalArgumentException("tantalum.hooks.required names plugins that are not installed: " + String.join(", ", unknown)
@@ -869,6 +904,37 @@ public final class PluginGate {
                 points.get(name).stream().distinct().toList(), mandatory.getOrDefault(name, false) || required.contains(name),
                 byDefault.getOrDefault(name, true))));
         return grouped;
+    }
+
+    /** memory-plugin 的插件成员属于哪个插件；不认识的类型抛 {@link IllegalArgumentException}。 */
+    static String memberPlugin(Object member) {
+        return switch (member) {
+            case RunFinishedListener listener -> listener.plugin();
+            case PromptAttacher attacher -> attacher.plugin();
+            case PluginEndpoints endpoints -> endpoints.plugin();
+            case ContextContributor contributor -> contributor.plugin();
+            default -> throw new IllegalArgumentException("not a plugin member: " + member.getClass().getName());
+        };
+    }
+
+    /** 插件页上“挂在”那一栏的名字。 */
+    static String memberPoint(Object member) {
+        return switch (member) {
+            case RunFinishedListener ignored -> "runFinished";
+            case PromptAttacher ignored -> "attach";
+            case PluginEndpoints ignored -> "endpoints";
+            case ContextContributor ignored -> "context";
+            default -> throw new IllegalArgumentException("not a plugin member: " + member.getClass().getName());
+        };
+    }
+
+    /** 某个插件此刻对这个用户生效的参数值（memory-plugin：插件服务用）；没有参数时是空对象。 */
+    public Json.Obj params(Principal user, String plugin) {
+        List<Param> declared = pluginParams.get(plugin);
+        if (declared == null) {
+            return new Json.Obj(Map.of());
+        }
+        return resolver.params(user, Kind.PLUGIN, plugin, declared, lock(Kind.PLUGIN, plugin) != null).values();
     }
 
     /** 插件页要的说明和开关策略只从实现了 {@link PluginInfo} 的成员取；没实现的什么都不说。 */

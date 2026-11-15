@@ -13,6 +13,7 @@ import tantalum.value.decision.HookDecided;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.StopReason;
@@ -109,12 +110,19 @@ public sealed interface TraceRecord {
     /** {@code attachments} 按上传顺序；{@code skills} 是文字里点名的技能连同附上的内容。没有时都不写出。 */
     record UserInput(Head head, Mode mode, String text, Source source,
                      @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments,
-                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills) implements TraceRecord {
+                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills,
+                     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachedBlock> attached) implements TraceRecord {
         public enum Mode { PROMPT, FOLLOW_UP, STEER, CONTINUE }
 
         public UserInput {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
             skills = skills == null ? List.of() : List.copyOf(skills);
+            attached = attached == null ? List.of() : List.copyOf(attached);
+        }
+
+        /** 插件附的内容（memory-plugin）没有时。 */
+        public UserInput(Head head, Mode mode, String text, Source source, List<AttachmentRef> attachments, List<SkillNote> skills) {
+            this(head, mode, text, source, attachments, skills, List.of());
         }
 
         public UserInput(Head head, Mode mode, String text, Source source, List<AttachmentRef> attachments) {
@@ -127,7 +135,7 @@ public sealed interface TraceRecord {
 
         @Override
         public UserInput withHead(Head newHead) {
-            return new UserInput(newHead, mode, text, source, attachments, skills);
+            return new UserInput(newHead, mode, text, source, attachments, skills, attached);
         }
     }
 

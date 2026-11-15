@@ -17,23 +17,25 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tantalum.memory.MemoryContext;
+import tantalum.memory.MemoryGuidance;
+import tantalum.memory.MemoryLimits;
+import tantalum.memory.MemoryStores;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.access.PluginSwitches;
+import tantalum.shell.knowledge.KnowledgeBase;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalTokens;
 import tantalum.shell.local.LocalTool;
 import tantalum.shell.local.LocalWorkspace;
 import tantalum.shell.local.TestComputer;
-import tantalum.shell.memory.KnowledgeBase;
-import tantalum.shell.memory.MemoryGuidance;
-import tantalum.shell.memory.MemoryLimits;
-import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.plugin.ContextContributor;
 import tantalum.shell.plugin.Kind;
+import tantalum.shell.plugin.Tool;
+import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.route.RouteClients;
 import tantalum.shell.route.RouteSettings;
 import tantalum.shell.route.Routes;
-import tantalum.shell.plugin.Tool;
-import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.settings.CompactionPolicy;
 import tantalum.shell.settings.UserSettings;
 import tantalum.shell.tool.ToolCatalog;
@@ -46,8 +48,8 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
-import tantalum.value.model.ModelChoice;
 import tantalum.value.json.Json;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.SessionContext;
@@ -109,12 +111,24 @@ class ContextHandlerTest {
         return catalog;
     }
 
-    private MemoryStores memories(Workspaces workspaces) {
-        return new MemoryStores(workspaces, dir.resolve("data"), MemoryLimits.defaults(), Clock.systemUTC());
+    /** 记忆插件的存储，目录照平台的插件数据目录规矩（memory-plugin）。 */
+    private MemoryStores stores(Workspaces workspaces) {
+        return new MemoryStores(user -> tantalum.shell.boot.PlatformServices.dataDir(workspaces, dir.resolve("data"), MemoryStores.DIR, user),
+                MemoryLimits.defaults(), Clock.systemUTC());
+    }
+
+    /** 记忆插件给上下文的那一份。 */
+    private List<ContextContributor> memories(Workspaces workspaces) {
+        return List.of(new MemoryContext(stores(workspaces)));
+    }
+
+    /** 装着记忆插件的门：插件开着，它的那一份才进上下文。 */
+    private PluginGate memoryGate() {
+        return PluginGate.allOn(catalog(), List.of(new MemoryContext(null)));
     }
 
     private ContextHandler handler(Workspaces workspaces, KnowledgeBase knowledge) {
-        return new ContextHandler(local, "Base prompt.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(workspaces), knowledge, "", noCompaction(), NO_WINDOW, NOBODY);
+        return new ContextHandler(local, "Base prompt.", catalog(), memoryGate(), memories(workspaces), knowledge, "", noCompaction(), NO_WINDOW, NOBODY);
     }
 
     private ContextHandler shared() {
@@ -162,7 +176,7 @@ class ContextHandlerTest {
     @Test
     void compactionSettingsFollowTheUsersChoiceOnEveryAssembly() throws Exception {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
         assertEquals(new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 936_000, 1.5), assembled(handler, COMMAND).compaction());
         users.setCompactionPercent(COMMAND.run().principal(), 50);
         assertEquals(500_000, assembled(handler, COMMAND).compaction().threshold());
@@ -180,7 +194,7 @@ class ContextHandlerTest {
     @Test
     void theModelIsTheRequestedThenTheSessionsThenTheUsersThenTheDefault() throws Exception {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
         ModelChoice gone = new ModelChoice("claude", "claude-opus-4-1", "high");
         assertEquals(OPUS, assembled(handler, assemble(OPUS, SONNET)).model(), "what the submission asked for");
         assertEquals(OPUS, assembled(handler, assemble(null, OPUS)).model(), "the session's current one");
@@ -194,7 +208,7 @@ class ContextHandlerTest {
     /** M11：system 里不写模型名，换模型前后 system 和工具逐字节相同。 */
     @Test
     void systemAndToolsDoNotDependOnTheModel() throws Exception {
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
         ContextAssembled sonnet = assembled(handler, assemble(SONNET, null));
         ContextAssembled opus = assembled(handler, assemble(OPUS, SONNET));
         assertEquals(sonnet.system(), opus.system());
@@ -314,7 +328,7 @@ class ContextHandlerTest {
     void withoutAgentsKnowledgeOrMemoriesSystemIsBaseAndGuidanceOnly() throws Exception {
         String system = assembled(shared(), COMMAND).system();
         assertEquals("Base prompt.\n\n" + MemoryGuidance.TEXT.strip(), system);
-        assertFalse(system.contains(ContextHandler.INDEX_HEADING));
+        assertFalse(system.contains(MemoryContext.INDEX_HEADING));
         assertFalse(system.contains(ContextHandler.KNOWLEDGE_HEADING));
     }
 
@@ -322,11 +336,11 @@ class ContextHandlerTest {
     void sectionsAppearInTheFixedOrderOnlyWhenPresent(@TempDir Path knowledgeDir) throws Exception {
         Files.writeString(knowledgeDir.resolve("team.md"), "Team facts.");
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
-        MemoryStores memories = memories(workspaces);
+        MemoryStores memories = stores(workspaces);
         Files.writeString(mac.resolve("AGENTS.md"), "Agents rules.");
         connect();
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction(), NO_WINDOW, NOBODY);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String system = assembled(handler, command(ALICE)).system();
 
@@ -335,7 +349,7 @@ class ContextHandlerTest {
         int knowledge = system.indexOf(ContextHandler.KNOWLEDGE_HEADING + "\n\n### team.md\n\nTeam facts.");
         int workspace = system.indexOf("<local-workspace>");
         int agents = system.indexOf("Agents rules.");
-        int index = system.indexOf(ContextHandler.INDEX_HEADING + "\n" + ContextHandler.INDEX_NOTE + "\n\n- [java](java.md) — user — Java 25 only");
+        int index = system.indexOf(MemoryContext.INDEX_HEADING + "\n" + MemoryContext.INDEX_NOTE + "\n\n- [java](java.md) — user — Java 25 only");
         assertTrue(base == 0 && base < guidance && guidance < knowledge && knowledge < workspace && workspace < agents && agents < index,
                 system);
         assertTrue(system.endsWith("Java 25 only\n</memory-index>"), "index is the last section");
@@ -344,7 +358,7 @@ class ContextHandlerTest {
     /** skills-wiki 需求 3.1、6.2：技能清单和 wiki 两段在 AGENTS.md 之后、记忆索引之前，各是一个会变的段。 */
     @Test
     void theSkillListAndTheWikiSitBetweenAgentsAndTheMemoryIndex() throws Exception {
-        MemoryStores memories = memories(Workspaces.perUser(dir.resolve("ws")));
+        MemoryStores memories = stores(Workspaces.perUser(dir.resolve("ws")));
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
         Files.writeString(mac.resolve("AGENTS.md"), "Agents rules.");
         Path skill = Files.createDirectories(mac.resolve("skills/pdf-tools"));
@@ -357,11 +371,11 @@ class ContextHandlerTest {
             @Override public java.util.Set<String> off(Principal user) { return java.util.Set.of(); }
         };
         ContextHandler handler = new ContextHandler(new LocalWorkspace(switches, links, filled), "Base.", catalog(),
-                tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "",
+                memoryGate(), List.of(new MemoryContext(memories)), KnowledgeBase.none(), "",
                 noCompaction(), NO_WINDOW, NOBODY);
         try (TestComputer ignored = connect()) {
             ContextAssembled event = assembled(handler, command(ALICE));
-            assertEquals(List.of(ContextHandler.LOCAL_TAG, ContextHandler.AGENTS_TAG, "skills", "wiki", ContextHandler.INDEX_TAG),
+            assertEquals(List.of(ContextHandler.LOCAL_TAG, ContextHandler.AGENTS_TAG, "skills", "wiki", MemoryContext.INDEX_TAG),
                     event.sections().stream().map(section -> section.name()).toList());
             String system = event.system();
             assertTrue(system.contains("</project-instructions>\n\n<skills>\n## Skills\n"), system);
@@ -369,7 +383,7 @@ class ContextHandlerTest {
                     "the template's own closing tag is kept as it is: " + system);
             assertTrue(system.contains("</skills>\n\n<wiki>\n## Wiki\n"), system);
             assertTrue(system.contains("<wiki_pages>\n- a.md — Page A\n</wiki_pages>\n</wiki>\n\n<memory-index>"), system);
-            assertTrue(event.sections().stream().filter(section -> !section.name().equals(ContextHandler.INDEX_TAG))
+            assertTrue(event.sections().stream().filter(section -> !section.name().equals(MemoryContext.INDEX_TAG))
                     .noneMatch(section -> section.byLine()), "a changed listing is sent again whole");
         }
     }
@@ -377,10 +391,10 @@ class ContextHandlerTest {
     @Test
     void eachUserSeesOnlyTheirOwnIndex() throws Exception {
         Workspaces workspaces = Workspaces.perUser(dir.resolve("ws"));
-        MemoryStores memories = memories(workspaces);
+        MemoryStores memories = stores(workspaces);
         memories.of(ALICE).write("alice-fact", "user", "alice likes tabs", "x");
         memories.of(BOB).write("bob-fact", "user", "bob likes spaces", "x");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), tantalum.shell.access.PluginGate.allOn(catalog(), List.of(), List.of(), List.of()), memories, KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
+        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String alice = assembled(handler, command(ALICE)).system();
         String bob = assembled(handler, command(BOB)).system();

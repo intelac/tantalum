@@ -1,6 +1,8 @@
 package tantalum.value.state;
 
 import java.util.List;
+import tantalum.value.model.AttachedBlock;
+import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.SkillBlock;
 
@@ -20,12 +22,15 @@ public interface Queue {
         return -1;
     }
 
-    /** 定位只比文字和附件：点名的技能内容是服务器附上的，改队列的请求里没有它。 */
+    /** 定位只比文字和附件：点名的技能内容和插件附加的内容是服务器附上的，改队列的请求里没有它们。 */
     private static Message plain(Message message) {
-        if (message.content().stream().noneMatch(SkillBlock.class::isInstance)) {
+        if (message.content().stream().noneMatch(Queue::added)) {
             return message;
         }
-        return new Message(message.role(), message.content().stream().filter(block -> !(block instanceof SkillBlock)).toList(),
-                message.interrupted());
+        return new Message(message.role(), message.content().stream().filter(block -> !added(block)).toList(), message.interrupted());
+    }
+
+    private static boolean added(ContentBlock block) {
+        return block instanceof SkillBlock || block instanceof AttachedBlock;
     }
 }

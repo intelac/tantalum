@@ -71,8 +71,8 @@ class ExamplesJarIT {
             for (JsonNode plugin : JSON.readTree(plugins.body()).get("plugins")) {
                 listed.add(plugin.get("name").asString() + "=" + plugin.get("enabled").asBoolean());
             }
-            // commandApproval 是服务器自带的（connector-jar），不是示例
-            assertEquals(List.of("citationCheck=true", "commandApproval=true", "dailyQuota=false", "live-monitor=true", "pinnedContext=true", "readOnly=false", "run-overview=true", "secretMask=true", "toolApproval=false",
+            // commandApproval（connector-jar）、memory（memory-plugin）是服务器自带的，不是示例
+            assertEquals(List.of("citationCheck=true", "commandApproval=true", "dailyQuota=false", "live-monitor=true", "memory=true", "pinnedContext=true", "readOnly=false", "run-overview=true", "secretMask=true", "toolApproval=false",
                     "truncateOutput=true"), listed);
             assertTrue(Files.readString(temp.resolve("server.log")).contains("example plugins from tantalum-examples"));
         } finally {

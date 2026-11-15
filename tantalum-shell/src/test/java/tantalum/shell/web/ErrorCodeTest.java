@@ -64,9 +64,17 @@ class ErrorCodeTest {
             }
         }
         String code = all.toString().replace("enum ErrorCode", "");
+        // 记忆插件（memory-plugin）不依赖平台的枚举，写的是同样的字面值
+        StringBuilder plugins = new StringBuilder();
+        try (var files = Files.walk(Path.of("src/main/java/tantalum/memory"))) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                plugins.append(Files.readString(file));
+            }
+        }
         for (ErrorCode each : ErrorCode.values()) {
             String uses = code.replaceAll("(?s)public enum ErrorCode.*?;\\s*\\n\\s*private final String wire;", "");
-            assertTrue(uses.contains("ErrorCode." + each.name()) || uses.contains("-> " + each.name() + ";"), each + " is never used");
+            assertTrue(uses.contains("ErrorCode." + each.name()) || uses.contains("-> " + each.name() + ";")
+                    || plugins.toString().contains("\"" + each.wire() + "\""), each + " is never used");
         }
     }
 

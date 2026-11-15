@@ -13,6 +13,7 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
@@ -60,11 +61,13 @@ public sealed interface TranscriptItem {
      * {@code removed} 表示排队时被用户移除了：从没发给模型，页面不显示；没移除时不写出。
      * {@code attachments} 按上传顺序；没有时不写出，接口和推送的格式和以前相同。
      * {@code skills} 是文字里点名的技能，按出现顺序；没有时不写出。
+     * {@code attached} 是插件在提交时附的内容（memory-plugin），按插件的顺序；没有时不写出。
      */
     record UserMessage(String id, SessionId session, RunId run, Instant at, String text,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued,
                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean removed,
-                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills)
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills,
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachedBlock> attached)
             implements TranscriptItem {
 
         public UserMessage {
@@ -74,6 +77,12 @@ public sealed interface TranscriptItem {
             Objects.requireNonNull(text, "text");
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
             skills = skills == null ? List.of() : List.copyOf(skills);
+            attached = attached == null ? List.of() : List.copyOf(attached);
+        }
+
+        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
+                           boolean queued, boolean removed, List<SkillNote> skills) {
+            this(id, session, run, at, text, attachments, queued, removed, skills, List.of());
         }
 
         public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,

@@ -7,10 +7,11 @@ import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
-import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
+import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.SkillBlock;
@@ -103,6 +104,7 @@ public record TokenEstimate(double bytesPerToken) {
             case ModelChangeBlock change -> ofText(change.text());
             case HookTextBlock note -> ofText(note.text());
             case SkillBlock skill -> ofText(skill.text());
+            case AttachedBlock attached -> ofText(attached.wrapped());
         };
     }
 

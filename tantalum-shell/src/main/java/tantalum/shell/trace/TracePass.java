@@ -49,6 +49,7 @@ import tantalum.value.event.UserPrompt;
 import tantalum.value.event.WorkDone;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.Message;
 import tantalum.value.state.Awaiting;
 import tantalum.value.state.Ended;
@@ -96,9 +97,10 @@ final class TracePass {
 
     void run() {
         switch (envelope.event()) {
-            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), Mode.PROMPT);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), Mode.FOLLOW_UP);
-            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), Mode.STEER);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), Mode.PROMPT);
+            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(),
+                    Mode.FOLLOW_UP);
+            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), Mode.STEER);
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);
@@ -224,7 +226,7 @@ final class TracePass {
             Queued queued = book.queued.pollFirst();
             Place first = pending(run);
             add(new UserInput(head("u:" + queued.seq(), run, first, queued.at()).ended(queued.at()), queued.mode(), queued.text(),
-                    Source.USER, queued.attachments(), queued.skills()), first, false);
+                    Source.USER, queued.attachments(), queued.skills(), queued.attached()), first, false);
         }
         return track;
     }
@@ -287,18 +289,18 @@ final class TracePass {
     // ---- 用户 ----
 
     /** 用户提交：直接开始运行、插进当前运行，或排队到运行开始时再记。 */
-    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, Mode mode) {
+    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, List<AttachedBlock> attached, Mode mode) {
         List<SkillNote> skills = SkillNote.of(named);
         RunId fresh = RunId.of(session, seq);
         SessionState earlier = before.sessions().get(session);
         SessionState after = state.sessions().get(session);
         if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
             track(fresh);
-            user(fresh, mode, text, Source.USER, attachments, skills);
+            user(fresh, mode, text, Source.USER, attachments, skills, attached);
         } else if (mode == Mode.STEER && activeRun() != null) {
             user(activeRun(), mode, text, Source.USER, attachments, skills);
         } else if (after != null && after.followUps().size() > (earlier == null ? 0 : earlier.followUps().size())) {
-            book.queued.addLast(new Queued(seq, at, text, mode, attachments, skills));
+            book.queued.addLast(new Queued(seq, at, text, mode, attachments, skills, attached));
         }
     }
 
@@ -315,7 +317,8 @@ final class TracePass {
         switch (edited.action()) {
             case EDIT -> {
                 if (envelope.event() instanceof QueueChanged changed) {
-                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments(), queued.skills()));
+                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments(), queued.skills(),
+                            queued.attached()));
                 } else {
                     queue.add(edited.index(), queued);
                 }
@@ -332,8 +335,13 @@ final class TracePass {
     }
 
     void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments, List<SkillNote> skills) {
+        user(run, mode, text, source, attachments, skills, List.of());
+    }
+
+    void user(RunId run, Mode mode, String text, Source source, List<AttachmentRef> attachments, List<SkillNote> skills,
+              List<AttachedBlock> attached) {
         Place place = pending(run);
-        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments, skills), place, false);
+        add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments, skills, attached), place, false);
     }
 
     /** 运行标题的 ID，和对话页运行状态条目的 ID 相同。 */

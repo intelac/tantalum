@@ -76,6 +76,32 @@ class ArchitectureTest {
             .that().doNotHaveFullyQualifiedName("tantalum.value.text.Bundle")
             .should().dependOnClassesThat().haveFullyQualifiedName("java.util.ResourceBundle");
 
+    /**
+     * 记忆是插件（memory-plugin 需求 2.1）：只经插件接口（{@code tantalum.shell.plugin}）、value 包和 {@code PrivateFiles} 和平台打交道；
+     * Spring 和日志只在它的 {@code boot} 包里（日志各处可用）。平台反过来一点不知道记忆插件。
+     */
+    @ArchTest
+    static final ArchRule memoryPluginUsesOnlyThePluginApi = classes()
+            .that().resideInAPackage("tantalum.memory..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage("tantalum.memory..", "tantalum.shell.plugin..", "tantalum.value..",
+                    "tantalum.local.fs..", "java..", "org.slf4j..", "org.springframework..")
+            .andShould(new com.tngtech.archunit.lang.ArchCondition<com.tngtech.archunit.core.domain.JavaClass>("use Spring only in tantalum.memory.boot") {
+                @Override
+                public void check(com.tngtech.archunit.core.domain.JavaClass item, com.tngtech.archunit.lang.ConditionEvents events) {
+                    if (item.getPackageName().startsWith("tantalum.memory.boot")) {
+                        return;
+                    }
+                    item.getDirectDependenciesFromSelf().stream()
+                            .filter(dependency -> dependency.getTargetClass().getPackageName().startsWith("org.springframework"))
+                            .forEach(dependency -> events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(item, dependency.getDescription())));
+                }
+            });
+
+    @ArchTest
+    static final ArchRule platformKnowsNothingOfTheMemoryPlugin = noClasses()
+            .that().resideInAnyPackage("tantalum.shell..", "tantalum.kernel..", "tantalum.value..", "tantalum.local..")
+            .should().dependOnClassesThat().resideInAPackage("tantalum.memory..");
+
     @ArchTest
     static final ArchRule kernelDoesNotDependOnShell = noClasses()
             .that().resideInAPackage("tantalum.kernel..")

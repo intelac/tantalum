@@ -433,13 +433,15 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 
 模型可以替每个用户记住跨会话仍然有用的事实：偏好、纠正过的做法、项目事实、外部链接。四层模型里实现了第二层（会话摘要，见下面的“上下文压缩”）、第三层（个人长期记忆）和第四层（共享知识，只读）。
 
+个人长期记忆、每天的笔记和自动记下是**记忆插件**（包 `tantalum.memory`），随服务器发布、默认装上，只经下面“写插件”里的插件接口和平台打交道（架构测试钉住）。插件页上有一行“记忆”：总开关关掉后记忆工具、记忆指引和索引都不再给模型；参数“自动记下”每人自己开关。部署时 `tantalum.memory-plugin.enabled=false` 不装，企业可以换成自己的实现。共享知识是平台的，不在插件里。
+
 - **存在哪**：每人模式下在 `<workspace>/<用户名>/memory/`，索引 `MEMORY.md` 每条一行，条目 `<name>.md` 带 frontmatter（名称、描述、类型、更新时间）。共用工作目录模式下放到 `<data-dir>/memory/<用户名>/`，这样别人的 `grep` 搜不到。索引以条目文件为准，每次写删后重建。
 - **怎么进 prompt**：运行开始时把记忆指引、共享知识、`AGENTS.md`、技能清单、wiki 页列表和该用户的索引依次拼进 system，写进 `ContextAssembled` 事件；回放不读文件。索引在 system 末尾、钩子追加内容之前，prompt caching 的断点整个运行里稳定。条目正文不常驻，模型用 `memory_read` 按需读。新记忆从下一个运行开始生效：会话的 system 和工具在第一个运行时固定（所有模型相同），之后可变内容有变化时追加一条用户消息说明，新工具要到新会话才可见。
 - **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令的内容会被拒绝写入。
 - **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
 - **边界和删除**：知识、`AGENTS.md`、索引用标签包裹并转义闭合标签，这只降低注入风险，不是保证。记忆变化时只追加变化的部分。删除记忆不会清除 journal 和历史消息里的内容，同一会话的 system 也要到压缩或新会话才更新。
-- **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增。接口 `GET/POST /api/memory`、`GET/DELETE /api/memory/{name}` 只操作当前登录用户的记忆。
+- **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增；每天的笔记能看、改、删。记忆插件关着时这一页只说明一句。接口在 `/api/plugin-api/memory/` 下（`entries`、`entries/{name}`、`notes`、`notes/{day}/{session}`、`capture`），只操作当前登录用户的；管理员只读查看时能看笔记，看不到长期记忆。
 
 ## 附件
 
@@ -826,8 +828,13 @@ Tantalum 不连 MCP 服务器（2026-11-14 Yi 定，`remove-generic-mcp` spec）
 | 判断时需要 I/O | `KernelHook` 返回 `NeedWork`，再实现 `WorkType` |
 | 增加工具 | `Tool`，声明服务端和并发上限；未声明时上限为 1 |
 | 修改工具输出 | `AfterToolHook` |
+| 一轮结束后在后台做事（如记笔记） | `RunFinishedListener`：平台在后台线程上给这一轮的摘录（用户的话、工具和截短遮盖后的结果、最后的回答）；慢不影响对话，抛异常只记日志 |
+| 提问时往用户消息上附一段文字（如想起的记忆） | `PromptAttacher`：限时 200 毫秒，超时这一轮不附；附的文字随提交进 journal，发给模型时包在 `<attached plugin="…">` 里，对话页和轨迹页标出是哪个插件附的 |
+| 往 system 里加固定说明和一段会变的内容 | `ContextContributor`：固定说明接在基础提示后面，会变的一段排在最后，变了由内核追加变化 |
+| 给自己的页面提供接口 | `PluginEndpoints`：`/api/plugin-api/<插件>/…`，只给当前用户用；插件关着时 404；管理员只读查看时只有插件说能看的 GET 进得来 |
+| 每人的数据目录、调模型、读参数、搜过去的对话 | 注入 `PluginServices`：`dataDir`（每人模式在这个人的工作区里，共用模式在数据目录下）、`complete`（不带工具的一次模型调用，不算每日额度）、`params`、`enabled`、`searchConversations` |
 
-注册成 Spring bean 即可。同一个插件的钩子、工作类型和工具后处理要让 `plugin()` 返回同一个名字（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明（`LocalText`，可以写三种语言，见“语言”）。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
+注册成 Spring bean 即可。同一个插件的钩子、工作类型、工具后处理和上面几个插件点要让 `plugin()` 返回同一个名字；工具的 `plugin()` 默认为空，写上插件名后插件关着时这个工具也不给模型（钩子和工作类型默认是 `name()`，工具后处理默认是类名），插件页按它分组开关；`description()` 是插件页上的一句说明（`LocalText`，可以写三种语言，见“语言”）。插件里不要直接调别的插件的 `run`：所有调用都经过 `PluginGate`，它负责按用户的开关过滤。
 
 开关相关的三个方法（`KernelHook`）：
 - `defaultEnabled()`：用户没设置过时开不开，默认开。策略类插件返回 false，由用户在插件页打开；同一个插件里有一个钩子返回 false，整个插件默认关。

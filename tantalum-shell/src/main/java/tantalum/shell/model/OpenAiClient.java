@@ -1,7 +1,5 @@
 package tantalum.shell.model;
 
-import tantalum.value.text.Failures;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,11 +23,12 @@ import tantalum.shell.json.JsonText;
 import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.FailureReason;
-import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
+import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
@@ -45,6 +44,7 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.text.Failures;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -365,6 +365,7 @@ public final class OpenAiClient implements ModelClient {
                 case ToolChangeBlock change -> append(text, ToolChanges.describe(change));
                 case HookTextBlock note -> append(text, SystemUpdates.HEADER + note.text());
                 case SkillBlock skill -> append(text, skill.text());
+                case AttachedBlock attached -> append(text, attached.wrapped());
                 case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);

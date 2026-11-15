@@ -648,7 +648,7 @@ class ClaudeScenarioTest {
         try (TestServer server = new TestServer(data, workspace, strict)) {
             submit(server, "drift", "s1", "Let a1 = 3 and a(n+1) = 2*a(n) - 1. Compute a12 modulo 7 step by step and double-check it.");
             assertEquals("COMPLETED", waitForLatestRun(server, "drift", "s1", Duration.ofMinutes(3)).get("endReason").asString());
-            assertEquals(201, server.post("drift", "/api/memory",
+            assertEquals(201, server.post("drift", "/api/plugin-api/memory/entries",
                     "{\"name\":\"style\",\"type\":\"user\",\"description\":\"Prefers short answers\",\"content\":\"Short answers.\"}").statusCode());
             submit(server, "drift", "s1", "Also, what short-answer preference do you know about me? Then compute a13 modulo 7.");
             JsonNode second = waitForRun(server, "drift", "s1", 2, Duration.ofMinutes(3));
@@ -1030,7 +1030,7 @@ class ClaudeScenarioTest {
         Path data = temp.resolve("data-forget");
 
         try (TestServer server = new TestServer(data, workspace, claude(MODEL, "medium"))) {
-            HttpResponse<String> seeded = server.post("forget", "/api/memory",
+            HttpResponse<String> seeded = server.post("forget", "/api/plugin-api/memory/entries",
                     "{\"name\":\"java-version\",\"type\":\"user\",\"description\":\"Always answer with Java 25 syntax\","
                     + "\"content\":\"The user wants Java 25 syntax in every example.\"}");
             assertEquals(201, seeded.statusCode(), seeded.body());

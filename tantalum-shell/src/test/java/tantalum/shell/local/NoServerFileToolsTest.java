@@ -55,7 +55,7 @@ class NoServerFileToolsTest {
                 assertTrue(SERVER_TOOLS.contains(tool.name()), tool.name() + " (" + tool.getClass().getName() + ") runs on the server");
                 // ask_user 只有定义，调用由内核截下，不碰任何文件（waiting-state）
                 assertTrue(tool instanceof ReadAttachmentTool || tool instanceof tantalum.shell.tool.AskUserTool || tool instanceof tantalum.shell.tool.TodoWriteTool
-                        || tool.getClass().getPackageName().equals("tantalum.shell.memory"), tool.getClass().getName());
+                        || tool.getClass().getPackageName().equals("tantalum.memory"), tool.getClass().getName());
             }
             assertEquals(SERVER_TOOLS, Set.copyOf(tools.stream().filter(tool -> !(tool instanceof LocalTool) && !web(tool)).map(Tool::name).toList()));
             assertEquals(WEB_TOOLS, Set.copyOf(tools.stream().filter(NoServerFileToolsTest::web).map(Tool::name).toList()));

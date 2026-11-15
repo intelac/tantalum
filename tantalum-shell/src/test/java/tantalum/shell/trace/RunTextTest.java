@@ -1,0 +1,66 @@
+package tantalum.shell.trace;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import tantalum.shell.trace.TraceRecord.Head;
+import tantalum.shell.trace.TraceRecord.ModelRequest;
+import tantalum.shell.trace.TraceRecord.ToolCall;
+import tantalum.shell.trace.TraceRecord.UserInput;
+import tantalum.shell.trace.TraceRecord;
+import tantalum.value.id.RunId;
+
+/** memory-capture 需求 1.1、2.2、5.2、5.4：摘出的文字、截短、遮盖、去掉回忆块、留头留尾；模型回答里的要点。 */
+class RunTextTest {
+
+    private static final RunId RUN = new RunId("s1_5");
+    private static final Instant T = Instant.parse("2026-11-15T00:00:00Z");
+
+    private static Head head(String id, String pos) {
+        return new Head(id, pos, RUN, 1, 1, null, T, T);
+    }
+
+    private static ModelRequest answer(String id, String pos, String text) {
+        return new ModelRequest(head(id, pos), 1, ModelRequest.Purpose.NORMAL, ModelRequest.Status.DONE, List.of(), 3, "local", "qwen", null, 0,
+                null, null, text, null, null, null, null, List.of());
+    }
+
+    private static ToolCall tool(String id, String pos, String args, String result, ToolCall.Status status, String code) {
+        return new ToolCall(head(id, pos), id, "read_file", null, args, null, status, result, code, null, "g", T, T, "m1");
+    }
+
+    @Test
+    void theExcerptHasTheUserToolsAndTheLastAnswerWithSecretsMaskedAndRecallStripped() {
+        String key = "sk-" + "ant-" + "api03-" + "A".repeat(40);
+        List<TraceRecord> records = List.of(
+                new UserInput(head("u", "5.0"), UserInput.Mode.PROMPT, "<recall>old note</recall>读一下 README<attached plugin=\"memory\">\n- attached note\n</attached>", TraceRecord.Source.USER),
+                answer("m1", "6.0", "我先读文件"),
+                tool("t1", "7.0", "{\"path\":\"README.md\"}", "key=" + key + "\n" + "x".repeat(800), ToolCall.Status.DONE, null),
+                tool("t2", "7.1", "{\"path\":\"nope\"}", null, ToolCall.Status.ERROR, "NOT_FOUND"),
+                answer("m2", "8.0", "README 讲的是 Tantalum。"),
+                new UserInput(head("c", "8.1"), UserInput.Mode.CONTINUE, "plugin continuation", TraceRecord.Source.plugin("cite")));
+        String excerpt = RunText.of(records, 20_000);
+        assertTrue(excerpt.startsWith("User: 读一下 README"), excerpt);
+        assertFalse(excerpt.contains("old note"), "recall blocks are not noted again");
+        assertFalse(excerpt.contains("attached note"), "what plugins attached is not noted again");
+        assertFalse(excerpt.contains(key), "secrets in tool results are masked");
+        assertTrue(excerpt.contains("Tool read_file({\"path\":\"nope\"}) failed: NOT_FOUND"));
+        assertTrue(excerpt.endsWith("Assistant: README 讲的是 Tantalum。"), "only the last answer");
+        assertFalse(excerpt.contains("我先读文件"));
+        assertFalse(excerpt.contains("plugin continuation"));
+        assertTrue(excerpt.contains("…"), "long results are cut");
+    }
+
+    @Test
+    void longExcerptsKeepTheHeadAndTheTail() {
+        String cut = RunText.middleCut("A".repeat(500) + "B".repeat(500), 200);
+        assertTrue(cut.startsWith("A".repeat(80)));
+        assertTrue(cut.endsWith("B".repeat(80)));
+        assertTrue(cut.contains("chars omitted"));
+        assertEquals("short", RunText.middleCut("short", 200));
+    }
+}

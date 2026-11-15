@@ -596,7 +596,8 @@ class OpenAiClientTest {
     void namedSkillRequestBodies() throws Exception {
         List<Prompt> prompts = List.of(
                 new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools convert it", List.of(), List.of(SKILL)))),
-                new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL)))));
+                new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL),
+                                List.of(new tantalum.value.model.AttachedBlock("memory", "- the user converts PDFs often"))))));
         StringBuilder actual = new StringBuilder();
         for (boolean vision : new boolean[] {true, false}) {
             OpenAiClient client = new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),

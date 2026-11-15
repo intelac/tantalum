@@ -45,81 +45,81 @@ class MemoryApiTest {
     }
 
     private HttpResponse<String> delete(String user, String name) throws Exception {
-        return server.http.send(server.request(user, "/api/memory/" + name).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+        return server.http.send(server.request(user, "/api/plugin-api/memory/entries/" + name).DELETE().build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
     void createListReadDelete() throws Exception {
-        HttpResponse<String> created = server.post("alice", "/api/memory", entry("java", "user", "Java 25 only", "Always Java 25."));
+        HttpResponse<String> created = server.post("alice", "/api/plugin-api/memory/entries", entry("java", "user", "Java 25 only", "Always Java 25."));
         assertEquals(201, created.statusCode(), created.body());
         JsonNode body = JSON.readTree(created.body());
         assertEquals("java", body.get("name").asString());
         assertEquals("user", body.get("type").asString());
         assertTrue(body.has("updatedAt"));
 
-        server.post("alice", "/api/memory", entry("cobol", "project", "COBOL rules", "Copybooks live in cpy/."));
-        JsonNode list = JSON.readTree(server.get("alice", "/api/memory").body());
+        server.post("alice", "/api/plugin-api/memory/entries", entry("cobol", "project", "COBOL rules", "Copybooks live in cpy/."));
+        JsonNode list = JSON.readTree(server.get("alice", "/api/plugin-api/memory/entries").body());
         assertEquals(2, list.get("entries").size());
         assertEquals(2, list.get("used").asInt());
         assertEquals(200, list.get("max").asInt());
         assertEquals("cobol", list.get("entries").get(0).get("name").asString(), "newest first");
         assertFalse(list.get("entries").get(0).has("content"), "list carries summaries only");
 
-        JsonNode read = JSON.readTree(server.get("alice", "/api/memory/java").body());
+        JsonNode read = JSON.readTree(server.get("alice", "/api/plugin-api/memory/entries/java").body());
         assertEquals("Always Java 25.", read.get("content").asString());
 
-        HttpResponse<String> overwritten = server.post("alice", "/api/memory", entry("java", "user", "Java 25 only", "changed"));
+        HttpResponse<String> overwritten = server.post("alice", "/api/plugin-api/memory/entries", entry("java", "user", "Java 25 only", "changed"));
         assertEquals(200, overwritten.statusCode());
 
         assertEquals(204, delete("alice", "java").statusCode());
-        assertEquals(404, server.get("alice", "/api/memory/java").statusCode());
-        assertTrue(server.get("alice", "/api/memory/java").body().contains("\"code\":\"memory/not-found\""));
+        assertEquals(404, server.get("alice", "/api/plugin-api/memory/entries/java").statusCode());
+        assertTrue(server.get("alice", "/api/plugin-api/memory/entries/java").body().contains("\"code\":\"memory/not-found\""));
         assertEquals(404, delete("alice", "java").statusCode());
     }
 
     @Test
     void validationAndCredentialFilterGive400WithTheReason() throws Exception {
-        assertEquals(400, server.post("alice", "/api/memory", "{oops").statusCode());
-        HttpResponse<String> badName = server.post("alice", "/api/memory", entry("Bad Name", "user", "d", "c"));
+        assertEquals(400, server.post("alice", "/api/plugin-api/memory/entries", "{oops").statusCode());
+        HttpResponse<String> badName = server.post("alice", "/api/plugin-api/memory/entries", entry("Bad Name", "user", "d", "c"));
         assertEquals(400, badName.statusCode());
         assertTrue(badName.body().contains("name"), badName.body());
         // console-i18n I9：代码加参数给控制台按语言说
         assertTrue(badName.body().contains("\"code\":\"memory/invalid-name\""), badName.body());
-        assertTrue(server.post("alice", "/api/memory", entry("x", "video", "d", "c")).body().contains("\"code\":\"memory/invalid\",\"params\":{\"field\":\"type\"}"));
-        assertTrue(server.post("alice", "/api/memory", "{\"name\":\"x\",\"type\":\"user\",\"content\":\"c\"}").body().contains("description"));
-        HttpResponse<String> secret = server.post("alice", "/api/memory", entry("x", "user", "d", "password=hunter2secret"));
+        assertTrue(server.post("alice", "/api/plugin-api/memory/entries", entry("x", "video", "d", "c")).body().contains("\"code\":\"memory/invalid\",\"params\":{\"field\":\"type\"}"));
+        assertTrue(server.post("alice", "/api/plugin-api/memory/entries", "{\"name\":\"x\",\"type\":\"user\",\"content\":\"c\"}").body().contains("description"));
+        HttpResponse<String> secret = server.post("alice", "/api/plugin-api/memory/entries", entry("x", "user", "d", "password=hunter2secret"));
         assertEquals(400, secret.statusCode());
         assertTrue(secret.body().contains("credentials"), secret.body());
         assertTrue(secret.body().contains("\"code\":\"memory/credential\""), secret.body());
         assertFalse(secret.body().contains("hunter2"));
-        assertEquals(0, JSON.readTree(server.get("alice", "/api/memory").body()).get("used").asInt());
+        assertEquals(0, JSON.readTree(server.get("alice", "/api/plugin-api/memory/entries").body()).get("used").asInt());
     }
 
     @Test
     void usersOnlySeeTheirOwnAndMissingLooksTheSame() throws Exception {
-        server.post("alice", "/api/memory", entry("alice-fact", "user", "d", "c"));
-        assertEquals(0, JSON.readTree(server.get("bob", "/api/memory").body()).get("used").asInt());
-        HttpResponse<String> others = server.get("bob", "/api/memory/alice-fact");
-        HttpResponse<String> missing = server.get("bob", "/api/memory/nope");
+        server.post("alice", "/api/plugin-api/memory/entries", entry("alice-fact", "user", "d", "c"));
+        assertEquals(0, JSON.readTree(server.get("bob", "/api/plugin-api/memory/entries").body()).get("used").asInt());
+        HttpResponse<String> others = server.get("bob", "/api/plugin-api/memory/entries/alice-fact");
+        HttpResponse<String> missing = server.get("bob", "/api/plugin-api/memory/entries/nope");
         assertEquals(404, others.statusCode());
         assertEquals(others.body(), missing.body());
         assertEquals(404, delete("bob", "alice-fact").statusCode());
-        assertEquals(200, server.get("alice", "/api/memory/alice-fact").statusCode());
+        assertEquals(200, server.get("alice", "/api/plugin-api/memory/entries/alice-fact").statusCode());
         // 名字不合法按不存在处理；带编码斜杠的路径由 Spring 的防火墙直接拒绝（400），不会到控制器。
-        assertEquals(404, server.get("alice", "/api/memory/Not-Valid").statusCode());
-        assertEquals(400, server.get("alice", "/api/memory/..%2Fother").statusCode());
+        assertEquals(404, server.get("alice", "/api/plugin-api/memory/entries/Not-Valid").statusCode());
+        assertEquals(400, server.get("alice", "/api/plugin-api/memory/entries/..%2Fother").statusCode());
     }
 
     @Test
     void requiresLoginAndSameOriginForWrites() throws Exception {
-        assertEquals(401, server.get(null, "/api/memory").statusCode());
-        server.get("alice", "/api/memory");  // 登录
-        HttpRequest cross = server.request("alice", "/api/memory").header("Origin", "https://evil.example")
+        assertEquals(401, server.get(null, "/api/plugin-api/memory/entries").statusCode());
+        server.get("alice", "/api/plugin-api/memory/entries");  // 登录
+        HttpRequest cross = server.request("alice", "/api/plugin-api/memory/entries").header("Origin", "https://evil.example")
                 .header("content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(entry("x", "user", "d", "c"))).build();
         assertEquals(403, server.http.send(cross, HttpResponse.BodyHandlers.ofString()).statusCode());
-        HttpRequest crossDelete = server.request("alice", "/api/memory/x").header("Origin", "https://evil.example").DELETE().build();
+        HttpRequest crossDelete = server.request("alice", "/api/plugin-api/memory/entries/x").header("Origin", "https://evil.example").DELETE().build();
         assertEquals(403, server.http.send(crossDelete, HttpResponse.BodyHandlers.ofString()).statusCode());
-        assertEquals(0, JSON.readTree(server.get("alice", "/api/memory").body()).get("used").asInt());
+        assertEquals(0, JSON.readTree(server.get("alice", "/api/plugin-api/memory/entries").body()).get("used").asInt());
     }
 }

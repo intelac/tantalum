@@ -2,7 +2,6 @@ package tantalum.shell.web;
 
 import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.attachment.AttachmentRejected;
-import tantalum.shell.memory.MemoryStore;
 import tantalum.shell.route.ChoiceCheck;
 
 /**
@@ -93,6 +92,7 @@ public enum ErrorCode {
     PARAM_INVALID("param/invalid", 400),
     /** 只有管理员能改的参数。参数 {@code key}。 */
     PARAM_FORBIDDEN("param/forbidden", 403),
+    // 下面几个由记忆插件的接口发出（tantalum.memory.api.MemoryEndpoints 写同样的字面值；ErrorCodeTest 比对），控制台按它们显示文字
     MEMORY_NOT_FOUND("memory/not-found", 404),
     MEMORY_INVALID_NAME("memory/invalid-name", 400),
     /** Windows 的设备名（con、nul、com1 这类），所有平台都不收。 */
@@ -166,18 +166,6 @@ public enum ErrorCode {
             case LEVEL_UNKNOWN -> MODEL_LEVEL_UNKNOWN;
             case TOOL_CHANGES -> MODEL_TOOL_CHANGES;
             case NO_IMAGES -> ATTACHMENT_MODEL_NO_IMAGES;
-        };
-    }
-
-    public static ErrorCode of(MemoryStore.Problem problem) {
-        return switch (problem) {
-            case INVALID_NAME -> MEMORY_INVALID_NAME;
-            case RESERVED_NAME -> MEMORY_RESERVED_NAME;
-            case INVALID -> MEMORY_INVALID;
-            case TOO_LONG -> MEMORY_TOO_LONG;
-            case FULL -> MEMORY_FULL;
-            case INDEX_FULL -> MEMORY_INDEX_FULL;
-            case CREDENTIAL -> MEMORY_CREDENTIAL;
         };
     }
 

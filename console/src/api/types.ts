@@ -265,6 +265,15 @@ export interface UserItem extends ItemBase {
   removed?: boolean;
   /** 文字里点名的技能，按出现顺序；没有时不出现。 */
   skills?: SkillNote[];
+  /** 插件在提交时附的内容（memory-plugin），按插件的顺序；没有时不出现。 */
+  attached?: AttachedNote[];
+}
+
+/** 插件附在用户消息上的一段文字。 */
+export interface AttachedNote {
+  kind?: "attached";
+  plugin: string;
+  text: string;
 }
 
 export interface TextItem extends ItemBase {
@@ -446,6 +455,8 @@ export interface UserInput extends TraceHead {
   attachments?: AttachmentRef[];
   /** 文字里点名的技能连同附上的内容；没有时不出现。 */
   skills?: SkillNote[];
+  /** 插件附的内容；没有时不出现。 */
+  attached?: AttachedNote[];
 }
 
 export interface ContextSection {
@@ -1104,7 +1115,7 @@ export interface PanelInfo {
   url: string;
 }
 
-// ---- 每天的笔记（memory-capture）：`/api/memory/notes`、`/api/memory/capture`。 ----
+// ---- 每天的笔记（memory-capture）：`/api/plugin-api/memory/notes`、`/api/plugin-api/memory/capture`（记忆插件）。 ----
 
 export interface NoteListed {
   session: string;

@@ -71,7 +71,7 @@ class MemoryNotesApiTest {
     private JsonNode waitForNotes(String user, int sections) throws Exception {
         JsonNode days = null;
         for (int i = 0; i < 500; i++) {
-            days = get(user, "/api/memory/notes").get("days");
+            days = get(user, "/api/plugin-api/memory/notes").get("days");
             if (days.size() > 0 && days.get(0).get("notes").get(0).get("sections").asInt() >= sections) {
                 return days;
             }
@@ -90,31 +90,33 @@ class MemoryNotesApiTest {
         assertEquals("s1", listed.get("session").asString());
         assertTrue(listed.get("preview").asString().contains("自动记下"));
 
-        JsonNode note = get("alice", "/api/memory/notes/" + day + "/s1");
+        JsonNode note = get("alice", "/api/plugin-api/memory/notes/" + day + "/s1");
         assertTrue(note.get("sections").get(0).get("run").asString().startsWith("s1_"));
         assertTrue(note.get("text").asString().contains("用户想把记忆往前提"));
 
-        assertEquals(0, get("bob", "/api/memory/notes").get("days").size(), "bob does not see alice's notes");
-        assertEquals(1, get("root", "/api/memory/notes?viewAs=alice").get("days").size(), "the admin can read while viewing");
-        assertTrue(send("root", "DELETE", "/api/memory/notes/" + day + "/s1?viewAs=alice", null).statusCode() >= 400, "but not delete");
+        assertEquals(0, get("bob", "/api/plugin-api/memory/notes").get("days").size(), "bob does not see alice's notes");
+        assertEquals(1, get("root", "/api/plugin-api/memory/notes?viewAs=alice").get("days").size(), "the admin can read while viewing");
+        assertTrue(send("root", "DELETE", "/api/plugin-api/memory/notes/" + day + "/s1?viewAs=alice", null).statusCode() >= 400, "but not delete");
 
         String edited = note.get("text").asString().replace("用户想把记忆往前提", "用户决定先做记忆");
-        assertEquals(200, send("alice", "PUT", "/api/memory/notes/" + day + "/s1", JSON.writeValueAsString(java.util.Map.of("text", edited))).statusCode());
-        assertTrue(get("alice", "/api/memory/notes/" + day + "/s1").get("text").asString().contains("用户决定先做记忆"));
-        assertEquals(200, send("alice", "DELETE", "/api/memory/notes/" + day + "/s1", null).statusCode());
-        assertEquals(0, get("alice", "/api/memory/notes").get("days").size());
-        assertEquals(404, server.get("alice", "/api/memory/notes/" + day + "/s1").statusCode());
-        assertEquals(400, server.get("alice", "/api/memory/notes/yesterday/s1").statusCode());
+        assertEquals(200, send("alice", "PUT", "/api/plugin-api/memory/notes/" + day + "/s1", JSON.writeValueAsString(java.util.Map.of("text", edited))).statusCode());
+        assertTrue(get("alice", "/api/plugin-api/memory/notes/" + day + "/s1").get("text").asString().contains("用户决定先做记忆"));
+        assertEquals(200, send("alice", "DELETE", "/api/plugin-api/memory/notes/" + day + "/s1", null).statusCode());
+        assertEquals(0, get("alice", "/api/plugin-api/memory/notes").get("days").size());
+        assertEquals(404, server.get("alice", "/api/plugin-api/memory/notes/" + day + "/s1").statusCode());
+        assertEquals(400, server.get("alice", "/api/plugin-api/memory/notes/yesterday/s1").statusCode());
     }
 
     @Test
     void turningCaptureOffStopsNewNotes() throws Exception {
-        JsonNode capture = get("alice", "/api/memory/capture");
+        JsonNode capture = get("alice", "/api/plugin-api/memory/capture");
         assertTrue(capture.get("enabled").asBoolean());
         assertTrue(capture.get("server").asBoolean());
-        assertEquals(200, send("alice", "PUT", "/api/memory/capture", "{\"enabled\":false}").statusCode());
-        assertFalse(get("alice", "/api/memory/capture").get("enabled").asBoolean());
-        assertEquals(400, send("alice", "PUT", "/api/memory/capture", "{\"enabled\":\"no\"}").statusCode());
+        // 开关是记忆插件在插件页上的参数（memory-plugin 需求 2.3）
+        assertEquals(200, send("alice", "PUT", "/api/plugins/plugin/memory/params", "{\"values\":{\"capture\":false}}").statusCode());
+        assertFalse(get("alice", "/api/plugin-api/memory/capture").get("enabled").asBoolean());
+        assertEquals(404, send("alice", "PUT", "/api/plugin-api/memory/capture", "{\"enabled\":true}").statusCode(), "the switch moved");
+        assertFalse(get("alice", "/api/plugin-api/memory/capture").get("enabled").asBoolean());
 
         server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"不要记\"}");
         String body = "";
@@ -124,6 +126,6 @@ class MemoryNotesApiTest {
         }
         Thread.sleep(300);
         assertEquals(0, notePrompts.get(), "no note was even attempted");
-        assertEquals(0, get("alice", "/api/memory/notes").get("days").size());
+        assertEquals(0, get("alice", "/api/plugin-api/memory/notes").get("days").size());
     }
 }

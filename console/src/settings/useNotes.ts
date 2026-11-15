@@ -1,7 +1,7 @@
-// 每天的笔记和“自动记下”开关的数据（memory-capture）：写入后让列表和那一篇失效。
+// 每天的笔记和“自动记下”的状态（memory-capture）：写入后让列表和那一篇失效。开关在插件页“记忆”的参数里（memory-plugin）。
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteNote, getCapture, getNote, listNotes, saveNote, setCapture } from "../api/client";
+import { deleteNote, getCapture, getNote, listNotes, saveNote } from "../api/client";
 
 export const NOTES_KEY = ["memory-notes"] as const;
 export const CAPTURE_KEY = ["memory-capture"] as const;
@@ -32,12 +32,4 @@ export function useDeleteNote(day: string, session: string) {
 
 export function useCapture() {
   return useQuery({ queryKey: CAPTURE_KEY, queryFn: getCapture });
-}
-
-export function useSetCapture() {
-  const queries = useQueryClient();
-  return useMutation({
-    mutationFn: (enabled: boolean) => setCapture(enabled),
-    onSuccess: (state) => queries.setQueryData(CAPTURE_KEY, state),
-  });
 }

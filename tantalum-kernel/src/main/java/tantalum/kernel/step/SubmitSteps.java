@@ -28,13 +28,13 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), Message.user(event.text(), event.attachments(), blocks(event.skills())), event.model(), event.dir());
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), event.dir());
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
         return submit(context, new OwnerRef.OfSession(context.envelope().session()),
-                Message.user(event.text(), event.attachments(), blocks(event.skills())), event.model(), null);
+                Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), null);
     }
 
     /** 点名的技能里读到内容的那些变成消息里的块，按点名的顺序；没读到的不进消息，只留在事件里给对话页看。 */

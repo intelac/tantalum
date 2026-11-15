@@ -67,10 +67,10 @@ describe("client", () => {
     await deleteMemory("x");
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls.map(([path, init]) => `${init.method ?? "GET"} ${path}`)).toEqual([
-      "GET /api/memory",
-      "GET /api/memory/a%20b",
-      "POST /api/memory",
-      "DELETE /api/memory/x",
+      "GET /api/plugin-api/memory/entries",
+      "GET /api/plugin-api/memory/entries/a%20b",
+      "POST /api/plugin-api/memory/entries",
+      "DELETE /api/plugin-api/memory/entries/x",
     ]);
     expect(JSON.parse(calls[2]?.[1].body as string)).toEqual({ name: "x", type: "user", description: "d", content: "c" });
 

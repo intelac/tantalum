@@ -14,7 +14,6 @@ import tantalum.kernel.table.TransitionTable;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.local.LocalTool;
-import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.plugin.PluginInfo;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolDispatch;
@@ -53,7 +52,7 @@ final class KernelFactory {
     }
 
     /**
-     * 只回答调度问题的规则：和服务器注册同样的内置工具、转发工具、记忆工具、{@code web_fetch} 和插件工具的调度描述，
+     * 只回答调度问题的规则：和服务器注册同样的内置工具、转发工具、{@code web_fetch} 和插件工具（记忆工具是记忆插件的）的调度描述，
      * 不打开附件库、不连电脑、不起出口、不开记忆库。
      * 浏览器工具恒为独占，不用登记。
      */
@@ -64,7 +63,6 @@ final class KernelFactory {
         if (properties.webSettings().fetch().enabled()) {
             dispatches.add(WebFetchTool.DISPATCH);
         }
-        dispatches.addAll(MemoryTools.dispatch());
         plugins.forEach(plugin -> dispatches.add(plugin.dispatch()));
         return ToolDispatch.safety(dispatches);
     }

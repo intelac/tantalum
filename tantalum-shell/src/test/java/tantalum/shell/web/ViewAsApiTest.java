@@ -159,8 +159,8 @@ class ViewAsApiTest {
                 {"POST", "/api/projects", "{\"path\":\"/tmp\"}"},
                 {"PATCH", "/api/projects/p1", "{\"title\":\"t\"}"},
                 {"DELETE", "/api/projects/p1", null},
-                {"POST", "/api/memory", "{\"name\":\"n\",\"content\":\"c\"}"},
-                {"DELETE", "/api/memory/n", null},
+                {"POST", "/api/plugin-api/memory/entries", "{\"name\":\"n\",\"content\":\"c\"}"},
+                {"DELETE", "/api/plugin-api/memory/entries/n", null},
                 {"PUT", "/api/plugins/tool/ask_user", "{\"enabled\":false}"},
                 {"DELETE", "/api/plugins/tool/ask_user", null},
                 {"PUT", "/api/plugins/tool/ask_user/params", "{\"values\":{}}"},
@@ -184,7 +184,7 @@ class ViewAsApiTest {
             assertTrue(refused.body().contains("\"code\":\"view/read-only\""), write[0] + " " + write[1] + ": " + refused.body());
         }
         // 读，但不在允许的范围里：记忆、插件和参数、本机工作区和令牌、技能、设置、今日用量、账号、管理接口
-        for (String path : List.of("/api/memory", "/api/memory/n", "/api/plugins", "/api/local", "/api/local/skills", "/api/local/wiki",
+        for (String path : List.of("/api/plugin-api/memory/entries", "/api/plugin-api/memory/entries/n", "/api/plugins", "/api/local", "/api/local/skills", "/api/local/wiki",
                 "/api/skills", "/api/settings", "/api/usage/today", "/api/models", "/api/config", "/api/auth/me", "/api/projects/browse",
                 "/api/users", "/api/admin/plugins", "/api/admin/users/alice/params")) {
             HttpResponse<String> refused = send("root", "GET", path + "?viewAs=alice", null);
@@ -249,7 +249,7 @@ class ViewAsApiTest {
         byte[] attachments = Files.exists(temp.resolve("data/attachments")) ? new byte[] {1} : new byte[] {0};
         for (String path : List.of("/api/sessions", "/api/sessions/s1/messages", "/api/sessions/s1/runs", "/api/runs/" + run,
                 "/api/sessions/s1/trace", "/api/runs/" + run + "/turns", "/api/sessions/s1/context", "/api/sessions/s1/questions",
-                "/api/projects", "/api/events/poll", "/api/memory", "/api/local")) {
+                "/api/projects", "/api/events/poll", "/api/plugin-api/memory/entries", "/api/local")) {
             send("root", "GET", path + "?viewAs=alice", null);
         }
         Map<String, byte[]> after = files(temp.resolve("data/sessions"));

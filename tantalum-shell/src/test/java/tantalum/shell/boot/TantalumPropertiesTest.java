@@ -18,7 +18,6 @@ import tantalum.kernel.Limits;
 import tantalum.shell.attachment.AttachmentLimits;
 import tantalum.shell.boot.TantalumProperties.Loop;
 import tantalum.shell.loop.Evictor;
-import tantalum.shell.memory.MemoryLimits;
 import tantalum.shell.route.RouteSettings;
 import tantalum.shell.settings.CompactionPolicy;
 
@@ -96,17 +95,6 @@ class TantalumPropertiesTest {
     }
 
     @Test
-    void memoryLimitsHaveDefaultsAndMustBePositive() {
-        MemoryLimits memory = MemoryLimits.defaults();
-        assertEquals(200, memory.maxEntries());
-        assertEquals(16 * 1024, memory.maxIndexBytes());
-        assertEquals(8 * 1024, memory.maxEntryBytes());
-        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(0, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(1, 0, 1));
-        assertThrows(IllegalArgumentException.class, () -> new MemoryLimits(1, 1, -1));
-    }
-
-    @Test
     void blankKnowledgeDirMeansNoSharedLayer() {
         assertTrue(TantalumProperties.Knowledge.none().path().isEmpty());
         assertTrue(new TantalumProperties.Knowledge("  ", 10).path().isEmpty());
@@ -181,8 +169,8 @@ class TantalumPropertiesTest {
                 java.util.Map.of("local", new TantalumProperties.OpenAiRoute(null, "http://127.0.0.1:8090/v1", null, "qwen", null, null,
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),
-                MemoryLimits.defaults(), TantalumProperties.Knowledge.none(), compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null, null);
+                TantalumProperties.Knowledge.none(), compaction, TantalumProperties.Index.defaults(),
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null);
     }
 
     /** 压缩参数和模型无关；预留按模型另算（CompactionPolicyTest）。路线配置的窗口不大于预留时启动失败（context-compaction 需求 9）。 */

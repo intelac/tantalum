@@ -1,8 +1,5 @@
 package tantalum.shell.boot;
 
-import tantalum.shell.memory.capture.CaptureSettings;
-import tantalum.shell.memory.capture.NoteTaker;
-import tantalum.value.model.ModelChoice;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -24,13 +21,13 @@ import tantalum.shell.local.LocalWorkspace;
 import tantalum.shell.loop.InFlightCommands;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.loop.Receipts;
-import tantalum.shell.memory.MemoryStores;
 import tantalum.shell.monitor.Monitor;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
 import tantalum.shell.panel.Panel;
 import tantalum.shell.panel.PanelRegistry;
 import tantalum.shell.plugin.AfterToolHook;
+import tantalum.shell.plugin.ContextContributor;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.WorkType;
 import tantalum.shell.project.Projects;
@@ -43,6 +40,7 @@ import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.model.ModelChoice;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 
@@ -71,8 +69,11 @@ public final class Engine implements AutoCloseable {
     /** 关闭开始后入口返回 503。 */
     private final AtomicBoolean closing = new AtomicBoolean();
     private PanelRegistry panels = PanelRegistry.empty();
+    private final java.nio.file.Path dataDir;
+    /** memory-plugin 的插件成员，平台各处按类型取。 */
+    private final List<Object> members;
     /** 每轮结束后自动记笔记（memory-capture）。 */
-    private NoteTaker noteTaker;
+    private PluginRunListeners runListeners;
     /** 实时监视（live-monitor）：只在内存里，没人看时埋点几乎不做事。 */
     private final Monitor monitor = new Monitor(Clock.systemUTC());
 
@@ -90,6 +91,17 @@ public final class Engine implements AutoCloseable {
     public Engine(TantalumProperties properties, Routes routes,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
                   List<Panel> panels, EventCodec codec, Clock clock) throws IOException {
+        this(properties, routes, tools, hooks, workTypes, afterHooks, panels, List.of(), codec, clock);
+    }
+
+    /**
+     * 同上，另有 memory-plugin 的插件成员（运行结束的听众、提交时附加内容、插件接口、上下文的一份）。
+     */
+    public Engine(TantalumProperties properties, Routes routes,
+                  List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
+                  List<Panel> panels, List<Object> members, EventCodec codec, Clock clock) throws IOException {
+        this.dataDir = properties.dataDir();
+        this.members = List.copyOf(members);
         long started = System.nanoTime();
         this.clock = clock;
         this.codec = codec;
@@ -105,11 +117,12 @@ public final class Engine implements AutoCloseable {
         try {
             openedStores = Stores.open(properties, codec, clock, opened);
             this.panels = new PanelRegistry(panels, Engine.class.getClassLoader());
-            openedToolbox = Toolbox.open(properties, openedStores, routes, tools, hooks, workTypes, afterHooks, panels, clock, opened);
+            openedToolbox = Toolbox.open(properties, openedStores, routes, tools, hooks, workTypes, afterHooks, panels, members, clock,
+                    opened);
             unfinished = openedStores.storage().catchUp();
             openedQueries = Queries.open(openedStores, codec);
             openedPipeline = Pipeline.open(properties, openedStores, openedToolbox, openedQueries, clock, receipts, closing::get, hooks, opened,
-                    monitor);
+                    monitor, members(ContextContributor.class));
         } catch (RuntimeException | IOException failure) {
             closeAll(opened, failure);
             throw failure;
@@ -118,8 +131,18 @@ public final class Engine implements AutoCloseable {
         this.toolbox = openedToolbox;
         this.queries = openedQueries;
         this.pipeline = openedPipeline;
-        this.noteTaker = noteTaker(properties.memoryCapture(), stores, toolbox.routes(), queries, clock);
-        stores.storage().onRunEnded(noteTaker::offer);
+        // 运行结束后交给插件（memory-plugin 需求 1.1）
+        SessionIndex titleIndex = stores.storage().index;
+        this.runListeners = new PluginRunListeners(members(tantalum.shell.plugin.RunFinishedListener.class),
+                (plugin, user) -> toolbox.gate().pluginEnabled(user, plugin), queries.queries().runs()::records,
+                session -> {
+                    try {
+                        return titleIndex.session(session).map(SessionIndex.Session::shownTitle).orElse("");
+                    } catch (java.sql.SQLException unreadable) {
+                        return "";
+                    }
+                });
+        stores.storage().onRunEnded(runListeners::offer);
         int interrupted;
         try {
             pipeline.output().start();
@@ -172,42 +195,27 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 会话、运行和回放的读取。 */
-    /** 自动记笔记的服务器配置（memory-capture 需求 4.2）。 */
-    public CaptureSettings captureSettings() {
-        return captureSettings;
-    }
-
-    private CaptureSettings captureSettings = CaptureSettings.defaults();
-
-    /**
-     * 记笔记用哪个模型：配了路线就用它，没配时有本机路线 {@code local} 就用本机，否则用默认路线；模型没配时用那条路线的默认模型。
-     * 路线不存在时不记笔记（记日志）。
-     */
-    private NoteTaker noteTaker(CaptureSettings settings, Stores stores, Routes routes, Queries queries, Clock clock) {
-        this.captureSettings = settings;
-        String routeName = settings.route() != null ? settings.route()
-                : routes.route("local").isPresent() ? "local" : routes.defaultRoute();
-        NoteTaker.Writer writer = routes.route(routeName)
-                .map(route -> new NoteTaker.Writer(route.client(),
-                        new ModelChoice(routeName, settings.model() != null ? settings.model() : route.settings().defaultModel(), null)))
-                .orElse(null);
-        if (writer == null && settings.enabled()) {
-            LOG.warn("memory notes are off: tantalum.memory-capture.route={} names no route", routeName);
-        }
-        SessionIndex index = stores.storage().index;
-        return new NoteTaker(settings, stores.userSettings()::memoryCapture, stores.memories()::notes,
-                queries.queries().runs()::records,
-                session -> {
-                    try {
-                        return index.session(session).map(SessionIndex.Session::shownTitle).orElse("");
-                    } catch (java.sql.SQLException unreadable) {
-                        return "";
-                    }
-                }, writer, clock, java.time.ZoneId.systemDefault());
-    }
-
     public Monitor monitor() {
         return monitor;
+    }
+
+    Stores stores() {
+        return stores;
+    }
+
+    java.nio.file.Path dataDir() {
+        return dataDir;
+    }
+
+    /** 提交时问插件要附加的内容（memory-plugin 需求 1.2）。 */
+    public PromptAttachers attachers() {
+        return new PromptAttachers(members(tantalum.shell.plugin.PromptAttacher.class),
+                (plugin, user) -> plugins().pluginEnabled(user, plugin), PromptAttachers.BUDGET);
+    }
+
+    /** 某一类插件成员（memory-plugin）。 */
+    public <T> List<T> members(Class<T> type) {
+        return members.stream().filter(type::isInstance).map(type::cast).toList();
     }
 
     /** 装上的插件面板（plugin-panel）。 */
@@ -299,11 +307,6 @@ public final class Engine implements AutoCloseable {
         return toolbox.addressRules();
     }
 
-    /** 每用户的长期记忆，接口和工具共用同一份实例。 */
-    public MemoryStores memories() {
-        return stores.memories();
-    }
-
     public EventCodec codec() {
         return codec;
     }
@@ -383,7 +386,7 @@ new Shutdown.Step("close egress", () -> {
                 new Shutdown.Step("fail pending receipts", receipts::failAll),
                 new Shutdown.Step("drain cleanroom ring", () -> pipeline.cleanroomRing().shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> pipeline.output().shutdown(DRAIN)),
-                new Shutdown.Step("stop memory notes", noteTaker),
+                new Shutdown.Step("stop plugin run listeners", runListeners),
                 new Shutdown.Step("close plugin settings", stores.switches()),
                 new Shutdown.Step("close plugin params", stores.params()),
                 new Shutdown.Step("close local tokens", stores.localTokens()),

@@ -16,6 +16,7 @@ import tantalum.shell.handler.TimerHandler;
 import tantalum.shell.handler.ToolHandler;
 import tantalum.shell.handler.WorkHandler;
 import tantalum.shell.journal.TailSequence;
+import tantalum.shell.knowledge.KnowledgeBase;
 import tantalum.shell.loop.Cleanroom;
 import tantalum.shell.loop.CleanroomRing;
 import tantalum.shell.loop.DeadlineTimers;
@@ -33,8 +34,8 @@ import tantalum.shell.loop.Release;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.SubmissionLedger;
-import tantalum.shell.memory.KnowledgeBase;
 import tantalum.shell.monitor.Probe;
+import tantalum.shell.plugin.ContextContributor;
 import tantalum.shell.store.SessionQueries;
 import tantalum.shell.trace.TraceRecord;
 import tantalum.value.command.AssembleContext;
@@ -62,12 +63,15 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
 
     static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
                          BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened) {
-        return open(properties, stores, toolbox, queries, clock, receipts, closing, hooks, opened, Probe.NONE);
+        return open(properties, stores, toolbox, queries, clock, receipts, closing, hooks, opened, Probe.NONE, List.of());
     }
 
-    /** 同上，{@code probe} 是实时监视的埋点（live-monitor），接到各个环节上。 */
+    /**
+     * 同上，{@code probe} 是实时监视的埋点（live-monitor），接到各个环节上；{@code contributors} 是插件给上下文的那一份（memory-plugin）。
+     */
     static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
-                         BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened, Probe probe) {
+                         BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened, Probe probe,
+                         List<ContextContributor> contributors) {
         Storage storage = stores.storage();
         Loop loop = properties.loop();
         Kernel kernel = KernelFactory.kernel(properties, toolbox.catalog().safety(), hooks);
@@ -84,7 +88,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         RequestImages requestImages = new RequestImages(storage.attachments);
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
-                        stores.memories(), new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
+                        contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
                         session -> dirOf(queries.view().current(), session), toolbox.skillCatalog()),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,

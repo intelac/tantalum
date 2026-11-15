@@ -338,14 +338,14 @@ export function getTurn(run: string, number: number): Promise<Turn> {
   return call(asViewed(`/api/runs/${encodeURIComponent(run)}/turns/${number}`));
 }
 
-// ---- 记忆：只操作当前登录用户的，接口按会话取身份。 ----
+// ---- 记忆：记忆插件的接口（memory-plugin），只操作当前登录用户的，接口按会话取身份。 ----
 
 export function listMemories(): Promise<MemoryList> {
-  return call("/api/memory");
+  return call("/api/plugin-api/memory/entries");
 }
 
 export function getMemory(name: string): Promise<MemoryEntry> {
-  return call(`/api/memory/${encodeURIComponent(name)}`);
+  return call(`/api/plugin-api/memory/entries/${encodeURIComponent(name)}`);
 }
 
 export interface NewMemory {
@@ -357,37 +357,33 @@ export interface NewMemory {
 
 /** 400 时抛出的 ApiError.message 就是服务端的拒绝原因，原样显示给用户。 */
 export function createMemory(entry: NewMemory): Promise<MemoryEntry> {
-  return call("/api/memory", { method: "POST", body: JSON.stringify(entry) });
+  return call("/api/plugin-api/memory/entries", { method: "POST", body: JSON.stringify(entry) });
 }
 
 export function deleteMemory(name: string): Promise<void> {
-  return call(`/api/memory/${encodeURIComponent(name)}`, { method: "DELETE" });
+  return call(`/api/plugin-api/memory/entries/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 // ---- 每天的笔记（memory-capture）：只读接口在只读查看时也能用。 ----
 
 export function listNotes(): Promise<{ days: NoteDay[] }> {
-  return call(asViewed("/api/memory/notes"));
+  return call(asViewed("/api/plugin-api/memory/notes"));
 }
 
 export function getNote(day: string, session: string): Promise<NoteDetail> {
-  return call(asViewed(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`));
+  return call(asViewed(`/api/plugin-api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`));
 }
 
 export function saveNote(day: string, session: string, text: string): Promise<{ saved: boolean }> {
-  return call(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "PUT", body: JSON.stringify({ text }) });
+  return call(`/api/plugin-api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "PUT", body: JSON.stringify({ text }) });
 }
 
 export function deleteNote(day: string, session: string): Promise<{ deleted: boolean }> {
-  return call(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "DELETE" });
+  return call(`/api/plugin-api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "DELETE" });
 }
 
 export function getCapture(): Promise<CaptureState> {
-  return call(asViewed("/api/memory/capture"));
-}
-
-export function setCapture(enabled: boolean): Promise<CaptureState> {
-  return call("/api/memory/capture", { method: "PUT", body: JSON.stringify({ enabled }) });
+  return call(asViewed("/api/plugin-api/memory/capture"));
 }
 
 export function listPlugins(): Promise<Plugins> {

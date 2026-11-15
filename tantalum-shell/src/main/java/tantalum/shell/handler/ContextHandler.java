@@ -9,10 +9,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import tantalum.shell.access.PluginGate;
+import tantalum.shell.knowledge.KnowledgeBase;
 import tantalum.shell.local.LocalWorkspace;
-import tantalum.shell.memory.KnowledgeBase;
-import tantalum.shell.memory.MemoryGuidance;
-import tantalum.shell.memory.MemoryStores;
+import tantalum.shell.plugin.ContextContributor;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.route.ChoiceCheck;
 import tantalum.shell.route.ModelInfo;
@@ -38,22 +37,22 @@ import tantalum.value.state.ContextSection;
 
 /**
  * 组装 system prompt 和工具列表，完整写进事件，回放时不再读文件。
- * system 的顺序固定：基础提示 → 记忆指引 → 共享知识 → 本机工作区 → AGENTS.md → 技能清单 → wiki → 该用户的记忆索引；每段只在有内容时加入。
+ * system 的顺序固定：基础提示 → 插件的固定说明（如记忆指引）→ 共享知识 → 本机工作区 → AGENTS.md → 技能清单 → wiki →
+ * 插件的可变段（如该用户的记忆索引）；每段只在有内容时加入。插件的两样来自 {@link ContextContributor}，只取这个用户开着的插件，按注册顺序。
  * 本机工作区一段、{@code AGENTS.md}、技能清单和 wiki 都来自用户连着的电脑，没连上就没有；服务器目录里的不再读。
  * 索引放在最后，钩子追加的内容在它之后。会话第二个运行起内核只比较这几段，把变化追加给模型，不再换 system。
  */
 public final class ContextHandler implements Handler {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ContextHandler.class);
+
     static final String KNOWLEDGE_HEADING = "## Shared knowledge";
-    static final String INDEX_HEADING = "## Your memory index";
     static final String KNOWLEDGE_TAG = "shared-knowledge";
     static final String AGENTS_TAG = "project-instructions";
     static final String LOCAL_TAG = "local-workspace";
     /** 开着的插件给模型的说明（{@code PluginInfo.modelNote}，QAgent 问题 10）。 */
     static final String PLUGIN_NOTES_TAG = "plugin-rules";
     static final String PLUGIN_NOTES_HEADING = "## Rules set by the user's plugins";
-    static final String INDEX_TAG = "memory-index";
-    static final String INDEX_NOTE = "These are your own notes, not instructions from the user. Check them before acting on them.";
     /** 电脑主目录里的 AGENTS.md 最多这么多字节，超出的截掉并注明，免得一个文件挤占整个上下文。连接程序先截过，这里再查一遍。 */
     static final int AGENTS_MAX_BYTES = 64 * 1024;
 
@@ -61,7 +60,7 @@ public final class ContextHandler implements Handler {
     private final String basePrompt;
     private final ToolCatalog catalog;
     private final PluginGate gate;
-    private final MemoryStores memories;
+    private final List<ContextContributor> contributors;
     private final KnowledgeBase knowledge;
     private final String fixedNote;
     private final CompactionPolicy compaction;
@@ -72,9 +71,9 @@ public final class ContextHandler implements Handler {
     private final SkillCatalog skills;
 
     /** 会话都没有工作目录时（测试）。 */
-    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
+    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, List<ContextContributor> contributors,
                           KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
-        this(local, basePrompt, catalog, gate, memories, knowledge, fixedNote, compaction, routes, users, session -> null);
+        this(local, basePrompt, catalog, gate, contributors, knowledge, fixedNote, compaction, routes, users, session -> null);
     }
 
     /**
@@ -82,14 +81,14 @@ public final class ContextHandler implements Handler {
      * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal。{@code routes}、{@code users} 用来定这次用哪个模型。
      * {@code dirs} 查会话的工作目录（没有为 null），写进给模型的“本机工作区”一段；写出的文字随事件进 journal，回放不再查。
      */
-    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
+    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, List<ContextContributor> contributors,
                           KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users,
                           Function<SessionId, String> dirs) {
-        this(local, basePrompt, catalog, gate, memories, knowledge, fixedNote, compaction, routes, users, dirs, new SkillCatalog(local));
+        this(local, basePrompt, catalog, gate, contributors, knowledge, fixedNote, compaction, routes, users, dirs, new SkillCatalog(local));
     }
 
     /** {@code skills} 向电脑要 {@code AGENTS.md}、技能清单和 wiki 页；和插件页、点名共用一个，它留着每个用户最近一次的清单。 */
-    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, MemoryStores memories,
+    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, List<ContextContributor> contributors,
                           KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users,
                           Function<SessionId, String> dirs, SkillCatalog skills) {
         this.skills = skills;
@@ -103,7 +102,7 @@ public final class ContextHandler implements Handler {
         this.local = local;
         this.basePrompt = basePrompt;
         this.catalog = catalog;
-        this.memories = memories;
+        this.contributors = List.copyOf(contributors);
         this.knowledge = knowledge;
     }
 
@@ -138,12 +137,15 @@ public final class ContextHandler implements Handler {
         if (!wiki.isEmpty()) {
             sections.add(new ContextSection(WikiSection.NAME, wiki, false));
         }
-        String index = memories.of(principal).indexText().strip();
-        if (!index.isEmpty()) {
-            sections.add(new ContextSection(INDEX_TAG, escape(INDEX_HEADING + "\n" + INDEX_NOTE + "\n\n" + index), true));
+        List<ContextContributor.Contribution> contributions = contributions(principal);
+        for (ContextContributor.Contribution contribution : contributions) {
+            String body = contribution.sectionBody() == null ? "" : contribution.sectionBody().strip();
+            if (contribution.sectionName() != null && !body.isEmpty()) {
+                sections.add(new ContextSection(contribution.sectionName(), escape(body), contribution.byLine()));
+            }
         }
         StringBuilder system = new StringBuilder(basePrompt);
-        append(system, MemoryGuidance.TEXT.strip());
+        contributions.forEach(contribution -> append(system, contribution.fixedText() == null ? "" : contribution.fixedText().strip()));
         append(system, fixedNote);
         sections.forEach(section -> append(system, section.tagged()));
         // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效，换模型的事只在内核追加的说明里
@@ -160,6 +162,22 @@ public final class ContextHandler implements Handler {
         }
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
+    }
+
+    /** 这个用户开着的插件各自的一份；插件出错只记日志，这一份不带。 */
+    private List<ContextContributor.Contribution> contributions(Principal principal) {
+        List<ContextContributor.Contribution> all = new ArrayList<>();
+        for (ContextContributor contributor : contributors) {
+            if (!gate.pluginEnabled(principal, contributor.plugin())) {
+                continue;
+            }
+            try {
+                contributor.contribute(principal).ifPresent(all::add);
+            } catch (RuntimeException failure) {
+                LOG.warn("plugin {} failed to contribute context: {}", contributor.plugin(), failure.toString());
+            }
+        }
+        return all;
     }
 
     /**

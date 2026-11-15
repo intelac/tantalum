@@ -68,7 +68,7 @@ test.describe("只读查看别人的会话", () => {
     expect(write.status()).toBe(403);
     expect((await write.json()).code).toBe("view/read-only");
     expect((await admin.request.patch(`/api/sessions/${session}?viewAs=${OTHER_USER}`, { data: { title: "x" } })).status()).toBe(403);
-    expect((await admin.request.get(`/api/memory?viewAs=${OTHER_USER}`)).status()).toBe(403);
+    expect((await admin.request.get(`/api/plugin-api/memory/entries?viewAs=${OTHER_USER}`)).status()).toBe(403);
     expect((await admin.request.get(`/api/local?viewAs=${OTHER_USER}`)).status()).toBe(403);
     // 普通用户带这个参数：拒
     const peek = await user.request.get(`/api/sessions?viewAs=${USER}`);

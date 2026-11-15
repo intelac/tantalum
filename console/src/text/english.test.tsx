@@ -42,7 +42,7 @@ function backend() {
       if (path === "/api/local") return ok({ switches: { "local-workspace": true, "fs-read": true, git: true, "file-edit": true, shell: true }, link: null });
       if (path === "/api/settings") return ok({ compaction: { percent: 85, points: [{ percent: 50, tokens: 100000 }] }, language: "en" });
       if (path === "/api/auth/me") return ok({ username: "yi", language: "en" });
-      if (path === "/api/memory") return ok({ entries: [{ name: "style", type: "feedback", description: "Prefers tabs", updatedAt: "2026-11-01T00:00:00Z" }], used: 1, max: 200 });
+      if (path === "/api/plugin-api/memory/entries") return ok({ entries: [{ name: "style", type: "feedback", description: "Prefers tabs", updatedAt: "2026-11-01T00:00:00Z" }], used: 1, max: 200 });
       if (path === "/api/models") return ok({ routes: [], default: null, mine: null, percent: 85 });
       return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("{}") });
     }),

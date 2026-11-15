@@ -28,9 +28,9 @@ import tantalum.shell.attachment.StoredMedia;
 import tantalum.shell.handler.CallLimiter;
 import tantalum.shell.handler.ModelHandler;
 import tantalum.shell.journal.EventCodec;
-import tantalum.shell.json.JsonText;
 import tantalum.shell.journal.SessionFiles;
 import tantalum.shell.journal.SessionPaths;
+import tantalum.shell.json.JsonText;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.FileRef;
@@ -571,7 +571,8 @@ class ClaudeRequestTest {
                 new Sample("the user's text, then the skill as one more text block", plain,
                         new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools convert it", List.of(), List.of(SKILL))))),
                 new Sample("text, attachment, then the skill", plain,
-                        new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL))))));
+                        new Prompt("sys", List.of(), List.of(Message.user("/pdf-tools this one", List.of(PNG), List.of(SKILL),
+                                List.of(new tantalum.value.model.AttachedBlock("memory", "- the user converts PDFs often")))))));
         StringBuilder actual = new StringBuilder();
         for (Sample sample : samples) {
             client(sample.settings()).call(sample.prompt(), MEDIA, IGNORE);

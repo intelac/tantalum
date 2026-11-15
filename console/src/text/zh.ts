@@ -72,6 +72,8 @@ export const zh = {
     },
     viewInTrace: "在轨迹中查看",
     skillUsed: (name: string) => `用了技能 ${name}`,
+    attachedBy: (plugin: string) => `插件 ${plugin} 附加了内容`,
+    attachedContent: (plugin: string) => `插件 ${plugin} 附加的内容`,
     skillFailed: (name: string, reason: string) => `技能 ${name} 没读到：${reason}`,
     skillTimeout: "电脑没有按时回应",
     skillContent: (name: string) => `技能 ${name} 的全文`,
@@ -437,6 +439,7 @@ export const zh = {
     endReason: { COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消", STOPPED: "被插件结束" } satisfies Record<EndReason, string>,
     running: "进行中",
     namedSkills: "点名的技能",
+    attachedTexts: "插件附加的内容",
     userMode: { PROMPT: "提问", FOLLOW_UP: "排队", STEER: "插话", CONTINUE: "插件续写" } satisfies Record<UserInput["mode"], string>,
     status: { failed: "失败", pending: "等待中", completed: "已完成" },
     toolStatus: {
@@ -1027,6 +1030,7 @@ export const zh = {
     },
   },
   memory: {
+    pluginOff: "记忆插件没开。可以在插件页打开“记忆”。",
     title: "记忆",
     hint: "模型替你记住的跨会话事实。新记忆从下一次运行开始生效。",
     used: (used: number, max: number) => `已用 ${used}/${max} 条`,
@@ -1059,6 +1063,9 @@ export const zh = {
       capture: "自动记下",
       captureHint: "开着时，每轮对话结束后系统会在后台记下值得记住的内容，不影响回答。",
       serverOff: "服务器关掉了自动记下。",
+      captureOff: "自动记下关着。可以在插件页“记忆”的参数里打开。",
+      on: "开",
+      off: "关",
     },
   },
   plugins: {

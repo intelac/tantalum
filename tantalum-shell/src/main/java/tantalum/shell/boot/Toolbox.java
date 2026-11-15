@@ -14,7 +14,6 @@ import tantalum.shell.fetch.WebFetchTool;
 import tantalum.shell.local.LocalLinks;
 import tantalum.shell.local.LocalTool;
 import tantalum.shell.local.LocalWorkspace;
-import tantalum.shell.memory.MemoryTools;
 import tantalum.shell.net.AddressRules;
 import tantalum.shell.net.Egress;
 import tantalum.shell.net.UpstreamProxy;
@@ -43,7 +42,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
     private static final Duration LIST_STARTUP_WAIT = Duration.ofSeconds(5);
 
     static Toolbox open(TantalumProperties properties, Stores stores, Routes routes, List<Tool> tools, List<KernelHook> hooks,
-                        List<WorkType> workTypes, List<AfterToolHook> afterHooks, List<Panel> panels, Clock clock,
+                        List<WorkType> workTypes, List<AfterToolHook> afterHooks, List<Panel> panels, List<Object> members, Clock clock,
                         List<AutoCloseable> opened) throws IOException {
         ToolCatalog catalog = new ToolCatalog();
         LocalLinks localLinks = new LocalLinks(stores.localTokens(), clock, LocalLinks.Timing.DEFAULT);
@@ -54,7 +53,6 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         BuiltinTools.of(stores.storage().attachments).forEach(catalog::register);
         SkillSettings skillSettings = new SkillSettings(stores.params());
         LocalTool.all(localLinks, toolImages, properties.toolTimeout(), skillSettings).forEach(catalog::register);
-        MemoryTools.all(stores.memories()).forEach(catalog::register);
         tools.forEach(catalog::register);
 
         TantalumProperties.Web web = properties.webSettings();
@@ -73,7 +71,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         Routes started = routes.start(LIST_STARTUP_WAIT);
         CompactionPolicy compaction = new CompactionPolicy(stores.userSettings(), properties.compactionLimits());
         PluginGate gate = new PluginGate(catalog, stores.switches(), List.of(localWorkspace, webAccess),
-                hooks, afterHooks, workTypes, panels, Set.copyOf(properties.hooks().required()), stores.params());
+                hooks, afterHooks, workTypes, panels, members, Set.copyOf(properties.hooks().required()), stores.params());
         return new Toolbox(catalog, toolImages, localLinks, localWorkspace, skillSettings, skillCatalog,
                 new SkillMentions(localWorkspace, skillCatalog), addressRules, egress, webAccess,
                 started, compaction, gate);

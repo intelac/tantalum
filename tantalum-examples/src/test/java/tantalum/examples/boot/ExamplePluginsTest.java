@@ -65,16 +65,18 @@ class ExamplePluginsTest {
     @Test
     void withoutTheSwitchNothingIsRegistered() throws Exception {
         try (TestServer server = server()) {
-            // commandApproval（connector-jar）、secretMask（qagent-fixes）是服务器自带的，不是示例
-            assertEquals(Map.of("commandApproval", "on", "secretMask", "on"), plugins(server, "alice"));
+            // commandApproval（connector-jar）、secretMask（qagent-fixes）、memory（memory-plugin）是服务器自带的，不是示例
+            assertEquals(Map.of("commandApproval", "on", "memory", "on", "secretMask", "on"), plugins(server, "alice"));
         }
     }
 
     @Test
     void theExamplesAreListedAndPoliciesStartOff() throws Exception {
         try (TestServer server = server("--tantalum.examples.enabled=true")) {
-            assertEquals(Map.of("citationCheck", "on", "commandApproval", "on", "dailyQuota", "off", "live-monitor", "on", "pinnedContext", "on",
-                    "readOnly", "off", "run-overview", "on", "secretMask", "on", "toolApproval", "off", "truncateOutput", "on"), plugins(server, "alice"),
+            assertEquals(Map.ofEntries(Map.entry("citationCheck", "on"), Map.entry("commandApproval", "on"), Map.entry("dailyQuota", "off"),
+                    Map.entry("live-monitor", "on"), Map.entry("memory", "on"), Map.entry("pinnedContext", "on"), Map.entry("readOnly", "off"),
+                    Map.entry("run-overview", "on"), Map.entry("secretMask", "on"), Map.entry("toolApproval", "off"),
+                    Map.entry("truncateOutput", "on")), plugins(server, "alice"),
                     "providerBackoff is left out without a status url");
             assertEquals(200, put(server, "alice", "/api/plugins/plugin/readOnly", "{\"enabled\":true}").statusCode());
             assertEquals("on", plugins(server, "alice").get("readOnly"));
@@ -112,7 +114,8 @@ class ExamplePluginsTest {
                     params.put(plugin.get("name").asString() + "." + param.get("key").asString(), param);
                 }
             }
-            assertEquals(java.util.Set.of("dailyQuota.tokens", "readOnly.tools", "toolApproval.tools", "truncateOutput.maxChars"),
+            // memory.capture 是服务器自带的记忆插件的（memory-plugin）
+            assertEquals(java.util.Set.of("dailyQuota.tokens", "memory.capture", "readOnly.tools", "toolApproval.tools", "truncateOutput.maxChars"),
                     params.keySet(), "the other examples have no params");
             JsonNode tokens = params.get("dailyQuota.tokens");
             assertEquals(777, tokens.get("value").asInt());

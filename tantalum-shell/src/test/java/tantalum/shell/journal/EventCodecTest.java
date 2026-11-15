@@ -388,6 +388,18 @@ class EventCodecTest {
                 StopReason.END_TURN, "m", null, null, null, null));
     }
 
+    /** memory-plugin 需求 1.2：插件附的内容随提交进 journal，读回来一样；块的 kind 是 attached。 */
+    @Test
+    void attachedTextsSurviveARoundTrip() {
+        List<tantalum.value.model.AttachedBlock> attached = List.of(new tantalum.value.model.AttachedBlock("memory", "- 用户在做 Tantalum"));
+        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi", List.of(), null, null, List.of(), attached));
+        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "later", List.of(), null, List.of(), attached));
+        String line = codec.encode(new FollowUpSubmitted(SUB, REQ, "later", List.of(), null, List.of(), attached));
+        assertTrue(line.endsWith("\"attached\":[{\"kind\":\"attached\",\"plugin\":\"memory\",\"text\":\"- 用户在做 Tantalum\"}]}"), line);
+        String block = codec.encode(new ModelReplied(CMD, List.of(attached.getFirst()), StopReason.END_TURN, "m", null, null, null, null));
+        assertTrue(block.contains("{\"kind\":\"attached\",\"plugin\":\"memory\""), block);
+    }
+
     /** 读到的只有 content，没读到的只有 error；skills 在行的最后。 */
     @Test
     void aNamedSkillWritesItsContentOrItsError() {

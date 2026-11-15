@@ -265,4 +265,42 @@ class PluginGateTest {
         ToolOutput kept = laxGate.afterTool(context(ALICE), tool("read_file", "workspace"), new Json.Obj(java.util.Map.of()), ToolOutput.ok("text"));
         assertEquals("text +marked", kept.text(), "a lax hook's failure keeps the previous output and the rest run");
     }
+
+    /** memory-plugin：只有新插件点成员的插件也在插件页上；插件的工具跟着插件的开关走，再看工具自己的开关。 */
+    @Test
+    void aPluginOfOnlyTheNewPointsHasARowAndItsToolsFollowItsSwitch() throws Exception {
+        ToolCatalog tools = new ToolCatalog();
+        Tool remember = new Tool() {
+            @Override public String name() { return "remember"; }
+            @Override public String description() { return "remember"; }
+            @Override public Json schema() { return new Json.Obj(java.util.Map.of()); }
+            @Override public String plugin() { return "notes"; }
+            @Override public ToolOutput run(ToolContext context, Json arguments) { return ToolOutput.ok(""); }
+        };
+        tools.register(remember);
+        tools.register(tool("plain", "plain"));
+        tantalum.shell.plugin.ContextContributor contributor = new tantalum.shell.plugin.ContextContributor() {
+            @Override public String plugin() { return "notes"; }
+            @Override public java.util.Optional<Contribution> contribute(Principal user) { return java.util.Optional.empty(); }
+        };
+        tantalum.shell.plugin.RunFinishedListener listener = new tantalum.shell.plugin.RunFinishedListener() {
+            @Override public String plugin() { return "notes"; }
+            @Override public void runFinished(FinishedRun run) { }
+        };
+        PluginSwitches mine = PluginSwitches.inMemory(java.time.Clock.systemUTC());
+        PluginGate notes = new PluginGate(tools, mine, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(contributor, listener),
+                java.util.Set.of(), tantalum.shell.param.ParamStore.inMemory(java.time.Clock.systemUTC(),
+                        new tantalum.shell.param.SecretBox(new byte[32])));
+        assertEquals(List.of("context", "runFinished"), notes.plugins().stream().filter(plugin -> plugin.name().equals("notes")).findFirst()
+                .orElseThrow().points());
+        assertEquals(List.of("plain", "remember"), notes.enabledTools(ALICE).stream().sorted().toList());
+        mine.set(ALICE, Kind.PLUGIN, "notes", false);
+        assertEquals(List.of("plain"), notes.enabledTools(ALICE), "the plugin is off, so its tool is gone");
+        assertEquals(List.of("plain", "remember"), notes.enabledTools(BOB).stream().sorted().toList());
+        mine.set(BOB, Kind.TOOL, "remember", false);
+        assertEquals(List.of("plain"), notes.enabledTools(BOB), "the tool's own switch still counts");
+        PluginGate without = PluginGate.allOn(tools, List.of());
+        assertEquals(List.of("plain"), without.enabledTools(ALICE), "a tool whose plugin is not installed is off");
+        assertThrows(IllegalArgumentException.class, () -> PluginGate.memberPlugin("not a member"));
+    }
 }

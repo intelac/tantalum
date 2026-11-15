@@ -34,10 +34,11 @@ import tantalum.value.attachment.AttachmentText;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.json.Json;
+import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
-import tantalum.value.model.Message;
 import tantalum.value.model.HookTextBlock;
+import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
@@ -407,6 +408,8 @@ final class ClaudeRequest {
             case HookTextBlock note -> throw new IllegalStateException("hook texts are system messages, see systemMessage()");
             // 用户点名的技能：用户消息里的又一段文字
             case SkillBlock skill -> ContentBlockParam.ofText(TextBlockParam.builder().text(skill.text()).build());
+            // 插件在提交时附的内容（memory-plugin）：包在 <attached plugin="…"> 里的又一段文字
+            case AttachedBlock attached -> ContentBlockParam.ofText(TextBlockParam.builder().text(attached.wrapped()).build());
         };
     }
 

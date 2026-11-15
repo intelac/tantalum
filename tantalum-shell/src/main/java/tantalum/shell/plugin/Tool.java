@@ -16,6 +16,13 @@ public interface Tool {
     /** 参数的 JSON Schema。 */
     Json schema();
 
+    /**
+     * 属于哪个插件（memory-plugin）：有的话，插件对这个用户关着时这个工具不给模型，开着时再看工具自己的开关。默认不属于插件。
+     */
+    default String plugin() {
+        return null;
+    }
+
     /** 所属服务端。同一服务端的工具共享并发名额，跨运行、跨用户。 */
     default String server() {
         return name();
