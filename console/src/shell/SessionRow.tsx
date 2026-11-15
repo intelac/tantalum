@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, CircleHelp, Copy, MoreHorizontal, Pencil, Pin, PinOff } from "lucide-react";
+import { Archive, ArchiveRestore, CircleHelp, Copy, EyeOff, MoreHorizontal, Pencil, Pin, PinOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { SessionSummary } from "../api/types";
 import { relativeTime } from "../text/format";
@@ -90,6 +90,7 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-1">
             {pinned && <Pin size={12} className="shrink-0 text-fg-faint" aria-label={t.projects.pinned} role="img" />}
+            {session.offRecord === true && <EyeOff size={12} className="shrink-0 text-fg-faint" aria-label={t.composer.offRecord} role="img" />}
             <span className="truncate">{title}</span>
           </span>
           {detail !== undefined && <span className="truncate text-xs text-fg-faint">{detail}</span>}

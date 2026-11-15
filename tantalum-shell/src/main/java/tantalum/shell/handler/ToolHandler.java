@@ -1,11 +1,5 @@
 package tantalum.shell.handler;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import tantalum.value.id.SessionId;
-import tantalum.value.text.Failures;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -15,6 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tantalum.shell.access.PluginGate;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolContext;
@@ -25,7 +21,9 @@ import tantalum.value.command.Command;
 import tantalum.value.command.RunTool;
 import tantalum.value.event.Event;
 import tantalum.value.event.ToolFinished;
+import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
+import tantalum.value.text.Failures;
 
 /** 执行工具调用。失败和超时都变成错误结果交给模型；结果不明的调用不自动重试。 */
 public final class ToolHandler implements Handler {
@@ -41,6 +39,7 @@ public final class ToolHandler implements Handler {
     private final Map<String, CallLimiter> limiters = new ConcurrentHashMap<>();
     private final Clock clock;
     private final Function<SessionId, String> dirs;
+    private final java.util.function.Predicate<SessionId> offRecord;
 
     /** 执行的结果和真正开始的时刻；没拿到名额时开始时刻为 null。 */
     private record Ran(ToolOutput output, Instant startedAt) {}
@@ -52,6 +51,13 @@ public final class ToolHandler implements Handler {
     /** {@code dirs} 查会话在用户电脑上的工作目录（没有为 null），放进 {@link ToolContext#dir()}。 */
     public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock,
                        Function<SessionId, String> dirs) {
+        this(catalog, workspaces, gate, timeout, clock, dirs, session -> false);
+    }
+
+    /** {@code offRecord} 查会话是不是“不进记忆”的（memory-final-plan 第 11 节），放进 {@link ToolContext#offRecord()}。 */
+    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock,
+                       Function<SessionId, String> dirs, java.util.function.Predicate<SessionId> offRecord) {
+        this.offRecord = offRecord;
         this.dirs = dirs;
         this.catalog = catalog;
         this.workspaces = workspaces;
@@ -70,7 +76,7 @@ public final class ToolHandler implements Handler {
         ToolContext context;
         try {
             context = new ToolContext(run.run().principal(), run.run().session(), workspaces.of(run.run().principal()),
-                    dirs.apply(run.run().session()));
+                    dirs.apply(run.run().session())).in(run.run().run(), run.id(), offRecord.test(run.run().session()));
         } catch (RuntimeException failure) {
             return finished(run, ToolOutput.error(tantalum.shell.mask.SecretMask.mask("Workspace unavailable: " + failure.getMessage())), null);
         }

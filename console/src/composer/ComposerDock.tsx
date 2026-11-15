@@ -14,6 +14,7 @@ import { pendingApproval } from "./approval/pending";
 import { Composer } from "./Composer";
 import { LinkChip } from "./LinkChip";
 import { ModelPicker } from "./ModelPicker";
+import { OffRecordChip } from "./OffRecordChip";
 import { ProjectChip } from "./ProjectChip";
 import { QueueDock } from "./queue/QueueDock";
 import { useQueueActions } from "./queue/useQueueActions";
@@ -43,6 +44,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const unarchive = useSetArchived();
   // 选了别的工作区后重新从存储读一次
   const [, setPicked] = useState(0);
+  // 还没发第一句的会话里拨的“不进记忆”，按会话记（只在这个页面里）
+  const [offDrafts, setOffDrafts] = useState<Record<string, boolean>>({});
   const summary = sessions.data?.find((each) => each.id === session);
   // 服务器知道这个会话了，就是发过第一句：工作区按它的目录算，不能再换（W12）
   const started = summary !== undefined;
@@ -50,6 +53,7 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const wanted = stored === null ? readLastProject() : stored === "" ? null : stored;
   const chosen: Project | null = started ? projectOf(summary, projects) : (projects.find((project) => project.id === wanted) ?? null);
   const dir = started ? (summary.dir ?? null) : (chosen?.path ?? null);
+  const offRecord = started ? summary.offRecord === true : (offDrafts[session] ?? false);
   const { run, running } = useLatestRun(store, session);
   const version = useRunVersion(store, run);
   const items = useItems(store, useOrder(store, session));
@@ -116,6 +120,7 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
             if (!started) saveLastProject(chosen?.id ?? null);
           }}
           project={started ? null : (chosen?.id ?? null)}
+          offRecord={!started && offRecord}
           accessory={
             <>
               <ProjectChip
@@ -128,6 +133,7 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
                 }}
                 onAdd={() => onAddProject?.()}
               />
+              <OffRecordChip value={offRecord} fixed={started} onChange={(value) => setOffDrafts((all) => ({ ...all, [session]: value }))} />
               <LinkChip dir={dir} onOpen={() => onOpenPlugins?.()} />
             </>
           }

@@ -90,11 +90,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
-                        session -> dirOf(queries.view().current(), session), toolbox.skillCatalog()),
+                        session -> dirOf(queries.view().current(), session), toolbox.skillCatalog())
+                        .offRecord(session -> offRecordOf(queries.view().current(), session)),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()), properties.weights()),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
-                        session -> dirOf(queries.view().current(), session)),
+                        session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
                 StartTimer.class, new TimerHandler());
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);
@@ -141,6 +142,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
     }
 
     /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
+    /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
+    static boolean offRecordOf(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found != null && found.offRecord();
+    }
+
     static String dirOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found == null ? null : found.dir();

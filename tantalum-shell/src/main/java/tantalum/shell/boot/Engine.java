@@ -141,7 +141,15 @@ public final class Engine implements AutoCloseable {
                     } catch (java.sql.SQLException unreadable) {
                         return "";
                     }
-                });
+                }, tool -> toolbox.catalog().find(tool).map(Tool::plugin).orElse(null),
+                // 不进记忆的会话（memory-final-plan 第 11 节）：会话可能已经移出内存，按查询读；读不到时当作不进记忆，宁可少记
+                (user, session) -> {
+                    try {
+                        return queries.queries().session(user, session).map(view -> view.state().offRecord()).orElse(true);
+                    } catch (RuntimeException unreadable) {
+                        return true;
+                    }
+                }, () -> toolbox.gate().personalPlugins());
         stores.storage().onRunEnded(runListeners::offer);
         int interrupted;
         try {
@@ -203,7 +211,7 @@ public final class Engine implements AutoCloseable {
         return stores;
     }
 
-    java.nio.file.Path dataDir() {
+    public java.nio.file.Path dataDir() {
         return dataDir;
     }
 
@@ -309,6 +317,11 @@ public final class Engine implements AutoCloseable {
 
     public EventCodec codec() {
         return codec;
+    }
+
+    /** 工具属于哪个插件；内置的或不认识的为 null。 */
+    public String toolPlugin(String name) {
+        return toolbox.catalog().find(name).map(Tool::plugin).orElse(null);
     }
 
     /** 注册了的全部工具，按名称排序，给诊断和测试用。 */

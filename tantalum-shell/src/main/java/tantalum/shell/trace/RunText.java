@@ -56,6 +56,45 @@ public final class RunText {
         return middleCut(text.toString().strip(), maxChars);
     }
 
+    /**
+     * 同一轮带角色的分段（memory-final-plan 第 7 节）：你说的话、每个工具的结果（截短到 {@link #SEGMENT_CHARS}、遮盖密钥）、助手每次的回答，
+     * 按 journal 的顺序。{@code pluginOf} 查工具属于哪个插件（内置的为 null）。
+     */
+    public static List<tantalum.shell.plugin.RunSegment> segments(Collection<TraceRecord> records,
+                                                                  java.util.function.Function<String, String> pluginOf) {
+        List<tantalum.shell.plugin.RunSegment> segments = new java.util.ArrayList<>();
+        records.stream().sorted(Comparator.comparing(record -> record.head().pos(), RunText::comparePos)).forEach(record -> {
+            switch (record) {
+                case UserInput input when input.text() != null && input.mode() != UserInput.Mode.CONTINUE -> {
+                    String said = clean(input.text());
+                    if (!said.isBlank()) {
+                        segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.USER, null, null, said,
+                                record.head().pos()));
+                    }
+                }
+                case ToolCall tool -> {
+                    String text = tool.finished() && tool.status() != ToolCall.Status.DONE
+                            ? "failed: " + (tool.code() != null ? tool.code() : tool.status().name())
+                            : tool.result() == null ? "" : cutKeepingLines(SecretMask.mask(clean(tool.result())), SEGMENT_CHARS);
+                    segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.TOOL, tool.name(),
+                            pluginOf.apply(tool.name()), text, record.head().pos()));
+                }
+                case ModelRequest request when request.purpose() == ModelRequest.Purpose.NORMAL && request.text() != null
+                        && !request.text().isBlank() -> segments.add(new tantalum.shell.plugin.RunSegment(
+                                tantalum.shell.plugin.RunSegment.Role.ASSISTANT, null, null, clean(request.text()), record.head().pos()));
+                default -> { }
+            }
+        });
+        return segments;
+    }
+
+    static final int SEGMENT_CHARS = 2000;
+
+    /** 截到 {@code max} 个字符，保留换行（分段要能按行看）。 */
+    static String cutKeepingLines(String text, int max) {
+        return text.length() <= max ? text : text.substring(0, max) + "…";
+    }
+
     static String clean(String text) {
         return text == null ? "" : RECALL.matcher(text).replaceAll("").strip();
     }

@@ -220,6 +220,8 @@ export const zh = {
     switchCompaction: (label: string) => `换到 ${label} 之前压缩失败，请重试或换窗口更大的模型`,
   },
   composer: {
+    offRecord: "不进记忆",
+    offRecordHint: "这个会话不记笔记、不留下任何记忆，发出第一句后就不能改了。记忆里已有的照样能用。",
     placeholder: "给 Tantalum 发消息",
     send: "发送",
     stop: "停止",

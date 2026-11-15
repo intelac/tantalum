@@ -28,13 +28,14 @@ public final class SubmitSteps {
 
     public static Decision userPrompt(StepContext context) {
         UserPrompt event = (UserPrompt) context.envelope().event();
-        return submit(context, event.owner(), Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), event.dir());
+        return submit(context, event.owner(), Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), event.dir(),
+                Boolean.TRUE.equals(event.offRecord()));
     }
 
     public static Decision followUp(StepContext context) {
         FollowUpSubmitted event = (FollowUpSubmitted) context.envelope().event();
         return submit(context, new OwnerRef.OfSession(context.envelope().session()),
-                Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), null);
+                Message.user(event.text(), event.attachments(), blocks(event.skills()), event.attached()), event.model(), null, false);
     }
 
     /** 点名的技能里读到内容的那些变成消息里的块，按点名的顺序；没读到的不进消息，只留在事件里给对话页看。 */
@@ -46,12 +47,18 @@ public final class SubmitSteps {
      * 空闲时开新运行，用提交里带的选择；运行中排队，带了选择就记下，排队的提问开始运行时用它，
      * 正在跑的运行不受影响。{@code dir} 只在会话还没有任何消息时定下工作目录，之后带了也不理。
      */
-    private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model, String dir) {
+    private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model, String dir, boolean offRecord) {
         Outcome out = new Outcome(context);
         SessionState existing = out.state().sessions().get(context.envelope().session());
         if (dir != null && (existing == null || existing.messages().isEmpty())) {
             out.put((existing == null ? SessionState.start(context.envelope().session(), context.envelope().principal()) : existing)
                     .withDir(dir));
+        }
+        // “不进记忆”和工作目录一样只在第一次提问时定下（memory-final-plan 第 11 节）
+        existing = out.state().sessions().get(context.envelope().session());
+        if (offRecord && (existing == null || existing.messages().isEmpty())) {
+            out.put((existing == null ? SessionState.start(context.envelope().session(), context.envelope().principal()) : existing)
+                    .withOffRecord());
         }
         if (context.run() == null || context.run().isEnded()) {
             startRun(out, owner, message, model);

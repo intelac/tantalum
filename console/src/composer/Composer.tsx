@@ -34,6 +34,8 @@ interface Props {
   onSubmitted?: (choice: ModelChoice | null) => void;
   /** 随提问发出的工作区（workspaces W3）；服务器只在会话的第一次提问时用它。 */
   project?: string | null;
+  /** 随提问发出“不进记忆”（memory-final-plan 第 11 节）；同样只有第一次提问算数。 */
+  offRecord?: boolean;
   /** 附件按钮右边的标签：工作区、电脑连接（workspaces 需求 7）。 */
   accessory?: ReactNode;
   /** 排队的消息有几条；输入框空着按 Ctrl/Cmd+Enter 时把它们都转成插话（input-area 需求 1.10）。 */
@@ -66,6 +68,7 @@ export function Composer({
   choice = null,
   onSubmitted,
   project = null,
+  offRecord = false,
   accessory,
   queued = 0,
   onSteerQueue,
@@ -203,7 +206,7 @@ export function Composer({
       if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
       try {
         // 插话并进当前运行，不换模型
-        await submit(session, mode, content, requestId.current, attachments, mode === "steer" ? null : choice, project);
+        await submit(session, mode, content, requestId.current, attachments, mode === "steer" ? null : choice, project, offRecord);
       } catch (failure) {
         failedContent.current = signature;
         setError(failure);

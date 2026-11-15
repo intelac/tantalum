@@ -25,6 +25,8 @@ final class IndexBatch {
         CommandId answerTimer;
         /** 会话的工作目录；不知道时为 null。 */
         String dir;
+        /** “不进记忆”的会话（memory-final-plan 第 11 节）。 */
+        boolean offRecord;
         /** 这一批里最后一次改名；没改为 null，空串表示恢复自动标题。 */
         String rename;
         long lastSeq;
@@ -64,6 +66,7 @@ final class IndexBatch {
         if (change.dir() != null) {
             row.dir = change.dir();
         }
+        row.offRecord |= change.offRecord();
         row.runStatus = change.runStatus();
         row.activeRun = change.activeRun();
         row.answerDeadline = change.answerDeadline();

@@ -228,6 +228,7 @@ export function submit(
   attachments: readonly AttachmentRef[] = [],
   model: ModelChoice | null = null,
   project: string | null = null,
+  offRecord = false,
 ): Promise<{ submissionId: string; duplicate: boolean }> {
   const body: Record<string, unknown> = { requestId, mode, text };
   if (attachments.length > 0) body.attachments = attachments.map(({ id, name }) => ({ id, name }));
@@ -235,6 +236,8 @@ export function submit(
   if (model !== null && mode !== "steer") body.model = model;
   // 工作区只跟着提问走，服务器只在会话的第一次提问时用它（workspaces W3）
   if (project !== null && mode === "prompt") body.project = project;
+  // 不进记忆也只在会话的第一次提问时算数（memory-final-plan 第 11 节）
+  if (offRecord && mode === "prompt") body.offRecord = true;
   return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, { method: "POST", body: JSON.stringify(body) });
 }
 

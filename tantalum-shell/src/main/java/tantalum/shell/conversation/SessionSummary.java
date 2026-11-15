@@ -11,7 +11,12 @@ import tantalum.value.state.RunState;
  * 侧栏里的一行：标题取第一条提问的开头（用户改过名就用改的），最近活动取条目里最晚的时间，{@code runStatus} 没有运行时是 {@code idle}，
  * {@code dir} 是会话的工作目录，没有为 null。
  */
-public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus, String dir) {
+public record SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus, String dir, boolean offRecord) {
+
+    /** 不是“不进记忆”的会话时。 */
+    public SessionSummary(SessionId id, String title, Instant lastActivity, String runStatus, String dir) {
+        this(id, title, lastActivity, runStatus, dir, false);
+    }
 
     public static final String IDLE = "idle";
     static final int TITLE_LENGTH = 40;

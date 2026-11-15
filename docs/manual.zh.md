@@ -435,7 +435,10 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 
 个人长期记忆、每天的笔记和自动记下是**记忆插件**（包 `tantalum.memory`），随服务器发布、默认装上，只经下面“写插件”里的插件接口和平台打交道（架构测试钉住）。插件页上有一行“记忆”：总开关关掉后记忆工具、记忆指引和索引都不再给模型；参数“自动记下”每人自己开关。部署时 `tantalum.memory-plugin.enabled=false` 不装，企业可以换成自己的实现。共享知识是平台的，不在插件里。
 
-- **存在哪**：每人模式下在 `<workspace>/<用户名>/memory/`，索引 `MEMORY.md` 每条一行，条目 `<name>.md` 带 frontmatter（名称、描述、类型、更新时间）。共用工作目录模式下放到 `<data-dir>/memory/<用户名>/`，这样别人的 `grep` 搜不到。索引以条目文件为准，每次写删后重建。
+- **存在哪**：每人一本记忆账，在数据目录的 `plugins/memory/<用户名>/ledger.jsonl`，不在工作区里，用户自己的工具碰不到。账只追加：每条有编号和版本，改一次版本加一，写入时比对版本；删掉的留墓碑。条目（页面和页面上的说法）、每天的笔记都在这本账上。以前放在 `<workspace>/<用户名>/memory/` 的旧文件第一次打开时导进来一次，原文件留作备份。
+- **不进记忆的会话**：新对话发第一句之前，点输入框下面的“不进记忆”（接口：提交时带 `"offRecord": true`，只有会话的第一次提问算数，记进 journal）。这种会话不记笔记、不交给任何“个人的”插件；记忆里已有的照样能用。侧栏和输入框上有标记。
+- **敏感信息**：所有写进记忆的内容都过平台统一的检测：密钥和令牌、各家云的访问密钥、身份证号（核对校验位）、手机号。命中就拒绝，拒绝原因只写规则名、不回显内容。管理员可以关掉某条内置规则（`tantalum.sensitive.off=mobile phone number`，逗号分隔规则名）或加自己的（`tantalum.sensitive.patterns.<名字>=正则`）。
+- **插件调模型**：记笔记这类插件自己的模型调用按路线排队（名额是路线配的并发数），用户在等的排在后台的前面；每次调用记进 `plugin-usage.db`（谁、哪个插件、做什么、token、耗时），不算每日额度。管理员接口：`GET /api/admin/plugin-usage?days=7`。
 - **怎么进 prompt**：运行开始时把记忆指引、共享知识、`AGENTS.md`、技能清单、wiki 页列表和该用户的索引依次拼进 system，写进 `ContextAssembled` 事件；回放不读文件。索引在 system 末尾、钩子追加内容之前，prompt caching 的断点整个运行里稳定。条目正文不常驻，模型用 `memory_read` 按需读。新记忆从下一个运行开始生效：会话的 system 和工具在第一个运行时固定（所有模型相同），之后可变内容有变化时追加一条用户消息说明，新工具要到新会话才可见。
 - **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令的内容会被拒绝写入。
 - **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。

@@ -210,6 +210,8 @@ export const en: Text = {
     switchCompaction: (label) => `Compaction failed before switching to ${label}. Try again or pick a model with a larger window`,
   },
   composer: {
+    offRecord: "Off the record",
+    offRecordHint: "This conversation takes no notes and leaves nothing in memory. It is fixed once you send the first message. What is already in memory can still be used.",
     placeholder: "Message Tantalum",
     send: "Send",
     stop: "Stop",

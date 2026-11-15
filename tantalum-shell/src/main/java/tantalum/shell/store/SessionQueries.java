@@ -126,7 +126,8 @@ public final class SessionQueries {
         Map<SessionId, SessionSummary> summaries = new HashMap<>();
         Map<SessionId, String> renamed = new HashMap<>();
         for (SessionIndex.Session row : index.sessions(principal)) {
-            summaries.put(row.session(), new SessionSummary(row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir()));
+            summaries.put(row.session(), new SessionSummary(row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir(),
+                    row.offRecord()));
             if (row.renamed() != null) {
                 renamed.put(row.session(), row.renamed());
             }
@@ -137,7 +138,7 @@ public final class SessionQueries {
                 SessionSummary live = SessionSummary.of(session.id(),
                         session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id()));
                 summaries.put(session.id(), new SessionSummary(session.id(), renamed.getOrDefault(session.id(), live.title()),
-                        live.lastActivity(), live.runStatus(), session.dir()));
+                        live.lastActivity(), live.runStatus(), session.dir(), session.offRecord()));
             }
         }
         return summaries.values().stream().sorted(Comparator.comparing(SessionSummary::lastActivity).reversed()).toList();

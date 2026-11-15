@@ -205,6 +205,8 @@ export const ja: Text = {
     switchCompaction: (label) => `${label} に切り替える前の圧縮に失敗しました。もう一度試すか、ウィンドウの大きいモデルを選んでください`,
   },
   composer: {
+    offRecord: "記憶に残さない",
+    offRecordHint: "この会話はメモを取らず、記憶に何も残しません。最初のメッセージを送ると変更できません。すでにある記憶は使えます。",
     placeholder: "Tantalum にメッセージを送る",
     send: "送信",
     stop: "停止",

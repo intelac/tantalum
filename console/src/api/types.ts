@@ -162,6 +162,8 @@ export interface SessionSummary {
   archived?: boolean;
   /** 置顶了（session-find-pin R1）。和归档互斥。 */
   pinned?: boolean;
+  /** 不进记忆的会话（memory-final-plan 第 11 节）；不是时不出现。 */
+  offRecord?: boolean;
 }
 
 /** 按内容搜到的一个会话（session-find-pin R3）。 */

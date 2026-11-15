@@ -14,10 +14,12 @@ import tantalum.value.state.OwnerRef;
  * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），只有会话的第一次提问带它才算数；没选或旧行为 null。
  * {@code skills} 是用户在文字里点名的技能（{@code /name}），按出现顺序；没有或旧行是空列表。
  * {@code attached} 是插件在提交时附的内容（memory-plugin），按插件的顺序；没有或旧行是空列表。
+ * {@code offRecord} 为 true 时这是“不进记忆”的会话（memory-final-plan 第 11 节），只有会话的第一次提问带它才算数；
+ * 没带、旧行为 null（只写 true，旧行逐字节不变）。
  */
 public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text,
                          List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills,
-                         List<AttachedBlock> attached) implements Submitted {
+                         List<AttachedBlock> attached, Boolean offRecord) implements Submitted {
 
     public static final String TYPE = "UserPrompt";
 
@@ -25,6 +27,12 @@ public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef ow
         attachments = attachments == null ? List.of() : List.copyOf(attachments);
         skills = skills == null ? List.of() : List.copyOf(skills);
         attached = attached == null ? List.of() : List.copyOf(attached);
+        offRecord = Boolean.TRUE.equals(offRecord) ? Boolean.TRUE : null;
+    }
+
+    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,
+                      ModelChoice model, String dir, List<SkillUse> skills, List<AttachedBlock> attached) {
+        this(submission, request, owner, text, attachments, model, dir, skills, attached, null);
     }
 
     public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,

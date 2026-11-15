@@ -143,6 +143,13 @@ public final class Intake {
     public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
                              List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills,
                              List<AttachedBlock> attached) {
+        return submit(principal, session, request, mode, text, attachments, model, dir, skills, attached, false);
+    }
+
+    /** 同上，{@code offRecord} 为真时提问带“不进记忆”（memory-final-plan 第 11 节，只有会话的第一次提问算数）。 */
+    public Submission submit(Principal principal, SessionId session, RequestId request, String mode, String text,
+                             List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills,
+                             List<AttachedBlock> attached, boolean offRecord) {
         if (residency.failure(session) != null) {
             return Submission.rejected(500);
         }
@@ -160,7 +167,8 @@ public final class Intake {
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
             case "steer" -> new SteerSubmitted(submission, request, text, attachments, skills);
             case "follow-up" -> new FollowUpSubmitted(submission, request, text, attachments, model, skills, attached);
-            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir, skills, attached);
+            default -> new UserPrompt(submission, request, new OwnerRef.OfSession(session), text, attachments, model, dir, skills, attached,
+                    offRecord ? Boolean.TRUE : null);
         });
     }
 

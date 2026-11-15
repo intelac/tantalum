@@ -83,29 +83,61 @@ public final class PlatformServices implements PluginServices {
 
     @Override
     public Optional<String> complete(String plugin, String system, String user, ModelPick pick, int maxTokens) {
+        return complete(new Completion(null, plugin, "other", Priority.BACKGROUND, system, user, pick, maxTokens));
+    }
+
+    /**
+     * 排队（{@link PluginModelGate}：每条路线的名额是它配的并发数，本机模型一般是 1；前台的先）、调用、记进用量账
+     * （{@link tantalum.shell.store.PluginUsage}，不算每日额度）。
+     */
+    @Override
+    public Optional<String> complete(Completion request) {
         Engine bound = engine;
         if (bound == null) {
             return Optional.empty();
         }
         Routes routes = bound.routes();
+        ModelPick pick = request.pick() == null ? ModelPick.DEFAULT : request.pick();
         String routeName = pick.route() != null ? pick.route() : routes.route("local").isPresent() ? "local" : routes.defaultRoute();
         Optional<Route> route = routes.route(routeName);
         if (route.isEmpty()) {
-            LOG.warn("plugin {} asked for route {}, which does not exist", plugin, routeName);
+            LOG.warn("plugin {} asked for route {}, which does not exist", request.plugin(), routeName);
             return Optional.empty();
         }
         ModelChoice choice = new ModelChoice(routeName, pick.model() != null ? pick.model() : route.get().settings().defaultModel(), null);
-        Prompt prompt = new Prompt(system, List.of(), List.of(Message.user(user)), new Prompt.Output(false, maxTokens), choice);
-        ModelOutcome outcome = route.get().client().call(prompt, new ChunkListener() {
-            @Override
-            public void onText(String text) {
-            }
+        String who = request.user() == null ? "-" : request.user().value();
+        long started = System.nanoTime();
+        PluginModelGate.Permit permit;
+        try {
+            permit = gate(bound).acquire(routeName, request.priority(), PluginModelGate.waitFor(request.priority()));
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        }
+        if (permit == null) {
+            LOG.warn("plugin {} gave up waiting for route {} ({})", request.plugin(), routeName, request.purpose());
+            record(bound, new tantalum.shell.store.PluginUsage.Call(java.time.Instant.now(), who, request.plugin(), request.purpose(), routeName,
+                    choice.model(), 0, 0, (System.nanoTime() - started) / 1_000_000, "busy"));
+            return Optional.empty();
+        }
+        ModelOutcome outcome;
+        try (permit) {
+            Prompt prompt = new Prompt(request.system(), List.of(), List.of(Message.user(request.text())),
+                    new Prompt.Output(false, request.maxTokens()), choice);
+            outcome = route.get().client().call(prompt, new ChunkListener() {
+                @Override
+                public void onText(String text) {
+                }
 
-            @Override
-            public void onReasoning(String text) {
-            }
-        });
+                @Override
+                public void onReasoning(String text) {
+                }
+            });
+        }
+        long ms = (System.nanoTime() - started) / 1_000_000;
         if (!(outcome instanceof ModelOutcome.Replied replied)) {
+            record(bound, new tantalum.shell.store.PluginUsage.Call(java.time.Instant.now(), who, request.plugin(), request.purpose(), routeName,
+                    choice.model(), 0, 0, ms, "failed"));
             return Optional.empty();
         }
         StringBuilder text = new StringBuilder();
@@ -114,9 +146,90 @@ public final class PlatformServices implements PluginServices {
                 text.append(part.text());
             }
         }
-        LOG.info("plugin {} model call: {}/{} tokens via {}/{}", plugin, replied.usage() == null ? "?" : replied.usage().promptTotal(),
-                replied.usage() == null ? "?" : replied.usage().output(), choice.route(), choice.model());
+        long input = replied.usage() == null ? 0 : replied.usage().promptTotal();
+        long output = replied.usage() == null ? 0 : replied.usage().output();
+        record(bound, new tantalum.shell.store.PluginUsage.Call(java.time.Instant.now(), who, request.plugin(), request.purpose(), routeName,
+                choice.model(), input, output, ms, "ok"));
+        LOG.info("plugin {} model call ({}): {}/{} tokens via {}/{} in {} ms", request.plugin(), request.purpose(), input, output,
+                choice.route(), choice.model(), ms);
         return Optional.of(text.toString());
+    }
+
+    private volatile PluginModelGate gate;
+    private volatile tantalum.shell.store.PluginUsage usage;
+
+    private PluginModelGate gate(Engine bound) {
+        PluginModelGate current = gate;
+        if (current == null) {
+            synchronized (this) {
+                if (gate == null) {
+                    gate = new PluginModelGate(name -> bound.routes().route(name).map(route -> route.settings().concurrency()).orElse(1));
+                }
+                current = gate;
+            }
+        }
+        return current;
+    }
+
+    /** 记一次用量；账打不开或写不进只记日志。 */
+    private void record(Engine bound, tantalum.shell.store.PluginUsage.Call call) {
+        try {
+            usage(bound).record(call);
+        } catch (java.io.IOException | java.sql.SQLException failure) {
+            LOG.warn("cannot record plugin model usage: {}", failure.toString());
+        }
+    }
+
+    /** 插件用量账（第一次用时打开）。 */
+    public synchronized tantalum.shell.store.PluginUsage usage(Engine bound) throws java.io.IOException, java.sql.SQLException {
+        if (usage == null) {
+            usage = tantalum.shell.store.PluginUsage.open(bound.dataDir());
+        }
+        return usage;
+    }
+
+    /** 服务关闭时关掉用量账。 */
+    public synchronized void close() {
+        if (usage != null) {
+            try {
+                usage.close();
+            } catch (java.sql.SQLException ignored) {
+                // 关不掉不影响退出
+            }
+            usage = null;
+        }
+    }
+
+    @Override
+    public List<tantalum.shell.plugin.RunSegment> runView(Principal user, SessionId session, tantalum.value.id.RunId run) {
+        Engine bound = engine;
+        if (bound == null) {
+            return List.of();
+        }
+        return tantalum.shell.trace.RunText.segments(bound.queries().runs().records(user, session, run), bound::toolPlugin);
+    }
+
+    @Override
+    public List<FinishedRef> finishedRuns(Principal user, java.time.Instant since, int limit) {
+        Engine bound = engine;
+        if (bound == null || limit <= 0) {
+            return List.of();
+        }
+        List<FinishedRef> found = new java.util.ArrayList<>();
+        String after = null;
+        do {
+            tantalum.shell.store.RunTable.Page page = bound.queries().runs().list(user, new tantalum.shell.store.RunTable.Filter(since, null,
+                    java.util.Set.of("COMPLETED"), null, null, null, null, tantalum.shell.store.RunTable.Sort.STARTED, after,
+                    Math.min(100, limit - found.size())));
+            for (tantalum.shell.store.RunTable.Listed listed : page.runs()) {
+                tantalum.shell.trace.RunRow row = listed.row();
+                found.add(new FinishedRef(row.session(), row.run(), row.turn(), row.start(), row.end(),
+                        row.endReason() == null ? null : row.endReason().name(),
+                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION));
+            }
+            after = page.next();
+        } while (after != null && found.size() < limit);
+        return found;
     }
 
     @Override

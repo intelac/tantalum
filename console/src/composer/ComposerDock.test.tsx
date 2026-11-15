@@ -102,4 +102,18 @@ describe("ComposerDock", () => {
     act(() => mounted.applyItem({ ...base, id: "6.0", text: "乙", queued: false, run: "r2" } as never, 8));
     expect(screen.queryByRole("group", { name: "排队的消息" })).toBeNull();
   });
+
+  // memory-final-plan 第 11 节：还没发第一句时能拨“不进记忆”，随第一次提问发出
+  it("sends off-the-record with the first prompt of a new session", async () => {
+    backend();
+    mount({ route: "local", model: "qwen3.8", effort: "on" });
+    const toggle = await screen.findByRole("button", { name: "不进记忆" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.type(screen.getByRole("textbox"), "我在找新工作{Enter}");
+    const fetched = vi.mocked(fetch).mock.calls.find(([path]) => String(path).endsWith("/submissions"));
+    expect(fetched).toBeDefined();
+    expect(JSON.parse(String((fetched?.[1] as RequestInit).body))).toMatchObject({ text: "我在找新工作", offRecord: true });
+  });
 });

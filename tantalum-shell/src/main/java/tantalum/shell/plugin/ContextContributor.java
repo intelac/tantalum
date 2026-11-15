@@ -13,6 +13,17 @@ public interface ContextContributor {
 
     Optional<Contribution> contribute(Principal user);
 
+    /**
+     * 带上这一轮的情况（memory-final-plan 第 15 节：插件要知道是哪个会话、在哪个项目目录）。默认不看它，调 {@link #contribute(Principal)}。
+     * 结果随事件进 journal，回放不再调。
+     */
+    default Optional<Contribution> contribute(Principal user, Situation situation) {
+        return contribute(user);
+    }
+
+    /** 组装上下文时的情况：会话、它在用户电脑上的工作目录（没有为 null）、是不是“不进记忆”的会话。 */
+    record Situation(tantalum.value.id.SessionId session, String dir, boolean offRecord) {}
+
     /** 这个插件会用到的段名（管理员只读查看时按它遮掉个人插件的段）。默认没有。 */
     default java.util.Set<String> sectionNames() {
         return java.util.Set.of();

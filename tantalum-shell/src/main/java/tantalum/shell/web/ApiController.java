@@ -259,8 +259,10 @@ public class ApiController {
         List<AttachedBlock> attached = mode.equals("steer") || content == null || content.isBlank() ? List.of()
                 : engine.attachers().collect(user, id.get(), content,
                         engine.queries().session(user, id.get()).map(view -> view.state().view()).orElse(List.of()));
+        // 不进记忆（memory-final-plan 第 11 节）：只有第一次提问带才算数，内核按会话有没有消息判断
+        boolean offRecord = request.get().path("offRecord").asBoolean(false);
         Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
-                content == null ? "" : content, attachments, model, dir, skills, attached);
+                content == null ? "" : content, attachments, model, dir, skills, attached, offRecord);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
 
@@ -430,6 +432,10 @@ public class ApiController {
         // 侧栏的“待回答”标记：从索引里的阶段名来，不载入会话
         view.put("awaitingAnswer", AwaitingAnswer.NAME.equals(summary.runStatus()));
         view.put("dir", summary.dir());
+        // 不进记忆的会话（memory-final-plan 第 11 节）：侧栏和输入框显示标记；只在是的时候给
+        if (summary.offRecord()) {
+            view.put("offRecord", true);
+        }
         view.put("archived", archived);
         view.put("pinned", pinned);
         return view;

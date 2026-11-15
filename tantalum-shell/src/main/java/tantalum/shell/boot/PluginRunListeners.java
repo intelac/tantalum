@@ -37,12 +37,28 @@ final class PluginRunListeners implements AutoCloseable {
     private final BiPredicate<String, Principal> enabled;
     private final Records records;
     private final Function<SessionId, String> titles;
+    private final Function<String, String> pluginOf;
+    private final BiPredicate<Principal, SessionId> offRecord;
+    private final java.util.function.Supplier<java.util.Set<String>> personal;
     private final ArrayBlockingQueue<RunRow> queue = new ArrayBlockingQueue<>(QUEUE);
     private final List<Thread> workers = new ArrayList<>();
     private volatile boolean closed;
 
     PluginRunListeners(List<RunFinishedListener> listeners, BiPredicate<String, Principal> enabled, Records records,
                        Function<SessionId, String> titles) {
+        this(listeners, enabled, records, titles, tool -> null, (user, session) -> false, java.util.Set::of);
+    }
+
+    /**
+     * {@code pluginOf} 查工具属于哪个插件（分段里用）；{@code offRecord} 查会话是不是“不进记忆”的，{@code personal} 是个人插件的名字：
+     * 不进记忆的会话不通知个人插件（memory-final-plan 第 11 节）。
+     */
+    PluginRunListeners(List<RunFinishedListener> listeners, BiPredicate<String, Principal> enabled, Records records,
+                       Function<SessionId, String> titles, Function<String, String> pluginOf,
+                       BiPredicate<Principal, SessionId> offRecord, java.util.function.Supplier<java.util.Set<String>> personal) {
+        this.offRecord = offRecord;
+        this.personal = personal;
+        this.pluginOf = pluginOf;
         this.listeners = List.copyOf(listeners);
         this.enabled = enabled;
         this.records = records;
@@ -83,16 +99,21 @@ final class PluginRunListeners implements AutoCloseable {
 
     /** 测试直接调。 */
     void deliver(RunRow row) {
-        List<RunFinishedListener> interested = listeners.stream().filter(listener -> enabled.test(listener.plugin(), row.principal())).toList();
+        boolean offTheRecord = offRecord.test(row.principal(), row.session());
+        java.util.Set<String> personalPlugins = offTheRecord ? personal.get() : java.util.Set.of();
+        List<RunFinishedListener> interested = listeners.stream().filter(listener -> enabled.test(listener.plugin(), row.principal()))
+                .filter(listener -> !personalPlugins.contains(listener.plugin())).toList();
         if (interested.isEmpty()) {
             return;
         }
         FinishedRun run;
         try {
-            String excerpt = RunText.of(records.of(row.principal(), row.session(), row.run()), EXCERPT_CHARS);
+            List<TraceRecord> trace = records.of(row.principal(), row.session(), row.run());
+            String excerpt = RunText.of(trace, EXCERPT_CHARS);
             run = new FinishedRun(row.principal(), row.session(), row.run(), row.turn(),
                     row.endReason() == null ? null : row.endReason().name(),
-                    row.trigger() == TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, row.start(), row.end(), titles.apply(row.session()), excerpt);
+                    row.trigger() == TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, row.start(), row.end(), titles.apply(row.session()), excerpt,
+                    RunText.segments(trace, pluginOf), offTheRecord);
         } catch (RuntimeException failure) {
             LOG.warn("cannot build the finished run {} for plugins: {}", row.run().value(), failure.toString());
             return;

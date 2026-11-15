@@ -11,9 +11,9 @@ import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.UserPrompt;
+import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
-import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
@@ -33,7 +33,15 @@ import tantalum.value.state.SessionState;
  */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text) {
+                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord) {
+
+    /** 不是“不进记忆”的会话时（测试）。 */
+    public IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
+                       RunId activeRun, Usage usage, Submission submission, boolean runEnded,
+                       Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text) {
+        this(principal, session, seq, at, title, runStatus, activeRun, usage, submission, runEnded, answerDeadline, answerTimer, dir, rename,
+                text, false);
+    }
 
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
@@ -66,7 +74,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
                 timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
-                text != null && !text.isBlank() ? new Text(USER, text) : replyText(envelope));
+                text != null && !text.isBlank() ? new Text(USER, text) : replyText(envelope), offRecord(after, envelope.session()));
     }
 
     /** 模型回复里给人看的文字：全部文本块按顺序接起来；没有时为 null。 */
@@ -84,6 +92,11 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
             }
         }
         return joined.isEmpty() ? null : new Text(ASSISTANT, joined.toString());
+    }
+
+    private static boolean offRecord(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found != null && found.offRecord();
     }
 
     private static String dir(KernelState state, SessionId session) {

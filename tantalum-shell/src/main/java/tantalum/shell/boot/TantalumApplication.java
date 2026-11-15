@@ -121,6 +121,26 @@ public class TantalumApplication {
                 : Path.of(System.getProperty("user.home"), ".local", "share", "tantalum");
     }
 
+    /**
+     * 统一的敏感信息检测（memory-final-plan 第 7 节）：内置规则，去掉 {@code tantalum.sensitive.off} 里列的（逗号分隔的规则名），
+     * 加上 {@code tantalum.sensitive.patterns.<名字>=正则}。启动时设一次，插件经 {@link tantalum.shell.plugin.SensitiveText#current()} 用。
+     */
+    @Bean
+    tantalum.shell.plugin.SensitiveText sensitiveText(Environment environment) {
+        org.springframework.boot.context.properties.bind.Binder binder = org.springframework.boot.context.properties.bind.Binder.get(environment);
+        java.util.Map<String, String> extra = binder.bind("tantalum.sensitive.patterns",
+                org.springframework.boot.context.properties.bind.Bindable.mapOf(String.class, String.class)).orElse(java.util.Map.of());
+        java.util.Set<String> off = new java.util.HashSet<>();
+        for (String label : environment.getProperty("tantalum.sensitive.off", "").split(",")) {
+            if (!label.isBlank()) {
+                off.add(label.strip());
+            }
+        }
+        tantalum.shell.plugin.SensitiveText configured = tantalum.shell.plugin.SensitiveText.of(off, extra);
+        tantalum.shell.plugin.SensitiveText.configure(configured);
+        return configured;
+    }
+
     /** 管理员只读查看的记录（memory-final-plan 第 13 节）。在 {@link #userStore} 之后打开：数据目录的位置在那里先检查。 */
     @Bean(destroyMethod = "close")
     tantalum.shell.auth.ViewLog viewLog(TantalumProperties properties, UserStore afterTheDataDirCheck) throws IOException, SQLException {
@@ -137,7 +157,7 @@ public class TantalumApplication {
     }
 
     /** 平台给插件的服务（memory-plugin）：插件构造时注入，引擎起来后接上。 */
-    @Bean
+    @Bean(destroyMethod = "close")
     PlatformServices platformServices() {
         return new PlatformServices();
     }

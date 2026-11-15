@@ -68,6 +68,7 @@ public final class ContextHandler implements Handler {
     private final ChoiceCheck check;
     private final UserSettings users;
     private final Function<SessionId, String> dirs;
+    private volatile java.util.function.Predicate<SessionId> offRecord = session -> false;
     private final SkillCatalog skills;
 
     /** 会话都没有工作目录时（测试）。 */
@@ -106,6 +107,12 @@ public final class ContextHandler implements Handler {
         this.knowledge = knowledge;
     }
 
+    /** 查会话是不是“不进记忆”的（给插件的 {@link ContextContributor.Situation}）；不设时都不是。 */
+    public ContextHandler offRecord(java.util.function.Predicate<SessionId> lookup) {
+        this.offRecord = lookup;
+        return this;
+    }
+
     @Override
     public Event handle(Command command) throws IOException, InterruptedException {
         Principal principal = command.run().principal();
@@ -137,7 +144,8 @@ public final class ContextHandler implements Handler {
         if (!wiki.isEmpty()) {
             sections.add(new ContextSection(WikiSection.NAME, wiki, false));
         }
-        List<ContextContributor.Contribution> contributions = contributions(principal);
+        List<ContextContributor.Contribution> contributions = contributions(principal,
+                new ContextContributor.Situation(command.run().session(), dir, offRecord.test(command.run().session())));
         for (ContextContributor.Contribution contribution : contributions) {
             String body = contribution.sectionBody() == null ? "" : contribution.sectionBody().strip();
             if (contribution.sectionName() != null && !body.isEmpty()) {
@@ -165,14 +173,14 @@ public final class ContextHandler implements Handler {
     }
 
     /** 这个用户开着的插件各自的一份；插件出错只记日志，这一份不带。 */
-    private List<ContextContributor.Contribution> contributions(Principal principal) {
+    private List<ContextContributor.Contribution> contributions(Principal principal, ContextContributor.Situation situation) {
         List<ContextContributor.Contribution> all = new ArrayList<>();
         for (ContextContributor contributor : contributors) {
             if (!gate.pluginEnabled(principal, contributor.plugin())) {
                 continue;
             }
             try {
-                contributor.contribute(principal).ifPresent(all::add);
+                contributor.contribute(principal, situation).ifPresent(all::add);
             } catch (RuntimeException failure) {
                 LOG.warn("plugin {} failed to contribute context: {}", contributor.plugin(), failure.toString());
             }
