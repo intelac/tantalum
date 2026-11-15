@@ -79,8 +79,12 @@ jobs:
           # 量到 65–100.6 ms（6 次运行），不是控件慢；断言不改
           pnpm test --no-file-parallelism
       - name: Package
+        # 控制台的计时测试偶尔在 runner 上超时（ModelPicker 的 100 ms，2026-11-14/15 两次 106–108 ms）：它失败时 Java 照样要跑，
+        # 不然这次推送真正要验证的平台代码一个测试都没跑（断言不改，见上一步的注释）
+        if: success() || failure()
         run: mvn -B -ntp package "-DskipTests"
       - name: Maven verify
+        if: success() || failure()
         # 覆盖率门槛留在 macOS 的全量回归上：bash 的边界这类只在 macOS、Linux 跑的代码在这里跳过，比例会偏低（设计“windows.yml”）。
         run: mvn -B -ntp verify "-Djacoco.haltOnFailure=false"
       - name: PowerShell, browser host and Windows-only tests were not skipped
