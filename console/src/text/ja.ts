@@ -871,6 +871,10 @@ export const ja: Text = {
     cloudNotice: "プロンプトはすべてクラウドのプロバイダーに送信されます。",
     localNotice: "モデルはローカルで動作し、データはこのマシンの外に出ません。",
     loggedInAs: "現在のユーザー",
+    views: "管理者の閲覧記録",
+    viewsHint: "管理者があなたのセッションを読み取り専用で見るたびに、ここに記録されます。記憶は管理者には隠されますが、モデルの返答は見えます。",
+    viewsEmpty: "管理者がセッションを見たことはまだありません。",
+    viewsList: (viewer, session) => (session === "" ? `${viewer} がセッション一覧を見ました` : `${viewer} がセッション ${session} を見ました`),
     keyNotice: "API キーはサーバーの環境変数からのみ読み込みます。ここでは入力できません。",
     contextWindow: "コンテキストウィンドウ",
     windowSource: "出所",
@@ -956,6 +960,7 @@ export const ja: Text = {
     "local/no-answer": "パソコンから応答がありません。パスを入力してください",
     "local/connector-missing": "サーバーに接続プログラムがありません。管理者に tantalum-connect.jar をサーバーの jar の隣に置いてもらってください",
     "plugin/not-found": (name) => `そのプラグインまたはツールはありません：${name}`,
+    "plugin/personal": (name) => `${name} は個人用のプラグインです：強制オフはできますが、強制オンはできません`,
     "plugin/locked": (name, source, reason) =>
       source === "admin"
         ? `${name} は管理者がロックしているため、変更できません${reason === "" ? "" : `：${reason}`}`

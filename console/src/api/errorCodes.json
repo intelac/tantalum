@@ -49,6 +49,7 @@
     "local/no-answer",
     "local/connector-missing",
     "plugin/not-found",
+    "plugin/personal",
     "plugin/locked",
     "param/invalid",
     "param/forbidden",

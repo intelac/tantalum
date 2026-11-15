@@ -94,6 +94,12 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
                 .ja("長期記憶、毎日のメモ、自動メモ。");
     }
 
+    /** 记忆是个人的：管理员看不到内容，也不能强制打开（memory-final-plan 第 13 节）。 */
+    @Override
+    public boolean personal() {
+        return true;
+    }
+
     /** 平台通知一轮结束。不阻塞；排不下时丢掉最旧的。 */
     @Override
     public void runFinished(FinishedRun run) {

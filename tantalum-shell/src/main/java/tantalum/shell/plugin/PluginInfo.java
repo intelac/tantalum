@@ -34,6 +34,14 @@ public interface PluginInfo {
     }
 
     /**
+     * 个人的插件（memory-final-plan 第 13 节，Yi 2026-11-15 定）：它的内容在管理员只读查看时一律遮掉；管理员只能强制关掉它，
+     * 不能强制打开（锁成开着会被拒，写进 {@code tantalum.hooks.required} 时启动失败）。同一个插件里有一个成员返回 true 就算。
+     */
+    default boolean personal() {
+        return false;
+    }
+
+    /**
      * 开着时给模型的一段固定说明（英文，一两句），没有为 null。放进上下文的“插件说明”一段，开关变了由内核追加变化，不改 system。
      * 用来让模型事先知道规矩，比如“改文件要用户批准”（QAgent 问题 10），不要写会变的内容。
      */

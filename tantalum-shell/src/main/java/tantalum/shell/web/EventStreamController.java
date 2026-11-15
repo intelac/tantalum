@@ -32,13 +32,15 @@ public class EventStreamController {
     private final Engine engine;
     private final LoginContextRepository logins;
     private final ViewAs viewAs;
+    private final WebJson json;
     private final Duration heartbeat;
 
-    public EventStreamController(Engine engine, LoginContextRepository logins, ViewAs viewAs,
+    public EventStreamController(Engine engine, LoginContextRepository logins, ViewAs viewAs, WebJson json,
                                  @Value("${tantalum.sse-heartbeat:15s}") Duration heartbeat) {
         this.engine = engine;
         this.logins = logins;
         this.viewAs = viewAs;
+        this.json = json;
         this.heartbeat = heartbeat;
     }
 
@@ -113,7 +115,9 @@ public class EventStreamController {
             if (message == null) {
                 continue;
             }
-            SseEmitter.SseEventBuilder event = SseEmitter.event().name(message.event()).data(message.data(), MediaType.TEXT_PLAIN);
+            // 只读查看别人时遮掉个人插件的内容（memory-final-plan 第 13 节）；这里不在请求线程上，按“看的人是不是本人”判断
+            String data = viewer.equals(user) ? message.data() : json.redactText(message.data());
+            SseEmitter.SseEventBuilder event = SseEmitter.event().name(message.event()).data(data, MediaType.TEXT_PLAIN);
             if (message.id() != null) {
                 event.id(message.id());
             }

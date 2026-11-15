@@ -83,12 +83,20 @@ public final class ViewAs extends OncePerRequestFilter {
     private final UserStore users;
     private final boolean enabled;
     private final Clock clock;
+    private final ViewLog log;
     private final Map<String, Long> seen = new ConcurrentHashMap<>();
+    private final Map<String, Long> recorded = new ConcurrentHashMap<>();
 
     public ViewAs(UserStore users, boolean enabled, Clock clock) {
+        this(users, enabled, clock, null);
+    }
+
+    /** {@code log} 是查看记录（memory-final-plan 第 13 节），可以为 null（测试）。 */
+    public ViewAs(UserStore users, boolean enabled, Clock clock, ViewLog log) {
         this.users = users;
         this.enabled = enabled;
         this.clock = clock;
+        this.log = log;
     }
 
     /** 部署的人没关掉这个功能（{@code tantalum.view-as.enabled}，默认开）。 */
@@ -139,6 +147,7 @@ public final class ViewAs extends OncePerRequestFilter {
             return;
         }
         started(real.getName(), LoginContextRepository.currentLogin(request), target);
+        record(real.getName(), LoginContextRepository.currentLogin(request), target, request.getRequestURI());
         SecurityContext viewing = SecurityContextHolder.createEmptyContext();
         viewing.setAuthentication(new Viewing(target, real.getName()));
         SecurityContextHolder.setContext(viewing);
@@ -154,6 +163,34 @@ public final class ViewAs extends OncePerRequestFilter {
         response.setContentType("application/json");
         response.getWriter().write(body);
     }
+
+    /**
+     * 查看记录（进 {@link ViewLog}，被看的人能查）：每个被看的会话记一条，同一次登录看同一个会话 {@link #LOG_EVERY} 内只记一次；
+     * 不属于会话的接口（会话列表等）按“没有会话”记一条。记不下来只写日志，不挡住这次查看。
+     */
+    private void record(String viewer, String login, String target, String path) {
+        if (log == null) {
+            return;
+        }
+        java.util.regex.Matcher matcher = SESSION_IN_PATH.matcher(path);
+        String session = matcher.find() ? matcher.group(1) : null;
+        long now = clock.millis();
+        String key = login + "\n" + target + "\n" + (session == null ? "" : session);
+        Long last = recorded.put(key, now);
+        if (last != null && now - last < LOG_EVERY.toMillis()) {
+            return;
+        }
+        try {
+            log.record(target, viewer, session, clock.instant());
+        } catch (java.sql.SQLException failure) {
+            LOG.warn("cannot record that {} viewed {}: {}", viewer, target, failure.toString());
+        }
+        if (recorded.size() > REMEMBERED) {
+            recorded.values().removeIf(at -> now - at >= LOG_EVERY.toMillis());
+        }
+    }
+
+    private static final Pattern SESSION_IN_PATH = Pattern.compile("^/api/sessions/([^/?]+)");
 
     /** 一次查看的开头记一行：谁、看谁。之后同一次登录接着看同一个人不再记，隔了 {@link #LOG_EVERY} 才算新的一次。 */
     private void started(String viewer, String login, String target) {

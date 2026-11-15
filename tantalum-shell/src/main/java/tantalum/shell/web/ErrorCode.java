@@ -86,6 +86,8 @@ public enum ErrorCode {
     LOCAL_CONNECTOR_MISSING("local/connector-missing", 404),
     /** 参数 {@code name}。 */
     PLUGIN_NOT_FOUND("plugin/not-found", 404),
+    /** 个人的插件（如记忆）不能被管理员锁成开着。参数 {@code name}。 */
+    PLUGIN_PERSONAL("plugin/personal", 400),
     /** 开关锁着。参数 {@code name}、{@code source}（{@code code}、{@code config}、{@code admin}），管理员写了原因时还有 {@code reason}。 */
     PLUGIN_LOCKED("plugin/locked", 403),
     /** 参数的值不合格。参数 {@code reason}（{@code type}、{@code range}、{@code tooLong}、{@code tooMany}、{@code unknown}）和 {@code key}。 */

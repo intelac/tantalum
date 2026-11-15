@@ -1,5 +1,6 @@
 package tantalum.shell.web;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +26,35 @@ public class SettingsController {
     private final Engine engine;
     private final WebJson json;
 
-    public SettingsController(Engine engine, WebJson json) {
+    private final tantalum.shell.auth.ViewLog views;
+
+    public SettingsController(Engine engine, WebJson json, tantalum.shell.auth.ViewLog views) {
         this.engine = engine;
         this.json = json;
+        this.views = views;
+    }
+
+    /**
+     * 管理员只读查看过我的哪些会话（memory-final-plan 第 13 节）：{@code {views: [{viewer, session, at}]}}，新的在前，最多 200 条。
+     * 只给本人：只读查看时这个接口不在白名单里。
+     */
+    @GetMapping("/api/settings/views")
+    ResponseEntity<String> views() {
+        try {
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (tantalum.shell.auth.ViewLog.View view : views.of(WebJson.currentUser().value(), 200)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("viewer", view.viewer());
+                if (view.session() != null) {
+                    item.put("session", view.session());
+                }
+                item.put("at", view.at().toString());
+                items.add(item);
+            }
+            return json.json(200, Map.of("views", items));
+        } catch (java.sql.SQLException failure) {
+            return json.error(ErrorCode.SERVER_BUSY, "the view log cannot be read now");
+        }
     }
 
     /**

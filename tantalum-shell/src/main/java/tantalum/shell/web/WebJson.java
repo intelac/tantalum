@@ -21,24 +21,76 @@ import tools.jackson.databind.json.JsonMapper;
 final class WebJson {
 
     private final JsonMapper mapper;
+    private final Engine engine;
+    private volatile ViewRedaction redaction;
 
     WebJson(Engine engine) {
         this.mapper = engine.codec().mapper();
+        this.engine = engine;
     }
 
-    /** 一个值的 JSON 文字（SSE 的数据用）。 */
+    /** 一个值的 JSON 文字（SSE 的数据用）。管理员只读查看时遮掉个人插件的内容。 */
     String write(Object value) {
-        return mapper.writeValueAsString(value);
+        return viewing() ? redacted(value) : mapper.writeValueAsString(value);
     }
 
     ResponseEntity<String> json(int status, Object body) {
-        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(mapper.writeValueAsString(body));
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(write(body));
     }
 
     /** 带一次性秘密（如连接令牌）的响应：不让浏览器和代理缓存。 */
     ResponseEntity<String> secret(int status, Object body) {
         return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).contentType(MediaType.APPLICATION_JSON)
-                .body(mapper.writeValueAsString(body));
+                .body(write(body));
+    }
+
+    /** 这次请求是管理员在只读查看别人。 */
+    static boolean viewing() {
+        return SecurityContextHolder.getContext().getAuthentication() instanceof tantalum.shell.auth.ViewAs.Viewing;
+    }
+
+    /** 已经写好的 JSON 文字（SSE、轮询推给只读查看者的）：遮掉个人插件的内容；不是 JSON 的按文字遮。 */
+    String redactText(String data) {
+        ViewRedaction rules = redaction();
+        if (rules.idle() || data == null) {
+            return data;
+        }
+        try {
+            return mapper.writeValueAsString(rules.redact(mapper.readTree(data)));
+        } catch (RuntimeException notJson) {
+            return rules.redactText(data);
+        }
+    }
+
+    private String redacted(Object value) {
+        ViewRedaction rules = redaction();
+        if (rules.idle()) {
+            return mapper.writeValueAsString(value);
+        }
+        return mapper.writeValueAsString(rules.redact(mapper.valueToTree(value)));
+    }
+
+    /** 个人插件、它们的工具和段名；第一次用时从引擎算一次（插件在启动时就定了）。 */
+    ViewRedaction redaction() {
+        ViewRedaction rules = redaction;
+        if (rules == null) {
+            java.util.Set<String> personal = engine.plugins().personalPlugins();
+            java.util.Set<String> tools = new java.util.HashSet<>();
+            engine.tools().forEach(tool -> {
+                if (tool.plugin() != null && personal.contains(tool.plugin())) {
+                    tools.add(tool.name());
+                }
+            });
+            java.util.Set<String> sections = new java.util.HashSet<>();
+            engine.members(tantalum.shell.plugin.ContextContributor.class).forEach(contributor -> {
+                if (personal.contains(contributor.plugin())) {
+                    sections.addAll(contributor.sectionNames());
+                }
+            });
+            rules = new ViewRedaction(personal, tools, sections);
+            redaction = rules;
+        }
+        return rules;
     }
 
     /** 错误：{@code {"error": 英文诊断, "code": 代码, "params": {…}}}，没有参数时不写 {@code params}。 */

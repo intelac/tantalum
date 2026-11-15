@@ -49,11 +49,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
         return MemoryTools.PLUGIN;
     }
 
-    /** 管理员只读查看时能看笔记和“自动记下”的状态，长期记忆不给看（和搬进插件之前一样）。 */
-    @Override
-    public boolean viewable(List<String> path) {
-        return !path.isEmpty() && (path.getFirst().equals("notes") || path.getFirst().equals("capture"));
-    }
+    // 管理员只读查看时一样都看不到（Yi 2026-11-15：记忆是个人的），用接口的默认值：不可看。
 
     @Override
     public PluginResponse handle(PluginRequest request) {

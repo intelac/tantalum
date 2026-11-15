@@ -88,6 +88,8 @@ public class PluginAdminController {
             return PluginViews.unknown(json, unknown);
         } catch (PluginGate.LockedPlugin refused) {
             return PluginViews.locked(json, refused);
+        } catch (PluginGate.PersonalPlugin personal) {
+            return json.error(ErrorCode.PLUGIN_PERSONAL, personal.getMessage(), Map.of("name", personal.name()));
         } catch (PluginGate.ForbiddenParam forbidden) {
             return PluginViews.forbidden(json, forbidden);
         } catch (InvalidParam invalid) {

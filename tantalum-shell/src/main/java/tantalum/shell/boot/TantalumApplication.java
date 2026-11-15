@@ -121,6 +121,12 @@ public class TantalumApplication {
                 : Path.of(System.getProperty("user.home"), ".local", "share", "tantalum");
     }
 
+    /** 管理员只读查看的记录（memory-final-plan 第 13 节）。在 {@link #userStore} 之后打开：数据目录的位置在那里先检查。 */
+    @Bean(destroyMethod = "close")
+    tantalum.shell.auth.ViewLog viewLog(TantalumProperties properties, UserStore afterTheDataDirCheck) throws IOException, SQLException {
+        return tantalum.shell.auth.ViewLog.open(properties.dataDir());
+    }
+
     /** 第一个打开数据目录的地方：先检查数据目录的位置（只在 Windows 上查）。 */
     @Bean(destroyMethod = "close")
     UserStore userStore(TantalumProperties properties) throws IOException, SQLException {

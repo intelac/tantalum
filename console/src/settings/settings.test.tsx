@@ -48,4 +48,25 @@ describe("SettingsDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "退出登录" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
+
+  it("lists the administrator views of my sessions (memory-final-plan section 13)", async () => {
+    renderPlain(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <SettingsDialog open onClose={vi.fn()} config={config} username="yi" onLogout={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string) =>
+        Promise.resolve(
+          input === "/api/settings/views"
+            ? { ok: true, status: 200, text: () => Promise.resolve('{"views":[{"viewer":"root","session":"s-1","at":"2026-11-16T01:00:00Z"},{"viewer":"root","at":"2026-11-16T00:59:00Z"}]}') }
+            : { ok: false, status: 502, text: () => Promise.resolve("") },
+        ),
+      ),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "账号" }));
+    expect(await screen.findByText("root 看了会话 s-1")).not.toBeNull();
+    expect(screen.getByText("root 看了你的会话列表")).not.toBeNull();
+  });
 });

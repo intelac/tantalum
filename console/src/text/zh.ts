@@ -894,6 +894,10 @@ export const zh = {
     cloudNotice: "完整的提示词会发送到云端供应商。",
     localNotice: "模型在本地运行，数据不出本机。",
     loggedInAs: "当前用户",
+    views: "管理员查看记录",
+    viewsHint: "管理员只读查看你的会话时，这里会记一条。你的记忆对管理员隐藏，但会话里模型的回答他们看得到。",
+    viewsEmpty: "还没有管理员查看过你的会话。",
+    viewsList: (viewer: string, session: string) => (session === "" ? `${viewer} 看了你的会话列表` : `${viewer} 看了会话 ${session}`),
     keyNotice: "API Key 只从服务端环境变量读取，这里不提供输入。",
     contextWindow: "上下文窗口",
     windowSource: "来源",
@@ -982,6 +986,7 @@ export const zh = {
     "local/no-answer": "电脑没有响应，请手动输入路径",
     "local/connector-missing": "服务器上没有放连接程序，请管理员把 tantalum-connect.jar 放在服务器 jar 旁边",
     "plugin/not-found": (name: string) => `没有这个插件或工具：${name}`,
+    "plugin/personal": (name: string) => `${name} 是个人的插件：可以强制关，不能强制开`,
     "plugin/locked": (name: string, source: string, reason: string) =>
       source === "admin" ? `${name} 被管理员锁定了，不能改${reason === "" ? "" : `：${reason}`}` : `${name} 是必须开启的，不能关`,
     "param/invalid": (key: string, reason: string) => {

@@ -303,4 +303,22 @@ class PluginGateTest {
         assertEquals(List.of("plain"), without.enabledTools(ALICE), "a tool whose plugin is not installed is off");
         assertThrows(IllegalArgumentException.class, () -> PluginGate.memberPlugin("not a member"));
     }
+
+    /** memory-final-plan 第 13 节：个人的插件不能写进 tantalum.hooks.required 强制打开。 */
+    @Test
+    void aPersonalPluginCannotBeRequired() throws Exception {
+        final class Personal implements tantalum.shell.plugin.ContextContributor, tantalum.shell.plugin.PluginInfo {
+            @Override public String plugin() { return "diary"; }
+            @Override public java.util.Optional<Contribution> contribute(Principal user) { return java.util.Optional.empty(); }
+            @Override public boolean personal() { return true; }
+        }
+        ToolCatalog tools = new ToolCatalog();
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> new PluginGate(tools,
+                PluginSwitches.inMemory(java.time.Clock.systemUTC()), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(new Personal()), java.util.Set.of("diary"), tantalum.shell.param.ParamStore.inMemory(java.time.Clock.systemUTC(),
+                        new tantalum.shell.param.SecretBox(new byte[32]))));
+        assertTrue(refused.getMessage().contains("personal"), refused.getMessage());
+        PluginGate allowed = PluginGate.allOn(tools, List.of(new Personal()));
+        assertEquals(java.util.Set.of("diary"), allowed.personalPlugins());
+    }
 }

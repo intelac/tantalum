@@ -78,6 +78,7 @@ public final class PluginGate {
     private final List<AfterToolHook> afterHooks;
     private final List<WorkType> workTypes;
     private final Map<String, Plugin> plugins;
+    private final Set<String> personal;
     /** 成员自己声明必须开启的插件（{@link PluginInfo#mandatory()}）；其余必须开启的是服务器配置定的。 */
     private final Set<String> lockedInCode;
     /** 插件给模型的固定说明（{@link PluginInfo#modelNote()}），按插件名。 */
@@ -145,6 +146,13 @@ public final class PluginGate {
         this.afterHooks = List.copyOf(afterHooks);
         this.workTypes = List.copyOf(workTypes);
         this.plugins = group(hooks, afterHooks, workTypes, panels, members, required);
+        this.personal = personal(hooks, afterHooks, workTypes, panels, members);
+        for (String plugin : required) {
+            if (personal.contains(plugin)) {
+                throw new IllegalArgumentException("tantalum.hooks.required cannot force on the personal plugin " + plugin
+                        + "; a user can always turn it off");
+            }
+        }
         this.lockedInCode = lockedInCode(hooks, afterHooks);
         this.modelNotes = modelNotes(hooks, afterHooks);
         this.pluginParams = declared(hooks, afterHooks, workTypes, members);
@@ -639,6 +647,10 @@ public final class PluginGate {
         if (lock != null && !Lock.ADMIN.equals(lock.source())) {
             throw new LockedPlugin(name, lock);
         }
+        // 个人的插件只能强制关，不能强制开（锁着又不是“关”，就是强制开）
+        if (kind == Kind.PLUGIN && personal.contains(name) && locked && !Boolean.FALSE.equals(enabled)) {
+            throw new PersonalPlugin(name);
+        }
         switches.setPolicy(kind, name, enabled, locked, reason);
     }
 
@@ -775,6 +787,20 @@ public final class PluginGate {
     }
 
     /** 开关锁着，改不了。{@link #lock()} 说是谁锁的、为什么。 */
+    /** 管理员想把个人的插件锁成开着。 */
+    public static final class PersonalPlugin extends IllegalArgumentException {
+        private final String name;
+
+        PersonalPlugin(String name) {
+            super(name + " is personal: an administrator can lock it off, not on");
+            this.name = name;
+        }
+
+        public String name() {
+            return name;
+        }
+    }
+
     public static final class LockedPlugin extends IllegalArgumentException {
         private final String name;
         private final transient Lock lock;
@@ -935,6 +961,42 @@ public final class PluginGate {
             return new Json.Obj(Map.of());
         }
         return resolver.params(user, Kind.PLUGIN, plugin, declared, lock(Kind.PLUGIN, plugin) != null).values();
+    }
+
+    /** 个人的插件（{@link PluginInfo#personal}）：管理员看不到内容，也不能强制打开。 */
+    public Set<String> personalPlugins() {
+        return personal;
+    }
+
+    private static Set<String> personal(List<KernelHook> hooks, List<AfterToolHook> afterHooks, List<WorkType> workTypes,
+                                        List<Panel> panels, List<Object> members) {
+        Set<String> names = new java.util.TreeSet<>();
+        hooks.forEach(hook -> {
+            if (hook instanceof PluginInfo info && info.personal()) {
+                names.add(hook.plugin());
+            }
+        });
+        afterHooks.forEach(hook -> {
+            if (hook instanceof PluginInfo info && info.personal()) {
+                names.add(hook.plugin());
+            }
+        });
+        workTypes.forEach(type -> {
+            if (type instanceof PluginInfo info && info.personal()) {
+                names.add(type.plugin());
+            }
+        });
+        panels.forEach(panel -> {
+            if (panel instanceof PluginInfo info && info.personal()) {
+                names.add(panel.plugin());
+            }
+        });
+        members.forEach(member -> {
+            if (member instanceof PluginInfo info && info.personal()) {
+                names.add(memberPlugin(member));
+            }
+        });
+        return Set.copyOf(names);
     }
 
     /** 插件页要的说明和开关策略只从实现了 {@link PluginInfo} 的成员取；没实现的什么都不说。 */

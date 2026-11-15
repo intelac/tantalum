@@ -13,6 +13,11 @@ public interface ContextContributor {
 
     Optional<Contribution> contribute(Principal user);
 
+    /** 这个插件会用到的段名（管理员只读查看时按它遮掉个人插件的段）。默认没有。 */
+    default java.util.Set<String> sectionNames() {
+        return java.util.Set.of();
+    }
+
     /**
      * {@code fixedText} 是固定说明（可以为 null），接在基础提示后面；{@code sectionName} 和 {@code sectionBody} 是可变段的标签名和内容
      * （可以为 null 或空，空时不加这一段；内容由平台转义，插件给原文），排在各段最后；{@code byLine} 为真时内核按行比较变化。

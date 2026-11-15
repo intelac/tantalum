@@ -101,8 +101,8 @@ public class SecurityConfig {
 
     /** 管理员只读查看别人的会话；部署的人可以用 {@code tantalum.view-as.enabled=false} 关掉。 */
     @Bean
-    ViewAs viewAs(Environment environment, UserStore users) {
-        return new ViewAs(users, environment.getProperty("tantalum.view-as.enabled", Boolean.class, true), Clock.systemUTC());
+    ViewAs viewAs(Environment environment, UserStore users, ViewLog views) {
+        return new ViewAs(users, environment.getProperty("tantalum.view-as.enabled", Boolean.class, true), Clock.systemUTC(), views);
     }
 
     /** 这个过滤器只在上面的安全链里用；不让 Spring Boot 再把它当普通过滤器注册一遍。 */

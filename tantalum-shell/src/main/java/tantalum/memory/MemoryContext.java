@@ -26,6 +26,11 @@ public final class MemoryContext implements ContextContributor {
     }
 
     @Override
+    public java.util.Set<String> sectionNames() {
+        return java.util.Set.of(INDEX_TAG);
+    }
+
+    @Override
     public Optional<Contribution> contribute(Principal user) {
         String index = stores.of(user).indexText().strip();
         String section = index.isEmpty() ? null : INDEX_HEADING + "\n" + INDEX_NOTE + "\n\n" + index;

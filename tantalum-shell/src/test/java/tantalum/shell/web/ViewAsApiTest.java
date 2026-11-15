@@ -337,4 +337,55 @@ class ViewAsApiTest {
         // 同一个编号不带查看参数就是另一个人的了：不认
         assertEquals(410, send("root", "GET", "/api/events/poll?stream=" + token, null).statusCode());
     }
+
+    /**
+     * memory-final-plan 第 13 节（Yi 2026-11-15 定）：管理员只读查看时，记忆（个人插件）的内容在任何接口里都看不到；
+     * 每次查看都记下，被看的人自己查得到；管理员只能把记忆锁成关，不能锁成开。
+     */
+    @Test
+    void anAdministratorViewingSeesNoMemoryAndEveryViewIsRecorded() throws Exception {
+        assertEquals(201, send("alice", "POST", "/api/plugin-api/memory/entries",
+                "{\"name\":\"secret-plan\",\"type\":\"project\",\"description\":\"zebra-quartz plan\",\"content\":\"zebra-quartz details\"}")
+                .statusCode());
+        ask("alice", "s1", "r1");
+        String run = runOf("alice", "s1");
+        for (String path : List.of("/api/sessions/s1/context", "/api/sessions/s1/trace", "/api/sessions/s1/messages",
+                "/api/sessions/s1/runs/" + run + "/tree", "/api/runs/" + run + "/turns/1")) {
+            HttpResponse<String> viewed = send("root", "GET", path + "?viewAs=alice", null);
+            assertEquals(200, viewed.statusCode(), path + ": " + viewed.body());
+            assertFalse(viewed.body().contains("zebra-quartz"), path + " shows memory: " + viewed.body());
+        }
+        JsonNode trace = JSON.readTree(send("alice", "GET", "/api/sessions/s1/trace", null).body());
+        int calls = 0;
+        for (JsonNode record : trace.get("records")) {
+            if (!"request".equals(record.path("kind").asString())) {
+                continue;
+            }
+            for (JsonNode attempt : record.path("attempts")) {
+                String command = attempt.path("call").asString();
+                // 本人看得到：一次模型调用的完整输入里有记忆索引；管理员只读查看时被遮掉
+                assertTrue(send("alice", "GET", "/api/sessions/s1/trace/calls/" + command, null).body().contains("zebra-quartz"));
+                String viewed = send("root", "GET", "/api/sessions/s1/trace/calls/" + command + "?viewAs=alice", null).body();
+                assertFalse(viewed.contains("zebra-quartz"), "the full input of a model call hides memory: " + viewed);
+                assertTrue(viewed.contains("[hidden]"), viewed);
+                calls++;
+            }
+        }
+        assertTrue(calls > 0, trace.toString());
+        assertEquals(403, send("root", "GET", "/api/plugin-api/memory/notes?viewAs=alice", null).statusCode(), "daily notes are memory too");
+        assertEquals(403, send("root", "GET", "/api/plugin-api/memory/entries?viewAs=alice", null).statusCode());
+
+        JsonNode views = JSON.readTree(send("alice", "GET", "/api/settings/views", null).body()).get("views");
+        assertTrue(views.size() >= 1, views.toString());
+        assertTrue(java.util.stream.StreamSupport.stream(views.spliterator(), false)
+                .anyMatch(view -> "root".equals(view.get("viewer").asString()) && "s1".equals(view.path("session").asString())), views.toString());
+        assertEquals(0, JSON.readTree(send("root", "GET", "/api/settings/views", null).body()).get("views").size(), "nobody viewed root");
+        assertEquals(403, send("root", "GET", "/api/settings/views?viewAs=alice", null).statusCode(), "an admin cannot read the log as alice");
+
+        HttpResponse<String> lockOn = send("root", "PUT", "/api/admin/plugins/plugin/memory", "{\"enabled\":true,\"locked\":true,\"reason\":\"x\"}");
+        assertEquals(400, lockOn.statusCode(), lockOn.body());
+        assertTrue(lockOn.body().contains("\"code\":\"plugin/personal\""), lockOn.body());
+        assertEquals(200, send("root", "PUT", "/api/admin/plugins/plugin/memory", "{\"enabled\":false,\"locked\":true,\"reason\":\"x\"}")
+                .statusCode(), "locking it off is allowed");
+    }
 }

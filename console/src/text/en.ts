@@ -876,6 +876,10 @@ export const en: Text = {
     cloudNotice: "Full prompts are sent to the cloud provider.",
     localNotice: "The model runs locally; data stays on this machine.",
     loggedInAs: "Signed in as",
+    views: "Administrator views",
+    viewsHint: "Each time an administrator views your sessions read-only, it is recorded here. Your memory is hidden from them, but they can see the model's replies.",
+    viewsEmpty: "No administrator has viewed your sessions.",
+    viewsList: (viewer, session) => (session === "" ? `${viewer} viewed your session list` : `${viewer} viewed session ${session}`),
     keyNotice: "The API key is read only from the server's environment variables; it cannot be entered here.",
     contextWindow: "Context window",
     windowSource: "Source",
@@ -961,6 +965,7 @@ export const en: Text = {
     "local/no-answer": "The computer did not answer. Type the path instead",
     "local/connector-missing": "The connector is not on this server. Ask the administrator to put tantalum-connect.jar next to the server jar",
     "plugin/not-found": (name) => `No such plugin or tool: ${name}`,
+    "plugin/personal": (name) => `${name} is personal: you can lock it off, but not on`,
     "plugin/locked": (name, source, reason) =>
       source === "admin"
         ? `${name} is locked by the administrator and cannot be changed${reason === "" ? "" : `: ${reason}`}`

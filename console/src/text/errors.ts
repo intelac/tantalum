@@ -57,6 +57,8 @@ export function codeText(t: Text, code: string, params: Readonly<Record<string, 
       return e["model/tool-changes"](text(params.model));
     case "plugin/not-found":
       return e["plugin/not-found"](text(params.name));
+    case "plugin/personal":
+      return e["plugin/personal"](text(params.name));
     case "plugin/locked":
       return e["plugin/locked"](text(params.name), text(params.source), text(params.reason));
     case "param/invalid":

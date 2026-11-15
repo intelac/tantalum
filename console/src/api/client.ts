@@ -515,6 +515,17 @@ export function getContextUsage(session: string): Promise<ContextUsage> {
   return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/context`));
 }
 
+/** 管理员只读查看过我的会话的记录（memory-final-plan 第 13 节），新的在前。 */
+export interface ViewRecord {
+  viewer: string;
+  session?: string;
+  at: string;
+}
+
+export function getViews(): Promise<{ views: ViewRecord[] }> {
+  return call("/api/settings/views");
+}
+
 export function getSettings(): Promise<UserSettingsView> {
   return call("/api/settings");
 }

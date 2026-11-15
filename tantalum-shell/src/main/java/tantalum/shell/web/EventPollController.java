@@ -33,13 +33,15 @@ public class EventPollController {
     private static final long LINGER_MILLIS = 80;
 
     private final PollStreams streams;
+    private final WebJson json;
     private final LoginContextRepository logins;
     private final Duration hold;
 
-    public EventPollController(Engine engine, LoginContextRepository logins,
+    public EventPollController(Engine engine, LoginContextRepository logins, WebJson json,
                                @Value("${tantalum.sse-poll-hold:15s}") Duration hold,
                                @Value("${tantalum.sse-poll-idle:60s}") Duration idle) {
         this.streams = new PollStreams(engine.hub(), idle.toMillis());
+        this.json = json;
         this.logins = logins;
         this.hold = hold;
     }
@@ -68,8 +70,12 @@ public class EventPollController {
             streams.drop(held);
             return ResponseEntity.status(410).build();
         }
+        // 只读查看别人时遮掉个人插件的内容（memory-final-plan 第 13 节）
+        List<SseMessage> shown = WebJson.viewing()
+                ? batch.stream().map(message -> new SseMessage(message.id(), message.event(), json.redactText(message.data()))).toList()
+                : batch;
         return ResponseEntity.ok().header(STREAM, held.token()).cacheControl(CacheControl.noStore())
-                .contentType(new MediaType("text", "plain", StandardCharsets.UTF_8)).body(text(batch).getBytes(StandardCharsets.UTF_8));
+                .contentType(new MediaType("text", "plain", StandardCharsets.UTF_8)).body(text(shown).getBytes(StandardCharsets.UTF_8));
     }
 
     /** 和 SSE 一样的文本：{@code id}、{@code event}、{@code data}（多行就多个 data），空行结束。 */

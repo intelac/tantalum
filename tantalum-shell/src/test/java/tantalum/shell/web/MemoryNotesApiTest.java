@@ -95,7 +95,8 @@ class MemoryNotesApiTest {
         assertTrue(note.get("text").asString().contains("用户想把记忆往前提"));
 
         assertEquals(0, get("bob", "/api/plugin-api/memory/notes").get("days").size(), "bob does not see alice's notes");
-        assertEquals(1, get("root", "/api/plugin-api/memory/notes?viewAs=alice").get("days").size(), "the admin can read while viewing");
+        // 记忆是个人的（Yi 2026-11-15）：管理员只读查看时连笔记也看不到
+        assertEquals(403, server.get("root", "/api/plugin-api/memory/notes?viewAs=alice").statusCode(), "the admin cannot read notes while viewing");
         assertTrue(send("root", "DELETE", "/api/plugin-api/memory/notes/" + day + "/s1?viewAs=alice", null).statusCode() >= 400, "but not delete");
 
         String edited = note.get("text").asString().replace("用户想把记忆往前提", "用户决定先做记忆");
