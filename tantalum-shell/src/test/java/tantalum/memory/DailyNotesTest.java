@@ -23,8 +23,8 @@ class DailyNotesTest {
         assertTrue(notes.append("2026-11-15", "s-1", "读 \"README\"", "s-1_3", "16:25 · 第 1 轮", "- 用户在做 Tantalum\n- 下一步：记忆"));
         assertFalse(notes.append("2026-11-15", "s-1", "ignored", "s-1_3", "16:26", "- again"), "the same run is not noted twice");
         assertTrue(notes.append("2026-11-15", "s-1", "ignored", "s-1_9", "16:40 · 第 2 轮", "- 决定先做记忆"));
-        Path file = dir.resolve("daily/2026-11-15/s-1.md");
-        assertTrue(Files.isRegularFile(file));
+        // 笔记记在记忆账上（memory-final-plan M1），不再是 daily/ 下的文件
+        assertTrue(Files.isRegularFile(dir.resolve(tantalum.memory.ledger.Ledger.FILE)));
         DailyNotes.Note note = notes.read("2026-11-15", "s-1").orElseThrow();
         assertEquals("读 'README'", note.title());
         assertEquals(List.of("s-1_3", "s-1_9"), note.sections().stream().map(DailyNotes.Section::run).toList());

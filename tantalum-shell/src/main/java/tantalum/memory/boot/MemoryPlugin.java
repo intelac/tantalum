@@ -40,7 +40,9 @@ public class MemoryPlugin {
     @Bean
     MemoryStores memoryStores(ObjectProvider<PluginServices> services, Environment environment) {
         MemoryLimits limits = Binder.get(environment).bind("tantalum.memory", MemoryLimits.class).orElse(MemoryLimits.defaults());
-        return new MemoryStores(user -> services.getObject().dataDir(MemoryTools.PLUGIN, MemoryStores.DIR, user), limits, Clock.systemUTC());
+        // 账在插件的私有状态目录（数据目录下）；旧格式的记忆目录只用来第一次导入
+        return new MemoryStores(user -> services.getObject().stateDir(MemoryTools.PLUGIN, user),
+                user -> services.getObject().dataDir(MemoryTools.PLUGIN, MemoryStores.DIR, user), limits, Clock.systemUTC());
     }
 
     @Bean

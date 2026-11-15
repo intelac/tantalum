@@ -29,6 +29,12 @@ public interface PluginServices {
      */
     Path dataDir(String plugin, String name, Principal user);
 
+    /**
+     * 这个插件、这个用户的私有状态目录（不建），一律在数据目录下（{@code <data>/plugins/<插件>/<用户>}），不随工作区模式变，
+     * 用户自己的工具碰不到。插件名的规矩同 {@link #dataDir}。
+     */
+    Path stateDir(String plugin, Principal user);
+
     /** 一次不带工具的模型调用，返回回答的文字；调用失败或路线不存在时为空。用量记日志，不算每日额度。 */
     Optional<String> complete(String plugin, String system, String user, ModelPick pick, int maxTokens);
 

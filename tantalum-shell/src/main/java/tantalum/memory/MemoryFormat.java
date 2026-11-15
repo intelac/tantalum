@@ -21,7 +21,7 @@ public final class MemoryFormat {
 
     public static final Pattern NAME = Pattern.compile("[a-z0-9-]{1,64}");
     public static final int MAX_DESCRIPTION_CHARS = 200;
-    static final String INDEX_FILE = "MEMORY.md";
+    public static final String INDEX_FILE = "MEMORY.md";
 
     private static final String FENCE = "---";
     private static final Pattern INDEX_LINE = Pattern.compile("^- \\[([a-z0-9-]{1,64})]\\(\\1\\.md\\) — ([a-z]+) — (.*)$");

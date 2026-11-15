@@ -47,6 +47,26 @@ public final class PlatformServices implements PluginServices {
         return dataDir(bound.stores().workspaces(), bound.dataDir(), name, user);
     }
 
+    @Override
+    public Path stateDir(String plugin, Principal user) {
+        Engine bound = engine;
+        if (bound == null) {
+            throw new IllegalStateException("plugin services used before the engine started");
+        }
+        return stateDir(bound.dataDir(), plugin, user);
+    }
+
+    /** 插件私有状态目录的规矩：{@code <data>/plugins/<插件>/<用户>}。名字不合规矩时抛 {@link IllegalArgumentException}。 */
+    public static Path stateDir(Path data, String plugin, Principal user) {
+        if (!NAME.matcher(plugin).matches()) {
+            throw new IllegalArgumentException("plugin name must be lowercase letters, digits, . _ - : " + plugin);
+        }
+        if (!Principal.isUsable(user.value())) {
+            throw new IllegalArgumentException("user name cannot be used as a directory: " + user.value());
+        }
+        return data.resolve("plugins").resolve(plugin).resolve(user.value());
+    }
+
     /**
      * 插件数据目录的规矩，和以前的记忆目录一样：共用工作区时放数据目录（共用目录会被所有人的 grep 搜到），每人模式放在这个人的工作区里。
      * 不建目录：插件第一次写时按自己的权限建。名字不合规矩时抛 {@link IllegalArgumentException}。

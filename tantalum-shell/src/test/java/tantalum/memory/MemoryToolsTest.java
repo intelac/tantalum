@@ -160,30 +160,28 @@ class MemoryToolsTest {
         assertTrue(CredentialGuard.detect("sk-abc123def456ghi789jkl").isPresent());
     }
 
-    /** 需求 3.4：坏行跳过，好行留下。 */
+    /** 需求 3.4（记忆账版）：账上坏掉的一行跳过，好的留下；最后一行没写完会被截掉。 */
     @Test
-    void indexTextSkipsBadLines() throws Exception {
+    void aBrokenLedgerLineIsSkipped() throws Exception {
         save(ALICE, "java", "x");
-        MemoryStore store = stores.of(ALICE);
-        Path index = store.dir().resolve(MemoryFormat.INDEX_FILE);
-        String good = java.nio.file.Files.readString(index);
-        java.nio.file.Files.writeString(index, good + "this line is garbage\n");
-        assertEquals(good.strip(), store.indexText().strip());
+        Path ledger = stores.of(ALICE).ledger().file();
+        java.nio.file.Files.writeString(ledger, "this line is garbage\n{\"put\":", java.nio.file.StandardOpenOption.APPEND);
+        MemoryStores reopened = MemoryStoresTest.stores(workspaces, temp.resolve("data"), new MemoryLimits(2, 16 * 1024, 64));
+        assertEquals(List.of("java"), reopened.of(ALICE).list().stream().map(MemoryEntry::name).toList());
+        assertTrue(java.nio.file.Files.readString(ledger).endsWith("garbage\n"), "the partial last line was cut off");
+        save(ALICE, "kotlin", "y");
     }
 
-    /** 需求 3.3：索引超限时截断并告诉模型。 */
+    /** 需求 3.3：索引超限时截断并告诉模型（上限调小以后，已有的条目照样在，只是索引截断）。 */
     @Test
     void oversizedIndexIsCutWithANotice() throws Exception {
-        MemoryStores small = MemoryStoresTest.stores(workspaces, temp.resolve("data2"), new MemoryLimits(50, 200, 64));
-        MemoryStore store = small.of(ALICE);
-        java.nio.file.Files.createDirectories(store.dir());
-        StringBuilder many = new StringBuilder();
+        MemoryStores roomy = MemoryStoresTest.stores(workspaces, temp.resolve("data2"), new MemoryLimits(50, 16 * 1024, 64));
         for (int i = 0; i < 40; i++) {
-            many.append(MemoryFormat.formatIndexLine(new MemoryEntry("n" + i, MemoryType.USER, "about " + i, "c", Instant.EPOCH))).append('\n');
+            org.junit.jupiter.api.Assertions.assertInstanceOf(MemoryStore.WriteResult.Created.class, roomy.of(ALICE).write(String.format("n%02d", i), "user", "about " + i, "c"));
         }
-        java.nio.file.Files.writeString(store.dir().resolve(MemoryFormat.INDEX_FILE), many.toString());
-        String text = store.indexText();
-        assertTrue(text.contains("n0"));
+        MemoryStores small = MemoryStoresTest.stores(workspaces, temp.resolve("data2"), new MemoryLimits(50, 200, 64));
+        String text = small.of(ALICE).indexText();
+        assertTrue(text.contains("n00"));
         assertFalse(text.contains("n39"));
         assertTrue(text.contains("truncated"), text);
     }

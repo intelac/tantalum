@@ -70,7 +70,8 @@ class MemorySnapshotTest {
             server.post("alice", "/api/sessions/s1/submissions",
                     "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"remember: always Java 25\"}");
             awaitCompleted(server, "s1");
-            assertTrue(Files.isRegularFile(workspace.resolve("alice/memory/java-version.md")), "the tool wrote the file");
+            // 记忆账在数据目录下插件的私有目录里（memory-final-plan M1），不在工作区里
+            assertTrue(Files.isRegularFile(data.resolve("plugins/memory/alice/ledger.jsonl")), "the tool wrote the ledger");
 
             server.post("alice", "/api/sessions/s2/submissions",
                     "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"which Java version?\"}");
@@ -94,7 +95,7 @@ class MemorySnapshotTest {
         assertTrue(systems.get(1).contains(INDEX_LINE), "the index is in the event, so replay needs no file");
 
         // 删掉记忆目录再回放：prompt 仍和实时逐个相同。
-        try (Stream<Path> files = Files.walk(workspace.resolve("alice/memory"))) {
+        try (Stream<Path> files = Files.walk(data.resolve("plugins/memory/alice"))) {
             files.sorted(Comparator.reverseOrder()).forEach(path -> {
                 try {
                     Files.delete(path);

@@ -49,7 +49,8 @@ class MemoryStoreTest {
 
         MemoryEntry entry = assertInstanceOf(WriteResult.Created.class, result).entry();
         assertEquals(now, entry.updatedAt());
-        assertTrue(Files.isRegularFile(temp.resolve("alice/memory/java-version.md")));
+        // 记在记忆账上（memory-final-plan M1），不再是一条一个文件
+        assertTrue(Files.isRegularFile(temp.resolve("alice/memory/" + tantalum.memory.ledger.Ledger.FILE)));
         assertEquals("- [java-version](java-version.md) — user — 回答一律用 Java 25\n", store.indexText());
         assertEquals(List.of(entry), store.list());
         assertEquals(entry, store.read("java-version").orElseThrow());

@@ -33,6 +33,30 @@ public enum MemoryType {
         return Optional.empty();
     }
 
+    /**
+     * 记忆账上页面的类型（memory-final-plan 第 6 节的六种）。旧的四种映射过去：user → person、feedback → preference、
+     * project → project、reference → term。
+     */
+    public String pageType() {
+        return switch (this) {
+            case USER -> "person";
+            case FEEDBACK -> "preference";
+            case PROJECT -> "project";
+            case REFERENCE -> "term";
+        };
+    }
+
+    /** 从页面类型回到这四种（decision 归 project，procedure 归 feedback）；不认识的为空。 */
+    public static Optional<MemoryType> fromPageType(String pageType) {
+        return switch (pageType == null ? "" : pageType) {
+            case "person" -> Optional.of(USER);
+            case "preference", "procedure" -> Optional.of(FEEDBACK);
+            case "project", "decision" -> Optional.of(PROJECT);
+            case "term" -> Optional.of(REFERENCE);
+            default -> Optional.empty();
+        };
+    }
+
     /** 全部类型的小写名字，逗号分隔，给模型和错误信息看。 */
     public static String keys() {
         return Arrays.stream(values()).map(MemoryType::key).collect(Collectors.joining(", "));
