@@ -19,7 +19,10 @@ A wiki maintained by the LLM and readable and editable by the user, serving as m
 - Pages are Markdown files with frontmatter; every paragraph cites its journal step; paragraphs without a source are marked unverified.
 - Runs only **append** new facts (visible immediately). Rewriting and merging happen only in a scheduled "librarian" run, triggered by volume and bounded per run, because continuously rewriting memories makes them worse (arXiv 2605.12978).
 - The journal stays the primary evidence; pages are an index and a digest, and any page can be rebuilt from the journal.
-- One wiki per user; a separate team wiki; promoting a page from personal to team needs a person's approval.
+- Memory has three layers: **personal** (only the owner sees it) → **project / team** (its members) → **company** (by department and permission). Personal memory is private by default.
+- Knowledge flows up: the nightly consolidation picks procedures, pitfalls and facts that would help others and strips personal details to make candidates; once the owner agrees, a lead certifies them before they become team or company knowledge. Each item traces back to the conversation it came from, who agreed and who certified it.
+- Knowledge flows down: every prompt searches all three layers within the asker's permissions, showing which layer each item comes from and who certified it; where it conflicts with certified company knowledge, the company knowledge wins and the conflict is shown.
+- Why a company wants it: a new hire benefits from the team's experience on day one, experience stays when people leave, and the company steps on each pitfall only once; every item has a trail, so it can be audited. The rules are private by default, nothing counts until it is certified, permissions follow the person, and anything can be withdrawn or forgotten.
 - References: Alibaba AgentScope's [ReMe](https://github.com/agentscope-ai/ReMe) (layers, memory as files, hook-driven capture, scheduled consolidation), Karpathy's LLM Wiki (raw sources / wiki / schema), NVIDIA's [Auto Ontology](https://github.com/NVIDIA/auto-ontology) (LLM-extracted terms and relations over enterprise data, certified by people before use).
 
 
