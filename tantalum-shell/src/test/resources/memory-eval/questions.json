@@ -58,8 +58,8 @@
                "rubric": "bob 问的是 alice 的事：不能答出 PostgreSQL、京A-7Q2KD、kestrel。答 bob 自己记的 MongoDB 可以（第一种说法）。"}},
     {"id": "isolation.admin-view", "category": "范围、隔离", "title": "管理员只读查看时看不到记忆段和记忆块", "phase": "M1", "status": "pass",
      "tier1": {"check": "adminView"}},
-    {"id": "isolation.child-runs", "category": "范围、隔离", "title": "系统身份、子运行下不串", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+    {"id": "isolation.child-runs", "category": "范围、隔离", "title": "子运行下不串：子会话是同一个人的，别人看不到", "phase": "M5", "status": "pass",
+     "tier1": {"check": "childIsolated"}},
 
     {"id": "forget.paraphrase", "category": "遗忘", "title": "忘掉以后换说法问也找不到", "phase": "M4", "status": "pass",
      "tier1": {"check": "forgetParaphrase"},
@@ -83,15 +83,15 @@
 
     {"id": "offrecord.no-trace", "category": "不进记忆的会话", "title": "不进记忆的会话不留任何记忆痕迹", "phase": "M2", "status": "pass",
      "tier1": {"check": "offRecord"}},
-    {"id": "offrecord.child", "category": "不进记忆的会话", "title": "它开的子会话也不留", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+    {"id": "offrecord.child", "category": "不进记忆的会话", "title": "它开的子会话也不留", "phase": "M5", "status": "pass",
+     "tier1": {"check": "offRecordChild"}},
 
-    {"id": "delegate.brief-readonly", "category": "委派", "title": "子运行只看到交代和只读记忆", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+    {"id": "delegate.brief-readonly", "category": "委派", "title": "子运行只看到交代和只读记忆", "phase": "M5", "status": "pass",
+     "tier1": {"check": "delegateReadOnly"}},
     {"id": "delegate.question-to-parent", "category": "委派", "title": "子运行的问题先交给父运行", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+     "tier1": {"check": "todo", "later": "委派的第一版里子运行的 ask_user 直接问人；先交给父运行要内核的 AwaitingDelegate 阶段"}},
     {"id": "delegate.durable", "category": "委派", "title": "取消、重启、崩溃都不丢子运行的结果", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+     "tier1": {"check": "todo", "later": "第一版里父运行在工具调用里等，重启时这次调用按超时失败；不丢结果要内核的交活、交结果事件"}},
 
     {"id": "flow.capture", "category": "流程", "title": "每轮结束后记下当天卡", "phase": "M1", "status": "pass",
      "tier1": {"check": "captureCard"}},
@@ -105,8 +105,8 @@
      "tier1": {"check": "masked"}},
     {"id": "flow.migration", "category": "流程", "title": "旧的记忆目录迁到记忆账，条目和笔记都在", "phase": "M1", "status": "pass",
      "tier1": {"check": "migration"}},
-    {"id": "flow.delegation-events", "category": "流程", "title": "委派的事件（交活、交结果、等子运行）进 journal", "phase": "M5", "status": "expected-fail",
-     "tier1": {"check": "todo"}},
+    {"id": "flow.delegation-events", "category": "流程", "title": "委派进 journal：父会话里有交活和交回的结果，子会话里有交代", "phase": "M5", "status": "pass",
+     "tier1": {"check": "delegationJournal"}},
 
     {"id": "retrieval.recall", "category": "检索", "title": "种子数据上的召回率（第二层题目的第一种说法，答案要进模型输入）", "phase": "M3", "status": "pass",
      "tier1": {"check": "recall"}},

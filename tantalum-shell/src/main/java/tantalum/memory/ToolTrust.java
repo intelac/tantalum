@@ -17,16 +17,32 @@ public final class ToolTrust {
     public record Verdict(MemoryItem.Source source, boolean pendingConfirm, java.util.List<String> outsideTools) {}
 
     private final Function<ToolContext, List<RunSegment>> views;
+    private final java.util.function.Predicate<ToolContext> delegated;
 
     /** {@code views} 给这次调用所在这一轮到目前为止的分段（平台的 runView）。 */
     public ToolTrust(Function<ToolContext, List<RunSegment>> views) {
+        this(views, context -> false);
+    }
+
+    /** {@code delegated} 判断这次调用是不是在委派开的子会话里（memory-final-plan 第 12 节：子运行只能用 memory_note 写）。 */
+    public ToolTrust(Function<ToolContext, List<RunSegment>> views, java.util.function.Predicate<ToolContext> delegated) {
         this.views = views;
+        this.delegated = delegated;
     }
 
     /** 不看这一轮（测试）：一律当作没读过外部内容。 */
     public static ToolTrust none() {
         return new ToolTrust(context -> List.of());
     }
+
+    /** 在委派开的子会话里。 */
+    public boolean delegated(ToolContext context) {
+        return delegated.test(context);
+    }
+
+    /** 子会话里不能改的时候给模型的话。 */
+    static final String CHILD = "This is a delegated sub-conversation: it can read memory and add notes with memory_note, but only the "
+            + "delegating conversation changes entries and working memory. Put what should change in your answer instead.";
 
     public Verdict judge(ToolContext context, String quote) {
         List<RunSegment> segments = context.run() == null ? List.of() : views.apply(context);

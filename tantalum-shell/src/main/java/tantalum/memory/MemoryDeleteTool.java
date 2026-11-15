@@ -12,9 +12,15 @@ import tantalum.value.json.Json;
 public final class MemoryDeleteTool implements Tool {
 
     private final MemoryStores stores;
+    private final ToolTrust trust;
 
     public MemoryDeleteTool(MemoryStores stores) {
+        this(stores, ToolTrust.none());
+    }
+
+    public MemoryDeleteTool(MemoryStores stores, ToolTrust trust) {
         this.stores = stores;
+        this.trust = trust;
     }
 
     static final String NAME = "memory_delete";
@@ -34,6 +40,12 @@ public final class MemoryDeleteTool implements Tool {
         String name = ToolArguments.string(arguments, "name");
         if (name == null) {
             return MemoryTools.missing("name");
+        }
+        if (context.offRecord()) {
+            return ToolOutput.error(ToolTrust.OFF_RECORD);
+        }
+        if (trust.delegated(context)) {
+            return ToolOutput.error(ToolTrust.CHILD);
         }
         try {
             return stores.of(context.principal()).delete(name) ? ToolOutput.ok("Deleted " + name + ".") : MemoryTools.notFound(name);

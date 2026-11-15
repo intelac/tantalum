@@ -262,6 +262,20 @@ public final class PlatformServices implements PluginServices {
     }
 
     @Override
+    public Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
+        Engine bound = engine;
+        if (bound == null) {
+            return Optional.empty();
+        }
+        try {
+            return bound.delegations().of(user, session).map(tantalum.shell.delegate.Delegations.Delegation::parent);
+        } catch (java.sql.SQLException | RuntimeException unreadable) {
+            LOG.warn("cannot read the delegation of {}: {}", session.value(), unreadable.toString());
+            return Optional.empty();
+        }
+    }
+
+    @Override
     public Json.Obj params(String plugin, Principal user) {
         Engine bound = engine;
         return bound == null ? new Json.Obj(Map.of()) : bound.plugins().params(user, plugin);

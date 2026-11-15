@@ -275,6 +275,28 @@
     }
   },
   {
+    "name": "delegate",
+    "deferred": false,
+    "description": "Hand a self-contained piece of work to a sub-conversation of the same user and get its result. task: what to do; brief: what it needs to know (it does not see this conversation); wait: true (default) waits for the result, false returns at once and the result is reported back here later. The sub-conversation can read memory but only add notes; at most two levels deep.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "type": "string"
+        },
+        "brief": {
+          "type": "string"
+        },
+        "wait": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task"
+      ]
+    }
+  },
+  {
     "name": "edit_file",
     "deferred": true,
     "description": "Replace an exact piece of text in a file in the allowed directories on the user's computer. old_string must match the file exactly, including whitespace and line breaks, and must occur exactly once unless replace_all is true; include enough surrounding lines to make it unique. You must have read the file with read_file in this session.",

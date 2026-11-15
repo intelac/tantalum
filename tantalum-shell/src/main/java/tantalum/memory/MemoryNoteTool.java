@@ -63,12 +63,14 @@ public final class MemoryNoteTool implements Tool {
         }
         try {
             ToolTrust.Verdict verdict = trust.judge(context, quote);
+            // 子运行写的记一笔是谁写的（memory-final-plan 第 12 节）
+            MemoryItem.Actor actor = trust.delegated(context) ? MemoryItem.Actor.CHILD : MemoryItem.Actor.AGENT;
             MemoryItem.Provenance provenance = new MemoryItem.Provenance(context.session().value(),
                     context.run() == null ? null : context.run().value(), context.command() == null ? null : context.command().value(), null);
             String suffix = verdict.pendingConfirm() ? ToolTrust.pendingNote(verdict) : "";
             if (kind.equals("noticed")) {
                 Optional<MemoryItem> added = stores.working(context.principal()).add(MemoryItem.Kind.NOTICED, text,
-                        Map.of(WorkingMemory.SESSION, context.session().value()), verdict.source(), MemoryItem.Actor.AGENT, quote, provenance,
+                        Map.of(WorkingMemory.SESSION, context.session().value()), verdict.source(), actor, quote, provenance,
                         verdict.pendingConfirm(), null);
                 return ToolOutput.ok(added.isEmpty() ? "Already noted." : "Noted." + suffix);
             }
@@ -77,7 +79,7 @@ public final class MemoryNoteTool implements Tool {
                 return ToolOutput.error("kind must be one of preference, fact, decision, noticed");
             }
             MemoryStore store = stores.of(context.principal());
-            MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, verdict.source(), MemoryItem.Actor.AGENT,
+            MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, verdict.source(), actor,
                     text.strip(), store.ledger().clock().instant()).withQuote(quote).withProvenance(provenance)
                     .withPendingConfirm(verdict.pendingConfirm());
             Optional<MemoryItem> added = store.addClaim(shelf[0], shelf[1], shelf[2], claim);

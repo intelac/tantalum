@@ -67,6 +67,11 @@ public interface PluginServices {
     /** 这个插件对这个用户开没开（插件页的开关）。 */
     boolean enabled(String plugin, Principal user);
 
+    /** 这个会话是不是委派开的子会话（memory-final-plan 第 12 节）：是的话给父会话，不是为空。 */
+    default Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
+        return Optional.empty();
+    }
+
     /** 统一的敏感信息检测（memory-final-plan 第 7 节）：所有记忆写入点都过一遍。 */
     default SensitiveText sensitive() {
         return SensitiveText.current();

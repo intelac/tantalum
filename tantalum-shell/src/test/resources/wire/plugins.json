@@ -8,6 +8,13 @@
     "changed" : false,
     "params" : [ ]
   }, {
+    "name" : "delegate",
+    "description" : "Hand a self-contained piece of work to a sub-conversation of the same user and get its result. task: what to do; brief: what it needs to know (it does not see this conversation); wait: true (default) waits for the result, false returns at once and the result is reported back here later. The sub-conversation can read memory but only add notes; at most two levels deep.",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
+  }, {
     "name" : "history_search",
     "description" : "Search this user's past conversations word for word, including parts that were compacted or left the context. Returns the matching lines with their session and time. Use it when memory_search finds nothing.",
     "enabled" : true,

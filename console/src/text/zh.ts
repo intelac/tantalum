@@ -1177,6 +1177,7 @@ export const zh = {
       memory_note: ["记一条", "记下一条偏好、事实、决定或注意到的事；带上你的原话才算你亲口说的。"],
       now: ["工作记忆", "看和改在做的事、答应的事、在等的事、最近注意到的。"],
       memory_search: ["找记忆", "按关键词在记忆里找，带出处。"],
+      delegate: ["委派", "把一件事交给一个子会话去做，等它的结果，或者做完后汇报回来。"],
       history_search: ["找过去的对话", "在过去的对话原话里找，包括已经压缩掉的。"],
     } satisfies Record<string, readonly [string, string]>,
     pointNames: {

@@ -164,6 +164,8 @@ export interface SessionSummary {
   pinned?: boolean;
   /** 不进记忆的会话（memory-final-plan 第 11 节）；不是时不出现。 */
   offRecord?: boolean;
+  /** 委派开的子会话：开它的会话（memory-final-plan 第 12 节）；不是时不出现。 */
+  parent?: string;
 }
 
 /** 按内容搜到的一个会话（session-find-pin R3）。 */

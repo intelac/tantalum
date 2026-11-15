@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project, SessionSummary } from "../api/types";
-import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, projectOf, searchSessions } from "./group";
+import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, nestChildren, projectOf, searchSessions } from "./group";
 
 // workspaces 任务 18（W4、W9、W10、W13）。
 
@@ -150,5 +150,18 @@ describe("mergeHits", () => {
 
   it("is the local result while content search has not answered", () => {
     expect(mergeHits(local, null, sessions, [], false)).toBe(local);
+  });
+
+  // memory-final-plan 第 12 节：委派开的子会话紧跟在父会话后面
+  it("puts delegated sub-conversations right after their parent", () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 10, 16, 0, minutes)).toISOString();
+    const rows: SessionSummary[] = [
+      { id: "d-1", title: "child", lastActivity: at(9), runStatus: "idle", parent: "p" },
+      { id: "x", title: "other", lastActivity: at(8), runStatus: "idle" },
+      { id: "p", title: "parent", lastActivity: at(7), runStatus: "idle" },
+      { id: "d-2", title: "grandchild", lastActivity: at(6), runStatus: "idle", parent: "d-1" },
+      { id: "d-3", title: "orphan", lastActivity: at(5), runStatus: "idle", parent: "gone" },
+    ];
+    expect(nestChildren(rows).map((row) => row.id)).toEqual(["x", "p", "d-1", "d-2", "d-3"]);
   });
 });

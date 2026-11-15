@@ -61,7 +61,7 @@ export function groupSessions(
   extra: Readonly<Record<string, number>>,
   current: string | null,
 ): Group[] {
-  const visible = sessions.filter((session) => options.showArchived || session.archived !== true).slice().sort(pinnedFirst);
+  const visible = nestChildren(sessions.filter((session) => options.showArchived || session.archived !== true).slice().sort(pinnedFirst));
   if (options.mode === "flat") return [{ key: FLAT, project: null, count: visible.length, rows: visible, hidden: 0 }];
   const byKey = new Map<string, SessionSummary[]>();
   for (const session of visible) {
@@ -72,6 +72,27 @@ export function groupSessions(
   const ungrouped = byKey.get(UNGROUPED) ?? [];
   if (ungrouped.length > 0) groups.push(page(UNGROUPED, null, ungrouped, extra, current));
   return groups;
+}
+
+/**
+ * 委派开的子会话紧跟在父会话后面（memory-final-plan 第 12 节），按原来的先后；父会话不在这一批里的照原样放。
+ * 子会话的子会话同样跟在它后面。
+ */
+export function nestChildren(rows: readonly SessionSummary[]): SessionSummary[] {
+  const present = new Set(rows.map((row) => row.id));
+  const children = new Map<string, SessionSummary[]>();
+  for (const row of rows) {
+    if (row.parent !== undefined && present.has(row.parent)) children.set(row.parent, [...(children.get(row.parent) ?? []), row]);
+  }
+  const out: SessionSummary[] = [];
+  const place = (row: SessionSummary) => {
+    out.push(row);
+    for (const child of children.get(row.id) ?? []) place(child);
+  };
+  for (const row of rows) {
+    if (row.parent === undefined || !present.has(row.parent)) place(row);
+  }
+  return out;
 }
 
 function page(key: string, project: Project | null, rows: SessionSummary[], extra: Readonly<Record<string, number>>, current: string | null): Group {

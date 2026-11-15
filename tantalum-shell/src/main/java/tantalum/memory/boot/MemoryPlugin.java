@@ -48,7 +48,8 @@ public class MemoryPlugin {
     /** 记忆工具写入时的信任判断：这一轮读过外部内容没有（平台的 runView）。 */
     @Bean
     tantalum.memory.ToolTrust memoryToolTrust(ObjectProvider<PluginServices> services) {
-        return new tantalum.memory.ToolTrust(context -> services.getObject().runView(context.principal(), context.session(), context.run()));
+        return new tantalum.memory.ToolTrust(context -> services.getObject().runView(context.principal(), context.session(), context.run()),
+                context -> services.getObject().delegatedFrom(context.principal(), context.session()).isPresent());
     }
 
     @Bean
@@ -102,8 +103,8 @@ public class MemoryPlugin {
     }
 
     @Bean
-    MemoryDeleteTool memoryDeleteTool(MemoryStores stores) {
-        return new MemoryDeleteTool(stores);
+    MemoryDeleteTool memoryDeleteTool(MemoryStores stores, tantalum.memory.ToolTrust trust) {
+        return new MemoryDeleteTool(stores, trust);
     }
 
     @Bean

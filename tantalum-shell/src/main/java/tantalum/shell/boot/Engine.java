@@ -151,6 +151,10 @@ public final class Engine implements AutoCloseable {
                     }
                 }, () -> toolbox.gate().personalPlugins());
         stores.storage().onRunEnded(runListeners::offer);
+        // 委派（memory-final-plan 第 12 节）：工具要的提交、查询、取消由引擎做，引擎起来时接上
+        this.delegator = new EngineDelegator(this);
+        toolbox.catalog().find(tantalum.shell.tool.DelegateTool.NAME).filter(tantalum.shell.tool.DelegateTool.class::isInstance)
+                .map(tantalum.shell.tool.DelegateTool.class::cast).ifPresent(tool -> tool.bind(delegator));
         int interrupted;
         try {
             pipeline.output().start();
@@ -209,6 +213,13 @@ public final class Engine implements AutoCloseable {
 
     Stores stores() {
         return stores;
+    }
+
+    private EngineDelegator delegator;
+
+    /** 委派的记录（子会话是谁开的）。 */
+    public tantalum.shell.delegate.Delegations delegations() {
+        return delegator.delegations();
     }
 
     public java.nio.file.Path dataDir() {
@@ -388,6 +399,11 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
                 new Shutdown.Step("stop answer deadline timers", pipeline.deadlines()),
                 new Shutdown.Step("close local links", toolbox.localLinks()),
+                new Shutdown.Step("close delegation records", () -> {
+                    if (delegator != null) {
+                        delegator.close();
+                    }
+                }),
 new Shutdown.Step("close egress", () -> {
                     if (toolbox.egress() != null) {
                         toolbox.egress().close();

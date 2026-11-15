@@ -72,7 +72,7 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         ]
       : null;
   return (
-    <li className="group relative">
+    <li className={session.parent !== undefined ? "group relative pl-4" : "group relative"} data-delegated={session.parent !== undefined || undefined}>
       <button
         type="button"
         aria-current={selected ? "page" : undefined}
