@@ -60,13 +60,18 @@ def env_file():
     return env
 
 
+JARS = {}   # --shell-jar、--examples-jar 给了就用它们（拷到别处的包，跑的时候重新打包不受影响）
+
+
 def shell_jar():
+    if JARS.get("shell"): return JARS["shell"]
     found = sorted(glob.glob(os.path.join(REPO, "tantalum-shell", "target", "tantalum-shell-*-exec.jar")))
     if not found: raise SystemExit(f"tantalum-shell is not packaged; run `mvn -o package -DskipTests` in {REPO} first")
     return found[-1]
 
 
 def examples_jar():
+    if JARS.get("examples"): return JARS["examples"]
     found = [p for p in sorted(glob.glob(os.path.join(REPO, "tantalum-examples", "target", "tantalum-examples-*.jar"))) if "-exec" not in p]
     if not found: raise SystemExit(f"tantalum-examples is not packaged; run `mvn -o package -DskipTests` in {REPO} first")
     return found[-1]
@@ -242,7 +247,10 @@ def main():
     parser.add_argument("--timeout", type=int, default=240)
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--tag", default="")
+    parser.add_argument("--shell-jar", default="", help="用这个服务器包，不用 target 里的（跑的时候要重新打包时）")
+    parser.add_argument("--examples-jar", default="")
     args = parser.parse_args()
+    JARS.update(shell=args.shell_jar, examples=args.examples_jar)
     questions = [q for q in json.load(open(os.path.join(EVAL, "questions.json"), encoding="utf-8"))["questions"] if q.get("tier2")]
     if args.only: questions = [q for q in questions if q["id"] in set(args.only.split(","))]
     if not questions: raise SystemExit("no tier-2 questions selected")

@@ -81,6 +81,9 @@ export function TurnRail({ store, blocks, scroller, hasMore, onLoadOlder, onJump
         }, TRACK_MS);
     };
     track();
+    // 新的一轮刚加进来时，跟随到底部的滚动可能还没发生（或者它的滚动事件落在重新订阅之前）：过一会儿再算两次，
+    // 不然当前轮会停在上一轮（Windows CI 上偶尔看到）
+    const late = [window.setTimeout(track, 150), window.setTimeout(track, 600)];
     element.addEventListener("scroll", onScroll, { passive: true });
     // 内容变高（回复流进来、展开）不一定有滚动事件，也要重算
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onScroll);
@@ -88,6 +91,7 @@ export function TurnRail({ store, blocks, scroller, hasMore, onLoadOlder, onJump
     return () => {
       element.removeEventListener("scroll", onScroll);
       observer?.disconnect();
+      late.forEach((each) => window.clearTimeout(each));
       if (timer !== 0) window.clearTimeout(timer);
     };
   }, [scroller, wide, track]);
