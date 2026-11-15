@@ -64,6 +64,7 @@ class ClaudeCrashRecoveryTest {
                 "tantalum.shell.boot.TantalumApplication",
                 "--server.port=" + port,
                 "--tantalum.data-dir=" + data,
+                "--tantalum.memory-capture.enabled=false",
                 "--tantalum.workspace=" + workspace,
                 "--tantalum.provider=claude",
                 "--tantalum.claude.effort=high")

@@ -8,9 +8,10 @@ import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
+import { CaptureSwitch, NotesList, NoteView } from "./NotesSection";
 import { errorLine } from "../text/errors";
 
-type View = { kind: "list" } | { kind: "entry"; name: string } | { kind: "add" };
+type View = { kind: "list" } | { kind: "entry"; name: string } | { kind: "add" } | { kind: "note"; day: string; session: string };
 
 const TYPES: MemoryType[] = ["user", "feedback", "project", "reference"];
 
@@ -19,7 +20,14 @@ export function MemoryPane() {
   const [view, setView] = useState<View>({ kind: "list" });
   if (view.kind === "entry") return <EntryView name={view.name} onBack={() => setView({ kind: "list" })} />;
   if (view.kind === "add") return <AddForm onDone={() => setView({ kind: "list" })} />;
-  return <ListView onOpen={(name) => setView({ kind: "entry", name })} onAdd={() => setView({ kind: "add" })} />;
+  if (view.kind === "note") return <NoteView day={view.day} session={view.session} onBack={() => setView({ kind: "list" })} />;
+  return (
+    <div className="flex flex-col gap-5">
+      <CaptureSwitch />
+      <ListView onOpen={(name) => setView({ kind: "entry", name })} onAdd={() => setView({ kind: "add" })} />
+      <NotesList onOpen={(day, session) => setView({ kind: "note", day, session })} />
+    </div>
+  );
 }
 
 function TypeTag({ type }: { type: MemoryType }) {

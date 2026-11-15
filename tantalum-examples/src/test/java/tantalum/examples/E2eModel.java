@@ -67,6 +67,15 @@ public final class E2eModel implements ModelClient {
 
     @Override
     public ModelOutcome call(Prompt prompt, ChunkListener chunks) {
+        // 自动记笔记（memory-capture）：固定的两条要点；不算进上下文大小（那是给对话用的）
+        if (prompt.system().startsWith("You keep notes for a user's long-term memory")) {
+            String excerpt = userText(prompt.messages().getLast());
+            if (excerpt.contains("nothing to note")) {
+                return new ModelOutcome.Replied(List.of(new TextBlock("NOTHING")), StopReason.END_TURN, MODEL, null);
+            }
+            return new ModelOutcome.Replied(List.of(new TextBlock("- The user tested memory notes in the end-to-end suite\n- 下一步：看记忆页")),
+                    StopReason.END_TURN, MODEL, null);
+        }
         promptSize = promptSize(prompt);
         int lastUser = lastUserText(prompt.messages());
         String text = lastUser < 0 ? "" : userText(prompt.messages().get(lastUser));

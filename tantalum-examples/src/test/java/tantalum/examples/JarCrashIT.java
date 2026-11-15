@@ -319,6 +319,7 @@ class JarCrashIT {
                 "-jar", jar.toString(),
                 "--server.port=" + port,
                 "--tantalum.data-dir=" + data,
+                "--tantalum.memory-capture.enabled=false",
                 "--tantalum.workspace=" + workspace,
                 "--tantalum.provider=local",
                 "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072",

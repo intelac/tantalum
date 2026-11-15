@@ -29,6 +29,9 @@ import type {
   Plugins,
   Project,
   PanelInfo,
+  CaptureState,
+  NoteDay,
+  NoteDetail,
   RunListPage,
   RunNode,
   RunsSummary,
@@ -359,6 +362,32 @@ export function createMemory(entry: NewMemory): Promise<MemoryEntry> {
 
 export function deleteMemory(name: string): Promise<void> {
   return call(`/api/memory/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+// ---- 每天的笔记（memory-capture）：只读接口在只读查看时也能用。 ----
+
+export function listNotes(): Promise<{ days: NoteDay[] }> {
+  return call(asViewed("/api/memory/notes"));
+}
+
+export function getNote(day: string, session: string): Promise<NoteDetail> {
+  return call(asViewed(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`));
+}
+
+export function saveNote(day: string, session: string, text: string): Promise<{ saved: boolean }> {
+  return call(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "PUT", body: JSON.stringify({ text }) });
+}
+
+export function deleteNote(day: string, session: string): Promise<{ deleted: boolean }> {
+  return call(`/api/memory/notes/${encodeURIComponent(day)}/${encodeURIComponent(session)}`, { method: "DELETE" });
+}
+
+export function getCapture(): Promise<CaptureState> {
+  return call(asViewed("/api/memory/capture"));
+}
+
+export function setCapture(enabled: boolean): Promise<CaptureState> {
+  return call("/api/memory/capture", { method: "PUT", body: JSON.stringify({ enabled }) });
 }
 
 export function listPlugins(): Promise<Plugins> {

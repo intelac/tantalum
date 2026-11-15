@@ -55,6 +55,7 @@ final class Storage implements AutoCloseable {
     /** 运行表的实时写入（run-tree 需求 3）：净室放出的轨迹记录攒成运行的行，交给索引写入线程。 */
     final RunCollector runs;
     final RunRebuild runRebuild;
+    private volatile java.util.function.Consumer<tantalum.shell.trace.RunRow> ended = row -> { };
 
     private Storage(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits,
                     Deque<AutoCloseable> opened) throws IOException {
@@ -76,9 +77,16 @@ final class Storage implements AutoCloseable {
         opened.push(files);
         attachments = new AttachmentStore(dataDir, attachmentLimits, new ImageNormalizer(attachmentLimits));
         records = new RecordReplay(paths, reader);
-        runRebuild = new RunRebuild(paths, records, indexWriter::onRun);
+        // 运行结束时还交给“结束了的运行”的听众（自动记笔记，memory-capture）；启动补齐走自己的收集器，不经这里
+        java.util.function.Consumer<tantalum.shell.trace.RunRow> emit = row -> {
+            indexWriter.onRun(row);
+            if (row.end() != null) {
+                ended.accept(row);
+            }
+        };
+        runRebuild = new RunRebuild(paths, records, emit);
         opened.push(runRebuild);
-        runs = new RunCollector(indexWriter::onRun, runRebuild);
+        runs = new RunCollector(emit, runRebuild);
     }
 
     static Storage open(Path dataDir, EventCodec codec, TantalumProperties.Index throttle, AttachmentLimits attachmentLimits)
@@ -90,6 +98,11 @@ final class Storage implements AutoCloseable {
             opened.forEach(Storage::closeQuietly);
             throw failure;
         }
+    }
+
+    /** 运行结束后再交给谁（只有实时和重启后结束的运行，不含启动补齐）。 */
+    void onRunEnded(java.util.function.Consumer<tantalum.shell.trace.RunRow> listener) {
+        this.ended = listener;
     }
 
     /** 让索引追上会话文件，返回有未结束运行的会话。追不上就不知道哪些运行要收尾，拒绝启动；索引可以删掉重建。 */

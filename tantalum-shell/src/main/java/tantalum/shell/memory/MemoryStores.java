@@ -19,6 +19,7 @@ public final class MemoryStores {
     private final MemoryLimits limits;
     private final Clock clock;
     private final Map<Principal, MemoryStore> stores = new ConcurrentHashMap<>();
+    private final Map<Principal, DailyNotes> notes = new ConcurrentHashMap<>();
 
     public MemoryStores(Workspaces workspaces, Path dataDir, MemoryLimits limits, Clock clock) {
         this.workspaces = workspaces;
@@ -40,6 +41,11 @@ public final class MemoryStores {
         MemoryStore opened = new MemoryStore(directoryFor(principal), limits, clock);
         MemoryStore raced = stores.putIfAbsent(principal, opened);
         return raced == null ? opened : raced;
+    }
+
+    /** 这个人每天的笔记（memory-capture）：和记忆在同一个目录下；同一用户总是同一个实例，锁才有效。 */
+    public DailyNotes notes(Principal principal) {
+        return notes.computeIfAbsent(principal, user -> new DailyNotes(of(user).dir()));
     }
 
     private Path directoryFor(Principal principal) {

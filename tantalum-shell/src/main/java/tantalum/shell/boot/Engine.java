@@ -1,5 +1,8 @@
 package tantalum.shell.boot;
 
+import tantalum.shell.memory.capture.CaptureSettings;
+import tantalum.shell.memory.capture.NoteTaker;
+import tantalum.value.model.ModelChoice;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -68,6 +71,8 @@ public final class Engine implements AutoCloseable {
     /** 关闭开始后入口返回 503。 */
     private final AtomicBoolean closing = new AtomicBoolean();
     private PanelRegistry panels = PanelRegistry.empty();
+    /** 每轮结束后自动记笔记（memory-capture）。 */
+    private NoteTaker noteTaker;
     /** 实时监视（live-monitor）：只在内存里，没人看时埋点几乎不做事。 */
     private final Monitor monitor = new Monitor(Clock.systemUTC());
 
@@ -113,6 +118,8 @@ public final class Engine implements AutoCloseable {
         this.toolbox = openedToolbox;
         this.queries = openedQueries;
         this.pipeline = openedPipeline;
+        this.noteTaker = noteTaker(properties.memoryCapture(), stores, toolbox.routes(), queries, clock);
+        stores.storage().onRunEnded(noteTaker::offer);
         int interrupted;
         try {
             pipeline.output().start();
@@ -165,6 +172,40 @@ public final class Engine implements AutoCloseable {
     }
 
     /** 会话、运行和回放的读取。 */
+    /** 自动记笔记的服务器配置（memory-capture 需求 4.2）。 */
+    public CaptureSettings captureSettings() {
+        return captureSettings;
+    }
+
+    private CaptureSettings captureSettings = CaptureSettings.defaults();
+
+    /**
+     * 记笔记用哪个模型：配了路线就用它，没配时有本机路线 {@code local} 就用本机，否则用默认路线；模型没配时用那条路线的默认模型。
+     * 路线不存在时不记笔记（记日志）。
+     */
+    private NoteTaker noteTaker(CaptureSettings settings, Stores stores, Routes routes, Queries queries, Clock clock) {
+        this.captureSettings = settings;
+        String routeName = settings.route() != null ? settings.route()
+                : routes.route("local").isPresent() ? "local" : routes.defaultRoute();
+        NoteTaker.Writer writer = routes.route(routeName)
+                .map(route -> new NoteTaker.Writer(route.client(),
+                        new ModelChoice(routeName, settings.model() != null ? settings.model() : route.settings().defaultModel(), null)))
+                .orElse(null);
+        if (writer == null && settings.enabled()) {
+            LOG.warn("memory notes are off: tantalum.memory-capture.route={} names no route", routeName);
+        }
+        SessionIndex index = stores.storage().index;
+        return new NoteTaker(settings, stores.userSettings()::memoryCapture, stores.memories()::notes,
+                queries.queries().runs()::records,
+                session -> {
+                    try {
+                        return index.session(session).map(SessionIndex.Session::shownTitle).orElse("");
+                    } catch (java.sql.SQLException unreadable) {
+                        return "";
+                    }
+                }, writer, clock, java.time.ZoneId.systemDefault());
+    }
+
     public Monitor monitor() {
         return monitor;
     }
@@ -342,6 +383,7 @@ new Shutdown.Step("close egress", () -> {
                 new Shutdown.Step("fail pending receipts", receipts::failAll),
                 new Shutdown.Step("drain cleanroom ring", () -> pipeline.cleanroomRing().shutdown(DRAIN)),
                 new Shutdown.Step("drain output ring", () -> pipeline.output().shutdown(DRAIN)),
+                new Shutdown.Step("stop memory notes", noteTaker),
                 new Shutdown.Step("close plugin settings", stores.switches()),
                 new Shutdown.Step("close plugin params", stores.params()),
                 new Shutdown.Step("close local tokens", stores.localTokens()),

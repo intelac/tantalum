@@ -43,7 +43,11 @@ public final class TestServer implements AutoCloseable {
             "--tantalum.data-dir=" + dataDir,
             "--tantalum.workspace=" + workspace
         };
-        String[] args = java.util.stream.Stream.concat(List.of(base).stream(), List.of(extra).stream()).toArray(String[]::new);
+        // 自动记笔记会在后台调同一个脚本化模型，测试默认关掉；要测它的测试自己传 --tantalum.memory-capture.enabled=true
+        boolean captureChosen = java.util.Arrays.stream(extra).anyMatch(arg -> arg.startsWith("--tantalum.memory-capture.enabled="));
+        String[] quiet = captureChosen ? new String[0] : new String[] {"--tantalum.memory-capture.enabled=false"};
+        String[] args = java.util.stream.Stream.of(List.of(base).stream(), List.of(quiet).stream(), List.of(extra).stream())
+                .flatMap(stream -> stream).toArray(String[]::new);
         context = new SpringApplicationBuilder(TantalumApplication.class)
                 .initializers(ctx -> {
                     GenericApplicationContext generic = (GenericApplicationContext) ctx;

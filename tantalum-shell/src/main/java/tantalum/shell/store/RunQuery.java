@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import tantalum.shell.journal.SessionPaths;
@@ -41,9 +42,15 @@ public final class RunQuery {
 
     /** 会话不存在、不是本人的，或会话里没有这个运行时为空。读不了文件时抛 {@link SessionUnreadable}。 */
     public Optional<RunTree> tree(Principal principal, SessionId session, RunId run) {
+        List<TraceRecord> records = records(principal, session, run);
+        return records.isEmpty() ? Optional.empty() : Optional.of(RunTree.of(run, records));
+    }
+
+    /** 这次运行的轨迹记录（最终版本，按出现的先后）；没有时为空列表。读不了文件时抛 {@link SessionUnreadable}。 */
+    public List<TraceRecord> records(Principal principal, SessionId session, RunId run) {
         Path file = paths.sessionFile(principal, session);
         if (!Files.exists(file)) {
-            return Optional.empty();
+            return List.of();
         }
         Trace trace = new Trace();
         Map<String, TraceRecord> records = new LinkedHashMap<>();
@@ -58,7 +65,7 @@ public final class RunQuery {
         } catch (Exception failure) {
             throw new SessionUnreadable(session, failure);
         }
-        return records.isEmpty() ? Optional.empty() : Optional.of(RunTree.of(run, records.values()));
+        return List.copyOf(records.values());
     }
 
     /** 当前筛选条件下的汇总；天按 {@code zone} 划分。 */

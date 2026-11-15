@@ -114,7 +114,9 @@ def start(extra=(), name=None):
         f"--tantalum.openai-routes.local.model={LOCAL['model']}", "--tantalum.openai-routes.local.thinking=chat-template", "--tantalum.openai-routes.local.context-window=131072",
         "--tantalum.web.block-private-network=false",
         # 场景里没有人回答命令审批（connector-jar 需求 5）：去掉内置的“命令先问”
-        "--tantalum.local.command-approval.enabled=false", *extra]), env=env, stdout=open(f"{DATA}-server.log", "w"), stderr=subprocess.STDOUT)
+        "--tantalum.local.command-approval.enabled=false",
+        # 自动记笔记会在后台占用同一个模型，场景测量的是对话本身，关掉（memory-capture）
+        "--tantalum.memory-capture.enabled=false", *extra]), env=env, stdout=open(f"{DATA}-server.log", "w"), stderr=subprocess.STDOUT)
     started.append(server)
     admin = Client()
     for _ in range(90):

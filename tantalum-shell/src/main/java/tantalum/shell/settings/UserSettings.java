@@ -37,6 +37,7 @@ public final class UserSettings implements AutoCloseable {
     private static final String COMPACTION_PERCENT = "compaction_percent";
     private static final String MODEL_CHOICE = "model_choice";
     private static final String LANGUAGE = "language";
+    private static final String MEMORY_CAPTURE = "memory_capture";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final Connection connection;
@@ -45,6 +46,7 @@ public final class UserSettings implements AutoCloseable {
     /** 没选过的用户也缓存一份空的，免得每次提问都读库。 */
     private final Map<Principal, Optional<ModelChoice>> choices = new ConcurrentHashMap<>();
     private final Map<Principal, Optional<Language>> languages = new ConcurrentHashMap<>();
+    private final Map<Principal, Boolean> captures = new ConcurrentHashMap<>();
 
     private UserSettings(Connection connection, Clock clock) {
         this.connection = connection;
@@ -123,6 +125,22 @@ public final class UserSettings implements AutoCloseable {
         }
         save(user, MODEL_CHOICE, JSON.writeValueAsString(value));
         choices.put(user, Optional.of(choice));
+    }
+
+    /** 这个用户开没开自动记笔记（memory-capture 需求 4），没设过是开。 */
+    public boolean memoryCapture(Principal user) {
+        Boolean cached = captures.get(user);
+        if (cached != null) {
+            return cached;
+        }
+        boolean loaded = load(user, MEMORY_CAPTURE).map(value -> !value.equals("off")).orElse(true);
+        Boolean raced = captures.putIfAbsent(user, loaded);
+        return raced == null ? loaded : raced;
+    }
+
+    public synchronized void setMemoryCapture(Principal user, boolean enabled) {
+        save(user, MEMORY_CAPTURE, enabled ? "on" : "off");
+        captures.put(user, enabled);
     }
 
     /** 这个用户选的控制台语言；没选过（跟随浏览器）、或者存的读不懂时为空。 */

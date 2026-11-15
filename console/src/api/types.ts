@@ -1103,3 +1103,39 @@ export interface PanelInfo {
   icon: string;
   url: string;
 }
+
+// ---- 每天的笔记（memory-capture）：`/api/memory/notes`、`/api/memory/capture`。 ----
+
+export interface NoteListed {
+  session: string;
+  title: string;
+  sections: number;
+  preview: string;
+  updated: string;
+}
+
+export interface NoteDay {
+  day: string;
+  notes: NoteListed[];
+}
+
+export interface NoteSection {
+  run?: string;
+  heading: string;
+  body: string;
+}
+
+export interface NoteDetail {
+  day: string;
+  session: string;
+  title: string;
+  text: string;
+  sections: NoteSection[];
+  updated: string;
+}
+
+/** `enabled` 是这个人的开关，`server` 是服务器配置的总开关。 */
+export interface CaptureState {
+  enabled: boolean;
+  server: boolean;
+}
