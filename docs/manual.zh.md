@@ -438,13 +438,18 @@ Disable-ScheduledTask -TaskName Tantalum; Stop-ScheduledTask -TaskName Tantalum 
 - **存在哪**：每人一本记忆账，在数据目录的 `plugins/memory/<用户名>/ledger.jsonl`，不在工作区里，用户自己的工具碰不到。账只追加：每条有编号和版本，改一次版本加一，写入时比对版本；删掉的留墓碑。条目（页面和页面上的说法）、每天的笔记都在这本账上。以前放在 `<workspace>/<用户名>/memory/` 的旧文件第一次打开时导进来一次，原文件留作备份。
 - **不进记忆的会话**：新对话发第一句之前，点输入框下面的“不进记忆”（接口：提交时带 `"offRecord": true`，只有会话的第一次提问算数，记进 journal）。这种会话不记笔记、不交给任何“个人的”插件；记忆里已有的照样能用。侧栏和输入框上有标记。
 - **敏感信息**：所有写进记忆的内容都过平台统一的检测：密钥和令牌、各家云的访问密钥、身份证号（核对校验位）、手机号。命中就拒绝，拒绝原因只写规则名、不回显内容。管理员可以关掉某条内置规则（`tantalum.sensitive.off=mobile phone number`，逗号分隔规则名）或加自己的（`tantalum.sensitive.patterns.<名字>=正则`）。
-- **插件调模型**：记笔记这类插件自己的模型调用按路线排队（名额是路线配的并发数），用户在等的排在后台的前面；每次调用记进 `plugin-usage.db`（谁、哪个插件、做什么、token、耗时），不算每日额度。管理员接口：`GET /api/admin/plugin-usage?days=7`。
+- **插件调模型**：记笔记这类插件自己的模型调用按路线排队（名额是路线配的并发数），用户在等的排在后台的前面；每次调用记进 `plugin-usage.db`（谁、哪个插件、做什么、token、耗时），不算每日额度，另有自己的上限：`tantalum.plugin-models.daily-tokens`（每人每个插件每天，默认 0 不限；到了就不再调，记一行 `capped`）。管理员接口：`GET /api/admin/plugin-usage?days=7`。
 - **怎么进 prompt**：运行开始时把记忆指引、共享知识、`AGENTS.md`、技能清单、wiki 页列表和该用户的索引依次拼进 system，写进 `ContextAssembled` 事件；回放不读文件。索引在 system 末尾、钩子追加内容之前，prompt caching 的断点整个运行里稳定。条目正文不常驻，模型用 `memory_read` 按需读。新记忆从下一个运行开始生效：会话的 system 和工具在第一个运行时固定（所有模型相同），之后可变内容有变化时追加一条用户消息说明，新工具要到新会话才可见。
-- **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令的内容会被拒绝写入。
+- **工具**：`memory_write(name, type, description, content)` 新建或同名覆盖，`memory_read(name)`，`memory_delete(name)`；`memory_note(kind, text, quote)` 随手记一条偏好、事实、决定或“注意到的”；`now(action, …)` 看和改工作记忆（见下）。名称 `[a-z0-9-]{1,64}`，类型 `user`、`feedback`、`project`、`reference`。看起来像密钥、令牌、口令、身份证号、手机号的内容会被拒绝写入。
+- **只认你亲口说的**：自动记笔记只把你说的话（包括问答卡里的回答）和最后的回答交给模型，工具的输出不给；模型每条笔记附一句原话（`- [种类] 要点 «原话»`），代码在对应的分段里逐字核对（忽略空白和标点）。原话在你的话里的直接生效：偏好、事实、决定写进“preferences”“about-me”“decisions”这几页，在做的事、答应的事、在等的事进工作记忆。原话只在回答里的只进当天的笔记；这一轮读过文件、网页、命令输出的话，记成“待确认”。原话哪里都找不到的整条丢掉，所以文件里伪造的“User: …”变不成记忆。模型用工具写的同样：读过外部内容的一轮里写的等你确认；你认可过的决定，模型改不了，它的版本也是等你确认。记忆永远不算批准，命令照样先问。
+- **待确认**：设置 › 记忆 › 待确认，和对话页输入框上方的一条“记住了，要你确认”，每条有“确认”“撤销”。确认后生效，撤销后不再出现。接口：`GET /api/plugin-api/memory/pending`，`POST …/items/{id}/confirm`、`…/items/{id}/withdraw`。
+- **工作记忆**：在做的事、答应的事、在等的事、最近注意到的，每项带状态（进行中、等待、完成、放下），每轮都进上下文（`memory-now` 一段，每类有条数上限，7 天没动的标“可能过期”，后面列出等确认的、标明不能当真）。模型用 `now` 工具改，带版本，版本旧了被拒并告诉它现在的样子；你在设置 › 记忆 › 现在里改状态、新加。接口：`GET/POST /api/plugin-api/memory/now`、`PUT …/now/{id}`（带 `version`）。
+- **补记**：每轮处理完在记忆账上记一个标记（包括“没什么可记”）。记笔记的模型连不上、服务器在这期间重启了，这一轮没有标记；这个人下一轮结束时自动补记（只补第一次自动记笔记以后、最近 7 天里的轮次）。
+- **改条目的版本**：条目接口返回 `version`，写入时带上它就先比对，被别处改过时回 409（`memory/conflict`），不会悄悄覆盖。
 - **上限**：`tantalum.memory.max-entries`（200）、`max-index-bytes`（16 KB）、`max-entry-bytes`（8 KB）。超限时写入被拒并提示模型先删或合并；不做自动整理。
 - **共享知识**：`tantalum.knowledge.dir` 指向管理员维护的目录，其中的 `*.md` 按文件名顺序进所有用户的 system（总字节上限 `tantalum.knowledge.max-bytes`，默认 64 KB）。模型改不了它。
 - **边界和删除**：知识、`AGENTS.md`、索引用标签包裹并转义闭合标签，这只降低注入风险，不是保证。记忆变化时只追加变化的部分。删除记忆不会清除 journal 和历史消息里的内容，同一会话的 system 也要到压缩或新会话才更新。
-- **界面**：设置 › 记忆：列表、正文、删除（需确认）、手工新增；每天的笔记能看、改、删。记忆插件关着时这一页只说明一句。接口在 `/api/plugin-api/memory/` 下（`entries`、`entries/{name}`、`notes`、`notes/{day}/{session}`、`capture`），只操作当前登录用户的；管理员只读查看时笔记和长期记忆都看不到（见“以他的身份查看”）。
+- **界面**：设置 › 记忆，分“现在”“待确认”“档案”“每天”四栏：档案是长期记忆的列表、正文、删除（需确认）、手工新增；每天的笔记能看、改、删。记忆插件关着时这一页只说明一句。接口在 `/api/plugin-api/memory/` 下（`entries`、`entries/{name}`、`notes`、`notes/{day}/{session}`、`capture`），只操作当前登录用户的；管理员只读查看时笔记和长期记忆都看不到（见“以他的身份查看”）。
 
 ## 附件
 

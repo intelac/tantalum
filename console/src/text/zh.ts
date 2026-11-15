@@ -17,6 +17,7 @@ import type {
   WebSwitch,
   RunNodeKind,
   RunNodeState,
+  WorkingItem,
 } from "../api/types";
 
 export const zh = {
@@ -1057,6 +1058,33 @@ export const zh = {
     updatedAt: "更新于",
     types: { user: "用户", feedback: "反馈", project: "项目", reference: "引用" } satisfies Record<MemoryType, string>,
     loadFailed: "记忆加载失败",
+    tabs: { now: "现在", pending: "待确认", entries: "档案", notes: "每天" },
+    now: {
+      hint: "模型替你记着的：在做的、答应的、在等的、最近注意到的。每轮对话都会带上。7 天没动的会标出来。",
+      empty: "现在没有在做的事。",
+      kinds: { task: "在做的事", commitment: "答应的事", waiting: "在等的事", noticed: "最近注意到的" } satisfies Record<WorkingItem["kind"], string>,
+      statuses: { active: "进行中", waiting: "等待", done: "完成", dropped: "放下" } satisfies Record<WorkingItem["status"], string>,
+      status: "状态",
+      next: "下一步：",
+      due: "期限：",
+      stale: "7 天没动，可能过期？",
+      kind: "种类",
+      title: "内容",
+      placeholder: "比如：周四前把发布说明翻成日文",
+      add: "加上",
+      closed: (count: number) => `另有 ${count} 项已完成或放下`,
+    },
+    pending: {
+      hint: "从网页、文件或模型推断来的记忆，你确认后才生效；撤销的不会再出现。你自己说的话不用确认。",
+      empty: "没有等你确认的。",
+      strip: "记住了，要你确认：",
+      confirm: "确认",
+      withdraw: "撤销",
+      conflict: "和你认可过的决定冲突：确认就会改掉那个决定。",
+      more: (count: number) => `还有 ${count} 条，在设置 › 记忆 › 待确认`,
+      source: (source: string) =>
+        ({ tool_web: "来自网页", tool_file: "来自文件", tool_other: "来自工具", assistant_inferred: "模型推断", other_person: "别人说的" })[String(source)] ?? String(source),
+    },
     notes: {
       title: "每天的笔记",
       hint: "每轮对话结束后自动记下的要点，一个会话一天一篇。可以改，也可以删；删掉的不会再写回来。",
@@ -1140,6 +1168,8 @@ export const zh = {
       todo_write: ["待办清单", "模型做多步的活时写下计划、边做边更新；输入框上方的计划横条显示进度。"],
       ask_user: ["问用户", "运行停下来问你一个问题，等你在对话页回答后再继续；等多久都行，重启也不丢。"],
       memory_delete: ["删记忆", "删除一条长期记忆。"],
+      memory_note: ["记一条", "记下一条偏好、事实、决定或注意到的事；带上你的原话才算你亲口说的。"],
+      now: ["工作记忆", "看和改在做的事、答应的事、在等的事、最近注意到的。"],
     } satisfies Record<string, readonly [string, string]>,
     pointNames: {
       beforeModelCall: "调模型前",

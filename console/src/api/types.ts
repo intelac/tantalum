@@ -703,6 +703,39 @@ export interface MemoryEntry extends MemorySummary {
   content: string;
 }
 
+/** 等你确认的一条（memory-final-plan 第 7 节）：外部来源或推断出来的，确认后才生效。 */
+export interface PendingItem {
+  id: string;
+  /** `claim`（页面上的说法）或工作记忆的一类（`task`、`commitment`、`waiting`、`noticed`）。 */
+  kind: string;
+  page?: string;
+  text: string;
+  /** `user_said`、`assistant_inferred`、`tool_web` 等。 */
+  source: string;
+  /** 和哪条你认可过的决定冲突。 */
+  conflictsWith?: string;
+  session?: string;
+  created: string;
+}
+
+/** 工作记忆的一项（memory-final-plan 第 5 节）。 */
+export interface WorkingItem {
+  id: string;
+  version: number;
+  kind: "task" | "commitment" | "waiting" | "noticed";
+  title: string;
+  status: "active" | "waiting" | "done" | "dropped";
+  next?: string;
+  to?: string;
+  due?: string;
+  on?: string;
+  session?: string;
+  source: string;
+  updated: string;
+  /** 7 天没动。 */
+  stale: boolean;
+}
+
 export interface MemoryList {
   entries: MemorySummary[];
   used: number;

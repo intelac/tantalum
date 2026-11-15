@@ -19,7 +19,8 @@ public final class MemoryTools {
 
     /** 记忆是本地数据库，三个工具都可以并行；不用打开记忆库就能给出。 */
     public static List<ToolDispatch> dispatch() {
-        return List.of(dispatch(MemoryWriteTool.NAME), dispatch(MemoryReadTool.NAME), dispatch(MemoryDeleteTool.NAME));
+        return List.of(dispatch(MemoryWriteTool.NAME), dispatch(MemoryReadTool.NAME), dispatch(MemoryDeleteTool.NAME),
+                dispatch(MemoryNoteTool.NAME), dispatch(NowTool.NAME));
     }
 
     static ToolDispatch dispatch(String name) {
@@ -27,7 +28,8 @@ public final class MemoryTools {
     }
 
     public static List<Tool> all(MemoryStores stores) {
-        return List.of(new MemoryWriteTool(stores), new MemoryReadTool(stores), new MemoryDeleteTool(stores));
+        return List.of(new MemoryWriteTool(stores), new MemoryReadTool(stores), new MemoryDeleteTool(stores),
+                new MemoryNoteTool(stores, ToolTrust.none()), new NowTool(stores, ToolTrust.none()));
     }
 
     static ToolOutput missing(String name) {

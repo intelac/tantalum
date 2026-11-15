@@ -498,6 +498,29 @@
     }
   },
   {
+    "name": "memory_note",
+    "deferred": false,
+    "description": "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; quote: the user's exact words that show it (needed for it to count as what the user said). Use memory_write instead to write or rewrite a whole entry.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ]
+    }
+  },
+  {
     "name": "memory_read",
     "deferred": false,
     "description": "Read the full body of one of your memory entries by name (see the memory index).",
@@ -538,6 +561,52 @@
         "type",
         "description",
         "content"
+      ]
+    }
+  },
+  {
+    "name": "now",
+    "deferred": false,
+    "description": "Your working memory for this user: what you are doing (task), what was promised (commitment), what you are waiting for (waiting), what you noticed (noticed). action: list | add (kind, text; optional next, to, due, on, and quote: the user's exact words if they asked for it) | update (id, version; any of text, status, next, to, due, on) | close (id, version; status done or dropped). Status is active, waiting, done or dropped. A stale version is refused with the current one; read it and try again.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "due": {
+          "type": "string"
+        },
+        "on": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
       ]
     }
   },

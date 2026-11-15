@@ -8,6 +8,8 @@ async function openMemory(page: Page) {
   await page.getByRole("button", { name: "设置", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByRole("button", { name: "记忆", exact: true }).click();
+  // 记忆页分四栏（memory-final-plan 第 16 节）：笔记在“每天”
+  await dialog.getByRole("tab", { name: "每天" }).click();
   return dialog;
 }
 

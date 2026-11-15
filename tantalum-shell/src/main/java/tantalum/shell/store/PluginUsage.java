@@ -87,6 +87,19 @@ public final class PluginUsage implements AutoCloseable {
         }
     }
 
+    /** 这个人、这个插件 {@code since} 以后用掉的 token（输入加输出）。 */
+    public synchronized long tokens(String user, String plugin, Instant since) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT coalesce(sum(input + output), 0) FROM calls WHERE user = ? AND plugin = ? AND at >= ?")) {
+            select.setString(1, user);
+            select.setString(2, plugin);
+            select.setString(3, since.toString());
+            try (ResultSet rows = select.executeQuery()) {
+                return rows.next() ? rows.getLong(1) : 0;
+            }
+        }
+    }
+
     /** {@code since} 以后的合计，按人、插件、用途；token 多的在前。 */
     public synchronized List<Total> totals(Instant since) throws SQLException {
         List<Total> totals = new ArrayList<>();

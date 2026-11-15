@@ -52,9 +52,12 @@ final class EvalModel implements ModelClient {
 
     static final String SUMMARY = "（之前的对话摘要：用户和助手聊了一些杂事。）";
 
+    /** 记笔记的模型写的一条：种类（preference、fact、decision、task、commitment、waiting、note）、要点、原话。 */
+    record Note(String kind, String text, String quote) {}
+
     private final List<Call> calls = new CopyOnWriteArrayList<>();
     private volatile Function<Call, Step> chat = call -> Step.say("好的。");
-    private volatile Function<Call, List<String>> capture = call -> List.of();
+    private volatile Function<Call, List<Note>> capture = call -> List.of();
     private volatile boolean captureDown;
     private volatile long tokensPerCall;
     private int ids;
@@ -71,8 +74,9 @@ final class EvalModel implements ModelClient {
                 if (captureDown) {
                     yield new ModelOutcome.Failed(FailureReason.CONNECTION_ERROR, true, null, null, "the note model is down (eval)");
                 }
-                List<String> bullets = capture.apply(call);
-                yield replied(bullets.isEmpty() ? NotePrompt.NOTHING : String.join("\n", bullets.stream().map(b -> "- " + b).toList()), usage);
+                List<Note> notes = capture.apply(call);
+                yield replied(notes.isEmpty() ? NotePrompt.NOTHING
+                        : String.join("\n", notes.stream().map(n -> "- [" + n.kind() + "] " + n.text() + " «" + n.quote() + "»").toList()), usage);
             }
             case COMPACT -> replied(SUMMARY, usage);
             case OTHER -> replied(call.lastUser(), usage);
@@ -145,7 +149,7 @@ final class EvalModel implements ModelClient {
         this.chat = script;
     }
 
-    void capture(Function<Call, List<String>> script) {
+    void capture(Function<Call, List<Note>> script) {
         this.capture = script;
     }
 

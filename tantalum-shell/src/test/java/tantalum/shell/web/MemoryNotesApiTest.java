@@ -37,7 +37,7 @@ class MemoryNotesApiTest {
     private final ModelClient model = (prompt, chunks) -> {
         if (prompt.system().startsWith("You keep notes for a user's long-term memory")) {
             notePrompts.incrementAndGet();
-            return new ModelOutcome.Replied(List.of(new TextBlock("- 用户想把记忆往前提\n- 下一步：自动记下")), StopReason.END_TURN, "m", null);
+            return new ModelOutcome.Replied(List.of(new TextBlock("- [note] 用户想把记忆往前提 «把记忆往前提»\n- [task] 下一步：自动记下 «把记忆往前提»")), StopReason.END_TURN, "m", null);
         }
         return new ModelOutcome.Replied(List.of(new TextBlock("好的")), StopReason.END_TURN, "m", null);
     };

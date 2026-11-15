@@ -107,6 +107,20 @@ public final class PlatformServices implements PluginServices {
         ModelChoice choice = new ModelChoice(routeName, pick.model() != null ? pick.model() : route.get().settings().defaultModel(), null);
         String who = request.user() == null ? "-" : request.user().value();
         long started = System.nanoTime();
+        // 插件自己的上限（memory-final-plan 第 9 节）：每人每个插件每天这么多 token，不混进每日额度；0 是不限
+        if (dailyTokens > 0 && request.user() != null) {
+            try {
+                java.time.Instant today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
+                if (usage(bound).tokens(who, request.plugin(), today) >= dailyTokens) {
+                    LOG.info("plugin {} reached its daily model budget for {} ({} tokens)", request.plugin(), who, dailyTokens);
+                    record(bound, new tantalum.shell.store.PluginUsage.Call(java.time.Instant.now(), who, request.plugin(), request.purpose(),
+                            routeName, choice.model(), 0, 0, 0, "capped"));
+                    return Optional.empty();
+                }
+            } catch (java.io.IOException | java.sql.SQLException unreadable) {
+                LOG.warn("cannot read plugin model usage: {}", unreadable.toString());
+            }
+        }
         PluginModelGate.Permit permit;
         try {
             permit = gate(bound).acquire(routeName, request.priority(), PluginModelGate.waitFor(request.priority()));
@@ -153,6 +167,13 @@ public final class PlatformServices implements PluginServices {
         LOG.info("plugin {} model call ({}): {}/{} tokens via {}/{} in {} ms", request.plugin(), request.purpose(), input, output,
                 choice.route(), choice.model(), ms);
         return Optional.of(text.toString());
+    }
+
+    private volatile long dailyTokens;
+
+    /** 每人每个插件每天调模型的 token 上限（{@code tantalum.plugin-models.daily-tokens}），0 是不限。 */
+    public void dailyTokens(long limit) {
+        this.dailyTokens = Math.max(0, limit);
     }
 
     private volatile PluginModelGate gate;
@@ -216,6 +237,14 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
         List<FinishedRef> found = new java.util.ArrayList<>();
+        java.util.Set<SessionId> offRecord = new java.util.HashSet<>();
+        try {
+            bound.queries().sessions(user).stream().filter(tantalum.shell.conversation.SessionSummary::offRecord)
+                    .forEach(summary -> offRecord.add(summary.id()));
+        } catch (java.sql.SQLException unreadable) {
+            LOG.warn("cannot list the sessions of {}: {}", user.value(), unreadable.toString());
+            return List.of();
+        }
         String after = null;
         do {
             tantalum.shell.store.RunTable.Page page = bound.queries().runs().list(user, new tantalum.shell.store.RunTable.Filter(since, null,
@@ -225,7 +254,7 @@ public final class PlatformServices implements PluginServices {
                 tantalum.shell.trace.RunRow row = listed.row();
                 found.add(new FinishedRef(row.session(), row.run(), row.turn(), row.start(), row.end(),
                         row.endReason() == null ? null : row.endReason().name(),
-                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION));
+                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, offRecord.contains(row.session())));
             }
             after = page.next();
         } while (after != null && found.size() < limit);

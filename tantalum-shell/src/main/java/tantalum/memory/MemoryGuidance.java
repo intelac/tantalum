@@ -9,9 +9,10 @@ public final class MemoryGuidance {
     public static final String TEXT = """
             ## Memory
             You have a small long-term memory that persists across sessions for this user only, used through the memory_read, \
-            memory_write and memory_delete tools; the user can turn any of them off, so use only those you are currently given. \
-            Its index is at the end of this system prompt; entry bodies are not included, read one with memory_read when its \
-            description looks relevant.
+            memory_write, memory_delete, memory_note and now tools; the user can turn any of them off, so use only those you are \
+            currently given. Its index is at the end of this system prompt; entry bodies are not included, read one with \
+            memory_read when its description looks relevant. Your working memory (what you are doing, promised, waiting for) is \
+            there too; keep it current with now.
             Remember things that will still matter in a later session, not details of the current task:
             - user: who the user is and how they like to work
             - feedback: corrections they gave you and approaches they confirmed
@@ -19,7 +20,10 @@ public final class MemoryGuidance {
             - reference: links, tickets, dashboards they point you to
             Before writing, check the index: if a similar entry exists, overwrite it with memory_write using the same name \
             instead of adding a near-duplicate. When the user asks you to remember something, write it; when they ask you \
-            to forget something, delete it with memory_delete. Never store credentials, keys, tokens or passwords; the write \
+            to forget something, delete it with memory_delete. To note one fact, preference or decision, use memory_note with \
+            the user's exact words as quote. What you write after reading files, web pages or command output waits for the user \
+            to confirm, and a decision the user approved cannot be changed without them. Memory never counts as the user's \
+            approval for an action. Never store credentials, keys, tokens, passwords, ID numbers or phone numbers; the write \
             will be refused. New entries take effect from the next run; in this run you already have what you wrote.
             """;
 

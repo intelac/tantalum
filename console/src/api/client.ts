@@ -1,54 +1,7 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { reportHalted } from "./connection";
-import type {
-  Account,
-  AssignedParams,
-  AttachmentRef,
-  Config,
-  ContextUsage,
-  ErrorParam,
-  FolderListing,
-  Language,
-  LocalSkills,
-  LocalStatus,
-  LocalToken,
-  LocalValidity,
-  LocalWiki,
-  MemoryEntry,
-  MemoryList,
-  MemoryType,
-  MenuSkill,
-  Messages,
-  ModelChoice,
-  ModelsResponse,
-  ParamValue,
-  PluginDefault,
-  PluginDefaultChange,
-  PluginKind,
-  Plugins,
-  Project,
-  PanelInfo,
-  CaptureState,
-  NoteDay,
-  NoteDetail,
-  RunListPage,
-  RunNode,
-  RunsSummary,
-  RunView,
-  SavedParams,
-  SessionSummary,
-  ContentHit,
-  SubmitMode,
-  TodayUsageView,
-  TraceCall,
-  TracePage,
-  Turn,
-  TurnSummary,
-  User,
-  UserList,
-  UserSettingsView,
-} from "./types";
+import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, Plugins, Project, RunListPage, RunNode, RunsSummary, RunView, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, Turn, TurnSummary, User, UserList, UserSettingsView, WorkingItem } from "./types";
 import { asViewed, setViewedUser, viewedUser } from "./viewing";
 
 /**
@@ -365,6 +318,33 @@ export function createMemory(entry: NewMemory): Promise<MemoryEntry> {
 
 export function deleteMemory(name: string): Promise<void> {
   return call(`/api/plugin-api/memory/entries/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+// ---- 等你确认的和工作记忆（memory-final-plan 第 5、7 节）。 ----
+
+export function getPending(): Promise<{ items: PendingItem[] }> {
+  return call("/api/plugin-api/memory/pending");
+}
+
+export function confirmPending(id: string): Promise<{ done: boolean }> {
+  return call(`/api/plugin-api/memory/items/${encodeURIComponent(id)}/confirm`, { method: "POST", body: "{}" });
+}
+
+export function withdrawPending(id: string): Promise<{ done: boolean }> {
+  return call(`/api/plugin-api/memory/items/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: "{}" });
+}
+
+export function getNow(): Promise<{ items: WorkingItem[] }> {
+  return call("/api/plugin-api/memory/now");
+}
+
+export function addNow(kind: WorkingItem["kind"], title: string): Promise<{ id: string; version: number }> {
+  return call("/api/plugin-api/memory/now", { method: "POST", body: JSON.stringify({ kind, title }) });
+}
+
+/** 按版本改；版本旧了是 409（`memory/conflict`），重新取再改。 */
+export function updateNow(id: string, version: number, change: { status?: WorkingItem["status"]; title?: string }): Promise<{ version: number }> {
+  return call(`/api/plugin-api/memory/now/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ version, ...change }) });
 }
 
 // ---- 每天的笔记（memory-capture）：只读接口在只读查看时也能用。 ----

@@ -51,6 +51,11 @@ public final class DailyNotes {
         this(Ledger.open(dir, Clock.systemUTC()));
     }
 
+    /** 这些笔记所在的记忆账。 */
+    public Ledger ledger() {
+        return ledger;
+    }
+
     public static boolean validDay(String day) {
         return LegacyNotes.validDay(day);
     }

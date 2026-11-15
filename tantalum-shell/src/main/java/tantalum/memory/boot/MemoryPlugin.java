@@ -45,9 +45,30 @@ public class MemoryPlugin {
                 user -> services.getObject().dataDir(MemoryTools.PLUGIN, MemoryStores.DIR, user), limits, Clock.systemUTC());
     }
 
+    /** 记忆工具写入时的信任判断：这一轮读过外部内容没有（平台的 runView）。 */
     @Bean
-    MemoryWriteTool memoryWriteTool(MemoryStores stores) {
-        return new MemoryWriteTool(stores);
+    tantalum.memory.ToolTrust memoryToolTrust(ObjectProvider<PluginServices> services) {
+        return new tantalum.memory.ToolTrust(context -> services.getObject().runView(context.principal(), context.session(), context.run()));
+    }
+
+    @Bean
+    MemoryWriteTool memoryWriteTool(MemoryStores stores, tantalum.memory.ToolTrust trust) {
+        return new MemoryWriteTool(stores, trust);
+    }
+
+    @Bean
+    tantalum.memory.NowTool memoryNowTool(MemoryStores stores, tantalum.memory.ToolTrust trust) {
+        return new tantalum.memory.NowTool(stores, trust);
+    }
+
+    @Bean
+    tantalum.memory.MemoryNoteTool memoryNoteTool(MemoryStores stores, tantalum.memory.ToolTrust trust) {
+        return new tantalum.memory.MemoryNoteTool(stores, trust);
+    }
+
+    @Bean
+    tantalum.memory.MemoryNow memoryNow(MemoryStores stores) {
+        return new tantalum.memory.MemoryNow(stores, Clock.systemUTC());
     }
 
     @Bean
@@ -78,7 +99,22 @@ public class MemoryPlugin {
         }
         PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model());
         return new NoteTaker(settings, user -> wantsNotes(services.getObject(), user), stores::notes,
-                (system, user, maxTokens) -> services.getObject().complete(MemoryTools.PLUGIN, system, user, pick, maxTokens),
+                user -> new tantalum.memory.capture.NoteFiler(stores.of(user), stores.working(user), stores.notes(user),
+                        services.getObject().sensitive()),
+                (user, system, text, maxTokens) -> services.getObject().complete(new PluginServices.Completion(user, MemoryTools.PLUGIN,
+                        "capture", PluginServices.Priority.BACKGROUND, system, text, pick, maxTokens)),
+                new NoteTaker.Catchup() {
+                    @Override
+                    public java.util.List<PluginServices.FinishedRef> finished(Principal user, java.time.Instant since) {
+                        return services.getObject().finishedRuns(user, since, 200);
+                    }
+
+                    @Override
+                    public java.util.List<tantalum.shell.plugin.RunSegment> view(Principal user, tantalum.value.id.SessionId session,
+                                                                               tantalum.value.id.RunId run) {
+                        return services.getObject().runView(user, session, run);
+                    }
+                },
                 ZoneId.systemDefault());
     }
 

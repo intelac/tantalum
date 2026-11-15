@@ -158,8 +158,10 @@ public class TantalumApplication {
 
     /** 平台给插件的服务（memory-plugin）：插件构造时注入，引擎起来后接上。 */
     @Bean(destroyMethod = "close")
-    PlatformServices platformServices() {
-        return new PlatformServices();
+    PlatformServices platformServices(Environment environment) {
+        PlatformServices services = new PlatformServices();
+        services.dailyTokens(environment.getProperty("tantalum.plugin-models.daily-tokens", Long.class, 0L));
+        return services;
     }
 
     private static List<Object> members(ObjectProvider<?>... providers) {

@@ -67,9 +67,9 @@ public interface PluginServices {
         return SensitiveText.current();
     }
 
-    /** 结束了的一轮：会话、运行、第几轮、开始和结束、结束原因、是不是手动压缩。 */
+    /** 结束了的一轮：会话、运行、第几轮、开始和结束、结束原因、是不是手动压缩、会话是不是“不进记忆”的。 */
     record FinishedRef(SessionId session, tantalum.value.id.RunId run, Integer turn, Instant start, Instant end, String endReason,
-                       boolean manual) {}
+                       boolean manual, boolean offRecord) {}
 
     /**
      * 一轮对话带角色的分段（memory-final-plan 第 7 节；读 journal，进行中的一轮也行：给工具判断这一轮读过外部内容没有）。

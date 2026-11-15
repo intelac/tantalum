@@ -76,8 +76,9 @@ public record MemoryItem(String id, int version, State state, Kind kind, String 
     }
 
     /** 在账上算不算“有效”：确认过、没被取代。墓碑另算（见 {@link Ledger}）。 */
+    /** 生效的：已落盘、没被取代、不在等你确认（memory-final-plan 第 4 节的 {@code pending_confirm}）。 */
     public boolean live() {
-        return state == State.CONFIRMED && supersededBy == null;
+        return state == State.CONFIRMED && supersededBy == null && !pendingConfirm;
     }
 
     public MemoryItem withPage(String value) {

@@ -16,12 +16,13 @@ afterEach(() => {
 let mounted: ConversationStore;
 
 /** 假后端：模型列表、最近一轮的用量（输入 65536）；别的都不通。 */
-function backend() {
+function backend(pending: unknown[] = []) {
   vi.stubGlobal(
     "fetch",
     vi.fn((path: string) => {
       const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) });
       if (path === "/api/models") return ok(MODELS);
+      if (path === "/api/plugin-api/memory/pending") return ok({ items: pending });
       if (path.endsWith("/context")) return ok({ used: 65_536, window: 131_072, limit: 120_000, parts: { system: 536, tools: 5000, messages: 60_000 } });
       return Promise.resolve({ ok: false, status: 502, text: () => Promise.resolve("") });
     }),
@@ -115,5 +116,19 @@ describe("ComposerDock", () => {
     const fetched = vi.mocked(fetch).mock.calls.find(([path]) => String(path).endsWith("/submissions"));
     expect(fetched).toBeDefined();
     expect(JSON.parse(String((fetched?.[1] as RequestInit).body))).toMatchObject({ text: "我在找新工作", offRecord: true });
+  });
+
+  // memory-final-plan 第 7 节：这个会话里等你确认的记忆出现在输入框上方，别的会话的不出现
+  it("shows this session's memories waiting for confirmation above the composer", async () => {
+    const at = new Date().toISOString();
+    backend([
+      { id: "m1", kind: "claim", page: "preferences", text: "命令都不用问", source: "assistant_inferred", session: "s", created: at },
+      { id: "m2", kind: "task", text: "别的会话的", source: "tool_web", session: "other", created: at },
+    ]);
+    mount({ route: "local", model: "qwen3.8", effort: "on" });
+    const strip = await screen.findByRole("region", { name: "记住了，要你确认：" });
+    expect(strip.textContent).toContain("命令都不用问");
+    expect(strip.textContent).not.toContain("别的会话的");
+    expect(screen.getByRole("button", { name: "确认" })).not.toBeNull();
   });
 });

@@ -42,7 +42,7 @@ const LIST = {
   max: 200,
 };
 
-async function openMemoryPane(routes: Route[]) {
+async function openMemoryPane(routes: Route[], tab: string | null = "档案") {
   const calls = fakeBackend(routes);
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
@@ -50,6 +50,8 @@ async function openMemoryPane(routes: Route[]) {
     </QueryClientProvider>,
   );
   await userEvent.click(screen.getByRole("button", { name: "记忆" }));
+  // 记忆页改版后分四栏（memory-final-plan 第 16 节）：长期记忆在“档案”
+  if (tab !== null) await userEvent.click(await screen.findByRole("tab", { name: tab }));
   return calls;
 }
 
@@ -113,11 +115,36 @@ describe("MemoryPane", () => {
   });
 
   it("says the memory plugin is off instead of showing the pane (memory-plugin 3.1)", async () => {
-    await openMemoryPane([
-      { path: "/api/plugins", status: 200, body: JSON.stringify({ tools: [], plugins: [{ name: "memory", enabled: false, points: [], params: [] }] }) },
-      { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
-    ]);
+    await openMemoryPane(
+      [
+        { path: "/api/plugins", status: 200, body: JSON.stringify({ tools: [], plugins: [{ name: "memory", enabled: false, points: [], params: [] }] }) },
+        { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
+      ],
+      null,
+    );
     expect(await screen.findByText("记忆插件没开。可以在插件页打开“记忆”。")).toBeTruthy();
     expect(screen.queryByText("COBOL 迁移约束")).toBeNull();
+  });
+
+  // memory-final-plan 第 5、7 节：有等确认的先打开“待确认”，确认后发到服务器；“现在”按种类列出工作记忆
+  it("opens on the items to confirm, confirms one, and lists working memory by kind", async () => {
+    const pending = { items: [{ id: "m1", kind: "claim", page: "team-meetings", text: "网页上说：周会改到周五下午。", source: "tool_web", created: new Date().toISOString() }] };
+    const now = { items: [{ id: "t1", version: 2, kind: "task", title: "把发布说明翻译成日文", status: "active", source: "user_said", updated: new Date().toISOString(), stale: true }] };
+    const calls = await openMemoryPane(
+      [
+        { path: "/api/plugin-api/memory/pending", status: 200, body: JSON.stringify(pending) },
+        { path: "/api/plugin-api/memory/now", status: 200, body: JSON.stringify(now) },
+        { method: "POST", path: "/api/plugin-api/memory/items/m1/confirm", status: 200, body: '{"done":true}' },
+      ],
+      null,
+    );
+    expect(await screen.findByText("网页上说：周会改到周五下午。")).toBeTruthy();
+    expect(screen.getByText(/来自网页/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "确认" }));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.path.endsWith("/items/m1/confirm"))).toBe(true));
+    await userEvent.click(screen.getByRole("tab", { name: "现在" }));
+    expect(await screen.findByText("把发布说明翻译成日文")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "在做的事" })).toBeTruthy();
+    expect(screen.getByText(/可能过期/)).toBeTruthy();
   });
 });

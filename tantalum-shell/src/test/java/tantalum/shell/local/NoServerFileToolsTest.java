@@ -25,7 +25,8 @@ import tantalum.value.model.TextBlock;
 class NoServerFileToolsTest {
 
     /** 只碰服务器自己的数据：附件目录（只读）、每人的记忆；ask_user 和 todo_write 什么都不碰（清单就是调用参数，记在会话里）。 */
-    private static final Set<String> SERVER_TOOLS = Set.of("ask_user", "read_attachment", "memory_read", "memory_write", "memory_delete", "todo_write");
+    private static final Set<String> SERVER_TOOLS = Set.of("ask_user", "read_attachment", "memory_read", "memory_write", "memory_delete", "memory_note",
+            "now", "todo_write");
 
     /** 联网工具：名字一个不多，包只能是 fetch 和 browser。 */
     /** 服务器上的联网工具只剩抓网页；浏览器工具是转发到用户电脑的本机工具（local-browser）。 */

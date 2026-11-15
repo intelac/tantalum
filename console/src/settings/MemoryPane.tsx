@@ -9,6 +9,10 @@ import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { useCreateMemory, useDeleteMemory, useMemories, useMemory } from "./useMemories";
 import { CaptureStatus, NotesList, NoteView } from "./NotesSection";
+import { NowSection } from "./NowSection";
+import { PendingSection } from "./PendingSection";
+import { Tabs } from "../ui/Tabs";
+import { usePending } from "./useMemories";
 import { usePlugins } from "../plugins/usePlugins";
 import { errorLine } from "../text/errors";
 
@@ -16,22 +20,47 @@ type View = { kind: "list" } | { kind: "entry"; name: string } | { kind: "add" }
 
 const TYPES: MemoryType[] = ["user", "feedback", "project", "reference"];
 
-/** 看、删、手工新增当前用户的记忆。列表按更新时间倒序，正文按需加载。记忆插件关着或没装时只说明一句（memory-plugin 需求 3.1）。 */
+type Tab = "now" | "pending" | "entries" | "notes";
+
+/**
+ * 记忆页（memory-final-plan 第 16 节的记忆页改版）：现在 · 待确认 · 档案 · 每天四栏。档案是长期记忆，看、删、手工新增；
+ * 列表按更新时间倒序，正文按需加载。记忆插件关着或没装时只说明一句（memory-plugin 需求 3.1）。
+ */
 export function MemoryPane() {
   const t = useText();
   const plugins = usePlugins();
   const [view, setView] = useState<View>({ kind: "list" });
+  const pending = usePending();
+  const [chosen, setChosen] = useState<Tab | null>(null);
+  const tab: Tab = chosen ?? ((pending.data?.length ?? 0) > 0 ? "pending" : "now");
   if (plugins.data !== undefined && !plugins.data.plugins.some((plugin) => plugin.name === "memory" && plugin.enabled)) {
     return <p className="text-sm text-fg-muted">{t.memory.pluginOff}</p>;
   }
   if (view.kind === "entry") return <EntryView name={view.name} onBack={() => setView({ kind: "list" })} />;
   if (view.kind === "add") return <AddForm onDone={() => setView({ kind: "list" })} />;
   if (view.kind === "note") return <NoteView day={view.day} session={view.session} onBack={() => setView({ kind: "list" })} />;
+  const count = pending.data?.length ?? 0;
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <CaptureStatus />
-      <ListView onOpen={(name) => setView({ kind: "entry", name })} onAdd={() => setView({ kind: "add" })} />
-      <NotesList onOpen={(day, session) => setView({ kind: "note", day, session })} />
+      <Tabs
+        label={t.memory.title}
+        className="border-b border-line"
+        selected={tab}
+        onSelect={(id) => setChosen(id as Tab)}
+        tabs={[
+          { id: "now", label: t.memory.tabs.now },
+          { id: "pending", label: count > 0 ? `${t.memory.tabs.pending} ${count}` : t.memory.tabs.pending },
+          { id: "entries", label: t.memory.tabs.entries },
+          { id: "notes", label: t.memory.tabs.notes },
+        ]}
+      />
+      <div role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        {tab === "now" && <NowSection />}
+        {tab === "pending" && <PendingSection />}
+        {tab === "entries" && <ListView onOpen={(name) => setView({ kind: "entry", name })} onAdd={() => setView({ kind: "add" })} />}
+        {tab === "notes" && <NotesList onOpen={(day, session) => setView({ kind: "note", day, session })} />}
+      </div>
     </div>
   );
 }

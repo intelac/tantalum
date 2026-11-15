@@ -26,6 +26,8 @@ class PluginUsageTest {
         try (PluginUsage reopened = PluginUsage.open(dir)) {
             assertEquals(List.of(new PluginUsage.Total("yi", "memory", "capture", 2, 1, 1500, 100),
                     new PluginUsage.Total("yi", "memory", "rewrite", 1, 0, 200, 20)), reopened.totals(t.minusSeconds(86_400 * 7)));
+            assertEquals(1820, reopened.tokens("yi", "memory", t.minusSeconds(60)), "input and output, every outcome, for the daily cap");
+            assertEquals(0, reopened.tokens("bob", "memory", t.minusSeconds(60)));
         }
     }
 }

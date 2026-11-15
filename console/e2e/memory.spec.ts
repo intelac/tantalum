@@ -11,6 +11,8 @@ test.describe("记忆", () => {
     await page.getByRole("button", { name: "设置", exact: true }).first().click();
     const dialog = page.getByRole("dialog", { name: "设置" });
     await dialog.getByRole("button", { name: "记忆" }).click();
+    // 记忆页分四栏（memory-final-plan 第 16 节）：长期记忆在“档案”
+    await dialog.getByRole("tab", { name: "档案" }).click();
 
     await expect(dialog.getByText("已用 1/200 条")).toBeVisible();
     const row = dialog.getByRole("button", { name: /e2e-fact/ });

@@ -7,12 +7,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
+import tantalum.memory.CredentialGuard;
 import tantalum.memory.DailyNotes;
 import tantalum.memory.MemoryEntry;
 import tantalum.memory.MemoryFormat;
 import tantalum.memory.MemoryStore;
 import tantalum.memory.MemoryStores;
 import tantalum.memory.MemoryTools;
+import tantalum.memory.PendingItems;
+import tantalum.memory.WorkingMemory;
+import tantalum.memory.ledger.MemoryItem;
 import tantalum.shell.plugin.PluginEndpoints;
 import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
@@ -62,6 +66,9 @@ public final class MemoryEndpoints implements PluginEndpoints {
             case "entries" -> entries(request, method, path);
             case "notes" -> notes(request, method, path);
             case "capture" -> path.size() == 1 && method.equals("GET") ? capture(request.user()) : missing();
+            case "pending" -> path.size() == 1 && method.equals("GET") ? pending(request.user()) : missing();
+            case "items" -> items(request, method, path);
+            case "now" -> now(request, method, path);
             default -> missing();
         };
     }
@@ -81,12 +88,16 @@ public final class MemoryEndpoints implements PluginEndpoints {
             if (!(request.body() instanceof Json.Obj input)) {
                 return PluginResponse.error(400, INVALID, "body must be a JSON object", Map.of());
             }
+            // 你在控制台写的就是你说的；带 version 时比对版本（memory-final-plan 第 4 节），旧版本 409
+            Integer expected = input.fields().get("version") instanceof Json.Num number ? number.value().intValue() : null;
             MemoryStore.WriteResult result = store.write(text(input, "name"), text(input, "type"), text(input, "description"),
-                    text(input, "content"));
+                    text(input, "content"), MemoryItem.Actor.USER, MemoryItem.Source.USER_SAID, expected);
             return switch (result) {
-                case MemoryStore.WriteResult.Created created -> new PluginResponse(201, full(created.entry()));
-                case MemoryStore.WriteResult.Updated updated -> PluginResponse.ok(full(updated.entry()));
-                case MemoryStore.WriteResult.Rejected rejected -> PluginResponse.error(400, code(rejected.problem()), rejected.reason(),
+                case MemoryStore.WriteResult.Created created -> new PluginResponse(201, full(created.entry(), store));
+                case MemoryStore.WriteResult.Updated updated -> PluginResponse.ok(full(updated.entry(), store));
+                case MemoryStore.WriteResult.Pending pending -> PluginResponse.ok(obj("pending", new Json.Str(pending.claim().id())));
+                case MemoryStore.WriteResult.Rejected rejected -> PluginResponse.error(
+                        rejected.problem() == MemoryStore.Problem.CONFLICT ? 409 : 400, code(rejected.problem()), rejected.reason(),
                         params(rejected.params()));
             };
         }
@@ -94,7 +105,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
             String name = path.get(1);
             if (method.equals("GET")) {
                 Optional<MemoryEntry> entry = MemoryFormat.isValidName(name) ? store.read(name) : Optional.empty();
-                return entry.map(found -> PluginResponse.ok(full(found))).orElseGet(MemoryEndpoints::noMemory);
+                return entry.map(found -> PluginResponse.ok(full(found, store))).orElseGet(MemoryEndpoints::noMemory);
             }
             if (method.equals("DELETE")) {
                 return MemoryFormat.isValidName(name) && store.delete(name) ? PluginResponse.noContent() : noMemory();
@@ -112,6 +123,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
             case FULL -> "memory/full";
             case INDEX_FULL -> "memory/index-full";
             case CREDENTIAL -> "memory/credential";
+            case CONFLICT -> "memory/conflict";
         };
     }
 
@@ -128,14 +140,141 @@ public final class MemoryEndpoints implements PluginEndpoints {
         return view;
     }
 
-    private static Json full(MemoryEntry entry) {
+    private static Json full(MemoryEntry entry, MemoryStore store) {
         Map<String, Json> view = summaryFields(entry);
         view.put("content", new Json.Str(entry.content()));
+        view.put("version", num(store.version(entry.name())));
         return new Json.Obj(view);
     }
 
     private static PluginResponse noMemory() {
         return PluginResponse.error(404, NOT_FOUND, "no such memory", Map.of());
+    }
+
+    // ---- 等你确认的（memory-final-plan 第 7 节） ----
+
+    private PluginResponse pending(Principal user) {
+        List<Json> items = new ArrayList<>();
+        for (MemoryItem item : new PendingItems(stores.ledger(user)).list()) {
+            Map<String, Json> view = new LinkedHashMap<>();
+            view.put("id", new Json.Str(item.id()));
+            view.put("kind", new Json.Str(item.kind().name().toLowerCase(java.util.Locale.ROOT)));
+            if (item.page() != null) {
+                view.put("page", new Json.Str(item.page()));
+            }
+            view.put("text", new Json.Str(item.text()));
+            view.put("source", new Json.Str(item.source().name().toLowerCase(java.util.Locale.ROOT)));
+            if (item.attr(MemoryStore.CONFLICTS_WITH) != null) {
+                view.put("conflictsWith", new Json.Str(item.attr(MemoryStore.CONFLICTS_WITH)));
+            }
+            if (item.provenance() != null && item.provenance().session() != null) {
+                view.put("session", new Json.Str(item.provenance().session()));
+            }
+            view.put("created", new Json.Str(item.created().toString()));
+            items.add(new Json.Obj(view));
+        }
+        return PluginResponse.ok(obj("items", new Json.Arr(items)));
+    }
+
+    /** {@code POST items/{id}/confirm} 和 {@code POST items/{id}/withdraw}：确认、撤销；重复做是 200（{@code already}）。 */
+    private PluginResponse items(PluginRequest request, String method, List<String> path) {
+        if (path.size() != 3 || !method.equals("POST") || !(path.get(2).equals("confirm") || path.get(2).equals("withdraw"))) {
+            return missing();
+        }
+        PendingItems pending = new PendingItems(stores.ledger(request.user()));
+        PendingItems.Outcome outcome = path.get(2).equals("confirm") ? pending.confirm(path.get(1)) : pending.withdraw(path.get(1));
+        return switch (outcome) {
+            case DONE -> PluginResponse.ok(obj("done", new Json.Bool(true)));
+            case ALREADY -> PluginResponse.ok(obj("done", new Json.Bool(true), "already", new Json.Bool(true)));
+            case MISSING -> PluginResponse.error(404, NOT_FOUND, "no such pending item", Map.of());
+        };
+    }
+
+    // ---- 工作记忆（memory-final-plan 第 5 节） ----
+
+    private PluginResponse now(PluginRequest request, String method, List<String> path) {
+        WorkingMemory working = stores.working(request.user());
+        if (path.size() == 1 && method.equals("GET")) {
+            java.time.Instant at = working.ledger().clock().instant();
+            List<Json> items = new ArrayList<>();
+            for (MemoryItem item : working.items()) {
+                Map<String, Json> view = new LinkedHashMap<>();
+                view.put("id", new Json.Str(item.id()));
+                view.put("version", num(item.version()));
+                view.put("kind", new Json.Str(item.kind().name().toLowerCase(java.util.Locale.ROOT)));
+                view.put("title", new Json.Str(item.attr(WorkingMemory.TITLE) == null ? item.text() : item.attr(WorkingMemory.TITLE)));
+                view.put("status", new Json.Str(WorkingMemory.status(item)));
+                for (String key : List.of(WorkingMemory.NEXT, WorkingMemory.TO, WorkingMemory.DUE, WorkingMemory.ON, WorkingMemory.SESSION)) {
+                    if (item.attr(key) != null) {
+                        view.put(key, new Json.Str(item.attr(key)));
+                    }
+                }
+                view.put("source", new Json.Str(item.source().name().toLowerCase(java.util.Locale.ROOT)));
+                view.put("updated", new Json.Str(item.updated().toString()));
+                view.put("stale", new Json.Bool(java.time.Duration.between(item.updated(), at).compareTo(java.time.Duration.ofDays(7)) > 0));
+                items.add(new Json.Obj(view));
+            }
+            return PluginResponse.ok(obj("items", new Json.Arr(items)));
+        }
+        if (path.size() == 1 && method.equals("POST")) {
+            if (!(request.body() instanceof Json.Obj input)) {
+                return PluginResponse.error(400, INVALID, "body must be a JSON object", Map.of());
+            }
+            MemoryItem.Kind kind = switch (String.valueOf(text(input, "kind"))) {
+                case "task" -> MemoryItem.Kind.TASK;
+                case "commitment" -> MemoryItem.Kind.COMMITMENT;
+                case "waiting" -> MemoryItem.Kind.WAITING;
+                case "noticed" -> MemoryItem.Kind.NOTICED;
+                default -> null;
+            };
+            String title = text(input, "title");
+            if (kind == null || title == null || title.isBlank() || title.length() > 500) {
+                return PluginResponse.error(400, INVALID, "kind (task, commitment, waiting, noticed) and title (at most 500 characters) are required",
+                        Map.of());
+            }
+            if (CredentialGuard.detect(title).isPresent()) {
+                return PluginResponse.error(400, code(MemoryStore.Problem.CREDENTIAL), CredentialGuard.REASON, Map.of());
+            }
+            Optional<MemoryItem> added = working.add(kind, title, details(input), MemoryItem.Source.USER_SAID, MemoryItem.Actor.USER, null,
+                    null, false, null);
+            return added.map(item -> new PluginResponse(201, obj("id", new Json.Str(item.id()), "version", num(item.version()))))
+                    .orElseGet(() -> PluginResponse.error(409, "memory/duplicate", "the same item is already open", Map.of()));
+        }
+        if (path.size() == 2 && method.equals("PUT")) {
+            if (!(request.body() instanceof Json.Obj input) || !(input.fields().get("version") instanceof Json.Num version)) {
+                return PluginResponse.error(400, INVALID, "body must be a JSON object with version", Map.of());
+            }
+            Map<String, String> changes = details(input);
+            String status = text(input, "status");
+            if (status != null) {
+                if (!WorkingMemory.STATUSES.contains(status)) {
+                    return PluginResponse.error(400, INVALID, "status must be one of active, waiting, done, dropped", Map.of());
+                }
+                changes.put(WorkingMemory.STATUS, status);
+            }
+            String title = text(input, "title");
+            if (title != null && CredentialGuard.detect(title).isPresent()) {
+                return PluginResponse.error(400, code(MemoryStore.Problem.CREDENTIAL), CredentialGuard.REASON, Map.of());
+            }
+            return switch (working.update(path.get(1), version.value().intValue(), title, changes, MemoryItem.Actor.USER)) {
+                case WorkingMemory.Change.Done done -> PluginResponse.ok(obj("version", num(done.item().version())));
+                case WorkingMemory.Change.Stale stale -> PluginResponse.error(409, code(MemoryStore.Problem.CONFLICT),
+                        "the item was changed elsewhere", Map.of("version", new Json.Num(BigDecimal.valueOf(stale.current().version()))));
+                case WorkingMemory.Change.Missing missing -> PluginResponse.error(404, NOT_FOUND, "no such item", Map.of());
+            };
+        }
+        return missing();
+    }
+
+    private static Map<String, String> details(Json.Obj input) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        for (String key : List.of(WorkingMemory.NEXT, WorkingMemory.TO, WorkingMemory.DUE, WorkingMemory.ON)) {
+            String value = text(input, key);
+            if (value != null) {
+                attrs.put(key, value.strip());
+            }
+        }
+        return attrs;
     }
 
     // ---- 每天的笔记 ----

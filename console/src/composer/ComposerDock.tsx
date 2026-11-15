@@ -15,6 +15,7 @@ import { Composer } from "./Composer";
 import { LinkChip } from "./LinkChip";
 import { ModelPicker } from "./ModelPicker";
 import { OffRecordChip } from "./OffRecordChip";
+import { PendingStrip } from "./PendingStrip";
 import { ProjectChip } from "./ProjectChip";
 import { QueueDock } from "./queue/QueueDock";
 import { useQueueActions } from "./queue/useQueueActions";
@@ -89,6 +90,7 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   }
   return (
     <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
+      <PendingStrip session={session} running={running} />
       <QueueDock queued={queued} running={running} actions={queueActions} />
       {pending !== null && <ApprovalCard key={pending.question.id} pending={pending} />}
       <div hidden={pending !== null}>
