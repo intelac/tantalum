@@ -38,7 +38,7 @@ class SpaControllerTest {
 
     @Test
     void frontendRoutesFallBackToIndexWithoutLogin() throws Exception {
-        for (String path : List.of("/", "/login", "/s/abc", "/s/abc/trace/run-0")) {
+        for (String path : List.of("/", "/login", "/s/abc", "/s/abc/trace/run-0", "/runs", "/runs/abc/abc_3")) {
             HttpResponse<String> response = server.get(null, path);
             assertEquals(200, response.statusCode(), path);
             assertTrue(response.headers().firstValue("content-type").orElse("").startsWith("text/html"), path);

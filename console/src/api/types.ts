@@ -999,3 +999,99 @@ export interface ModelsResponse {
   /** 这个用户选的压缩点百分比。 */
   percent: number;
 }
+
+// ---- 运行（run-tree、observe-page）：`/api/runs`、`/api/runs/summary`、`/api/sessions/{s}/runs/{run}/tree`。 ----
+
+export interface Tokens {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/** 一步、一个压缩组或一次运行的汇总；没有记录的指标不出现。 */
+export interface Tally {
+  tokens: Tokens;
+  summaryTokens: Tokens;
+  context?: number;
+  requests: number;
+  attempts: number;
+  retries: number;
+  modelMs?: number;
+  ttftMs?: number;
+  toolCalls: number;
+  toolErrors: number;
+  toolMs?: number;
+  tools: { name: string; calls: number; errors: number }[];
+  hooks: number;
+  hookErrors: number;
+  models: string[];
+  ms?: number;
+}
+
+/** 运行列表的一行；`end` 为空表示还在进行。 */
+export interface RunListItem {
+  session: string;
+  title: string;
+  run: string;
+  turn?: number;
+  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION";
+  start: string;
+  end?: string;
+  endReason?: EndReason;
+  prompt?: string;
+  tally: Tally;
+}
+
+export interface RunListPage {
+  runs: RunListItem[];
+  next?: string | null;
+}
+
+/** 汇总里的结束状态：四种结束原因，加上还在进行的 `RUNNING`。 */
+export type RunEnd = EndReason | "RUNNING";
+
+export interface RunsSummary {
+  runs: number;
+  ends: Partial<Record<RunEnd, number>>;
+  toolErrorRuns: number;
+  tokens: number;
+  p50Ms?: number;
+  p90Ms?: number;
+  days: { day: string; ends: Partial<Record<RunEnd, number>>; tokens: number }[];
+  tools: string[];
+  models: string[];
+}
+
+export type RunNodeKind =
+  | "run"
+  | "step"
+  | "compaction"
+  | "input"
+  | "context"
+  | "system"
+  | "compacted"
+  | "request"
+  | "attempt"
+  | "tool"
+  | "hook"
+  | "work"
+  | "question";
+
+export type RunNodeState = "ok" | "error" | "running" | "waiting" | "cancelled";
+
+export interface RunNode {
+  id: string;
+  parent?: string;
+  kind: RunNodeKind;
+  name?: string;
+  start?: string;
+  end?: string;
+  ms?: number;
+  state: RunNodeState;
+  detail?: string;
+  record?: string;
+  firstToken?: string;
+  tally?: Tally;
+  children?: RunNode[];
+}

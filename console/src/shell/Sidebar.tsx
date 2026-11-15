@@ -1,4 +1,4 @@
-import { LogOut, PanelLeftClose, Puzzle, Settings, SquarePen } from "lucide-react";
+import { Activity, LogOut, PanelLeftClose, Puzzle, Settings, SquarePen } from "lucide-react";
 import type { Project, SessionSummary } from "../api/types";
 import { ProjectSidebar } from "../projects/ProjectSidebar";
 import { useText } from "../text";
@@ -21,6 +21,10 @@ interface Props {
   onSelectSession: (id: string) => void;
   onSettings: () => void;
   onPlugins: () => void;
+  /** 打开观测页面（observe-page 需求 1）；没有时不显示入口。 */
+  onObserve?: () => void;
+  /** 现在在观测页面上。 */
+  observing?: boolean;
   onLogout: () => void;
   username: string;
 }
@@ -43,6 +47,8 @@ export function Sidebar({
   onSelectSession,
   onSettings,
   onPlugins,
+  onObserve,
+  observing = false,
   onLogout,
   username,
 }: Props) {
@@ -64,6 +70,11 @@ export function Sidebar({
           </Button>
         )}
         <div className="flex-1" />
+        {onObserve !== undefined && (
+          <Button variant="icon" aria-label={t.sidebar.observe} aria-current={observing ? "page" : undefined} onClick={onObserve} title={t.sidebar.observe}>
+            <Activity size={18} />
+          </Button>
+        )}
         {!viewing && (
           <>
             <Button variant="icon" aria-label={t.sidebar.plugins} onClick={onPlugins} title={t.sidebar.plugins}>
@@ -121,6 +132,13 @@ export function Sidebar({
         <p className="px-6 py-2 text-xs text-fg-faint">{t.sidebar.empty}</p>
       )}
       <div className="flex shrink-0 flex-col gap-0.5 border-t border-line px-3 py-2">
+        {/* 只读查看时也能看被查看的人的运行 */}
+        {onObserve !== undefined && (
+          <Button variant="ghost" size="sm" className="justify-start" aria-current={observing ? "page" : undefined} onClick={onObserve}>
+            <Activity size={16} />
+            {t.sidebar.observe}
+          </Button>
+        )}
         {!viewing && (
           <>
             <Button variant="ghost" size="sm" className="justify-start" onClick={onPlugins}>

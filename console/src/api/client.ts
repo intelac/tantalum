@@ -28,6 +28,9 @@ import type {
   PluginKind,
   Plugins,
   Project,
+  RunListPage,
+  RunNode,
+  RunsSummary,
   RunView,
   SavedParams,
   SessionSummary,
@@ -301,6 +304,21 @@ export function getTracePage(session: string, cursor: { before?: number; run?: s
 /** 一次尝试的完整输入（system、工具、消息），定下来后不会再变。 */
 export function getTraceCall(session: string, command: string): Promise<TraceCall> {
   return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/trace/calls/${encodeURIComponent(command)}`));
+}
+
+/** 跨会话的运行列表（observe-page）：`query` 是已经拼好的筛选参数（不带 `?`）。 */
+export function listAllRuns(query: string, cursor?: string): Promise<RunListPage> {
+  const parts = [query, cursor === undefined ? "" : `cursor=${encodeURIComponent(cursor)}`].filter((part) => part !== "");
+  return call(asViewed(`/api/runs${parts.length === 0 ? "" : `?${parts.join("&")}`}`));
+}
+
+export function getRunsSummary(query: string): Promise<RunsSummary> {
+  return call(asViewed(`/api/runs/summary${query === "" ? "" : `?${query}`}`));
+}
+
+/** 一次运行的调用树；不存在或不是自己的是 404。 */
+export function getRunTree(session: string, run: string): Promise<{ root: RunNode }> {
+  return call(asViewed(`/api/sessions/${encodeURIComponent(session)}/runs/${encodeURIComponent(run)}/tree`));
 }
 
 export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {

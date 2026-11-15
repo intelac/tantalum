@@ -1,6 +1,9 @@
 package tantalum.shell.web;
 
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -97,6 +100,47 @@ public class RunsController {
         return json.json(200, body);
     }
 
+    /** 当前筛选条件下的汇总（observe-page 需求 5）：参数和列表相同（没有游标、排序、条数），{@code tz} 是划分天用的时区。 */
+    @GetMapping("/api/runs/summary")
+    ResponseEntity<String> summary(@RequestParam(required = false) String from, @RequestParam(required = false) String to,
+                                   @RequestParam(required = false) List<String> end, @RequestParam(required = false) String toolErrors,
+                                   @RequestParam(required = false) String tool, @RequestParam(required = false) String model,
+                                   @RequestParam(required = false) String session, @RequestParam(required = false) String tz) {
+        RunTable.Filter filter;
+        ZoneId zone;
+        try {
+            filter = new RunTable.Filter(instant(from), instant(to), ends(end), bool(toolErrors), blankToNull(tool), blankToNull(model),
+                    session == null ? null : ApiController.sessionId(session).orElseThrow(() -> new IllegalArgumentException("invalid session id")),
+                    RunTable.Sort.STARTED, null, DEFAULT_LIMIT);
+            zone = zone(tz);
+        } catch (IllegalArgumentException invalid) {
+            return json.error(ErrorCode.REQUEST_INVALID, invalid.getMessage());
+        }
+        RunTable.Summary summary = engine.queries().runs().summary(WebJson.currentUser(), filter, zone);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("runs", summary.runs());
+        body.put("ends", summary.ends());
+        body.put("toolErrorRuns", summary.toolErrorRuns());
+        body.put("tokens", summary.tokens());
+        put(body, "p50Ms", summary.p50Ms());
+        put(body, "p90Ms", summary.p90Ms());
+        body.put("days", summary.days().stream().map(day -> Map.of("day", day.day().toString(), "ends", day.ends(), "tokens", day.tokens())).toList());
+        body.put("tools", summary.tools());
+        body.put("models", summary.models());
+        return json.json(200, body);
+    }
+
+    private static ZoneId zone(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return ZoneOffset.UTC;
+        }
+        try {
+            return ZoneId.of(raw);
+        } catch (DateTimeException invalid) {
+            throw new IllegalArgumentException("invalid tz: use an IANA zone like Asia/Tokyo");
+        }
+    }
+
     @ExceptionHandler(SessionQueries.SessionUnreadable.class)
     ResponseEntity<String> unreadable(SessionQueries.SessionUnreadable failure) {
         LOG.error("session unreadable", failure);
@@ -121,6 +165,7 @@ public class RunsController {
         out.put("state", node.state().name().toLowerCase(Locale.ROOT));
         put(out, "detail", node.detail());
         put(out, "record", node.record());
+        put(out, "firstToken", node.firstToken());
         if (node.tally() != null) {
             out.put("tally", tally(node.tally()));
         }

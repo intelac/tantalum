@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentRoute, loginPath, navigate, parseRoute, sessionPath, tracePath } from "./router";
+import { currentRoute, loginPath, navigate, parseRoute, runPath, runsPath, sessionPath, tracePath } from "./router";
 
 describe("parseRoute", () => {
   it("resolves the three pages and home", () => {
@@ -29,6 +29,15 @@ describe("parseRoute", () => {
     expect(loginPath("/s/abc")).toBe("/login?next=%2Fs%2Fabc");
     expect(loginPath("/")).toBe("/login");
     expect(loginPath()).toBe("/login");
+  });
+
+  it("resolves the observe page and one run, keeping the filters in the query", () => {
+    expect(parseRoute("/runs")).toEqual({ page: "runs", query: "" });
+    expect(parseRoute("/runs", "?window=24h&end=FAILED")).toEqual({ page: "runs", query: "window=24h&end=FAILED" });
+    expect(parseRoute(runPath("s-1", "s-1_7"))).toEqual({ page: "run", session: "s-1", run: "s-1_7" });
+    expect(parseRoute("/runs/s-1")).toEqual({ page: "notFound", path: "/runs/s-1" });
+    expect(runsPath()).toBe("/runs");
+    expect(runsPath("sort=ms")).toBe("/runs?sort=ms");
   });
 });
 

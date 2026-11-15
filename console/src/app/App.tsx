@@ -32,7 +32,15 @@ import { Tabs } from "../ui/Tabs";
 import { useEventStream } from "../store/events";
 import { fetchOlderTrace } from "../trace/hooks";
 import { TraceStore } from "../trace/TraceStore";
-import { loginPath, navigate, sessionPath, statsPath, tracePath, useRoute, type Route } from "./router";
+import { loginPath, navigate, newSessionId, runsPath, sessionPath, statsPath, tracePath, useRoute, type Route } from "./router";
+import { ArrowLeft } from "lucide-react";
+import { ObservePage } from "../observe/ObservePage";
+import { RunPage } from "../observe/RunPage";
+import { Button } from "../ui/Button";
+import { readStored, sessionArea, writeStored } from "../ui/storage";
+
+/** 上次打开的会话：观测页面的“返回对话”回到这里（这个标签页内）。 */
+const LAST_SESSION_KEY = "tantalum.lastSession";
 import { errorLine } from "../text/errors";
 
 // 页签 ID 就是路由的页面名，选中状态直接比较。值是页签名在 t.tabs 里的键，渲染时按当前语言取。
@@ -48,10 +56,7 @@ function tabPath(id: string, session: string): string {
   return sessionPath(session);
 }
 
-/** 新会话只是一个新 ID；后端在第一次提交时才创建它。 */
-export function newSessionId(): string {
-  return `s-${crypto.randomUUID().slice(0, 8)}`;
-}
+export { newSessionId } from "./router";
 
 export function App() {
   const route = useRoute();
@@ -88,14 +93,14 @@ export function App() {
 
   if (loading) return null;
   if (user === null) return <LoginPage onLoggedIn={setUser} />;
-  if (route.page !== "session" && route.page !== "trace" && route.page !== "stats") return null;
+  if (route.page !== "session" && route.page !== "trace" && route.page !== "stats" && route.page !== "runs" && route.page !== "run") return null;
   return (
     <Workspace key={viewed ?? ""} route={route} username={user.username} admin={user.admin === true} viewed={viewed} onLogout={() => void logout()} />
   );
 }
 
 interface WorkspaceProps {
-  route: Extract<Route, { page: "session" | "trace" | "stats" }>;
+  route: Extract<Route, { page: "session" | "trace" | "stats" | "runs" | "run" }>;
   username: string;
   admin: boolean;
   /** 管理员正在只读查看的人；没有是 null。 */
@@ -105,6 +110,13 @@ interface WorkspaceProps {
 
 function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps) {
   const t = useText();
+  // 观测页面不属于某个会话：侧栏、设置和事件流照常用上次打开的会话（observe-page 需求 1.3）
+  const observing = route.page === "runs" || route.page === "run";
+  const [fallback] = useState(() => readStored(LAST_SESSION_KEY, sessionArea()) ?? newSessionId());
+  const session = route.page === "runs" ? fallback : route.session;
+  useEffect(() => {
+    if (!observing) writeStored(LAST_SESSION_KEY, session, sessionArea());
+  }, [observing, session]);
   const queries = useQueryClient();
   const [store] = useState(() => new ConversationStore());
   const [trace] = useState(() => new TraceStore(fetchOlderTrace));
@@ -112,16 +124,16 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
   const sessions = useSessions();
   const config = useConfig();
   const models = useModels();
-  const sessionModel = useSessionModel(store, route.session);
+  const sessionModel = useSessionModel(store, session);
   // 设置页按当前会话选的模型算压缩点：没发出的选择 → 刚发出的 → 会话现在的 → 上次的 → 默认
-  const settingsChoice = pickChoice(readChoice(route.session), sentChoice(route.session) ?? sessionModel.model, models.data);
+  const settingsChoice = pickChoice(readChoice(session), sentChoice(session) ?? sessionModel.model, models.data);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const projects = useProjects();
   const projectList = projects.data ?? [];
   const list = sessions.data ?? [];
-  const summary = list.find((session) => session.id === route.session);
+  const summary = list.find((item) => item.id === session);
   const title = sessionTitle(summary, t);
   const tabs = TABS.map(({ id, key }) => ({ id, label: t.tabs[key] }));
   // 刚开始查看一个人时地址上是一个新的空会话：直接打开他最近的那个
@@ -133,6 +145,15 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
   return (
     <AppFrame
       header={
+        observing ? (
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{route.page === "run" ? t.observe.runTitle : t.observe.title}</h1>
+            <Button variant="ghost" size="sm" onClick={() => navigate(sessionPath(route.page === "run" ? route.session : fallback))}>
+              <ArrowLeft size={16} />
+              {t.observe.back}
+            </Button>
+          </div>
+        ) : (
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <h1 className="min-w-0 flex-1 truncate text-sm font-medium" title={title}>
             {title}
@@ -141,17 +162,19 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
             label={t.tabs.conversation}
             tabs={tabs}
             selected={route.page}
-            onSelect={(id) => navigate(tabPath(id, route.session))}
+            onSelect={(id) => navigate(tabPath(id, session))}
             className="h-12"
           />
         </div>
+        )
       }
       sidebar={({ rail, toggle, close }) => (
         <Sidebar
           sessions={list}
           loading={sessions.isPending}
           error={sessions.error === null ? null : errorLine(sessions.error)}
-          currentSession={route.session}
+          // 观测页面不属于某个会话：侧栏不选中、也不放新会话的占位
+          currentSession={route.page === "runs" ? null : session}
           rail={rail}
           onToggle={toggle}
           username={username}
@@ -173,10 +196,15 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
           onAddProject={() => setAddOpen(true)}
           onSelectSession={(id) => {
             close();
-            if (id !== route.session) navigate(sessionPath(id));
+            if (id !== session) navigate(sessionPath(id));
           }}
           onSettings={() => setSettingsOpen(true)}
           onPlugins={() => setPluginsOpen(true)}
+          onObserve={() => {
+            close();
+            navigate(runsPath());
+          }}
+          observing={observing}
           onLogout={onLogout}
         />
       )}
@@ -199,26 +227,30 @@ function Workspace({ route, username, admin, viewed, onLogout }: WorkspaceProps)
           onClose={() => setAddOpen(false)}
           // 还没发出第一句的会话直接用刚加的工作区
           onAdded={(project) => {
-            if (summary === undefined) savePending(route.session, project.id);
+            if (summary === undefined) savePending(session, project.id);
           }}
         />
         <div className="min-h-0 flex-1">
-          {route.page === "trace" ? (
-            <TracePage key={route.session} store={trace} session={route.session} run={route.run} record={route.record} />
+          {route.page === "runs" ? (
+            <ObservePage query={route.query} />
+          ) : route.page === "run" ? (
+            <RunPage key={`${route.session}/${route.run}`} session={route.session} run={route.run} />
+          ) : route.page === "trace" ? (
+            <TracePage key={session} store={trace} session={session} run={route.run} record={route.record} />
           ) : route.page === "stats" ? (
-            <StatsPage key={route.session} store={trace} session={route.session} />
+            <StatsPage key={session} store={trace} session={session} />
           ) : (
             <div className="flex h-full min-h-0 flex-col">
-              <ConversationPage store={store} session={route.session} />
+              <ConversationPage store={store} session={session} />
               {/* 计划横条（todo-tool 需求 3）：只读查看时也显示 */}
-              <SessionPlan store={store} session={route.session} />
+              <SessionPlan store={store} session={session} />
               {viewed !== null ? (
                 // 只读：没有输入框，也就没有排队、批准卡片、模型选择和压缩
                 <ViewingBar selected={summary !== undefined} any={list.length > 0} />
               ) : (
                 <ComposerDock
                   store={store}
-                  session={route.session}
+                  session={session}
                   config={config.data}
                   onOpenPlugins={() => setPluginsOpen(true)}
                   onAddProject={() => setAddOpen(true)}

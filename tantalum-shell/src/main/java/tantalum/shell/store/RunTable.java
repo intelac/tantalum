@@ -8,6 +8,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
@@ -15,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import tantalum.shell.trace.RunRow;
 import tantalum.shell.trace.Tally;
 import tantalum.shell.trace.TraceRecord.RunHead;
@@ -42,6 +46,16 @@ public final class RunTable {
 
     /** {@code next} 是下一页的游标，没有下一页时为 null。 */
     public record Page(List<Listed> runs, String next) {}
+
+    /** 一天：各结束原因（还没结束的记作 {@value #RUNNING}）的运行数和 token 合计。 */
+    public record Day(LocalDate day, Map<String, Integer> ends, long tokens) {}
+
+    /**
+     * 一段时间的汇总（observe-page 需求 5）：运行数、各结束原因的个数、有工具错误的运行数、token 合计、
+     * 已结束运行耗时的中位数和 P90（没有已结束的为 null）、按天（没有运行的天不给）、筛选用的工具和模型清单（不受工具、模型筛选影响）。
+     */
+    public record Summary(int runs, Map<String, Integer> ends, int toolErrorRuns, long tokens, Long p50Ms, Long p90Ms, List<Day> days,
+                          List<String> tools, List<String> models) {}
 
     public static final String RUNNING = "RUNNING";
 
@@ -163,41 +177,7 @@ public final class RunTable {
                 .append(" FROM runs r JOIN sessions s ON s.session = r.session AND s.principal = r.principal WHERE r.principal = ?");
         List<Object> args = new ArrayList<>();
         args.add(principal.value());
-        if (filter.from() != null) {
-            sql.append(" AND r.started >= ?");
-            args.add(filter.from().toEpochMilli());
-        }
-        if (filter.to() != null) {
-            sql.append(" AND r.started < ?");
-            args.add(filter.to().toEpochMilli());
-        }
-        if (filter.ends() != null && !filter.ends().isEmpty()) {
-            List<String> reasons = filter.ends().stream().filter(end -> !end.equals(RUNNING)).toList();
-            List<String> parts = new ArrayList<>();
-            if (!reasons.isEmpty()) {
-                parts.add("r.end_reason IN (" + String.join(", ", reasons.stream().map(reason -> "?").toList()) + ")");
-                args.addAll(reasons);
-            }
-            if (filter.ends().contains(RUNNING)) {
-                parts.add("r.ended IS NULL");
-            }
-            sql.append(" AND (").append(String.join(" OR ", parts)).append(")");
-        }
-        if (filter.toolErrors() != null) {
-            sql.append(filter.toolErrors() ? " AND r.tool_errors > 0" : " AND r.tool_errors = 0");
-        }
-        if (filter.tool() != null) {
-            sql.append(" AND EXISTS (SELECT 1 FROM run_tools t WHERE t.session = r.session AND t.run = r.run AND t.name = ?)");
-            args.add(filter.tool());
-        }
-        if (filter.model() != null) {
-            sql.append(" AND instr(char(10) || r.models || char(10), char(10) || ? || char(10)) > 0");
-            args.add(filter.model());
-        }
-        if (filter.session() != null) {
-            sql.append(" AND r.session = ?");
-            args.add(filter.session().value());
-        }
+        where(filter, true, sql, args);
         if (filter.after() != null) {
             Cursor cursor = Cursor.decode(filter.after());
             sql.append(" AND (").append(key).append(" < ? OR (").append(key).append(" = ? AND (r.session, r.run) < (?, ?)))");
@@ -228,6 +208,131 @@ public final class RunTable {
             next = new Cursor(keys.get(filter.limit() - 1), last.session().value(), last.run().value()).encode();
         }
         return new Page(withTools(connection, listed), next);
+    }
+
+    /** 当前筛选条件下的汇总；游标、排序、条数不管。天按 {@code zone} 划分。 */
+    static Summary summary(Connection connection, Principal principal, Filter filter, ZoneId zone) throws SQLException {
+        String from = " FROM runs r JOIN sessions s ON s.session = r.session AND s.principal = r.principal WHERE r.principal = ?";
+        StringBuilder sql = new StringBuilder("SELECT r.started, r.ended, r.end_reason, r.tokens, r.ms, r.tool_errors").append(from);
+        List<Object> args = new ArrayList<>();
+        args.add(principal.value());
+        where(filter, true, sql, args);
+        int runs = 0;
+        int toolErrorRuns = 0;
+        long tokens = 0;
+        Map<String, Integer> ends = new TreeMap<>();
+        Map<LocalDate, Map<String, Integer>> dayEnds = new TreeMap<>();
+        Map<LocalDate, Long> dayTokens = new TreeMap<>();
+        List<Long> durations = new ArrayList<>();
+        try (PreparedStatement select = prepare(connection, sql.toString(), args); ResultSet result = select.executeQuery()) {
+            while (result.next()) {
+                runs++;
+                String end = result.getString(3);
+                result.getLong(2);
+                boolean ended = !result.wasNull();
+                String key = ended && end != null ? end : RUNNING;
+                ends.merge(key, 1, Integer::sum);
+                long runTokens = result.getLong(4);
+                tokens += runTokens;
+                long ms = result.getLong(5);
+                if (ended && !result.wasNull()) {
+                    durations.add(ms);
+                }
+                if (result.getInt(6) > 0) {
+                    toolErrorRuns++;
+                }
+                LocalDate day = Instant.ofEpochMilli(result.getLong(1)).atZone(zone).toLocalDate();
+                dayEnds.computeIfAbsent(day, ignored -> new TreeMap<>()).merge(key, 1, Integer::sum);
+                dayTokens.merge(day, runTokens, Long::sum);
+            }
+        }
+        durations.sort(null);
+        List<Day> days = new ArrayList<>();
+        dayEnds.forEach((day, counts) -> days.add(new Day(day, counts, dayTokens.get(day))));
+        return new Summary(runs, ends, toolErrorRuns, tokens, rank(durations, 50), rank(durations, 90), days,
+                facet(connection, "SELECT DISTINCT t.name FROM run_tools t JOIN runs r ON r.session = t.session AND r.run = t.run"
+                        + " JOIN sessions s ON s.session = r.session AND s.principal = r.principal WHERE r.principal = ?", principal, filter, false),
+                facet(connection, "SELECT DISTINCT r.models" + from, principal, filter, true));
+    }
+
+    /** 最近秩法：第 ceil(p% × n) 个；没有值时为 null。 */
+    static Long rank(List<Long> sorted, int percent) {
+        if (sorted.isEmpty()) {
+            return null;
+        }
+        int index = (int) Math.ceil(percent / 100.0 * sorted.size()) - 1;
+        return sorted.get(Math.max(0, Math.min(sorted.size() - 1, index)));
+    }
+
+    /** 筛选用的清单：不按工具和模型筛，去重、排序；{@code split} 时每个值是换行分隔的多个。 */
+    private static List<String> facet(Connection connection, String select, Principal principal, Filter filter, boolean split)
+            throws SQLException {
+        StringBuilder sql = new StringBuilder(select);
+        List<Object> args = new ArrayList<>();
+        args.add(principal.value());
+        where(filter, false, sql, args);
+        TreeSet<String> values = new TreeSet<>();
+        try (PreparedStatement statement = prepare(connection, sql.toString(), args); ResultSet result = statement.executeQuery()) {
+            while (result.next()) {
+                String value = result.getString(1);
+                if (value == null || value.isEmpty()) {
+                    continue;
+                }
+                if (split) {
+                    values.addAll(List.of(value.split("\n")));
+                } else {
+                    values.add(value);
+                }
+            }
+        }
+        return List.copyOf(values);
+    }
+
+    private static PreparedStatement prepare(Connection connection, String sql, List<Object> args) throws SQLException {
+        PreparedStatement statement = connection.prepareStatement(sql);
+        for (int i = 0; i < args.size(); i++) {
+            statement.setObject(i + 1, args.get(i));
+        }
+        return statement;
+    }
+
+    /** 筛选条件拼成 SQL（表别名 {@code r}）；{@code byToolAndModel} 为 false 时不按工具和模型筛（筛选用的清单）。 */
+    private static void where(Filter filter, boolean byToolAndModel, StringBuilder sql, List<Object> args) {
+        if (filter.from() != null) {
+            sql.append(" AND r.started >= ?");
+            args.add(filter.from().toEpochMilli());
+        }
+        if (filter.to() != null) {
+            sql.append(" AND r.started < ?");
+            args.add(filter.to().toEpochMilli());
+        }
+        if (filter.ends() != null && !filter.ends().isEmpty()) {
+            List<String> reasons = filter.ends().stream().filter(end -> !end.equals(RUNNING)).toList();
+            List<String> parts = new ArrayList<>();
+            if (!reasons.isEmpty()) {
+                parts.add("r.end_reason IN (" + String.join(", ", reasons.stream().map(reason -> "?").toList()) + ")");
+                args.addAll(reasons);
+            }
+            if (filter.ends().contains(RUNNING)) {
+                parts.add("r.ended IS NULL");
+            }
+            sql.append(" AND (").append(String.join(" OR ", parts)).append(")");
+        }
+        if (filter.toolErrors() != null) {
+            sql.append(filter.toolErrors() ? " AND r.tool_errors > 0" : " AND r.tool_errors = 0");
+        }
+        if (byToolAndModel && filter.tool() != null) {
+            sql.append(" AND EXISTS (SELECT 1 FROM run_tools t WHERE t.session = r.session AND t.run = r.run AND t.name = ?)");
+            args.add(filter.tool());
+        }
+        if (byToolAndModel && filter.model() != null) {
+            sql.append(" AND instr(char(10) || r.models || char(10), char(10) || ? || char(10)) > 0");
+            args.add(filter.model());
+        }
+        if (filter.session() != null) {
+            sql.append(" AND r.session = ?");
+            args.add(filter.session().value());
+        }
     }
 
     /** 列表的工具名和次数另查一次，按写入时的先后。 */

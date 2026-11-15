@@ -3,6 +3,7 @@ package tantalum.shell.store;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -58,6 +59,15 @@ public final class RunQuery {
             throw new SessionUnreadable(session, failure);
         }
         return records.isEmpty() ? Optional.empty() : Optional.of(RunTree.of(run, records.values()));
+    }
+
+    /** 当前筛选条件下的汇总；天按 {@code zone} 划分。 */
+    public RunTable.Summary summary(Principal principal, RunTable.Filter filter, ZoneId zone) {
+        try {
+            return index.runSummary(principal, filter, zone);
+        } catch (SQLException failure) {
+            throw new RunsUnavailable(failure);
+        }
     }
 
     /** 这个人的运行，一页。游标不合法时抛 {@link IllegalArgumentException}。 */

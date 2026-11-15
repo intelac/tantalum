@@ -15,7 +15,7 @@ public class SpaController {
 
     private final Resource index = new ClassPathResource("static/index.html");
 
-    @GetMapping({"/", "/login", "/s/**"})
+    @GetMapping({"/", "/login", "/s/**", "/runs", "/runs/**"})
     ResponseEntity<Resource> index() {
         if (!index.exists()) {
             return ResponseEntity.status(404).contentType(MediaType.TEXT_PLAIN)

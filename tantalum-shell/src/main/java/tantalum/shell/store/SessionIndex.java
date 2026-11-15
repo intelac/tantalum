@@ -303,6 +303,11 @@ public final class SessionIndex implements AutoCloseable {
         return RunTable.list(connection, principal, filter);
     }
 
+    /** 当前筛选条件下运行的汇总（observe-page 需求 5）。 */
+    public synchronized RunTable.Summary runSummary(Principal principal, RunTable.Filter filter, java.time.ZoneId zone) throws SQLException {
+        return RunTable.summary(connection, principal, filter, zone);
+    }
+
     /** 重放完一个文件后写实际大小。文件可能比记录的短（残缺尾部被截掉），所以这里不取最大值。 */
     synchronized void setOffset(SessionId session, Principal principal, long offset) throws SQLException {
         try (PreparedStatement update = connection.prepareStatement("UPDATE sessions SET file_offset = ? WHERE session = ? AND principal = ?")) {

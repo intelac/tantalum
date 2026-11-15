@@ -194,6 +194,72 @@ class RunIndexTest {
     }
 
     @Test
+    void theSummaryCountsSplitsDaysByZoneAndListsFacets() throws Exception {
+        try (SessionIndex index = SessionIndex.open(dir)) {
+            assertTrue(index.claim(S1, YI));
+            IndexBatch batch = new IndexBatch();
+            // 东京时间 11-10 08:30 是 UTC 11-09 23:30：按 UTC 和按东京分在不同的天
+            Instant lateUtc = Instant.parse("2026-11-09T23:30:00Z");
+            batch.add(row("s1_1", lateUtc, 1_000L, EndReason.COMPLETED, 10, 0, List.of("bash"), List.of("local/qwen")));
+            batch.add(row("s1_2", T1, 3_000L, EndReason.FAILED, 20, 1, List.of("read_file"), List.of("claude/x")));
+            batch.add(row("s1_3", T2, 2_000L, EndReason.COMPLETED, 30, 0, List.of("bash", "read_file"), List.of("local/qwen")));
+            batch.add(row("s1_4", T3, null, null, 40, 0, List.of(), List.of()));
+            index.write(batch);
+
+            RunTable.Summary all = index.runSummary(YI, all(), java.time.ZoneOffset.UTC);
+            assertEquals(4, all.runs());
+            assertEquals(java.util.Map.of("COMPLETED", 2, "FAILED", 1, RunTable.RUNNING, 1), all.ends());
+            assertEquals(1, all.toolErrorRuns());
+            assertEquals(100L, all.tokens());
+            assertEquals(2_000L, all.p50Ms(), "nearest rank over the three ended runs");
+            assertEquals(3_000L, all.p90Ms());
+            assertEquals(List.of("2026-11-09", "2026-11-10"), all.days().stream().map(day -> day.day().toString()).toList());
+            assertEquals(List.of("bash", "read_file"), all.tools());
+            assertEquals(List.of("claude/x", "local/qwen"), all.models());
+
+            RunTable.Summary tokyo = index.runSummary(YI, all(), java.time.ZoneId.of("Asia/Tokyo"));
+            assertEquals(List.of("2026-11-10"), tokyo.days().stream().map(day -> day.day().toString()).toList());
+            assertEquals(100L, tokyo.days().getFirst().tokens());
+
+            // 按工具筛：数字跟着变，清单不变
+            RunTable.Summary bash = index.runSummary(YI, new RunTable.Filter(null, null, null, null, "bash", null, null,
+                    RunTable.Sort.STARTED, null, 50), java.time.ZoneOffset.UTC);
+            assertEquals(2, bash.runs());
+            assertEquals(List.of("bash", "read_file"), bash.tools());
+            assertEquals(List.of("claude/x", "local/qwen"), bash.models());
+
+            RunTable.Summary none = index.runSummary(BOB, all(), java.time.ZoneOffset.UTC);
+            assertEquals(0, none.runs());
+            assertNull(none.p50Ms());
+        }
+    }
+
+    @Test
+    void theSummaryOfTenThousandRunsIsFast() throws Exception {
+        try (SessionIndex index = SessionIndex.open(dir)) {
+            assertTrue(index.claim(S1, YI));
+            IndexBatch batch = new IndexBatch();
+            for (int i = 0; i < 10_000; i++) {
+                batch.add(row("s1_" + i, T1.plusSeconds(i * 60L), (long) i, EndReason.COMPLETED, i, 0, List.of("bash"), List.of("local/qwen")));
+            }
+            index.write(batch);
+            index.runSummary(YI, all(), java.time.ZoneOffset.UTC);
+            long start = System.nanoTime();
+            RunTable.Summary summary = index.runSummary(YI, all(), java.time.ZoneId.of("Asia/Tokyo"));
+            long millis = (System.nanoTime() - start) / 1_000_000;
+            assertEquals(10_000, summary.runs());
+            assertTrue(millis < 200, "summary took " + millis + " ms");
+        }
+    }
+
+    private static RunRow row(String run, Instant start, Long ms, EndReason end, long tokens, int toolErrors, List<String> tools,
+                              List<String> models) {
+        Tally tally = new Tally(new TokenUsage(tokens, 0, 0, 0), TokenUsage.ZERO, null, 1, 1, 0, null, null, tools.size(), toolErrors, null,
+                tools.stream().map(name -> new Tally.ToolCount(name, 1, 0)).toList(), 0, 0, models, ms);
+        return new RunRow(YI, S1, new RunId(run), 1, RunHead.Trigger.PROMPT, start, ms == null ? null : start.plusMillis(ms), end, "p", tally);
+    }
+
+    @Test
     void theFirstPageOfTenThousandRunsIsFast() throws Exception {
         try (SessionIndex index = SessionIndex.open(dir)) {
             assertTrue(index.claim(S1, YI));

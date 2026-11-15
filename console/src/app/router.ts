@@ -8,6 +8,8 @@ export type Route =
   | { page: "session"; session: string }
   | { page: "trace"; session: string; run?: string; record?: string }
   | { page: "stats"; session: string }
+  | { page: "runs"; query: string }
+  | { page: "run"; session: string; run: string }
   | { page: "notFound"; path: string };
 
 export function parseRoute(pathname: string, search = ""): Route {
@@ -16,6 +18,15 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (parts.length === 1 && parts[0] === "login") {
     const next = new URLSearchParams(search).get("next");
     return next !== null && isLocalPath(next) ? { page: "login", next } : { page: "login" };
+  }
+  if (parts[0] === "runs") {
+    if (parts.length === 1) return { page: "runs", query: search.startsWith("?") ? search.slice(1) : search };
+    if (parts.length === 3) {
+      const session = decode(parts[1] as string);
+      const run = decode(parts[2] as string);
+      if (session !== null && run !== null) return { page: "run", session, run };
+    }
+    return { page: "notFound", path: pathname };
   }
   if (parts[0] === "s" && parts[1] !== undefined) {
     const session = decode(parts[1]);
@@ -48,6 +59,11 @@ function decode(part: string): string | null {
   }
 }
 
+/** 新会话只是一个新 ID；后端在第一次提交时才创建它。 */
+export function newSessionId(): string {
+  return `s-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 export function sessionPath(session: string): string {
   return `/s/${encodeURIComponent(session)}`;
 }
@@ -65,6 +81,16 @@ export function statsPath(session: string): string {
 /** 轨迹页上的一条记录：展开所在的轮和调用、滚到并选中。 */
 export function traceRecordPath(session: string, record: string): string {
   return `${sessionPath(session)}/trace?record=${encodeURIComponent(record)}`;
+}
+
+/** 观测页面；`query` 是筛选条件（不带 `?`），默认条件时为空。 */
+export function runsPath(query = ""): string {
+  return query === "" ? "/runs" : `/runs?${query}`;
+}
+
+/** 观测页面里的一次运行。 */
+export function runPath(session: string, run: string): string {
+  return `/runs/${encodeURIComponent(session)}/${encodeURIComponent(run)}`;
 }
 
 export function loginPath(next?: string): string {

@@ -36,13 +36,18 @@ public record RunTree(Node root) {
     /**
      * {@code id} 是轨迹记录的 ID（尝试是 “请求 ID#序号”，组是 “运行头 ID/s步号” 或 “运行头 ID/c压缩组”）；
      * {@code record} 是去轨迹接口取正文用的记录 ID，组节点为 null；{@code detail} 是错误原因，最多 200 个字符；
-     * {@code tally} 只在运行、步骤和压缩组上有。
+     * {@code tally} 只在运行、步骤和压缩组上有；{@code firstToken} 只在尝试上有（第一个内容分片到达的时刻，没记录时为 null）。
      */
     public record Node(String id, String parent, Kind kind, String name, Instant start, Instant end, Long ms, State state,
-                       String detail, String record, Tally tally, List<Node> children) {
+                       String detail, String record, Tally tally, List<Node> children, Instant firstToken) {
 
         public Node {
             children = List.copyOf(children);
+        }
+
+        public Node(String id, String parent, Kind kind, String name, Instant start, Instant end, Long ms, State state,
+                    String detail, String record, Tally tally, List<Node> children) {
+            this(id, parent, kind, name, start, end, ms, state, detail, record, tally, children, null);
         }
     }
 
@@ -226,7 +231,7 @@ public record RunTree(Node root) {
         String detail = attempt.reason() == null ? null : cut(attempt.reason().name() + (attempt.detail() == null || attempt.detail().isEmpty()
                 ? "" : ": " + attempt.detail()));
         return new Node(request + "#" + number, request, Kind.ATTEMPT, "attempt " + number, start, attempt.endedAt(),
-                Tally.span(start, attempt.endedAt()), state, detail, request, null, List.of());
+                Tally.span(start, attempt.endedAt()), state, detail, request, null, List.of(), attempt.firstTokenAt());
     }
 
     /** 有没结束的就是进行中（有在等人的就是等待中），否则有出错的就是出错。 */

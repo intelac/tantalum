@@ -131,6 +131,7 @@ class RunTreeTest {
         assertEquals(List.of("claude/claude-x"), root.tally().models());
         Node request = child(root.children().get(1), Kind.REQUEST);
         assertEquals("m1#1", request.children().getFirst().id());
+        assertEquals(at(10_100), request.children().getFirst().firstToken(), "the attempt keeps its first-token time for the bar split");
         assertEquals("m1", request.children().getFirst().record());
     }
 

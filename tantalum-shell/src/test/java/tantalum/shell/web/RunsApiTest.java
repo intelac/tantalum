@@ -110,6 +110,13 @@ class RunsApiTest {
         assertEquals(2, JSON.readTree(server.get("alice", "/api/runs?end=completed&sort=tokens").body()).get("runs").size());
         assertEquals(0, JSON.readTree(server.get("alice", "/api/runs?end=failed,running").body()).get("runs").size());
         assertEquals(0, JSON.readTree(server.get("alice", "/api/runs?toolErrors=true").body()).get("runs").size());
+
+        JsonNode summary = JSON.readTree(server.get("alice", "/api/runs/summary?tz=Asia/Tokyo").body());
+        assertEquals(2, summary.get("runs").asInt());
+        assertEquals(2, summary.get("ends").get("COMPLETED").asInt());
+        assertEquals(2 * 127, summary.get("tokens").asInt());
+        assertEquals(List.of("m"), summary.get("models").valueStream().map(JsonNode::asString).toList());
+        assertTrue(summary.get("days").get(0).get("day").asString().matches("\\d{4}-\\d{2}-\\d{2}"));
     }
 
     @Test
@@ -121,6 +128,8 @@ class RunsApiTest {
         assertEquals(404, server.get("bob", "/api/sessions/s1/runs/" + run + "/tree").statusCode());
         assertEquals(1, JSON.readTree(server.get("root", "/api/runs?viewAs=alice").body()).get("runs").size());
         assertEquals(200, server.get("root", "/api/sessions/s1/runs/" + run + "/tree?viewAs=alice").statusCode());
+        assertEquals(1, JSON.readTree(server.get("root", "/api/runs/summary?viewAs=alice").body()).get("runs").asInt());
+        assertEquals(0, JSON.readTree(server.get("bob", "/api/runs/summary").body()).get("runs").asInt());
     }
 
     @Test
@@ -133,6 +142,8 @@ class RunsApiTest {
             assertEquals(400, response.statusCode(), query + " " + response.body());
             assertTrue(response.body().contains("request/invalid"), response.body());
         }
+        assertEquals(400, server.get("alice", "/api/runs/summary?tz=Mars/Olympus").statusCode());
+        assertEquals(400, server.get("alice", "/api/runs/summary?end=nope").statusCode());
         assertEquals(400, server.get("alice", "/api/sessions/s1/runs/nope/tree").statusCode());
         assertEquals(404, server.get("alice", "/api/sessions/s1/runs/other_1/tree").statusCode());
         assertEquals(404, server.get("alice", "/api/sessions/s1/runs/s1_9999/tree").statusCode());
