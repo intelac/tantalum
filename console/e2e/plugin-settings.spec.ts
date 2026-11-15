@@ -204,7 +204,8 @@ test.describe("插件参数", () => {
     await admin.getByRole("button", { name: "设置", exact: true }).first().click();
     const settings = admin.getByRole("dialog", { name: "设置" });
     await settings.getByRole("button", { name: "运维" }).click();
-    await expect(settings.getByRole("columnheader")).toHaveText(["用户", /^今日用量/, "每日上限", "会话", "进行中", "操作"]);
+    // 只看用户表：下面还有插件用量那张表
+    await expect(settings.getByRole("table").first().getByRole("columnheader")).toHaveText(["用户", /^今日用量/, "每日上限", "会话", "进行中", "操作"]);
     // 表格上面：所有人的默认上限
     await expect(settings.getByText("默认每日上限", { exact: true })).toBeVisible();
     await expect(settings.getByText("100,000,000").first()).toBeVisible();
