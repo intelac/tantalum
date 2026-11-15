@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -22,7 +22,7 @@ import {
 import { connectEvents } from "../api/sse";
 import type { SessionSummary } from "../api/types";
 import { asViewed, setViewedUser, viewedUser } from "../api/viewing";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, mainWindowId } from "./Sidebar";
 import { ViewingBanner, ViewingBar } from "./ViewingBanner";
 
 afterEach(() => {
@@ -153,6 +153,10 @@ describe("viewing another person's sessions", () => {
     render(wrap(<Sidebar {...props} />));
     // 平时：能新建、有插件和设置、行上有菜单、新会话有一行占位
     expect(screen.getByRole("button", { name: "新会话" })).toBeTruthy();
+    // 主窗口（memory-final-plan 第 11 节）：每天一个，编号 main-年-月-日
+    fireEvent.click(screen.getByRole("button", { name: "主窗口" }));
+    expect(props.onSelectSession).toHaveBeenCalledWith(mainWindowId());
+    expect(mainWindowId(new Date(2026, 10, 6))).toBe("main-2026-11-06");
     expect(screen.getByRole("button", { name: "插件" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "设置" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "添加" })).toBeTruthy();

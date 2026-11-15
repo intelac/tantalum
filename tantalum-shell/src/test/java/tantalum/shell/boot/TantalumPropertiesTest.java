@@ -112,12 +112,12 @@ class TantalumPropertiesTest {
         assertEquals(4096, compaction.maxSummarizedToolResultBytes());
         assertEquals(8192, compaction.summaryMaxTokens());
         String message = assertThrows(IllegalArgumentException.class,
-                () -> new TantalumProperties.Compaction(0, 1, 1, 1, 1, true)).getMessage();
+                () -> new TantalumProperties.Compaction(0, 1, 1, 1, 1, true, 0)).getMessage();
         assertTrue(message.contains("reserveTokens"), message);
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, -1, 1, 1, 1, true));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1, true));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1, true));
-        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0, true));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, -1, 1, 1, 1, true, 0));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 0, 1, 1, true, 0));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 0, 1, true, 0));
+        assertThrows(IllegalArgumentException.class, () -> new TantalumProperties.Compaction(1, 1, 1, 1, 0, true, 0));
     }
 
     /** 工作轮数默认 8，和内核的 {@code Limits.DEFAULT} 一致；小于 1 时绑定失败，启动随之失败。 */

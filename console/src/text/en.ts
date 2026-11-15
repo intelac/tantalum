@@ -26,6 +26,8 @@ export const en: Text = {
   },
   sidebar: {
     newSession: "New session",
+    mainWindow: "Main window",
+    mainWindowHint: "Where you talk every day, hand over work and get results; one per day. It keeps only the latest part of the conversation and brings back the rest from memory.",
     sessions: "Sessions",
     empty: "No sessions yet",
     collapse: "Collapse sidebar",

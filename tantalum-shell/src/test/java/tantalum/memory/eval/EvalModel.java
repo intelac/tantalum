@@ -78,7 +78,7 @@ final class EvalModel implements ModelClient {
                 yield replied(notes.isEmpty() ? NotePrompt.NOTHING
                         : String.join("\n", notes.stream().map(n -> "- [" + n.kind() + "] " + n.text() + " «" + n.quote() + "»").toList()), usage);
             }
-            case COMPACT -> replied(SUMMARY, usage);
+            case COMPACT -> replied(summary(call.input()), usage);
             case OTHER -> replied(call.system().startsWith(REWRITE) ? rewrite(call.lastUser()) : call.lastUser(), usage);
             case CHAT -> {
                 Step step = chat.apply(call);
@@ -110,6 +110,16 @@ final class EvalModel implements ModelClient {
             }
         });
         return asked + " |" + words;
+    }
+
+    /** 压缩的摘要：照主窗口的说明，把列过的选项（带编号的那句）留在“对话状态”里。 */
+    static String summary(String input) {
+        java.util.regex.Matcher listed = java.util.regex.Pattern.compile("[^\\n\\]\\[]*1\\. [^\\n\\]\\[]*2\\. [^\\n\\]\\[]*").matcher(input);
+        String options = null;
+        while (listed.find()) {
+            options = listed.group().strip();
+        }
+        return options == null ? SUMMARY : SUMMARY + "\n列过的选项：" + options;
     }
 
     private static ModelOutcome replied(String text, TokenUsage usage) {

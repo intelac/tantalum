@@ -227,9 +227,10 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
      * 读窗口，只用配置的值：测试要用小窗口让压缩尽快发生。
      */
     public record Compaction(long reserveTokens, long keepRecentTokens, int maxKeptToolResultBytes,
-                             int maxSummarizedToolResultBytes, long summaryMaxTokens, boolean windowFromModel) {
+                             int maxSummarizedToolResultBytes, long summaryMaxTokens, boolean windowFromModel, long mainWindowTokens) {
 
         public Compaction {
+            mainWindowTokens = mainWindowTokens > 0 ? mainWindowTokens : tantalum.shell.handler.MainWindow.DEFAULT_TOKENS;
             requirePositive("reserveTokens", reserveTokens);
             requirePositive("keepRecentTokens", keepRecentTokens);
             requirePositive("maxKeptToolResultBytes", maxKeptToolResultBytes);
@@ -238,7 +239,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
         }
 
         public static Compaction defaults() {
-            return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192, true);
+            return new Compaction(16384, 20000, 32 * 1024, 4 * 1024, 8192, true, 0);
         }
     }
 
@@ -432,6 +433,11 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /** 联网的配置；没有配置时用默认值。 */
     public Web webSettings() {
         return web == null ? Web.defaults() : web;
+    }
+
+    /** 主窗口保留多少最近的原话（token，{@code tantalum.compaction.main-window-tokens}，memory-final-plan 第 11 节）。 */
+    public long mainWindowTokens() {
+        return compaction == null ? tantalum.shell.handler.MainWindow.DEFAULT_TOKENS : compaction.mainWindowTokens();
     }
 
     /** 向模型读窗口吗；没有压缩配置段时读。 */

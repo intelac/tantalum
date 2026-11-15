@@ -107,6 +107,14 @@ public final class ContextHandler implements Handler {
         this.knowledge = knowledge;
     }
 
+    private volatile long mainWindowTokens = MainWindow.DEFAULT_TOKENS;
+
+    /** 主窗口保留多少最近的原话（token，memory-final-plan 第 11 节）。 */
+    public ContextHandler mainWindowTokens(long tokens) {
+        this.mainWindowTokens = Math.max(500, tokens);
+        return this;
+    }
+
     /** 查会话是不是“不进记忆”的（给插件的 {@link ContextContributor.Situation}）；不设时都不是。 */
     public ContextHandler offRecord(java.util.function.Predicate<SessionId> lookup) {
         this.offRecord = lookup;
@@ -155,6 +163,10 @@ public final class ContextHandler implements Handler {
         StringBuilder system = new StringBuilder(basePrompt);
         contributions.forEach(contribution -> append(system, contribution.fixedText() == null ? "" : contribution.fixedText().strip()));
         append(system, fixedNote);
+        boolean main = MainWindow.is(command.run().session());
+        if (main) {
+            append(system, MainWindow.NOTE);
+        }
         sections.forEach(section -> append(system, section.tagged()));
         // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效，换模型的事只在内核追加的说明里
         AssembleContext assemble = (AssembleContext) command;
@@ -168,7 +180,11 @@ public final class ContextHandler implements Handler {
             unlocks.forEach(rule -> later.addAll(rule.add()));
             enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
         }
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), compaction(principal, model), sections,
+        CompactionSettings settings = compaction(principal, model);
+        if (main && settings != null) {
+            settings = MainWindow.settings(settings, system.toString(), catalog.specs(), mainWindowTokens);
+        }
+        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), settings, sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
     }
 

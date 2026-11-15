@@ -8,7 +8,7 @@
                "rubric": "答出 PostgreSQL（版本 16 可有可无）。说不知道、或答成别的数据库都不算。"}},
     {"id": "remember.after-compaction", "category": "记得", "title": "压缩以后还记得这个会话前面说的事（11-15 的失误）", "phase": "M3", "status": "pass",
      "tier1": {"check": "afterCompaction"}},
-    {"id": "remember.after-window", "category": "记得", "title": "移出主窗口以后还记得，且每轮输入不随会话变长", "phase": "M6", "status": "expected-fail",
+    {"id": "remember.after-window", "category": "记得", "title": "移出主窗口以后还记得，且每轮输入不随会话变长", "phase": "M6", "status": "pass",
      "tier1": {"check": "afterWindow"}},
     {"id": "remember.days-ago", "category": "记得", "title": "三天前定的事（时间）", "phase": "M3", "status": "pass",
      "tier1": {"check": "input", "user": "alice", "ask": "三天前我们定了什么？", "contains": ["12 月 1 日"]},
@@ -76,9 +76,9 @@
     {"id": "robust.restart-reconcile", "category": "稳", "title": "重启以后待确认的条目对得上", "phase": "M2", "status": "pass",
      "tier1": {"check": "restartReconcile"}},
 
-    {"id": "window.that-one", "category": "主窗口", "title": "“那就按第二个”能接上", "phase": "M6", "status": "expected-fail",
+    {"id": "window.that-one", "category": "主窗口", "title": "“那就按第二个”能接上", "phase": "M6", "status": "pass",
      "tier1": {"check": "thatOne"}},
-    {"id": "window.stable-size", "category": "主窗口", "title": "每轮上下文大小稳定", "phase": "M6", "status": "expected-fail",
+    {"id": "window.stable-size", "category": "主窗口", "title": "每轮上下文大小稳定", "phase": "M6", "status": "pass",
      "tier1": {"check": "stableSize"}},
 
     {"id": "offrecord.no-trace", "category": "不进记忆的会话", "title": "不进记忆的会话不留任何记忆痕迹", "phase": "M2", "status": "pass",

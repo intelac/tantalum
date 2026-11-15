@@ -37,6 +37,8 @@ export const zh = {
   },
   sidebar: {
     newSession: "新会话",
+    mainWindow: "主窗口",
+    mainWindowHint: "日常说话、交代活、拿结果的地方，每天一个。只留最近一段对话，更早的靠记忆找回。",
     sessions: "会话",
     empty: "还没有会话",
     collapse: "收起侧栏",

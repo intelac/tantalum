@@ -30,6 +30,8 @@ final class EvalWorld implements AutoCloseable {
     static final String SMALL = "small";
     /** 自动记笔记开着，要重启的题用（重启不影响别的题）。 */
     static final String RESTART = "restart";
+    /** 主窗口的题：自动记笔记开着，主窗口只留约 2000 token 最近的原话（memory-final-plan 第 11 节）。 */
+    static final String MAIN = "main";
 
     private static final Map<String, String[]> CONFIGS = Map.of(
             PLAIN, new String[0],
@@ -37,7 +39,10 @@ final class EvalWorld implements AutoCloseable {
             SMALL, new String[] {"--tantalum.memory-capture.enabled=true", "--tantalum.claude.context-window=7500",
                 "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3", "--tantalum.compaction.reserve-tokens=500",
                 "--tantalum.compaction.keep-recent-tokens=600", "--tantalum.web.fetch.enabled=false"},
-            RESTART, new String[] {"--tantalum.memory-capture.enabled=true"});
+            RESTART, new String[] {"--tantalum.memory-capture.enabled=true"},
+            // 估算系数和脚本化模型报的用量一致（它按 3 字节一个 token 报），不然压缩点和实际大小差一倍
+            MAIN, new String[] {"--tantalum.memory-capture.enabled=true", "--tantalum.compaction.main-window-tokens=2000",
+                "--tantalum.claude.bytes-per-token=3"});
 
     /** 管理员（只读查看用）。 */
     static final String ADMIN = "root";
@@ -120,6 +125,11 @@ final class EvalWorld implements AutoCloseable {
 
     String session() {
         return "e-" + (++counter);
+    }
+
+    /** 一个主窗口会话（编号以 {@code main-} 开头）。 */
+    String mainSession() {
+        return "main-e-" + (++counter);
     }
 
     HttpResponse<String> send(String config, String user, String method, String path, String body) {

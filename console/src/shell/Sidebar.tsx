@@ -1,4 +1,4 @@
-import { Activity, LogOut, PanelLeftClose, Puzzle, Settings, SquarePen } from "lucide-react";
+import { Activity, House, LogOut, PanelLeftClose, Puzzle, Settings, SquarePen } from "lucide-react";
 import type { Project, SessionSummary } from "../api/types";
 import { ProjectSidebar } from "../projects/ProjectSidebar";
 import { useText } from "../text";
@@ -6,6 +6,15 @@ import { Button } from "../ui/Button";
 import { Brand } from "./Brand";
 import { SessionRow } from "./SessionRow";
 import { useViewedUser } from "../api/viewing";
+
+/**
+ * 今天的主窗口（memory-final-plan 第 11 节）：编号 {@code main-年-月-日}，按本机日子每天一个。服务器按编号前缀认出主窗口，
+ * 只留最近一段原话，更早的分小批移出、换成一块对话状态，移出去的靠记忆找回。
+ */
+export function mainWindowId(now: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `main-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 interface Props {
   sessions: readonly SessionSummary[];
@@ -102,6 +111,16 @@ export function Sidebar({
           <Button variant="secondary" className="w-full" onClick={onNewSession}>
             <SquarePen size={16} />
             {t.sidebar.newSession}
+          </Button>
+          <Button
+            variant="ghost"
+            className="mt-1 w-full justify-start"
+            aria-current={currentSession === mainWindowId() ? "page" : undefined}
+            title={t.sidebar.mainWindowHint}
+            onClick={() => onSelectSession(mainWindowId())}
+          >
+            <House size={16} />
+            {t.sidebar.mainWindow}
           </Button>
         </div>
       )}

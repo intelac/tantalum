@@ -236,19 +236,20 @@ class MemoryEvalTest {
     }
 
     private void afterWindow() {
-        String user = world.person(EvalWorld.PLAIN, null);
-        String session = world.session();
-        world.ask(EvalWorld.PLAIN, user, session, "我的工位号是 C-1207。");
+        String user = world.person(EvalWorld.MAIN, null);
+        String session = world.mainSession();
+        world.model.capture(call -> call.turn().contains("C-1207") ? List.of(note("fact", "用户的工位号是 C-1207", "我的工位号是 C-1207")) : List.of());
+        world.ask(EvalWorld.MAIN, user, session, "我的工位号是 C-1207。");
         int early = 0;
         for (int turn = 1; turn <= 24; turn++) {
-            List<Call> calls = world.ask(EvalWorld.PLAIN, user, session, filler(turn, 1000));
-            if (turn == 5) {
-                early = size(calls);
+            List<Call> calls = world.ask(EvalWorld.MAIN, user, session, filler(turn, 1000));
+            if (turn <= 6) {
+                early = Math.max(early, size(calls));
             }
         }
-        List<Call> last = world.ask(EvalWorld.PLAIN, user, session, "我工位号多少？");
+        List<Call> last = world.ask(EvalWorld.MAIN, user, session, "我工位号多少？");
         mustSee(last, "C-1207", "after the window moved on");
-        assertTrue(size(last) <= early + 3000, "the input kept growing: " + early + " chars at turn 5, " + size(last) + " at the end");
+        assertTrue(size(last) <= early + 3000, "the input kept growing: at most " + early + " chars in the first turns, " + size(last) + " at the end");
     }
 
     // ---- 更新 ----
@@ -326,7 +327,8 @@ class MemoryEvalTest {
         for (Call call : calls) {
             if (call.input().contains("周五下午")) {
                 String lower = call.input().toLowerCase(Locale.ROOT);
-                assertTrue(lower.contains("待确认") || lower.contains("pending"), "an unconfirmed web claim reached the model as a fact");
+                assertTrue(lower.contains("待确认") || lower.contains("pending") || lower.contains("not confirmed"),
+                        "an unconfirmed web claim reached the model as a fact");
             }
         }
         mustSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我们数据库用的是什么？"), world.seed.text("a-db"),
@@ -570,36 +572,36 @@ class MemoryEvalTest {
     // ---- 主窗口 ----
 
     private void thatOne() {
-        String user = world.person(EvalWorld.PLAIN, null);
-        String session = world.session();
+        String user = world.person(EvalWorld.MAIN, null);
+        String session = world.mainSession();
         world.model.chat(call -> call.lastUser().contains("缓存怎么做")
                 ? Step.say("有三种做法：1. 用 Redis；2. 用 Caffeine 本地缓存；3. 不加缓存。") : Step.say("好的。"));
-        world.ask(EvalWorld.PLAIN, user, session, "缓存怎么做比较好？");
+        world.ask(EvalWorld.MAIN, user, session, "缓存怎么做比较好？");
         int early = 0;
         for (int turn = 1; turn <= 20; turn++) {
-            List<Call> calls = world.ask(EvalWorld.PLAIN, user, session, filler(turn, 1000));
-            if (turn == 3) {
-                early = size(calls);
+            List<Call> calls = world.ask(EvalWorld.MAIN, user, session, filler(turn, 1000));
+            if (turn <= 6) {
+                early = Math.max(early, size(calls));
             }
         }
-        List<Call> last = world.ask(EvalWorld.PLAIN, user, session, "那就按第二个。");
+        List<Call> last = world.ask(EvalWorld.MAIN, user, session, "那就按第二个。");
         mustSee(last, "Caffeine", "\"the second one\"");
-        assertTrue(size(last) <= early + 3000, "the input kept growing: " + early + " chars at turn 3, " + size(last) + " at the end");
+        assertTrue(size(last) <= early + 3000, "the input kept growing: at most " + early + " chars in the first turns, " + size(last) + " at the end");
     }
 
     private void stableSize() {
-        String user = world.person(EvalWorld.PLAIN, null);
-        String session = world.session();
+        String user = world.person(EvalWorld.MAIN, null);
+        String session = world.mainSession();
         int early = 0;
         int last = 0;
         for (int turn = 1; turn <= 20; turn++) {
-            List<Call> calls = world.ask(EvalWorld.PLAIN, user, session, filler(turn, 800));
-            if (turn == 5) {
-                early = size(calls);
+            List<Call> calls = world.ask(EvalWorld.MAIN, user, session, filler(turn, 800));
+            if (turn <= 6) {
+                early = Math.max(early, size(calls));
             }
             last = size(calls);
         }
-        assertTrue(last <= early + 3000, "the input kept growing: " + early + " chars at turn 5, " + last + " at turn 20");
+        assertTrue(last <= early + 3000, "the input kept growing: at most " + early + " chars in the first turns, " + last + " at turn 20");
     }
 
     // ---- 不进记忆的会话 ----

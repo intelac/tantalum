@@ -216,7 +216,7 @@ def judge(client, model, question, phrasing, answer, usage):
     message = (f"Question: {phrasing}\n\nRubric: {question['tier2']['rubric']}\n\n"
                f"Should refuse or correct the premise: {'yes' if question['tier2'].get('refuse') else 'no'}\n\n"
                f"<answer>\n{answer}\n</answer>")
-    response = client.messages.create(model=model, max_tokens=300, system=JUDGE_SYSTEM, messages=[{"role": "user", "content": message}])
+    response = client.messages.create(model=model, max_tokens=500, system=JUDGE_SYSTEM, messages=[{"role": "user", "content": message}])
     usage["input"] += response.usage.input_tokens; usage["output"] += response.usage.output_tokens
     text = "".join(block.text for block in response.content if block.type == "text").strip()
     start, end = text.find("{"), text.rfind("}")

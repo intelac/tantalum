@@ -32,11 +32,13 @@ public final class RecallText {
     }
 
     private static String source(MemoryItem item) {
+        // 第二层评测（11-16，qwen）：只写“pending”时模型照样当事实说、认可过的决定照样改；写明该怎么做
         if (item.pendingConfirm()) {
-            return "pending, not confirmed by the user — " + origin(item.source());
+            return "NOT CONFIRMED, " + origin(item.source()) + ": do not state it as a fact; say it is unconfirmed";
         }
         String said = origin(item.source());
-        return item.status() == MemoryItem.Status.APPROVED ? said + ", approved decision" : said;
+        return item.status() == MemoryItem.Status.APPROVED
+                ? said + ", a decision the user approved: do not change or contradict it without asking the user first" : said;
     }
 
     private static String origin(MemoryItem.Source source) {

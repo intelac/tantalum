@@ -21,6 +21,8 @@ export const ja: Text = {
   },
   sidebar: {
     newSession: "新しいセッション",
+    mainWindow: "メインウィンドウ",
+    mainWindowHint: "毎日の会話、仕事の依頼、結果の受け取りの場所。1 日に 1 つ。最近の会話だけを残し、それより前は記憶から取り戻します。",
     sessions: "セッション",
     empty: "セッションはまだありません",
     collapse: "サイドバーを閉じる",
