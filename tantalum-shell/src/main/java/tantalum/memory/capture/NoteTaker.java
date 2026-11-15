@@ -238,6 +238,14 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
         return Quotes.tainted(segments);
     }
 
+    private volatile Function<Principal, tantalum.memory.LibrarianProposals.Result> proposals = user -> null;
+
+    /** 每天整理以后再让模型提议（{@link tantalum.memory.LibrarianProposals}，提议都进“待确认”）；不设时不提议。 */
+    public NoteTaker proposals(Function<Principal, tantalum.memory.LibrarianProposals.Result> proposer) {
+        this.proposals = proposer;
+        return this;
+    }
+
     /** 每人每天整理一次（{@link tantalum.memory.Librarian}），在处理通知的后台线程上做；出错只记日志。 */
     void tidy(Principal user) {
         if (closed) {
@@ -248,6 +256,13 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             if (result != null && result.merged() > 0) {
                 LOG.info("memory librarian for {}: merged {} duplicate(s){}", user.value(), result.merged(),
                         result.rolledBack() ? ", rolled back because recall got worse" : "");
+            }
+            if (result != null) {
+                tantalum.memory.LibrarianProposals.Result proposed = proposals.apply(user);
+                if (proposed != null && proposed.added() + proposed.corrections() + proposed.closes() > 0) {
+                    LOG.info("memory librarian for {} proposed {} addition(s), {} correction(s), {} close(s)", user.value(),
+                            proposed.added(), proposed.corrections(), proposed.closes());
+                }
             }
         } catch (RuntimeException failure) {
             LOG.warn("memory librarian for {} failed: {}", user.value(), failure.toString());

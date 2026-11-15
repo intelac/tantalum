@@ -1058,6 +1058,7 @@ export const en: Text = {
       hint: "Memories that came from web pages, files or the model's inference take effect only after you confirm them; withdrawn ones never come back. What you said yourself needs no confirmation.",
       empty: "Nothing waits for your confirmation.",
       strip: "Remembered, please confirm:",
+      proposal: "proposed by the daily tidy-up",
       confirm: "Confirm",
       withdraw: "Withdraw",
       conflict: "This conflicts with a decision you approved: confirming changes that decision.",

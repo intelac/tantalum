@@ -165,6 +165,9 @@ public final class MemoryEndpoints implements PluginEndpoints {
             }
             view.put("text", new Json.Str(item.text()));
             view.put("source", new Json.Str(item.source().name().toLowerCase(java.util.Locale.ROOT)));
+            if (item.attr(tantalum.memory.LibrarianProposals.PROPOSAL) != null) {
+                view.put("proposal", new Json.Str(item.attr(tantalum.memory.LibrarianProposals.PROPOSAL)));
+            }
             if (item.attr(MemoryStore.CONFLICTS_WITH) != null) {
                 view.put("conflictsWith", new Json.Str(item.attr(MemoryStore.CONFLICTS_WITH)));
             }

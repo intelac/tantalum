@@ -716,6 +716,8 @@ export interface PendingItem {
   source: string;
   /** 和哪条你认可过的决定冲突。 */
   conflictsWith?: string;
+  /** 每天整理时图书管理员的提议：`librarian`（加或改一条）、`close`（关掉一件事）。 */
+  proposal?: string;
   session?: string;
   created: string;
 }

@@ -13,7 +13,7 @@ export function PendingRow({ item }: { item: PendingItem }) {
     <div className="flex flex-col gap-1.5 px-3 py-2">
       <p className="text-sm break-words text-fg">{item.text}</p>
       <p className="text-xs text-fg-faint">
-        {t.source(item.source)}
+        {item.proposal !== undefined ? t.proposal : t.source(item.source)}
         {item.page !== undefined && ` · ${item.page}`} · {relativeTime(item.created)}
       </p>
       {item.conflictsWith !== undefined && <p className="text-xs text-warning">{t.conflict}</p>}

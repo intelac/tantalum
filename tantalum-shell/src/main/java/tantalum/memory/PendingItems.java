@@ -3,6 +3,7 @@ package tantalum.memory;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import tantalum.memory.ledger.Ledger;
 import tantalum.memory.ledger.MemoryItem;
@@ -48,12 +49,30 @@ public final class PendingItems {
                     && other.pendingConfirm() && other.state() == MemoryItem.State.CONFIRMED)) {
                 ledger.put(page.withPendingConfirm(false).withActor(MemoryItem.Actor.USER), page.version());
             }
+            // 图书管理员的改正：确认后取代那条旧说法
+            String supersedes = item.attr("supersedes");
+            if (supersedes != null) {
+                ledger.get(supersedes).filter(MemoryItem::live).ifPresent(old -> ledger.put(old.withSupersededBy(item.id()), old.version()));
+            }
             if ("page".equals(item.attr(MemoryStore.REPLACES))) {
                 for (MemoryItem old : ledger.items(other -> other.kind() == MemoryItem.Kind.CLAIM && item.page().equals(other.page())
                         && other.live() && !other.id().equals(item.id()))) {
                     ledger.put(old.withSupersededBy(item.id()), old.version());
                 }
             }
+        }
+        // 图书管理员提议关掉一件事：确认后把那件事标成完成，提议本身也就了结了
+        if (LibrarianProposals.CLOSE.equals(item.attr(LibrarianProposals.PROPOSAL)) && item.attr(LibrarianProposals.TARGET) != null) {
+            ledger.get(item.attr(LibrarianProposals.TARGET)).filter(MemoryItem::live).ifPresent(target -> {
+                Map<String, String> attrs = new java.util.LinkedHashMap<>(target.attrs());
+                attrs.put(WorkingMemory.STATUS, "done");
+                ledger.put(target.withAttrs(attrs).withActor(MemoryItem.Actor.USER), target.version());
+            });
+            ledger.get(id).ifPresent(done -> {
+                Map<String, String> attrs = new java.util.LinkedHashMap<>(done.attrs());
+                attrs.put(WorkingMemory.STATUS, "done");
+                ledger.put(done.withAttrs(attrs), done.version());
+            });
         }
         return Outcome.DONE;
     }

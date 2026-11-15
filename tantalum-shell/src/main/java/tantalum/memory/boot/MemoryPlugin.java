@@ -124,7 +124,7 @@ public class MemoryPlugin {
                     settings.model() == null ? "(route default)" : settings.model());
         }
         PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model());
-        return new NoteTaker(settings, user -> wantsNotes(services.getObject(), user), stores::notes,
+        NoteTaker taker = new NoteTaker(settings, user -> wantsNotes(services.getObject(), user), stores::notes,
                 user -> new tantalum.memory.capture.NoteFiler(stores.of(user), stores.working(user), stores.notes(user),
                         services.getObject().sensitive()),
                 (user, system, text, maxTokens) -> services.getObject().complete(new PluginServices.Completion(user, MemoryTools.PLUGIN,
@@ -142,6 +142,10 @@ public class MemoryPlugin {
                     }
                 },
                 ZoneId.systemDefault());
+        // 图书管理员的提议（memory-final-plan 第 9 节）：排在最后（后台），只读记忆，提议都进“待确认”
+        return taker.proposals(user -> new tantalum.memory.LibrarianProposals(stores.ledger(user), stores.of(user), stores.working(user),
+                ZoneId.systemDefault()).propose((system, text) -> services.getObject().complete(new PluginServices.Completion(user,
+                MemoryTools.PLUGIN, "librarian", PluginServices.Priority.BACKGROUND, system, text, pick, 1500))));
     }
 
     @Bean
