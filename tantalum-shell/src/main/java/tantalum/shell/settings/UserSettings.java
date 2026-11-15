@@ -37,6 +37,7 @@ public final class UserSettings implements AutoCloseable {
     private static final String COMPACTION_PERCENT = "compaction_percent";
     private static final String MODEL_CHOICE = "model_choice";
     private static final String LANGUAGE = "language";
+    private static final String TIMEZONE = "timezone";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final Connection connection;
@@ -45,6 +46,7 @@ public final class UserSettings implements AutoCloseable {
     /** 没选过的用户也缓存一份空的，免得每次提问都读库。 */
     private final Map<Principal, Optional<ModelChoice>> choices = new ConcurrentHashMap<>();
     private final Map<Principal, Optional<Language>> languages = new ConcurrentHashMap<>();
+    private final Map<Principal, Optional<java.time.ZoneId>> zones = new ConcurrentHashMap<>();
 
     private UserSettings(Connection connection, Clock clock) {
         this.connection = connection;
@@ -144,6 +146,31 @@ public final class UserSettings implements AutoCloseable {
             delete(user, LANGUAGE);
         }
         languages.put(user, language);
+    }
+
+    /** 这个用户的时区（memory-final-plan 评审：当天笔记、“三天前”按它算）；没设过、存的读不懂时为空。 */
+    public Optional<java.time.ZoneId> timezone(Principal user) {
+        Optional<java.time.ZoneId> cached = zones.get(user);
+        if (cached != null) {
+            return cached;
+        }
+        Optional<java.time.ZoneId> loaded = load(user, TIMEZONE).flatMap(UserSettings::zone);
+        Optional<java.time.ZoneId> raced = zones.putIfAbsent(user, loaded);
+        return raced == null ? loaded : raced;
+    }
+
+    public synchronized void setTimezone(Principal user, java.time.ZoneId zone) {
+        save(user, TIMEZONE, zone.getId());
+        zones.put(user, Optional.of(zone));
+    }
+
+    /** IANA 的时区名（如 {@code Asia/Tokyo}）；读不懂为空。 */
+    public static Optional<java.time.ZoneId> zone(String id) {
+        try {
+            return id == null || id.isBlank() || id.length() > 64 ? Optional.empty() : Optional.of(java.time.ZoneId.of(id.strip()));
+        } catch (java.time.DateTimeException unknown) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<ModelChoice> parseChoice(String stored) {

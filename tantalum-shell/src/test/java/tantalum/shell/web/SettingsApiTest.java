@@ -115,6 +115,26 @@ class SettingsApiTest {
         assertEquals(401, putLanguage(null, "{\"language\":\"ja\"}").statusCode());
     }
 
+    private HttpResponse<String> putTimezone(String user, String body) throws Exception {
+        return server.http.send(server.request(user, "/api/settings/timezone").header("content-type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    /** 每人的时区（当天笔记、“三天前”按它算）：按用户存，只收 IANA 时区名。 */
+    @Test
+    void theTimezoneIsStoredPerUser() throws Exception {
+        assertTrue(JSON.readTree(server.get("alice", "/api/settings").body()).get("timezone").isNull());
+        HttpResponse<String> saved = putTimezone("alice", "{\"timezone\":\"Asia/Tokyo\"}");
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals("Asia/Tokyo", JSON.readTree(saved.body()).get("timezone").asString());
+        assertTrue(JSON.readTree(server.get("bob", "/api/settings").body()).get("timezone").isNull());
+        for (String body : new String[] {"{\"timezone\":\"Mars/Olympus\"}", "{\"timezone\":1}", "{}", "not json"}) {
+            assertEquals(400, putTimezone("alice", body).statusCode(), body);
+        }
+        assertEquals("Asia/Tokyo", JSON.readTree(server.get("alice", "/api/settings").body()).get("timezone").asString());
+        assertEquals(401, putTimezone(null, "{\"timezone\":\"Asia/Tokyo\"}").statusCode());
+    }
+
     @Test
     void configSaysWhereTheWindowCameFrom() throws Exception {
         JsonNode config = JSON.readTree(server.get("alice", "/api/config").body());

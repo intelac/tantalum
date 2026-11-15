@@ -78,12 +78,12 @@ public class MemoryPlugin {
         PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model(), "off");
         return new tantalum.memory.recall.RecallWork(stores, (user, system, text) -> services.getObject().complete(
                 new PluginServices.Completion(user, MemoryTools.PLUGIN, "rewrite", PluginServices.Priority.FOREGROUND, system, text, pick, 160)),
-                user -> ZoneId.systemDefault());
+                user -> services.getObject().zone(user));
     }
 
     @Bean
-    tantalum.memory.recall.MemorySearchTool memorySearchTool(MemoryStores stores) {
-        return new tantalum.memory.recall.MemorySearchTool(stores, user -> ZoneId.systemDefault());
+    tantalum.memory.recall.MemorySearchTool memorySearchTool(MemoryStores stores, ObjectProvider<PluginServices> services) {
+        return new tantalum.memory.recall.MemorySearchTool(stores, user -> services.getObject().zone(user));
     }
 
     @Bean
@@ -141,10 +141,10 @@ public class MemoryPlugin {
                         return services.getObject().runView(user, session, run);
                     }
                 },
-                ZoneId.systemDefault());
+                (Principal user) -> services.getObject().zone(user));
         // 图书管理员的提议（memory-final-plan 第 9 节）：排在最后（后台），只读记忆，提议都进“待确认”
         return taker.proposals(user -> new tantalum.memory.LibrarianProposals(stores.ledger(user), stores.of(user), stores.working(user),
-                ZoneId.systemDefault()).propose((system, text) -> services.getObject().complete(new PluginServices.Completion(user,
+                services.getObject().zone(user)).propose((system, text) -> services.getObject().complete(new PluginServices.Completion(user,
                 MemoryTools.PLUGIN, "librarian", PluginServices.Priority.BACKGROUND, system, text, pick, 1500))));
     }
 

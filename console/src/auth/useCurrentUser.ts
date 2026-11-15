@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
-import { logout as logoutRequest, me, onUnauthorized } from "../api/client";
+import { logout as logoutRequest, me, onUnauthorized, saveTimezone } from "../api/client";
 import type { User } from "../api/types";
 import { applyStoredLanguage } from "../text";
 
@@ -34,6 +34,15 @@ export function useCurrentUser(): CurrentUser {
     if (known) applyStoredLanguage(stored);
   }, [known, stored]);
 
+  // 服务器按这个人的时区分当天笔记、算“三天前”：存的和浏览器的不一样时更新一次（失败不管，下次登录再试）
+  const zone = query.data?.timezone;
+  const signedIn = query.data !== null && query.data !== undefined;
+  useEffect(() => {
+    if (!signedIn) return;
+    const browser = browserTimezone();
+    if (browser !== undefined && browser !== zone) saveTimezone(browser).catch(() => undefined);
+  }, [signedIn, zone]);
+
   useEffect(() => {
     onUnauthorized(forget);
     return () => onUnauthorized(() => undefined);
@@ -48,4 +57,14 @@ export function useCurrentUser(): CurrentUser {
   }, [forget]);
 
   return { user: query.data ?? null, loading: query.isPending, setUser, logout };
+}
+
+/** 浏览器的时区；拿不到时为空。 */
+function browserTimezone(): string | undefined {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof zone === "string" && zone !== "" ? zone : undefined;
+  } catch {
+    return undefined;
+  }
 }

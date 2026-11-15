@@ -85,6 +85,22 @@ class NoteTakerTest {
                 "only the task in the user's own words goes into working memory; the inferred note stays in the day's card");
     }
 
+    /** 当天卡按这个人的时区分天：UTC 早上 7 点，在洛杉矶还是前一天晚上。 */
+    @Test
+    void theDayFollowsTheUsersTimeZone() {
+        tantalum.memory.ledger.Ledger ledger = tantalum.memory.ledger.Ledger.open(dir, java.time.Clock.systemUTC());
+        DailyNotes notes = new DailyNotes(ledger);
+        NoteFiler filer = new NoteFiler(new MemoryStore(ledger, MemoryLimits.defaults()), new WorkingMemory(ledger), notes,
+                tantalum.shell.plugin.SensitiveText.current());
+        NoteTaker taker = new NoteTaker(on(), user -> true, user -> notes, user -> filer, model, NoteTaker.Catchup.NONE,
+                (tantalum.value.id.Principal user) -> ZoneId.of("America/Los_Angeles"));
+        assertTrue(taker.note(run("s-1_5", "COMPLETED", false)));
+        assertTrue(new DailyNotes(dir).read("2026-11-15", "s-1").isEmpty());
+        DailyNotes.Note note = new DailyNotes(dir).read("2026-11-14", "s-1").orElseThrow();
+        assertTrue(note.sections().getFirst().heading().startsWith("23:24"), note.sections().getFirst().heading());
+        taker.close();
+    }
+
     @Test
     void onlyCompletedRunsThatAreNotCompactionsAreQueued() {
         assertTrue(NoteTaker.worthNoting(run("r", "COMPLETED", false)));

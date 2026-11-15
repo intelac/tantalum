@@ -11,6 +11,8 @@ export interface User {
   language?: Language | null;
   /** 管理员才有设置页的“用户”一页（ops-hardening-2 需求 2.3）。 */
   admin?: boolean;
+  /** 存在服务器上的时区（当天笔记、“三天前”按它算）；和浏览器的不一样时控制台更新它。 */
+  timezone?: string | null;
 }
 
 /** 用户管理接口里的一个账号。 */
@@ -1006,6 +1008,7 @@ export interface UserSettingsView {
   model?: ModelChoice | null;
   /** null 表示跟随浏览器（console-i18n I3）。 */
   language?: Language | null;
+  timezone?: string | null;
 }
 
 // ---- 模型路线（`/api/models`，model-picker）----

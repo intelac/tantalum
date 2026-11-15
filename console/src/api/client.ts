@@ -533,6 +533,11 @@ export function setCompactionPercent(percent: number): Promise<UserSettingsView>
   return call("/api/settings/compaction", { method: "PUT", body: JSON.stringify({ percent }) });
 }
 
+/** 存这个用户的时区（IANA 名，如 Asia/Tokyo）：记忆的当天笔记、“三天前”这类找回按它算。 */
+export function saveTimezone(timezone: string): Promise<UserSettingsView> {
+  return call("/api/settings/timezone", { method: "PUT", body: JSON.stringify({ timezone }) });
+}
+
 /** 存这个用户的控制台语言；null 是跟随浏览器（console-i18n I3）。只改自己的。 */
 export function saveLanguage(language: Language | null): Promise<UserSettingsView> {
   return call("/api/settings/language", { method: "PUT", body: JSON.stringify({ language }) });

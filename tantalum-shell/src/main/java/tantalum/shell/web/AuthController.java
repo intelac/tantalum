@@ -141,13 +141,14 @@ public class AuthController {
 
     /**
      * {@code {"username", "language", "admin"}}：控制台登录后、刷新后立即用这个用户的语言，{@code null} 是跟随浏览器；
-     * {@code admin} 决定设置页有没有“用户”一页。
+     * {@code admin} 决定设置页有没有“用户”一页；{@code timezone} 是存的时区（控制台和浏览器的不一样时更新它）。
      */
     private ObjectNode user(Principal user) throws SQLException {
         ObjectNode view = json.object();
         view.put("username", user.value());
         view.put("language", engine.userSettings().language(user).map(Language::id).orElse(null));
         view.put("admin", users.status(user.value()).map(UserStore.Status::admin).orElse(false));
+        view.put("timezone", engine.userSettings().timezone(user).map(java.time.ZoneId::getId).orElse(null));
         return view;
     }
 }

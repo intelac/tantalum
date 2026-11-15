@@ -262,6 +262,12 @@ public final class PlatformServices implements PluginServices {
     }
 
     @Override
+    public java.time.ZoneId zone(Principal user) {
+        Engine bound = engine;
+        return bound == null ? java.time.ZoneId.systemDefault() : bound.userSettings().timezone(user).orElse(java.time.ZoneId.systemDefault());
+    }
+
+    @Override
     public Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
         Engine bound = engine;
         if (bound == null) {

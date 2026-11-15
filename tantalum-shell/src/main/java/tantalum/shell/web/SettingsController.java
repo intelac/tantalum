@@ -122,6 +122,19 @@ public class SettingsController {
         return json.json(200, view(user));
     }
 
+    /** 请求体 {@code {"timezone": "Asia/Tokyo"}}：控制台按浏览器的时区自动设；当天笔记、“三天前”这类找回按它算。 */
+    @PutMapping("/api/settings/timezone")
+    ResponseEntity<String> setTimezone(@RequestBody String body) {
+        Optional<java.time.ZoneId> zone = json.read(body).map(node -> node.path("timezone").asString(null))
+                .flatMap(tantalum.shell.settings.UserSettings::zone);
+        if (zone.isEmpty()) {
+            return json.error(ErrorCode.SETTINGS_INVALID, "body must be {\"timezone\": \"an IANA time zone such as Asia/Tokyo\"}");
+        }
+        Principal user = WebJson.currentUser();
+        engine.userSettings().setTimezone(user, zone.get());
+        return json.json(200, view(user));
+    }
+
     private ObjectNode view(Principal user) {
         CompactionPolicy policy = engine.compaction();
         Map<String, Object> compaction = new LinkedHashMap<>();
@@ -136,6 +149,7 @@ public class SettingsController {
         ObjectNode node = (ObjectNode) json.tree(view);
         // journal 的 mapper 省略 null，语言要写出显式的 null
         node.put("language", engine.userSettings().language(user).map(Language::id).orElse(null));
+        node.put("timezone", engine.userSettings().timezone(user).map(java.time.ZoneId::getId).orElse(null));
         return node;
     }
 

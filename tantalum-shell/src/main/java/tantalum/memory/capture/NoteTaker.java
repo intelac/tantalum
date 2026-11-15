@@ -75,7 +75,8 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
     private final Predicate<Principal> userWants;
     private final Function<Principal, DailyNotes> notes;
     private final Writer writer;
-    private final ZoneId zone;
+    /** 每个人的时区：当天卡按它分天，标题里的时刻按它写。 */
+    private final Function<Principal, ZoneId> zones;
     private final Function<Principal, NoteFiler> filers;
     private final Catchup catchup;
     private final java.util.Map<Principal, Long> caughtUp = new java.util.concurrent.ConcurrentHashMap<>();
@@ -87,18 +88,29 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
     /** {@code filers} 给这个人的归档（写页面、工作记忆、当天卡）；{@code catchup} 补抓用。 */
     public NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
                      Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, ZoneId zone) {
-        this(settings, userWants, notes, filers, writer, catchup, zone, BACKOFF_MILLIS);
+        this(settings, userWants, notes, filers, writer, catchup, user -> zone, BACKOFF_MILLIS);
+    }
+
+    /** 同上，时区按人（{@link tantalum.shell.plugin.PluginServices#zone}）。 */
+    public NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
+                     Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, Function<Principal, ZoneId> zones) {
+        this(settings, userWants, notes, filers, writer, catchup, zones, BACKOFF_MILLIS);
     }
 
     NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
               Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, ZoneId zone, long[] backoff) {
+        this(settings, userWants, notes, filers, writer, catchup, user -> zone, backoff);
+    }
+
+    NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
+              Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, Function<Principal, ZoneId> zones, long[] backoff) {
         this.filers = filers;
         this.catchup = catchup;
         this.settings = settings;
         this.userWants = userWants;
         this.notes = notes;
         this.writer = writer;
-        this.zone = zone;
+        this.zones = zones;
         this.backoff = backoff.clone();
         this.queue = new ArrayBlockingQueue<>(settings.queue());
         if (settings.enabled()) {
@@ -180,6 +192,7 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             if (!userWants.test(run.user())) {
                 return false;
             }
+            ZoneId zone = zones.apply(run.user());
             String day = LocalDate.ofInstant(run.end(), zone).toString();
             DailyNotes daily = notes.apply(run.user());
             tantalum.memory.ledger.Ledger ledger = daily.ledger();
@@ -252,7 +265,7 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             return;
         }
         try {
-            tantalum.memory.Librarian.Result result = new tantalum.memory.Librarian(notes.apply(user).ledger(), zone).daily();
+            tantalum.memory.Librarian.Result result = new tantalum.memory.Librarian(notes.apply(user).ledger(), zones.apply(user)).daily();
             if (result != null && result.merged() > 0) {
                 LOG.info("memory librarian for {}: merged {} duplicate(s){}", user.value(), result.merged(),
                         result.rolledBack() ? ", rolled back because recall got worse" : "");

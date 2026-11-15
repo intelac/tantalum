@@ -67,6 +67,11 @@ public interface PluginServices {
     /** 这个插件对这个用户开没开（插件页的开关）。 */
     boolean enabled(String plugin, Principal user);
 
+    /** 这个用户的时区：他在控制台里的（浏览器的），没有时用服务器的。 */
+    default java.time.ZoneId zone(Principal user) {
+        return java.time.ZoneId.systemDefault();
+    }
+
     /** 这个会话是不是委派开的子会话（memory-final-plan 第 12 节）：是的话给父会话，不是为空。 */
     default Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
         return Optional.empty();
