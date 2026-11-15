@@ -108,6 +108,13 @@ public final class ContextHandler implements Handler {
     }
 
     private volatile long mainWindowTokens = MainWindow.DEFAULT_TOKENS;
+    private volatile java.time.Clock clock;
+
+    /** 引擎的钟：固定部分后面、各段前面写一行今天的日期（按这个人的时区）。不设（单元测试）就不写。 */
+    public ContextHandler clock(java.time.Clock clock) {
+        this.clock = clock;
+        return this;
+    }
 
     /** 主窗口保留多少最近的原话（token，memory-final-plan 第 11 节）。 */
     public ContextHandler mainWindowTokens(long tokens) {
@@ -167,6 +174,13 @@ public final class ContextHandler implements Handler {
         if (main) {
             append(system, MainWindow.NOTE);
         }
+        // 今天的日期（2026-11-16 记忆评测：模型不知道今天几号，“三天前”只能猜，反复搜到超时）：只写到日期，一天才变一次；
+        // 放在固定部分后面，固定部分照样一直命中缓存，后面的各段本来就每轮会变
+        java.time.Clock now = clock;
+        if (now != null) {
+            append(system, today(now.instant(), users == null ? java.time.ZoneId.systemDefault()
+                    : users.timezone(principal).orElse(java.time.ZoneId.systemDefault())));
+        }
         sections.forEach(section -> append(system, section.tagged()));
         // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效，换模型的事只在内核追加的说明里
         AssembleContext assemble = (AssembleContext) command;
@@ -193,6 +207,13 @@ public final class ContextHandler implements Handler {
         }
         return new ContextAssembled(command.id(), system.toString(), catalog.specs(), settings, sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
+    }
+
+    /** system 的最后一行：{@code Today is 2026-11-16 (Monday, time zone Asia/Tokyo).} */
+    static String today(java.time.Instant now, java.time.ZoneId zone) {
+        java.time.LocalDate day = java.time.LocalDate.ofInstant(now, zone);
+        return "Today is " + day + " (" + day.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
+                + ", time zone " + zone.getId() + ").";
     }
 
     /** 这个用户开着的插件各自的一份；插件出错只记日志，这一份不带。 */

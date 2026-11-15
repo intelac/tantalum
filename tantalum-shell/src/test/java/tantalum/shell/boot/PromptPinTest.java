@@ -69,7 +69,7 @@ class PromptPinTest {
             }
             Prompt prompt = prompts.getFirst();
             String root = mac.toString();
-            return new Prompt(prompt.system().replace(root, "{{root}}"), prompt.tools(), prompt.messages(), prompt.output(), prompt.model());
+            return new Prompt(prompt.system().replace(root, "{{root}}").replaceAll("Today is \\d{4}-\\d{2}-\\d{2} \\([A-Za-z]+, time zone [^)]+\\)\\.", "Today is {{today}}."), prompt.tools(), prompt.messages(), prompt.output(), prompt.model());
         } finally {
             if (connected != null) {
                 connected.close();

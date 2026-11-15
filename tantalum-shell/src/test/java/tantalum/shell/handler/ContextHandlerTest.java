@@ -332,6 +332,21 @@ class ContextHandlerTest {
         assertFalse(system.contains(ContextHandler.KNOWLEDGE_HEADING));
     }
 
+    /** 2026-11-16 记忆评测：模型要知道今天几号。按这个人的时区写日期，放在固定部分后面、各段前面；引擎不给钟时不写。 */
+    @Test
+    void todaysDateFollowsTheFixedPartInTheUsersZone() throws Exception {
+        UserSettings users = UserSettings.inMemory(Clock.systemUTC());
+        users.setTimezone(ALICE, java.time.ZoneId.of("Asia/Tokyo"));
+        Clock evening = Clock.fixed(Instant.parse("2026-11-15T22:30:00Z"), java.time.ZoneOffset.UTC);
+        ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog(), memoryGate(), memories(Workspaces.shared(dir)),
+                KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, users).clock(evening);
+        String system = assembled(handler, COMMAND).system();
+        assertEquals("Base prompt.\n\n" + MemoryGuidance.TEXT.strip() + "\n\nToday is 2026-11-16 (Monday, time zone Asia/Tokyo).", system);
+        users.setTimezone(ALICE, java.time.ZoneId.of("America/Los_Angeles"));
+        assertTrue(assembled(handler, COMMAND).system().endsWith("Today is 2026-11-15 (Sunday, time zone America/Los_Angeles)."));
+        assertFalse(assembled(shared(), COMMAND).system().contains("Today is"), "without the engine's clock there is no date");
+    }
+
     @Test
     void sectionsAppearInTheFixedOrderOnlyWhenPresent(@TempDir Path knowledgeDir) throws Exception {
         Files.writeString(knowledgeDir.resolve("team.md"), "Team facts.");
