@@ -73,6 +73,59 @@ def c_window_delegates(ctx):
         failed.append(f"开出去的会话没有用改文件的工具：{opened}")
     return failed
 
+def raw(ctx, session):
+    try: return open(os.path.join(ctx.sessions_dir, f"{session}.jsonl"), encoding="utf-8").read()
+    except OSError: return ""
+
+def window_says(ctx, needles, seconds=240):
+    """主窗口交出去不等：结果是事后一条条回来、各开一轮说的。等到这次场景的会话记录里这些词都出现（模型回复里），最多等这么久。"""
+    import json, time
+    deadline = time.time() + seconds
+    missing = list(needles)
+    while True:
+        said = ""
+        for session in ctx.sessions:
+            for line in raw(ctx, session).splitlines():
+                try: entry = json.loads(line)
+                except ValueError: continue
+                if entry.get("type") == "ModelReplied":
+                    said += "".join(block.get("text", "") for block in (entry.get("payload") or {}).get("content", []) if block.get("kind") == "text")
+        missing = [n for n in needles if n.lower() not in said.lower()]
+        if not missing or time.time() > deadline: break
+        time.sleep(3)
+    return [f"等了 {seconds} 秒，主窗口的回复里还是没有 {n!r}" for n in missing]
+
+def c_fan_out_three(ctx):
+    """一句话交代三件互不相干的事：模型自己分给三个会话，三个都真的干了活，三个结果都回到主窗口。"""
+    failed = window_says(ctx, [FACTS["warehouse"], "shipping.py", "12"])
+    opened = others(ctx)
+    if len(opened) < 3: failed.append(f"只开出了 {len(opened)} 个会话，要 3 个：{list(opened)}")
+    idle = [session for session, names in opened.items() if not any(name in FILE_TOOLS for name in names)]
+    if idle: failed.append(f"{', '.join(idle)} 没有用电脑上的工具")
+    mine = [name for name in FILE_TOOLS if ctx.tools.get(name, 0) > 0]
+    if mine: failed.append(f"主窗口自己用了 {', '.join(mine)}")
+    answers = sum(raw(ctx, session).count('"type":"SessionMessage"') for session in ctx.sessions)
+    if answers < len(opened): failed.append(f"开出去 {len(opened)} 个会话，只回来 {answers} 句话")
+    return failed
+
+def c_take_back(ctx):
+    """交出去一件长活，接着说不用做了：模型把它收回，那个会话停下，并且照常回一句“没做成”。"""
+    import time
+    failed = []
+    stops = [call for call in ctx.calls if call["name"] == "delegate" and isinstance(call["args"], dict) and call["args"].get("stop") in (True, "true")]
+    if not stops: failed.append("没有把交出去的活收回")
+    opened = others(ctx)
+    if len(opened) != 1: failed.append(f"应该只开出 1 个会话：{list(opened)}")
+    deadline = time.time() + 60
+    marker = "taken back by the conversation that handed it over"
+    while time.time() < deadline and not any(marker in raw(ctx, session) for session in opened): time.sleep(2)
+    for session in opened:
+        if marker not in raw(ctx, session):
+            failed.append(f"{session} 没有因为被收回而停下" + ("（它在收回之前已经做完了，这次没测到）" if '"reason":"COMPLETED"' in raw(ctx, session) else ""))
+    while time.time() < deadline and not any(marker in raw(ctx, session) for session in ctx.sessions): time.sleep(2)
+    if not any(marker in raw(ctx, session) for session in ctx.sessions): failed.append("“没做成”的回话没有回到主窗口")
+    return failed
+
 def same_dir(a, b):
     return a is not None and b is not None and os.path.realpath(a.rstrip("/")) == os.path.realpath(b.rstrip("/"))
 
@@ -1196,6 +1249,14 @@ SCENARIOS += [
       "请在同一次回复里调用两次 delegate 工具（wait 都设为 true），让两个会话各查一件事：一个查 inventory/data/catalog.py 里 SKU-2187 的 "
       "warehouse_code 是什么；另一个查 compute_shipping_fee 定义在哪个文件。你自己不要读文件、不要搜索。两个回答都拿到后一起告诉我。",
       c_delegate_two, max_calls=6, timeout=480),
+    # 多个会话（2026-11-17 Yi：“多个子 agent 测试了吗”）。提示里不提任何工具名，主窗口不等结果，结果事后各自回来
+    S("fan-out-three", "交给别的会话", "一句话三件互不相干的事：分给三个会话同时干，三个结果都回到主窗口",
+      "有三件互不相干的事，分给三个会话同时去查，都回来以后告诉我结果：一是 inventory/data/catalog.py 里 SKU-2187 的 warehouse_code 是什么；"
+      "二是 compute_shipping_fee 这个函数定义在哪个文件；三是 inventory/shipping.py 里 EXPRESS_SURCHARGE 现在的值是多少。",
+      c_fan_out_three, max_calls=10, timeout=420, window=True),
+    S("take-back", "交给别的会话", "交出去的长活，用户说不用做了：模型收回，那个会话停下并回一句没做成",
+      "开一个会话去做这件事：把 inventory 目录下每个 .py 文件逐个读一遍，每个文件写一段不少于 300 字的中文说明，全部写完再汇总给我。",
+      c_take_back, max_calls=8, timeout=300, window=True, turns=["算了，刚才交出去的那件事不用做了，让它停下。"]),
     S("window-delegates", "交给别的会话", "主窗口里不提 delegate，模型自己决定开一个会话去改文件",
       "把 inventory/shipping.py 里 EXPRESS_SURCHARGE 的值改成 25。", c_window_delegates, max_calls=6, timeout=300, window=True),
     # 工作区（2026-11-16 Yi）：模型知道有哪些工作区，自己决定新建、在哪个里面开会话；新建前先问用户。提示里不提任何工具名

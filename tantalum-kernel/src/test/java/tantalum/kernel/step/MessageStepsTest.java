@@ -78,7 +78,7 @@ class MessageStepsTest {
         World() {
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);
-            kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> true, Limits.DEFAULT);
+            kernel = new Kernel(table, new HookChain(List.of()), (tool, args) -> !"write_file".equals(tool), Limits.DEFAULT);
         }
 
         Decision feed(SessionId session, RunId run, Event event) {
@@ -516,5 +516,158 @@ class MessageStepsTest {
         }
         assertEquals(world.state, replay.state);
         assertEquals(world.commands, replay.commands);
+    }
+
+    private static ToolCallBlock stop(String id, String session) {
+        Map<String, Json> fields = new LinkedHashMap<>();
+        fields.put("stop", new Json.Bool(true));
+        if (session != null) {
+            fields.put("session", new Json.Str(session));
+        }
+        return new ToolCallBlock(id, "delegate", "{}", new Json.Obj(fields));
+    }
+
+    /**
+     * 撤回：A 交给 B 两件（一件在做、一件排着队），然后收回。B 排队的那件去掉、在做的那一轮按被取消结束，两件各回一句“没做成”，
+     * 所以每件交出去的活仍然恰好有一句回话。
+     */
+    @Test
+    void takingWorkBackEndsWhatIsNotFinishedAndEachPieceStillAnswers() {
+        World world = new World();
+        CallModel call = world.ask(A, "start");
+        world.reply(A, call, delegate("c1", "first job", false, null));
+        Send first = world.only(Send.class);
+        CallModel next = world.only(CallModel.class);
+        world.deliver(first);
+        world.reply(A, next, delegate("c2", "second job", false, first.to().value()));
+        Send second = world.only(Send.class);
+        next = world.only(CallModel.class);
+        world.deliver(second);
+        SessionId b = first.to();
+        assertEquals(1, world.session(b).inbox().waiting().size());
+
+        world.reply(A, next, stop("c3", b.value()));
+        Send back = world.only(Send.class);
+        assertTrue(back.message().isWithdrawal() && !back.message().isReply() && !back.message().isRequest());
+        assertEquals(b, back.to());
+        ToolResultBlock told = results(world, A).getFirst();
+        assertTrue(!told.error() && told.text().startsWith("Told conversation " + b.value() + " to stop"), told.text());
+        assertTrue(world.session(A).inbox().unconfirmed().stream().anyMatch(each -> each.message().id().equals(back.id())),
+                "held until the other side confirms, like any message");
+
+        world.deliver(back);
+        assertEquals(EndReason.CANCELLED, ((Ended) world.run(b).phase()).reason());
+        assertNull(world.session(b).activeRun(), "nothing else started");
+        assertTrue(world.session(b).inbox().isEmpty());
+        assertTrue(world.last.commands().stream().anyMatch(AbortCommands.class::isInstance), "what the turn was waiting for is aborted");
+        assertEquals(1, world.last.commands().stream().filter(tantalum.value.command.Confirm.class::isInstance).count());
+        List<Send> answers = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).toList();
+        assertEquals(2, answers.size(), "one answer per piece");
+        assertTrue(answers.stream().allMatch(each -> each.to().equals(A) && each.message().failed()));
+        assertEquals(java.util.Set.of(first.id(), second.id()),
+                answers.stream().map(each -> each.message().answers()).collect(java.util.stream.Collectors.toSet()));
+        assertTrue(answers.stream().anyMatch(each -> each.message().text().contains("before it started")));
+        assertTrue(answers.stream().anyMatch(each -> each.message().text().startsWith("it was cancelled: taken back")), answers.toString());
+
+        // 再送一遍同一句撤回（重启后的重送）：只回确认
+        world.deliver(back);
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance));
+    }
+
+    /** 撤回只管交活的那个会话交来的、还没做完的：已经做完的、用户自己在那里问的、别的会话交来的都不动。 */
+    @Test
+    void takingBackLeavesFinishedWorkTheUsersOwnTurnsAndOtherConversationsWorkAlone() {
+        World world = new World();
+        CallModel call = world.ask(A, "go");
+        world.reply(A, call, delegate("c1", "count", false, null));
+        Send sent = world.only(Send.class);
+        CallModel next = world.only(CallModel.class);
+        SessionId b = sent.to();
+        world.deliver(finishes(world, sent, "42"));
+        // B 已经做完；用户自己在 B 里又问了一句，正在跑
+        world.ask(b, "and how many are tests?");
+        RunState own = world.run(b);
+
+        world.reply(A, next, stop("c2", b.value()));
+        Send back = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast)
+                .filter(each -> each.message().isWithdrawal()).findFirst().orElseThrow();
+        world.deliver(back);
+        assertEquals(own, world.run(b), "the user's own turn goes on");
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "nothing to answer: the work was finished");
+        assertEquals(1, world.last.commands().stream().filter(tantalum.value.command.Confirm.class::isInstance).count());
+
+        // 另一个会话 C 交给 B 的活排着队：A 的撤回不碰它
+        SessionId c = new SessionId("c");
+        CallModel other = world.ask(c, "go");
+        world.reply(c, other, delegate("c9", "other job", false, b.value()));
+        Send fromC = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        world.deliver(fromC);
+        assertEquals(1, world.session(b).inbox().waiting().size());
+        world.deliver(new Send(back.id(), back.run(), b, SessionMessage.withdrawal(new tantalum.value.id.CommandId("again"), back.run())));
+        assertEquals(1, world.session(b).inbox().waiting().size(), "work from another conversation stays queued");
+        assertEquals(own, world.run(b));
+    }
+
+    @Test
+    void takingBackNeedsTheConversationAndNothingElse() {
+        World world = new World();
+        CallModel call = world.ask(A, "go");
+        world.reply(A, call, stop("c1", null));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance));
+        ToolResultBlock result = results(world, A).getFirst();
+        assertTrue(result.error() && result.text().contains("\"stop\" needs \"session\""), result.text());
+        CallModel next = world.only(CallModel.class);
+        world.reply(A, next, stop("c2", A.value()));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance));
+        assertTrue(results(world, A).getFirst().error());
+    }
+
+    /**
+     * “不进记忆”的会话和进记忆的会话之间不交活（新开的会话跟着交活的一方，没问题）：已有的会话标记不一样就不接，
+     * 回一句没做成，那个会话一个字都不多。两个方向都一样。
+     */
+    @Test
+    void workDoesNotCrossBetweenAnOffRecordConversationAndAnOrdinaryOne() {
+        World world = new World();
+        SessionId plain = new SessionId("plain");
+        CallModel first = world.ask(plain, "hello");
+        world.reply(plain, first, new TextBlock("hi"));
+        int before = world.session(plain).messages().size();
+
+        SessionId quiet = new SessionId("quiet");
+        world.feed(quiet, null, new UserPrompt(new SubmissionId("subq"), new RequestId("reqq"), new OwnerRef.OfSession(quiet), "private thing",
+                List.of(), null, null, List.of(), List.of(), true));
+        assertTrue(world.session(quiet).offRecord());
+        CallModel call = world.assembled(quiet, world.only(AssembleContext.class));
+        world.reply(quiet, call, delegate("c1", "use the private thing", true, plain.value()));
+        Send sent = world.only(Send.class);
+        assertEquals(Boolean.TRUE, sent.message().offRecord());
+        world.deliver(sent);
+        assertEquals(before, world.session(plain).messages().size(), "nothing reached the ordinary conversation");
+        Send refused = world.only(Send.class);
+        assertTrue(refused.message().failed() && refused.message().text().contains("off the record"), refused.message().text());
+        world.deliver(refused);
+        assertTrue(results(world, quiet).getFirst().error());
+
+        // 反过来：进记忆的会话交给已有的不进记忆的会话
+        CallModel again = world.ask(plain, "ask the quiet one");
+        world.reply(plain, again, delegate("c2", "what was the private thing", true, quiet.value()));
+        Send other = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        int quietBefore = world.session(quiet).messages().size();
+        world.deliver(other);
+        assertEquals(quietBefore, world.session(quiet).messages().size());
+        assertTrue(world.only(Send.class).message().failed());
+    }
+
+    /** 一次回复里先问另一个会话（等结果）、后面跟一个独占的工具：工具当场就发，不用等到回话。 */
+    @Test
+    void anExclusiveToolAfterAWaitingQuestionIsSentAtOnce() {
+        World world = new World();
+        CallModel call = world.ask(A, "go");
+        world.reply(A, call, delegate("c1", "count", true, null),
+                new ToolCallBlock("c2", "write_file", "{}", new Json.Obj(Map.of("path", new Json.Str("a.txt"), "content", new Json.Str("x")))));
+        assertEquals(1, world.last.commands().stream().filter(Send.class::isInstance).count());
+        assertEquals(1, world.last.commands().stream().filter(tantalum.value.command.RunTool.class::isInstance).count(),
+                "the tool does not wait for the other conversation: " + world.last.commands());
     }
 }

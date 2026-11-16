@@ -77,6 +77,25 @@ public final class RecallHook implements KernelHook {
     }
 
     private static String textOf(Message message) {
+        return plain(rawTextOf(message));
+    }
+
+    /**
+     * 另一个会话交来的话、回来的结果，开头有一段给模型看的固定英文：去掉，只拿任务或结果本身去找。不然那段话里的
+     * “user”“work”这些词会对上不相干的记忆。
+     */
+    static String plain(String text) {
+        String shown = tantalum.value.delegate.DelegateCall.shownOf(text);
+        if (shown.startsWith(tantalum.value.delegate.DelegateCall.REPORT)) {
+            String rest = shown.substring(tantalum.value.delegate.DelegateCall.REPORT.length());
+            int line = rest.indexOf('\n');
+            // 第二行开头是“Conversation <编号> finished:”，也不是内容
+            return rest.startsWith("Conversation ") && line >= 0 ? rest.substring(line + 1) : rest;
+        }
+        return shown;
+    }
+
+    private static String rawTextOf(Message message) {
         StringBuilder text = new StringBuilder();
         for (ContentBlock block : message.content()) {
             if (block instanceof TextBlock part) {

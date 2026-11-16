@@ -56,6 +56,13 @@ public final class ToolTrust {
         return new Verdict(MemoryItem.Source.ASSISTANT_INFERRED, !outside.isEmpty(), outside);
     }
 
+    /** 读过外部内容的一轮里不许删、不许改写时给模型的话。 */
+    static String outsideNote(Verdict verdict) {
+        return "Not done: this turn read outside content (" + String.join(", ", verdict.outsideTools()) + "), so memory is not deleted or "
+                + "rewritten in it. If the user asked for this, tell them to ask again in a turn of its own, or to do it in the console "
+                + "(Settings > Memory).";
+    }
+
     /** 不进记忆的会话里给模型的话。 */
     static final String OFF_RECORD = "This conversation is off the record: memory is not read or written. Tell the user if they asked you to "
             + "remember or recall something.";

@@ -31,7 +31,9 @@ public final class DelegateTool implements Tool {
                 + "default it works in the same folder as this one. "
                 + "wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way "
                 + "for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several "
-                + "calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.";
+                + "calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to. "
+                + "stop: true together with session (and nothing else) takes back work you handed to that conversation: what it "
+                + "has not finished ends, and it answers that it did not finish.";
     }
 
     /** 手写 schema：{@code wait} 是布尔值。 */
@@ -42,10 +44,10 @@ public final class DelegateTool implements Tool {
         properties.put("session", property("string", "Id of an existing conversation to hand the work to. Omit to open a new one."));
         properties.put("workspace", property("string", "Path of the workspace a new conversation works in. Not together with session."));
         properties.put("wait", property("boolean", "Wait for the answer in this turn (default false)."));
+        properties.put("stop", property("boolean", "Take back the work handed to session instead of handing over new work."));
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));
         schema.put("properties", new Json.Obj(properties));
-        schema.put("required", new Json.Arr(List.of(new Json.Str("task"))));
         schema.put("additionalProperties", new Json.Bool(false));
         return new Json.Obj(schema);
     }

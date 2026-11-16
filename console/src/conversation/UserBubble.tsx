@@ -37,8 +37,8 @@ export function UserBubble({ store, id }: Props) {
       {(item.skills ?? []).map((skill) => (
         <SkillLine key={skill.name} skill={skill} />
       ))}
-      {(item.attached ?? []).map((note) => (
-        <AttachedLine key={note.plugin} note={note} />
+      {(item.attached ?? []).map((note, index) => (
+        <AttachedLine key={`${note.plugin}:${index}`} note={note} />
       ))}
       <div className="flex h-6 items-center gap-1 text-xs text-fg-faint">
         {item.queued && <span className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted">{t.conversation.queued}</span>}

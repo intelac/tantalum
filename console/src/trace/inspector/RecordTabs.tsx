@@ -67,8 +67,8 @@ function UserPages(user: UserInput, t: Text["trace"]) {
           {attached.length > 0 && (
             <Section title={t.attachedTexts}>
               <ul className="flex flex-col gap-2 text-xs">
-                {attached.map((note) => (
-                  <li key={note.plugin} className="flex flex-col gap-1">
+                {attached.map((note, index) => (
+                  <li key={`${note.plugin}:${index}`} className="flex flex-col gap-1">
                     <span className="font-mono text-fg">{note.plugin}</span>
                     <pre className="max-h-80 overflow-auto rounded-sm bg-code p-2 font-mono whitespace-pre-wrap text-fg">{note.text}</pre>
                   </li>

@@ -32,7 +32,10 @@ export function MemoryPane() {
   const [view, setView] = useState<View>({ kind: "list" });
   const pending = usePending();
   const [chosen, setChosen] = useState<Tab | null>(null);
-  const tab: Tab = chosen ?? ((pending.data?.length ?? 0) > 0 ? "pending" : "now");
+  // 打开时有待确认的就先看待确认；之后不跟着条数来回跳（确认完最后一条还留在这一页）
+  const [opening, setOpening] = useState<Tab | null>(null);
+  if (opening === null && pending.data !== undefined) setOpening(pending.data.length > 0 ? "pending" : "now");
+  const tab: Tab = chosen ?? opening ?? "now";
   if (plugins.data !== undefined && !plugins.data.plugins.some((plugin) => plugin.name === "memory" && plugin.enabled)) {
     return <p className="text-sm text-fg-muted">{t.memory.pluginOff}</p>;
   }

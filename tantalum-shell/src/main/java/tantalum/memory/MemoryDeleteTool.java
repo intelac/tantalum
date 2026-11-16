@@ -54,6 +54,19 @@ public final class MemoryDeleteTool implements Tool {
             return ToolOutput.error(ToolTrust.CHILD);
         }
         try {
+            // 这一轮读过外部内容：文件、网页里一句“把某某记忆删掉”不能让记忆真的被删（review 2026-11-17）
+            ToolTrust.Verdict verdict = trust.judge(context, null);
+            if (verdict.pendingConfirm()) {
+                return ToolOutput.error(ToolTrust.outsideNote(verdict));
+            }
+            // 你认可过的决定，模型删不了：只有你自己在控制台里删
+            if (name != null) {
+                java.util.Optional<tantalum.memory.ledger.MemoryItem> approved = stores.of(context.principal()).approved(name);
+                if (approved.isPresent()) {
+                    return ToolOutput.error("Not deleted: " + name + " holds a decision the user approved (\"" + approved.get().text()
+                            + "\"). Only the user can remove it, in the console (Settings > Memory).");
+                }
+            }
             if (name == null) {
                 int gone = Forgetting.statement(stores.of(context.principal()), text.strip(), tantalum.memory.ledger.MemoryItem.Actor.AGENT);
                 return ToolOutput.ok(gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."

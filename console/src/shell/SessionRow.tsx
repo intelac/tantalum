@@ -1,7 +1,7 @@
 import { Archive, ArchiveRestore, CircleHelp, Copy, EyeOff, MoreHorizontal, Pencil, Pin, PinOff, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { SessionSummary } from "../api/types";
-import { nested, openedByMainWindow } from "../projects/group";
+import { openedByMainWindow } from "../projects/group";
 import { relativeTime } from "../text/format";
 import { type Text, useText } from "../text";
 import { cx } from "../ui/cx";
@@ -20,6 +20,8 @@ interface Props {
   onPin?: (session: SessionSummary, pinned: boolean) => void;
   /** 搜索结果里在标题下写工作区名或命中的片段。 */
   detail?: string;
+  /** 缩进：开它的会话就在同一列里、排在它前面（见 {@code indentedIn}）。 */
+  indent?: boolean;
 }
 
 /** 会话的显示标题：还没有第一条消息时是“新会话”。 */
@@ -34,7 +36,7 @@ const COPIED_MS = 1500;
  * 一行会话：标题，右侧相对时间；运行中显示跳动的点；停在等你回答时显示“待回答”（waiting-state 需求 7.3）。
  * 已归档的变灰，时间换成“已归档”。置顶的标题前有图钉。菜单：改名、置顶、复制会话号、归档（session-find-pin R1、R2）。
  */
-export function SessionRow({ session, selected, onSelect, now, onRename, onArchive, onPin, detail }: Props) {
+export function SessionRow({ session, selected, onSelect, now, onRename, onArchive, onPin, detail, indent }: Props) {
   const t = useText();
   const waiting = session.awaitingAnswer === true;
   const running = !waiting && session.runStatus !== "idle";
@@ -73,7 +75,7 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         ]
       : null;
   return (
-    <li className={nested(session) ? "group relative pl-4" : "group relative"} data-delegated={session.parent !== undefined || undefined}>
+    <li className={indent === true ? "group relative pl-4" : "group relative"} data-delegated={session.parent !== undefined || undefined}>
       <button
         type="button"
         aria-current={selected ? "page" : undefined}

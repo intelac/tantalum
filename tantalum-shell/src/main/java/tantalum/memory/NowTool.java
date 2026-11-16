@@ -70,7 +70,7 @@ public final class NowTool implements Tool {
             }
             return switch (action) {
                 case "add" -> add(context, working, arguments);
-                case "update", "close" -> update(working, arguments, action.equals("close"));
+                case "update", "close" -> update(context, working, arguments, action.equals("close"));
                 default -> ToolOutput.error("Unknown action: " + action + ". Use list, add, update or close.");
             };
         } catch (RuntimeException failure) {
@@ -104,7 +104,7 @@ public final class NowTool implements Tool {
         return ToolOutput.ok("Added [" + added.get().id() + " v" + added.get().version() + "]." + (verdict.pendingConfirm() ? ToolTrust.pendingNote(verdict) : ""));
     }
 
-    private ToolOutput update(WorkingMemory working, Json arguments, boolean close) {
+    private ToolOutput update(ToolContext context, WorkingMemory working, Json arguments, boolean close) {
         String id = ToolArguments.string(arguments, "id");
         Integer version = ToolArguments.integer(arguments, "version");
         if (id == null) {
@@ -130,6 +130,17 @@ public final class NowTool implements Tool {
         String text = ToolArguments.string(arguments, "text");
         if (text != null && tantalum.shell.plugin.SensitiveText.current().detect(text).isPresent()) {
             return ToolOutput.error(CredentialGuard.REASON);
+        }
+        // 下一步、等谁、期限这些也是存下来、每轮进上下文的：一样不存密钥
+        if (changes.values().stream().anyMatch(value -> value != null && tantalum.shell.plugin.SensitiveText.current().detect(value).isPresent())) {
+            return ToolOutput.error(CredentialGuard.REASON);
+        }
+        // 改写一项的文字：这一轮读过外部内容就不改（原来那句是你说的，不能被文件里的话悄悄换掉）；改状态不受影响
+        if (text != null) {
+            ToolTrust.Verdict verdict = trust.judge(context, ToolArguments.string(arguments, "quote"));
+            if (verdict.pendingConfirm()) {
+                return ToolOutput.error(ToolTrust.outsideNote(verdict));
+            }
         }
         // 已经关掉的再关一次：什么都不改，说清楚已经关了。不然每次都回“Updated”，本机模型会一直关下去（2026-11-16 端到端测出来的）
         Optional<MemoryItem> current = working.ledger().get(id);

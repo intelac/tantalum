@@ -36,6 +36,19 @@ class ViewRedactionTest {
         assertEquals(6, out.split(java.util.regex.Pattern.quote(ViewRedaction.HIDDEN), -1).length - 1, out);
     }
 
+    /** 轨迹里“上下文变了”的记录带着那一段变之前、变之后的全文：个人的段两边都遮掉，别的段不动。 */
+    @Test
+    void aChangedPersonalSectionIsHiddenOnBothSides() {
+        JsonNode tree = JSON.readTree("""
+                {"records":[{"kind":"context","sections":[
+                  {"name":"memory-index","before":"- old secret","after":"- new secret"},
+                  {"name":"memory-index","after":"- first secret"},
+                  {"name":"workspaces","before":"kept before","after":"kept after"}]}]}""");
+        String out = JSON.writeValueAsString(redaction.redact(tree));
+        assertFalse(out.contains("secret"), out);
+        assertTrue(out.contains("kept before") && out.contains("kept after"), out);
+    }
+
     @Test
     void withoutPersonalPluginsNothingChanges() {
         ViewRedaction none = new ViewRedaction(Set.of(), Set.of(), Set.of());

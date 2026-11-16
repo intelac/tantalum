@@ -105,8 +105,13 @@ final class ViewRedaction {
             if (calls.contains(text(object, "toolCallId")) && object.has("text")) {
                 object.put("text", HIDDEN);
             }
-            if (sections.contains(text(object, "name")) && object.has("body")) {
-                object.put("body", HIDDEN);
+            if (sections.contains(text(object, "name"))) {
+                // 上下文里的一段（body），和轨迹里“上下文变了”的记录（before / after）：都是这一段的原文
+                for (String field : List.of("body", "before", "after")) {
+                    if (object.has(field) && object.get(field).isString()) {
+                        object.put(field, HIDDEN);
+                    }
+                }
             }
             Iterator<Map.Entry<String, JsonNode>> fields = object.properties().iterator();
             List<Map.Entry<String, JsonNode>> copy = new java.util.ArrayList<>();

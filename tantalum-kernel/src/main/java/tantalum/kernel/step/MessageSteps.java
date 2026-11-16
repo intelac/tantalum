@@ -77,6 +77,9 @@ public final class MessageSteps {
         } catch (IllegalArgumentException invalid) {
             return done(round, index, invalid.getMessage(), true);
         }
+        if (parsed.stop()) {
+            return takeBack(out, run, round, index, parsed.session());
+        }
         int hops = (run.owner() instanceof OwnerRef.OfMessage answering ? answering.hops() : 0) + 1;
         if (hops > MAX_HOPS) {
             return done(round, index, "This turn is itself answering another conversation: do the work here instead of handing "
@@ -107,6 +110,21 @@ public final class MessageSteps {
         return done(round, index, (parsed.session() != null ? "Handed to conversation " : "Opened conversation ") + to.value()
                 + (parsed.workspace() != null ? " in " + parsed.workspace() : "")
                 + ". It works on its own; its answer comes back here later as a message.", false);
+    }
+
+    /**
+     * 撤回交给会话 {@code to} 的活：送一句撤回，当场完成。这边不知道那边做到哪了（一步只看自己的会话），所以结果里写明两种可能；
+     * 那边还没做完的每一件都会回一句“没做成”，和平时的回话一样回来。
+     */
+    private static ToolRound takeBack(Outcome out, RunState run, ToolRound round, int index, SessionId to) {
+        if (out.session(run.ref()).id().equals(to)) {
+            return done(round, index, "\"session\" is this conversation itself.", true);
+        }
+        CommandId id = out.nextCommandId();
+        out.emit(new Send(id, run.ref(), to, SessionMessage.withdrawal(id, run.ref())));
+        return done(round, index, "Told conversation " + to.value() + " to stop what this conversation handed it. Work it was still doing "
+                + "or had queued ends now, and each such piece answers \"did not finish\" as a message. Work it had already finished "
+                + "stays as it is, and so does anything the user asked it directly.", false);
     }
 
     private static ToolRound done(ToolRound round, int index, String text, boolean error) {
@@ -157,12 +175,49 @@ public final class MessageSteps {
             out.report(List.of(new HookReported(where, KERNEL, "message " + event.id().value() + " ignored: it comes from another user")));
             return out.decision();
         }
-        // 重送来的（编号见过）：只回确认，别的什么都不做。确认和记编号在 Outcome 里统一做
         SessionState known = context.state().sessions().get(envelope.session());
+        if (known != null && !known.principal().equals(envelope.principal())) {
+            // 这个会话是别的用户的（会话编号全服务器唯一）：处理器本来就不该送进来，这里再挡一次，状态不动、不回确认
+            return Decision.unchanged(context.state());
+        }
+        // 重送来的（编号见过）：只回确认，别的什么都不做。确认和记编号在 Outcome 里统一做
         if (known != null && known.inbox().hasSeen(event.id())) {
             return new Outcome(context).decision();
         }
-        return event.isReply() ? reply(context, event) : request(context, event);
+        return event.isWithdrawal() ? withdrawn(context, event) : event.isReply() ? reply(context, event) : request(context, event);
+    }
+
+    /**
+     * 撤回到了：那个会话交来的活，排着队还没开始的去掉并各回一句“没做成”；正在做的那一轮按被取消结束（收尾时照常把“没做成”
+     * 送回去）。别的会话交来的、用户自己在这里问的都不动。什么都对不上（已经做完了）就什么都不做，只回确认。
+     */
+    private static Decision withdrawn(StepContext context, SessionMessage event) {
+        EventEnvelope envelope = context.envelope();
+        Outcome out = new Outcome(context);
+        SessionState session = out.state().sessions().get(envelope.session());
+        if (session == null) {
+            return out.decision();
+        }
+        SessionId from = event.from().session();
+        RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+        List<SessionMessage> kept = new ArrayList<>();
+        for (SessionMessage waiting : session.inbox().waiting()) {
+            if (!waiting.from().session().equals(from)) {
+                kept.add(waiting);
+                continue;
+            }
+            CommandId id = out.nextCommandId();
+            out.emit(new Send(id, where, from, new SessionMessage(id, where, "it was " + DelegateCall.WITHDRAWN + " before it started.",
+                    waiting.id(), true, waiting.hops(), null, null, null)));
+        }
+        if (kept.size() != session.inbox().waiting().size()) {
+            out.put(session.withInbox(new tantalum.value.state.Inbox(kept, session.inbox().unconfirmed(), session.inbox().seen())));
+        }
+        RunState run = context.run();
+        if (run != null && !run.isEnded() && run.owner() instanceof OwnerRef.OfMessage owner && owner.from().equals(from)) {
+            CancelSteps.end(out, run, EndReason.CANCELLED, DelegateCall.WITHDRAWN);
+        }
+        return out.decision();
     }
 
     /** 对方确认收到了：从“还没确认”里去掉。 */
@@ -206,6 +261,15 @@ public final class MessageSteps {
         }
         SessionState existing = out.state().sessions().get(envelope.session());
         SessionState session = existing == null ? SessionState.start(envelope.session(), envelope.principal()) : existing;
+        if (!session.messages().isEmpty() && session.offRecord() != Boolean.TRUE.equals(event.offRecord())) {
+            // 一边“不进记忆”、一边进：不接。不然不进记忆的会话里说的话会经这个会话进了记忆，或者反过来它的回答被带出去
+            CommandId id = out.nextCommandId();
+            RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+            out.emit(new Send(id, where, event.from().session(), new SessionMessage(id, where,
+                    "Not taken: one of the two conversations is off the record and the other is not. Open a new conversation "
+                            + "for this instead (leave out \"session\").", event.id(), true, event.hops(), null, null, null)));
+            return out.decision();
+        }
         if (session.messages().isEmpty()) {
             // 工作目录、“不进记忆”和用户开的会话一样，只在第一次定下
             if (event.dir() != null) {

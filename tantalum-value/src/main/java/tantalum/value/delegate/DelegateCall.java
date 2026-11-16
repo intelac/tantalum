@@ -12,7 +12,7 @@ import tantalum.value.json.Json;
  * 参数：{@code task}（必填）、{@code brief}（可选，对方需要知道的背景）、{@code session}（可选：交给已有的会话，不给就开一个新的）、
  * {@code workspace}（可选：新会话开在哪个工作区，写那个工作区的目录；不给就和这个会话同一个目录。已有会话的目录定了不能改，
  * 所以不能和 {@code session} 一起给）、{@code wait}（默认 false：送出去就接着做，结果事后作为一条消息回来；true：这次调用等到对方
- * 回话，回话就是结果）。
+ * 回话，回话就是结果）。{@code stop}（和 {@code session} 一起给）：撤回交给那个会话的活，见 {@link tantalum.value.event.SessionMessage}。
  */
 public interface DelegateCall {
 
@@ -21,7 +21,11 @@ public interface DelegateCall {
     String REPORT = "Answer from a conversation you handed work to (not from the user).\n";
 
     /** 解析出的一次调用。{@code session} 为 null 是开新会话；{@code workspace} 是新会话的目录（null 是沿用）；{@code waits} 是参数 {@code wait}。 */
-    record Parsed(String task, String brief, SessionId session, String workspace, boolean waits) {}
+    record Parsed(String task, String brief, SessionId session, String workspace, boolean waits, boolean stop) {
+        public Parsed(String task, String brief, SessionId session, String workspace, boolean waits) {
+            this(task, brief, session, workspace, waits, false);
+        }
+    }
 
     /** 新会话的编号：由那句话的编号算出，回放时相同。 */
     static SessionId sessionOf(CommandId message) {
@@ -57,23 +61,40 @@ public interface DelegateCall {
         if (workspace != null && !(workspace.startsWith("/") || workspace.startsWith("\\\\") || workspace.matches("^[A-Za-z]:[\\\\/].*"))) {
             throw new IllegalArgumentException("\"workspace\" must be the workspace's absolute path, as listed in the workspaces section");
         }
-        boolean wait = false;
-        Json rawWait = fields.get("wait");
-        if (rawWait != null && !(rawWait instanceof Json.Null)) {
-            // 本机模型有时把布尔值写成字符串
-            if (rawWait instanceof Json.Bool bool) {
-                wait = bool.value();
-            } else if (rawWait instanceof Json.Str str && (str.value().equalsIgnoreCase("true") || str.value().equalsIgnoreCase("false"))) {
-                wait = str.value().equalsIgnoreCase("true");
-            } else {
-                throw new IllegalArgumentException("\"wait\" must be true or false");
+        boolean wait = flag(fields, "wait");
+        if (flag(fields, "stop")) {
+            // 撤回：只要说是哪个会话
+            if (session == null) {
+                throw new IllegalArgumentException("\"stop\" needs \"session\": the conversation you handed the work to");
             }
+            if (task != null || workspace != null) {
+                throw new IllegalArgumentException("\"stop\" takes only \"session\": to hand over new work, call delegate again without \"stop\"");
+            }
+            return new Parsed(null, null, new SessionId(session), null, false, true);
         }
         if (task == null) {
             throw new IllegalArgumentException("delegate needs a non-empty \"task\"");
         }
         return new Parsed(task, brief, session == null ? null : new SessionId(session), workspace, wait);
     }
+
+    /** 读一个布尔参数，没给是 false。本机模型有时把布尔值写成字符串。 */
+    private static boolean flag(Map<String, Json> fields, String name) {
+        Json raw = fields.get(name);
+        if (raw == null || raw instanceof Json.Null) {
+            return false;
+        }
+        if (raw instanceof Json.Bool bool) {
+            return bool.value();
+        }
+        if (raw instanceof Json.Str str && (str.value().equalsIgnoreCase("true") || str.value().equalsIgnoreCase("false"))) {
+            return str.value().equalsIgnoreCase("true");
+        }
+        throw new IllegalArgumentException("\"" + name + "\" must be true or false");
+    }
+
+    /** 撤回时会话结束的原因，回话里带着它。 */
+    String WITHDRAWN = "taken back by the conversation that handed it over";
 
     /** 送给对方的话：写明它来自另一个会话、不是用户在这里说的，对方看不到这边的对话。 */
     static String text(Parsed call, SessionId from) {

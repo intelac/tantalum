@@ -151,7 +151,8 @@ public final class ToolSteps {
                 ToolSlot slot = round.slots().get(index);
                 if (DelegateCall.NAME.equals(slot.call().name())) {
                     round = MessageSteps.say(out, run, round, index);
-                    settledAtOnce |= round.slots().get(index).isFinished();
+                    // 问出去等回话的槽位不占在途名额：也要再排一次，不然排在它后面的独占工具要等到回话才发
+                    settledAtOnce |= round.slots().get(index).isFinished() || round.slots().get(index).status() == ToolSlot.Status.ASKED;
                     continue;
                 }
                 CommandId id = out.nextCommandId();

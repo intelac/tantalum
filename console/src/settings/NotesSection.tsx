@@ -85,7 +85,12 @@ export function NoteView({ day, session, onBack }: { day: string; session: strin
   const [confirming, setConfirming] = useState(false);
 
   async function confirmDelete(): Promise<void> {
-    await remove.mutateAsync();
+    try {
+      await remove.mutateAsync();
+    } catch {
+      // 没删掉：对话框留着，下面写出原因
+      return;
+    }
     setConfirming(false);
     onBack();
   }
@@ -174,6 +179,11 @@ export function NoteView({ day, session, onBack }: { day: string; session: strin
       <Dialog open={confirming} onClose={() => setConfirming(false)} title={t.confirmDelete} className="max-w-md">
         <div className="flex flex-col gap-4 p-6">
           <p className="text-sm text-fg">{t.confirmDeleteBody}</p>
+          {remove.isError && (
+            <p role="alert" className="text-xs text-danger">
+              {errorLine(remove.error)}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirming(false)}>
               {text.common.cancel}

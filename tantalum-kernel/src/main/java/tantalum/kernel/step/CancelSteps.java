@@ -52,6 +52,12 @@ public final class CancelSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
+        end(out, run, reason, detail);
+        return out.decision();
+    }
+
+    /** 结束一轮还在跑的运行：中止在途的命令（或撤掉问题、停掉等回话的定时器），然后收尾。 */
+    static void end(Outcome out, RunState run, EndReason reason, String detail) {
         if (run.phase() instanceof Awaiting awaiting && !awaiting.commands().isEmpty()) {
             out.emit(new AbortCommands(out.nextCommandId(), run.ref(), awaiting.commands()));
         } else if (run.phase() instanceof AwaitingAnswer waiting) {
@@ -60,6 +66,5 @@ public final class CancelSteps {
             out.emit(new AbortCommands(out.nextCommandId(), run.ref(), java.util.Set.of(waiting.timer())));
         }
         RunEnd.finish(out, run, reason, detail);
-        return out.decision();
     }
 }

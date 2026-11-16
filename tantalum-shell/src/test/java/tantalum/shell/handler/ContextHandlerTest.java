@@ -341,9 +341,9 @@ class ContextHandlerTest {
         ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog(), memoryGate(), memories(Workspaces.shared(dir)),
                 KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, users).clock(evening);
         String system = assembled(handler, COMMAND).system();
-        assertEquals("Base prompt.\n\n" + MemoryGuidance.TEXT.strip() + "\n\nToday is 2026-11-16 (Monday, time zone Asia/Tokyo).", system);
+        assertEquals("Base prompt.\n\n" + MemoryGuidance.TEXT.strip() + "\n\n<today>\nToday is 2026-11-16 (Monday, time zone Asia/Tokyo).\n</today>", system);
         users.setTimezone(ALICE, java.time.ZoneId.of("America/Los_Angeles"));
-        assertTrue(assembled(handler, COMMAND).system().endsWith("Today is 2026-11-15 (Sunday, time zone America/Los_Angeles)."));
+        assertTrue(assembled(handler, COMMAND).system().endsWith("Today is 2026-11-15 (Sunday, time zone America/Los_Angeles).\n</today>"));
         assertFalse(assembled(shared(), COMMAND).system().contains("Today is"), "without the engine's clock there is no date");
     }
 

@@ -101,7 +101,12 @@ final class TracePass {
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(),
                     Mode.FOLLOW_UP);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), Mode.STEER);
-            case tantalum.value.event.SessionMessage said -> delegateInput(said.isReply() ? null : said.text());
+            case tantalum.value.event.SessionMessage said -> {
+                // 撤回不是给模型的话
+                if (!said.isWithdrawal()) {
+                    delegateInput(said.isReply() ? null : said.text());
+                }
+            }
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);

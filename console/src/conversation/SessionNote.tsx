@@ -31,19 +31,30 @@ export function SessionNote({ item }: Props) {
   const Icon = !reply ? CornerDownRight : failed === true ? TriangleAlert : CornerDownLeft;
   const lines = item.text.split("\n");
   const long = lines.length > FOLD_LINES;
-  const shown = long && !open ? lines.slice(0, FOLD_LINES).join("\n") : item.text;
+  let shown = long && !open ? lines.slice(0, FOLD_LINES).join("\n") : item.text;
+  // 收起的地方正好在代码块里面：补上结尾，不然后面全被画成代码
+  if (shown !== item.text && (shown.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1) shown += "\n```";
+  // 那个会话不在列表里（删了）：只写名字，不给点，免得点过去是个空会话
+  const gone = sessions.data !== undefined && known === undefined && !session.startsWith("main-");
   return (
     <div data-turn={item.id} data-from-session={session} className="group flex scroll-mt-4 flex-col gap-1 py-2">
       <div className={`rounded-md border bg-muted px-3 py-2 ${failed === true ? "border-warning/50" : "border-line"}`}>
-        <button
-          type="button"
-          onClick={() => navigate(sessionPath(session))}
-          title={t.conversation.openSession(name)}
-          className="flex max-w-full items-center gap-1.5 rounded-xs text-xs text-fg-muted hover:text-fg hover:underline"
-        >
-          <Icon size={13} aria-hidden="true" className={failed === true ? "shrink-0 text-warning" : "shrink-0"} />
-          <span className="truncate">{label}</span>
-        </button>
+        {gone ? (
+          <p className="flex max-w-full items-center gap-1.5 text-xs text-fg-muted">
+            <Icon size={13} aria-hidden="true" className={failed === true ? "shrink-0 text-warning" : "shrink-0"} />
+            <span className="truncate">{label}</span>
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate(sessionPath(session))}
+            title={t.conversation.openSession(name)}
+            className="flex max-w-full items-center gap-1.5 rounded-xs text-xs text-fg-muted hover:text-fg hover:underline"
+          >
+            <Icon size={13} aria-hidden="true" className={failed === true ? "shrink-0 text-warning" : "shrink-0"} />
+            <span className="truncate">{label}</span>
+          </button>
+        )}
         {item.text !== "" && (
           <div className="mt-1.5 text-sm">
             <Markdown text={shown} />

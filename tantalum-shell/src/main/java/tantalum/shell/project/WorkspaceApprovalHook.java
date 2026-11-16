@@ -62,10 +62,63 @@ public final class WorkspaceApprovalHook implements KernelHook, PluginInfo {
     @Override
     public HookResult beforeToolCall(KernelState state, HookContext context) {
         ToolCallBlock call = context.call();
+        if (call != null && tantalum.value.delegate.DelegateCall.NAME.equals(call.name())) {
+            return opensIn(state, context, string(call.arguments(), "workspace"));
+        }
         if (call == null || !WorkspaceAddTool.NAME.equals(call.name())) {
             return Allow.PLAIN;
         }
         return new Ask(question(call));
+    }
+
+    /**
+     * 模型要在某个目录里开一个会话（{@code delegate} 的 {@code workspace}）：这个目录必须是用户的工作区，否则“新建前先问”就能绕过去。
+     * 钩子是纯函数，不能查工作区表，所以只认状态里看得到的三样：上下文“工作区”那一段列出来的目录、这个会话自己的目录、
+     * 这个会话里一次成功的 {@code workspace_add}（用户刚点了新建，那一段还没来得及更新）。别的一律拦下，并告诉模型怎么办。
+     */
+    private static HookResult opensIn(KernelState state, HookContext context, String workspace) {
+        if (workspace == null || workspace.isBlank()) {
+            return Allow.PLAIN;
+        }
+        tantalum.value.state.SessionState session = state.sessions().get(context.run().session());
+        String wanted = ProjectPaths.key(workspace);
+        if (session != null && known(session).contains(wanted)) {
+            return Allow.PLAIN;
+        }
+        return new Stop("\"" + workspace.strip() + "\" is not one of the user's workspaces. Use the path of a workspace listed in the "
+                + "workspaces section exactly as written, or add the folder as a workspace first (the user is asked to confirm).");
+    }
+
+    private static java.util.Set<String> known(tantalum.value.state.SessionState session) {
+        java.util.Set<String> known = new java.util.HashSet<>();
+        if (session.dir() != null && !session.dir().isBlank()) {
+            known.add(ProjectPaths.key(session.dir()));
+        }
+        if (session.context() != null && session.context().sections() != null) {
+            for (tantalum.value.state.ContextSection section : session.context().sections()) {
+                if (!"workspaces".equals(section.name()) || section.body() == null) {
+                    continue;
+                }
+                for (String line : section.body().split("\n")) {
+                    int cut = line.indexOf("\" — ");
+                    if (line.startsWith("- workspace \"") && cut > 0) {
+                        known.add(ProjectPaths.key(line.substring(cut + 4)));
+                    }
+                }
+            }
+        }
+        // 这个会话里成功的 workspace_add：调用里的目录，对上一条没出错的结果
+        java.util.Map<String, String> added = new java.util.HashMap<>();
+        for (tantalum.value.model.Message message : session.messages()) {
+            for (tantalum.value.model.ContentBlock block : message.content()) {
+                if (block instanceof ToolCallBlock call && WorkspaceAddTool.NAME.equals(call.name()) && string(call.arguments(), "path") != null) {
+                    added.put(call.id(), string(call.arguments(), "path"));
+                } else if (block instanceof tantalum.value.model.ToolResultBlock result && !result.error() && added.containsKey(result.toolCallId())) {
+                    known.add(ProjectPaths.key(added.get(result.toolCallId())));
+                }
+            }
+        }
+        return known;
     }
 
     /** 同一个调用再问就是同一个问题。正文是目录，给了名字时另起一行写名字。 */

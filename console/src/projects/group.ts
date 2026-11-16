@@ -88,6 +88,20 @@ export function nested(row: SessionSummary): boolean {
 }
 
 /**
+ * 这一列里哪些行要缩进：是另一个普通会话开出来的，而且开它的会话就在这一列里、排在它前面。开它的会话不在这一列
+ * （在别的工作区、已归档没显示、被“显示更多”折掉了）时不缩进，免得看起来挂在不相干的会话下面。
+ */
+export function indentedIn(rows: readonly SessionSummary[]): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const indented = new Set<string>();
+  for (const row of rows) {
+    if (nested(row) && row.parent !== undefined && seen.has(row.parent)) indented.add(row.id);
+    seen.add(row.id);
+  }
+  return indented;
+}
+
+/**
  * 一个会话开出来的会话紧跟在它后面，按原来的先后；开它的会话不在这一批里的照原样放。层级只是显示：内核里会话都是平的，
  * “谁开的”来自会话的第一句话。主窗口开的不挂在主窗口下面，照原样平铺。
  */

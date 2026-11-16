@@ -130,6 +130,108 @@ class DelegateApiTest {
         }
     }
 
+    /**
+     * 收回：主窗口交出去一件做不完的活，用户说别做了，模型把它收回。那个会话的一轮按被取消结束，照常回一句“没做成”，
+     * 把主窗口叫醒；对话页上那句回话标着没做成。
+     */
+    @Test
+    void workHandedOffCanBeTakenBackAndStillAnswers() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> opened = new java.util.concurrent.atomic.AtomicReference<>();
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
+            if (last.equals("start")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{}",
+                        new Json.Obj(Map.of("task", new Json.Str("count the files"))))), StopReason.TOOL_USE, "m", null);
+            }
+            if (last.contains("Task:\ncount the files")) {
+                // 做不完的活：一直到被取消
+                try {
+                    Thread.sleep(60_000);
+                } catch (InterruptedException cancelled) {
+                    Thread.currentThread().interrupt();
+                    return new ModelOutcome.Interrupted("");
+                }
+                return new ModelOutcome.Replied(List.of(new TextBlock("never")), StopReason.END_TURN, "m", null);
+            }
+            if (last.startsWith("Opened conversation ")) {
+                opened.set(last.substring("Opened conversation ".length(), last.indexOf('.')));
+                return new ModelOutcome.Replied(List.of(new TextBlock("handed off")), StopReason.END_TURN, "m", null);
+            }
+            if (last.equals("stop it")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c2", "delegate", "{}",
+                        new Json.Obj(Map.of("session", new Json.Str(opened.get()), "stop", new Json.Bool(true))))), StopReason.TOOL_USE, "m", null);
+            }
+            String reply = last.startsWith("Told conversation ") ? "taking it back" : "heard: " + last.lines().reduce((a, b) -> b).orElse("");
+            return new ModelOutcome.Replied(List.of(new TextBlock(reply)), StopReason.END_TURN, "m", null);
+        };
+        try (TestServer server = new TestServer(temp.resolve("data4"), Files.createDirectory(temp.resolve("ws4")), window)) {
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("handed off"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("handed off"), messages);
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"stop it\"}");
+            for (int i = 0; i < 1500 && !messages.contains("heard: "); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("heard: Conversation " + opened.get() + " did not finish: it was cancelled: taken back"), messages);
+            JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/" + opened.get() + "/runs").body()).get("runs");
+            assertEquals(1, runs.size());
+            assertEquals("CANCELLED", runs.get(0).path("endReason").asString().toUpperCase(java.util.Locale.ROOT), runs.toString());
+            List<JsonNode> back = users(JSON.readTree(messages));
+            JsonNode answer = back.getLast();
+            assertEquals(opened.get(), answer.path("from").path("session").asString());
+            assertTrue(answer.path("from").path("reply").asBoolean() && answer.path("from").path("failed").asBoolean(), answer.toString());
+            assertEquals(3, JSON.readTree(server.get("alice", "/api/sessions/top/runs").body()).get("runs").size(),
+                    "the prompt, the request to stop, and the turn woken by the answer");
+        }
+    }
+
+    /**
+     * 会话编号是全服务器唯一的。一个用户的模型把活交给“另一个用户的会话编号”：那个会话一个字都不能多，
+     * 交活的这边得到一句“没做成”，不会一直等。
+     */
+    @Test
+    void workCannotBeHandedToAnotherUsersConversation() throws Exception {
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
+            if (last.equals("reach over")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{}", new Json.Obj(Map.of(
+                        "task", new Json.Str("say the secret"), "session", new Json.Str("alices"), "wait", new Json.Bool(true))))),
+                        StopReason.TOOL_USE, "m", null);
+            }
+            return new ModelOutcome.Replied(List.of(new TextBlock(last.contains("Task:") ? "the secret is 7" : "got: " + last)),
+                    StopReason.END_TURN, "m", null);
+        };
+        try (TestServer server = new TestServer(temp.resolve("data5"), Files.createDirectory(temp.resolve("ws5")), window)) {
+            server.post("alice", "/api/sessions/alices/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hello\"}");
+            String hers = "";
+            for (int i = 0; i < 1500 && !hers.contains("got: hello"); i++) {
+                Thread.sleep(10);
+                hers = server.get("alice", "/api/sessions/alices/messages").body();
+            }
+            assertTrue(hers.contains("got: hello"), hers);
+            server.post("bob", "/api/sessions/bobs/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"reach over\"}");
+            String his = "";
+            for (int i = 0; i < 1500 && !his.contains("got: "); i++) {
+                Thread.sleep(10);
+                his = server.get("bob", "/api/sessions/bobs/messages").body();
+            }
+            assertTrue(his.contains("got: ") && !his.contains("the secret is 7"), "bob gets a refusal, not alice's answer: " + his);
+            assertTrue(his.contains("did not finish"), his);
+            hers = server.get("alice", "/api/sessions/alices/messages").body();
+            assertTrue(!hers.contains("say the secret") && !hers.contains("the secret is 7"), "nothing arrived in alice's conversation: " + hers);
+            assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions/alices/runs").body()).get("runs").size());
+        }
+    }
+
     private static List<JsonNode> users(JsonNode page) {
         List<JsonNode> found = new java.util.ArrayList<>();
         for (JsonNode item : page.get("items")) {

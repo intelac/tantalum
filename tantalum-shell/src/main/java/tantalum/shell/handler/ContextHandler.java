@@ -47,6 +47,8 @@ public final class ContextHandler implements Handler {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ContextHandler.class);
 
     static final String KNOWLEDGE_HEADING = "## Shared knowledge";
+    /** 今天的日期那一段的名字。 */
+    public static final String TODAY_TAG = "today";
     static final String KNOWLEDGE_TAG = "shared-knowledge";
     static final String AGENTS_TAG = "project-instructions";
     static final String LOCAL_TAG = "local-workspace";
@@ -212,12 +214,13 @@ public final class ContextHandler implements Handler {
         if (main) {
             append(system, MainWindow.NOTE);
         }
-        // 今天的日期（2026-11-16 记忆评测：模型不知道今天几号，“三天前”只能猜，反复搜到超时）：只写到日期，一天才变一次；
-        // 放在固定部分后面，固定部分照样一直命中缓存，后面的各段本来就每轮会变
+        // 今天的日期（2026-11-16 记忆评测：模型不知道今天几号，“三天前”只能猜，反复搜到超时）：只写到日期，一天才变一次。
+        // 它是一段（排在各段最前面），不写进固定部分：内核把固定部分定在第一次组装时，写在那里的话跨了天的会话日期不会变；
+        // 作为一段，变了的时候内核照别的段一样告诉模型（2026-11-17 review）
         java.time.Clock now = clock;
         if (now != null) {
-            append(system, today(now.instant(), users == null ? java.time.ZoneId.systemDefault()
-                    : users.timezone(principal).orElse(java.time.ZoneId.systemDefault())));
+            sections.add(0, new ContextSection(TODAY_TAG, today(now.instant(), users == null ? java.time.ZoneId.systemDefault()
+                    : users.timezone(principal).orElse(java.time.ZoneId.systemDefault())), false));
         }
         sections.forEach(section -> append(system, section.tagged()));
         // system 里不写模型名：换模型前后 system 逐字节相同，思考签名才继续有效，换模型的事只在内核追加的说明里

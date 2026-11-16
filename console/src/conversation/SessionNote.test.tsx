@@ -48,12 +48,22 @@ describe("SessionNote", () => {
 
   it("says when the other conversation did not finish, and falls back when it is not in the list", () => {
     mount({ text: "cancelled", from: { session: "s-gone", reply: true, failed: true } });
-    expect(screen.getByRole("button", { name: "「另一个会话」没做成" })).toBeDefined();
+    expect(screen.getByText("「另一个会话」没做成")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "「另一个会话」没做成" })).toBeNull();
+  });
+
+  it("closes a code block that the fold cuts through", () => {
+    const text = ["before", "", "```", ...Array.from({ length: 20 }, (_, i) => `code ${i + 1}`), "```", "", "after the block"].join("\n");
+    const { container } = mount({ text, from: { session: "s-a", reply: true } }, [{ id: "s-a", title: "t" }]);
+    expect(container.querySelectorAll("pre").length).toBe(1);
+    expect(screen.queryByText("after the block")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "展开全部" }));
+    expect(screen.getByText("after the block")).toBeDefined();
   });
 
   it("folds a long answer until asked", () => {
     const text = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n\n");
-    mount({ text, from: { session: "s-a", reply: true } });
+    mount({ text, from: { session: "s-a", reply: true } }, [{ id: "s-a", title: "t" }]);
     expect(screen.queryByText("line 30")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "展开全部" }));
     expect(screen.getByText("line 30")).toBeDefined();

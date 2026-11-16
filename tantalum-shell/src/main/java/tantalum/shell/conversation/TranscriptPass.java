@@ -369,12 +369,21 @@ final class TranscriptPass {
         if (current == null || get(id) != null) {
             return;
         }
+        // 这句回话被一次等着它的调用接走了（写成了工具结果）：不另出条目，哪怕正好有别的回话挂着当插话
+        if (before != null && before.sessions().get(session) instanceof SessionState was && was.activeRun() != null
+                && before.runs().get(was.activeRun()) instanceof RunState waiting && waiting.tools() != null
+                && waiting.tools().slots().stream().anyMatch(slot -> slot.status() == ToolSlot.Status.ASKED
+                        && said.answers().equals(slot.command()))) {
+            return;
+        }
         UserMessage.From from = new UserMessage.From(said.from().session().value(), true, said.failed());
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
             put(UserMessage.from(id, session, fresh, at, said.text(), from));
         } else if (current.activeRun() != null && state.runs().get(current.activeRun()) instanceof RunState now
                 && !now.pendingSteers().isEmpty()
+                && (before == null || !(before.runs().get(current.activeRun()) instanceof RunState earlier)
+                        || now.pendingSteers().size() > earlier.pendingSteers().size())
                 && firstText(now.pendingSteers().getLast()).startsWith(tantalum.value.delegate.DelegateCall.REPORT)) {
             put(UserMessage.from(id, session, current.activeRun(), at, said.text(), from));
         }

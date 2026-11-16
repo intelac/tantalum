@@ -82,6 +82,17 @@ public final class MemoryNoteTool implements Tool {
             MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, verdict.source(), actor,
                     text.strip(), store.ledger().clock().instant()).withQuote(quote).withProvenance(provenance)
                     .withPendingConfirm(verdict.pendingConfirm());
+            if (kind.equals("decision") && !claim.pendingConfirm()) {
+                // 和你认可过的决定冲突：不直接生效，标出来等你确认（和自动记笔记同一条规矩）
+                Optional<MemoryItem> approved = tantalum.memory.recall.Overlap.approvedConflict(store.ledger(), text.strip());
+                if (approved.isPresent()) {
+                    Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
+                    attrs.put(MemoryStore.CONFLICTS_WITH, approved.get().id());
+                    claim = claim.withPendingConfirm(true).withAttrs(attrs);
+                    suffix = " It differs from a decision the user approved (\"" + approved.get().text() + "\"), so it waits for the user to "
+                            + "confirm it in the console; the approved one stays in force until then. Tell the user.";
+                }
+            }
             Optional<MemoryItem> added = store.addClaim(shelf[0], shelf[1], shelf[2], claim);
             return ToolOutput.ok(added.isEmpty() ? "Already noted in " + shelf[0] + "." : "Noted in " + shelf[0] + "." + suffix);
         } catch (RuntimeException failure) {
