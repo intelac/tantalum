@@ -72,4 +72,42 @@ class DelegateApiTest {
             assertTrue(server.get("alice", "/api/sessions/top/messages").body().contains("Answer from conversation s-"));
         }
     }
+
+    /** 不等结果：主窗口交出去就结束这一轮；对方做完，结果作为一条消息回来，把空闲的主窗口叫醒，再跑一轮。全程没有人再说话。 */
+    @Test
+    void withoutWaitingTheAnswerComesBackLaterAndWakesTheOpener() throws Exception {
+        List<String> seen = new CopyOnWriteArrayList<>();
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().getLast().content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat);
+            seen.add(last);
+            if (last.equals("start")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{\"task\":\"count the files\"}",
+                        new Json.Obj(Map.of("task", new Json.Str("count the files"))))), StopReason.TOOL_USE, "m", null);
+            }
+            String reply = last.startsWith("Opened conversation") ? "handed off" : last.contains("Task:\ncount the files") ? "42 files"
+                    : "the other conversation says: " + last.lines().reduce((a, b) -> b).orElse("");
+            return new ModelOutcome.Replied(List.of(new TextBlock(reply)), StopReason.END_TURN, "m", null);
+        };
+        try (TestServer server = new TestServer(temp.resolve("data2"), Files.createDirectory(temp.resolve("ws2")), window)) {
+            server.post("alice", "/api/sessions/main-2026-11-16/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("the other conversation says: 42 files"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/main-2026-11-16/messages").body();
+            }
+            assertTrue(messages.contains("the other conversation says: 42 files"), "the answer came back and started a second turn: " + seen);
+            assertTrue(seen.stream().anyMatch(input -> input.startsWith("Answer from a conversation you handed work to (not from the user).")),
+                    "it arrived marked as not from the user");
+            JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/main-2026-11-16/runs").body()).get("runs");
+            assertEquals(2, runs.size(), "one turn for the user's prompt, one woken by the answer");
+            JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
+            assertEquals(2, sessions.size(), sessions.toString());
+            for (JsonNode session : sessions) {
+                if (!session.get("id").asString().equals("main-2026-11-16")) {
+                    assertEquals("main-2026-11-16", session.path("parent").asString(), "the list says who opened it");
+                }
+            }
+        }
+    }
 }
