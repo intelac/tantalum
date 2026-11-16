@@ -34,13 +34,13 @@ class ExampleHooksPipelineTest {
     private static final String PIN = "PIN";
     private static final String PINNED = "a message pinned with " + PIN + " would be summarized away";
     /**
-     * 窗口 5600、预留 500：阈值 5100。估算只算发给模型的工具：这里没连电脑，本机工具都是延后的、不算（agent-eval 之前连延后的
+     * 窗口 5750、预留 500：阈值 5250。估算只算发给模型的工具：这里没连电脑，本机工具都是延后的、不算（agent-eval 之前连延后的
      * 一起算，窗口曾一路加到 7500）。第一次调模型在阈值下，第二次越过。2026-11-16 记忆加了 memory_note、now、memory_search、
      * history_search 四个工具和几句指引（合 550 token 左右），窗口跟着加 600；M5 又加了内置的 delegate（约 250 token），再加 300。
-     * 同一天又加了“工作区”一段、内置的 workspace_add 和它的说明（合 650 token 左右），再加 700。阈值相对固定部分的位置不变。
+     * 同一天又加了“工作区”一段、内置的 workspace_add 和它的说明（合 650 token 左右），再加 700。2026-11-17 delegate 的说明多了“收回”（stop）、日期成了单独的一段，再加 150。阈值相对固定部分的位置不变。
      */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
-        "--tantalum.claude.context-window=5600", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
+        "--tantalum.claude.context-window=5750", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
         // 这里测的是钩子和压缩，不用抓网页（web-tools，同 CompactApiTest）
         "--tantalum.web.fetch.enabled=false"};

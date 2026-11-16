@@ -9,6 +9,9 @@ import { clockTime } from "../text/format";
 import { useText } from "../text";
 import { CopyButton } from "../ui/CopyButton";
 
+/** 代码块的围栏行（三个反引号或三个波浪号开头）。反引号写成 \\x60：源码里不出现成对不上的反引号。 */
+const FENCE = new RegExp("^\\s*(\\x60{3}|~~~)", "gm");
+
 /** 超过这么多行先收起。 */
 const FOLD_LINES = 12;
 
@@ -33,7 +36,7 @@ export function SessionNote({ item }: Props) {
   const long = lines.length > FOLD_LINES;
   let shown = long && !open ? lines.slice(0, FOLD_LINES).join("\n") : item.text;
   // 收起的地方正好在代码块里面：补上结尾，不然后面全被画成代码
-  if (shown !== item.text && (shown.match(/^\s*(```|~~~)/gm)?.length ?? 0) % 2 === 1) shown += "\n```";
+  if (shown !== item.text && (shown.match(FENCE)?.length ?? 0) % 2 === 1) shown += `\n${"\x60".repeat(3)}`;
   // 那个会话不在列表里（删了）：只写名字，不给点，免得点过去是个空会话
   const gone = sessions.data !== undefined && known === undefined && !session.startsWith("main-");
   return (
