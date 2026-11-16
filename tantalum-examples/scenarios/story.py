@@ -286,6 +286,22 @@ def report(story, user, args):
     for entry in memory:
         body = user.call("GET", "/api/plugin-api/memory/entries/" + entry["name"])[1] or {}
         lines += [f"### 记忆 {entry['name']}", "", "```", str(body.get("body") or body.get("text") or json.dumps(body, ensure_ascii=False))[:1500], "```", ""]
+    # 工作记忆：做完的事不该还挂着（“等别的会话做完”“等我回答”这类由系统自己管，不该记进来）
+    # 直接读记忆的账：还活着的任务、在等、承诺
+    listed, dead = {}, set()
+    ledger = f"{run.DATA}/plugins/memory/dev/ledger.jsonl"
+    if os.path.exists(ledger):
+        for line in open(ledger, encoding="utf-8"):
+            try: entry = json.loads(line)
+            except ValueError: continue
+            if "put" in entry: listed[entry["put"]["id"]] = entry["put"]
+            for key in ("tombstone", "tomb"):
+                if key in entry: dead.add(entry[key].get("id") if isinstance(entry[key], dict) else entry[key])
+    listed = [item for item in listed.values() if item["id"] not in dead and item.get("kind") in ("task", "waiting", "commitment")]
+    lines += [f"## 工作记忆里现在挂着的（{len(listed)} 条）", ""]
+    lines += ["- " + str(item.get("kind") or "") + "：" + str(item.get("text") or "")[:160].replace(chr(10), " ") + ("（待确认）" if item.get("pendingConfirm") else "")
+              for item in listed] + [""]
+    print(f"工作记忆里挂着 {len(listed)} 条")
     lines += ["## 全程", ""]
     for index, turn in enumerate(story.turns, 1):
         lines += [f"### {index}. {turn['note']}（{turn['session']}，{turn['seconds']} 秒）", "", "**我说：** " + turn["said"], ""]

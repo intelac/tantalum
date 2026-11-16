@@ -49,6 +49,11 @@ public final class NotePrompt {
             Do not write down small talk, the details of a one-off task, or anything already obvious from a single message. \
             Do not describe what the assistant did (for example that it saved something). Material the user can read again, \
             like the content of a file or a web page, is not worth keeping.
+            The system itself keeps track of work that is under way inside it: work the assistant handed to another \
+            conversation, a result the assistant said it would report when that work is done, a question the assistant \
+            asked and is waiting to have answered. Do not note any of these as waiting, task or commitment; they are closed \
+            by the system, and a note about them would stay open forever. "waiting" is only for something outside: a person \
+            who has to reply, a date, an event.
             Write each note on its own line, like this:
             - [kind] the note «exact words»
             where kind is one of preference, fact, decision, task, commitment, waiting, note, and «exact words» is a short \

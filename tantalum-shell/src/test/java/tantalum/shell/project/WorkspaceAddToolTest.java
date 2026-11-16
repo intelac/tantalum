@@ -44,7 +44,7 @@ class WorkspaceAddToolTest {
             assertFalse(added.error(), added.text());
             assertTrue(added.text().startsWith("Added workspace \"Shop\" at /home/yi/shop."), added.text());
             assertTrue(added.text().contains("not connected, so the folder was not checked"));
-            assertTrue(added.text().contains("workspace=\"/home/yi/shop\""));
+            assertFalse(added.text().contains("delegate"), "what the tool says back is repeated to the user: no tool names in it");
             assertEquals("Shop", projects.list(YI).getFirst().title());
 
             ToolOutput again = tool.run(context, args("path", "/home/yi/shop/"));

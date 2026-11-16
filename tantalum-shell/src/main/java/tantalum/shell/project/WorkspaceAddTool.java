@@ -95,7 +95,8 @@ public final class WorkspaceAddTool implements Tool {
             Project added = projects.add(context.principal(), path, ToolArguments.string(arguments, "title"));
             return ToolOutput.ok("Added workspace \"" + added.title() + "\" at " + added.path() + "."
                     + (checked ? "" : " The computer is not connected, so the folder was not checked.")
-                    + " Open a conversation in it with delegate (workspace=\"" + added.path() + "\").");
+                    // 不在结果里写工具名：模型会照着对用户说“用 delegate 并指定路径”（2026-11-16 在 8091 上看到的）
+                    + " Conversations can now be opened in it. Tell the user in plain words; do not mention tool names.");
         } catch (Projects.Refused refused) {
             return ToolOutput.error(switch (refused.problem()) {
                 case PATH_INVALID -> "path must be an absolute path.";
