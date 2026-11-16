@@ -273,10 +273,7 @@ public final class OpenAiClient implements ModelClient {
         List<ContentBlock> content = content(reasoning, text, tools, prompt);
         StopReason stop = stop(finishReason);
         if (tools.isEmpty() && !text.isEmpty()) {
-            java.util.Set<String> offered = new java.util.HashSet<>();
-            // 延后加载的（没开的）不算：模型看不见它们
-            prompt.tools().stream().filter(tool -> !tool.deferred()).forEach(tool -> offered.add(tool.name()));
-            java.util.Optional<List<ToolCallBlock>> written = TextToolCalls.parse(text.toString(), offered,
+            java.util.Optional<List<ToolCallBlock>> written = TextToolCalls.parse(text.toString(),
                     Integer.toHexString(java.util.concurrent.ThreadLocalRandom.current().nextInt()));
             if (written.isPresent()) {
                 content.removeIf(TextBlock.class::isInstance);

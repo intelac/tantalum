@@ -106,7 +106,7 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar --tantalum.provide
 
 然后打开 <http://127.0.0.1:8080>。配置项和默认值见 `tantalum-shell/src/main/resources/application.properties`。
 
-本机模型有时把工具调用按 Qwen3 的写法（`<tool_call><function=名字><parameter=参数>…`）写进回答正文，模型服务没解析出来。整段回答都是这样的调用块、名字都是这次给了的工具时，服务器照工具调用处理；夹着别的文字就照旧当回答。
+本机模型有时把工具调用按 Qwen3 的写法（`<tool_call><function=名字><parameter=参数>…`）写进回答正文，模型服务没解析出来。整段回答都是这样的调用块时，服务器照工具调用处理（调的是没给的工具时，工具那边回“Unknown tool”，模型接着答）；夹着别的文字就照旧当回答。
 
 服务默认只绑定 `127.0.0.1`。
 

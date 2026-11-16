@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tantalum.shell.json.JsonText;
@@ -15,7 +14,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 写在正文里的工具调用（2026-11-16 LongMemEval：本机 qwen 有 3 道题把工具调用按 Qwen3 的写法
  * {@code <tool_call><function=名字><parameter=参数>值</parameter></function></tool_call>} 写进了正文，模型服务没解析，
- * 这一轮就以这段文字当回答结束了）。只在整段正文全是完整的调用块、名字都是这次给了的工具时才认；否则照旧是文字。
+ * 这一轮就以这段文字当回答结束了）。只在整段正文全是完整的调用块时才认，夹着别的文字照旧是文字。名字不查：
+ * 三次里调的都是这次没给的 {@code web_search}，照调用处理，工具那边回“Unknown tool”，模型接着答，比把这段当回答好。
  * 参数值是 JSON（数字、数组、真假）就按 JSON，不是就当字符串。
  */
 final class TextToolCalls {
@@ -29,7 +29,7 @@ final class TextToolCalls {
     private TextToolCalls() {}
 
     /** 正文全是调用块时，按顺序给出调用；id 是 {@code text-call-<序号>-<前缀>}。 */
-    static Optional<List<ToolCallBlock>> parse(String text, Set<String> offered, String prefix) {
+    static Optional<List<ToolCallBlock>> parse(String text, String prefix) {
         String body = text == null ? "" : text.strip();
         if (!body.startsWith("<tool_call>") || !body.endsWith("</tool_call>")) {
             return Optional.empty();
@@ -38,7 +38,7 @@ final class TextToolCalls {
         List<ToolCallBlock> calls = new ArrayList<>();
         int end = 0;
         while (block.find()) {
-            if (!body.substring(end, block.start()).isBlank() || calls.size() >= MAX_CALLS || !offered.contains(block.group(1))) {
+            if (!body.substring(end, block.start()).isBlank() || calls.size() >= MAX_CALLS) {
                 return Optional.empty();
             }
             Map<String, Object> arguments = new LinkedHashMap<>();

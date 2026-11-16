@@ -149,7 +149,7 @@ class OpenAiClientTest {
         assertEquals(StopReason.TOOL_USE, reply.stop());
     }
 
-    /** 2026-11-16 LongMemEval：qwen 把调用按 Qwen3 的写法写进正文、服务没解析时，照工具调用算；没给的工具名照旧是文字。 */
+    /** 2026-11-16 LongMemEval：qwen 把调用按 Qwen3 的写法写进正文、服务没解析时，照工具调用算；夹着别的文字照旧是文字。 */
     @Test
     void aToolCallWrittenAsTextIsTakenAsACall() throws Exception {
         String written = "<tool_call>\\n<function=web_search>\\n<parameter=query>\\nbedroom layout\\n</parameter>\\n</function>\\n</tool_call>";
@@ -163,8 +163,8 @@ class OpenAiClientTest {
         assertEquals(1, reply.content().size());
         assertEquals(StopReason.TOOL_USE, reply.stop());
 
-        server.body = delta("{\"content\":\"" + written + "\"}") + finish("stop");
-        ModelOutcome.Replied plain = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        server.body = delta("{\"content\":\"Let me search.\\n" + written + "\"}") + finish("stop");
+        ModelOutcome.Replied plain = assertInstanceOf(ModelOutcome.Replied.class, call(withSearch));
         assertInstanceOf(TextBlock.class, plain.content().getFirst());
         assertEquals(StopReason.END_TURN, plain.stop());
     }
