@@ -236,7 +236,8 @@ def run_one(user, scenario, model, recording=False):
     after_setup = tree(ROOT) if recording else None
     posted = []
     fixture.REQUESTS.clear()
-    session = "s-" + secrets.token_hex(4)
+    # window=True 的场景在主窗口里问（编号以 main- 开头）：那里没有改文件、跑命令的工具
+    session = ("main-" if scenario.get("window") else "s-") + secrets.token_hex(4)
     started = time.time()
     prompt = scenario["prompt"].replace("{outside}", OUTSIDE) + (RECORD_NOTE if recording else "")
     approvals = []

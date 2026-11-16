@@ -21,12 +21,13 @@ def says(ctx, *needles):
 def used(ctx, *names):
     return [] if any(ctx.tools.get(n, 0) > 0 for n in names) else [f"没有用到 {' / '.join(names)}"]
 
-def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, timeout=240, followup=None, server=None, world=True, turns=(), approve=None):
+def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, timeout=240, followup=None, server=None, world=True, turns=(), approve=None,
+      window=False):
     """server：要单独起一台服务器的配置名（见 run.py 的 SERVERS）；world=False 的场景只能查回答（在表里标出来）；
     turns：同一会话里接着问的话（上一轮结束后再问）。followup 是另开一个新会话问。
     approve：命令审批卡片怎么答（"once"、"session"、"deny"，或 命令 -> 其中之一），只对 server="approval" 有意义。"""
     return dict(id=id, group=group, risk=risk, prompt=prompt, check=check, max_calls=max_calls, answers=answers or {}, setup=setup,
-                timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve)
+                timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve, window=window)
 
 # ---- 交给别的会话 ----
 FILE_TOOLS = ("grep", "find_files", "read_file", "list_dir", "bash", "powershell")
@@ -55,6 +56,19 @@ def delegated(ctx, count):
     if len(opened) < count: failed.append(f"只开出了 {len(opened)} 个会话，要 {count} 个")
     idle = [session for session, names in opened.items() if not any(name in FILE_TOOLS for name in names)]
     if idle: failed.append(f"{', '.join(idle)} 没有用电脑上的工具")
+    return failed
+
+def c_window_delegates(ctx):
+    """主窗口里没人提 delegate：模型要自己想到开一个会话去改。开出去的会话是事后干活的，等它最多两分钟。"""
+    import time
+    failed = []
+    if ctx.tools.get("delegate", 0) < 1: failed.append("主窗口没有自己想到用 delegate")
+    deadline = time.time() + 120
+    while time.time() < deadline and "EXPRESS_SURCHARGE = 25" not in read(ctx, "inventory/shipping.py"): time.sleep(2)
+    if "EXPRESS_SURCHARGE = 25" not in read(ctx, "inventory/shipping.py"): failed.append("文件没有被改成 25")
+    opened = others(ctx)
+    if not any(name in ("edit_file", "write_file", "bash") for names in opened.values() for name in names):
+        failed.append(f"开出去的会话没有用改文件的工具：{opened}")
     return failed
 
 def c_delegate_find(ctx):
@@ -1050,6 +1064,8 @@ SCENARIOS += [
       "请在同一次回复里调用两次 delegate 工具（wait 都设为 true），让两个会话各查一件事：一个查 inventory/data/catalog.py 里 SKU-2187 的 "
       "warehouse_code 是什么；另一个查 compute_shipping_fee 定义在哪个文件。你自己不要读文件、不要搜索。两个回答都拿到后一起告诉我。",
       c_delegate_two, max_calls=6, timeout=480),
+    S("window-delegates", "交给别的会话", "主窗口里不提 delegate，模型自己决定开一个会话去改文件",
+      "把 inventory/shipping.py 里 EXPRESS_SURCHARGE 的值改成 25。", c_window_delegates, max_calls=6, timeout=300, window=True),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
@@ -1057,6 +1073,6 @@ ANSWER_ONLY = {"find-def", "big-file", "tree", "odd-files", "binary", "pdf", "ru
                "git-blame", "git-dirty", "web", "web-404", "web-redirect", "web-huge", "form", "wait", "skill", "wiki", "memory", "parallel",
                "secret-env", "missing-cmd", "needle-log", "doc-qa",
                "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot",
-               "delegate-find", "delegate-two"}
+               "delegate-find", "delegate-two"}   # window-delegates 查文件，不在这里
 for _scenario in SCENARIOS:
     _scenario["world"] = _scenario["id"] not in ANSWER_ONLY
