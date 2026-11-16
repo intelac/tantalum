@@ -119,15 +119,15 @@ def raw_quotes(items):
 
 # ---- 服务器 ----
 
-def start(data, password):
-    """起一台服务器，自动记笔记关掉（评测只看想起，不让后台调用抢模型）。用户由 new_user 每问一次建一个。"""
+def start(data, password, extra=()):
+    """起一台服务器，自动记笔记关掉（评测只看想起，不让后台调用抢模型）。用户由 new_user 每问一次建一个。extra 是另外加的启动参数。"""
     env = env_file(); env.update(TANTALUM_ADMIN_USER="root", TANTALUM_ADMIN_PASSWORD=password)
     server = subprocess.Popen(["java", "--enable-native-access=ALL-UNNAMED", f"-Dloader.path={examples_jar()}", "-cp", shell_jar(),
         "org.springframework.boot.loader.launch.PropertiesLauncher", f"--server.port={PORT}", f"--tantalum.data-dir={data}",
         f"--tantalum.workspace={data}-ws", "--tantalum.examples.enabled=true", "--tantalum.provider=local",
         f"--tantalum.openai-routes.local.base-url={LOCAL['url']}", f"--tantalum.openai-routes.local.model={LOCAL['model']}",
         "--tantalum.openai-routes.local.thinking=chat-template", "--tantalum.openai-routes.local.context-window=131072",
-        "--tantalum.memory-capture.enabled=false"], env=env, stdout=open(f"{data}-server.log", "w"), stderr=subprocess.STDOUT)
+        "--tantalum.memory-capture.enabled=false", *extra], env=env, stdout=open(f"{data}-server.log", "w"), stderr=subprocess.STDOUT)
     admin = Client()
     for _ in range(90):
         try:

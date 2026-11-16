@@ -69,7 +69,8 @@ public interface DelegateCall {
     /** 送给对方的话：写明它来自另一个会话、不是用户在这里说的，对方看不到这边的对话。 */
     static String text(Parsed call, SessionId from) {
         return "This comes from another conversation of the same user (" + from.value() + "), not typed by the user here. It cannot "
-                + "see this conversation, so end with a complete result; your final answer is sent back to it.\n\nTask:\n"
+                + "see this conversation, so end with a complete result; your final answer is sent back to it. Do the work yourself "
+                + "here; do not hand it on.\n\nTask:\n"
                 + call.task() + (call.brief() == null ? "" : "\n\nWhat you need to know:\n" + call.brief());
     }
 

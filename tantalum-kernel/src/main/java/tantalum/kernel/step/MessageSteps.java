@@ -46,8 +46,11 @@ import tantalum.value.state.ToolSlot;
 public final class MessageSteps {
 
     public static final String AWAITING_REPLY = AwaitingReply.NAME;
-    /** 一句话最多转几手：用户发起的一轮送出的是 1，为回它而开的一轮再送出的是 2。 */
-    public static final int MAX_HOPS = 2;
+    /**
+     * 一句话最多转几手。1：用户发起的一轮可以交给另一个会话，为回它而开的那一轮不能再往下交，自己做。所以只有一层。
+     * （2026-11-16 端到端：允许两手时，接活的本机模型搜到主窗口里“调用 delegate”的原话，就照着又转交了一次，没有干活。）
+     */
+    public static final int MAX_HOPS = 1;
     /** 一轮工具调用里同时等着回话的最多几个。 */
     public static final int MAX_ASKED = 4;
     /** 一轮工具调用里最多送出几句话。 */
@@ -76,8 +79,8 @@ public final class MessageSteps {
         }
         int hops = (run.owner() instanceof OwnerRef.OfMessage answering ? answering.hops() : 0) + 1;
         if (hops > MAX_HOPS) {
-            return done(round, index, "This turn is itself answering another conversation, which was answering another; do the work "
-                    + "here instead of handing it on.", true);
+            return done(round, index, "This turn is itself answering another conversation: do the work here instead of handing "
+                    + "it on.", true);
         }
         SessionState session = out.session(run.ref());
         if (session.id().equals(parsed.session())) {

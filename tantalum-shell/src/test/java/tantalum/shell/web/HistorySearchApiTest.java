@@ -69,9 +69,15 @@ class HistorySearchApiTest {
                     Thread.sleep(20);
                 }
                 Thread.sleep(300);
+                // 另一个会话也读过同一个文件：两条命中次数一样（2026-11-16 端到端测出排序拿没有的时刻去比，抛了空指针）
+                ask(server, "again", "读一下 notes.txt");
+                Thread.sleep(300);
                 ask(server, "second", "以前那个提示词是什么？");
             }
             assertTrue(inputs.getLast().contains("read_file: 部署口令的提示词是 zebra-amber-42"), "history_search found the tool result");
+            assertFalse(inputs.getLast().contains("Tool failed"), inputs.getLast());
+            assertTrue(inputs.getLast().contains("[first · tool]") && inputs.getLast().contains("[again · tool]"), "both, without a missing time: "
+                    + inputs.getLast().substring(Math.max(0, inputs.getLast().length() - 500)));
             assertFalse(server.get("alice", "/api/sessions/search?q=zebra-amber-42").body().contains("\"first\""),
                     "the sidebar search covers what was said, not tool output");
         }

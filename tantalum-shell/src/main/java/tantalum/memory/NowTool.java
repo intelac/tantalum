@@ -131,8 +131,17 @@ public final class NowTool implements Tool {
         if (text != null && tantalum.shell.plugin.SensitiveText.current().detect(text).isPresent()) {
             return ToolOutput.error(CredentialGuard.REASON);
         }
+        // 已经关掉的再关一次：什么都不改，说清楚已经关了。不然每次都回“Updated”，本机模型会一直关下去（2026-11-16 端到端测出来的）
+        Optional<MemoryItem> current = working.ledger().get(id);
+        String closedAs = current.map(item -> item.attr(WorkingMemory.STATUS)).filter(was -> was.equals("done") || was.equals("dropped")).orElse(null);
+        if (closedAs != null && text == null && (status == null || status.equals(closedAs)) && changes.size() <= (status == null ? 0 : 1)) {
+            return ToolOutput.ok("[" + id + "] is already closed (" + closedAs + "). Nothing changed; there is nothing more to do for it.");
+        }
+        boolean closing = "done".equals(status) || "dropped".equals(status);
         return switch (working.update(id, version, text, changes, MemoryItem.Actor.AGENT)) {
-            case WorkingMemory.Change.Done done -> ToolOutput.ok("Updated [" + done.item().id() + " v" + done.item().version() + "].");
+            case WorkingMemory.Change.Done done -> ToolOutput.ok(closing
+                    ? "Closed [" + done.item().id() + "] (" + status + "). It no longer shows as open; nothing more to do for it."
+                    : "Updated [" + done.item().id() + " v" + done.item().version() + "].");
             case WorkingMemory.Change.Stale stale -> ToolOutput.error("Version " + version + " is stale; now it is "
                     + NowText.line(stale.current(), working.ledger().clock().instant()));
             case WorkingMemory.Change.Missing missing -> ToolOutput.error("No working memory item " + id + ".");

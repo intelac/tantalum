@@ -32,7 +32,7 @@ class DelegateApiTest {
 
     private final List<String> inputs = new CopyOnWriteArrayList<>();
 
-    /** 每一轮第一次都再委派一层；拿到工具结果后把它原样交回去。 */
+    /** 每一轮第一次都想再交给别人；拿到工具结果（回话，或者“自己做”的拒绝）后把它原样交回去。 */
     private final ModelClient model = (prompt, chunks) -> {
         inputs.add(prompt.toString());
         Message last = prompt.messages().getLast();
@@ -47,7 +47,7 @@ class DelegateApiTest {
     };
 
     @Test
-    void delegationStopsAtTwoLevelsAndEachResultGoesBackUp() throws Exception {
+    void aConversationCanAskAnotherOneButThatOneDoesTheWorkItself() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("ws")), model)) {
             server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
             for (int i = 0; i < 1500; i++) {
@@ -57,18 +57,18 @@ class DelegateApiTest {
                 }
                 Thread.sleep(10);
             }
-            assertTrue(inputs.stream().anyMatch(input -> input.contains("do the work here instead of handing it on")),
+            assertTrue(inputs.stream().anyMatch(input -> input.contains("do the work here instead of handing")),
                     "the third level is refused: " + inputs.size() + " calls, sessions " + server.get("alice", "/api/sessions").body()
                             + " last input " + (inputs.isEmpty() ? "" : inputs.getLast().substring(Math.max(0, inputs.getLast().length() - 600))));
             JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
-            assertEquals(3, sessions.size(), sessions.toString());
+            assertEquals(2, sessions.size(), "only one level: " + sessions);
             long children = 0;
             for (JsonNode session : sessions) {
                 if (session.has("parent")) {
                     children++;
                 }
             }
-            assertEquals(2, children, "the list says which conversation opened each of the two");
+            assertEquals(1, children, "the list says which conversation opened the other");
             assertTrue(server.get("alice", "/api/sessions/top/messages").body().contains("Answer from conversation s-"));
         }
     }

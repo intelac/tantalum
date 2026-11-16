@@ -349,20 +349,20 @@ class MessageStepsTest {
     }
 
     @Test
-    void aMessageCanBeHandedOnOnceMoreButNotAThirdTime() {
+    void aTurnThatAnswersAMessageCannotHandItOn() {
         World world = new World();
         Send first = asked(world);
         world.deliver(first);
         CallModel b = world.assembled(first.to(), world.only(AssembleContext.class));
-        world.reply(first.to(), b, delegate("c1", "deeper", true, null));
-        Send second = world.only(Send.class);
-        assertEquals(2, second.message().hops());
-        world.deliver(second);
-        CallModel c = world.assembled(second.to(), world.only(AssembleContext.class));
-        world.reply(second.to(), c, delegate("c1", "too deep", true, null));
-        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance));
-        ToolResultBlock refused = results(world, second.to()).getFirst();
+        world.reply(first.to(), b, delegate("c1", "pass it on", true, null));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "only one level: it does the work itself");
+        ToolResultBlock refused = results(world, first.to()).getFirst();
         assertTrue(refused.error() && refused.text().contains("do the work here"), refused.text());
+        // 但用户自己在那个会话里开的一轮可以交出去
+        world.reply(first.to(), world.only(CallModel.class), new TextBlock("did it myself"));
+        CallModel own = world.ask(first.to(), "now ask someone else");
+        world.reply(first.to(), own, delegate("c2", "another job", false, null));
+        assertEquals(1, world.only(Send.class).message().hops());
 
         // 听话的一方也查：转手太多的话不接，回一句“不接”
         SessionId other = new SessionId("z");

@@ -128,8 +128,15 @@ class TrustedToolsTest {
                 .startsWith("Updated"));
         ToolOutput stale = now.run(in(false), args("action", "close", "id", task.id(), "version", task.version()));
         assertTrue(stale.text().startsWith("Version 1 is stale"), stale.text());
-        assertTrue(now.run(in(false), args("action", "close", "id", task.id(), "version", task.version() + 1)).text().startsWith("Updated"));
+        assertTrue(now.run(in(false), args("action", "close", "id", task.id(), "version", task.version() + 1)).text().startsWith("Closed ["));
         assertTrue(stores.working(ALICE).open().isEmpty());
+        // 2026-11-16 端到端：关掉的再关，以前每次都回“Updated”并涨版本，本机模型就一直关下去。现在说清楚已经关了，什么都不改
+        int closedAt = stores.working(ALICE).ledger().get(task.id()).orElseThrow().version();
+        for (int again = 0; again < 3; again++) {
+            ToolOutput repeated = now.run(in(false), args("action", "close", "id", task.id(), "version", closedAt + again));
+            assertTrue(!repeated.error() && repeated.text().contains("is already closed (done). Nothing changed"), repeated.text());
+        }
+        assertEquals(closedAt, stores.working(ALICE).ledger().get(task.id()).orElseThrow().version());
         assertTrue(now.run(in(false), args("action", "list")).text().contains("empty"));
     }
 }
