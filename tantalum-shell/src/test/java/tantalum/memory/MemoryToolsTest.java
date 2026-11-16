@@ -131,7 +131,8 @@ class MemoryToolsTest {
         for (Tool tool : MemoryTools.all(stores)) {
             Json.Obj schema = (Json.Obj) tool.schema();
             Json.Arr required = (Json.Arr) schema.fields().get("required");
-            assertFalse(required.items().isEmpty(), tool.name());
+            // memory_delete 要 name 或 text 其中一个，所以两个都不是必填
+            assertEquals(tool.name().equals("memory_delete"), required.items().isEmpty(), tool.name());
             assertEquals("memory", tool.server());
             assertTrue(tool.isConcurrencySafe(args()));
         }

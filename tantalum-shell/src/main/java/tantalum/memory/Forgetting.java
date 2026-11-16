@@ -99,6 +99,42 @@ public final class Forgetting {
         return gone.size();
     }
 
+    /**
+     * 对话里用户说“这条忘掉吧”（2026-11-16 真模型端到端：模型只会整条删或者改写页面，改写不留墓碑，那句话还会从笔记、工作记忆、
+     * 会话标题里回来）：按一句话忘掉，页面里说它的那几行删掉、别的行留着（删空了整条删），再照 {@link #forget} 连带标掉，
+     * 并给这句话本身留一个墓碑，以后的找回、笔记、标题都按它过滤。返回去掉的行数和说法数。
+     */
+    public static int statement(MemoryStore store, String text, MemoryItem.Actor actor) {
+        Ledger ledger = store.ledger();
+        int gone = 0;
+        for (MemoryEntry entry : store.list()) {
+            List<String> kept = new ArrayList<>();
+            int dropped = 0;
+            for (String line : entry.content().split("\n", -1)) {
+                if (!line.isBlank() && Overlap.of(line, text) >= SAME) {
+                    dropped++;
+                } else {
+                    kept.add(line);
+                }
+            }
+            if (dropped == 0) {
+                continue;
+            }
+            gone += dropped;
+            String rest = String.join("\n", kept).strip();
+            if (rest.isEmpty()) {
+                store.delete(entry.name(), actor);
+            } else {
+                store.write(entry.name(), entry.type().key(), entry.description(), rest + "\n");
+            }
+        }
+        gone += forget(ledger, text, actor);
+        MemoryItem said = MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.USER_SAID, actor, text, ledger.clock().instant());
+        ledger.put(said, 0);
+        ledger.tombstone(said.id(), actor, REASON);
+        return gone;
+    }
+
     /** 忘掉的一句：原文和忘掉的时刻。 */
     public record Forgotten(String text, java.time.Instant at) {}
 

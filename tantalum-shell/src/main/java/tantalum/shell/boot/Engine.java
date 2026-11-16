@@ -157,6 +157,7 @@ public final class Engine implements AutoCloseable {
             pipeline.cleanroomRing().start();
             pipeline.input().start();
             interrupted = interrupt(unfinished);
+            redeliver();
             try {
                 pipeline.deadlines().arm(stores.storage().index.awaitingWithDeadline());
             } catch (SQLException failure) {
@@ -365,6 +366,29 @@ public final class Engine implements AutoCloseable {
      * 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。
      * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
      */
+    /**
+     * 上一个进程可能死在“送话记了账、还没送进对方会话”之间：有话送出去没确认的会话各收到一条 {@link tantalum.value.event.Redeliver}，
+     * 内核照原来的编号重送，对方按编号去重。放不进输入环的这次不送（话还在信箱里，下次启动再送），不拦住启动。
+     */
+    private void redeliver() {
+        List<SessionIndex.Session> pending;
+        try {
+            pending = stores.storage().index.withUnconfirmed();
+        } catch (SQLException failure) {
+            throw new IllegalStateException("cannot read which sessions have unconfirmed messages", failure);
+        }
+        int asked = 0;
+        for (SessionIndex.Session session : pending) {
+            if (pipeline.input().tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(), session.session(),
+                    null, new tantalum.value.event.Redeliver()))) {
+                asked++;
+            }
+        }
+        if (!pending.isEmpty()) {
+            LOG.info("{} of {} sessions with unconfirmed messages were asked to send them again", asked, pending.size());
+        }
+    }
+
     private int interrupt(List<SessionIndex.Session> all) {
         // 等用户回答、等会话回答的运行没有在途命令，不收尾，照旧等
         List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())

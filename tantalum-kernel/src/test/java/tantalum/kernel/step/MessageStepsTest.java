@@ -233,7 +233,7 @@ class MessageStepsTest {
         Send back = finishes(world, sent, "done early");
         world.deliver(back);
         assertEquals(1, world.run(A).pendingSteers().size(), "A's run is still going: it sees the answer at its next step");
-        assertTrue(world.last.commands().isEmpty());
+        assertTrue(world.last.commands().stream().allMatch(tantalum.value.command.Confirm.class::isInstance), "only the confirmation goes out");
     }
 
     @Test
@@ -245,7 +245,7 @@ class MessageStepsTest {
         assertEquals(2, sent.size());
         world.deliver(finishes(world, sent.get(1), "B"));
         assertInstanceOf(AwaitingReply.class, world.run(A).phase(), "still waiting for the first");
-        assertTrue(world.last.commands().isEmpty());
+        assertTrue(world.last.commands().stream().allMatch(tantalum.value.command.Confirm.class::isInstance), "only the confirmation goes out");
         world.deliver(finishes(world, sent.get(0), "A"));
         world.only(CallModel.class);
         List<ToolResultBlock> answers = results(world, A);
@@ -348,6 +348,95 @@ class MessageStepsTest {
         assertTrue(results(world, A).getFirst().text().contains(" in /home/u/docs"));
         world.deliver(sent.get(0));
         assertEquals("/home/u/docs", world.session(sent.get(0).to()).dir());
+    }
+
+    // ---- 话不丢、不重：送出去记着等确认，重启后重送，收的一方按编号只处理一次 ----
+
+    @Test
+    void whatIsSentStaysUnconfirmedUntilTheOtherSideSaysItArrived() {
+        World world = new World();
+        CallModel call = world.ask(A, "do it");
+        world.reply(A, call, delegate("c1", "count", false, null));
+        Send sent = world.only(Send.class);
+        assertEquals(List.of(sent.message().id()), world.session(A).inbox().unconfirmed().stream().map(each -> each.message().id()).toList(),
+                "recorded in the same step that sends it");
+        assertEquals(sent.to(), world.session(A).inbox().unconfirmed().getFirst().to());
+
+        world.deliver(sent);
+        tantalum.value.command.Confirm confirm = world.only(tantalum.value.command.Confirm.class);
+        assertEquals(A, confirm.to());
+        assertEquals(sent.message().id(), confirm.message());
+        assertTrue(world.session(sent.to()).inbox().hasSeen(sent.message().id()));
+
+        world.feed(A, null, new tantalum.value.event.MessageDelivered(confirm.message()));
+        assertTrue(world.session(A).inbox().unconfirmed().isEmpty(), "confirmed: nothing left to send again");
+        KernelState before = world.state;
+        world.feed(A, null, new tantalum.value.event.MessageDelivered(confirm.message()));
+        assertEquals(before, world.state, "a second confirmation changes nothing");
+    }
+
+    @Test
+    void afterARestartUnconfirmedMessagesAreSentAgainAndTakenOnlyOnce() {
+        World world = new World();
+        CallModel call = world.ask(A, "do it");
+        world.reply(A, call, delegate("c1", "count", false, null));
+        Send sent = world.only(Send.class);
+        world.deliver(sent);   // 送到了，但确认没回来进程就死了
+        SessionId other = sent.to();
+        int runsBefore = world.state.runs().size();
+
+        world.feed(A, null, new tantalum.value.event.Redeliver());
+        Send again = world.only(Send.class);
+        assertEquals(sent.message(), again.message(), "the same message with the same id");
+        assertEquals(other, again.to());
+        assertEquals(1, world.session(A).inbox().unconfirmed().size(), "still one entry, not two");
+
+        KernelState before = world.state;
+        world.deliver(again);
+        assertEquals(runsBefore, world.state.runs().size(), "the duplicate does not start a second turn");
+        assertEquals(before.sessions().get(other).messages(), world.session(other).messages(), "nor add anything to the conversation");
+        assertEquals(sent.message().id(), world.only(tantalum.value.command.Confirm.class).message(), "but it is confirmed again");
+
+        // 没送到就死了的那种：对方从没见过，重送的就是第一次
+        World lost = new World();
+        CallModel first = lost.ask(A, "do it");
+        lost.reply(A, first, delegate("c1", "count", false, null));
+        lost.feed(A, null, new tantalum.value.event.Redeliver());
+        Send resent = lost.only(Send.class);
+        lost.deliver(resent);
+        assertEquals("count", tantalum.value.delegate.DelegateCall.taskOf(((tantalum.value.model.TextBlock) lost.session(resent.to())
+                .messages().getFirst().content().getFirst()).text()), "it arrives and starts the work");
+        assertTrue(lost.run(resent.to()).owner() instanceof OwnerRef.OfMessage);
+    }
+
+    @Test
+    void theAnswerBackIsAlsoHeldUntilConfirmedAndADuplicateAnswerIsDropped() {
+        World world = new World();
+        CallModel call = world.ask(A, "ask");
+        world.reply(A, call, delegate("c1", "count", true, null));
+        Send request = world.only(Send.class);
+        world.deliver(request);
+        SessionId other = request.to();
+        CallModel work = world.assembled(other, world.only(AssembleContext.class));
+        world.reply(other, work, new tantalum.value.model.TextBlock("42"));
+        Send answer = world.only(Send.class);
+        assertEquals(List.of(answer.message().id()), world.session(other).inbox().unconfirmed().stream().map(each -> each.message().id()).toList());
+
+        world.deliver(answer);
+        assertTrue(results(world, A).getFirst().text().contains("42"));
+        int messages = world.session(A).messages().size();
+        world.deliver(answer);
+        assertEquals(messages, world.session(A).messages().size(), "the same answer a second time is not taken again");
+    }
+
+    @Test
+    void redeliverWithNothingPendingChangesNothing() {
+        World world = new World();
+        world.ask(A, "hello");
+        KernelState before = world.state;
+        world.feed(A, null, new tantalum.value.event.Redeliver());
+        assertEquals(before, world.state);
+        assertTrue(world.last.commands().isEmpty());
     }
 
     @Test

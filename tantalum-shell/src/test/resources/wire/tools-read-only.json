@@ -534,17 +534,18 @@
   {
     "name": "memory_delete",
     "deferred": false,
-    "description": "Delete one of your memory entries by name, for example when the user asks you to forget something.",
+    "description": "Forget something. name: delete a whole memory entry. text: forget one thing the user said or no longer wants (give the statement itself, in the user's words); it is removed from every entry, note and working memory and is not brought back later, while the rest of those entries stays. Use text when the user takes back one statement; do not rewrite the entry by hand for that. Give name or text.",
     "schema": {
       "type": "object",
       "properties": {
         "name": {
           "type": "string"
+        },
+        "text": {
+          "type": "string"
         }
       },
-      "required": [
-        "name"
-      ]
+      "required": []
     }
   },
   {

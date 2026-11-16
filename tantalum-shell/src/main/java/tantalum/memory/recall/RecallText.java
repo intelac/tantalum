@@ -36,6 +36,11 @@ public final class RecallText {
         if (item.pendingConfirm()) {
             return "NOT CONFIRMED, " + origin(item.source()) + ": do not state it as a fact; say it is unconfirmed";
         }
+        // 每天的笔记是模型对那次对话的小结，多半是用户自己说的话。写成 “inferred” 时模型会对用户说“这条没经你确认”
+        // （2026-11-16 Sonnet 端到端：用户明说过的习惯被说成“我推断的”）；照实写它是什么
+        if (item.kind() == MemoryItem.Kind.CARD) {
+            return "your summary of that conversation";
+        }
         String said = origin(item.source());
         return item.status() == MemoryItem.Status.APPROVED
                 ? said + ", a decision the user approved: do not change or contradict it without asking the user first" : said;

@@ -26,8 +26,13 @@ public final class MemoryDeleteTool implements Tool {
     static final String NAME = "memory_delete";
 
     @Override public String name() { return NAME; }
-    @Override public String description() { return "Delete one of your memory entries by name, for example when the user asks you to forget something."; }
-    @Override public Json schema() { return ToolArguments.schema(List.of("name"), List.of()); }
+    @Override public String description() {
+        return "Forget something. name: delete a whole memory entry. text: forget one thing the user said or no longer wants (give the "
+                + "statement itself, in the user's words); it is removed from every entry, note and working memory and is not brought "
+                + "back later, while the rest of those entries stays. Use text when the user takes back one statement; do not rewrite "
+                + "the entry by hand for that. Give name or text.";
+    }
+    @Override public Json schema() { return ToolArguments.schema(List.of(), List.of("name", "text")); }
     @Override public String server() { return MemoryTools.SERVER; }
 
     @Override public String plugin() { return MemoryTools.PLUGIN; }
@@ -38,8 +43,9 @@ public final class MemoryDeleteTool implements Tool {
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {
         String name = ToolArguments.string(arguments, "name");
-        if (name == null) {
-            return MemoryTools.missing("name");
+        String text = ToolArguments.string(arguments, "text");
+        if (name == null && (text == null || text.isBlank())) {
+            return MemoryTools.missing("name or text");
         }
         if (context.offRecord()) {
             return ToolOutput.error(ToolTrust.OFF_RECORD);
@@ -48,6 +54,11 @@ public final class MemoryDeleteTool implements Tool {
             return ToolOutput.error(ToolTrust.CHILD);
         }
         try {
+            if (name == null) {
+                int gone = Forgetting.statement(stores.of(context.principal()), text.strip(), tantalum.memory.ledger.MemoryItem.Actor.AGENT);
+                return ToolOutput.ok(gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."
+                        : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back.");
+            }
             return stores.of(context.principal()).delete(name) ? ToolOutput.ok("Deleted " + name + ".") : MemoryTools.notFound(name);
         } catch (RuntimeException failure) {
             return MemoryTools.unavailable(failure);

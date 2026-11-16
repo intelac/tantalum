@@ -54,6 +54,9 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, Answered.TYPE, AnswerSteps::ignored);
         // 会话之间说话：另一个会话说了一句话（交来的活，或者回话）；等回话的期限到
         table.register(TransitionTable.ANY_STATE, SessionMessage.TYPE, MessageSteps::received);
+        // 送话的确认和重启后的重送：和运行在什么状态无关
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.MessageDelivered.TYPE, MessageSteps::delivered);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Redeliver.TYPE, MessageSteps::redeliver);
         table.register(MessageSteps.AWAITING_REPLY, TimerFired.TYPE, MessageSteps::expired);
     }
 }

@@ -25,8 +25,8 @@ import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
 import tantalum.value.decision.QueueEdited;
-import tantalum.value.decision.StepFailed;
 import tantalum.value.decision.SessionChange;
+import tantalum.value.decision.StepFailed;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
@@ -69,7 +69,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = DoWork.class, name = "DoWork"),
         @JsonSubTypes.Type(value = StartTimer.class, name = "StartTimer"),
         @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands"),
-        @JsonSubTypes.Type(value = tantalum.value.command.Send.class, name = "Send")
+        @JsonSubTypes.Type(value = tantalum.value.command.Send.class, name = "Send"),
+        @JsonSubTypes.Type(value = tantalum.value.command.Confirm.class, name = "Confirm")
     })
     private interface CommandMixin {}
 

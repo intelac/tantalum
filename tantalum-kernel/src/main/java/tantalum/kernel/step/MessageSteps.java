@@ -157,7 +157,40 @@ public final class MessageSteps {
             out.report(List.of(new HookReported(where, KERNEL, "message " + event.id().value() + " ignored: it comes from another user")));
             return out.decision();
         }
+        // 重送来的（编号见过）：只回确认，别的什么都不做。确认和记编号在 Outcome 里统一做
+        SessionState known = context.state().sessions().get(envelope.session());
+        if (known != null && known.inbox().hasSeen(event.id())) {
+            return new Outcome(context).decision();
+        }
         return event.isReply() ? reply(context, event) : request(context, event);
+    }
+
+    /** 对方确认收到了：从“还没确认”里去掉。 */
+    public static Decision delivered(StepContext context) {
+        EventEnvelope envelope = context.envelope();
+        tantalum.value.event.MessageDelivered event = (tantalum.value.event.MessageDelivered) envelope.event();
+        SessionState session = context.state().sessions().get(envelope.session());
+        if (session == null || session.inbox().confirmed(event.message()).equals(session.inbox())) {
+            return Decision.unchanged(context.state());
+        }
+        Outcome out = new Outcome(context);
+        out.put(session.withInbox(session.inbox().confirmed(event.message())));
+        return out.decision();
+    }
+
+    /** 服务器重启后：还没确认的话照原来的编号再送一次。 */
+    public static Decision redeliver(StepContext context) {
+        EventEnvelope envelope = context.envelope();
+        SessionState session = context.state().sessions().get(envelope.session());
+        if (session == null || session.inbox().unconfirmed().isEmpty()) {
+            return Decision.unchanged(context.state());
+        }
+        Outcome out = new Outcome(context);
+        RunRef here = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+        for (tantalum.value.state.Inbox.Outgoing outgoing : session.inbox().unconfirmed()) {
+            out.emit(new Send(out.nextCommandId(), here, outgoing.to(), outgoing.message()));
+        }
+        return out.decision();
     }
 
     /** 交来的活：空闲就为它开一轮，正忙就排队。转手太多的不接，回一句“不接”。 */
@@ -224,7 +257,8 @@ public final class MessageSteps {
         }
         SessionState session = out.state().sessions().get(envelope.session());
         if (session == null) {
-            return Decision.unchanged(context.state());
+            // 没有这个会话：没什么可做，但照样回确认，免得对方一直留着重送
+            return out.decision();
         }
         Message message = Message.user(DelegateCall.REPORT + "Conversation " + from
                 + (event.failed() ? " did not finish: " + text : text.isEmpty() ? " ended without an answer." : " finished:\n" + text));

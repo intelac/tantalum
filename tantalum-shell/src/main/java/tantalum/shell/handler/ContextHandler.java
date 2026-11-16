@@ -159,7 +159,11 @@ public final class ContextHandler implements Handler {
             // 列出来的不含“不进记忆”的会话：它们的标题不该出现在别的会话的上下文里
             // 按行比较：之后变了只把变的那几行告诉模型
             // 别的会话的标题是用户以前的原话：插件说不给的（记忆插件：忘掉的事）不写标题
-            List<WorkspaceSection.Row> rows = source.sessions(principal).stream().map(row -> hidden(principal, row.summary())
+            // 主窗口不列：没有人会把活交给它，它的标题又是随口说的话，列出来只会把旧话带进每个会话
+            SessionId here = command.run().session();
+            List<WorkspaceSection.Row> rows = source.sessions(principal).stream()
+                    .filter(row -> row.summary().id().equals(here) || !MainWindow.is(row.summary().id()))
+                    .map(row -> hidden(principal, row.summary())
                     ? new WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(row.summary().id(), "", row.summary().lastActivity(),
                             row.summary().runStatus(), row.summary().dir(), row.summary().offRecord()), row.tokens()) : row).toList();
             // 这个会话自己那一行从第一句话起就在：第一次组装时它可能还没进会话列表，不补上的话第二句话时这一段会平白变一次

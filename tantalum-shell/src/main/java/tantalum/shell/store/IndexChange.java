@@ -9,8 +9,8 @@ import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
-import tantalum.value.event.ToolFinished;
 import tantalum.value.event.Submitted;
+import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
@@ -30,11 +30,20 @@ import tantalum.value.state.SessionState;
 /**
  * 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。
  * {@code dir} 是会话的工作目录（没有为 null）；{@code rename} 是这一步的改名（没改名为 null，空串表示恢复自动标题），
- * 改名不算会话的活动。
+ * 改名不算会话的活动。{@code unconfirmed}：这一步之后会话有没有送出去还没确认的话（重启后 shell 据此让它重送）。
  */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord) {
+                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord,
+                          boolean unconfirmed) {
+
+    /** 没有送出去没确认的话时（测试）。 */
+    public IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
+                       RunId activeRun, Usage usage, Submission submission, boolean runEnded,
+                       Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord) {
+        this(principal, session, seq, at, title, runStatus, activeRun, usage, submission, runEnded, answerDeadline, answerTimer, dir, rename,
+                text, offRecord, false);
+    }
 
     /** 不是“不进记忆”的会话时（测试）。 */
     public IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
@@ -84,7 +93,13 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 timed != null ? timed.timer() : reply != null ? reply.timer() : null,
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
-                        ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()));
+                        ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()),
+                unconfirmed(after, envelope.session()));
+    }
+
+    private static boolean unconfirmed(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found != null && !found.inbox().unconfirmed().isEmpty();
     }
 
     /** 一次工具调用的结果：“工具名: 结果”（截短、遮盖密钥）；找不到是哪个工具时只有结果。 */

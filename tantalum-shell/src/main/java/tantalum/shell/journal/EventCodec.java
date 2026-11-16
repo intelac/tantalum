@@ -240,6 +240,8 @@ public final class EventCodec {
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
         // 会话之间说话：另一个会话说了一句话
         codec.register(SessionMessage.TYPE, 1, SessionMessage.class);
+        codec.register(tantalum.value.event.MessageDelivered.TYPE, 1, tantalum.value.event.MessageDelivered.class);
+        codec.register(tantalum.value.event.Redeliver.TYPE, 1, tantalum.value.event.Redeliver.class);
         return codec;
     }
 

@@ -113,4 +113,59 @@ class DelegateApiTest {
             }
         }
     }
+
+    /**
+     * 进程死在“送话记了账、还没送进对方会话”之间：重启后这句话重送，对方开始干活，结果照样回来把交活的会话叫醒。
+     * 再重启一次什么都不重复。
+     */
+    @Test
+    void aMessageThatWasRecordedButNeverArrivedIsSentAgainAfterARestart() throws Exception {
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
+            if (last.equals("start")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{\"task\":\"count the files\"}",
+                        new Json.Obj(Map.of("task", new Json.Str("count the files"))))), StopReason.TOOL_USE, "m", null);
+            }
+            String reply = last.startsWith("Opened conversation") ? "handed off" : last.contains("Task:\ncount the files") ? "42 files"
+                    : "the other conversation says: " + last.lines().reduce((a, b) -> b).orElse("");
+            return new ModelOutcome.Replied(List.of(new TextBlock(reply)), StopReason.END_TURN, "m", null);
+        };
+        Path data = temp.resolve("data3");
+        Path workspace = Files.createDirectory(temp.resolve("ws3"));
+        System.setProperty("tantalum.test.drop-sends", "1");
+        try (TestServer server = new TestServer(data, workspace, window)) {
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("handed off"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("handed off"), messages);
+            Thread.sleep(300);
+            assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions").size(), "it never arrived: no other conversation");
+        } finally {
+            System.clearProperty("tantalum.test.drop-sends");
+        }
+        try (TestServer server = new TestServer(data, workspace, window)) {
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("the other conversation says: 42 files"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("the other conversation says: 42 files"), "sent again after the restart, done, and the answer came back: " + messages);
+        }
+        try (TestServer server = new TestServer(data, workspace, window)) {
+            Thread.sleep(500);
+            JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
+            assertEquals(2, sessions.size(), sessions.toString());
+            assertEquals(2, JSON.readTree(server.get("alice", "/api/sessions/top/runs").body()).get("runs").size(), "nothing is repeated by another restart");
+            for (JsonNode session : sessions) {
+                if (!session.get("id").asString().equals("top")) {
+                    assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions/" + session.get("id").asString() + "/runs").body()).get("runs").size());
+                }
+            }
+        }
+    }
 }
