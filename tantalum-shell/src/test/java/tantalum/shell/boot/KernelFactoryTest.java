@@ -70,7 +70,7 @@ class KernelFactoryTest {
     /** 静态的描述和工具自己的方法说的一样。 */
     @Test
     void theStaticDescriptionsMatchTheTools() {
-        assertEquals(List.of("read_attachment", "ask_user", "todo_write", "delegate", "workspace_add"), BuiltinTools.dispatch().stream().map(ToolDispatch::name).toList());
+        assertEquals(List.of("read_attachment", "ask_user", "todo_write", "delegate"), BuiltinTools.dispatch().stream().map(ToolDispatch::name).toList());
         assertEquals(LocalTool.all(null, null, java.time.Duration.ofSeconds(1)).stream().map(tool -> tool.dispatch().name()).toList(),
                 LocalTool.dispatches().stream().map(ToolDispatch::name).toList());
         assertEquals(List.of("memory_write", "memory_read", "memory_delete", "memory_note", "now", "memory_search", "history_search"),

@@ -24,6 +24,14 @@ public interface ContextContributor {
     /** 组装上下文时的情况：会话、它在用户电脑上的工作目录（没有为 null）、是不是“不进记忆”的会话。 */
     record Situation(tantalum.value.id.SessionId session, String dir, boolean offRecord) {}
 
+    /**
+     * 平台要把用户以前说过的一句话放进上下文时（比如“工作区”一段里别的会话的标题）先问插件：返回 true 就不放。
+     * 记忆插件用它挡住忘掉的事（memory-final-plan 第 10 节）。{@code said} 是那句话大约什么时候说的。默认都放。
+     */
+    default boolean hides(Principal user, String words, java.time.Instant said) {
+        return false;
+    }
+
     /** 这个插件会用到的段名（管理员只读查看时按它遮掉个人插件的段）。默认没有。 */
     default java.util.Set<String> sectionNames() {
         return java.util.Set.of();

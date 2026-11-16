@@ -59,6 +59,7 @@ final class KernelFactory {
     static ToolSafety safety(TantalumProperties properties, List<Tool> plugins) {
         List<ToolDispatch> dispatches = new ArrayList<>();
         dispatches.addAll(BuiltinTools.dispatch());
+        dispatches.add(tantalum.shell.project.WorkspaceAddTool.DISPATCH);
         dispatches.addAll(LocalTool.dispatches());
         if (properties.webSettings().fetch().enabled()) {
             dispatches.add(WebFetchTool.DISPATCH);

@@ -158,7 +158,11 @@ public final class ContextHandler implements Handler {
         if (source != null && tantalum.value.delegate.DelegateCall.openerOf(command.run().session()).isEmpty()) {
             // 列出来的不含“不进记忆”的会话：它们的标题不该出现在别的会话的上下文里
             // 按行比较：之后变了只把变的那几行告诉模型
-            sections.add(new ContextSection(WorkspaceSection.NAME, escape(WorkspaceSection.text(source.list(principal), source.sessions(principal),
+            // 别的会话的标题是用户以前的原话：插件说不给的（记忆插件：忘掉的事）不写标题
+            List<WorkspaceSection.Row> rows = source.sessions(principal).stream().map(row -> hidden(principal, row.summary())
+                    ? new WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(row.summary().id(), "", row.summary().lastActivity(),
+                            row.summary().runStatus(), row.summary().dir(), row.summary().offRecord()), row.tokens()) : row).toList();
+            sections.add(new ContextSection(WorkspaceSection.NAME, escape(WorkspaceSection.text(source.list(principal), rows,
                     command.run().session(), clock == null ? null : clock.instant())), true));
         }
         List<String> notes = gate.modelNotes(principal);
@@ -233,6 +237,24 @@ public final class ContextHandler implements Handler {
         }
         return new ContextAssembled(command.id(), system.toString(), specs, settings, sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
+    }
+
+    private boolean hidden(Principal principal, tantalum.shell.conversation.SessionSummary summary) {
+        String title = summary.title();
+        if (title == null || title.isBlank()) {
+            return false;
+        }
+        for (ContextContributor contributor : contributors) {
+            try {
+                if (contributor.hides(principal, title, summary.lastActivity())) {
+                    return true;
+                }
+            } catch (RuntimeException failure) {
+                // 插件答不上来时宁可不给标题
+                return true;
+            }
+        }
+        return false;
     }
 
     /** system 的最后一行：{@code Today is 2026-11-16 (Monday, time zone Asia/Tokyo).} */

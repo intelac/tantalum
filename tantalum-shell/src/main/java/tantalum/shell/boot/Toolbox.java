@@ -50,7 +50,16 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         // 本机工作区读到的图片、浏览器截图都照附件规则存进本人附件
         ToolImages toolImages = new ToolImages(stores.storage().attachments);
         // 服务器上只读附件；读写文件、Git 都转发到用户的电脑
-        BuiltinTools.of(stores.storage().attachments, stores.projects(), localLinks).forEach(catalog::register);
+        BuiltinTools.of(stores.storage().attachments).forEach(catalog::register);
+        // 模型登记工作区（执行前由 WorkspaceApprovalHook 先问用户）
+        catalog.register(new tantalum.shell.project.WorkspaceAddTool(stores.projects(), (user, path) -> {
+            LocalLinks.Listing listing = localLinks.browse(user, path);
+            if (listing.outcome() != LocalLinks.Listing.Outcome.OK) {
+                return tantalum.shell.project.WorkspaceAddTool.Folder.UNCHECKED;
+            }
+            return listing.result().error() != null ? tantalum.shell.project.WorkspaceAddTool.Folder.REFUSED
+                    : tantalum.shell.project.WorkspaceAddTool.Folder.OK;
+        }));
         SkillSettings skillSettings = new SkillSettings(stores.params());
         LocalTool.all(localLinks, toolImages, properties.toolTimeout(), skillSettings).forEach(catalog::register);
         tools.forEach(catalog::register);

@@ -3,7 +3,6 @@ package tantalum.shell.project;
 import java.util.List;
 import tantalum.kernel.hook.KernelHook;
 import tantalum.shell.plugin.PluginInfo;
-import tantalum.shell.tool.WorkspaceAddTool;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookContext;

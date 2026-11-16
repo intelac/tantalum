@@ -255,7 +255,9 @@ class SkillChainTest {
             assertFalse(prompt.system().contains("<skills>"), prompt.system());
             assertFalse(prompt.system().contains("<wiki>"), prompt.system());
             // 之后只有开着的插件给模型的说明（命令先问，qagent-fixes R5.2），没有技能、wiki 的空段
-            String system = prompt.system().replaceFirst("(?s)\\n*<plugin-rules>.*</plugin-rules>$", "");
+            // 再前面是“工作区”一段（总在）
+            String system = prompt.system().replaceFirst("(?s)\\n*<plugin-rules>.*</plugin-rules>$", "")
+                    .replaceFirst("(?s)\\n*<workspaces>.*</workspaces>$", "");
             assertTrue(system.endsWith("</local-workspace>"), prompt.system());
             assertFalse(offered(prompt, "skill"));
             assertNull(computer.contexts().getFirst().skills());

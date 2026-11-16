@@ -1,18 +1,14 @@
-package tantalum.shell.tool;
+package tantalum.shell.project;
 
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import tantalum.shell.local.LocalLinks;
 import tantalum.shell.plugin.Tool;
 import tantalum.shell.plugin.ToolArguments;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolOutput;
-import tantalum.shell.project.Project;
-import tantalum.shell.project.ProjectPaths;
-import tantalum.shell.project.Projects;
 import tantalum.value.json.Json;
 
 /**
@@ -24,14 +20,21 @@ public final class WorkspaceAddTool implements Tool {
 
     public static final String NAME = "workspace_add";
 
-    static final ToolDispatch DISPATCH = ToolDispatch.exclusive(NAME, "workspaces", 4);
+    public static final ToolDispatch DISPATCH = ToolDispatch.exclusive(NAME, "workspaces", 4);
+
+    /** 问用户的电脑这个目录在不在、让不让用。电脑没连上（或连接程序太旧）答 {@link Folder#UNCHECKED}。 */
+    public interface FolderCheck {
+        Folder check(tantalum.value.id.Principal user, String path) throws InterruptedException;
+    }
+
+    public enum Folder { OK, REFUSED, UNCHECKED }
 
     private final Projects projects;
-    private final LocalLinks links;
+    private final FolderCheck folders;
 
-    public WorkspaceAddTool(Projects projects, LocalLinks links) {
+    public WorkspaceAddTool(Projects projects, FolderCheck folders) {
         this.projects = projects;
-        this.links = links;
+        this.folders = folders;
     }
 
     @Override public String name() { return NAME; }
@@ -76,9 +79,9 @@ public final class WorkspaceAddTool implements Tool {
             return ToolOutput.error("path must be an absolute path on the user's computer, like /home/me/project or C:\\Work\\project.");
         }
         // 电脑连着、认得列目录时先问一次：不存在或不允许就不登记
-        LocalLinks.Listing listing = links.browse(context.principal(), path);
-        boolean checked = listing.outcome() == LocalLinks.Listing.Outcome.OK;
-        if (checked && listing.result().error() != null) {
+        Folder folder = folders.check(context.principal(), path);
+        boolean checked = folder != Folder.UNCHECKED;
+        if (folder == Folder.REFUSED) {
             return ToolOutput.error("The computer does not have this folder or does not allow it: " + path
                     + ". Create it first, or choose a folder inside the allowed ones.");
         }

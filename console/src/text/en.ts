@@ -1172,7 +1172,8 @@ export const en: Text = {
       memory_note: ["Note one thing", "Notes a preference, fact, decision or something noticed; it counts as yours only with your exact words."],
       now: ["Working memory", "Shows and updates what is being done, promised, waited for and recently noticed."],
       memory_search: ["Search memory", "Searches memory by keywords and shows where each result came from."],
-      delegate: ["Delegate", "Hands a piece of work to a sub-conversation and waits for its result, or has it report back when done."],
+      delegate: ["Hand to another conversation", "Hands a piece of work to another conversation (a new one or an existing one, optionally in a chosen workspace) and waits for its result, or gets the result back when it is done."],
+      workspace_add: ["Add workspace", "Adds a folder on your computer as a workspace. You are asked every time; it is added only if you agree."],
       history_search: ["Search past conversations", "Searches what was said in past conversations, including compacted parts."],
     },
     pointNames: {

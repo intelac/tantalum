@@ -1,4 +1,4 @@
-package tantalum.shell.tool;
+package tantalum.shell.project;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -10,12 +10,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import tantalum.shell.local.LocalLinks;
-import tantalum.shell.local.LocalTokens;
 import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.shell.plugin.Workspace;
-import tantalum.shell.project.Projects;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
@@ -38,9 +35,9 @@ class WorkspaceAddToolTest {
 
     @Test
     void addsTheFolderOnceAndSaysHowToUseIt() throws Exception {
-        try (Projects projects = Projects.inMemory(Clock.systemUTC()); LocalTokens tokens = LocalTokens.open(dir.resolve("t"), Clock.systemUTC());
-             LocalLinks links = new LocalLinks(tokens, Clock.systemUTC(), LocalLinks.Timing.DEFAULT)) {
-            WorkspaceAddTool tool = new WorkspaceAddTool(projects, links);
+        try (Projects projects = Projects.inMemory(Clock.systemUTC())) {
+            WorkspaceAddTool tool = new WorkspaceAddTool(projects, (user, path) -> path.equals("/gone") ? WorkspaceAddTool.Folder.REFUSED
+                    : path.equals("/seen") ? WorkspaceAddTool.Folder.OK : WorkspaceAddTool.Folder.UNCHECKED);
             ToolContext context = new ToolContext(YI, new SessionId("s"), new Workspace(dir));
 
             ToolOutput added = tool.run(context, args("path", " /home/yi/shop ", "title", "Shop"));
@@ -67,9 +64,9 @@ class WorkspaceAddToolTest {
 
     @Test
     void refusesWhatTheSidebarWouldRefuse() throws Exception {
-        try (Projects projects = Projects.inMemory(Clock.systemUTC()); LocalTokens tokens = LocalTokens.open(dir.resolve("t"), Clock.systemUTC());
-             LocalLinks links = new LocalLinks(tokens, Clock.systemUTC(), LocalLinks.Timing.DEFAULT)) {
-            WorkspaceAddTool tool = new WorkspaceAddTool(projects, links);
+        try (Projects projects = Projects.inMemory(Clock.systemUTC())) {
+            WorkspaceAddTool tool = new WorkspaceAddTool(projects, (user, path) -> path.equals("/gone") ? WorkspaceAddTool.Folder.REFUSED
+                    : path.equals("/seen") ? WorkspaceAddTool.Folder.OK : WorkspaceAddTool.Folder.UNCHECKED);
             ToolContext context = new ToolContext(YI, new SessionId("s"), new Workspace(dir));
             assertTrue(tool.run(context, args()).error());
             assertTrue(tool.run(context, args("path", "shop")).text().contains("absolute path"));
@@ -79,6 +76,10 @@ class WorkspaceAddToolTest {
             assertTrue(taken.text().contains("give another title"));
             assertTrue(tool.run(context, args("path", "/c", "title", "x".repeat(Projects.MAX_TITLE + 1))).error());
             assertEquals(1, projects.list(YI).size());
+            ToolOutput gone = tool.run(context, args("path", "/gone"));
+            assertTrue(gone.error() && gone.text().contains("does not have this folder"), "the computer says no: not added");
+            assertEquals(1, projects.list(YI).size());
+            assertFalse(tool.run(context, args("path", "/seen")).text().contains("not checked"), "checked by the computer");
         }
     }
 }

@@ -142,7 +142,8 @@ test.describe("插件参数", () => {
 
     // 管理员自己那一页也锁着，从那一行能跳到默认值
     await admin.getByRole("tab", { name: "我的插件" }).click();
-    await defaults.getByRole("button", { name: "去插件默认值改" }).click();
+    // 锁着的每一行都有这个按钮（内置的“新建工作区先问”必须开启，也算一行），哪个都跳到同一页
+    await defaults.getByRole("button", { name: "去插件默认值改" }).first().click();
     await expect(defaults.getByRole("tab", { name: "插件默认值" })).toHaveAttribute("aria-selected", "true");
     await item.getByRole("switch", { name: "锁定 toolApproval" }).click();
     await item.getByRole("button", { name: "保存 toolApproval" }).click();
