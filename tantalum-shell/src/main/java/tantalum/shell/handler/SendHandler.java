@@ -23,11 +23,16 @@ public final class SendHandler implements Handler {
     private static final int ATTEMPTS = 200;
     private static final long BACKOFF_MILLIS = 50;
 
-    /** 只供测试：前这么多条送话不送，像进程死在“记了账、还没送到”之间那样（{@code -Dtantalum.test.drop-sends=1}）。 */
-    static final String DROP_SENDS = "tantalum.test.drop-sends";
+    /**
+     * 只供测试：这个进程处理的第几条送话不送（从 1 数，逗号分隔），像进程死在“记了账、还没送到”之间那样
+     * （{@code -Dtantalum.test.drop-send-numbers=1}：交活那句；{@code 2}：回话）。回确认不算在内。
+     */
+    static final String DROP_SENDS = "tantalum.test.drop-send-numbers";
 
     private final Post post;
-    private final java.util.concurrent.atomic.AtomicInteger drop = new java.util.concurrent.atomic.AtomicInteger(Integer.getInteger(DROP_SENDS, 0));
+    private final java.util.Set<Integer> drop = java.util.Arrays.stream(System.getProperty(DROP_SENDS, "").split(","))
+            .filter(each -> !each.isBlank()).map(each -> Integer.parseInt(each.strip())).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private final java.util.concurrent.atomic.AtomicInteger handled = new java.util.concurrent.atomic.AtomicInteger();
 
     public SendHandler(Post post) {
         this.post = post;
@@ -35,7 +40,7 @@ public final class SendHandler implements Handler {
 
     @Override
     public Event handle(Command command) throws InterruptedException {
-        if (command instanceof Send && drop.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
+        if (command instanceof Send && drop.contains(handled.incrementAndGet())) {
             return null;
         }
         // 两种命令都只是把一条事件放进另一个会话的入口：送话放“会话来话”，回确认放“送到了”

@@ -98,23 +98,51 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         .mainWindowTokens(properties.mainWindowTokens())
                         .clock(clock)
                         .workspaces(new ContextHandler.Workspaces() {
+                            private final java.util.concurrent.ConcurrentHashMap<tantalum.value.id.Principal, Known> workspaces =
+                                    new java.util.concurrent.ConcurrentHashMap<>();
+
+                            private record Known(long at, java.util.List<tantalum.shell.project.Project> projects) {}
+
                             @Override
                             public java.util.List<tantalum.shell.project.Project> list(tantalum.value.id.Principal user) {
+                                Known cached = workspaces.get(user);
+                                long now = System.nanoTime();
+                                if (cached != null && now - cached.at() < 1_000_000_000L) {
+                                    return cached.projects();
+                                }
                                 try {
-                                    return stores.projects().list(user);
+                                    java.util.List<tantalum.shell.project.Project> projects = stores.projects().list(user);
+                                    workspaces.put(user, new Known(now, projects));
+                                    return projects;
                                 } catch (java.sql.SQLException unreadable) {
                                     return java.util.List.of();
                                 }
                             }
 
+                            // 每次调模型都要这一段：只读索引库（不为每个在内存的会话重算一遍对话条目），同一个人一秒内用上一次的结果。
+                            // 索引可能比内存晚一步，这一段本来就只写粗粒度的东西，够用
+                            private final java.util.concurrent.ConcurrentHashMap<tantalum.value.id.Principal, Listed> recent =
+                                    new java.util.concurrent.ConcurrentHashMap<>();
+
+                            private record Listed(long at, java.util.List<tantalum.shell.handler.WorkspaceSection.Row> rows) {}
+
                             @Override
                             public java.util.List<tantalum.shell.handler.WorkspaceSection.Row> sessions(tantalum.value.id.Principal user) {
+                                Listed cached = recent.get(user);
+                                long now = System.nanoTime();
+                                if (cached != null && now - cached.at() < 1_000_000_000L) {
+                                    return cached.rows();
+                                }
                                 try {
                                     tantalum.value.state.KernelState state = queries.view().current();
                                     java.util.Set<tantalum.value.id.SessionId> archived = stores.marks().allArchived(user);
-                                    return queries.queries().sessions(user).stream()
-                                            .filter(summary -> !summary.offRecord() && !archived.contains(summary.id()))
-                                            .map(summary -> new tantalum.shell.handler.WorkspaceSection.Row(summary, tokensOf(state, summary.id()))).toList();
+                                    java.util.List<tantalum.shell.handler.WorkspaceSection.Row> rows = storage.index.sessions(user).stream()
+                                            .filter(row -> !row.offRecord() && !archived.contains(row.session()))
+                                            .map(row -> new tantalum.shell.handler.WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(
+                                                    row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir(), false),
+                                                    tokensOf(state, row.session()))).toList();
+                                    recent.put(user, new Listed(now, rows));
+                                    return rows;
                                 } catch (java.sql.SQLException unreadable) {
                                     return java.util.List.of();
                                 }

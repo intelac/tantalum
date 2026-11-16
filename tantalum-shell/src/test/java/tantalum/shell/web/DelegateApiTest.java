@@ -134,7 +134,7 @@ class DelegateApiTest {
         };
         Path data = temp.resolve("data3");
         Path workspace = Files.createDirectory(temp.resolve("ws3"));
-        System.setProperty("tantalum.test.drop-sends", "1");
+        System.setProperty("tantalum.test.drop-send-numbers", "1");
         try (TestServer server = new TestServer(data, workspace, window)) {
             server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
             String messages = "";
@@ -146,7 +146,7 @@ class DelegateApiTest {
             Thread.sleep(300);
             assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions").size(), "it never arrived: no other conversation");
         } finally {
-            System.clearProperty("tantalum.test.drop-sends");
+            System.clearProperty("tantalum.test.drop-send-numbers");
         }
         try (TestServer server = new TestServer(data, workspace, window)) {
             String messages = "";

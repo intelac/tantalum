@@ -182,11 +182,120 @@ def t3(report, state, data, model, timeout):
     report.check("T3", "模型把没做成的原因告诉了用户", any(word in answer for word in ("重启", "中断", "打断", "restart", "interrupted")), answer[:300])
 
 
+# ---- 出故障的时候：话不丢、不重，状态闭环 ----
+#
+# 说的是平常的话，不提工具名。进程死在哪一刻没法靠掐时间做准，所以“记了账、没送到”用服务器的测试开关做：
+# -Dtantalum.test.drop-send-numbers=N 让这个进程处理的第 N 条送话不送（1 是交活那句，2 是回话）。之后杀掉、不带开关再起，
+# 看重启后是不是照原样送到、做完、把结果交回来，最后对着账核对（audit_states）。
+
+NO_WAIT = "写一句二十个字左右的话形容秋天的山。这件事你别自己写，交给另一个会话去写，不用等它，先告诉我已经交出去了；它写好以后把它写的告诉我。"
+WAIT = "写一句二十个字左右的话形容秋天的山。这件事你别自己写，交给另一个会话去写，等它写完，把它写的原样告诉我。"
+LONG = "写一篇一千五百字左右的散文，题目是秋天的山。这件事你别自己写，交给另一个会话去写，不用等它，先告诉我已经交出去了；它写好以后告诉我它写完了没有。"
+
+
+def restart(state, data, drop=None, hard=True):
+    """杀掉服务器再起。drop：这个新进程处理的第几条送话不送（没有就都送）。"""
+    if state["server"].poll() is None:
+        state["server"].send_signal(signal.SIGKILL if hard else signal.SIGTERM)
+        state["server"].wait(timeout=30)
+    if drop is None: os.environ.pop("JAVA_TOOL_OPTIONS", None)
+    else: os.environ["JAVA_TOOL_OPTIONS"] = f"-Dtantalum.test.drop-send-numbers={drop}"
+    try:
+        state["server"], state["admin"] = me.start(data, state["password"], EXTRA)
+    finally:
+        os.environ.pop("JAVA_TOOL_OPTIONS", None)
+
+
+def stays(condition, seconds):
+    """这么多秒里一直是这样（用来确认“确实卡住了”，不是还没轮到）。"""
+    end = time.time() + seconds
+    while time.time() < end:
+        if not condition(): return False
+        time.sleep(1)
+    return True
+
+
+def audit(report, case, data, name):
+    import contextlib, io
+    import audit_states
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured):
+        problems = audit_states.main(os.path.join(data, "sessions", name))
+    report.check(case, "对账：每一轮都结束了、每句话都送到并确认、每件活都有回话、信箱是空的", problems == 0, captured.getvalue().replace("\n", " / "))
+
+
+def fault(report, state, data, model, timeout, case, name, prompt, waits, drop):
+    """交活那句（drop=1）或回话（drop=2）记了账没送到，然后重启。"""
+    restart(state, data, drop=drop)
+    password = user(state["admin"], name)
+    client = login(name, password)
+    window = "main-" + name
+    submit(client, window, prompt, model)
+    what = "交活那句" if drop == 1 else "回话"
+    if waits:
+        stuck = wait_for(lambda: any(s["id"] == window and s.get("runStatus") == "AwaitingReply" for s in sessions(client)), timeout)
+        report.check(case, "交活的一方在等回话", stuck, sessions(client))
+    else:
+        stuck = wait_for(lambda: ended(client, window, 1), timeout)
+        report.check(case, "交活的一方第一轮结束了（没有等）", stuck and "AwaitingReply" not in raw(data, name, window), runs(client, window))
+    if not stuck: return
+    if drop == 1:
+        lost = stays(lambda: not opened_by(client, window), 8)
+        report.check(case, f"{what}没送到：另一个会话没有出现", lost, sessions(client))
+    else:
+        other_done = wait_for(lambda: [s for s in opened_by(client, window) if ended(client, s["id"], 1)], timeout)
+        report.check(case, "另一个会话做完了", other_done, sessions(client))
+        if waits: lost = stays(lambda: any(s["id"] == window and s.get("runStatus") == "AwaitingReply" for s in sessions(client)), 8)
+        else: lost = stays(lambda: len(runs(client, window)) == 1, 8)
+        report.check(case, f"{what}没送到：交活的一方一直没收到结果", lost, runs(client, window))
+    restart(state, data)
+    client = login(name, password)
+    need = 1 if waits else 2
+    done = wait_for(lambda: ended(client, window, need), timeout)
+    report.check(case, "重启后：结果回到了交活的一方" + ("，它接着走完了这一轮" if waits else "，把它叫醒又跑了一轮"),
+                 done and done[-1].get("endReason") == "COMPLETED" and len(done) == need, runs(client, window))
+    opened = opened_by(client, window)
+    report.check(case, "另一个会话只有一个，只跑了一轮（没有做第二遍）", len(opened) == 1 and len(runs(client, opened[0]["id"])) == 1,
+                 [(s["id"], len(runs(client, s["id"]))) for s in opened])
+    if opened:
+        theirs, _, _ = me.answer_of(data, name, opened[0]["id"])
+        mine, _, _ = me.answer_of(data, name, window)
+        report.check(case, "交活的一方最后的回答里有对方写的那句", theirs.strip() and theirs.strip()[:8] in mine, (theirs[:80], mine[:200]))
+    time.sleep(2)
+    audit(report, case, data, name)
+
+
+def f5(report, state, data, model, timeout):
+    """不等；对方干到一半服务器被杀。"""
+    case, name = "F5", "f5"
+    restart(state, data)
+    password = user(state["admin"], name)
+    client = login(name, password)
+    window = "main-" + name
+    submit(client, window, LONG, model)
+    working = wait_for(lambda: [s for s in opened_by(client, window) if s.get("runStatus") not in ("idle", None)], timeout)
+    report.check(case, "重启前：另一个会话正在写", working, sessions(client))
+    if not working: return
+    wait_for(lambda: ended(client, window, 1), 60)
+    restart(state, data)
+    client = login(name, password)
+    other = working[0]["id"]
+    theirs = wait_for(lambda: ended(client, other, 1), 60)
+    report.check(case, "重启后：对方那一轮以“被重启打断”结束", theirs and theirs[0].get("endReason") == "CANCELLED" and "restart" in str(theirs[0].get("detail")), theirs)
+    done = wait_for(lambda: ended(client, window, 2), timeout)
+    report.check(case, "“被打断”作为回话送到，把交活的一方叫醒又跑了一轮", done and len(done) >= 2, runs(client, window))
+    answer, _, _ = me.answer_of(data, name, window)
+    report.check(case, "它如实告诉我没写完（没有假装写完了）", any(word in answer for word in ("重启", "中断", "打断", "没有写完", "没写完", "未完成", "没有完成")), answer[:300])
+    wait_for(lambda: all(s.get("runStatus") == "idle" for s in sessions(client)), timeout)
+    time.sleep(2)
+    audit(report, case, data, name)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="qwen", choices=sorted(me.MODELS))
     parser.add_argument("--timeout", type=int, default=300)
-    parser.add_argument("--only", default="", help="逗号分隔：T1,T2,T3")
+    parser.add_argument("--only", default="", help="逗号分隔：T1,T2,T3,F1..F5（F 是五个故障用例一起）")
     parser.add_argument("--port", type=int, default=8096)
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--hold", type=int, default=0, help="跑完以后服务器再开这么多秒（用固定密码），登录进去看画面")
@@ -196,6 +305,7 @@ def main():
     me.PORT = args.port; me.BASE = f"http://127.0.0.1:{args.port}"
     HOLD["on"] = args.hold > 0
     wanted = set(args.only.split(",")) if args.only else {"T1", "T2", "T3"}
+    if "F" in wanted: wanted |= {"F1", "F2", "F3", "F4", "F5"}
     model = me.MODELS[args.model]
     work = tempfile.mkdtemp(prefix="tantalum-delegate-e2e-")
     data = os.path.join(work, "data")
@@ -207,6 +317,11 @@ def main():
         if "T1" in wanted: t1(report, state["admin"], data, model, args.timeout)
         if "T2" in wanted: t2(report, state["admin"], data, model, args.timeout)
         if "T3" in wanted: t3(report, state, data, model, args.timeout)
+        if "F1" in wanted: fault(report, state, data, model, args.timeout, "F1", "f1", NO_WAIT, waits=False, drop=1)
+        if "F2" in wanted: fault(report, state, data, model, args.timeout, "F2", "f2", NO_WAIT, waits=False, drop=2)
+        if "F3" in wanted: fault(report, state, data, model, args.timeout, "F3", "f3", WAIT, waits=True, drop=1)
+        if "F4" in wanted: fault(report, state, data, model, args.timeout, "F4", "f4", WAIT, waits=True, drop=2)
+        if "F5" in wanted: f5(report, state, data, model, args.timeout)
         if args.hold > 0:
             print(f"holding {args.hold}s at {me.BASE}; users t1, t2, t3 with password e2e-<name>-look-at-the-screen", flush=True)
             time.sleep(args.hold)

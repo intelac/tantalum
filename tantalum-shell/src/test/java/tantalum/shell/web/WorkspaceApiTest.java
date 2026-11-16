@@ -106,7 +106,8 @@ class WorkspaceApiTest {
                 }
             }
 
-            // 下一轮：上下文里有工作区和它下面那个会话
+            // 下一轮：上下文里有工作区和它下面那个会话（这一段同一个人一秒内用上一次查到的，所以等一下）
+            Thread.sleep(1500);
             server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"what is there\"}");
             assertTrue(waitFor(server, "top", "looked").contains("looked"));
             String seen = inputs.getLast();

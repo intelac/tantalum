@@ -58,7 +58,7 @@ class CompactionStressTest {
      */
     private static final int THRESHOLD = 5500;
     private static final String[] SETTINGS = {
-        "--tantalum.claude.context-window=6400",   // 6000 → 6400：上下文多了“工作区”一段，bob 的 20 轮不该因此压缩
+        "--tantalum.claude.context-window=6700",   // 6000 → 6400：上下文多了“工作区”一段，bob 的 20 轮不该因此压缩
         "--tantalum.claude.bytes-per-token=3",
         "--tantalum.claude.max-tokens=500",
         "--tantalum.compaction.reserve-tokens=500",
