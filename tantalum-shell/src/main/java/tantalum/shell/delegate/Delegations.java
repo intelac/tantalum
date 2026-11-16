@@ -23,6 +23,19 @@ import tantalum.value.id.SessionId;
  */
 public final class Delegations implements AutoCloseable {
 
+    /**
+     * 不等结果的委派做完后，汇报以一次提交进父会话（{@code EngineDelegator.report}），journal 里看着和用户打的字一样。
+     * 汇报都以这两句之一开头；{@code RunText.segments} 按它把这条当成委派工具的结果，不当成用户的话（自动记笔记只认用户亲口说的）。
+     */
+    public static final String REPORT = "Report from the delegated sub-conversation ";
+    public static final String REPORT_PROBLEM = "The delegated sub-conversation ";
+
+    /** 这段提交是不是委派的汇报。 */
+    public static boolean isReport(String text) {
+        return text != null && (text.startsWith(REPORT) || text.startsWith(REPORT_PROBLEM));
+    }
+
+
     public static final String FILE = "delegations.db";
 
     /** 一次委派：子会话、父会话、父运行里那次工具调用的命令号、第几层（父会话自己不是子会话时是 1）、时刻。 */

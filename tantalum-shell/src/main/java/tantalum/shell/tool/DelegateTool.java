@@ -141,9 +141,9 @@ public final class DelegateTool implements Tool {
     private static void reportLater(Runner bound, Principal user, SessionId parent, SessionId child) {
         try {
             Optional<String> answer = await(bound, user, child);
-            String text = answer.isEmpty() ? "The delegated sub-conversation " + child.value() + " did not finish in time and was stopped."
-                    : answer.get().isBlank() ? "The delegated sub-conversation " + child.value() + " ended without an answer."
-                    : "Report from the delegated sub-conversation " + child.value() + ":\n" + answer.get();
+            String text = answer.isEmpty() ? Delegations.REPORT_PROBLEM + child.value() + " did not finish in time and was stopped."
+                    : answer.get().isBlank() ? Delegations.REPORT_PROBLEM + child.value() + " ended without an answer."
+                    : Delegations.REPORT + child.value() + ":\n" + answer.get();
             if (answer.isEmpty()) {
                 bound.cancel(user, child);
             }
