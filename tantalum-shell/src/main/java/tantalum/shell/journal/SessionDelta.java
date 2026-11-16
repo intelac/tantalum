@@ -78,9 +78,9 @@ final class SessionDelta {
         changed(node, "model", change.model());
         changed(node, "followUpModels", change.followUpModels());
         changed(node, "dir", change.dir());
-        // “不进记忆”和委派里的位置也是会话状态：不写的话重启、回收再载入后就丢了
+        // “不进记忆”和排队的来话也是会话状态：不写的话重启、回收再载入后就丢了
         changed(node, "offRecord", change.offRecord());
-        changed(node, "handoffs", change.handoffs());
+        changed(node, "inbox", change.inbox());
         return node;
     }
 
@@ -113,7 +113,7 @@ final class SessionDelta {
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
                 changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS),
                 changed(node, "dir", String.class), changed(node, "offRecord", Boolean.class),
-                changed(node, "handoffs", tantalum.value.state.Handoffs.class));
+                changed(node, "inbox", tantalum.value.state.Inbox.class));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

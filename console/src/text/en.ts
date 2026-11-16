@@ -39,6 +39,7 @@ export const en: Text = {
     logout: "Sign out",
     running: "Running",
     awaitingAnswer: "Needs answer",
+    fromMainWindow: "Opened by the main window",
     untitled: "New session",
   },
   tabs: {

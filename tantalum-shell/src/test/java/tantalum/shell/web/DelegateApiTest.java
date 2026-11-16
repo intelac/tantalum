@@ -39,8 +39,8 @@ class DelegateApiTest {
         String result = last.content().stream().filter(ToolResultBlock.class::isInstance).map(block -> ((ToolResultBlock) block).text())
                 .findFirst().orElse(null);
         if (last.role() == Role.USER && result == null) {
-            return new ModelOutcome.Replied(List.of(new ToolCallBlock("c-" + inputs.size(), "delegate", "{\"task\":\"go deeper\"}",
-                    new Json.Obj(Map.of("task", new Json.Str("go deeper"))))), StopReason.TOOL_USE, "m", null);
+            return new ModelOutcome.Replied(List.of(new ToolCallBlock("c-" + inputs.size(), "delegate", "{\"task\":\"go deeper\",\"wait\":true}",
+                    new Json.Obj(Map.of("task", new Json.Str("go deeper"), "wait", new Json.Bool(true))))), StopReason.TOOL_USE, "m", null);
         }
         return new ModelOutcome.Replied(List.of(new TextBlock("done: " + (result == null ? "" : result.lines().findFirst().orElse("")))),
                 StopReason.END_TURN, "m", null);
@@ -57,7 +57,7 @@ class DelegateApiTest {
                 }
                 Thread.sleep(10);
             }
-            assertTrue(inputs.stream().anyMatch(input -> input.contains("was itself delegated 2 levels deep")),
+            assertTrue(inputs.stream().anyMatch(input -> input.contains("do the work here instead of handing it on")),
                     "the third level is refused: " + inputs.size() + " calls, sessions " + server.get("alice", "/api/sessions").body()
                             + " last input " + (inputs.isEmpty() ? "" : inputs.getLast().substring(Math.max(0, inputs.getLast().length() - 600))));
             JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
@@ -68,8 +68,8 @@ class DelegateApiTest {
                     children++;
                 }
             }
-            assertEquals(2, children, "both sub-conversations know their parent");
-            assertTrue(server.get("alice", "/api/sessions/top/messages").body().contains("Result from sub-conversation d-"));
+            assertEquals(2, children, "the list says which conversation opened each of the two");
+            assertTrue(server.get("alice", "/api/sessions/top/messages").body().contains("Answer from conversation s-"));
         }
     }
 }

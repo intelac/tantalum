@@ -74,15 +74,30 @@ export function groupSessions(
   return groups;
 }
 
+/** 主窗口的会话编号以它开头（见 {@code mainWindowId}）。 */
+const MAIN_WINDOW = "main-";
+
+/** 这个会话是主窗口开出去干活的：平铺在侧栏里，只带一个标记，不缩进。 */
+export function openedByMainWindow(row: SessionSummary): boolean {
+  return row.parent !== undefined && row.parent.startsWith(MAIN_WINDOW);
+}
+
+/** 这个会话是另一个普通会话问出来的（会话里的 subagent）：缩进挂在开它的会话下面。 */
+export function nested(row: SessionSummary): boolean {
+  return row.parent !== undefined && !row.parent.startsWith(MAIN_WINDOW);
+}
+
 /**
- * 委派开的子会话紧跟在父会话后面（memory-final-plan 第 12 节），按原来的先后；父会话不在这一批里的照原样放。
- * 子会话的子会话同样跟在它后面。
+ * 一个会话开出来的会话紧跟在它后面，按原来的先后；开它的会话不在这一批里的照原样放。层级只是显示：内核里会话都是平的，
+ * “谁开的”来自会话的第一句话。主窗口开的不挂在主窗口下面，照原样平铺。
  */
 export function nestChildren(rows: readonly SessionSummary[]): SessionSummary[] {
   const present = new Set(rows.map((row) => row.id));
   const children = new Map<string, SessionSummary[]>();
+  const under = (row: SessionSummary) => (nested(row) && row.parent !== undefined && present.has(row.parent) ? row.parent : undefined);
   for (const row of rows) {
-    if (row.parent !== undefined && present.has(row.parent)) children.set(row.parent, [...(children.get(row.parent) ?? []), row]);
+    const parent = under(row);
+    if (parent !== undefined) children.set(parent, [...(children.get(parent) ?? []), row]);
   }
   const out: SessionSummary[] = [];
   const place = (row: SessionSummary) => {
@@ -90,7 +105,7 @@ export function nestChildren(rows: readonly SessionSummary[]): SessionSummary[] 
     for (const child of children.get(row.id) ?? []) place(child);
   };
   for (const row of rows) {
-    if (row.parent === undefined || !present.has(row.parent)) place(row);
+    if (under(row) === undefined) place(row);
   }
   return out;
 }

@@ -11,8 +11,8 @@ import tantalum.value.delegate.DelegateCall;
 import tantalum.value.json.Json;
 
 /**
- * {@code delegate} 给模型看的定义（kernel-delegation）。调用由内核处理，不在这里执行：内核发“交活”命令，子会话的账里多一条交活事件；
- * 子会话一轮结束时由它的内核发“交回”，结果作为事件回到这里的账里。等待是内核里的一个状态（{@code AwaitingDelegate}），没有线程在等。
+ * {@code delegate} 给模型看的定义：让另一个会话做一件事。调用由内核处理，不在这里执行：内核发“送话”命令，那个会话的账里多一条
+ * 会话来话；它为这句话跑的一轮结束时，结果作为另一条会话来话回来。不等的当场完成；要等的停在内核的“等会话回答”，没有线程在等。
  * 做法照 {@link AskUserTool}。
  */
 public final class DelegateTool implements Tool {
@@ -25,20 +25,20 @@ public final class DelegateTool implements Tool {
     @Override public String name() { return NAME; }
 
     @Override public String description() {
-        return "Hand a self-contained piece of work to a sub-conversation of the same user. task: what to do; brief: what it needs "
-                + "to know (it does not see this conversation). wait: true (default) waits for its result, up to 10 minutes; false "
-                + "returns at once and its result is reported back here later, which is the way for long work. session: give the id "
-                + "of a sub-conversation you started earlier to hand it more work with its history kept. Several delegate calls in "
-                + "one reply run side by side. The sub-conversation can read memory but only add notes; at most two levels deep.";
+        return "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot "
+                + "see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. "
+                + "wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way "
+                + "for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several "
+                + "calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.";
     }
 
     /** 手写 schema：{@code wait} 是布尔值。 */
     @Override public Json schema() {
         Map<String, Json> properties = new LinkedHashMap<>();
-        properties.put("task", property("string", "What the sub-conversation should do."));
+        properties.put("task", property("string", "What the other conversation should do."));
         properties.put("brief", property("string", "Background it needs: it cannot see this conversation."));
-        properties.put("wait", property("boolean", "Wait for the result (default true). Use false for long work."));
-        properties.put("session", property("string", "Id of a sub-conversation started earlier, to hand it more work."));
+        properties.put("session", property("string", "Id of an existing conversation to hand the work to. Omit to open a new one."));
+        properties.put("wait", property("boolean", "Wait for the answer in this turn (default false)."));
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));
         schema.put("properties", new Json.Obj(properties));

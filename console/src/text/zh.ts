@@ -50,6 +50,7 @@ export const zh = {
     logout: "退出登录",
     running: "运行中",
     awaitingAnswer: "待回答",
+    fromMainWindow: "主窗口开的",
     untitled: "新会话",
   },
   tabs: {

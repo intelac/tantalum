@@ -452,7 +452,7 @@ class MemoryEvalTest {
 
     // ---- 委派（memory-final-plan 第 12 节） ----
 
-    private static final String DELEGATED = "You are doing a task delegated";
+    private static final String DELEGATED = "This comes from another conversation of the same user";
 
     /** 父运行先调 delegate，再回一句；子运行按 {@code child} 走。 */
     private static java.util.function.Function<Call, Step> delegating(String task, java.util.function.Function<Call, Step> child) {
@@ -461,13 +461,13 @@ class MemoryEvalTest {
             if (call.input().contains(DELEGATED)) {
                 return child.apply(call);
             }
-            return parent.getAndIncrement() == 0 ? Step.call("delegate", Map.of("task", task, "brief", "项目用 Java")) : Step.say("好的。");
+            return parent.getAndIncrement() == 0 ? Step.call("delegate", Map.of("task", task, "brief", "项目用 Java", "wait", "true")) : Step.say("好的。");
         };
     }
 
     private static String childOf(List<Call> calls) {
         for (Call call : calls) {
-            java.util.regex.Matcher found = java.util.regex.Pattern.compile("sub-conversation (d-[A-Za-z0-9_-]+)").matcher(call.input());
+            java.util.regex.Matcher found = java.util.regex.Pattern.compile("conversation (s-[A-Za-z0-9_-]+)").matcher(call.input());
             if (found.find()) {
                 return found.group(1);
             }

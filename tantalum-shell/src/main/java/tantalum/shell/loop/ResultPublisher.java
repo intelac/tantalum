@@ -48,7 +48,7 @@ public final class ResultPublisher {
     }
 
     /**
-     * 把一条事件放进另一个会话的入口（kernel-delegation：交活、交回）。不指定运行：内核按那个会话现在的运行找步骤。
+     * 把一条事件放进另一个会话的入口（会话之间说话）。不指定运行：内核按那个会话现在的运行找步骤。
      * 放不进（输入环满）返回 false，由调用方决定重试还是放弃。
      */
     public boolean post(tantalum.value.id.Principal principal, tantalum.value.id.SessionId session, Event event) {

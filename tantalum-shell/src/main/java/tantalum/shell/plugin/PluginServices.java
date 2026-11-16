@@ -72,7 +72,10 @@ public interface PluginServices {
         return java.time.ZoneId.systemDefault();
     }
 
-    /** 这个会话是不是委派开的子会话（memory-final-plan 第 12 节）：是的话给父会话，不是为空。 */
+    /**
+     * 这个会话现在这一轮是不是为回另一个会话的话开的：是的话给出那个会话，不是为空。这样的一轮不是用户亲口发起的，个人插件要更小心
+     * （记忆只许追加）。用户自己在这个会话里提问开的一轮不算。
+     */
     default Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
         return Optional.empty();
     }

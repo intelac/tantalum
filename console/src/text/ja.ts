@@ -34,6 +34,7 @@ export const ja: Text = {
     logout: "ログアウト",
     running: "実行中",
     awaitingAnswer: "回答待ち",
+    fromMainWindow: "メインウィンドウが開いた会話",
     untitled: "新しいセッション",
   },
   tabs: {

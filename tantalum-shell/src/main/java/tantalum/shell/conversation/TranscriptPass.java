@@ -95,8 +95,7 @@ final class TranscriptPass {
             case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), false);
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(), false);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), true);
-            case tantalum.value.event.Delegated handoff -> delegateInput(handoff.text());
-            case tantalum.value.event.DelegateReturned back -> delegateInput(null);
+            case tantalum.value.event.SessionMessage said -> delegateInput(said.isReply() ? null : said.text());
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -111,8 +110,8 @@ final class TranscriptPass {
             if (command instanceof RunTool tool && tool.run().session().equals(session)) {
                 dispatched(tool);
             }
-            if (command instanceof tantalum.value.command.Delegate handoff && handoff.run().session().equals(session)) {
-                delegated(handoff);
+            if (command instanceof tantalum.value.command.Send send && send.run().session().equals(session)) {
+                asked(send);
             }
         }
         for (Fact fact : decision.facts()) {
@@ -351,21 +350,8 @@ final class TranscriptPass {
     }
 
     /** 同一事件发出的调用是一组并行调用，组名取事件序号。 */
-    /** 一次 {@code delegate} 调用交出去了（kernel-delegation）：它的步骤从这时起算在跑，等子会话交回。重发的交活找不到在等的槽位，不动。 */
-    private void delegated(tantalum.value.command.Delegate handoff) {
-        if (!(state.runs().get(handoff.run().run()) instanceof RunState current) || current.tools() == null) {
-            return;
-        }
-        for (ToolSlot slot : current.tools().slots()) {
-            if (slot.status() == ToolSlot.Status.DELEGATED && handoff.id().equals(slot.command())
-                    && step(slot.call().id()) instanceof ToolStep step && !step.isFinished()) {
-                put(step.running("g" + envelope.seq(), at));
-            }
-        }
-    }
-
     /**
-     * 交活或汇报带来的一条消息（kernel-delegation）：这一步开了新的一轮就是它的开头，运行正在跑、汇报成了插话时挂在那一轮上。
+     * 交活或汇报带来的一条消息：这一步开了新的一轮就是它的开头，运行正在跑、汇报成了插话时挂在那一轮上。
      * {@code text} 为 null 时取内核刚放进去的那条消息的文字（汇报）。交回被写成工具结果或被忽略时没有条目。
      */
     private void delegateInput(String text) {
@@ -380,7 +366,7 @@ final class TranscriptPass {
             put(new UserMessage(id, session, fresh, at, text != null ? text : firstText(current.messages().getLast()), List.of(), false, false,
                     List.of(), List.of()));
         } else if (text == null && current.activeRun() != null && state.runs().get(current.activeRun()) instanceof RunState now
-                && !now.pendingSteers().isEmpty() && firstText(now.pendingSteers().getLast()).startsWith("Report from a sub-conversation")
+                && !now.pendingSteers().isEmpty() && firstText(now.pendingSteers().getLast()).startsWith(tantalum.value.delegate.DelegateCall.REPORT)
                 && get(id) == null) {
             put(new UserMessage(id, session, current.activeRun(), at, firstText(now.pendingSteers().getLast()), List.of(), false, false,
                     List.of(), List.of()));
@@ -390,6 +376,19 @@ final class TranscriptPass {
     private static String firstText(Message message) {
         return message.content().stream().filter(tantalum.value.model.TextBlock.class::isInstance)
                 .map(block -> ((tantalum.value.model.TextBlock) block).text()).findFirst().orElse("");
+    }
+
+    /** 一次要等回话的 {@code delegate}：话送出去了，它的步骤从这时起算在跑，等另一个会话回话。 */
+    private void asked(tantalum.value.command.Send send) {
+        if (!(state.runs().get(send.run().run()) instanceof RunState current) || current.tools() == null) {
+            return;
+        }
+        for (ToolSlot slot : current.tools().slots()) {
+            if (slot.status() == ToolSlot.Status.ASKED && send.id().equals(slot.command())
+                    && step(slot.call().id()) instanceof ToolStep step && !step.isFinished()) {
+                put(step.running("g" + envelope.seq(), at));
+            }
+        }
     }
 
     private void dispatched(RunTool tool) {

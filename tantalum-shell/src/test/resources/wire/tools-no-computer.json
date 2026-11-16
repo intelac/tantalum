@@ -277,25 +277,25 @@
   {
     "name": "delegate",
     "deferred": false,
-    "description": "Hand a self-contained piece of work to a sub-conversation of the same user. task: what to do; brief: what it needs to know (it does not see this conversation). wait: true (default) waits for its result, up to 10 minutes; false returns at once and its result is reported back here later, which is the way for long work. session: give the id of a sub-conversation you started earlier to hand it more work with its history kept. Several delegate calls in one reply run side by side. The sub-conversation can read memory but only add notes; at most two levels deep.",
+    "description": "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.",
     "schema": {
       "type": "object",
       "properties": {
         "task": {
           "type": "string",
-          "description": "What the sub-conversation should do."
+          "description": "What the other conversation should do."
         },
         "brief": {
           "type": "string",
           "description": "Background it needs: it cannot see this conversation."
         },
-        "wait": {
-          "type": "boolean",
-          "description": "Wait for the result (default true). Use false for long work."
-        },
         "session": {
           "type": "string",
-          "description": "Id of a sub-conversation started earlier, to hand it more work."
+          "description": "Id of an existing conversation to hand the work to. Omit to open a new one."
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "Wait for the answer in this turn (default false)."
         }
       },
       "required": [

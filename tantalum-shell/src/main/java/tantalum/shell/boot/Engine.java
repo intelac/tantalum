@@ -214,7 +214,7 @@ public final class Engine implements AutoCloseable {
     private tantalum.shell.delegate.Delegations delegations;
 
     /**
-     * 旧的委派记录（kernel-delegation 之前，子会话是谁开的记在 {@code delegations.db} 里）。只读：新的子会话把父会话记在自己的账里。
+     * 旧的委派记录（2026-11-16 之前的第一版，子会话是谁开的记在 {@code delegations.db} 里）。只读，只为那时开的会话。
      */
     public synchronized tantalum.shell.delegate.Delegations delegations() {
         if (delegations == null) {
@@ -366,9 +366,9 @@ public final class Engine implements AutoCloseable {
      * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
      */
     private int interrupt(List<SessionIndex.Session> all) {
-        // 等用户回答、等委派交回的运行没有在途命令，不收尾，照旧等
+        // 等用户回答、等会话回答的运行没有在途命令，不收尾，照旧等
         List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())
-                && !tantalum.value.state.AwaitingDelegate.NAME.equals(session.runStatus())).toList();
+                && !tantalum.value.state.AwaitingReply.NAME.equals(session.runStatus())).toList();
         if (unfinished.isEmpty()) {
             return 0;
         }

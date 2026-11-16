@@ -17,17 +17,14 @@ import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
-import tantalum.value.event.DelegateCancelled;
-import tantalum.value.event.DelegateReturned;
-import tantalum.value.event.Delegated;
 import tantalum.value.event.Event;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
-import tantalum.value.event.Recovered;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.event.SessionMessage;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
@@ -143,7 +140,8 @@ public final class EventCodec {
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
         @JsonSubTypes.Type(value = OwnerRef.OfSession.class, name = "session"),
-        @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command")
+        @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command"),
+        @JsonSubTypes.Type(value = OwnerRef.OfMessage.class, name = "message")
     })
     private interface OwnerRefMixin {}
 
@@ -240,11 +238,8 @@ public final class EventCodec {
         codec.register(SessionRenamed.TYPE, 1, SessionRenamed.class);
         codec.register(QueueChanged.TYPE, 1, QueueChanged.class);
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
-        // kernel-delegation：交活、交回、重启后恢复
-        codec.register(Delegated.TYPE, 1, Delegated.class);
-        codec.register(DelegateReturned.TYPE, 1, DelegateReturned.class);
-        codec.register(Recovered.TYPE, 1, Recovered.class);
-        codec.register(DelegateCancelled.TYPE, 1, DelegateCancelled.class);
+        // 会话之间说话：另一个会话说了一句话
+        codec.register(SessionMessage.TYPE, 1, SessionMessage.class);
         return codec;
     }
 

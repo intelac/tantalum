@@ -41,7 +41,7 @@ public final class ToolSteps {
     static void start(Outcome out, RunState run, List<ToolCallBlock> calls) {
         List<ToolSlot> slots = calls.stream()
                 .map(call -> AskUser.NAME.equals(call.name()) ? ToolSlot.waiting(call)
-                        // delegate 不发 RunTool、不占别的工具的并行名额：当作并行安全的槽位排进来，轮到它时交活
+                        // delegate 不发 RunTool：当作并行安全的槽位排进来，轮到它时送话
                         : DelegateCall.NAME.equals(call.name()) ? ToolSlot.pending(call, true)
                         : ToolSlot.pending(call, isConcurrencySafe(out, call)))
                 .toList();
@@ -134,7 +134,7 @@ public final class ToolSteps {
     static void dispatch(Outcome out, RunState pending) {
         RunState run = pending;
         ToolRound round = run.tools();
-        // 交活的槽位可能当场就有结果（参数不对、不等结果）：那样就再排一次，直到没有槽位当场完成
+        // delegate 的槽位可能当场就有结果（不等，或者参数不对）：那样就再排一次，直到没有槽位当场完成
         boolean settledAtOnce = true;
         while (settledAtOnce) {
             if (round.allFinished()) {
@@ -150,7 +150,7 @@ public final class ToolSteps {
             for (int index : ToolScheduler.next(round, out.maxParallelTools)) {
                 ToolSlot slot = round.slots().get(index);
                 if (DelegateCall.NAME.equals(slot.call().name())) {
-                    round = DelegateSteps.handOff(out, run, round, index);
+                    round = MessageSteps.say(out, run, round, index);
                     settledAtOnce |= round.slots().get(index).isFinished();
                     continue;
                 }
@@ -160,18 +160,18 @@ public final class ToolSteps {
             }
         }
         Set<CommandId> sent = new HashSet<>();
-        boolean delegated = false;
+        boolean asked = false;
         for (ToolSlot slot : round.slots()) {
             if (slot.status() == ToolSlot.Status.SENT) {
                 sent.add(slot.command());
             }
-            delegated |= slot.status() == ToolSlot.Status.DELEGATED;
+            asked |= slot.status() == ToolSlot.Status.ASKED;
         }
         if (!sent.isEmpty()) {
             out.await(run.withTools(round), AWAITING_TOOLS, sent);
-        } else if (delegated) {
-            // 没有在途命令了，还有交出去的活没交回：停在等委派，没有线程在等
-            DelegateSteps.await(out, run.withTools(round));
+        } else if (asked) {
+            // 没有在途命令了，还有问出去的话没回：停在等会话回答，没有线程在等
+            MessageSteps.await(out, run.withTools(round));
         } else {
             // 只剩 ask_user 的槽位：按顺序问第一个（一个运行同一时刻只有一个问题，需求 1.6）
             askNext(out, run.withTools(round));

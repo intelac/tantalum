@@ -101,8 +101,7 @@ final class TracePass {
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(),
                     Mode.FOLLOW_UP);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), Mode.STEER);
-            case tantalum.value.event.Delegated handoff -> delegateInput(handoff.text());
-            case tantalum.value.event.DelegateReturned back -> delegateInput(null);
+            case tantalum.value.event.SessionMessage said -> delegateInput(said.isReply() ? null : said.text());
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);
@@ -292,7 +291,7 @@ final class TracePass {
 
     /** 用户提交：直接开始运行、插进当前运行，或排队到运行开始时再记。 */
     /**
-     * 交活或汇报带来的输入（kernel-delegation），来源记成 {@code delegate}，不是用户：这一步开了新的一轮就是它的开头；
+     * 另一个会话说的话带来的输入，来源记成 {@code delegate}，不是用户：这一步开了新的一轮就是它的开头；
      * 运行正在跑、汇报成了插话时记在那一轮里。{@code text} 为 null 时取内核刚放进去的那条消息的文字（汇报）。
      * 交回被写成工具结果、或者被忽略时，这一步既没开新的一轮也没多出插话，什么都不记。
      */

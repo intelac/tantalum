@@ -91,9 +91,9 @@ public class ApiController {
         } catch (RuntimeException unreadable) {
             LOG.warn("cannot read the delegations of {}: {}", user.value(), unreadable.toString());
         }
-        // 新的子会话：编号由委派号算出，里面带着父会话的编号（真正的父子关系在子会话的账里，这里只是给列表用）
-        engine.queries().sessions(user).forEach(summary -> tantalum.value.delegate.DelegateCall.parentOf(summary.id())
-                .ifPresent(parent -> parents.putIfAbsent(summary.id(), parent)));
+        // 别的会话开出来的会话：编号里带着是谁开的。只给侧栏显示用（内核里没有父子关系）
+        engine.queries().sessions(user).forEach(summary -> tantalum.value.delegate.DelegateCall.openerOf(summary.id())
+                .ifPresent(opener -> parents.putIfAbsent(summary.id(), opener)));
         List<Map<String, Object>> sessions = engine.queries().sessions(user).stream()
                 .map(summary -> {
                     Map<String, Object> view = describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()));

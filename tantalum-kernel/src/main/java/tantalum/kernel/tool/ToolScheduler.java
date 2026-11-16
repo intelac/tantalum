@@ -12,7 +12,7 @@ public final class ToolScheduler {
 
     /**
      * 返回现在可以发出的调用下标。等用户回答的 {@code ask_user} 槽位不发命令、不构成屏障，别的槽位都完成后再问；
-     * 已经交给子会话的 {@code delegate} 槽位（kernel-delegation）没有在途命令，也不构成屏障。
+     * 在等另一个会话回话的槽位没有在途命令，也不构成屏障。
      */
     public static List<Integer> next(ToolRound round, int maxParallelTools) {
         List<ToolSlot> slots = round.slots();
@@ -20,7 +20,7 @@ public final class ToolScheduler {
         int inFlight = (int) slots.stream().filter(slot -> slot.status() == ToolSlot.Status.SENT).count();
         for (int i = 0; i < round.checked(); i++) {
             ToolSlot slot = slots.get(i);
-            if (slot.isFinished() || slot.status() == ToolSlot.Status.WAITING || slot.status() == ToolSlot.Status.DELEGATED) {
+            if (slot.isFinished() || slot.status() == ToolSlot.Status.WAITING || slot.status() == ToolSlot.Status.ASKED) {
                 continue;
             }
             if (slot.status() == ToolSlot.Status.SENT) {

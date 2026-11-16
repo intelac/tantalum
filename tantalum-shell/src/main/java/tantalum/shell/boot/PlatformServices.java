@@ -273,10 +273,12 @@ public final class PlatformServices implements PluginServices {
         if (bound == null) {
             return Optional.empty();
         }
-        // 父会话记在子会话自己的状态里（kernel-delegation）；之前开的子会话还在旧的记录里
-        Optional<SessionId> parent = bound.queries().session(user, session).map(view -> view.state().handoffs().parent());
-        if (parent.isPresent()) {
-            return parent;
+        // 这个会话现在这一轮是为回另一个会话的话开的：看这一轮的主人。第一版开的子会话还在旧的记录里
+        Optional<SessionId> from = bound.queries().session(user, session).flatMap(view -> view.runs().stream()
+                .filter(run -> run.ref().run().equals(view.state().activeRun())).findFirst())
+                .map(run -> run.owner() instanceof tantalum.value.state.OwnerRef.OfMessage owner ? owner.from() : null);
+        if (from.isPresent()) {
+            return from;
         }
         try {
             return bound.delegations().of(user, session).map(tantalum.shell.delegate.Delegations.Delegation::parent);

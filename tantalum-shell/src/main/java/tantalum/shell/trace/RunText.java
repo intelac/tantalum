@@ -69,7 +69,7 @@ public final class RunText {
                 case UserInput input when input.text() != null && input.mode() != UserInput.Mode.CONTINUE -> {
                     String said = clean(input.text());
                     if (!"user".equals(input.source().type())) {
-                        // 父会话交来的活、子会话的汇报（kernel-delegation）：不是用户的话，算委派这个工具的结果
+                        // 另一个会话说的话（交来的活、回来的结果）：不是用户的话，算 delegate 这个工具的结果
                         segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.TOOL, "delegate", null,
                                 cutKeepingLines(SecretMask.mask(said), SEGMENT_CHARS), record.head().pos()));
                     } else if (!said.isBlank()) {

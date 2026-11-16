@@ -70,13 +70,16 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         RunId active = activeRun(after, envelope.session());
         RunId previous = activeRun(before, envelope.session());
         RunPhase phase = active == null ? null : after.runs().get(active).phase();
-        // 等用户回答且有期限：记下期限和定时器，重启后 shell 据此重新起定时器
+        // 等用户回答、等会话回答且有期限：记下期限和定时器，重启后 shell 据此重新起定时器
         AwaitingAnswer timed = phase instanceof AwaitingAnswer waiting && waiting.timer() != null ? waiting : null;
+        tantalum.value.state.AwaitingReply reply = phase instanceof tantalum.value.state.AwaitingReply waiting && waiting.timer() != null
+                ? waiting : null;
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
                 text == null ? "" : SessionSummary.titleOf(text),
                 phase == null ? SessionSummary.IDLE : phase.name(), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
-                timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
+                timed != null ? timed.question().deadline() : reply != null ? reply.deadline() : null,
+                timed != null ? timed.timer() : reply != null ? reply.timer() : null,
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
                         ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()));

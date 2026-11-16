@@ -166,7 +166,7 @@ export interface SessionSummary {
   pinned?: boolean;
   /** 不进记忆的会话（memory-final-plan 第 11 节）；不是时不出现。 */
   offRecord?: boolean;
-  /** 委派开的子会话：开它的会话（memory-final-plan 第 12 节）；不是时不出现。 */
+  /** 另一个会话开出来的会话：开它的那个会话；不是时不出现。只用于显示（主窗口开的平铺带标记，普通会话开的缩进）。 */
   parent?: string;
 }
 

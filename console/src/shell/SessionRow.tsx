@@ -1,6 +1,7 @@
-import { Archive, ArchiveRestore, CircleHelp, Copy, EyeOff, MoreHorizontal, Pencil, Pin, PinOff } from "lucide-react";
+import { Archive, ArchiveRestore, CircleHelp, Copy, EyeOff, MoreHorizontal, Pencil, Pin, PinOff, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { SessionSummary } from "../api/types";
+import { nested, openedByMainWindow } from "../projects/group";
 import { relativeTime } from "../text/format";
 import { type Text, useText } from "../text";
 import { cx } from "../ui/cx";
@@ -72,7 +73,7 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
         ]
       : null;
   return (
-    <li className={session.parent !== undefined ? "group relative pl-4" : "group relative"} data-delegated={session.parent !== undefined || undefined}>
+    <li className={nested(session) ? "group relative pl-4" : "group relative"} data-delegated={session.parent !== undefined || undefined}>
       <button
         type="button"
         aria-current={selected ? "page" : undefined}
@@ -92,6 +93,9 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
             {pinned && <Pin size={12} className="shrink-0 text-fg-faint" aria-label={t.projects.pinned} role="img" />}
             {session.offRecord === true && <EyeOff size={12} className="shrink-0 text-fg-faint" aria-label={t.composer.offRecord} role="img" />}
             <span className="truncate">{title}</span>
+            {openedByMainWindow(session) && (
+              <Workflow size={12} className="shrink-0 text-fg-faint" aria-label={t.sidebar.fromMainWindow} role="img" />
+            )}
           </span>
           {detail !== undefined && <span className="truncate text-xs text-fg-faint">{detail}</span>}
         </span>

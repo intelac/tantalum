@@ -6,31 +6,34 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 
 /**
- * 内置工具 {@code delegate}（kernel-delegation）：内核认它的名字，不发 {@code RunTool}，把它变成一次交活；子会话交回的文字写成工具结果。
- * 做法照 {@link tantalum.value.question.AskUser}：这里只有纯函数，shell 里的 {@code DelegateTool} 只负责给模型的定义。
- * 参数：{@code task}（新活时必填）、{@code brief}（可选，子会话需要知道的背景）、{@code wait}（默认 true，等结果）、
- * {@code session}（可选：交给已有的子会话接着做）、{@code answer}（可选：回答 {@code session} 那个子会话问的问题）。
+ * 内置工具 {@code delegate}：让另一个会话做一件事。内核认它的名字，不发 {@code RunTool}，把它变成一次送话
+ * （{@link tantalum.value.event.SessionMessage}）。做法照 {@link tantalum.value.question.AskUser}：这里只有纯函数，
+ * shell 里的 {@code DelegateTool} 只负责给模型的定义。
+ * 参数：{@code task}（必填）、{@code brief}（可选，对方需要知道的背景）、{@code session}（可选：交给已有的会话，不给就开一个新的）、
+ * {@code wait}（默认 false：送出去就接着做，结果事后作为一条消息回来；true：这次调用等到对方回话，回话就是结果）。
  */
 public interface DelegateCall {
 
     String NAME = "delegate";
+    /** 不等的结果回来时给模型看的开头：写明不是用户说的。对话页、轨迹页据此认出它。 */
+    String REPORT = "Answer from a conversation you handed work to (not from the user).\n";
 
-    /** 解析出的一次交活。{@code session} 为 null 是开新的子会话；{@code answer} 不为 null 是回答子会话的问题；{@code waits} 是等不等结果（参数 {@code wait}）。 */
-    record Parsed(String task, String brief, boolean waits, SessionId session, String answer) {}
+    /** 解析出的一次调用。{@code session} 为 null 是开新会话；{@code waits} 是参数 {@code wait}。 */
+    record Parsed(String task, String brief, SessionId session, boolean waits) {}
 
-    /** 新子会话的编号：由委派号算出，回放时相同。 */
-    static SessionId childOf(CommandId delegation) {
-        return new SessionId("d-" + delegation.value());
+    /** 新会话的编号：由那句话的编号算出，回放时相同。 */
+    static SessionId sessionOf(CommandId message) {
+        return new SessionId("s-" + message.value());
     }
 
     /**
-     * 从子会话的编号读出父会话的编号：{@code d-<父会话>_<序号>-<下标>}。不是这个样子的为空。只给列表这类展示用，
-     * 判断一个会话是不是子会话要看它自己账里的状态。
+     * 从这样算出的会话编号读出是哪个会话开的它：{@code s-<开它的会话>_<序号>-<下标>}。不是这个样子的为空。
+     * 只给侧栏这类显示用；内核里没有父子关系。
      */
-    static java.util.Optional<SessionId> parentOf(SessionId child) {
-        String value = child.value();
+    static java.util.Optional<SessionId> openerOf(SessionId session) {
+        String value = session.value();
         int cut = value.lastIndexOf('_');
-        if (!value.startsWith("d-") || cut <= 2 || !value.substring(cut + 1).matches("\\d+-\\d+")) {
+        if (!value.startsWith("s-") || cut <= 2 || !value.substring(cut + 1).matches("\\d+-\\d+")) {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(new SessionId(value.substring(2, cut)));
@@ -45,8 +48,7 @@ public interface DelegateCall {
         String task = text(fields, "task");
         String brief = text(fields, "brief");
         String session = text(fields, "session");
-        String answer = text(fields, "answer");
-        boolean wait = true;
+        boolean wait = false;
         Json rawWait = fields.get("wait");
         if (rawWait != null && !(rawWait instanceof Json.Null)) {
             // 本机模型有时把布尔值写成字符串
@@ -58,26 +60,17 @@ public interface DelegateCall {
                 throw new IllegalArgumentException("\"wait\" must be true or false");
             }
         }
-        if (answer != null && session == null) {
-            throw new IllegalArgumentException("\"answer\" needs \"session\": the sub-conversation whose question you are answering");
-        }
-        if (task == null && answer == null) {
+        if (task == null) {
             throw new IllegalArgumentException("delegate needs a non-empty \"task\"");
         }
-        return new Parsed(task, brief, wait, session == null ? null : new SessionId(session), answer);
+        return new Parsed(task, brief, session == null ? null : new SessionId(session), wait);
     }
 
-    /** 交给子会话的文字：新活写明它是被交代的、看不到父会话；接着做和回答问题只有内容。 */
-    static String text(Parsed call, SessionId parent, boolean first) {
-        if (call.answer() != null) {
-            return call.answer();
-        }
-        String body = "Task:\n" + call.task() + (call.brief() == null ? "" : "\n\nWhat you need to know:\n" + call.brief());
-        if (!first) {
-            return body;
-        }
-        return "You are doing a task delegated by another conversation of the same user (" + parent.value()
-                + "). It cannot see this conversation, so reply with a complete result; your final answer goes back to it.\n\n" + body;
+    /** 送给对方的话：写明它来自另一个会话、不是用户在这里说的，对方看不到这边的对话。 */
+    static String text(Parsed call, SessionId from) {
+        return "This comes from another conversation of the same user (" + from.value() + "), not typed by the user here. It cannot "
+                + "see this conversation, so end with a complete result; your final answer is sent back to it.\n\nTask:\n"
+                + call.task() + (call.brief() == null ? "" : "\n\nWhat you need to know:\n" + call.brief());
     }
 
     private static String text(Map<String, Json> fields, String name) {

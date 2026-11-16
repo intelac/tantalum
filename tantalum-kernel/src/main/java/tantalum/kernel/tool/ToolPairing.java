@@ -28,9 +28,9 @@ public final class ToolPairing {
                             + "operations. Otherwise check the external state or ask the user first.",
                     true, OUTCOME_UNKNOWN);
         }
-        if (slot.status() == ToolSlot.Status.DELEGATED) {
-            return new ToolResultBlock(id, "The run ended while the sub-conversation was still working; it was told to stop.",
-                    true, OUTCOME_UNKNOWN);
+        if (slot.status() == ToolSlot.Status.ASKED) {
+            return new ToolResultBlock(id, "The run ended before the other conversation answered. It may still be working; its answer "
+                    + "will come back later as a message.", true, OUTCOME_UNKNOWN);
         }
         return new ToolResultBlock(id, "The run ended before this tool call was sent. It did not run.",
                 true, ABORTED_BEFORE_DISPATCH);

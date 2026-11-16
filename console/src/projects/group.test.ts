@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project, SessionSummary } from "../api/types";
-import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, nestChildren, projectOf, searchSessions } from "./group";
+import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, nestChildren, nested, openedByMainWindow, projectOf, searchSessions } from "./group";
 
 // workspaces 任务 18（W4、W9、W10、W13）。
 
@@ -163,5 +163,21 @@ describe("mergeHits", () => {
       { id: "d-3", title: "orphan", lastActivity: at(5), runStatus: "idle", parent: "gone" },
     ];
     expect(nestChildren(rows).map((row) => row.id)).toEqual(["x", "p", "d-1", "d-2", "d-3"]);
+  });
+
+  // 层级只是显示：普通会话开的缩进挂在它下面；主窗口开的平铺、带标记
+  it("keeps what the main window opened flat and nests what an ordinary conversation asked", () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 10, 16, 0, minutes)).toISOString();
+    const rows: SessionSummary[] = [
+      { id: "s-main-2026-11-16_7-0", title: "from the window", lastActivity: at(9), runStatus: "idle", parent: "main-2026-11-16" },
+      { id: "main-2026-11-16", title: "window", lastActivity: at(8), runStatus: "idle" },
+      { id: "s-a_3-0", title: "asked by a", lastActivity: at(7), runStatus: "idle", parent: "a" },
+      { id: "a", title: "ordinary", lastActivity: at(6), runStatus: "idle" },
+    ];
+    expect(nestChildren(rows).map((row) => row.id)).toEqual(["s-main-2026-11-16_7-0", "main-2026-11-16", "a", "s-a_3-0"]);
+    expect(openedByMainWindow(rows[0])).toBe(true);
+    expect(nested(rows[0])).toBe(false);
+    expect(nested(rows[2])).toBe(true);
+    expect(openedByMainWindow(rows[3])).toBe(false);
   });
 });
