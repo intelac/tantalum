@@ -149,6 +149,26 @@ class OpenAiClientTest {
         assertEquals(StopReason.TOOL_USE, reply.stop());
     }
 
+    /** 2026-11-16 LongMemEval：qwen 把调用按 Qwen3 的写法写进正文、服务没解析时，照工具调用算；没给的工具名照旧是文字。 */
+    @Test
+    void aToolCallWrittenAsTextIsTakenAsACall() throws Exception {
+        String written = "<tool_call>\\n<function=web_search>\\n<parameter=query>\\nbedroom layout\\n</parameter>\\n</function>\\n</tool_call>";
+        Prompt withSearch = new Prompt("sys", List.of(new tantalum.value.model.ToolSpec("web_search", "Search.", new Json.Obj(java.util.Map.of()))),
+                List.of(Message.user("hi")));
+        server.body = delta("{\"content\":\"" + written + "\"}") + finish("stop");
+        ModelOutcome.Replied reply = assertInstanceOf(ModelOutcome.Replied.class, call(withSearch));
+        ToolCallBlock call = assertInstanceOf(ToolCallBlock.class, reply.content().getFirst());
+        assertEquals("web_search", call.name());
+        assertEquals("{\"query\":\"bedroom layout\"}", call.rawArguments());
+        assertEquals(1, reply.content().size());
+        assertEquals(StopReason.TOOL_USE, reply.stop());
+
+        server.body = delta("{\"content\":\"" + written + "\"}") + finish("stop");
+        ModelOutcome.Replied plain = assertInstanceOf(ModelOutcome.Replied.class, call(HI));
+        assertInstanceOf(TextBlock.class, plain.content().getFirst());
+        assertEquals(StopReason.END_TURN, plain.stop());
+    }
+
     /** 每个 tool_calls 分片报一次工具输入，没有参数的分片报空串；只用来量首 token。 */
     @Test
     void toolCallFragmentsAreReportedAsToolInput() throws Exception {

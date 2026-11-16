@@ -270,7 +270,21 @@ public final class OpenAiClient implements ModelClient {
         if (cut != null) {
             return cut;
         }
-        return new ModelOutcome.Replied(content(reasoning, text, tools, prompt), stop(finishReason), actualModel, usage);
+        List<ContentBlock> content = content(reasoning, text, tools, prompt);
+        StopReason stop = stop(finishReason);
+        if (tools.isEmpty() && !text.isEmpty()) {
+            java.util.Set<String> offered = new java.util.HashSet<>();
+            // 延后加载的（没开的）不算：模型看不见它们
+            prompt.tools().stream().filter(tool -> !tool.deferred()).forEach(tool -> offered.add(tool.name()));
+            java.util.Optional<List<ToolCallBlock>> written = TextToolCalls.parse(text.toString(), offered,
+                    Integer.toHexString(java.util.concurrent.ThreadLocalRandom.current().nextInt()));
+            if (written.isPresent()) {
+                content.removeIf(TextBlock.class::isInstance);
+                content.addAll(written.get());
+                stop = StopReason.TOOL_USE;
+            }
+        }
+        return new ModelOutcome.Replied(content, stop, actualModel, usage);
     }
 
     /** 推理块记下这次的路线和请求的模型名，下次只发回给同一条路线、同一个模型；没有选择时不记（旧做法）。 */
