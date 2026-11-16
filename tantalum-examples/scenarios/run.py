@@ -251,6 +251,8 @@ def run_one(user, scenario, model, recording=False):
         session2 = "s-" + secrets.token_hex(4); sessions.append(session2)
         problem = ask(user, session2, scenario["followup"], model, scenario["timeout"], scenario["answers"], scenario["max_calls"])
     ctx = Ctx(); ctx.root = ROOT; ctx.outside = OUTSIDE; ctx.approvals = approvals; ctx.seconds = time.time() - started
+    # 这次场景的会话，和会话记录所在的目录：判分要看“别的会话”干了什么时用（交给别的会话那组）
+    ctx.sessions = sessions; ctx.sessions_dir = f"{DATA}/sessions/dev"
     ctx.calls, ctx.answer, ctx.model_calls, tokens, ctx.compactions, prompt_sha = [], "", 0, collections.Counter(), 0, None
     for each in sessions:
         calls, answer, model_calls, used, extra = journal(each)
@@ -344,7 +346,7 @@ REPLAY_DIR = os.path.join(REPO, "tantalum-examples", "src", "test", "resources",
 # 回放时 bash 不真的执行，模型用命令行改的文件回放不出来：录制时在提问后面加这一句（存进 scenario.json，回放用同一句）
 RECORD_NOTE = "（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）"
 # 回放的测试电脑没有浏览器、联网站点、技能和知识库目录，也不开第二个会话
-NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能"}
+NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能", "交给别的会话"}   # 最后一组跨两个会话，回放只放一个会话的回复
 # 录制只在 macOS 上做，所以只查 macOS 和 Linux 的本机路径；Windows 盘符和转义过的代码（"usage:\\n"）分不开，不查
 SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|sk-ant-|api[_-]?key\s*[:=]", re.IGNORECASE)
 

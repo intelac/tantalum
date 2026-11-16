@@ -28,6 +28,41 @@ def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, ti
     return dict(id=id, group=group, risk=risk, prompt=prompt, check=check, max_calls=max_calls, answers=answers or {}, setup=setup,
                 timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve)
 
+# ---- 交给别的会话 ----
+FILE_TOOLS = ("grep", "find_files", "read_file", "list_dir", "bash", "powershell")
+
+def others(ctx):
+    """这次场景里别的会话开出来的会话各自调过哪些工具：{会话: [工具名…]}。它们的编号是 s-<开它的会话>_<序号>-<下标>。"""
+    import glob, json
+    found = {}
+    for session in ctx.sessions:
+        for path in sorted(glob.glob(os.path.join(ctx.sessions_dir, f"s-{session}_*.jsonl"))):
+            names = []
+            for line in open(path, encoding="utf-8"):
+                try: entry = json.loads(line)
+                except ValueError: continue
+                if entry.get("type") == "ModelReplied":
+                    names += [block.get("name") for block in (entry.get("payload") or {}).get("content", []) if block.get("kind") == "toolCall"]
+            found[os.path.basename(path)[:-6]] = names
+    return found
+
+def delegated(ctx, count):
+    failed = []
+    if ctx.tools.get("delegate", 0) < count: failed.append(f"delegate 只调了 {ctx.tools.get('delegate', 0)} 次，要 {count} 次")
+    mine = [name for name in FILE_TOOLS if ctx.tools.get(name, 0) > 0]
+    if mine: failed.append(f"这边自己用了 {', '.join(mine)}，没有交给别的会话")
+    opened = others(ctx)
+    if len(opened) < count: failed.append(f"只开出了 {len(opened)} 个会话，要 {count} 个")
+    idle = [session for session, names in opened.items() if not any(name in FILE_TOOLS for name in names)]
+    if idle: failed.append(f"{', '.join(idle)} 没有用电脑上的工具")
+    return failed
+
+def c_delegate_find(ctx):
+    return delegated(ctx, 1) + says(ctx, "shipping.py", "orders.py", "reports.py", "cli.py")
+
+def c_delegate_two(ctx):
+    return delegated(ctx, 2) + says(ctx, FACTS["warehouse"], "shipping.py")
+
 # ---- 找和读 ----
 def c_find_def(ctx):
     return says(ctx, "shipping.py", "orders.py", "reports.py", "cli.py")
@@ -1007,12 +1042,21 @@ SCENARIOS += [
       c_head_error, setup=setup_head_error, max_calls=8),
     S("not-git", "Git", "不是 Git 仓库时说清楚、不编提交", "{outside} 这个目录的提交历史是什么样的？最近一次提交是谁做的？",
       c_not_git, server="outside", max_calls=8),
+    # ---- 交给别的会话（delegate）：另一个会话真的用电脑上的工具干活，再把结论交回来 ----
+    S("delegate-find", "交给别的会话", "等结果的 subagent：它用工具查，这边只拿结论",
+      "请调用 delegate 工具（wait 设为 true），让另一个会话去查：compute_shipping_fee 这个函数定义在哪个文件，项目里还有哪些文件调用了它。"
+      "你自己不要读文件、不要搜索。拿到它的回答后，把文件名列给我。", c_delegate_find, max_calls=6, timeout=420),
+    S("delegate-two", "交给别的会话", "一次回复里同时问两个会话，都等结果",
+      "请在同一次回复里调用两次 delegate 工具（wait 都设为 true），让两个会话各查一件事：一个查 inventory/data/catalog.py 里 SKU-2187 的 "
+      "warehouse_code 是什么；另一个查 compute_shipping_fee 定义在哪个文件。你自己不要读文件、不要搜索。两个回答都拿到后一起告诉我。",
+      c_delegate_two, max_calls=6, timeout=480),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
 ANSWER_ONLY = {"find-def", "big-file", "tree", "odd-files", "binary", "pdf", "run-tests", "noisy", "slow", "stdin", "network", "git-history",
                "git-blame", "git-dirty", "web", "web-404", "web-redirect", "web-huge", "form", "wait", "skill", "wiki", "memory", "parallel",
                "secret-env", "missing-cmd", "needle-log", "doc-qa",
-               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot"}
+               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot",
+               "delegate-find", "delegate-two"}
 for _scenario in SCENARIOS:
     _scenario["world"] = _scenario["id"] not in ANSWER_ONLY
