@@ -115,6 +115,10 @@ class JarCrashIT {
             for (JsonNode message : messages) {
                 String role = message.path("role").asString();
                 if (role.equals("user")) {
+                    // 上下文有变化时内核追加的说明也是 user 角色，但不是谁说的话，不拿它当这一轮的标记
+                    if (text(message.get("content")).startsWith("[Context update")) {
+                        continue;
+                    }
                     last = text(message.get("content"));
                     toolResult = false;
                 } else if (role.equals("tool")) {
