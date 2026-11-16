@@ -208,13 +208,14 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
                 return false;
             }
             String title = run.title();
-            String reply = ask(run, NotePrompt.user(title, day, turn));
+            NoteFiler filer = filers.apply(run.user());
+            String reply = ask(run, NotePrompt.user(title, day, turn, filer.open()));
             if (reply == null) {
                 // 模型失败：不记标记，之后补抓
                 return false;
             }
             String heading = TIME.format(run.start().atZone(zone)) + (run.turn() == null ? "" : " · #" + run.turn());
-            NoteFiler.Filed filed = filers.apply(run.user()).file(new NoteFiler.Turn(run.session().value(), run.run().value(), day,
+            NoteFiler.Filed filed = filer.file(new NoteFiler.Turn(run.session().value(), run.run().value(), day,
                     title, heading, run.segments(), tainted(run.segments())), NotePrompt.notes(reply));
             ledger.mark(CAPTURED + run.run().value());
             return filed.kept() + filed.pending() > 0;

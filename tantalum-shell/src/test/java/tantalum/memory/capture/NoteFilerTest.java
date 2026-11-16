@@ -91,4 +91,37 @@ class NoteFilerTest {
         String card = new DailyNotes(ledger).read("2026-11-16", "s-1").orElseThrow().text();
         assertFalse(card.contains("命令"), "nothing that waits for confirmation goes into the card");
     }
+
+    /** 当天卡开头是你说的原话：读过外部内容、模型什么都没记的那一轮也有，“昨天做了什么”靠它。 */
+    @Test
+    void theCardOpensWithWhatTheUserSaidEvenWhenNothingWasNoted() {
+        filer = filer();
+        RunSegment file = new RunSegment(RunSegment.Role.TOOL, "read_file", "local", "ZONE_RATES = ...", "2.0");
+        RunSegment blocked = new RunSegment(RunSegment.Role.TOOL, "ask_user", null, "failed: BLOCKED", "2.5");
+        filer.file(turn("s-1_4", true, user("把海外那个区的运费费率调一下"), file, blocked, answer("改成 4 了，测试全过。")), List.of());
+        filer.file(turn("s-1_5", true, user("你好"), answer("你好。")), List.of());
+        DailyNotes.Note note = new DailyNotes(ledger).read("2026-11-16", "s-1").orElseThrow();
+        assertEquals(1, note.sections().size(), "a greeting leaves no card");
+        assertEquals("> 把海外那个区的运费费率调一下", note.sections().getFirst().body());
+    }
+
+    /** 这一轮说明一项开着的事办完了：标成完成，不再挂着；没确认过的那种也一样，不用再问你。 */
+    @Test
+    void anOpenItemIsClosedWhenTheTurnShowsItIsOver() {
+        filer = filer();
+        WorkingMemory working = new WorkingMemory(ledger);
+        MemoryItem asked = working.add(MemoryItem.Kind.TASK, "修好打折的计算", java.util.Map.of(), MemoryItem.Source.USER_SAID,
+                MemoryItem.Actor.AGENT, "修好", null, false, null).orElseThrow();
+        MemoryItem guessed = working.add(MemoryItem.Kind.TASK, "折扣测试没过，要排查", java.util.Map.of(), MemoryItem.Source.ASSISTANT_INFERRED,
+                MemoryItem.Actor.AGENT, "没过", null, true, null).orElseThrow();
+        assertEquals(java.util.Set.of(asked.id(), guessed.id()),
+                filer.open().stream().map(NotePrompt.Open::id).collect(java.util.stream.Collectors.toSet()), "both are shown to the note-taker");
+        NoteFiler.Filed filed = filer.file(turn("s-1_6", true, user("打折修好了吗"), answer("修好了，8 个测试全部通过。")),
+                List.of(new Note(Kind.DONE, asked.id(), "8 个测试全部通过"), new Note(Kind.DONE, guessed.id(), "修好了"),
+                        new Note(Kind.DONE, "no-such-id", "修好了"), new Note(Kind.DONE, asked.id(), "这句话不在这一轮里")));
+        assertEquals(new NoteFiler.Filed(2, 0, 2), filed);
+        assertTrue(working.open().isEmpty() && working.pending().isEmpty(), "nothing is left open or waiting for the user");
+        assertTrue(new tantalum.memory.PendingItems(ledger).list().isEmpty());
+        assertEquals("done", WorkingMemory.status(ledger.get(asked.id()).orElseThrow()));
+    }
 }

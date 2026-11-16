@@ -10,6 +10,10 @@ import java.util.regex.Pattern;
  * 记笔记的提示词（memory-capture 需求 1.2、1.3；memory-final-plan 第 7 节）。system 固定不变（能命中缓存）。模型只看到你说的话和最后的回答
  * （工具的输出不给），每条笔记一行：{@code - [种类] 要点 «原话»}。原话由代码在对应的分段里核对（{@link Quotes}），对不上的整条丢掉。
  * 没有值得记的回 {@link #NOTHING}。
+ *
+ * <p>工作的现状（文件里现在是什么、测试过没过、这一轮改了哪些文件）不记：它在文件和对话原话里，会变，记下来就过时
+ * （2026-11-16 Sonnet 五天故事：15 句话记出 11 条“待确认”，多半是“附加费现在是 12”这类）。工作记忆里还开着的事项随这一轮一起给模型，
+ * 这一轮里办完了、不做了的，模型写 {@code - [done] 编号 «原话»}，由 {@link NoteFiler} 关掉。
  */
 public final class NotePrompt {
 
@@ -19,9 +23,9 @@ public final class NotePrompt {
     /** 一条笔记：种类、要点、模型给的原话。 */
     public record Note(Kind kind, String text, String quote) {}
 
-    /** 笔记的种类：前三种进页面，中间三种进工作记忆，最后一种只进当天卡。 */
+    /** 笔记的种类：前三种进页面，中间三种进工作记忆，“笔记”只进当天卡；“了结”不是新笔记，是关掉一项开着的事（要点是那一项的编号）。 */
     public enum Kind {
-        PREFERENCE, FACT, DECISION, TASK, COMMITMENT, WAITING, NOTE;
+        PREFERENCE, FACT, DECISION, TASK, COMMITMENT, WAITING, NOTE, DONE;
 
         static Kind parse(String word) {
             if (word == null) {
@@ -42,7 +46,8 @@ public final class NotePrompt {
             - how the user wants things done (preference)
             - facts about the user, their work, and the people and things they deal with (fact)
             - decisions made and why (decision)
-            - work in progress and its next step (task)
+            - work that is still unfinished when this turn ends and has to be picked up in a later conversation, with its \
+            next step (task). Work that was asked for and finished in this turn is not a task.
             - something promised: who promised what to whom, by when (commitment)
             - something the user or the assistant is waiting for (waiting)
             - anything else worth keeping (note)
@@ -54,11 +59,23 @@ public final class NotePrompt {
             asked and is waiting to have answered. Do not note any of these as waiting, task or commitment; they are closed \
             by the system, and a note about them would stay open forever. "waiting" is only for something outside: a person \
             who has to reply, a date, an event.
+            The state of the work is not memory either: what a file contains, what a value is right now, whether tests pass \
+            or fail, which files were changed, what was found while looking. All of that can be read again from the files \
+            and from the conversation history, and it changes, so a note about it goes stale. Do not write it down as fact, \
+            decision or task. What the user decided or asked for is memory: write it so that it stays true ("express \
+            surcharge: the user decided on 15"), not as the state of a file ("the surcharge is now 15 on line 4").
+            The turn may come with a list of open items: things already in the user's working memory, each with an id. Do \
+            not write an open item again as a new note. If this turn shows that an open item is finished, cancelled or no \
+            longer true, close it with a line like this:
+            - [done] id «exact words»
+            where id is the item's id from the list and «exact words» is copied from the turn and shows it is over.
             Write each note on its own line, like this:
             - [kind] the note «exact words»
             where kind is one of preference, fact, decision, task, commitment, waiting, note, and «exact words» is a short \
             piece copied character for character from what the user said or from the assistant's answer that shows the note \
-            is true. A note whose words cannot be found in the turn is thrown away, so copy them exactly.
+            is true. When something the user said shows it, copy the user's words, not the assistant's; copy from the \
+            answer only when nothing the user said shows it. A note whose words cannot be found in the turn is thrown away, \
+            so copy them exactly.
             Write the notes in the language the user wrote in. At most 6 lines, no headings, no preamble. Never include \
             passwords, API keys, tokens, ID numbers or phone numbers.
             If nothing is worth keeping, reply exactly NOTHING.
@@ -80,11 +97,25 @@ public final class NotePrompt {
         return SYSTEM;
     }
 
+    /** 工作记忆里还开着的一项：编号和它的内容。 */
+    public record Open(String id, String text) {}
+
     /** {@code title} 是会话标题，{@code day} 是今天的日期，{@code turn} 是这一轮你说的话和最后的回答。 */
     public static String user(String title, String day, String turn) {
+        return user(title, day, turn, List.of());
+    }
+
+    /** 同上，{@code open} 是工作记忆里还开着的事项（没有就不写这一段）。 */
+    public static String user(String title, String day, String turn, List<Open> open) {
+        StringBuilder items = new StringBuilder();
+        if (!open.isEmpty()) {
+            items.append("\n\n<open-items>\n");
+            open.forEach(item -> items.append("- ").append(item.id()).append(": ").append(item.text().replaceAll("\\s+", " ").strip()).append('\n'));
+            items.append("</open-items>");
+        }
         // 用标签框住这一轮，最后明确要它写笔记：不然模型会把自己当成对话里的助手，接着回答（本机 qwen 实测）
         return "Conversation: " + (title == null || title.isBlank() ? "(untitled)" : title) + "\nDate: " + day
-                + "\n\n<turn>\n" + turn + "\n</turn>\n\nYou are not in this conversation. Write the notes about it now: "
+                + "\n\n<turn>\n" + turn + "\n</turn>" + items + "\n\nYou are not in this conversation. Write the notes about it now: "
                 + "lines like \"- [kind] the note «exact words»\", or NOTHING.";
     }
 
@@ -113,7 +144,15 @@ public final class NotePrompt {
             if (text.length() < 2) {
                 continue;
             }
-            notes.add(new Note(Kind.parse(matcher.group(1)), text, quote.strip()));
+            Kind kind = Kind.parse(matcher.group(1));
+            if (kind == Kind.DONE) {
+                // 关掉一项：要点只留编号（模型有时在后面接着抄那一项的内容）
+                text = text.split("[\\s:：]", 2)[0].replaceAll("^[\\[(]|[\\])]$", "");
+                if (matcher.group(3) == null && matcher.group(4) == null && matcher.group(5) == null) {
+                    continue;
+                }
+            }
+            notes.add(new Note(kind, text, quote.strip()));
         }
         return notes;
     }

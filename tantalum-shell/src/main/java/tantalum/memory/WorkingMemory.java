@@ -49,10 +49,10 @@ public final class WorkingMemory {
         return items().stream().filter(item -> OPEN.contains(status(item))).toList();
     }
 
-    /** 等你确认的（外部来源），最近的在前。 */
+    /** 等你确认的（外部来源），最近的在前；已经了结的（完成、放下）不算。 */
     public List<MemoryItem> pending() {
         return ledger.items(item -> KINDS.contains(item.kind()) && item.state() == MemoryItem.State.CONFIRMED && item.pendingConfirm()
-                && item.supersededBy() == null);
+                && item.supersededBy() == null && OPEN.contains(status(item)));
     }
 
     public static String status(MemoryItem item) {

@@ -1,7 +1,7 @@
 package tantalum.memory.recall;
 
-import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import tantalum.memory.ledger.MemoryItem;
 
@@ -12,6 +12,8 @@ import tantalum.memory.ledger.MemoryItem;
 public final class RecallText {
 
     public static final String TAG = "memory-recall";
+    /** 写到分钟：同一天里先后两个说法（调了又撤回）要分得出哪个新。 */
+    private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private RecallText() {}
 
@@ -25,7 +27,7 @@ public final class RecallText {
         for (Recall.Hit hit : hits) {
             MemoryItem item = hit.item();
             text.append("- [").append(item.page() != null ? item.page() : "daily note").append(" · ")
-                    .append(LocalDate.ofInstant(item.validFrom(), zone)).append(" · ").append(source(item)).append("] ")
+                    .append(WHEN.format(item.validFrom().atZone(zone))).append(" · ").append(source(item)).append("] ")
                     .append(item.text().replaceAll("\\s+", " ").strip()).append('\n');
         }
         return text.append("</").append(TAG).append(">").toString();
@@ -39,7 +41,9 @@ public final class RecallText {
         // 每天的笔记是模型对那次对话的小结，多半是用户自己说的话。写成 “inferred” 时模型会对用户说“这条没经你确认”
         // （2026-11-16 Sonnet 端到端：用户明说过的习惯被说成“我推断的”）；照实写它是什么
         if (item.kind() == MemoryItem.Kind.CARD) {
-            return "your summary of that conversation";
+            return item.text().lines().anyMatch(line -> line.startsWith(tantalum.memory.capture.NoteFiler.SAID))
+                    ? "from that conversation: what follows > is what the user said, word for word; what follows - is your summary"
+                    : "your summary of that conversation";
         }
         String said = origin(item.source());
         return item.status() == MemoryItem.Status.APPROVED

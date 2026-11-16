@@ -76,7 +76,8 @@ class NoteTakerTest {
         assertFalse(taker.note(run("s-1_5", "COMPLETED", false)), "the same run is noted once");
         DailyNotes.Note note = new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow();
         assertEquals("记忆计划", note.title());
-        assertEquals("- 用户在做 Tantalum 的记忆功能\n- 把记忆往前提", note.sections().getFirst().body());
+        assertTrue(note.sections().getFirst().body().endsWith("- 用户在做 Tantalum 的记忆功能\n- 把记忆往前提"), note.sections().getFirst().body());
+        assertTrue(note.sections().getFirst().body().startsWith("> "), "the card opens with what the user said, word for word");
         assertEquals("s-1_5", note.sections().getFirst().run());
         assertTrue(note.sections().getFirst().heading().startsWith("07:24"));
         assertEquals(1, prompts.size(), "the second time does not even call the model");
@@ -120,12 +121,14 @@ class NoteTakerTest {
         NoteTaker taker = taker(true, model, on());
         reply = "NOTHING";
         assertFalse(taker.note(run("s-1_5", "COMPLETED", false)));
-        assertTrue(new DailyNotes(dir).read("2026-11-15", "s-1").isEmpty());
+        assertTrue(new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body().lines()
+                .allMatch(line -> line.startsWith("> ")), "nothing was noted; the card only keeps what the user said");
         String key = "sk-" + "ant-" + "api03-" + "B".repeat(40);
         reply = "- [fact] 用户的 key 是 " + key + " «把记忆往前提»\n- [note] 用户想先做记忆 «先做记忆»\n- [fact] 用户喜欢 Vim «喜欢 Vim»";
         assertTrue(taker.note(run("s-1_6", "COMPLETED", false)));
-        String body = new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body();
-        assertEquals("- 用户想先做记忆", body, "the key and the unquoted claim are dropped");
+        String body = new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow().sections().getLast().body();
+        assertEquals("- 用户想先做记忆", body.lines().filter(line -> !line.startsWith("> ")).collect(java.util.stream.Collectors.joining("\n")),
+                "the key and the unquoted claim are dropped");
     }
 
     @Test

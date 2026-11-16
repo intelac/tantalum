@@ -168,6 +168,21 @@ class ModelApiTest {
         assertEquals(200, submit("alice", "s2", "prompt", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"low\"}").statusCode());
     }
 
+    /**
+     * 会话从一开始就用不支持工具变化的模型：关着的工具不进它的工具表，所以不算“有工具变化”，第二句话照样能用这个模型
+     * （2026-11-17：接着连接程序的 Mac 上总有一个关着的命令工具，Haiku 在每个会话里都发不出第二句话）。
+     */
+    @Test
+    void aSessionStartedOnAModelWithoutToolChangesKeepsWorkingWithIt() throws Exception {
+        assertEquals(200, server.http.send(server.request("alice", "/api/plugins/tool/memory_write").header("content-type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        String sonnet5 = "{\"route\":\"claude\",\"model\":\"claude-sonnet-5\",\"effort\":\"low\"}";
+        assertEquals(200, submit("alice", "s3", "prompt", sonnet5).statusCode());
+        awaitRuns("s3", 1);
+        assertFalse(JSON.readTree(server.get("alice", "/api/sessions/s3/messages").body()).path("toolChangesInHistory").asBoolean());
+        assertEquals(200, submit("alice", "s3", "prompt", sonnet5).statusCode(), "the second message is accepted");
+    }
+
     /** 需求 5.1、M13：带的选择进 UserPrompt，调到对的路线；会话视图带着现在的选择。插话带了也不进 journal。 */
     @Test
     void anAcceptedChoiceIsRecordedAndASteerIgnoresIt() throws Exception {

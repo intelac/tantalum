@@ -25,8 +25,10 @@ public final class PendingItems {
 
     /** 全部等确认的，新的在前。 */
     public List<MemoryItem> list() {
+        // 工作记忆里已经了结的（完成、放下）不用再问你
         List<MemoryItem> all = new ArrayList<>(ledger.items(item -> item.state() == MemoryItem.State.CONFIRMED && item.pendingConfirm()
-                && item.supersededBy() == null && item.kind() != MemoryItem.Kind.PAGE));
+                && item.supersededBy() == null && item.kind() != MemoryItem.Kind.PAGE
+                && !(WorkingMemory.KINDS.contains(item.kind()) && !WorkingMemory.OPEN.contains(WorkingMemory.status(item)))));
         all.sort(Comparator.comparing(MemoryItem::created).reversed());
         return all;
     }

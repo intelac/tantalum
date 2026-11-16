@@ -20,6 +20,13 @@ import tantalum.shell.plugin.SensitiveText;
  *   <li>原话只在回答里的（推断）：这一轮没读过外部内容时只进当天卡；读过的话，偏好、事实、决定、事项记成“待你确认”，不进当天卡；</li>
  *   <li>原话哪里都找不到的、命中敏感信息检测的，丢掉。</li>
  * </ol>
+ * 另外两件不靠模型判断真假的事：
+ * <ul>
+ *   <li>当天卡开头逐字记下这一轮你说的话（{@code > } 开头，截短）。你的话是可信的，所以读过外部内容的那一轮也记；
+ *   “昨天做了什么”靠它（模型的小结在这种轮次里不进卡）。</li>
+ *   <li>“了结”（{@link NotePrompt.Kind#DONE}）：把工作记忆里一项开着的事标成完成，原话在这一轮里找得到就算。它不新增任何说法，
+ *   模型在运行中用 {@code now} 也能做同样的事，所以不分是不是你亲口说的。</li>
+ * </ul>
  */
 public final class NoteFiler {
 
@@ -50,8 +57,54 @@ public final class NoteFiler {
         this.sensitive = sensitive;
     }
 
+    /** 给记笔记的模型看的开着的事项：进行中和等待的，加上等你确认的；最多 {@link #OPEN_LIMIT} 项。 */
+    public List<NotePrompt.Open> open() {
+        List<MemoryItem> items = new ArrayList<>(working.open());
+        items.addAll(working.pending());
+        return items.stream().limit(OPEN_LIMIT).map(item -> new NotePrompt.Open(item.id(), cut(item.text(), OPEN_CHARS))).toList();
+    }
+
+    static final int OPEN_LIMIT = 20;
+    static final int OPEN_CHARS = 160;
+    static final int SAID_CHARS = 240;
+    static final int SAID_LINES = 3;
+    /** 当天卡里你的原话这样开头。 */
+    public static final String SAID = "> ";
+
+    /** 这一轮你说的话，逐字、截短，每句一行；太短的（打招呼）和命中敏感信息的不记。 */
+    private List<String> said(Turn turn) {
+        List<String> lines = new ArrayList<>();
+        for (RunSegment segment : turn.segments()) {
+            if (lines.size() >= SAID_LINES) {
+                break;
+            }
+            // 问答卡没答成（被拦、取消）时那一段写的是 “failed: …”，不是你的话
+            boolean unanswered = segment.role() == RunSegment.Role.TOOL && segment.text().startsWith("failed:");
+            if (!Quotes.userWords(segment) || unanswered || Quotes.normalize(segment.text()).length() < 4
+                    || sensitive.detect(segment.text()).isPresent()) {
+                continue;
+            }
+            lines.add(SAID + cut(segment.text(), SAID_CHARS));
+        }
+        return lines;
+    }
+
+    private static String cut(String text, int max) {
+        String flat = text == null ? "" : text.replaceAll("\\s+", " ").strip();
+        return flat.length() <= max ? flat : flat.substring(0, max) + "…";
+    }
+
+    /** 关掉一项开着的事：编号对得上、还开着才关。 */
+    private boolean close(String id) {
+        Optional<MemoryItem> found = working.ledger().get(id).filter(item -> WorkingMemory.KINDS.contains(item.kind())
+                && item.state() == MemoryItem.State.CONFIRMED && item.supersededBy() == null
+                && WorkingMemory.OPEN.contains(WorkingMemory.status(item)));
+        return found.isPresent() && working.update(id, found.get().version(), null, Map.of(WorkingMemory.STATUS, "done"),
+                MemoryItem.Actor.AGENT) instanceof WorkingMemory.Change.Done;
+    }
+
     public Filed file(Turn turn, List<NotePrompt.Note> notes) {
-        List<String> card = new ArrayList<>();
+        List<String> card = new ArrayList<>(said(turn));
         int kept = 0;
         int pending = 0;
         int dropped = 0;
@@ -61,6 +114,14 @@ public final class NoteFiler {
             MemoryItem.Source source = hit.isPresent() ? null : Quotes.find(note.quote(), turn.segments());
             if (source == null) {
                 dropped++;
+                continue;
+            }
+            if (note.kind() == NotePrompt.Kind.DONE) {
+                if (close(note.text())) {
+                    kept++;
+                } else {
+                    dropped++;
+                }
                 continue;
             }
             boolean said = source == MemoryItem.Source.USER_SAID;

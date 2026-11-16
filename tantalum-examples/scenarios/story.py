@@ -297,11 +297,21 @@ def report(story, user, args):
             if "put" in entry: listed[entry["put"]["id"]] = entry["put"]
             for key in ("tombstone", "tomb"):
                 if key in entry: dead.add(entry[key].get("id") if isinstance(entry[key], dict) else entry[key])
-    listed = [item for item in listed.values() if item["id"] not in dead and item.get("kind") in ("task", "waiting", "commitment")]
-    lines += [f"## 工作记忆里现在挂着的（{len(listed)} 条）", ""]
+    alive = [item for item in listed.values() if item["id"] not in dead and item.get("state", "confirmed") == "confirmed" and not item.get("supersededBy")]
+    listed = [item for item in alive if item.get("kind") in ("task", "waiting", "commitment")
+              and (item.get("attrs") or {}).get("status", "active") in ("active", "waiting")]
+    closed = [item for item in alive if item.get("kind") in ("task", "waiting", "commitment")
+              and (item.get("attrs") or {}).get("status", "active") in ("done", "dropped")]
+    unconfirmed = [item for item in alive if item.get("pendingConfirm") and item.get("kind") == "claim"]
+    lines += [f"## 工作记忆里现在挂着的（{len(listed)} 条；另有 {len(closed)} 条已了结）", ""]
     lines += ["- " + str(item.get("kind") or "") + "：" + str(item.get("text") or "")[:160].replace(chr(10), " ") + ("（待确认）" if item.get("pendingConfirm") else "")
               for item in listed] + [""]
-    print(f"工作记忆里挂着 {len(listed)} 条")
+    lines += [f"## 等确认的说法（{len(unconfirmed)} 条）", ""]
+    lines += ["- " + str(item.get("page") or "") + "：" + str(item.get("text") or "")[:160].replace(chr(10), " ") for item in unconfirmed] + [""]
+    cards = [item for item in alive if item.get("kind") == "card"]
+    lines += [f"## 每天的笔记（{len(cards)} 张卡）", ""]
+    lines += ["- " + str(item.get("text") or "")[:300].replace(chr(10), " ⏎ ") for item in cards] + [""]
+    print(f"工作记忆里挂着 {len(listed)} 条（已了结 {len(closed)} 条）；等确认的说法 {len(unconfirmed)} 条；当天卡 {len(cards)} 张")
     lines += ["## 全程", ""]
     for index, turn in enumerate(story.turns, 1):
         lines += [f"### {index}. {turn['note']}（{turn['session']}，{turn['seconds']} 秒）", "", "**我说：** " + turn["said"], ""]

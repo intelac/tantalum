@@ -243,6 +243,13 @@ public final class ContextHandler implements Handler {
                     rule.add().stream().filter(name -> !withheld.contains(name)).toList()))
                     .filter(rule -> !rule.after().isEmpty() && !rule.add().isEmpty()).toList();
         }
+        // 模型不支持会话中途的工具变化（Haiku 等）时也一样：这个人现在没开着的工具不放进工具表。否则它们算“一开始就关着”，
+        // 这个会话的第二句话就选不了这个模型了。接着连接程序的 Mac 上 powershell 永远关着，所以每个普通会话都中招
+        // （2026-11-17 真模型场景发现）。会话的工具表在第一次组装时定下，这样的会话之后新开的工具要等压缩或新会话。
+        if (!routes.describe(model).map(ModelInfo::toolChanges).orElse(true)) {
+            java.util.Set<String> open = new java.util.HashSet<>(enabled);
+            specs = specs.stream().filter(spec -> open.contains(spec.name())).toList();
+        }
         CompactionSettings settings = compaction(principal, model);
         if (main && settings != null) {
             settings = MainWindow.settings(settings, system.toString(), specs, mainWindowTokens);

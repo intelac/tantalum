@@ -84,4 +84,25 @@ class RecallTest {
         assertTrue(found("三天前我们定了什么？", null).contains("发布日期改到 12 月 1 日。"));
         assertTrue(found("我的护照号是多少？", null).isEmpty(), "nothing is forced in when nothing matches");
     }
+
+    /** 问“昨天做了什么”：给的是那几天的经过，当天卡优先、按时间从早到晚；同一天的先后看得出来（写到分钟）。 */
+    @Test
+    void aQuestionAboutADayGetsThatDayInOrder() {
+        ledger = Ledger.open(dir, Clock.fixed(NOW, ZoneOffset.UTC));
+        page("about-me", "关于用户");
+        for (int i = 0; i < 14; i++) {
+            claim("about-me", "很久以前的第 " + i + " 条事实", 30);
+        }
+        claim("about-me", "库存系统的代码在 inventory 目录", 1);
+        tantalum.memory.DailyNotes daily = new tantalum.memory.DailyNotes(ledger);
+        daily.append("2026-11-15", "s-1", "库存", "s-1_1", "10:00", "> 把海外那个区的运费费率调一下");
+        daily.append("2026-11-15", "s-1", "库存", "s-1_2", "10:05", "> 算了，刚才调费率那一下撤回去吧");
+        List<Recall.Hit> hits = new Recall(ledger).search("昨天库存那边我们都动了什么？", "", null, ZoneOffset.UTC);
+        List<String> texts = hits.stream().map(hit -> hit.item().text()).toList();
+        assertTrue(texts.containsAll(List.of("> 把海外那个区的运费费率调一下", "> 算了，刚才调费率那一下撤回去吧")), texts.toString());
+        assertTrue(texts.stream().noneMatch(text -> text.startsWith("很久以前")), "only that period");
+        assertTrue(texts.indexOf("> 把海外那个区的运费费率调一下") < texts.indexOf("> 算了，刚才调费率那一下撤回去吧"), "earlier first");
+        String shown = RecallText.of(hits, ZoneOffset.UTC);
+        assertTrue(shown.contains("2026-11-16 03:00 · from that conversation: what follows > is what the user said"), shown);
+    }
 }

@@ -259,6 +259,8 @@ def run_one(user, scenario, model, recording=False):
     approvals = []
     problem = ask(user, session, prompt, model, scenario["timeout"], scenario["answers"], scenario["max_calls"], posted, scenario["approve"], approvals)
     sessions = [session]
+    if problem is None and scenario.get("between"):
+        problem = scenario["between"](sys.modules[__name__], user, session, model)
     # 同一会话的后几轮（多轮对话场景）
     for turn in scenario["turns"]:
         if problem is not None: break

@@ -22,12 +22,14 @@ def used(ctx, *names):
     return [] if any(ctx.tools.get(n, 0) > 0 for n in names) else [f"没有用到 {' / '.join(names)}"]
 
 def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, timeout=240, followup=None, server=None, world=True, turns=(), approve=None,
-      window=False, workspaces=()):
+      window=False, workspaces=(), between=None):
     """server：要单独起一台服务器的配置名（见 run.py 的 SERVERS）；world=False 的场景只能查回答（在表里标出来）；
     turns：同一会话里接着问的话（上一轮结束后再问）。followup 是另开一个新会话问。
-    approve：命令审批卡片怎么答（"once"、"session"、"deny"，或 命令 -> 其中之一），只对 server="approval" 有意义。"""
+    approve：命令审批卡片怎么答（"once"、"session"、"deny"，或 命令 -> 其中之一），只对 server="approval" 有意义。
+    between：第一句话之后、turns 之前做的事 between(run 模块, 用户, 会话, 模型) -> 出了什么问题（没有为 None）。"""
     return dict(id=id, group=group, risk=risk, prompt=prompt, check=check, max_calls=max_calls, answers=answers or {}, setup=setup,
-                timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve, window=window, workspaces=list(workspaces))
+                timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve, window=window, workspaces=list(workspaces),
+                between=between)
 
 # ---- 交给别的会话 ----
 FILE_TOOLS = ("grep", "find_files", "read_file", "list_dir", "bash", "powershell")
@@ -142,6 +144,63 @@ def c_workspace_reuse(ctx):
     projects, opened = workspace_state(ctx)
     if len(opened) != 1: failed.append(f"应该只开一个会话、第二次接着用它，实际开了 {len(opened)} 个：{opened}")
     if ctx.tools.get("delegate", 0) < 2: failed.append("两次都应该交出去")
+    return failed
+
+LARGE_TOKENS = 100_000   # WorkspaceSection.LARGE：会话的上下文到这么多，模型看到的那一行标 (large)
+
+def fill_opened_session(run, user, session, model):
+    """把第一句话开出来的那个会话的上下文撑到 10 万 token 以上：像真人那样往里贴一份很长的日志，让它收着。"""
+    import random, time
+    outside = run.OUTSIDE
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            if open(os.path.join(outside, "plan.md"), encoding="utf-8").read().startswith("# Field Notes"): break
+        except OSError: pass
+        time.sleep(2)
+    else: return "setup: the first change was never made"
+    time.sleep(4)   # 等它那一轮结束
+    listed = (user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", [])
+    opened = [row["id"] for row in listed if row.get("parent") == session]
+    if len(opened) != 1: return f"setup: expected one opened conversation, got {opened}"
+    rng, lines = random.Random(7), []
+    zones = ["local", "national", "overseas"]
+    while sum(len(line) + 1 for line in lines) < 225_000:
+        lines.append(f"2026-10-{rng.randint(1, 31):02d} {rng.randint(0, 23):02d}:{rng.randint(0, 59):02d} order {rng.randint(10000, 99999)} "
+                     f"shipped to {rng.choice(zones)} weight {rng.randint(1, 400) / 10} kg fee {rng.randint(100, 9000) / 100} carrier {rng.choice(['north', 'delta', 'kite'])}")
+    problem = run.ask(user, opened[0], "这是上个月的发运日志，先收着，后面可能要查。现在不用分析，回一句“收到”就行。\n\n" + "\n".join(lines),
+                      model, 300, {}, 4)
+    if problem: return "setup: " + problem
+    size = 0
+    for line in open(f"{run.DATA}/sessions/dev/{opened[0]}.jsonl", encoding="utf-8"):
+        try: entry = json.loads(line)
+        except ValueError: continue
+        if entry.get("type") == "ModelReplied":
+            usage = (entry.get("payload") or {}).get("usage") or {}
+            size = usage.get("input", 0) + usage.get("cacheRead", 0) + usage.get("cacheWrite", 0)
+    if size < LARGE_TOKENS: return f"setup: the conversation only reached {size} tokens"
+    return None
+
+def c_workspace_large(ctx):
+    """同一件事接着做，但已经在做它的那个会话上下文很大：在同一个工作区另开一个会话，不再往大的那个里塞；两处都改了。"""
+    import time
+    failed = []
+    path = os.path.join(ctx.outside, "plan.md")
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        text = open(path, encoding="utf-8").read()
+        if text.startswith("# Field Notes") and "Kept by hand." in text: break
+        time.sleep(2)
+    text = open(path, encoding="utf-8").read()
+    if not text.startswith("# Field Notes"): failed.append("标题没有改")
+    if "Kept by hand." not in text: failed.append("第二句没有改")
+    projects, opened = workspace_state(ctx)
+    if len(opened) != 2: failed.append(f"上下文大的那个会话不该接着用，应该另开一个（共 2 个），实际 {len(opened)} 个：{opened}")
+    if not all(same_dir(folder, ctx.outside) for folder in opened.values()): failed.append(f"新会话没有开在 notebook 工作区：{opened}")
+    if len(projects) != 2: failed.append(f"工作区数量变了：{projects}")
+    handed = [call for call in ctx.calls if call["name"] == "delegate"]
+    if len(handed) < 2: failed.append("两次都应该交出去")
+    elif isinstance(handed[-1]["args"], dict) and handed[-1]["args"].get("session"): failed.append(f"第二次还是交给了原来的会话：{handed[-1]['args'].get('session')}")
     return failed
 
 def c_delegate_find(ctx):
@@ -1151,6 +1210,11 @@ SCENARIOS += [
       "notebook 那个项目里 plan.md 的标题改成 “# Field Notes”。",
       c_workspace_reuse, max_calls=8, timeout=300, window=True, server="outside",
       workspaces=[("shop", "{root}"), ("notebook", "{outside}")],
+      turns=["同一个文件里，把 “Not under version control.” 那句改成 “Kept by hand.”。"]),
+    S("workspace-large", "交给别的会话", "已经在做这件事的会话上下文超过 10 万 token：在同一个工作区另开会话，不接着往里塞",
+      "notebook 那个项目里 plan.md 的标题改成 “# Field Notes”。",
+      c_workspace_large, max_calls=8, timeout=300, window=True, server="outside",
+      workspaces=[("shop", "{root}"), ("notebook", "{outside}")], between=fill_opened_session,
       turns=["同一个文件里，把 “Not under version control.” 那句改成 “Kept by hand.”。"]),
     S("workspace-denied", "交给别的会话", "用户在卡片上说不建：不登记、不重试、不绕过去",
       "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活。先把里面 plan.md 的标题改成 “# Field Notes”。",

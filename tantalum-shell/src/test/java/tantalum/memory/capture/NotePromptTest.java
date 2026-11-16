@@ -1,6 +1,8 @@
 package tantalum.memory.capture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -26,5 +28,15 @@ class NotePromptTest {
             many.append("- [note] note ").append(i).append(" «words ").append(i).append("»\n");
         }
         assertEquals(NotePrompt.MAX_BULLETS, NotePrompt.notes(many.toString()).size(), "at most six");
+    }
+
+    /** 开着的事项随这一轮给模型；模型用编号关掉办完的，没给原话的不算。 */
+    @Test
+    void openItemsAreShownAndClosedById() {
+        String prompt = NotePrompt.user("标题", "2026-11-17", "User: 修好了吗", List.of(new NotePrompt.Open("mm1abc", "折扣测试没过，\n要排查")));
+        assertTrue(prompt.contains("</turn>\n\n<open-items>\n- mm1abc: 折扣测试没过， 要排查\n</open-items>"), prompt);
+        assertFalse(NotePrompt.user("标题", "2026-11-17", "User: 你好").contains("open-items"), "no list when nothing is open");
+        assertEquals(List.of(new Note(Kind.DONE, "mm1abc", "8 个测试全部通过"), new Note(Kind.DONE, "mm2def", "不做了")),
+                NotePrompt.notes("- [done] mm1abc «8 个测试全部通过»\n- [done] mm2def: 折扣那件事 «不做了»\n- [done] mm3ghi"));
     }
 }

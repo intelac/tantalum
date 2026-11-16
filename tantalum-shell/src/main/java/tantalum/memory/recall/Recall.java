@@ -22,6 +22,8 @@ import tantalum.memory.ledger.MemoryItem;
  *   <li>被取代的不给（{@code supersededBy}，或者另一条生效说法的 {@code attrs.supersedes} 指着它）；撤掉的、墓碑掉的不在账上。</li>
  *   <li>等你确认的照样找，但标明没确认，不能当事实。</li>
  *   <li>打分：命中词的 idf 之和；至少命中 min(2, 问题的词数) 个才算。问题里说了时间（“三天前”）就只在那几天里找，那几天的都算。</li>
+ *   <li>问的是某段时间（“昨天做了什么”）时，要的是那几天的经过：当天卡优先，最多给 {@link #WINDOW_LIMIT} 条，按时间从早到晚排
+ *   （同一天里调了又撤回，要看得出先后）。</li>
  * </ul>
  */
 public final class Recall {
@@ -30,6 +32,7 @@ public final class Recall {
     public record Hit(MemoryItem item, String pageDescription, double score) {}
 
     public static final int LIMIT = 6;
+    public static final int WINDOW_LIMIT = 12;
 
     private final Ledger ledger;
 
@@ -94,12 +97,18 @@ public final class Recall {
                 }
             }
             if (matched >= needed || inWindow) {
-                // 当天卡是一轮的摘要，比页面上的说法弱一点
-                double weight = candidate.item.kind() == MemoryItem.Kind.CARD ? 0.8 : 1.0;
+                // 当天卡是一轮的摘要，比页面上的说法弱一点；问某段时间时反过来，卡记的是那天的经过
+                boolean card = candidate.item.kind() == MemoryItem.Kind.CARD;
+                double weight = card ? (inWindow ? 1.5 : 0.8) : 1.0;
                 hits.add(new Hit(candidate.item, candidate.description, weight * (score + (inWindow ? 1 : 0))));
             }
         }
         hits.sort(Comparator.comparingDouble(Hit::score).reversed().thenComparing(hit -> hit.item().validFrom(), Comparator.reverseOrder()));
+        if (window.isPresent()) {
+            List<Hit> picked = new ArrayList<>(hits.size() > WINDOW_LIMIT ? hits.subList(0, WINDOW_LIMIT) : hits);
+            picked.sort(Comparator.comparing(hit -> hit.item().validFrom()));
+            return List.copyOf(picked);
+        }
         return hits.size() > LIMIT ? List.copyOf(hits.subList(0, LIMIT)) : List.copyOf(hits);
     }
 
