@@ -35,6 +35,10 @@ public final class MemoryReadTool implements Tool {
         if (context.offRecord()) {
             return ToolOutput.error(ToolTrust.OFF_RECORD);
         }
+        java.util.Optional<String> spent = stores.budget().spend(context);
+        if (spent.isPresent()) {
+            return ToolOutput.ok(spent.get());
+        }
         String name = ToolArguments.string(arguments, "name");
         if (name == null) {
             return MemoryTools.missing("name");

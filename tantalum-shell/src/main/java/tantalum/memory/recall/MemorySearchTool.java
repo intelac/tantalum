@@ -48,6 +48,10 @@ public final class MemorySearchTool implements Tool {
         if (query == null || query.isBlank()) {
             return ToolOutput.error("Missing argument: query");
         }
+        java.util.Optional<String> spent = stores.budget().spend(context);
+        if (spent.isPresent()) {
+            return ToolOutput.ok(spent.get());
+        }
         if (context.offRecord()) {
             return ToolOutput.error("This conversation is off the record: memory is not read or written.");
         }

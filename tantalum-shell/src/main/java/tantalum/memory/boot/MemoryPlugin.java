@@ -89,7 +89,7 @@ public class MemoryPlugin {
     @Bean
     tantalum.memory.recall.HistorySearchTool historySearchTool(ObjectProvider<PluginServices> services, MemoryStores stores) {
         return new tantalum.memory.recall.HistorySearchTool(context -> services.getObject(),
-                context -> tantalum.memory.Forgetting.forgotten(stores.ledger(context.principal())));
+                context -> tantalum.memory.Forgetting.forgotten(stores.ledger(context.principal())), stores.budget());
     }
 
     @Bean

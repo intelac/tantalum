@@ -27,6 +27,7 @@ public final class MemoryStores {
     private final Map<Principal, MemoryStore> stores = new ConcurrentHashMap<>();
     private final Map<Principal, DailyNotes> notes = new ConcurrentHashMap<>();
     private final Map<Principal, WorkingMemory> working = new ConcurrentHashMap<>();
+    private final SearchBudget budget = new SearchBudget();
 
     /** {@code stateDirs} 给出账的目录，{@code legacyDirs} 给出旧格式目录（没有可以返回 null）；名字不安全时抛 {@link IllegalArgumentException}。 */
     public MemoryStores(Function<Principal, Path> stateDirs, Function<Principal, Path> legacyDirs, MemoryLimits limits, Clock clock) {
@@ -70,6 +71,11 @@ public final class MemoryStores {
     }
 
     /** 这个人的工作记忆（memory-final-plan 第 5 节）：和记忆在同一本账上。 */
+    /** 一轮里找记忆的次数，三个找记忆的工具共用。 */
+    public SearchBudget budget() {
+        return budget;
+    }
+
     public WorkingMemory working(Principal principal) {
         return working.computeIfAbsent(principal, user -> new WorkingMemory(ledger(user)));
     }
