@@ -74,6 +74,20 @@ public interface DelegateCall {
                 + call.task() + (call.brief() == null ? "" : "\n\nWhat you need to know:\n" + call.brief());
     }
 
+    /**
+     * 从送给对方的话里取出任务本身（去掉开场白和背景）；不是这样的话原样返回。会话的标题用它：另一个会话开出来的会话，
+     * 标题是交给它的任务，不是开场白。
+     */
+    static String taskOf(String text) {
+        int from = text == null ? -1 : text.indexOf("\n\nTask:\n");
+        if (from < 0 || !text.startsWith("This comes from another conversation of the same user (")) {
+            return text;
+        }
+        String task = text.substring(from + 8);
+        int to = task.indexOf("\n\nWhat you need to know:\n");
+        return to < 0 ? task : task.substring(0, to);
+    }
+
     private static String text(Map<String, Json> fields, String name) {
         Json value = fields.get(name);
         if (value == null || value instanceof Json.Null) {

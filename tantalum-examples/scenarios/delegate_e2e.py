@@ -73,8 +73,12 @@ def submit(client, session, text, model):
     if status != 200: raise SystemExit(f"submit {status}: {body}")
 
 
+HOLD = {"on": False}
+
+
 def user(admin, name):
-    password = secrets.token_urlsafe(18)
+    # --hold 时用固定密码，方便跑完以后登录进去看画面
+    password = f"e2e-{name}-look-at-the-screen" if HOLD["on"] else secrets.token_urlsafe(18)
     status, body = admin.call("POST", "/api/users", {"name": name, "password": password, "admin": False})
     assert status == 200, (status, body)
     return password
@@ -185,10 +189,12 @@ def main():
     parser.add_argument("--only", default="", help="逗号分隔：T1,T2,T3")
     parser.add_argument("--port", type=int, default=8096)
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument("--hold", type=int, default=0, help="跑完以后服务器再开这么多秒（用固定密码），登录进去看画面")
     parser.add_argument("--shell-jar", default=""); parser.add_argument("--examples-jar", default="")
     args = parser.parse_args()
     me.JARS.update(shell=args.shell_jar, examples=args.examples_jar)
     me.PORT = args.port; me.BASE = f"http://127.0.0.1:{args.port}"
+    HOLD["on"] = args.hold > 0
     wanted = set(args.only.split(",")) if args.only else {"T1", "T2", "T3"}
     model = me.MODELS[args.model]
     work = tempfile.mkdtemp(prefix="tantalum-delegate-e2e-")
@@ -201,6 +207,9 @@ def main():
         if "T1" in wanted: t1(report, state["admin"], data, model, args.timeout)
         if "T2" in wanted: t2(report, state["admin"], data, model, args.timeout)
         if "T3" in wanted: t3(report, state, data, model, args.timeout)
+        if args.hold > 0:
+            print(f"holding {args.hold}s at {me.BASE}; users t1, t2, t3 with password e2e-<name>-look-at-the-screen", flush=True)
+            time.sleep(args.hold)
     finally:
         if state["server"].poll() is None:
             state["server"].send_signal(signal.SIGTERM)

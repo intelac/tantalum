@@ -75,7 +75,9 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         tantalum.value.state.AwaitingReply reply = phase instanceof tantalum.value.state.AwaitingReply waiting && waiting.timer() != null
                 ? waiting : null;
         return new IndexChange(envelope.principal(), envelope.session(), envelope.seq(), envelope.at(),
-                text == null ? "" : SessionSummary.titleOf(text),
+                // 另一个会话开出来的会话：标题是交给它的任务（它不进“用户说过的话”的索引）
+                text != null ? SessionSummary.titleOf(text) : envelope.event() instanceof tantalum.value.event.SessionMessage said
+                        && !said.isReply() ? SessionSummary.titleOf(tantalum.value.delegate.DelegateCall.taskOf(said.text())) : "",
                 phase == null ? SessionSummary.IDLE : phase.name(), active,
                 usage(envelope, before, after), submission, previous != null && !previous.equals(active),
                 timed != null ? timed.question().deadline() : reply != null ? reply.deadline() : null,

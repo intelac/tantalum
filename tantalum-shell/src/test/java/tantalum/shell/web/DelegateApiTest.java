@@ -106,6 +106,7 @@ class DelegateApiTest {
             for (JsonNode session : sessions) {
                 if (!session.get("id").asString().equals("main-2026-11-16")) {
                     assertEquals("main-2026-11-16", session.path("parent").asString(), "the list says who opened it");
+                    assertEquals("count the files", session.path("title").asString(), "its title is the task, not the preamble");
                 }
             }
         }

@@ -66,5 +66,9 @@ class DelegateCallTest {
         assertTrue(text.startsWith("This comes from another conversation of the same user (a), not typed by the user here."), text);
         assertTrue(text.endsWith("Task:\ncount the files\n\nWhat you need to know:\nunder src"), text);
         assertTrue(DelegateCall.text(DelegateCall.parse(args("task", "x")), new SessionId("a")).endsWith("Task:\nx"));
+        assertEquals("count the files", DelegateCall.taskOf(text), "the title of the opened conversation is the task");
+        assertEquals("x", DelegateCall.taskOf(DelegateCall.text(DelegateCall.parse(args("task", "x")), new SessionId("a"))));
+        assertEquals("Task:\nnot a hand-off", DelegateCall.taskOf("Task:\nnot a hand-off"));
+        assertNull(DelegateCall.taskOf(null));
     }
 }

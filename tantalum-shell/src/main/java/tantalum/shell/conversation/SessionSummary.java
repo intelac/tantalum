@@ -26,7 +26,7 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
         Instant last = Instant.EPOCH;
         for (TranscriptItem item : items) {
             if (title.isEmpty() && item instanceof UserMessage message) {
-                title = titleOf(message.text());
+                title = titleOf(tantalum.value.delegate.DelegateCall.taskOf(message.text()));
             }
             Instant at = item instanceof RunStatus status ? status.updatedAt() : item.at();
             if (at.isAfter(last)) {
