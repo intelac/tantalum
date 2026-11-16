@@ -66,7 +66,8 @@ class ExamplePluginsTest {
     void withoutTheSwitchNothingIsRegistered() throws Exception {
         try (TestServer server = server()) {
             // commandApproval（connector-jar）、secretMask（qagent-fixes）、memory（memory-plugin）是服务器自带的，不是示例
-            assertEquals(Map.of("commandApproval", "on", "memory", "on", "secretMask", "on"), plugins(server, "alice"));
+            // workspaceApproval（新建工作区先问）也是自带的，必须开启
+            assertEquals(Map.of("commandApproval", "on", "memory", "on", "secretMask", "on", "workspaceApproval", "on,required"), plugins(server, "alice"));
         }
     }
 
@@ -75,7 +76,7 @@ class ExamplePluginsTest {
         try (TestServer server = server("--tantalum.examples.enabled=true")) {
             assertEquals(Map.ofEntries(Map.entry("citationCheck", "on"), Map.entry("commandApproval", "on"), Map.entry("dailyQuota", "off"),
                     Map.entry("live-monitor", "on"), Map.entry("memory", "on"), Map.entry("pinnedContext", "on"), Map.entry("readOnly", "off"),
-                    Map.entry("run-overview", "on"), Map.entry("secretMask", "on"), Map.entry("toolApproval", "off"),
+                    Map.entry("run-overview", "on"), Map.entry("secretMask", "on"), Map.entry("toolApproval", "off"), Map.entry("workspaceApproval", "on,required"),
                     Map.entry("truncateOutput", "on")), plugins(server, "alice"),
                     "providerBackoff is left out without a status url");
             assertEquals(200, put(server, "alice", "/api/plugins/plugin/readOnly", "{\"enabled\":true}").statusCode());

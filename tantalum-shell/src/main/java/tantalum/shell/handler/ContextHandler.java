@@ -162,6 +162,14 @@ public final class ContextHandler implements Handler {
             List<WorkspaceSection.Row> rows = source.sessions(principal).stream().map(row -> hidden(principal, row.summary())
                     ? new WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(row.summary().id(), "", row.summary().lastActivity(),
                             row.summary().runStatus(), row.summary().dir(), row.summary().offRecord()), row.tokens()) : row).toList();
+            // 这个会话自己那一行从第一句话起就在：第一次组装时它可能还没进会话列表，不补上的话第二句话时这一段会平白变一次
+            SessionId self = command.run().session();
+            if (rows.stream().noneMatch(row -> row.summary().id().equals(self))) {
+                rows = new java.util.ArrayList<>(rows);
+                rows.add(new WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(self, "", clock == null
+                        ? java.time.Instant.EPOCH : clock.instant(), tantalum.shell.conversation.SessionSummary.IDLE, dirs.apply(self)),
+                        java.util.OptionalLong.empty()));
+            }
             sections.add(new ContextSection(WorkspaceSection.NAME, escape(WorkspaceSection.text(source.list(principal), rows,
                     command.run().session(), clock == null ? null : clock.instant())), true));
         }

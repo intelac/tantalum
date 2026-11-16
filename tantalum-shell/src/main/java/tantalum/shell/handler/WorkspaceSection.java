@@ -76,13 +76,12 @@ public final class WorkspaceSection {
                 .sorted(Comparator.comparing((Row row) -> row.summary().id().value())).toList();
         for (Row row : recent) {
             SessionSummary summary = row.summary();
-            text.append("- ").append(summary.id().value());
             if (summary.id().equals(current)) {
-                // 自己这一行不写标题和时间：第一句话之后标题才有，写了每个会话都要多变一次
-                text.append(" · this conversation · ").append(where);
+                // 自己这一行不写编号、标题和时间：用不着把活交给自己，第一句话之后标题才有，写了每个会话都要多变一次
+                text.append("- this conversation · ").append(where);
             } else {
                 String title = summary.title() == null || summary.title().isBlank() ? "(untitled)" : summary.title().replaceAll("\\s+", " ");
-                text.append(" \"").append(title).append("\" · ").append(where);
+                text.append("- ").append(summary.id().value()).append(" \"").append(title).append("\" · ").append(where);
                 if (now != null) {
                     text.append(" · ").append(ago(Duration.between(summary.lastActivity(), now)));
                 }

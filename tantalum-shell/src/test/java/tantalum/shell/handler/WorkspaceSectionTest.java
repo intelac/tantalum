@@ -38,7 +38,7 @@ class WorkspaceSectionTest {
         assertEquals("- s-a \"fix the cart\" · in \"shop\" · active in the last day · ~40k tokens in context", lines[4]);
         assertEquals("- s-b \"write the guide\" · in \"docs\" · 3 d ago · ~130k tokens in context (large)", lines[5],
                 "the folder is matched whatever the case and slashes; a large context is flagged; who is running is not said");
-        assertEquals("- main-1 · this conversation · in no workspace", lines[6], "its own line has no title or time, and no size while small");
+        assertEquals("- this conversation · in no workspace", lines[6], "its own line has no id, title or time, and no size while small");
         assertTrue(text.contains("delegate with session=<id>") && text.contains("workspace=<its path>") && text.contains("workspace_add"));
     }
 
@@ -46,7 +46,7 @@ class WorkspaceSectionTest {
     void withNoWorkspacesItSaysSoSoTheModelKnowsItCanAddOne() {
         SessionId current = new SessionId("s-a");
         String alone = WorkspaceSection.text(List.of(), List.of(row("s-a", "x", Duration.ZERO, "running", null, 5L)), current, NOW);
-        assertTrue(alone.contains("- (no workspaces yet)\nRecent conversations:\n- s-a · this conversation · in no workspace\n"), alone);
+        assertTrue(alone.contains("- (no workspaces yet)\nRecent conversations:\n- this conversation · in no workspace\n"), alone);
         String nothing = WorkspaceSection.text(List.of(), List.of(), current, NOW);
         assertTrue(nothing.contains("- (no workspaces yet)\nTo hand work"), nothing);
     }
