@@ -7,11 +7,15 @@ import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
+import tantalum.value.event.DelegateCancelled;
+import tantalum.value.event.DelegateReturned;
+import tantalum.value.event.Delegated;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
+import tantalum.value.event.Recovered;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
@@ -51,5 +55,13 @@ public final class BuiltinSteps {
         table.register(AnswerSteps.AWAITING_ANSWER, Answered.TYPE, AnswerSteps::answered);
         table.register(AnswerSteps.AWAITING_ANSWER, TimerFired.TYPE, AnswerSteps::expired);
         table.register(TransitionTable.ANY_STATE, Answered.TYPE, AnswerSteps::ignored);
+        // 委派（kernel-delegation）：交活进子会话；交回填槽位或作为汇报；期限到；重启后重发
+        table.register(TransitionTable.ANY_STATE, Delegated.TYPE, DelegateSteps::delegated);
+        table.register(ToolSteps.AWAITING_TOOLS, DelegateReturned.TYPE, DelegateSteps::returned);
+        table.register(DelegateSteps.AWAITING_DELEGATE, DelegateReturned.TYPE, DelegateSteps::returned);
+        table.register(TransitionTable.ANY_STATE, DelegateReturned.TYPE, DelegateSteps::reported);
+        table.register(DelegateSteps.AWAITING_DELEGATE, TimerFired.TYPE, DelegateSteps::expired);
+        table.register(TransitionTable.ANY_STATE, Recovered.TYPE, DelegateSteps::recovered);
+        table.register(TransitionTable.ANY_STATE, DelegateCancelled.TYPE, DelegateSteps::cancelled);
     }
 }

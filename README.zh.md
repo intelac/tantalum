@@ -60,4 +60,5 @@ java -jar tantalum-0.1.0.jar --tantalum.provider=local \
 
 - 完整手册：[docs/manual.zh.md](docs/manual.zh.md)。配置、模型路线、用户、journal 格式、运维、Windows、记忆、附件、本机工作区、联网、写插件、测试。
 - Windows：[docs/windows](docs/windows)。
+- 扩展功能时什么时候改内核、怎么改：[docs/kernel-extension.zh.md](docs/kernel-extension.zh.md)。
 - 许可：MIT，见 [LICENSE](LICENSE)。第三方声明：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

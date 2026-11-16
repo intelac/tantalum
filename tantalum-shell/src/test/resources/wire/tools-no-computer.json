@@ -277,23 +277,31 @@
   {
     "name": "delegate",
     "deferred": false,
-    "description": "Hand a self-contained piece of work to a sub-conversation of the same user and get its result. task: what to do; brief: what it needs to know (it does not see this conversation); wait: true (default) waits for the result, false returns at once and the result is reported back here later. The sub-conversation can read memory but only add notes; at most two levels deep.",
+    "description": "Hand a self-contained piece of work to a sub-conversation of the same user. task: what to do; brief: what it needs to know (it does not see this conversation). wait: true (default) waits for its result, up to 10 minutes; false returns at once and its result is reported back here later, which is the way for long work. session: give the id of a sub-conversation you started earlier to hand it more work with its history kept. Several delegate calls in one reply run side by side. The sub-conversation can read memory but only add notes; at most two levels deep.",
     "schema": {
       "type": "object",
       "properties": {
         "task": {
-          "type": "string"
+          "type": "string",
+          "description": "What the sub-conversation should do."
         },
         "brief": {
-          "type": "string"
+          "type": "string",
+          "description": "Background it needs: it cannot see this conversation."
         },
         "wait": {
-          "type": "string"
+          "type": "boolean",
+          "description": "Wait for the result (default true). Use false for long work."
+        },
+        "session": {
+          "type": "string",
+          "description": "Id of a sub-conversation started earlier, to hand it more work."
         }
       },
       "required": [
         "task"
-      ]
+      ],
+      "additionalProperties": false
     }
   },
   {

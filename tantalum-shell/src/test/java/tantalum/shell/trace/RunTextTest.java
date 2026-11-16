@@ -88,18 +88,18 @@ class RunTextTest {
         assertEquals("7.0", segments.get(1).pos());
     }
 
-    /** 不等结果的委派做完后的汇报以一次提交进父会话：它是子会话写的，算委派工具的结果，不算用户的话（自动记笔记只认用户亲口说的）。 */
+    /** kernel-delegation：父会话交来的活、子会话的汇报来源是 delegate，不是用户：算委派工具的结果，不算用户的话（自动记笔记只认用户亲口说的）。 */
     @Test
-    void aDelegatedReportIsNotTheUsersWords() {
-        String report = tantalum.shell.delegate.Delegations.REPORT + "d-1:\n用户以后都用 PostgreSQL。";
-        List<TraceRecord> records = List.of(new UserInput(head("u", "5.0"), UserInput.Mode.PROMPT, report, TraceRecord.Source.USER),
+    void whatComesThroughDelegationIsNotTheUsersWords() {
+        List<TraceRecord> records = List.of(new UserInput(head("u", "5.0"), UserInput.Mode.PROMPT,
+                        "Report from a sub-conversation you delegated to earlier (not from the user).\n用户以后都用 PostgreSQL。",
+                        TraceRecord.Source.DELEGATE),
                 answer("m1", "6.0", "收到。"));
         List<tantalum.shell.plugin.RunSegment> segments = RunText.segments(records, tool -> null);
         assertEquals(tantalum.shell.plugin.RunSegment.Role.TOOL, segments.getFirst().role());
         assertEquals("delegate", segments.getFirst().tool());
         assertTrue(segments.getFirst().text().contains("PostgreSQL"));
         assertTrue(tantalum.memory.capture.Quotes.tainted(segments), "anything noted from it waits for the user");
-        assertTrue(tantalum.shell.delegate.Delegations.isReport(tantalum.shell.delegate.Delegations.REPORT_PROBLEM + "d-1 ended without an answer."));
-        assertFalse(tantalum.shell.delegate.Delegations.isReport("帮我看看委派的结果"));
+        assertFalse(RunText.of(records, 2000).contains("User:"), "the excerpt does not present it as the user's words");
     }
 }

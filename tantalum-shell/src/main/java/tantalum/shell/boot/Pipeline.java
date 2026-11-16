@@ -86,7 +86,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         opened.add(deadlines);
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
+        // 委派的三条命令共用一个处理器：只把事件送进另一个会话的入口（kernel-delegation）
+        Handler delegate = new tantalum.shell.handler.DelegateHandler(results::post);
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
+                tantalum.value.command.Delegate.class, delegate,
+                tantalum.value.command.Return.class, delegate,
+                tantalum.value.command.CancelDelegate.class, delegate,
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),

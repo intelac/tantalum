@@ -72,11 +72,15 @@ public sealed interface TraceRecord {
         }
     }
 
-    /** 来源：{@code user}、{@code context}（上下文组装）、{@code plugin}（{@code name} 是钩子名）、{@code unknown}（未记录来源）。 */
+    /**
+     * 来源：{@code user}、{@code context}（上下文组装）、{@code plugin}（{@code name} 是钩子名）、{@code delegate}（kernel-delegation：
+     * 父会话交来的活、子会话的汇报，不是用户说的）、{@code unknown}（未记录来源）。
+     */
     record Source(String type, String name) {
         public static final Source USER = new Source("user", null);
         public static final Source CONTEXT = new Source("context", null);
         public static final Source UNKNOWN = new Source("unknown", null);
+        public static final Source DELEGATE = new Source("delegate", null);
 
         public static Source plugin(String hook) {
             return new Source("plugin", hook);

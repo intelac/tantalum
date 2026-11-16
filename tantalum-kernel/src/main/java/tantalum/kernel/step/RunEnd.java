@@ -72,9 +72,12 @@ public final class RunEnd {
 
     /**
      * 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。
+     * 在等的委派被放弃；主人是交活的运行把结局交回父会话（{@link DelegateSteps}）。
      * {@code compacting} 原样保留：在等摘要时结束的运行，迟到的摘要回复据此不进历史。
      */
     static void finish(Outcome out, RunState run, EndReason reason, String detail) {
+        // 还有交出去、在等结果的活：让那些子会话停下（kernel-delegation）
+        DelegateSteps.abandon(out, run);
         if (run.tools() != null && !run.tools().allFinished()) {
             List<ContentBlock> results = new ArrayList<>(ToolPairing.complete(run.tools()));
             out.append(run.ref(), new Message(Role.USER, results, false));
@@ -85,8 +88,16 @@ public final class RunEnd {
         out.enter(run.withTools(null).withPendingSteers(List.of()),
                 new Ended(reason, detail));
 
-        SessionState session = out.session(run.ref()).endRun();
+        // 这一轮的主人是一次交活时，把结局交回给父会话
+        SessionState session = DelegateSteps.handBack(out, run, out.session(run.ref()).endRun(), reason, detail);
         out.put(session);
+        if (session.followUps().isEmpty() && !session.handoffs().queued().isEmpty()) {
+            // 排队的交活：用户排队的提问优先，没有了再轮到它
+            tantalum.value.event.Delegated next = session.handoffs().queued().getFirst();
+            out.put(session.withHandoffs(session.handoffs().dequeue()));
+            DelegateSteps.start(out, next);
+            return;
+        }
         if (!session.followUps().isEmpty()) {
             Message next = session.followUps().getFirst();
             ModelChoice requested = session.followUpModels().getFirst();

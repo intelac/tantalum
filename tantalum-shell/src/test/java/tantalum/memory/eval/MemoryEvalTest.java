@@ -467,7 +467,7 @@ class MemoryEvalTest {
 
     private static String childOf(List<Call> calls) {
         for (Call call : calls) {
-            java.util.regex.Matcher found = java.util.regex.Pattern.compile("sub-conversation (d-[0-9a-f]+)").matcher(call.input());
+            java.util.regex.Matcher found = java.util.regex.Pattern.compile("sub-conversation (d-[A-Za-z0-9_-]+)").matcher(call.input());
             if (found.find()) {
                 return found.group(1);
             }

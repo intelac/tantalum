@@ -273,6 +273,11 @@ public final class PlatformServices implements PluginServices {
         if (bound == null) {
             return Optional.empty();
         }
+        // 父会话记在子会话自己的状态里（kernel-delegation）；之前开的子会话还在旧的记录里
+        Optional<SessionId> parent = bound.queries().session(user, session).map(view -> view.state().handoffs().parent());
+        if (parent.isPresent()) {
+            return parent;
+        }
         try {
             return bound.delegations().of(user, session).map(tantalum.shell.delegate.Delegations.Delegation::parent);
         } catch (java.sql.SQLException | RuntimeException unreadable) {

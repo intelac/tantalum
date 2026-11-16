@@ -56,6 +56,8 @@ class DelegationCodecTest {
         DelegateReturned question = new DelegateReturned(DELEGATION, CHILD, null, DelegateReturned.Kind.QUESTION, "Which folder?", "ask-c1");
         assertEquals(question, codec.decode(DelegateReturned.TYPE, 1, codec.encode(question)));
         assertEquals(new Recovered(), codec.decode(Recovered.TYPE, 1, codec.encode(new Recovered())));
+        tantalum.value.event.DelegateCancelled stopped = new tantalum.value.event.DelegateCancelled(DELEGATION);
+        assertEquals(stopped, codec.decode(tantalum.value.event.DelegateCancelled.TYPE, 1, codec.encode(stopped)));
     }
 
     @Test
@@ -63,12 +65,13 @@ class DelegationCodecTest {
         RunRef childRun = new RunRef(USER, CHILD, new RunId("d-s-1_7-0_1"));
         RunState waiting = RunState.start(FROM, new OwnerRef.OfSession(PARENT))
                 .withPhase(new AwaitingDelegate(Instant.parse("2026-11-16T03:10:00Z"), new CommandId("s-1_7-1")));
-        Handoffs place = Handoffs.NONE.under(PARENT, 1, List.of("grep")).enqueue(handoff()).settle(outcome());
+        Handoffs place = Handoffs.NONE.under(PARENT, 1, List.of("grep")).enqueue(handoff()).settle(outcome())
+                .send(new Handoffs.Sent(CHILD, handoff()));
         SessionChange change = new SessionChange(PARENT, USER, false, List.of(), null, null, null, null, null, null, null, null, null,
                 null, null, null, null, new SessionChange.Changed<>(place));
         StepRecord record = new StepRecord(7, change, List.of(waiting), List.of(), null, null,
                 List.of(new Delegate(DELEGATION, FROM, CHILD, handoff()), new Return(new CommandId("d-1"), childRun, PARENT, outcome()),
-                        new CancelDelegate(new CommandId("s-1_9-0"), FROM, List.of(CHILD))), List.of());
+                        new CancelDelegate(new CommandId("s-1_9-0"), FROM, List.of(new CancelDelegate.Target(CHILD, DELEGATION)))), List.of());
         String line = records.encode(record, RecordMemo.writer(USER, PARENT));
         assertTrue(line.contains("\"kind\":\"AwaitingDelegate\""), line);
         assertEquals(record, records.decode(line, RecordMemo.reader(USER, PARENT)).record());

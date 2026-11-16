@@ -23,6 +23,19 @@ public interface DelegateCall {
         return new SessionId("d-" + delegation.value());
     }
 
+    /**
+     * 从子会话的编号读出父会话的编号：{@code d-<父会话>_<序号>-<下标>}。不是这个样子的为空。只给列表这类展示用，
+     * 判断一个会话是不是子会话要看它自己账里的状态。
+     */
+    static java.util.Optional<SessionId> parentOf(SessionId child) {
+        String value = child.value();
+        int cut = value.lastIndexOf('_');
+        if (!value.startsWith("d-") || cut <= 2 || !value.substring(cut + 1).matches("\\d+-\\d+")) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new SessionId(value.substring(2, cut)));
+    }
+
     /** 参数不合法时抛 {@link IllegalArgumentException}，信息直接给模型。 */
     static Parsed parse(Json arguments) {
         Map<String, Json> fields = arguments instanceof Json.Obj obj ? obj.fields() : null;
@@ -36,10 +49,14 @@ public interface DelegateCall {
         boolean wait = true;
         Json rawWait = fields.get("wait");
         if (rawWait != null && !(rawWait instanceof Json.Null)) {
-            if (!(rawWait instanceof Json.Bool bool)) {
+            // 本机模型有时把布尔值写成字符串
+            if (rawWait instanceof Json.Bool bool) {
+                wait = bool.value();
+            } else if (rawWait instanceof Json.Str str && (str.value().equalsIgnoreCase("true") || str.value().equalsIgnoreCase("false"))) {
+                wait = str.value().equalsIgnoreCase("true");
+            } else {
                 throw new IllegalArgumentException("\"wait\" must be true or false");
             }
-            wait = bool.value();
         }
         if (answer != null && session == null) {
             throw new IllegalArgumentException("\"answer\" needs \"session\": the sub-conversation whose question you are answering");

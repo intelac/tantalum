@@ -17,6 +17,7 @@ import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
+import tantalum.value.event.DelegateCancelled;
 import tantalum.value.event.DelegateReturned;
 import tantalum.value.event.Delegated;
 import tantalum.value.event.Event;
@@ -243,6 +244,7 @@ public final class EventCodec {
         codec.register(Delegated.TYPE, 1, Delegated.class);
         codec.register(DelegateReturned.TYPE, 1, DelegateReturned.class);
         codec.register(Recovered.TYPE, 1, Recovered.class);
+        codec.register(DelegateCancelled.TYPE, 1, DelegateCancelled.class);
         return codec;
     }
 
