@@ -56,6 +56,18 @@ class SessionDirCodecTest {
         assertEquals(record, records.decode(line, RecordMemo.reader(USER, SESSION)).record());
     }
 
+    /** “不进记忆”是会话状态的一部分（memory-final-plan 第 11 节）：写进账，重启、回收再载入后还在。 */
+    @Test
+    void theSessionChangeCarriesOffTheRecord() {
+        RecordCodec records = new RecordCodec(codec);
+        SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null, null, null,
+                null, null, null, new SessionChange.Changed<>(true));
+        StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of());
+        String line = records.encode(record, RecordMemo.writer(USER, SESSION));
+        assertTrue(line.contains("\"offRecord\":true"), line);
+        assertEquals(record, records.decode(line, RecordMemo.reader(USER, SESSION)).record());
+    }
+
     @Test
     void anUnchangedDirectoryIsNotWritten() {
         RecordCodec records = new RecordCodec(codec);

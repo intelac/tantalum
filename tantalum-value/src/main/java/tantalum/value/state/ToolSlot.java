@@ -16,7 +16,9 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
         SENT,
         DONE,
         /** {@code ask_user}：不发命令，等别的槽位都完成后问用户，回答就是结果。 */
-        WAITING
+        WAITING,
+        /** {@code delegate}（kernel-delegation）：已经交给子会话，等它交回；{@code command} 是委派号。没有在途命令。 */
+        DELEGATED
     }
 
     public ToolSlot {
@@ -34,6 +36,11 @@ public record ToolSlot(ToolCallBlock call, Status status, boolean concurrencySaf
 
     public static ToolSlot waiting(ToolCallBlock call) {
         return new ToolSlot(call, Status.WAITING, false, null, null);
+    }
+
+    /** 交给子会话了，委派号是 {@code delegation}。 */
+    public ToolSlot delegated(CommandId delegation) {
+        return new ToolSlot(call, Status.DELEGATED, false, delegation, null);
     }
 
     public ToolSlot sent(CommandId sentAs) {

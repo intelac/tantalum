@@ -28,14 +28,16 @@ import tantalum.value.model.ToolSpec;
  * {@code model} 是会话现在的模型选择，每次提问组装上下文时换成这次用的，压缩不清空；本 spec 之前的会话为 null。
  * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它。
  * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），第一次提问时定下，之后不变；没选或本 spec 之前的会话为 null。
- * {@code offRecord} 为真是“不进记忆”的会话（memory-final-plan 第 11 节），第一次提问时定下，之后不变。 */
+ * {@code offRecord} 为真是“不进记忆”的会话（memory-final-plan 第 11 节），第一次提问时定下，之后不变。
+ * {@code handoffs} 是这个会话在委派里的位置（kernel-delegation）：父会话、层数、排队的交活、最近的交回；普通会话是 {@link Handoffs#NONE}。 */
 public record SessionState(SessionId id, Principal principal, List<Message> messages,
                            RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
                            Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
                            Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels,
-                           String dir, boolean offRecord) {
+                           String dir, boolean offRecord, Handoffs handoffs) {
 
     public SessionState {
+        handoffs = handoffs == null ? Handoffs.NONE : handoffs;
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(principal, "principal");
         messages = List.copyOf(messages);
@@ -52,6 +54,15 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         if (compaction != null && compaction.tailFrom() > messages.size()) {
             throw new IllegalArgumentException("tailFrom " + compaction.tailFrom() + " beyond " + messages.size() + " messages");
         }
+    }
+
+    /** 和委派无关的会话时。 */
+    public SessionState(SessionId id, Principal principal, List<Message> messages,
+                        RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
+                        Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
+                        Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels, String dir, boolean offRecord) {
+        this(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model,
+                followUpModels, dir, offRecord, Handoffs.NONE);
     }
 
     /** 不是“不进记忆”的会话时。 */
@@ -90,18 +101,18 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
     public SessionState append(Message message) {
         List<Message> updated = new ArrayList<>(messages);
         updated.add(message);
-        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 运行开始：同时记为 {@code lastRun}。 */
     public SessionState startRun(RunId run) {
         Objects.requireNonNull(run, "run");
-        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 运行结束：只清 {@code activeRun}，{@code lastRun} 留着判断迟到的结果。 */
     public SessionState endRun() {
-        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 换排队的提问，都不带模型选择（测试）。 */
@@ -111,43 +122,47 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
 
     /** 换排队的提问和它们各自的选择，两者等长。 */
     public SessionState withFollowUps(List<Message> newFollowUps, List<ModelChoice> newFollowUpModels) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels, dir, offRecord, handoffs);
     }
 
     public SessionState withContext(SessionContext newContext) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 压缩成功：换替换段，锚点作废。 */
     public SessionState compacted(Compaction newCompaction) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     public SessionState withAnchor(UsageAnchor newAnchor) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     public SessionState withOmittedImages(List<String> newOmittedImages) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     public SessionState withToolsSeen(List<String> newToolsSeen) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 换会话的模型选择。 */
     public SessionState withModel(ModelChoice newModel) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels, dir, offRecord, handoffs);
     }
 
     /** 定下工作目录。 */
     public SessionState withDir(String newDir) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, newDir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, newDir, offRecord, handoffs);
     }
 
     /** 定成“不进记忆”的会话。 */
     public SessionState withOffRecord() {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, true);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, true, handoffs);
+    }
+
+    public SessionState withHandoffs(Handoffs newHandoffs) {
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, newHandoffs);
     }
 
     /** 这个工作类型记在会话里的东西，没有时是空对象。 */
@@ -172,7 +187,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         } else {
             updated.put(workType, new Json.Obj(Collections.unmodifiableMap(new LinkedHashMap<>(merged))));
         }
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels, dir, offRecord);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels, dir, offRecord, handoffs);
     }
 
     /**
