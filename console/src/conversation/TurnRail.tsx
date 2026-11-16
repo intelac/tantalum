@@ -83,7 +83,8 @@ export function TurnRail({ store, blocks, scroller, hasMore, onLoadOlder, onJump
     track();
     // 新的一轮刚加进来时，跟随到底部的滚动可能还没发生（或者它的滚动事件落在重新订阅之前）：过一会儿再算两次，
     // 不然当前轮会停在上一轮（Windows CI 上偶尔看到）
-    const late = [window.setTimeout(track, 150), window.setTimeout(track, 600)];
+    // 机器忙时跟随滚动可能更晚（2026-11-16 本机回归里三次有一次停在上一轮）：再晚一点多算两次，算一次很便宜
+    const late = [150, 600, 1500, 3000].map((delay) => window.setTimeout(track, delay));
     element.addEventListener("scroll", onScroll, { passive: true });
     // 内容变高（回复流进来、展开）不一定有滚动事件，也要重算
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(onScroll);
