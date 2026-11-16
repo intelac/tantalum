@@ -31,7 +31,9 @@ public final class MainWindow {
             numbers), and what words like "that one" or "the second" refer to. Older facts come back through memory, so search \
             it when the user refers to something no longer here. Tools that change files, run commands, use Git or drive the \
             browser are not offered here: open a conversation for that work with delegate (leave wait off) and go on talking; \
-            its answer comes back here as a message, and you tell the user what matters.""";
+            its answer comes back here as a message, and you tell the user what matters. The workspaces section shows where \
+            work can be done: hand the work to a conversation already on the topic, or open a new one in the right workspace; \
+            if no workspace fits, add one with workspace_add, or ask the user which folder to use.""";
 
     /** 主窗口不给的本机工具：改文件、跑命令、Git、操作浏览器（Yi 11-16 让我定）。读文件、技能、知识库、联网、记忆、委派照给。 */
     static final Set<tantalum.local.tool.LocalTool.Kind> DOING = EnumSet.of(tantalum.local.tool.LocalTool.Kind.WRITE,
@@ -43,7 +45,7 @@ public final class MainWindow {
         return session.value().startsWith(PREFIX);
     }
 
-    /** 这些工具里主窗口不给的那些的名字。工具定义照常全给（会话的工具列表不变），只是不在开着的名单里。 */
+    /** 这些工具里主窗口不给的那些的名字。它们连定义也不给：“有定义但关着”算会话里工具有变化，Haiku 这类模型第二句话起就选不了。 */
     static Set<String> withheld(List<Tool> tools) {
         return tools.stream().filter(tool -> tool instanceof LocalTool local && DOING.contains(local.kind())).map(Tool::name)
                 .collect(Collectors.toUnmodifiableSet());

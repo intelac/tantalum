@@ -214,6 +214,13 @@ public class TantalumApplication {
         return new tantalum.shell.local.CommandApprovalHook();
     }
 
+    /** 内置的新建工作区先问：模型用 {@code workspace_add} 登记工作区之前在对话页上问用户。必须开启，插件页上不能关。 */
+    @Bean
+    @org.springframework.core.annotation.Order(0)
+    tantalum.kernel.hook.KernelHook workspaceApprovalHook() {
+        return new tantalum.shell.project.WorkspaceApprovalHook();
+    }
+
     /**
      * 内置的密钥遮盖（QAgent 问题 67）：工具结果里的密钥换成 [REDACTED]。默认开，每个用户在插件页关；
      * {@code tantalum.secret-mask.enabled=false} 整个去掉。排在最前，先于截断这类工具后处理。

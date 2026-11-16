@@ -78,8 +78,10 @@ class DelegateApiTest {
     void withoutWaitingTheAnswerComesBackLaterAndWakesTheOpener() throws Exception {
         List<String> seen = new CopyOnWriteArrayList<>();
         ModelClient window = (prompt, chunks) -> {
-            String last = prompt.messages().getLast().content().stream().map(block -> block instanceof TextBlock text ? text.text()
-                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat);
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    // 上下文有变化时内核在后面追加一条说明，不是谁说的话
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
             seen.add(last);
             if (last.equals("start")) {
                 return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{\"task\":\"count the files\"}",

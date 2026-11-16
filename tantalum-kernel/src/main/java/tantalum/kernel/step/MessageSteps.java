@@ -97,13 +97,15 @@ public final class MessageSteps {
         }
         CommandId id = out.nextCommandId();
         SessionId to = parsed.session() != null ? parsed.session() : DelegateCall.sessionOf(id);
+        // 新会话开在哪个目录：指定了工作区就用它的目录，没指定就和这个会话同一个
         SessionMessage message = new SessionMessage(id, run.ref(), DelegateCall.text(parsed, session.id()), null, false, hops, run.model(),
-                session.dir(), session.offRecord() ? Boolean.TRUE : null);
+                parsed.workspace() != null ? parsed.workspace() : session.dir(), session.offRecord() ? Boolean.TRUE : null);
         out.emit(new Send(id, run.ref(), to, message));
         if (parsed.waits()) {
             return round.withSlot(index, slot.asked(id));
         }
         return done(round, index, (parsed.session() != null ? "Handed to conversation " : "Opened conversation ") + to.value()
+                + (parsed.workspace() != null ? " in " + parsed.workspace() : "")
                 + ". It works on its own; its answer comes back here later as a message.", false);
     }
 

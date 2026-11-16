@@ -277,7 +277,7 @@
   {
     "name": "delegate",
     "deferred": false,
-    "description": "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.",
+    "description": "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. workspace: for a new conversation, the path of the workspace it should work in (see the workspaces section); by default it works in the same folder as this one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.",
     "schema": {
       "type": "object",
       "properties": {
@@ -292,6 +292,10 @@
         "session": {
           "type": "string",
           "description": "Id of an existing conversation to hand the work to. Omit to open a new one."
+        },
+        "workspace": {
+          "type": "string",
+          "description": "Path of the workspace a new conversation works in. Not together with session."
         },
         "wait": {
           "type": "boolean",
@@ -821,6 +825,28 @@
       "required": [
         "url"
       ]
+    }
+  },
+  {
+    "name": "workspace_add",
+    "deferred": false,
+    "description": "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it (delegate with workspace=<path>). path: the folder's absolute path; it must already exist. title: a short name; the folder's name is used when omitted. The user is asked to confirm before it is added. The existing workspaces are listed in the workspaces section.",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path of an existing folder on the user's computer."
+        },
+        "title": {
+          "type": "string",
+          "description": "Short name for the workspace. Defaults to the folder's name."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
     }
   },
   {

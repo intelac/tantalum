@@ -95,7 +95,30 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         session -> dirOf(queries.view().current(), session), toolbox.skillCatalog())
                         .offRecord(session -> offRecordOf(queries.view().current(), session))
                         .mainWindowTokens(properties.mainWindowTokens())
-                        .clock(clock),
+                        .clock(clock)
+                        .workspaces(new ContextHandler.Workspaces() {
+                            @Override
+                            public java.util.List<tantalum.shell.project.Project> list(tantalum.value.id.Principal user) {
+                                try {
+                                    return stores.projects().list(user);
+                                } catch (java.sql.SQLException unreadable) {
+                                    return java.util.List.of();
+                                }
+                            }
+
+                            @Override
+                            public java.util.List<tantalum.shell.handler.WorkspaceSection.Row> sessions(tantalum.value.id.Principal user) {
+                                try {
+                                    tantalum.value.state.KernelState state = queries.view().current();
+                                    java.util.Set<tantalum.value.id.SessionId> archived = stores.marks().allArchived(user);
+                                    return queries.queries().sessions(user).stream()
+                                            .filter(summary -> !summary.offRecord() && !archived.contains(summary.id()))
+                                            .map(summary -> new tantalum.shell.handler.WorkspaceSection.Row(summary, tokensOf(state, summary.id()))).toList();
+                                } catch (java.sql.SQLException unreadable) {
+                                    return java.util.List.of();
+                                }
+                            }
+                        }),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()), properties.weights()),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
@@ -155,6 +178,12 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
     static String dirOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found == null ? null : found.dir();
+    }
+
+    /** 这个会话上下文现在大约多少 token：上一次模型回复实测的用量。会话没载入、还没调过模型时为空。 */
+    private static java.util.OptionalLong tokensOf(tantalum.value.state.KernelState state, tantalum.value.id.SessionId session) {
+        tantalum.value.state.SessionState found = state.sessions().get(session);
+        return found == null || found.anchor() == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(found.anchor().tokens());
     }
 
     private static void processed(EventEnvelope envelope, Receipts receipts, Intake intake, LaneDispatcher lanes) {

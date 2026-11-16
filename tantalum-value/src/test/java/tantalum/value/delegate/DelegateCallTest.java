@@ -37,6 +37,13 @@ class DelegateCallTest {
         assertTrue(DelegateCall.parse(args("task", "x", "wait", "True")).waits(), "a boolean written as a string");
         assertNull(DelegateCall.parse(args("task", "x", "brief", "   ")).brief(), "blank counts as absent");
         assertEquals(new SessionId("s-9"), DelegateCall.parse(args("task", "more", "session", "s-9")).session());
+        assertEquals("/home/alice/app", DelegateCall.parse(args("task", "x", "workspace", " /home/alice/app ")).workspace());
+        assertNull(call.workspace());
+        assertEquals("C:\\Work\\app", DelegateCall.parse(args("task", "x", "workspace", "C:\\Work\\app")).workspace());
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> DelegateCall.parse(args("task", "x", "workspace", "shop")))
+                .getMessage().contains("absolute path"), "a name is not enough: the kernel cannot look workspaces up");
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> DelegateCall.parse(args("task", "x", "session", "s-9", "workspace", "/home/alice/app"))).getMessage().contains("not both"));
     }
 
     @Test

@@ -28,6 +28,18 @@ describe("handleEvent", () => {
     expect(store.getLive("run-0").text).toBe("x");
   });
 
+  it("reloads the workspaces when the model has added one", () => {
+    const store = new ConversationStore();
+    const queries = new QueryClient();
+    const invalidate = vi.spyOn(queries, "invalidateQueries").mockResolvedValue();
+    const call = '"call":{"kind":"toolCall","id":"c1","name":"workspace_add","rawArguments":"{}","arguments":{"path":"/home/u/app"}}';
+    handleEvent({ id: "1.0", event: "item", data: `{"kind":"tool","id":"1.0","session":"s","run":"r","at":"t","status":"running",${call}}` }, store, queries);
+    expect(invalidate).not.toHaveBeenCalled();
+    const result = '"result":{"kind":"toolResult","callId":"c1","text":"Added workspace","error":false}';
+    handleEvent({ id: "2.0", event: "item", data: `{"kind":"tool","id":"1.0","session":"s","run":"r","at":"t","status":"done",${call},${result}}` }, store, queries);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["projects"] });
+  });
+
   it("refreshes the sidebar's waiting mark when a question is asked or settled", () => {
     const store = new ConversationStore();
     const queries = new QueryClient();

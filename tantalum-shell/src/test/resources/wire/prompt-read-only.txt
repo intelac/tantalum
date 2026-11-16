@@ -18,7 +18,16 @@ Today is {{today}}.
 Local workspace: macOS 26.2 arm64 "Test Mac". Main directory: {{root}}. File changes: not allowed. Shell: not available.
 </local-workspace>
 
+<workspaces>
+Workspaces are folders on the user's computer. A conversation works in one folder, fixed by its first message.
+- (no workspaces yet)
+Recent conversations:
+- s1 · this conversation · in no workspace
+To hand work to a listed conversation: delegate with session=<id>. To open a new conversation in a workspace: delegate with workspace=<its path>. Prefer a conversation already on the topic unless its context is large; then open a new one in the same workspace and put what it needs in brief. When the work is in a folder that is not a workspace and the user means to keep working there, add it first with workspace_add (the user is asked to confirm).
+</workspaces>
+
 <plugin-rules>
 ## Rules set by the user's plugins
 - Each bash or powershell command on the user's computer waits for the user to approve it; the user sees the full command. Run one clear command at a time, and if a command is denied, do not work around it: ask the user instead.
+- workspace_add waits for the user to confirm the new workspace; the user sees its name and folder. If the user says no, do not add it another way: ask which folder to use instead.
 </plugin-rules>

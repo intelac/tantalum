@@ -336,6 +336,21 @@ class MessageStepsTest {
     }
 
     @Test
+    void aNewConversationCanBeOpenedInAnotherWorkspace() {
+        World world = new World();
+        CallModel call = world.ask(A, "two jobs");
+        ToolCallBlock elsewhere = new ToolCallBlock("c1", "delegate", "{}", new Json.Obj(Map.of("task", new Json.Str("fix the docs"),
+                "workspace", new Json.Str("/home/u/docs"))));
+        world.reply(A, call, elsewhere, delegate("c2", "same place", false, null));
+        List<Send> sent = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).toList();
+        assertEquals("/home/u/docs", sent.get(0).message().dir(), "the workspace's folder goes with the first message");
+        assertNull(sent.get(1).message().dir(), "without a workspace it is the same folder as this conversation (none here)");
+        assertTrue(results(world, A).getFirst().text().contains(" in /home/u/docs"));
+        world.deliver(sent.get(0));
+        assertEquals("/home/u/docs", world.session(sent.get(0).to()).dir());
+    }
+
+    @Test
     void whatTheUserTypesInThatConversationIsNotSentBack() {
         World world = new World();
         CallModel call = world.ask(A, "go");

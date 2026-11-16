@@ -16,7 +16,9 @@ from scenarios import SCENARIOS, SITE as SITE_URL
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-WORK = tempfile.mkdtemp(prefix="tantalum-scenarios-")
+# 真实路径：macOS 的临时目录在符号链接后面（/var → /private/var），连接程序只认允许目录的真实路径，
+# 模型把提示里的路径原样交给 workspace_add、delegate 时要对得上
+WORK = os.path.realpath(tempfile.mkdtemp(prefix="tantalum-scenarios-"))
 ROOT = os.path.join(WORK, "inventory")
 OUTSIDE = os.path.join(WORK, "notebook")   # outside 那组服务器多允许的一个目录，不在 Git 仓库里
 PORT, SITE_PORT = 8094, 8766
@@ -236,6 +238,20 @@ def run_one(user, scenario, model, recording=False):
     after_setup = tree(ROOT) if recording else None
     posted = []
     fixture.REQUESTS.clear()
+    # 工作区每个场景从头来：清掉上一个场景留下的，登记这个场景要的（名字, 目录）；outside 那个目录的文件也放回原样
+    for project in (user.call("GET", "/api/projects")[1] or {}).get("projects", []):
+        user.call("DELETE", f"/api/projects/{project['id']}")
+    if os.path.isdir(OUTSIDE): fixture.write(OUTSIDE, "plan.md", "# Notebook\n\nNot under version control.\n")
+    if scenario["group"] == "交给别的会话":
+        # 这一组的模型看得到别的会话和记忆，会把活交给“已经在做这件事的会话”：上一个场景留下的会话归档（归档的不列出来）、
+        # 模型自己记下的笔记删掉，每个场景才是从头来
+        for row in (user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", []):
+            if not row.get("archived"): user.call("PUT", f"/api/sessions/{row['id']}/archived", {"archived": True})
+        for entry in (user.call("GET", "/api/plugin-api/memory/entries")[1] or {}).get("entries", []):
+            user.call("DELETE", "/api/plugin-api/memory/entries/" + urllib.parse.quote(entry["name"], safe=""))
+    for title, path in scenario.get("workspaces") or ():
+        status, body = user.call("POST", "/api/projects", {"title": title, "path": path.replace("{root}", ROOT).replace("{outside}", OUTSIDE)})
+        assert status == 201, f"workspace {title}: {status} {body}"
     # window=True 的场景在主窗口里问（编号以 main- 开头）：那里没有改文件、跑命令的工具
     session = ("main-" if scenario.get("window") else "s-") + secrets.token_hex(4)
     started = time.time()
@@ -254,6 +270,8 @@ def run_one(user, scenario, model, recording=False):
     ctx = Ctx(); ctx.root = ROOT; ctx.outside = OUTSIDE; ctx.approvals = approvals; ctx.seconds = time.time() - started
     # 这次场景的会话，和会话记录所在的目录：判分要看“别的会话”干了什么时用（交给别的会话那组）
     ctx.sessions = sessions; ctx.sessions_dir = f"{DATA}/sessions/dev"
+    # 工作区那组：判分时还要再查工作区和会话列表（开出去的会话是事后干活的），所以把登录着的用户也带上
+    ctx.user = user
     ctx.calls, ctx.answer, ctx.model_calls, tokens, ctx.compactions, prompt_sha = [], "", 0, collections.Counter(), 0, None
     for each in sessions:
         calls, answer, model_calls, used, extra = journal(each)

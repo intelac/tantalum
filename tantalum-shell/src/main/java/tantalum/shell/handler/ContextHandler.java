@@ -109,6 +109,20 @@ public final class ContextHandler implements Handler {
 
     private volatile long mainWindowTokens = MainWindow.DEFAULT_TOKENS;
     private volatile java.time.Clock clock;
+    private volatile Workspaces workspaces;
+
+    /** 给“工作区”一段用的数据：这个用户的工作区，和他的会话（不含“不进记忆”的、归档的）各自的概况。 */
+    public interface Workspaces {
+        List<tantalum.shell.project.Project> list(Principal user);
+
+        List<WorkspaceSection.Row> sessions(Principal user);
+    }
+
+    /** 接上以后，上下文里多一段“工作区”（{@link WorkspaceSection}）。不设（单元测试）就没有这一段。 */
+    public ContextHandler workspaces(Workspaces source) {
+        this.workspaces = source;
+        return this;
+    }
 
     /** 引擎的钟：固定部分后面、各段前面写一行今天的日期（按这个人的时区）。不设（单元测试）就不写。 */
     public ContextHandler clock(java.time.Clock clock) {
@@ -139,6 +153,14 @@ public final class ContextHandler implements Handler {
         String dir = dirs.apply(command.run().session());
         Optional<String> workspace = local.section(principal, dir);
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
+        Workspaces source = workspaces;
+        // 别的会话开出来干活的会话不能再往下交，不给它看这一段
+        if (source != null && tantalum.value.delegate.DelegateCall.openerOf(command.run().session()).isEmpty()) {
+            // 列出来的不含“不进记忆”的会话：它们的标题不该出现在别的会话的上下文里
+            // 按行比较：之后变了只把变的那几行告诉模型
+            sections.add(new ContextSection(WorkspaceSection.NAME, escape(WorkspaceSection.text(source.list(principal), source.sessions(principal),
+                    command.run().session(), clock == null ? null : clock.instant())), true));
+        }
         List<String> notes = gate.modelNotes(principal);
         if (!notes.isEmpty()) {
             sections.add(new ContextSection(PLUGIN_NOTES_TAG, escape(PLUGIN_NOTES_HEADING + "\n"
@@ -194,8 +216,12 @@ public final class ContextHandler implements Handler {
             unlocks.forEach(rule -> later.addAll(rule.add()));
             enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
         }
+        // 主窗口不给的工具对这个会话来说根本不存在：不放进工具表，而不是“有但关着”。关着的工具算“会话里工具有变化”，
+        // 不支持工具变化的模型（Haiku 等）第二句话起就不能选了（2026-11-16 真模型场景发现）
+        List<tantalum.value.model.ToolSpec> specs = catalog.specs();
         if (main) {
             java.util.Set<String> withheld = MainWindow.withheld(catalog.tools());
+            specs = specs.stream().filter(spec -> !withheld.contains(spec.name())).toList();
             enabled = enabled.stream().filter(name -> !withheld.contains(name)).toList();
             unlocks = unlocks.stream().map(rule -> new ToolUnlock(rule.after().stream().filter(name -> !withheld.contains(name)).toList(),
                     rule.add().stream().filter(name -> !withheld.contains(name)).toList()))
@@ -203,9 +229,9 @@ public final class ContextHandler implements Handler {
         }
         CompactionSettings settings = compaction(principal, model);
         if (main && settings != null) {
-            settings = MainWindow.settings(settings, system.toString(), catalog.specs(), mainWindowTokens);
+            settings = MainWindow.settings(settings, system.toString(), specs, mainWindowTokens);
         }
-        return new ContextAssembled(command.id(), system.toString(), catalog.specs(), settings, sections,
+        return new ContextAssembled(command.id(), system.toString(), specs, settings, sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
     }
 

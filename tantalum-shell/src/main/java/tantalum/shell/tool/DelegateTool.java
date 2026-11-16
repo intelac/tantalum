@@ -27,6 +27,8 @@ public final class DelegateTool implements Tool {
     @Override public String description() {
         return "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot "
                 + "see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. "
+                + "workspace: for a new conversation, the path of the workspace it should work in (see the workspaces section); by "
+                + "default it works in the same folder as this one. "
                 + "wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way "
                 + "for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several "
                 + "calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.";
@@ -38,6 +40,7 @@ public final class DelegateTool implements Tool {
         properties.put("task", property("string", "What the other conversation should do."));
         properties.put("brief", property("string", "Background it needs: it cannot see this conversation."));
         properties.put("session", property("string", "Id of an existing conversation to hand the work to. Omit to open a new one."));
+        properties.put("workspace", property("string", "Path of the workspace a new conversation works in. Not together with session."));
         properties.put("wait", property("boolean", "Wait for the answer in this turn (default false)."));
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));

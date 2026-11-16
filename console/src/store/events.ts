@@ -7,6 +7,7 @@ import { notifyUnauthorized } from "../api/client";
 import { reportConnection, resetConnection } from "../api/connection";
 import { connectEvents, type SseEvent } from "../api/sse";
 import type { Chunk, Item, PhaseChanged, TraceRecord } from "../api/types";
+import { PROJECTS_KEY } from "../projects/useProjects";
 import { SESSIONS_KEY } from "../shell/useSessions";
 import type { TraceStore } from "../trace/TraceStore";
 import { seqOf, type ConversationStore } from "./ConversationStore";
@@ -33,6 +34,10 @@ export function handleEvent(event: SseEvent, store: ConversationStore, queries: 
       const item = data as Item;
       store.applyItem(item, seqOf(event.id));
       if (item.kind === "user" || item.kind === "run") void queries.invalidateQueries({ queryKey: SESSIONS_KEY });
+      // 模型新建了工作区（workspace_add 有了结果）：侧栏的工作区列表跟着刷新
+      if (item.kind === "tool" && item.call.name === "workspace_add" && item.result !== undefined) {
+        void queries.invalidateQueries({ queryKey: PROJECTS_KEY });
+      }
       break;
     }
     case "chunk": {

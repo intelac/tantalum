@@ -50,7 +50,7 @@ record Toolbox(ToolCatalog catalog, ToolImages toolImages, LocalLinks localLinks
         // 本机工作区读到的图片、浏览器截图都照附件规则存进本人附件
         ToolImages toolImages = new ToolImages(stores.storage().attachments);
         // 服务器上只读附件；读写文件、Git 都转发到用户的电脑
-        BuiltinTools.of(stores.storage().attachments).forEach(catalog::register);
+        BuiltinTools.of(stores.storage().attachments, stores.projects(), localLinks).forEach(catalog::register);
         SkillSettings skillSettings = new SkillSettings(stores.params());
         LocalTool.all(localLinks, toolImages, properties.toolTimeout(), skillSettings).forEach(catalog::register);
         tools.forEach(catalog::register);

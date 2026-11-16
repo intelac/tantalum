@@ -10,7 +10,9 @@ import tantalum.value.json.Json;
  * （{@link tantalum.value.event.SessionMessage}）。做法照 {@link tantalum.value.question.AskUser}：这里只有纯函数，
  * shell 里的 {@code DelegateTool} 只负责给模型的定义。
  * 参数：{@code task}（必填）、{@code brief}（可选，对方需要知道的背景）、{@code session}（可选：交给已有的会话，不给就开一个新的）、
- * {@code wait}（默认 false：送出去就接着做，结果事后作为一条消息回来；true：这次调用等到对方回话，回话就是结果）。
+ * {@code workspace}（可选：新会话开在哪个工作区，写那个工作区的目录；不给就和这个会话同一个目录。已有会话的目录定了不能改，
+ * 所以不能和 {@code session} 一起给）、{@code wait}（默认 false：送出去就接着做，结果事后作为一条消息回来；true：这次调用等到对方
+ * 回话，回话就是结果）。
  */
 public interface DelegateCall {
 
@@ -18,8 +20,8 @@ public interface DelegateCall {
     /** 不等的结果回来时给模型看的开头：写明不是用户说的。对话页、轨迹页据此认出它。 */
     String REPORT = "Answer from a conversation you handed work to (not from the user).\n";
 
-    /** 解析出的一次调用。{@code session} 为 null 是开新会话；{@code waits} 是参数 {@code wait}。 */
-    record Parsed(String task, String brief, SessionId session, boolean waits) {}
+    /** 解析出的一次调用。{@code session} 为 null 是开新会话；{@code workspace} 是新会话的目录（null 是沿用）；{@code waits} 是参数 {@code wait}。 */
+    record Parsed(String task, String brief, SessionId session, String workspace, boolean waits) {}
 
     /** 新会话的编号：由那句话的编号算出，回放时相同。 */
     static SessionId sessionOf(CommandId message) {
@@ -48,6 +50,13 @@ public interface DelegateCall {
         String task = text(fields, "task");
         String brief = text(fields, "brief");
         String session = text(fields, "session");
+        String workspace = text(fields, "workspace");
+        if (session != null && workspace != null) {
+            throw new IllegalArgumentException("give \"session\" or \"workspace\", not both: an existing conversation stays in its folder");
+        }
+        if (workspace != null && !(workspace.startsWith("/") || workspace.startsWith("\\\\") || workspace.matches("^[A-Za-z]:[\\\\/].*"))) {
+            throw new IllegalArgumentException("\"workspace\" must be the workspace's absolute path, as listed in the workspaces section");
+        }
         boolean wait = false;
         Json rawWait = fields.get("wait");
         if (rawWait != null && !(rawWait instanceof Json.Null)) {
@@ -63,7 +72,7 @@ public interface DelegateCall {
         if (task == null) {
             throw new IllegalArgumentException("delegate needs a non-empty \"task\"");
         }
-        return new Parsed(task, brief, session == null ? null : new SessionId(session), wait);
+        return new Parsed(task, brief, session == null ? null : new SessionId(session), workspace, wait);
     }
 
     /** 送给对方的话：写明它来自另一个会话、不是用户在这里说的，对方看不到这边的对话。 */

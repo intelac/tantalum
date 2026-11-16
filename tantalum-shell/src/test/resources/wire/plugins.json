@@ -9,7 +9,7 @@
     "params" : [ ]
   }, {
     "name" : "delegate",
-    "description" : "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.",
+    "description" : "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. workspace: for a new conversation, the path of the workspace it should work in (see the workspaces section); by default it works in the same folder as this one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
@@ -73,6 +73,13 @@
   }, {
     "name" : "todo_write",
     "description" : "Record and update a structured task list for the current work. Send the ENTIRE list every call: it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Keep exactly one todo in_progress while work remains. Mark a todo completed the moment it is done (do not batch completions). Skip the list for trivial single-step tasks. Statuses: pending (not started), in_progress (being worked on now), completed (finished).",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "params" : [ ]
+  }, {
+    "name" : "workspace_add",
+    "description" : "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it (delegate with workspace=<path>). path: the folder's absolute path; it must already exist. title: a short name; the folder's name is used when omitted. The user is asked to confirm before it is added. The existing workspaces are listed in the workspaces section.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
@@ -165,6 +172,23 @@
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
+    "params" : [ ]
+  }, {
+    "name" : "workspaceApproval",
+    "description" : {
+      "en" : "Before the assistant adds a folder on your computer as a workspace, shows the name and the folder on the conversation page and waits for you: add it, or not.",
+      "zh" : "助手要把你电脑上的一个目录加成工作区之前，先在对话页上给你看名字和目录并等你决定：新建，或者不建。",
+      "ja" : "アシスタントがコンピューター上のフォルダーをワークスペースとして追加する前に、会話ページに名前とフォルダーを表示して判断を待ちます。追加する、追加しないから選べます。"
+    },
+    "points" : [ "beforeToolCall", "onAnswer" ],
+    "group" : "rule",
+    "enabled" : true,
+    "byDefault" : true,
+    "changed" : false,
+    "lock" : {
+      "source" : "code",
+      "reason" : ""
+    },
     "params" : [ ]
   } ]
 }
