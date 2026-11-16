@@ -273,6 +273,15 @@ export interface UserItem extends ItemBase {
   skills?: SkillNote[];
   /** 插件在提交时附的内容（memory-plugin），按插件的顺序；没有时不出现。 */
   attached?: AttachedNote[];
+  /** 有它时这一条不是用户说的，是另一个会话送来的；用户说的没有。 */
+  from?: SessionSource;
+}
+
+/** 送来这句话的会话。`reply` 为假是它交来的活，为真是它对这个会话交出去的活的回话；`failed` 是回话说没做成，没有时不出现。 */
+export interface SessionSource {
+  session: string;
+  reply: boolean;
+  failed?: boolean;
 }
 
 /** 插件附在用户消息上的一段文字。 */

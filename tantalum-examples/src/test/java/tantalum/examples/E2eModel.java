@@ -37,6 +37,8 @@ import tantalum.value.model.ToolResultBlock;
  *       {@code skillcheck}：回答“消息带着技能：”加这条用户消息里技能块的名字；</li>
  *   <li>{@code write:}（插件页）：现在开着 write_file 就写 {@code e2e/<后面的词>.txt}，否则回答“我现在没有写文件的工具。”；
  *       {@code forcewrite:} 不管开没开都调用 write_file，看执行前的拒绝；{@code edit:} 先写一个文件再改它，看改动差异；</li>
+ *   <li>{@code handoff:}（会话之间交活）：不等结果，把“清点 <后面的词>”交给一个新会话，回答“交出去了。”；被交了活的会话回答
+ *       “清点完了，一共 42 个。”；结果回来时回答“那边做完了。”；</li>
  *   <li>{@code todo:}（todo-tool）：写三步的待办清单，每隔一会儿更新一次（第一步完成、第二步完成、全部完成），
  *       然后回答“计划做完了。”；</li>
  *   <li>{@code ask:}（waiting-state）：调用 ask_user 问“备份删还是留？”（删除 / 保留，允许补一句），然后回答“你选了：”加工具结果；</li>
@@ -88,6 +90,19 @@ public final class E2eModel implements ModelClient {
         try {
             if (!prompt.output().toolsAllowed()) {
                 return summary(prompt);
+            }
+            if (text.startsWith("This comes from another conversation of the same user (")) {
+                // 另一个会话交来的活：直接给结果
+                return answer(chunks, "清点完了，一共 42 个。");
+            }
+            if (text.startsWith(tantalum.value.delegate.DelegateCall.REPORT)) {
+                // 交出去的活回话了
+                return answer(chunks, "那边做完了。");
+            }
+            if (text.contains("handoff:")) {
+                // 会话之间交活：不等结果，交给一个新会话，然后说一句
+                return results == 0 ? reply(List.of(), call("delegate", Map.of("task", "清点 " + word(text, "handoff:"))))
+                        : answer(chunks, "交出去了。");
             }
             if (text.contains("long")) {
                 return longAnswer(text, prompt, chunks);

@@ -105,13 +105,39 @@ class DelegateApiTest {
             assertEquals(2, runs.size(), "one turn for the user's prompt, one woken by the answer");
             JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
             assertEquals(2, sessions.size(), sessions.toString());
+            String opened = null;
             for (JsonNode session : sessions) {
                 if (!session.get("id").asString().equals("main-2026-11-16")) {
+                    opened = session.get("id").asString();
                     assertEquals("main-2026-11-16", session.path("parent").asString(), "the list says who opened it");
                     assertEquals("count the files", session.path("title").asString(), "its title is the task, not the preamble");
                 }
             }
+            // 对话页：两边的这两句话都不是用户说的，带着是哪个会话送来的；文字不带给模型看的开场白
+            List<JsonNode> back = users(JSON.readTree(messages));
+            assertEquals(2, back.size(), messages);
+            assertTrue(back.get(0).path("from").isMissingNode(), "what the user typed carries no source");
+            assertEquals("42 files", back.get(1).path("text").asString());
+            assertEquals(opened, back.get(1).path("from").path("session").asString());
+            assertTrue(back.get(1).path("from").path("reply").asBoolean(), "it is the answer to what was handed off");
+            assertTrue(back.get(1).path("from").path("failed").isMissingNode());
+            List<JsonNode> there = users(JSON.readTree(server.get("alice", "/api/sessions/" + opened + "/messages").body()));
+            assertEquals(1, there.size());
+            assertEquals("count the files", there.get(0).path("text").asString(), "only the task, not the preamble");
+            assertEquals("main-2026-11-16", there.get(0).path("from").path("session").asString());
+            assertEquals(false, there.get(0).path("from").path("reply").asBoolean());
+            assertTrue(there.get(0).path("run").asString().startsWith(opened), "it opens the turn that does the work");
         }
+    }
+
+    private static List<JsonNode> users(JsonNode page) {
+        List<JsonNode> found = new java.util.ArrayList<>();
+        for (JsonNode item : page.get("items")) {
+            if (item.path("kind").asString().equals("user")) {
+                found.add(item);
+            }
+        }
+        return found;
     }
 
     /**

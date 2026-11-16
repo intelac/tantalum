@@ -97,6 +97,18 @@ public interface DelegateCall {
         return to < 0 ? task : task.substring(0, to);
     }
 
+    /**
+     * 从送给对方的话里取出要给人看的部分：任务，加上背景（有的话，空一行接在后面），去掉给模型看的开场白；不是这样的话原样返回。
+     * 对话页用它显示交来的活。
+     */
+    static String shownOf(String text) {
+        int from = text == null ? -1 : text.indexOf("\n\nTask:\n");
+        if (from < 0 || !text.startsWith("This comes from another conversation of the same user (")) {
+            return text;
+        }
+        return text.substring(from + 8).replace("\n\nWhat you need to know:\n", "\n\n");
+    }
+
     private static String text(Map<String, Json> fields, String name) {
         Json value = fields.get(name);
         if (value == null || value instanceof Json.Null) {

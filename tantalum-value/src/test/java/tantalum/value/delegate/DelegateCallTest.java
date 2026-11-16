@@ -78,4 +78,14 @@ class DelegateCallTest {
         assertEquals("Task:\nnot a hand-off", DelegateCall.taskOf("Task:\nnot a hand-off"));
         assertNull(DelegateCall.taskOf(null));
     }
+
+    /** 对话页显示交来的活：只留任务和背景，去掉给模型看的开场白；不是交来的话原样返回。 */
+    @Test
+    void whatIsShownIsTheTaskAndTheBriefWithoutThePreamble() {
+        String sent = DelegateCall.text(new DelegateCall.Parsed("count the files", "only under src", null, null, false), new SessionId("s-a"));
+        assertEquals("count the files\n\nonly under src", DelegateCall.shownOf(sent));
+        assertEquals("count the files", DelegateCall.shownOf(DelegateCall.text(new DelegateCall.Parsed("count the files", null, null, null, false),
+                new SessionId("s-a"))));
+        assertEquals("just words", DelegateCall.shownOf("just words"));
+    }
 }

@@ -95,7 +95,11 @@ final class TranscriptPass {
             case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), false);
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(), false);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), true);
-            case tantalum.value.event.SessionMessage said -> delegateInput(said.isReply() ? null : said.text());
+            case tantalum.value.event.SessionMessage said -> {
+                if (said.isReply()) {
+                    reported(said);
+                }
+            }
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -354,23 +358,45 @@ final class TranscriptPass {
      * 交活或汇报带来的一条消息：这一步开了新的一轮就是它的开头，运行正在跑、汇报成了插话时挂在那一轮上。
      * {@code text} 为 null 时取内核刚放进去的那条消息的文字（汇报）。交回被写成工具结果或被忽略时没有条目。
      */
-    private void delegateInput(String text) {
+    /**
+     * 交出去的活回话了。这次调用在等它的，回话是那次工具调用的结果，不另出条目；没在等的，回话作为一条消息进这个会话
+     * （开一轮，或者插进正在跑的一轮），显示成“来自那个会话的回话”，不是用户的气泡。文字是对方的原话，不带给模型看的开场白。
+     */
+    private void reported(tantalum.value.event.SessionMessage said) {
         String id = TranscriptItem.id(envelope.seq(), 0);
         RunId fresh = RunId.of(session, envelope.seq());
         SessionState current = state.sessions().get(session);
-        if (current == null) {
+        if (current == null || get(id) != null) {
             return;
         }
+        UserMessage.From from = new UserMessage.From(said.from().session().value(), true, said.failed());
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
-            put(new UserMessage(id, session, fresh, at, text != null ? text : firstText(current.messages().getLast()), List.of(), false, false,
-                    List.of(), List.of()));
-        } else if (text == null && current.activeRun() != null && state.runs().get(current.activeRun()) instanceof RunState now
-                && !now.pendingSteers().isEmpty() && firstText(now.pendingSteers().getLast()).startsWith(tantalum.value.delegate.DelegateCall.REPORT)
-                && get(id) == null) {
-            put(new UserMessage(id, session, current.activeRun(), at, firstText(now.pendingSteers().getLast()), List.of(), false, false,
-                    List.of(), List.of()));
+            put(UserMessage.from(id, session, fresh, at, said.text(), from));
+        } else if (current.activeRun() != null && state.runs().get(current.activeRun()) instanceof RunState now
+                && !now.pendingSteers().isEmpty()
+                && firstText(now.pendingSteers().getLast()).startsWith(tantalum.value.delegate.DelegateCall.REPORT)) {
+            put(UserMessage.from(id, session, current.activeRun(), at, said.text(), from));
         }
+    }
+
+    /**
+     * 为另一个会话交来的活开的一轮：开头是那句话，显示成“那个会话交来的活”。看这一轮的主人认出它，所以来的时候会话正忙、
+     * 排了队后来才开始的也有这一条。文字只留任务和背景。
+     */
+    private void handedIn(RunId run) {
+        if (!(state.runs().get(run) instanceof RunState started) || !(started.owner() instanceof tantalum.value.state.OwnerRef.OfMessage owner)) {
+            return;
+        }
+        SessionState current = state.sessions().get(session);
+        String id = "in-" + owner.message().value();
+        if (current == null || current.messages().isEmpty() || get(id) != null) {
+            return;
+        }
+        Message opening = current.messages().stream().filter(message -> message.role() == Role.USER).reduce((first, second) -> second)
+                .orElse(current.messages().getLast());
+        put(UserMessage.from(id, session, run, at, tantalum.value.delegate.DelegateCall.shownOf(firstText(opening)),
+                new UserMessage.From(owner.from().value(), false, false)));
     }
 
     private static String firstText(Message message) {
@@ -400,7 +426,10 @@ final class TranscriptPass {
     private void phaseChanged(RunId run, String phase) {
         RunStatus existing = get(RunStatus.idOf(run)) instanceof RunStatus found ? found : null;
         RunStatus status = existing != null ? existing : RunStatus.started(session, run, at, phase);
-        if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
+        if (existing == null && state.runs().get(run) instanceof RunState begun
+                && begun.owner() instanceof tantalum.value.state.OwnerRef.OfMessage) {
+            handedIn(run);
+        } else if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
             UserMessage queued = (UserMessage) get(conversation.queued.pollFirst());
             put(queued.started(run));
         }
