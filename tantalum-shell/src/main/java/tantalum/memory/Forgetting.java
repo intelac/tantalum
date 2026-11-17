@@ -123,7 +123,13 @@ public final class Forgetting {
     }
 
     /** 忘掉的结果：去掉了几处（说法、页面上的行），和因为是你认可过的决定而没动的那几条。 */
-    public record Result(int gone, List<MemoryItem> kept) {}
+    /** {@code removed} 是去掉的原文：整条去掉的是那条说法的全文，只去掉几行的是那几行。给调用的一方照实看到带走了什么。 */
+    public record Result(int gone, List<MemoryItem> kept, List<String> removed) {
+
+        public Result(int gone, List<MemoryItem> kept) {
+            this(gone, kept, List.of());
+        }
+    }
 
     /**
      * 按一句话忘掉（接口 {@code POST forget}）：生效的说法里说这句话的那几行去掉（多行的条目别的行留着，去空了整条留墓碑，页面空了
@@ -138,6 +144,7 @@ public final class Forgetting {
         List<String> wanted = List.of(text);
         List<MemoryItem> gone = new ArrayList<>();
         List<MemoryItem> kept = new ArrayList<>();
+        List<String> removed = new ArrayList<>();
         Set<String> pages = new HashSet<>();
         int places = 0;
         for (MemoryItem claim : ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && item.state() == MemoryItem.State.CONFIRMED)) {
@@ -152,9 +159,12 @@ public final class Forgetting {
             if (rest.isEmpty()) {
                 if (ledger.tombstone(claim.id(), actor, REASON)) {
                     gone.add(claim);
+                    removed.add(claim.text().strip());
                     places++;
                 }
             } else if (ledger.put(claim.withText(rest).withActor(actor), claim.version()) instanceof Ledger.Result.Written) {
+                Set<String> left = new HashSet<>(rest.lines().map(String::strip).toList());
+                removed.add(String.join("\n", claim.text().lines().map(String::strip).filter(line -> !line.isEmpty() && !left.contains(line)).toList()));
                 places++;
             }
             if (claim.page() != null) {
@@ -178,7 +188,7 @@ public final class Forgetting {
         List<MemoryItem> cascadeFrom = new ArrayList<>(gone);
         cascadeFrom.add(said);
         cascade(ledger, cascadeFrom, actor);
-        return new Result(places, kept);
+        return new Result(places, kept, List.copyOf(removed));
     }
 
     /**

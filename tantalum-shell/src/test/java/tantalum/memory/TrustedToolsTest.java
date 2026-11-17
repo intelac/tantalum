@@ -196,6 +196,20 @@ class TrustedToolsTest {
         assertEquals("数据库用 PostgreSQL 16", store.read("decision-database").orElseThrow().content());
     }
 
+    /**
+     * 一条说法里写着几件事，忘掉其中一件时整条都去掉了：结果里照实写出去掉的全文，模型才知道别的部分也没了
+     * （2026-11-17 真模型：只说“去掉 1 处”，名字和别的习惯跟着丢了，模型不知道）。
+     */
+    @Test
+    void forgettingSaysInFullWhatWasRemoved() {
+        turn = List.of(new RunSegment(RunSegment.Role.USER, null, null, "费用按整数算这条忘掉吧", "9.0"));
+        new MemoryNoteTool(stores, trust).run(in(false), args("kind", "preference", "text", "小康负责库存系统；费用一律按整数计算；回复要简短"));
+        ToolOutput output = new MemoryDeleteTool(stores, trust).run(in(false), args("text", "费用一律按整数计算"));
+        assertTrue(output.text().contains("removed from 1 place"), output.text());
+        assertTrue(output.text().contains("Removed, in full:\n- 小康负责库存系统；费用一律按整数计算；回复要简短"), output.text());
+        assertTrue(new MemoryNoteTool(stores, trust).description().contains("several things are several notes"));
+    }
+
     @Test
     void offTheRecordNothingIsWritten() {
         for (ToolOutput output : List.of(

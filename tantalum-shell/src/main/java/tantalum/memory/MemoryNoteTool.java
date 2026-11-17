@@ -33,7 +33,8 @@ public final class MemoryNoteTool implements Tool {
 
     @Override public String name() { return NAME; }
     @Override public String description() {
-        return "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; "
+        return "Note one thing worth remembering for this user; several things are several notes, so each can be changed or forgotten "
+                + "on its own. kind: preference | fact | decision | noticed; text: one sentence; "
                 + "quote: the user's exact words from this turn that show it (needed for it to count as what the user said; once the "
                 + "conversation has read files or pages, text must also be the user's exact words, otherwise "
                 + "the note waits for the user to confirm). replaces: when this note takes the place of an entry recalled from "

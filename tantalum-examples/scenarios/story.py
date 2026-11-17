@@ -132,6 +132,15 @@ def file(root, path):
     except OSError as failure: return f"<{failure}>"
 
 
+def rounded_near(code):
+    """算保价费的那几行附近（前后 8 行）有没有取整：round、int、//、ceil、floor、quantize。"""
+    lines = code.splitlines()
+    for index, line in enumerate(lines):
+        if re.search(r"insur|保价|0\.015|1\.5", line, re.I):
+            if re.search(r"round|int\(|//|ceil|floor|quantize", "\n".join(lines[max(0, index - 8):index + 9]), re.I): return True
+    return False
+
+
 def said(turn, *needles):
     """主窗口这一轮说过的话里（包括结果回来以后又说的）有没有这些。"""
     text = "\n".join(turn["answers"])
@@ -187,8 +196,7 @@ def main():
         story.say(day2, "发运那边再加一项保价费：按订单金额的 1.5% 收。加好跑一下测试。", [
             ("代码里有了保价费", lambda t: bool(re.search(r"0\.015|1\.5", shipping() + file(root, "inventory/orders.py"))) or "没找到 1.5% 的计算"),
             ("记得我的习惯：按整数算（代码里取了整）", lambda t: (
-                bool(re.search(r"round\(|int\(|//|ceil|floor", "\n".join(line for line in (shipping() + file(root, "inventory/orders.py")).splitlines()
-                                                                   if re.search(r"insur|保价|0\.015|1\.5", line, re.I))))
+                rounded_near(shipping() + "\n" + file(root, "inventory/orders.py"))
                 or "没看出按整数算：相关代码行没有取整")),
         ], note="第一天说的习惯要自己用上，我这次没提")
         story.say(day2, "对了，我之前说费用都按整数算，这条你忘掉吧，以后不这么要求了。", [

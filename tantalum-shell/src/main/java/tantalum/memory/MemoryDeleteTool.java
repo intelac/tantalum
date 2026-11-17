@@ -73,12 +73,32 @@ public final class MemoryDeleteTool implements Tool {
                         + (result.kept().size() == 1 ? "" : "s") + " the user approved (\"" + result.kept().getFirst().text()
                         + "\"); only the user can remove an approved decision, in the console (Settings > Memory).";
                 return ToolOutput.ok((gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."
-                        : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back.")
+                        : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back."
+                        + removed(result.removed()))
                         + kept);
             }
             return stores.of(context.principal()).delete(name) ? ToolOutput.ok("Deleted " + name + ".") : MemoryTools.notFound(name);
         } catch (RuntimeException failure) {
             return MemoryTools.unavailable(failure);
         }
+    }
+
+    static final int SHOWN = 5;
+    static final int SHOWN_CHARS = 400;
+
+    /**
+     * 去掉的原文，照实给模型看（2026-11-17 真模型：一条说法里写着三件事，忘掉其中一件时整条没了，结果里只说“去掉 1 处”，
+     * 模型不知道另外两件也没了）。要不要把别的部分再记回去是模型的事，这里只陈述去掉了什么。
+     */
+    private static String removed(List<String> texts) {
+        if (texts.isEmpty()) {
+            return "";
+        }
+        StringBuilder shown = new StringBuilder(" Removed, in full:");
+        texts.stream().limit(SHOWN).forEach(text -> shown.append("\n- ").append(text.length() > SHOWN_CHARS ? text.substring(0, SHOWN_CHARS) + "…" : text));
+        if (texts.size() > SHOWN) {
+            shown.append("\n- (").append(texts.size() - SHOWN).append(" more)");
+        }
+        return shown.append("\nAnything in these lines beyond what the user asked to forget is gone from memory too.").toString();
     }
 }
