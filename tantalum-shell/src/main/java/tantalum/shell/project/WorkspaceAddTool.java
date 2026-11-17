@@ -39,6 +39,9 @@ public final class WorkspaceAddTool implements Tool {
 
     @Override public String name() { return NAME; }
 
+    /** 登记工作区要问用户，只在人在场的对话里做。 */
+    @Override public boolean inTasks() { return false; }
+
     @Override public String description() {
         return "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it. "
                 + "path: the folder's absolute path; it must already exist. title: a short name; the folder's "

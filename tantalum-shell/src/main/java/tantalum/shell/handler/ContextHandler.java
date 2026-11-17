@@ -71,6 +71,7 @@ public final class ContextHandler implements Handler {
     private final UserSettings users;
     private final Function<SessionId, String> dirs;
     private volatile java.util.function.Predicate<SessionId> offRecord = session -> false;
+    private volatile java.util.function.Function<SessionId, tantalum.value.task.Tasks> tasks = session -> tantalum.value.task.Tasks.NONE;
     private final SkillCatalog skills;
 
     /**
@@ -138,9 +139,36 @@ public final class ContextHandler implements Handler {
         return this;
     }
 
+    /** 查会话上任务的那一块（放出去还没回来的、是不是为任务开的）；不设时都没有。 */
+    public ContextHandler tasks(java.util.function.Function<SessionId, tantalum.value.task.Tasks> lookup) {
+        this.tasks = lookup;
+        return this;
+    }
+
+    /** 给为任务开的会话的固定说明：它只做这一件事，交回去的只有最后一条回答。 */
+    static final String TASK_NOTE = """
+            ## This is a task
+            Another agent handed you this piece of work and went on with something else. You start with nothing but the             message below: you do not see the conversation it came from, and you cannot ask the agent that sent it.             Do the work with the tools you have. Only your last message goes back, so end with the result itself:             what you found or did, where (paths, names), and anything you could not do or are unsure of.             Do not address the user: your reader is the agent that sent this.""";
+
+    /** 段名：放出去还没回来的任务。 */
+    static final String TASKS_TAG = "tasks";
+    static final String TASKS_HEADING = "Tasks you started that have not come back yet. Each result arrives in this conversation on its own, "
+            + "marked as the result of that task; there is nothing to check or wait for.";
+
+    static String tasksText(List<tantalum.value.task.OpenTask> open) {
+        StringBuilder text = new StringBuilder(TASKS_HEADING);
+        for (tantalum.value.task.OpenTask task : open) {
+            text.append("\n- ").append(task.id()).append(task.agent() == null ? "" : " (" + task.agent() + ")").append(": ")
+                    .append(task.brief()).append(" — started ").append(task.started());
+        }
+        return text.toString();
+    }
+
     @Override
     public Event handle(Command command) throws IOException, InterruptedException {
         Principal principal = command.run().principal();
+        tantalum.value.task.Tasks taskState = tasks.apply(command.run().session());
+        tantalum.value.task.TaskOrigin origin = taskState == null ? null : taskState.origin();
         List<ContextSection> sections = new ArrayList<>();
         String shared = knowledge.text();
         if (!shared.isEmpty()) {
@@ -203,9 +231,19 @@ public final class ContextHandler implements Handler {
         StringBuilder system = new StringBuilder(basePrompt);
         contributions.forEach(contribution -> append(system, contribution.fixedText() == null ? "" : contribution.fixedText().strip()));
         append(system, fixedNote);
-        boolean main = MainWindow.is(command.run().session());
+        // 为任务开的会话不是主窗口，哪怕放出它的是主窗口（它的编号以主窗口的编号开头）
+        boolean main = origin == null && MainWindow.is(command.run().session());
         if (main) {
             append(system, MainWindow.NOTE);
+        }
+        if (origin != null) {
+            append(system, TASK_NOTE);
+            if (origin.instructions() != null && !origin.instructions().isBlank()) {
+                append(system, origin.instructions().strip());
+            }
+        } else if (taskState != null && !taskState.open().isEmpty()) {
+            // 按行比较：放出一个、回来一个，只把变的那一行告诉模型；压缩之后模型仍然知道外面有什么
+            sections.add(new ContextSection(TASKS_TAG, escape(tasksText(taskState.open())), true));
         }
         // 今天的日期（2026-11-16 记忆评测：模型不知道今天几号，“三天前”只能猜，反复搜到超时）：只写到日期，一天才变一次。
         // 它是一段（排在各段最前面），不写进固定部分：内核把固定部分定在第一次组装时，写在那里的话跨了天的会话日期不会变；
@@ -235,6 +273,17 @@ public final class ContextHandler implements Handler {
         if (!routes.describe(model).map(ModelInfo::toolChanges).orElse(true)) {
             java.util.Set<String> open = new java.util.HashSet<>(enabled);
             specs = specs.stream().filter(spec -> open.contains(spec.name())).toList();
+        }
+        if (origin != null) {
+            // 任务里没有的工具（再放任务、写记忆、加工作区）和 agent 定义没列的工具，都不进这个会话的工具表
+            java.util.Set<String> allowed = new java.util.HashSet<>();
+            for (tantalum.shell.plugin.Tool tool : catalog.tools()) {
+                if (tool.inTasks() && (origin.tools() == null || origin.tools().contains(tool.name()))) {
+                    allowed.add(tool.name());
+                }
+            }
+            enabled = enabled.stream().filter(allowed::contains).toList();
+            specs = specs.stream().filter(spec -> allowed.contains(spec.name())).toList();
         }
         CompactionSettings settings = compaction(principal, model);
         if (main && settings != null) {

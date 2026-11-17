@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import tantalum.kernel.table.StepContext;
+import tantalum.value.command.AbortCommands;
 import tantalum.value.command.ReturnTask;
 import tantalum.value.command.StartTask;
 import tantalum.value.command.StartTimer;
@@ -158,13 +160,23 @@ public final class TaskSteps {
 
     /** 为任务开的那一轮结束了：在同一步里把结果交回去。{@code RunEnd.finish} 是运行唯一的出口，所以每个任务的这一轮恰好交一次。 */
     static void returned(Outcome out, RunState run, OwnerRef.OfTask owner, EndReason reason, String detail) {
-        TaskOutcome outcome = switch (reason) {
+        TaskOutcome outcome = outcomeOf(reason, detail);
+        out.emit(new ReturnTask(out.nextCommandId(), run.ref(), owner.parent(), owner.task(), outcome,
+                textOf(outcome, out.session(run.ref()), detail)));
+    }
+
+    /** 任务那一轮怎么结束，任务就是什么结局。启动时的核对补发结果时用同一张表。 */
+    public static TaskOutcome outcomeOf(EndReason reason, String detail) {
+        return switch (reason) {
             case COMPLETED -> TaskOutcome.COMPLETED;
             case FAILED, STOPPED -> TaskOutcome.FAILED;
             case CANCELLED -> CancelSteps.INTERRUPTED_BY_RESTART.equals(detail) ? TaskOutcome.INTERRUPTED : TaskOutcome.STOPPED;
         };
-        String text = outcome == TaskOutcome.COMPLETED ? lastAnswer(out.session(run.ref())) : detail;
-        out.emit(new ReturnTask(out.nextCommandId(), run.ref(), owner.parent(), owner.task(), outcome, text));
+    }
+
+    /** 交回的文字：完成时是最后的回答，否则是结束的详情。 */
+    public static String textOf(TaskOutcome outcome, SessionState session, String detail) {
+        return outcome == TaskOutcome.COMPLETED ? lastAnswer(session) : detail;
     }
 
     /** 最后一条助手消息里的文字；过程不带回。 */
@@ -196,7 +208,10 @@ public final class TaskSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        settled(out, session, event.task(), event.outcome(), event.text());
+        OpenTask task = session.tasks().find(event.task()).orElseThrow();
+        RunRef ref = settled(out, session, event.task(), event.outcome(), event.text());
+        // 期限的定时器不用再等了：让它停下。它要是已经到了，迟到的那一下在名单里找不到任务，不生效
+        out.emit(new AbortCommands(out.nextCommandId(), ref, Set.of(task.timer())));
         return out.decision();
     }
 

@@ -27,6 +27,10 @@ final class IndexBatch {
         String dir;
         /** “不进记忆”的会话（memory-final-plan 第 11 节）。 */
         boolean offRecord;
+        /** 为任务开的会话：放出它的会话；不是为 null。 */
+        String parent;
+        /** 放出去还没回来的任务，写进索引的样子（{@link SessionIndex#encode}）。 */
+        String tasks = "";
         /** 这一批里最后一次改名；没改为 null，空串表示恢复自动标题。 */
         String rename;
         long lastSeq;
@@ -67,6 +71,10 @@ final class IndexBatch {
             row.dir = change.dir();
         }
         row.offRecord |= change.offRecord();
+        if (change.parent() != null) {
+            row.parent = change.parent();
+        }
+        row.tasks = SessionIndex.encode(change.tasks());
         row.runStatus = change.runStatus();
         row.activeRun = change.activeRun();
         row.answerDeadline = change.answerDeadline();

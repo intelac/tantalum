@@ -37,6 +37,9 @@ public final class TaskStopTool implements Tool {
 
     @Override public ToolDispatch dispatch() { return DISPATCH; }
 
+    /** 只有一层：任务不能再放任务。内核也拦着。 */
+    @Override public boolean inTasks() { return false; }
+
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {
         throw new IllegalStateException("task_stop is handled by the kernel, not by the tool handler");

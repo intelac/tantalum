@@ -43,7 +43,10 @@ import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
+import tantalum.value.command.ReturnTask;
+import tantalum.value.command.StartTask;
 import tantalum.value.command.StartTimer;
+import tantalum.value.command.StopTask;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -81,12 +84,15 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         opened.add(deadlines);
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
+        // 任务的三条命令都是往别的会话放事件，同一个处理器
+        Handler tasks = new tantalum.shell.handler.TaskHandler(clock, input::tryPublish, tantalum.shell.handler.Agents.NONE);
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
                         session -> dirOf(queries.view().current(), session), toolbox.skillCatalog())
                         .offRecord(session -> offRecordOf(queries.view().current(), session))
+                        .tasks(session -> tasksOf(queries.view().current(), session))
                         .mainWindowTokens(properties.mainWindowTokens())
                         .clock(clock)
                         .workspaces(new ContextHandler.Workspaces() {
@@ -145,7 +151,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
                         session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
-                StartTimer.class, new TimerHandler());
+                StartTimer.class, new TimerHandler(),
+                StartTask.class, tasks, ReturnTask.class, tasks, StopTask.class, tasks);
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);
         OutputRing output = new OutputRing(loop.outputRingSize(), handlers);
         Evictor evictor = new Evictor(properties.residency(), residency, queries.projections(), clock, storage.files::forget);
@@ -191,6 +198,11 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
 
     /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
     /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
+    static tantalum.value.task.Tasks tasksOf(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? tantalum.value.task.Tasks.NONE : found.tasks();
+    }
+
     static boolean offRecordOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found != null && found.offRecord();

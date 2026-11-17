@@ -303,8 +303,8 @@ class TaskStepsTest {
         List<OpenTask> open = loop.session().tasks().open();
         done(loop, "two are out");
 
-        loop.feed(null, new TaskEnded(open.get(0).id(), TaskOutcome.COMPLETED, "one done"));
-        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        Decision first = loop.feed(null, new TaskEnded(open.get(0).id(), TaskOutcome.COMPLETED, "one done"));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(only(first, tantalum.value.command.AssembleContext.class).id(), "s", List.of(), null, List.of()));
         done(loop, "noted");
         RunId last = loop.session().lastRun();
 
@@ -312,7 +312,9 @@ class TaskStepsTest {
 
         assertNull(loop.session().activeRun());
         assertEquals(last, loop.session().lastRun());
-        assertTrue(paused.commands().isEmpty());
+        // 没有开运行：唯一的命令是撤掉这个任务期限的定时器
+        assertEquals(List.of(open.get(1).timer()), paused.commands().stream()
+                .flatMap(command -> ((tantalum.value.command.AbortCommands) command).commands().stream()).toList());
         assertEquals(List.of(new TaskResultBlock(open.get(1).id(), TaskOutcome.COMPLETED, "two done")),
                 loop.session().messages().getLast().content());
         assertTrue(paused.facts().stream().anyMatch(fact -> fact instanceof TaskSettled settled && settled.paused()));

@@ -146,6 +146,7 @@ public final class Engine implements AutoCloseable {
             } catch (SQLException failure) {
                 throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
             }
+            recoverTasks();
         } catch (RuntimeException failure) {
             // 环已经起来了：按正常关机的顺序关，线程、文件锁、数据库都放掉
             try {
@@ -355,6 +356,40 @@ public final class Engine implements AutoCloseable {
             throw new IllegalStateException("interrupted while closing the runs left unfinished by the previous process", stopping);
         }
         return unfinished.size();
+    }
+
+    /**
+     * 放出去还没回来的任务在开门前核对一遍（{@link tantalum.shell.loop.TaskRecovery}）：没送到的、结束了没送回的补发结果，
+     * 还在跑的重新起期限的定时器。在收尾没结束的运行之后做，那时任务自己的那一轮已经是结束的了。
+     */
+    private void recoverTasks() {
+        try {
+            List<tantalum.shell.loop.TaskRecovery.Outstanding> outstanding = stores.storage().index.outstandingTasks();
+            if (outstanding.isEmpty()) {
+                return;
+            }
+            tantalum.shell.loop.TaskRecovery.Plan plan = tantalum.shell.loop.TaskRecovery.plan(outstanding,
+                    (user, child) -> queries.queries().session(user, child)
+                            .map(view -> new tantalum.shell.loop.TaskRecovery.Child(view.state(), view.runs())).orElse(null),
+                    clock.instant());
+            long deadline = System.nanoTime() + DRAIN.toNanos();
+            for (EventEnvelope envelope : plan.settle()) {
+                while (!pipeline.input().tryPublish(envelope)) {
+                    if (pipeline.input().broken() || System.nanoTime() - deadline > 0) {
+                        throw new IllegalStateException("the input ring did not accept the results of the tasks left by the previous process");
+                    }
+                    Thread.sleep(INTERRUPT_RETRY.toMillis());
+                }
+            }
+            pipeline.deadlines().arm(plan.rearm());
+            LOG.info("{} task(s) left by the previous process: {} given a result, {} still running", outstanding.size(),
+                    plan.settle().size(), plan.rearm().size());
+        } catch (SQLException failure) {
+            throw new IllegalStateException("cannot read the tasks left by the previous process", failure);
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while settling the tasks left by the previous process", stopping);
+        }
     }
 
     /**

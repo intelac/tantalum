@@ -26,6 +26,9 @@ public final class MemoryWriteTool implements Tool {
     static final String NAME = "memory_write";
 
     @Override public String name() { return NAME; }
+
+    /** 写这个人的记忆只在人在场的对话里做：任务里说的话不是用户说的。 */
+    @Override public boolean inTasks() { return false; }
     @Override public String description() {
         return "Save a long-term memory for this user (new, or overwrite the entry with the same name). "
                 + "name: [a-z0-9-]; type: " + MemoryType.keys() + "; description: one line shown in the index; content: Markdown body.";

@@ -26,6 +26,9 @@ public final class MemoryDeleteTool implements Tool {
     static final String NAME = "memory_delete";
 
     @Override public String name() { return NAME; }
+
+    /** 忘掉记忆只在人在场的对话里做。 */
+    @Override public boolean inTasks() { return false; }
     @Override public String description() {
         return "Forget something. name: delete a whole memory entry. text: forget one thing the user said or no longer wants (give the "
                 + "statement itself, in the user's words); it is removed from every entry, note and working memory and is not brought "

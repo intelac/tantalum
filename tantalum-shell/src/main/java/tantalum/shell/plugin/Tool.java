@@ -47,6 +47,14 @@ public interface Tool {
         return ToolDispatch.of(this);
     }
 
+    /**
+     * 为任务开的会话里有没有这个工具（任务：一个会话放给另一个 agent 去做的一件事）。默认有。
+     * 只该由人在场的对话来做的事返回 false：记进这个人的记忆、登记工作区、再放出任务。
+     */
+    default boolean inTasks() {
+        return true;
+    }
+
     /** 在虚拟线程上执行，要响应中断。抛异常等同于错误结果。 */
     ToolOutput run(ToolContext context, Json arguments) throws Exception;
 }

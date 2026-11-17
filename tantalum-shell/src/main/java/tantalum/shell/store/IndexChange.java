@@ -2,6 +2,7 @@ package tantalum.shell.store;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.time.ZoneOffset;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.event.EventEnvelope;
@@ -26,6 +27,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.SessionState;
+import tantalum.value.task.OpenTask;
 
 /**
  * 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。
@@ -34,7 +36,8 @@ import tantalum.value.state.SessionState;
  */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord) {
+                          Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord,
+                          String parent, List<OpenTask> tasks) {
 
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
@@ -71,7 +74,8 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 timed == null ? null : timed.question().deadline(), timed == null ? null : timed.timer(),
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
-                        ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()));
+                        ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()),
+                parent(after, envelope.session()), tasks(after, envelope.session()));
     }
 
     /** 一次工具调用的结果：“工具名: 结果”（截短、遮盖密钥）；找不到是哪个工具时只有结果。 */
@@ -115,6 +119,18 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
     private static boolean offRecord(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found != null && found.offRecord();
+    }
+
+    /** 为任务开的会话：放出它的会话；不是为 null。侧栏和会话清单据此不列它。 */
+    private static String parent(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null || found.tasks().origin() == null ? null : found.tasks().origin().parent().value();
+    }
+
+    /** 这个会话放出去还没回来的任务：启动时据此核对、重新起期限的定时器。 */
+    private static List<OpenTask> tasks(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? List.of() : found.tasks().open();
     }
 
     private static String dir(KernelState state, SessionId session) {
