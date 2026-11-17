@@ -53,17 +53,26 @@ public final class RecallHook implements KernelHook {
         if (!remembers) {
             return Allow.PLAIN;
         }
-        Message last = session.messages().getLast();
+        // 问题后面可能跟着内核写的说明（上下文某一段变了、工具变了、换了模型）：那些不是用户说的，跳过去找问题本身。
+        // 不跳的话，拿去找记忆的就是那条说明，这一轮什么也想不起来
+        List<Message> messages = session.messages();
+        int at = messages.size() - 1;
+        while (at >= 0 && written(messages.get(at))) {
+            at--;
+        }
+        if (at < 0) {
+            return Allow.PLAIN;
+        }
+        Message last = messages.get(at);
         String question = textOf(last);
         if (last.role() != Role.USER || question.isBlank() || question.startsWith("<" + RecallText.TAG + ">")) {
             return Allow.PLAIN;
         }
         List<Json> recent = new ArrayList<>();
-        List<Message> messages = session.messages();
-        for (int i = messages.size() - 2; i >= 0 && recent.size() < 2; i--) {
+        for (int i = at - 1; i >= 0 && recent.size() < 2; i--) {
             Message earlier = messages.get(i);
             String said = textOf(earlier);
-            if (earlier.role() == Role.USER && !said.isBlank() && !said.startsWith("<" + RecallText.TAG + ">")) {
+            if (earlier.role() == Role.USER && !written(earlier) && !said.isBlank() && !said.startsWith("<" + RecallText.TAG + ">")) {
                 recent.add(0, new Json.Str(said.length() > 500 ? said.substring(0, 500) : said));
             }
         }
@@ -74,6 +83,12 @@ public final class RecallHook implements KernelHook {
             input.put("dir", new Json.Str(session.dir()));
         }
         return new NeedWork(RecallWork.TYPE, new Json.Obj(input));
+    }
+
+    /** 内核写的说明，不是谁说的话：上下文更新（用户消息，固定开头）、系统消息（工具变化、钩子说明、换模型）。 */
+    private static boolean written(Message message) {
+        return message.role() == Role.SYSTEM
+                || message.role() == Role.USER && tantalum.value.model.SystemUpdates.isContextUpdate(textOf(message));
     }
 
     private static String textOf(Message message) {
