@@ -85,10 +85,14 @@ public final class RecallHook implements KernelHook {
         return new NeedWork(RecallWork.TYPE, new Json.Obj(input));
     }
 
-    /** 内核写的说明，不是谁说的话：上下文更新（用户消息，固定开头）、系统消息（工具变化、钩子说明、换模型）。 */
+    /**
+     * 不是用户说的话：系统消息（工具变化、钩子说明、换模型）、上下文更新（用户角色的消息，固定开头）、
+     * 任务的结果（用户角色的消息，按内容块的类型认）。拿来找记忆的只能是用户自己的问题。
+     */
     private static boolean written(Message message) {
         return message.role() == Role.SYSTEM
-                || message.role() == Role.USER && tantalum.value.model.SystemUpdates.isContextUpdate(textOf(message));
+                || message.role() == Role.USER && (tantalum.value.model.SystemUpdates.isContextUpdate(textOf(message))
+                        || message.content().stream().anyMatch(tantalum.value.model.TaskResultBlock.class::isInstance));
     }
 
     private static String textOf(Message message) {

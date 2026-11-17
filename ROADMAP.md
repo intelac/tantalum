@@ -34,7 +34,7 @@ Once the wiki exists, letting the agent exist beyond a user's prompt needs only 
 
 - **External events**: a new event `Trigger(source, actor, payload)` that goes through the same pipeline and the same journal as a user prompt; code filters first (allow lists, team rules), then the model judges.
 - **A system identity**: whom the agent acts as when nobody asked. Always bound to one user; team-level matters go through the team wiki and administrator rules; no global agent.
-- **Delegation**: a run can start a run in another session and either wait for the result (like a tool call) or not (the report arrives later as an event). This is what is usually called a subagent; here it is an ownership relation, not a new entity.
+- **Tasks** (done): a run can hand a piece of work to a session opened only for it and go on; the result arrives later as an event, into the current run or starting a run that no person started. This is what is usually called a subagent; here it is an ownership relation and one more kind of input event, not a new entity and not a new waiting state. See “任务” in the manual.
 
 On screen: one main window, long work moved into "topics" automatically, externally triggered work tagged with its source, and nothing on screen while the agent is idle.
 
@@ -46,7 +46,7 @@ The direction DeepSeek describes in *Exploring Super-agent Design* and the [dsh-
 
 - First event source: **GitHub** (issues, comments, CI results), pointed at Tantalum's own repository to take on work and open pull requests, so it validates itself.
 - Allow lists, team rules, and an **observe mode** that first records what it would have taken on.
-- Router dispatches, workers run in parallel: here that is non-waiting delegation with a restricted tool set; the watchdog is a timer plus timeouts.
+- Router dispatches, workers run in parallel: here that is tasks with a restricted tool set; the watchdog is a timer plus timeouts.
 - Chat sources such as Feishu come later.
 
 ## 4. Timers and watchdog

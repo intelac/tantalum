@@ -126,10 +126,12 @@ public final class Engine implements AutoCloseable {
                         return "";
                     }
                 }, tool -> toolbox.catalog().find(tool).map(Tool::plugin).orElse(null),
-                // 不进记忆的会话（memory-final-plan 第 11 节）：会话可能已经移出内存，按查询读；读不到时当作不进记忆，宁可少记
+                // 不进记忆的会话（memory-final-plan 第 11 节）：会话可能已经移出内存，按查询读；读不到时当作不进记忆，宁可少记。
+                // 为任务开的会话也不通知个人插件（subagent 需求 9.1）：那里面说话的是另一个 agent，不是这个人
                 (user, session) -> {
                     try {
-                        return queries.queries().session(user, session).map(view -> view.state().offRecord()).orElse(true);
+                        return queries.queries().session(user, session)
+                                .map(view -> view.state().offRecord() || view.state().tasks().origin() != null).orElse(true);
                     } catch (RuntimeException unreadable) {
                         return true;
                     }

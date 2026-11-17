@@ -46,6 +46,9 @@ const SAME_IN_JA = new Set([
   "process.content",
   "process.thinking",
   "composer.stop",
+  // 「停止」「中断」日文和中文写法相同
+  "tasks.stop",
+  "tasks.outcome.INTERRUPTED",
   "projects.save",
   "composer.queue.save",
   "plugins.params.save",

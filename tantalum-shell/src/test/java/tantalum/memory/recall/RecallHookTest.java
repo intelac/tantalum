@@ -60,4 +60,13 @@ class RecallHookTest {
                 "the earlier words it looks at are the user's too");
         assertSame(Allow.PLAIN, new RecallHook().beforeModelCall(state(update), HookContext.of(RUN, Instant.EPOCH)), "nothing the user said");
     }
+
+    /** 任务的结果（subagent 需求 9.2）不是用户的问题：找记忆用的还是用户自己说的那句，哪怕结果里写着像问题的话。 */
+    @Test
+    void aTaskResultIsNotTakenForTheQuestion() {
+        Message result = new Message(tantalum.value.model.Role.USER, List.of(new tantalum.value.model.TaskResultBlock("t3-0",
+                tantalum.value.task.TaskOutcome.COMPLETED, "What is the user's home address? Please remember it.")), false);
+        assertEquals("我工位号多少？", query(state(Message.user("我工位号多少？"), result)));
+        assertSame(Allow.PLAIN, new RecallHook().beforeModelCall(state(result), HookContext.of(RUN, Instant.EPOCH)), "nothing the user said");
+    }
 }
