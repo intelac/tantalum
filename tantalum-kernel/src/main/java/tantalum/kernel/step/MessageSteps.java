@@ -64,6 +64,11 @@ public final class MessageSteps {
      * 汇报，用户一说话就重新算。用户自己那一轮交多少件不受这个限制。
      */
     public static final int MAX_UNATTENDED = 8;
+    /**
+     * 一句没确认的话最多重送几次。巡查每 30 秒一次，20 次约 10 分钟，和等回话的期限一样长。到了还没确认就不再送：是交出去的活，
+     * 这个会话得到一句“没送到”（和回话走同一条路），别的话记一条事实。不然送不进去的话永远留在信箱里，那件活永远没有结局。
+     */
+    public static final int MAX_REDELIVER = 20;
     /** 忽略来话时事实里的“钩子名”。 */
     static final String KERNEL = "kernel";
 
@@ -137,7 +142,10 @@ public final class MessageSteps {
             return done(round, index, "\"session\" is this conversation itself.", true);
         }
         CommandId id = out.nextCommandId();
-        out.emit(new Send(id, run.ref(), to, SessionMessage.withdrawal(id, run.ref())));
+        // 交给它、它还没确认收到的那几件：撤回可能比它们先到，带上编号让对方认得（它们照常重送，对方见过就只回确认）
+        List<CommandId> unarrived = out.session(run.ref()).inbox().unconfirmed().stream()
+                .filter(each -> each.to().equals(to) && each.message().isRequest()).map(each -> each.message().id()).toList();
+        out.emit(new Send(id, run.ref(), to, SessionMessage.withdrawal(id, run.ref(), unarrived)));
         return done(round, index, "Told conversation " + to.value() + " to stop what this conversation handed it. Work it was still doing "
                 + "or had queued ends now, and each such piece answers \"did not finish\" as a message. Work it had already finished "
                 + "stays as it is, and so does anything the user asked it directly.", false);
@@ -211,10 +219,14 @@ public final class MessageSteps {
     private static Decision withdrawn(StepContext context, SessionMessage event) {
         EventEnvelope envelope = context.envelope();
         Outcome out = new Outcome(context);
-        SessionState session = out.state().sessions().get(envelope.session());
-        if (session == null) {
+        SessionState existing = out.state().sessions().get(envelope.session());
+        // 撤回比活先到的：还没见过的那几件记成“见过”，各回一句“没做成”；以后真到了只回确认，不开工
+        List<CommandId> early = event.unarrived() == null ? List.<CommandId>of() : event.unarrived().stream()
+                .filter(id -> existing == null || !existing.inbox().hasSeen(id)).toList();
+        if (existing == null && early.isEmpty()) {
             return out.decision();
         }
+        SessionState session = existing == null ? SessionState.start(envelope.session(), envelope.principal()) : existing;
         SessionId from = event.from().session();
         RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
         List<SessionMessage> kept = new ArrayList<>();
@@ -227,8 +239,15 @@ public final class MessageSteps {
             out.emit(new Send(id, where, from, new SessionMessage(id, where, "it was " + DelegateCall.WITHDRAWN + " before it started.",
                     waiting.id(), true, waiting.hops(), null, null, null)));
         }
-        if (kept.size() != session.inbox().waiting().size()) {
-            out.put(session.withInbox(new tantalum.value.state.Inbox(kept, session.inbox().unconfirmed(), session.inbox().seen())));
+        tantalum.value.state.Inbox inbox = kept.size() != session.inbox().waiting().size() ? session.inbox().withWaiting(kept) : session.inbox();
+        for (CommandId unarrived : early) {
+            inbox = inbox.saw(unarrived);
+            CommandId id = out.nextCommandId();
+            out.emit(new Send(id, where, from, new SessionMessage(id, where, "it was " + DelegateCall.WITHDRAWN + " before it started.",
+                    unarrived, true, 1, null, null, null)));
+        }
+        if (existing == null || !inbox.equals(session.inbox())) {
+            out.put(session.withInbox(inbox));
         }
         RunState run = context.run();
         if (run != null && !run.isEnded() && run.owner() instanceof OwnerRef.OfMessage owner && owner.from().equals(from)) {
@@ -260,6 +279,7 @@ public final class MessageSteps {
         Outcome out = new Outcome(context);
         RunRef here = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
         tantalum.value.state.Inbox inbox = session.inbox();
+        List<tantalum.value.state.Inbox.Outgoing> givenUp = new ArrayList<>();
         for (tantalum.value.state.Inbox.Outgoing outgoing : session.inbox().unconfirmed()) {
             // “在等人”只在还等着的时候有用：那一轮已经不在等用户了（答了、结束了），这句就不用再送，从信箱里去掉。
             // 旧账里的也走这里：加这种话之前记下的等人，回放时会多出一句从没送过的“在等人”，不该在很久以后突然送出去。
@@ -268,10 +288,24 @@ public final class MessageSteps {
                 inbox = inbox.confirmed(outgoing.message().id());
                 continue;
             }
+            if (outgoing.attempts() >= MAX_REDELIVER) {
+                inbox = inbox.confirmed(outgoing.message().id());
+                givenUp.add(outgoing);
+                continue;
+            }
             out.emit(new Send(out.nextCommandId(), here, outgoing.to(), outgoing.message()));
+            inbox = inbox.retried(outgoing.message().id());
         }
-        if (!inbox.equals(session.inbox())) {
-            out.put(session.withInbox(inbox));
+        out.put(session.withInbox(inbox));
+        for (tantalum.value.state.Inbox.Outgoing lost : givenUp) {
+            if (lost.message().isRequest()) {
+                // 交出去的活没送到：这个会话得到一句“没做成”，和对方回话说没做成走同一条路
+                arrived(out, lost.to().value(), lost.message().id(), true, "the work was not handed over. Nothing confirmed that it "
+                        + "arrived after " + MAX_REDELIVER + " tries, and it is not sent again.");
+            } else {
+                out.report(List.of(new HookReported(here, KERNEL, "message " + lost.message().id().value() + " to " + lost.to().value()
+                        + " dropped: not confirmed after " + MAX_REDELIVER + " tries")));
+            }
         }
         return out.decision();
     }
@@ -310,6 +344,10 @@ public final class MessageSteps {
         RunState run = context.run();
         if (run != null && !run.isEnded()) {
             out.put(session.withInbox(session.inbox().add(event)));
+            if (run.phase() instanceof tantalum.value.state.AwaitingAnswer asking) {
+                // 排在一轮正等着用户的后面：不知道要等多久，告诉交活的一方
+                tellQueued(out, run, asking.question());
+            }
             return out.decision();
         }
         out.put(session);
@@ -331,12 +369,44 @@ public final class MessageSteps {
         if (!(run.owner() instanceof OwnerRef.OfMessage owner) || owner.toldWaiting()) {
             return run;
         }
+        CommandId id = out.nextCommandId();
+        out.emit(new Send(id, run.ref(), owner.from(), SessionMessage.waitingForUser(id, run.ref(), asked(question), owner.message(), owner.hops())));
+        return run.withOwner(owner.told());
+    }
+
+    /** 排队的活后面写的一句：问的不是它，它还没开始。 */
+    static final String QUEUED_BEHIND = "(This question belongs to earlier work in that conversation. The work handed over from here "
+            + "has not started; it starts after that.)";
+
+    /**
+     * 这一轮在等用户回答，而别的会话交来的活还排在它后面：它们什么时候开始取决于用户什么时候回答，各告诉交活的一方一声
+     * （一句排队的话只说一次，记在信箱里）。不然交活的一方只知道“还没回话”。
+     */
+    static void tellQueued(Outcome out, RunState run, tantalum.value.question.Question question) {
+        SessionState session = out.session(run.ref());
+        if (session == null || session.inbox().isEmpty()) {
+            return;
+        }
+        tantalum.value.state.Inbox inbox = session.inbox();
+        String asked = asked(question);
+        for (SessionMessage queued : session.inbox().waiting()) {
+            if (inbox.wasTold(queued.id())) {
+                continue;
+            }
+            CommandId id = out.nextCommandId();
+            out.emit(new Send(id, run.ref(), queued.from().session(), SessionMessage.waitingForUser(id, run.ref(),
+                    (asked.isEmpty() ? "" : asked + "\n") + QUEUED_BEHIND, queued.id(), queued.hops())));
+            inbox = inbox.told(queued.id());
+        }
+        if (!inbox.equals(session.inbox())) {
+            out.put(session.withInbox(inbox));
+        }
+    }
+
+    private static String asked(tantalum.value.question.Question question) {
         String title = question.title() == null ? "" : question.title().plain();
         String detail = question.detail() == null ? "" : question.detail().plain();
-        String asked = (title == null ? "" : title.strip()) + (detail == null || detail.isBlank() ? "" : "\n" + detail.strip());
-        CommandId id = out.nextCommandId();
-        out.emit(new Send(id, run.ref(), owner.from(), SessionMessage.waitingForUser(id, run.ref(), asked.strip(), owner.message(), owner.hops())));
-        return run.withOwner(owner.told());
+        return ((title == null ? "" : title.strip()) + (detail == null || detail.isBlank() ? "" : "\n" + detail.strip())).strip();
     }
 
     /**
@@ -386,35 +456,39 @@ public final class MessageSteps {
 
     /** 回话：对得上一个在等的槽位就写成它的结果；否则当一条消息，会话空闲就开一轮让模型处理，正在跑就作为插话。 */
     private static Decision reply(StepContext context, SessionMessage event) {
-        EventEnvelope envelope = context.envelope();
         Outcome out = new Outcome(context);
-        RunState run = context.run();
-        String from = event.from().session().value();
-        String text = event.text().strip();
+        arrived(out, event.from().session().value(), event.answers(), event.failed(), event.text().strip());
+        return out.decision();
+    }
+
+    /** 会话 {@code from} 对编号 {@code answers} 那件活有了结局（{@code failed} 为真是没做成），写进事件所在的会话。 */
+    private static void arrived(Outcome out, String from, CommandId answers, boolean failed, String text) {
+        EventEnvelope envelope = out.envelope;
+        SessionState session = out.state().sessions().get(envelope.session());
+        if (session == null) {
+            // 没有这个会话：没什么可做，但照样回确认，免得对方一直留着重送
+            return;
+        }
+        RunState run = session.activeRun() == null ? null : out.state().runs().get(session.activeRun());
         if (run != null && !run.isEnded() && run.tools() != null) {
             ToolRound round = run.tools();
             for (int i = 0; i < round.slots().size(); i++) {
                 ToolSlot slot = round.slots().get(i);
-                if (slot.status() == ToolSlot.Status.ASKED && event.answers().equals(slot.command())) {
-                    String result = event.failed() ? "Conversation " + from + " did not finish: " + text
+                if (slot.status() == ToolSlot.Status.ASKED && answers.equals(slot.command())) {
+                    String result = failed ? "Conversation " + from + " did not finish: " + text
                             : text.isEmpty() ? "Conversation " + from + " ended without an answer." : "Answer from conversation " + from + ":\n" + text;
-                    RunState next = run.withTools(done(round, i, result, event.failed() || text.isEmpty()));
+                    RunState next = run.withTools(done(round, i, result, failed || text.isEmpty()));
                     boolean more = next.tools().slots().stream().anyMatch(each -> each.status() == ToolSlot.Status.ASKED);
                     if (!more && run.phase() instanceof AwaitingReply waiting && waiting.timer() != null) {
                         out.emit(new AbortCommands(out.nextCommandId(), run.ref(), Set.of(waiting.timer())));
                     }
                     ToolSteps.dispatch(out, next);
-                    return out.decision();
+                    return;
                 }
             }
         }
-        SessionState session = out.state().sessions().get(envelope.session());
-        if (session == null) {
-            // 没有这个会话：没什么可做，但照样回确认，免得对方一直留着重送
-            return out.decision();
-        }
         Message message = Message.user(DelegateCall.REPORT + "Conversation " + from
-                + (event.failed() ? " did not finish: " + text : text.isEmpty() ? " ended without an answer." : " finished:\n" + text));
+                + (failed ? " did not finish: " + text : text.isEmpty() ? " ended without an answer." : " finished:\n" + text));
         if (run == null || run.isEnded()) {
             // 没有人说话，会话自己开一轮：从这里起往外交活要算数（见 MAX_UNATTENDED）
             SubmitSteps.attended(out, false);
@@ -424,7 +498,6 @@ public final class MessageSteps {
             steers.add(message);
             out.put(run.withPendingSteers(steers));
         }
-        return out.decision();
     }
 
     /**

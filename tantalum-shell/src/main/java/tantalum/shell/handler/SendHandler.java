@@ -72,7 +72,7 @@ public final class SendHandler implements Handler {
             return null;
         }
         if (whose != MINE) {
-            // 一时查不了归属：不送。话还记在送的会话的信箱里，重启后重送
+            // 一时查不了归属：不送。话还记在送的会话的信箱里，巡查会重送；重送到上限还没确认，内核放弃并告诉那个会话
             return null;
         }
         deliver(command.run().principal(), to, event);

@@ -802,4 +802,142 @@ class MessageStepsTest {
         assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), world.last.commands().toString());
         assertTrue(world.session(b).inbox().unconfirmed().isEmpty());
     }
+
+    /**
+     * 活排在一轮正等着用户的后面：交活的一方得知道，不然只是“还没回话”。到的时候那一轮已经在等、或者排着队时那一轮才停下来问，
+     * 都说；一句排队的话只说一次。
+     */
+    @Test
+    void workQueuedBehindATurnThatWaitsForTheUserSaysSo() {
+        World world = new World();
+        SessionId b = new SessionId("b");
+        CallModel own = world.ask(b, "tidy up");
+        world.reply(b, own, question("q1", "Delete build/?"));
+        assertEquals(tantalum.value.state.AwaitingAnswer.NAME, world.run(b).phase().name());
+
+        // 到的时候那一轮已经在等用户
+        CallModel call = world.ask(A, "count");
+        world.reply(A, call, delegate("c1", "count the files", true, b.value()));
+        Send sent = world.only(Send.class);
+        world.deliver(sent);
+        assertEquals(1, world.session(b).inbox().waiting().size(), "queued");
+        Send told = world.only(Send.class);
+        assertTrue(told.message().isWaitingForUser());
+        assertEquals(A, told.to());
+        assertEquals(sent.message().id(), told.message().answers());
+        assertTrue(told.message().text().startsWith("Delete build/?") && told.message().text().contains("has not started"), told.message().text());
+        world.deliver(told);
+        assertTrue(results(world, A).getFirst().text().contains("has not started"), results(world, A).getFirst().text());
+        assertFalse(world.run(A).phase() instanceof AwaitingReply, "A goes on and can tell the user");
+
+        // 用户答了，那一轮又问一次：排着的那句不说第二遍
+        world.feed(b, world.run(b).ref().run(), new tantalum.value.event.Answered(new SubmissionId("ans1"), new RequestId("r-ans1"),
+                "ask-q1", new tantalum.value.question.Answer(null, "yes")));
+        world.reply(b, world.only(CallModel.class), question("q2", "And the cache?"));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "told once");
+
+        // 排着队时那一轮才停下来问：也说
+        World later = new World();
+        CallModel busy = later.ask(b, "tidy up");
+        CallModel from = later.ask(A, "count");
+        later.reply(A, from, delegate("c1", "count the files", false, b.value()));
+        Send queued = later.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        later.deliver(queued);
+        assertTrue(later.last.commands().stream().noneMatch(Send.class::isInstance), "nothing to say while it is just busy");
+        later.reply(b, busy, question("q1", "Delete build/?"));
+        Send notice = later.only(Send.class);
+        assertTrue(notice.message().isWaitingForUser());
+        assertEquals(queued.message().id(), notice.message().answers());
+
+        // 那一轮结束，排着的活开始：信箱里“说过了”的记号跟着去掉
+        later.feed(b, later.run(b).ref().run(), new tantalum.value.event.Answered(new SubmissionId("ans"), new RequestId("r-ans"),
+                "ask-q1", new tantalum.value.question.Answer(null, "yes")));
+        later.reply(b, later.only(CallModel.class), new TextBlock("tidied"));
+        assertInstanceOf(OwnerRef.OfMessage.class, later.run(b).owner());
+        assertTrue(later.session(b).inbox().told().isEmpty());
+    }
+
+    /** 撤回比活先到（活第一次没送到）：撤回带着没确认的编号，对方记成见过并回一句“没做成”；活后来到了不开工，只回确认。 */
+    @Test
+    void takingBackAlsoCoversWorkThatHasNotArrivedYet() {
+        World world = new World();
+        CallModel call = world.ask(A, "start");
+        world.reply(A, call, delegate("c1", "long job", false, null));
+        Send job = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        SessionId b = job.to();
+        // 这句没送到。A 接着撤回
+        world.reply(A, world.only(CallModel.class), stop("c2", b.value()));
+        Send back = world.only(Send.class);
+        assertEquals(List.of(job.id()), back.message().unarrived());
+
+        world.deliver(back);
+        List<Send> answers = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).toList();
+        assertEquals(1, answers.size(), "one answer for the piece that never started");
+        assertEquals(job.id(), answers.getFirst().message().answers());
+        assertTrue(answers.getFirst().message().failed() && answers.getFirst().message().text().contains("before it started"));
+
+        // 活后来补送到了：不开工，只回确认
+        int runs = world.state.runs().size();
+        world.deliver(job);
+        assertEquals(runs, world.state.runs().size(), "it does not start");
+        assertTrue(world.session(b).messages().isEmpty());
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "and does not answer twice");
+        assertEquals(job.id(), world.only(tantalum.value.command.Confirm.class).message());
+
+        // 已经到了的照旧：不重复回话
+        World arrived = new World();
+        CallModel first = arrived.ask(A, "start");
+        arrived.reply(A, first, delegate("c1", "long job", false, null));
+        Send sent = arrived.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        CallModel next = arrived.only(CallModel.class);
+        arrived.deliver(sent);   // 到了，确认还没回到 A
+        arrived.reply(A, next, stop("c2", sent.to().value()));
+        arrived.deliver(arrived.only(Send.class));
+        List<Send> once = arrived.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).toList();
+        assertEquals(1, once.size(), once.toString());
+        assertTrue(once.getFirst().message().text().startsWith("it was cancelled"), once.getFirst().message().text());
+    }
+
+    /** 一直没确认的话不是永远重送：到了次数就放弃。交出去的活，这个会话得到一句“没送到”；别的话记一条事实。 */
+    @Test
+    void aMessageThatIsNeverConfirmedIsGivenUpAndTheConversationIsTold() {
+        World world = new World();
+        CallModel call = world.ask(A, "start");
+        world.reply(A, call, delegate("c1", "long job", false, null));
+        Send job = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        world.reply(A, world.only(CallModel.class), new TextBlock("started"));
+        for (int i = 0; i < MessageSteps.MAX_REDELIVER; i++) {
+            world.feed(A, null, new tantalum.value.event.Redeliver());
+            assertEquals(job.id(), world.only(Send.class).message().id(), "try " + i);
+        }
+        world.feed(A, null, new tantalum.value.event.Redeliver());
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "not sent again");
+        assertTrue(world.session(A).inbox().unconfirmed().isEmpty());
+        world.assembled(A, world.only(AssembleContext.class));
+        assertTrue(lastText(world, A).startsWith(DelegateCall.REPORT) && lastText(world, A).contains("was not handed over"), lastText(world, A));
+        KernelState before = world.state;
+        world.feed(A, null, new tantalum.value.event.Redeliver());
+        assertEquals(before, world.state, "nothing left");
+
+        // 等着回话的那种：那次调用得到“没做成”，这一轮接着走
+        World waits = new World();
+        Send asked = asked(waits);
+        for (int i = 0; i <= MessageSteps.MAX_REDELIVER; i++) {
+            waits.feed(A, null, new tantalum.value.event.Redeliver());
+        }
+        assertTrue(results(waits, A).getFirst().error() && results(waits, A).getFirst().text().contains("was not handed over"),
+                results(waits, A).getFirst().text());
+        assertFalse(waits.run(A).phase() instanceof AwaitingReply);
+        assertNotNull(asked);
+
+        // 回话送不到：记一条事实，不再送
+        World answer = new World();
+        Send sent = asked(answer);
+        Send reply = finishes(answer, sent, "42");
+        for (int i = 0; i <= MessageSteps.MAX_REDELIVER; i++) {
+            answer.feed(sent.to(), null, new tantalum.value.event.Redeliver());
+        }
+        assertTrue(answer.session(sent.to()).inbox().unconfirmed().isEmpty());
+        assertTrue(answer.last.facts().stream().anyMatch(fact -> fact.toString().contains(reply.id().value())), answer.last.facts().toString());
+    }
 }

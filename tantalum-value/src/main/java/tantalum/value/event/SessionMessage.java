@@ -1,5 +1,6 @@
 package tantalum.value.event;
 
+import java.util.List;
 import java.util.Objects;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.RunRef;
@@ -20,14 +21,16 @@ import tantalum.value.model.ModelChoice;
  * <p>
  * 第三种话是撤回（{@code withdraw} 为真，平时为空）：{@code from} 那个会话说“我交给你的活不要了”。收到的会话把那个会话交来的、
  * 还在做或还在排队的活停下，每一件照常回一句“没做成”，所以每件交出去的活仍然恰好有一句回话；已经做完的不受影响。
- * 撤回本身没有回话。只有交活的那个会话能撤回自己交的。
+ * 撤回本身没有回话。只有交活的那个会话能撤回自己交的。撤回带着 {@code unarrived}：交出去、对方还没确认收到的那几件
+ * （平时为空），免得撤回先到、活后到又开了工。
  * <p>
  * 第四种话是“在等人”（{@code asking} 为真，平时为空）：为回 {@code answers} 那句话开的一轮停下来等用户回答了（问答卡、
  * 工具审批）。不然交活的一方只知道“还没回话”，用户也不知道该去那个会话里回答，两边一直等下去。它不是回话：那件活做完时
  * 照常有它的那一句回话。一轮最多说一次。
  */
 public record SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
-                             ModelChoice model, String dir, Boolean offRecord, Boolean withdraw, Boolean asking) implements Event {
+                             ModelChoice model, String dir, Boolean offRecord, Boolean withdraw, Boolean asking,
+                             List<CommandId> unarrived) implements Event {
 
     public static final String TYPE = "SessionMessage";
 
@@ -35,16 +38,22 @@ public record SessionMessage(CommandId id, RunRef from, String text, CommandId a
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(from, "from");
         text = text == null ? "" : text;
+        unarrived = unarrived == null || unarrived.isEmpty() ? null : List.copyOf(unarrived);
+    }
+
+    public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
+                          ModelChoice model, String dir, Boolean offRecord, Boolean withdraw, Boolean asking) {
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, asking, null);
     }
 
     public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                           ModelChoice model, String dir, Boolean offRecord) {
-        this(id, from, text, answers, failed, hops, model, dir, offRecord, null, null);
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, null, null, null);
     }
 
     public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                           ModelChoice model, String dir, Boolean offRecord, Boolean withdraw) {
-        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, null);
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, null, null);
     }
 
     /**
@@ -60,9 +69,16 @@ public record SessionMessage(CommandId id, RunRef from, String text, CommandId a
         return Boolean.TRUE.equals(asking);
     }
 
-    /** 一句撤回：{@code from} 所在的会话收回它交出去的活。 */
+    /**
+     * 一句撤回：{@code from} 所在的会话收回它交出去的活。{@code unarrived} 是它交给对方、对方还没确认收到的那几件的编号：
+     * 撤回可能比它们先到，对方据此把它们记成“见过”并各回一句“没做成”，以后真到了也不开工。
+     */
+    public static SessionMessage withdrawal(CommandId id, RunRef from, List<CommandId> unarrived) {
+        return new SessionMessage(id, from, "", null, false, 0, null, null, null, Boolean.TRUE, null, unarrived);
+    }
+
     public static SessionMessage withdrawal(CommandId id, RunRef from) {
-        return new SessionMessage(id, from, "", null, false, 0, null, null, null, Boolean.TRUE, null);
+        return withdrawal(id, from, null);
     }
 
     /** 这是一句撤回。 */
