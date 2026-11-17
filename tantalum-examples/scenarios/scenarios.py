@@ -69,6 +69,89 @@ def c_workspace_denied(ctx):
     if projects: failed.append(f"用户说不建，却登记了：{projects}")
     return failed
 
+# ---- 任务（subagent）----
+def tasks_of(ctx):
+    """这个场景的会话放出过的任务（含已经结束的）。"""
+    return (ctx.user.call("GET", f"/api/sessions/{ctx.sessions[0]}/tasks")[1] or {}).get("tasks", [])
+
+def task_calls(ctx):
+    """各个任务自己的会话里调过的工具名（清单里不列这些会话，直接读它们的账）。"""
+    names = collections.Counter()
+    for task in tasks_of(ctx):
+        path = os.path.join(ctx.sessions_dir, task["session"] + ".jsonl")
+        if not os.path.exists(path): continue
+        for line in open(path, encoding="utf-8"):
+            try: entry = json.loads(line)
+            except ValueError: continue
+            if entry.get("type") != "ModelReplied": continue
+            for block in (entry.get("payload") or {}).get("content", []):
+                if block.get("kind") == "toolCall": names[block.get("name")] += 1
+    return names
+
+def wait_for_tasks(run, user, session, model):
+    """第一轮结束后：等放出去的任务都回来、结果开的那几轮也结束。任务里问的问题选第一个选项。没放任务时立刻返回。"""
+    import time
+    started, quiet = time.time(), 0
+    while time.time() - started < 900:
+        tasks = (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", [])
+        runs = (user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
+        for task in tasks:
+            if task.get("runStatus") != "AwaitingAnswer": continue
+            for question in (user.call("GET", f"/api/sessions/{task['session']}/questions")[1] or {}).get("questions", []):
+                payload = {"choice": question["choices"][0]["id"]} if question.get("choices") else {"text": "ok"}
+                user.call("POST", f"/api/sessions/{task['session']}/questions/{question['id']}", payload)
+        done = not any(task.get("open") for task in tasks) and runs and runs[-1].get("endReason")
+        quiet = quiet + 1 if done else 0
+        if quiet >= 3: return None
+        time.sleep(2)
+    return "放出去的任务 900 秒还没都回来"
+
+def c_tasks_common(ctx):
+    """放了任务就要守的几条（放不放是模型的判断，不算对错）：都回来了；放出后那一轮先结束，结果回来另开一轮；任务里没有再放任务。"""
+    failed, tasks = [], tasks_of(ctx)
+    still = [task["id"] for task in tasks if task.get("open")]
+    if still: failed.append(f"还有任务没回来：{still}")
+    if tasks:
+        runs = (ctx.user.call("GET", f"/api/sessions/{ctx.sessions[0]}/runs")[1] or {}).get("runs", [])
+        if len(runs) < 2: failed.append(f"放了 {len(tasks)} 个任务，主对话却只有 {len(runs)} 轮：结果没有开出下一轮")
+        nested = [task["id"] for task in tasks if (ctx.user.call("GET", f"/api/sessions/{task['session']}/tasks")[1] or {}).get("tasks")]
+        if nested: failed.append(f"任务里又放了任务：{nested}")
+    people = sum(1 for line in ctx.journal.splitlines() if '"type":"UserPrompt"' in line or '"type":"FollowUpSubmitted"' in line)
+    if people != 1: failed.append(f"账里有 {people} 条人说的话，应该只有 1 条")
+    return failed
+
+def all_said(ctx):
+    """主对话里模型说过的全部话：结果一个一个回来，它每次各说一段，不能只看最后一段。"""
+    texts = []
+    for line in ctx.journal.splitlines():
+        try: entry = json.loads(line)
+        except ValueError: continue
+        if entry.get("type") != "ModelReplied": continue
+        texts += [block.get("text", "") for block in (entry.get("payload") or {}).get("content", []) if block.get("kind") == "text"]
+    return "\n".join(texts)
+
+def c_tasks_parallel(ctx):
+    """三件互不相干的活：每个文件都有结论；只是看，不改文件。"""
+    said = all_said(ctx).lower()
+    failed = c_tasks_common(ctx) + [f"回答里没有 {name!r}" for name in ("orders", "reports", "cli") if name not in said]
+    edits = [name for name in ("edit_file", "write_file") if ctx.tools.get(name, 0) or task_calls(ctx).get(name, 0)]
+    if edits: failed.append(f"只让看，却用了 {edits}")
+    return failed
+
+def functions_in(ctx, path):
+    return len(re.findall(r"^\s*def \w+\(", read(ctx, path), re.M))
+
+def c_tasks_then_act(ctx):
+    """拿到两边的结果之后接着做：把两个数的和写进记事的文件。数是从文件里数出来的，猜不出来。"""
+    failed = c_tasks_common(ctx)
+    total = functions_in(ctx, "inventory/orders.py") + functions_in(ctx, "inventory/reports.py")
+    try: plan = open(os.path.join(ctx.outside, "plan.md"), encoding="utf-8").read()
+    except OSError as failure: plan = f"<{failure}>"
+    found = re.findall(r"functions:\s*(\d+)", plan)
+    if not found: failed.append(f"plan.md 里没有 functions: N 这一行：{plan[-200:]!r}")
+    elif int(found[-1]) != total: failed.append(f"写的是 {found[-1]}，两个文件里一共是 {total} 个函数")
+    return failed
+
 # ---- 找和读 ----
 def c_find_def(ctx):
     return says(ctx, "shipping.py", "orders.py", "reports.py", "cli.py")
@@ -1059,6 +1142,16 @@ SCENARIOS += [
     S("workspace-denied", "工作区", "用户在卡片上说不建：不登记、不重试",
       "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活，把它加成工作区。",
       c_workspace_denied, max_calls=8, timeout=300, server="outside", answers={"*": "deny"}),
+    # 任务（subagent，2026-11-18）：模型可以把能独立做完的事分出去，自己接着做别的，结果回来再往下走。提示里不提任何工具名，
+    # 分不分出去由模型自己定；判的是事情做成了没有，以及放了任务时那几条规矩（都回来、不傻等、只有一层）
+    S("tasks-parallel", "任务", "几件互不相干的活可以分头做：每件都有结论，放出去的都回来，不改不该改的",
+      "inventory 目录里 orders.py、reports.py、cli.py 这三个文件，各帮我仔细过一遍，看有没有明显的毛病，每个文件单独给个结论。"
+      "三个互不相干，可以分头同时看。",
+      c_tasks_parallel, max_calls=12, timeout=600, world=False, between=wait_for_tasks),
+    S("tasks-then-act", "任务", "拿到结果再接着做：两边各查一个数，都拿到后把和写下来",
+      "分头数一下 inventory/orders.py 和 inventory/reports.py 各定义了多少个函数。两个数都拿到以后，把它们的和写进 {outside} 目录里 plan.md 的最后一行，"
+      "写成 “functions: N”（N 是那个和）。",
+      c_tasks_then_act, max_calls=12, timeout=600, server="outside", between=wait_for_tasks),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
