@@ -39,7 +39,8 @@ class WorkspaceSectionTest {
         assertEquals("- s-b \"write the guide\" · in \"docs\" · 3 d ago · ~130k tokens in context (large)", lines[5],
                 "the folder is matched whatever the case and slashes; a large context is flagged; who is running is not said");
         assertEquals("- this conversation · in no workspace", lines[6], "its own line has no id, title or time, and no size while small");
-        assertTrue(text.contains("delegate with session=<id>") && text.contains("workspace=<its path>") && text.contains("workspace_add"));
+        assertTrue(text.contains("workspace_add"));
+        assertTrue(!text.contains("delegate"));
     }
 
     @Test
@@ -48,7 +49,7 @@ class WorkspaceSectionTest {
         String alone = WorkspaceSection.text(List.of(), List.of(row("s-a", "x", Duration.ZERO, "running", null, 5L)), current, NOW);
         assertTrue(alone.contains("- (no workspaces yet)\nRecent conversations:\n- this conversation · in no workspace\n"), alone);
         String nothing = WorkspaceSection.text(List.of(), List.of(), current, NOW);
-        assertTrue(nothing.contains("- (no workspaces yet)\nTo hand work"), nothing);
+        assertTrue(nothing.contains("- (no workspaces yet)\nWhen the work"), nothing);
     }
 
     @Test

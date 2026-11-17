@@ -30,8 +30,7 @@ public final class RunText {
         String answer = null;
         for (TraceRecord record : ordered) {
             switch (record) {
-                case UserInput input when input.text() != null && input.mode() != UserInput.Mode.CONTINUE
-                        && "user".equals(input.source().type()) -> {
+                case UserInput input when input.text() != null && input.mode() != UserInput.Mode.CONTINUE -> {
                     String said = clean(input.text());
                     if (!said.isBlank()) {
                         text.append("User: ").append(said).append("\n\n");
@@ -68,11 +67,7 @@ public final class RunText {
             switch (record) {
                 case UserInput input when input.text() != null && input.mode() != UserInput.Mode.CONTINUE -> {
                     String said = clean(input.text());
-                    if (!"user".equals(input.source().type())) {
-                        // 另一个会话说的话（交来的活、回来的结果）：不是用户的话，算 delegate 这个工具的结果
-                        segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.TOOL, "delegate", null,
-                                cutKeepingLines(SecretMask.mask(said), SEGMENT_CHARS), record.head().pos()));
-                    } else if (!said.isBlank()) {
+                    if (!said.isBlank()) {
                         segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.USER, null, null, said,
                                 record.head().pos()));
                     }

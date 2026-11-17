@@ -27,7 +27,6 @@ final class IndexBatch {
         String dir;
         /** “不进记忆”的会话（memory-final-plan 第 11 节）。 */
         boolean offRecord;
-        boolean unconfirmed;
         /** 这一批里最后一次改名；没改为 null，空串表示恢复自动标题。 */
         String rename;
         long lastSeq;
@@ -68,7 +67,6 @@ final class IndexBatch {
             row.dir = change.dir();
         }
         row.offRecord |= change.offRecord();
-        row.unconfirmed = change.unconfirmed();
         row.runStatus = change.runStatus();
         row.activeRun = change.activeRun();
         row.answerDeadline = change.answerDeadline();

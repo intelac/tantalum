@@ -84,24 +84,8 @@ public class ApiController {
         Principal user = WebJson.currentUser();
         Set<SessionId> archived = engine.marks().allArchived(user);
         Set<SessionId> pinned = engine.marks().allPinned(user);
-        // 委派开的子会话带上父会话（memory-final-plan 第 12 节），侧栏缩进到父会话下面
-        Map<SessionId, SessionId> parents = new java.util.HashMap<>();
-        try {
-            engine.delegations().all(user).forEach(delegation -> parents.put(delegation.child(), delegation.parent()));
-        } catch (RuntimeException unreadable) {
-            LOG.warn("cannot read the delegations of {}: {}", user.value(), unreadable.toString());
-        }
-        // 别的会话开出来的会话：编号里带着是谁开的。只给侧栏显示用（内核里没有父子关系）
-        engine.queries().sessions(user).forEach(summary -> tantalum.value.delegate.DelegateCall.openerOf(summary.id())
-                .ifPresent(opener -> parents.putIfAbsent(summary.id(), opener)));
         List<Map<String, Object>> sessions = engine.queries().sessions(user).stream()
-                .map(summary -> {
-                    Map<String, Object> view = describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()));
-                    if (parents.containsKey(summary.id())) {
-                        view.put("parent", parents.get(summary.id()).value());
-                    }
-                    return view;
-                }).toList();
+                .map(summary -> describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()))).toList();
         return json.json(200, Map.of("sessions", sessions));
     }
 

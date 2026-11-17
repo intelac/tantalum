@@ -61,7 +61,7 @@ export function groupSessions(
   extra: Readonly<Record<string, number>>,
   current: string | null,
 ): Group[] {
-  const visible = nestChildren(sessions.filter((session) => options.showArchived || session.archived !== true).slice().sort(pinnedFirst));
+  const visible = sessions.filter((session) => options.showArchived || session.archived !== true).slice().sort(pinnedFirst);
   if (options.mode === "flat") return [{ key: FLAT, project: null, count: visible.length, rows: visible, hidden: 0 }];
   const byKey = new Map<string, SessionSummary[]>();
   for (const session of visible) {
@@ -72,56 +72,6 @@ export function groupSessions(
   const ungrouped = byKey.get(UNGROUPED) ?? [];
   if (ungrouped.length > 0) groups.push(page(UNGROUPED, null, ungrouped, extra, current));
   return groups;
-}
-
-/** 主窗口的会话编号以它开头（见 {@code mainWindowId}）。 */
-const MAIN_WINDOW = "main-";
-
-/** 这个会话是主窗口开出去干活的：平铺在侧栏里，只带一个标记，不缩进。 */
-export function openedByMainWindow(row: SessionSummary): boolean {
-  return row.parent !== undefined && row.parent.startsWith(MAIN_WINDOW);
-}
-
-/** 这个会话是另一个普通会话问出来的（会话里的 subagent）：缩进挂在开它的会话下面。 */
-export function nested(row: SessionSummary): boolean {
-  return row.parent !== undefined && !row.parent.startsWith(MAIN_WINDOW);
-}
-
-/**
- * 这一列里哪些行要缩进：是另一个普通会话开出来的，而且开它的会话就在这一列里、排在它前面。开它的会话不在这一列
- * （在别的工作区、已归档没显示、被“显示更多”折掉了）时不缩进，免得看起来挂在不相干的会话下面。
- */
-export function indentedIn(rows: readonly SessionSummary[]): ReadonlySet<string> {
-  const seen = new Set<string>();
-  const indented = new Set<string>();
-  for (const row of rows) {
-    if (nested(row) && row.parent !== undefined && seen.has(row.parent)) indented.add(row.id);
-    seen.add(row.id);
-  }
-  return indented;
-}
-
-/**
- * 一个会话开出来的会话紧跟在它后面，按原来的先后；开它的会话不在这一批里的照原样放。层级只是显示：内核里会话都是平的，
- * “谁开的”来自会话的第一句话。主窗口开的不挂在主窗口下面，照原样平铺。
- */
-export function nestChildren(rows: readonly SessionSummary[]): SessionSummary[] {
-  const present = new Set(rows.map((row) => row.id));
-  const children = new Map<string, SessionSummary[]>();
-  const under = (row: SessionSummary) => (nested(row) && row.parent !== undefined && present.has(row.parent) ? row.parent : undefined);
-  for (const row of rows) {
-    const parent = under(row);
-    if (parent !== undefined) children.set(parent, [...(children.get(parent) ?? []), row]);
-  }
-  const out: SessionSummary[] = [];
-  const place = (row: SessionSummary) => {
-    out.push(row);
-    for (const child of children.get(row.id) ?? []) place(child);
-  };
-  for (const row of rows) {
-    if (under(row) === undefined) place(row);
-  }
-  return out;
 }
 
 function page(key: string, project: Project | null, rows: SessionSummary[], extra: Readonly<Record<string, number>>, current: string | null): Group {

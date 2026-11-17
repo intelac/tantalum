@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""整个系统一起跑的端到端测试（要真模型，不进 CI）：记忆（自动记笔记、找回）、主窗口、交给别的会话、工作区全部开着，
-一台临时的真服务器接着测试电脑和样例项目。说的都是人平常会说的话，不提任何工具名、不提“交给别的会话”“工作区”这些做法，
+"""整个系统一起跑的端到端测试（要真模型，不进 CI）：记忆（自动记笔记、找回）、主窗口、工作区全部开着，
+一台临时的真服务器接着测试电脑和样例项目。说的都是人平常会说的话，不提任何工具名、不提“工作区”这些做法，
 做法由模型自己定。
 
 一个人五天的工作（同一台服务器、同一个人，后面几天靠前面留下的记忆、会话和工作区）：
@@ -10,7 +10,7 @@
   第四天：一句话两件事（两个目录）→ 说得含糊（该先问我）→ 反悔，只撤一处
   第五天：问昨天动了什么，不能把撤回的说成现状
 
-判定看三样：电脑上的文件真的变了没有、会话和工作区是怎么安排的、回答里有没有该有的（不该有的）内容。
+判定看两样：电脑上的文件真的变了没有、回答里有没有该有的（不该有的）内容。
 全程的原话、回答、每个会话用过的工具都写进结果文件，供人读。
 
 用法：python3 story.py --model claude        结果在 scenarios/results/<时间>-story-<模型>.md
@@ -78,7 +78,7 @@ class Story:
                 self.cards.append({"session": row["id"], "title": title, "detail": detail, "answered": payload})
 
     def say(self, session, text, checks, note="", folder=None, workspace_choice="add", timeout=600, reply=None, reply_words=()):
-        """说一句话，等到所有会话都停下来（交出去的活做完、结果回来把这边叫醒的那一轮也跑完），再按 checks 判定。"""
+        """说一句话，等到所有会话都停下来，再按 checks 判定。"""
         self.workspace_choice = workspace_choice
         self.reply, self.reply_words = reply, reply_words   # 模型反过来问我时怎么答
         before_cards = len(self.cards)
@@ -109,8 +109,7 @@ class Story:
             texts, calls, used = replies(row["id"], self.seen.get(row["id"], 0))
             self.tokens.update(used); self.seen[row["id"]] = len(entries(row["id"]))
             if texts or calls:
-                turn["others"].append({"id": row["id"], "title": row.get("title"), "dir": row.get("dir"), "parent": row.get("parent"),
-                                       "new": row["id"] not in known, "tools": [name for name, _ in calls], "calls": calls, "answers": texts})
+                turn["others"].append({"id": row["id"], "title": row.get("title"), "dir": row.get("dir"), "new": row["id"] not in known, "tools": [name for name, _ in calls], "calls": calls, "answers": texts})
         turn["checks"] = ([("这一轮正常结束", False, problem)] if problem else []) + [self.judge(turn, check) for check in checks]
         self.turns.append(turn)
         ok = all(passed for _, passed, _ in turn["checks"])
@@ -153,31 +152,23 @@ def main():
     root, outside = run.ROOT, run.OUTSIDE
     fixture.reset(root)   # 样例项目回到起点：加急附加费 12，折扣有个 bug（两条测试是红的），报表里有条 TODO
     shipping = lambda: file(root, "inventory/shipping.py")
-    others_edited = lambda turn: (True if any(EDITING & set(other["tools"]) for other in turn["others"])
-                                  else f"没有别的会话动手改：{[(o['id'], o['tools']) for o in turn['others']]}")
-    main_did_not_edit = lambda turn: not (EDITING & {name for name, _ in turn["calls"]})
     try:
         # ---------------- 第一天 ----------------
         day1 = "main-" + secrets.token_hex(4)
         story.say(day1, "你好，我叫小康，负责库存系统这一块。我有个习惯：凡是费用，我都要按整数算，不要小数。另外跟我说话简短点就行。", [
-            ("只是聊天，没有把活交出去", lambda t: not t["others"]),
+            ("只是聊天，没有动文件", lambda t: not (EDITING & {name for name, _ in t["calls"]})),
         ], note="自我介绍和习惯，之后要靠记忆")
         time.sleep(15)   # 让自动记笔记做完
         story.say(day1, "库存系统的代码在 {root} 这个目录，以后我会经常在那边干活。先帮我看一眼，加急的附加费现在是多少？", [
             ("答出现在是 12", lambda t: said(t, "12")),
-        ], note="只是看，主窗口自己能读")
+        ], note="只是看")
         story.say(day1, "把它改成 15 吧。改完跑一下测试，看看有没有弄坏什么。", [
             ("文件真的改成了 15", lambda t: "EXPRESS_SURCHARGE = 15" in shipping() or f"还是：{re.findall('EXPRESS_SURCHARGE = .*', shipping())}"),
-            ("是别的会话动手改的，主窗口自己没改", lambda t: others_edited(t) if main_did_not_edit(t) else "主窗口自己改了"),
             ("回话里说了测试的情况", lambda t: said(t, "测试")),
-        ], note="主窗口没有改文件的工具，要自己想到交出去；结果回来再告诉我")
-        opened_after_3 = {other["id"] for turn in story.turns for other in turn["others"]}
+        ], note="改文件、跑测试")
         story.say(day1, "顺便，还是那个项目，报表那个文件里有条 TODO 说要加 CSV 导出，也一起做了吧。", [
             ("报表里有了 CSV 导出", lambda t: bool(re.search(r"def \w*csv\w*\(", file(root, "inventory/reports.py"), re.I)) or "reports.py 里没有带 csv 的函数"),
-            ("是别的会话动手改的", others_edited),
-            ("接着用刚才那个会话，没有另开", lambda t: all(not other["new"] for other in t["others"]) or
-                f"另开了：{[other['id'] for other in t['others'] if other['new']]}（已有：{sorted(opened_after_3)}）"),
-        ], note="同一件事的下一步：应该交给已经在做的那个会话")
+        ], note="同一个项目里的下一件事")
         time.sleep(15)
 
         # ---------------- 第二天：新的主窗口 ----------------
@@ -187,10 +178,7 @@ def main():
         ], note="新的主窗口里没有昨天的对话，要靠记忆或者去看")
         story.say(day2, "我还有个记事的目录在 {outside}，帮我在里面 plan.md 的最后加一行待办：核对海外运费。", [
             ("那一行真的加上了", lambda t: "核对海外运费" in file(outside, "plan.md") or f"plan.md：{file(outside, 'plan.md')!r}"),
-            ("是别的会话动手改的", others_edited),
-            ("没有交给在库存项目里干活的那个会话", lambda t: all(other["id"] not in opened_after_3 for other in t["others"] if EDITING & set(other["tools"]))
-                or "交给了库存项目的会话"),
-        ], note="另一个目录的活：不该塞给库存项目那个会话")
+        ], note="另一个目录的活")
         lines = len(file(outside, "plan.md").splitlines())
         story.say(day2, "两件事各帮我查一下：库存系统里哪些文件用到了算运费的那个函数；还有我那个 plan.md 现在一共几行。", [
             ("说出了用到它的文件", lambda t: said(t, "orders.py", "reports.py", "cli.py")),
@@ -198,15 +186,13 @@ def main():
         ], note="两处各一件事")
         story.say(day2, "发运那边再加一项保价费：按订单金额的 1.5% 收。加好跑一下测试。", [
             ("代码里有了保价费", lambda t: bool(re.search(r"0\.015|1\.5", shipping() + file(root, "inventory/orders.py"))) or "没找到 1.5% 的计算"),
-            ("记得我的习惯：按整数算（交代里写了，或者代码里取了整）", lambda t: (
-                any("整数" in json.dumps(arguments, ensure_ascii=False) for name, arguments in t["calls"] if name == "delegate")
-                or bool(re.search(r"round\(|int\(|//|ceil|floor", "\n".join(line for line in (shipping() + file(root, "inventory/orders.py")).splitlines()
+            ("记得我的习惯：按整数算（代码里取了整）", lambda t: (
+                bool(re.search(r"round\(|int\(|//|ceil|floor", "\n".join(line for line in (shipping() + file(root, "inventory/orders.py")).splitlines()
                                                                    if re.search(r"insur|保价|0\.015|1\.5", line, re.I))))
-                or "没看出按整数算：交代里没提，相关代码行也没有取整")),
-            ("是别的会话动手改的", others_edited),
+                or "没看出按整数算：相关代码行没有取整")),
         ], note="第一天说的习惯要自己用上，我这次没提")
         story.say(day2, "对了，我之前说费用都按整数算，这条你忘掉吧，以后不这么要求了。", [
-            ("没有把活交出去", lambda t: not any(EDITING & set(other["tools"]) for other in t["others"])),
+            ("没有动文件", lambda t: not (EDITING & {name for name, _ in t["calls"]})),
         ], note="让它忘掉一条")
         time.sleep(15)
 
@@ -229,10 +215,7 @@ def main():
         story.say(day4, "两件事一起办：库存系统里打折一直算错，测试是红的，帮我修好；另外我记事的那个目录里 plan.md 加一行：周五对账。", [
             ("测试全过了", lambda t: tests_pass().returncode == 0 or f"还有失败：{tests_pass().stderr[-300:]}"),
             ("记事那一行加上了", lambda t: "周五对账" in file(outside, "plan.md") or f"plan.md：{file(outside, 'plan.md')!r}"),
-            ("两件事分给了两个目录里的会话", lambda t: len({other["dir"] for other in t["others"] if EDITING & set(other["tools"])}) >= 2
-                or f"动手的会话：{[(o['id'], o['dir']) for o in t['others'] if EDITING & set(o['tools'])]}"),
-            ("主窗口自己没改", main_did_not_edit),
-        ], note="我没再说目录在哪：要靠记忆和工作区知道；两件事各归各的地方")
+        ], note="我没再说目录在哪：要靠记忆和工作区知道")
         before_rate = overseas()
         vague = story.say(day4, "把那个区的运费费率调一下。", [
             ("没有自己猜着改：先问了我（或者等我答了卡片才改）", lambda t: (overseas() == before_rate and ("？" in "\n".join(t["answers"]) or "?" in "\n".join(t["answers"])))
@@ -279,14 +262,14 @@ def report(story, user, args):
         for label, ok, detail in turn["checks"]:
             lines.append(f"| {index} | {turn['said'][:30].replace('|', ' ')} | {label} | {'过' if ok else '**没过**'} | {(detail or '').replace('|', ' ').replace(chr(10), ' ')[:300]} |")
     lines += ["", "## 最后的样子", "", "工作区：" + ("、".join(f"{p['title']}（{p['path']}）" for p in projects) or "没有"), "",
-              "| 会话 | 标题 | 目录 | 谁开的 |", "|---|---|---|---|"]
+              "| 会话 | 标题 | 目录 |", "|---|---|---|"]
     for row in sorted(rows, key=lambda each: each["id"]):
-        lines.append(f"| {row['id']} | {(row.get('title') or '').replace('|', ' ')[:40]} | {row.get('dir') or ''} | {row.get('parent') or ''} |")
+        lines.append(f"| {row['id']} | {(row.get('title') or '').replace('|', ' ')[:40]} | {row.get('dir') or ''} |")
     lines += ["", "记忆里的条目：" + ("、".join(entry.get("name", "") for entry in memory) or "没有"), ""]
     for entry in memory:
         body = user.call("GET", "/api/plugin-api/memory/entries/" + entry["name"])[1] or {}
         lines += [f"### 记忆 {entry['name']}", "", "```", str(body.get("body") or body.get("text") or json.dumps(body, ensure_ascii=False))[:1500], "```", ""]
-    # 工作记忆：做完的事不该还挂着（“等别的会话做完”“等我回答”这类由系统自己管，不该记进来）
+    # 工作记忆：做完的事不该还挂着（“等我回答”这类由系统自己管，不该记进来）
     # 直接读记忆的账：还活着的任务、在等、承诺
     listed, dead = {}, set()
     ledger = f"{run.DATA}/plugins/memory/dev/ledger.jsonl"
@@ -317,7 +300,7 @@ def report(story, user, args):
         lines += [f"### {index}. {turn['note']}（{turn['session']}，{turn['seconds']} 秒）", "", "**我说：** " + turn["said"], ""]
         if turn["calls"]: lines += ["主窗口用的工具：" + "、".join(name for name, _ in turn["calls"]), ""]
         for name, arguments in turn["calls"]:
-            if name in ("delegate", "workspace_add", "memory_note", "memory_write", "memory_delete", "now"):
+            if name in ("workspace_add", "memory_note", "memory_write", "memory_delete", "now"):
                 lines += [f"- `{name}` " + json.dumps(arguments, ensure_ascii=False)[:700]]
         for card in turn["cards"]:
             lines += ["", f"卡片（{card['session']}）：{card['title']} — {card['detail'][:200]!r} → {card['answered']}"]

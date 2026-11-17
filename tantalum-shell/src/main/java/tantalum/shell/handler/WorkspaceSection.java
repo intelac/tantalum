@@ -24,7 +24,7 @@ public final class WorkspaceSection {
     public static final String NAME = "workspaces";
     static final int MAX_WORKSPACES = 12;
     static final int MAX_SESSIONS = 5;
-    /** 上下文超过这么多 token 的会话标出来：再往里交活不如另开一个。 */
+    /** 上下文超过这么多 token 的会话标出来。 */
     static final long LARGE = 100_000;
     private static final long STEP = 10_000;
 
@@ -63,9 +63,7 @@ public final class WorkspaceSection {
         if (!sessions.isEmpty()) {
             text.append("Recent conversations:\n").append(sessions);
         }
-        text.append("To hand work to a listed conversation: delegate with session=<id>. To open a new conversation in a workspace: delegate "
-                + "with workspace=<its path>. Prefer a conversation already on the topic unless its context is large; then open a new "
-                + "one in the same workspace and put what it needs in brief. When the work is in a folder that is not a workspace and "
+        text.append("When the work is in a folder that is not a workspace and "
                 + "the user means to keep working there, add it first with workspace_add (the user is asked to confirm).");
         return text.toString();
     }
@@ -77,7 +75,7 @@ public final class WorkspaceSection {
         for (Row row : recent) {
             SessionSummary summary = row.summary();
             if (summary.id().equals(current)) {
-                // 自己这一行不写编号、标题和时间：用不着把活交给自己，第一句话之后标题才有，写了每个会话都要多变一次
+                // 自己这一行不写编号、标题和时间：第一句话之后标题才有，写了每个会话都要多变一次
                 text.append("- this conversation · ").append(where);
             } else {
                 String title = summary.title() == null || summary.title().isBlank() ? "(untitled)" : summary.title().replaceAll("\\s+", " ");

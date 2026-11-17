@@ -7,7 +7,7 @@ import { errorLine } from "../text/errors";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Menu } from "../ui/Menu";
-import { PAGE, groupSessions, indentedIn, mergeHits, searchSessions } from "./group";
+import { PAGE, groupSessions, mergeHits, searchSessions } from "./group";
 import { useContentSearch } from "./useContentSearch";
 import { ProjectGroup } from "./ProjectGroup";
 import { RenameDialog } from "./RenameDialog";
@@ -62,7 +62,6 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
   }, [notice]);
 
   const groups = useMemo(() => groupSessions(sessions, projects, view, extra, currentSession), [sessions, projects, view, extra, currentSession]);
-  const flatIndented = useMemo(() => indentedIn(groups[0]?.rows ?? []), [groups]);
   const found =
     query.trim() === "" ? null : mergeHits(searchSessions(sessions, projects, query, view.showArchived), content.result, sessions, projects, view.showArchived);
 
@@ -159,7 +158,7 @@ export function ProjectSidebar({ sessions, projects, currentSession, onSelectSes
         ) : view.mode === "flat" ? (
           <ul className="flex flex-col gap-0.5">
             {groups[0]?.rows.map((session) => (
-              <SessionRow key={session.id} session={session} selected={session.id === currentSession} indent={flatIndented.has(session.id)} {...rowProps} />
+              <SessionRow key={session.id} session={session} selected={session.id === currentSession} {...rowProps} />
             ))}
           </ul>
         ) : (

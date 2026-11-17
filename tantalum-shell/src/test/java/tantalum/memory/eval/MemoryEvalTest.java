@@ -125,10 +125,6 @@ class MemoryEvalTest {
             case "migration" -> migration();
             case "recall" -> recall();
             case "masked" -> masked();
-            case "delegateReadOnly" -> delegateReadOnly();
-            case "offRecordChild" -> offRecordChild();
-            case "childIsolated" -> childIsolated();
-            case "delegationJournal" -> delegationJournal();
             case "refusal" -> refusal();
             case "todo" -> throw new AssertionError(question.tier1().has("later") ? "not in this version: " + question.tier1().get("later").asString()
                     : "the check is written when " + question.phase() + " defines the interface");
@@ -447,85 +443,6 @@ class MemoryEvalTest {
         forget(user, "person-alice");
         world.model.chat(steps(Step.call("history_search", Map.of("query", "车牌"))));
         mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我以前说过车牌吗？"), "7Q2KD", "history after forgetting");
-    }
-
-
-    // ---- 委派（memory-final-plan 第 12 节） ----
-
-    private static final String DELEGATED = "This comes from another conversation of the same user";
-
-    /** 父运行先调 delegate，再回一句；子运行按 {@code child} 走。 */
-    private static java.util.function.Function<Call, Step> delegating(String task, java.util.function.Function<Call, Step> child) {
-        AtomicInteger parent = new AtomicInteger();
-        return call -> {
-            if (call.input().contains(DELEGATED)) {
-                return child.apply(call);
-            }
-            return parent.getAndIncrement() == 0 ? Step.call("delegate", Map.of("task", task, "brief", "项目用 Java", "wait", "true")) : Step.say("好的。");
-        };
-    }
-
-    private static String childOf(List<Call> calls) {
-        for (Call call : calls) {
-            java.util.regex.Matcher found = java.util.regex.Pattern.compile("conversation (s-[A-Za-z0-9_-]+)").matcher(call.input());
-            if (found.find()) {
-                return found.group(1);
-            }
-        }
-        throw new HarnessError("no sub-conversation was started");
-    }
-
-    private void delegateReadOnly() {
-        String user = world.person(EvalWorld.PLAIN, "alice");
-        world.model.chat(delegating("列出三种缓存做法", steps(Step.call("memory_write", Map.of("name", "x", "type", "project", "description", "d",
-                "content", "子会话想改记忆")), Step.call("memory_note", Map.of("kind", "fact", "text", "子会话记的一条")),
-                Step.say("三种做法：Redis、Caffeine、不加缓存。"))));
-        List<Call> calls = world.ask(EvalWorld.PLAIN, user, world.session(), "帮我找人列一下缓存做法。");
-        List<Call> child = calls.stream().filter(call -> call.input().contains(DELEGATED)).toList();
-        mustSee(child, "列出三种缓存做法", "the sub-conversation sees the task");
-        mustSee(child, "数据库选型", "the sub-conversation reads memory");
-        mustSee(child, "delegated sub-conversation", "memory_write is refused in the sub-conversation");
-        assertTrue(world.items(EvalWorld.PLAIN, user).values().stream().anyMatch(item -> item.path("text").asString().equals("子会话记的一条")
-                && item.path("actor").asString().equals("child")), "a note from the sub-conversation is marked as the child's");
-        assertTrue(world.itemsWith(EvalWorld.PLAIN, user, "子会话想改记忆").isEmpty());
-        mustSee(calls, "三种做法：Redis、Caffeine", "the result comes back to the parent");
-    }
-
-    private void offRecordChild() {
-        String user = world.person(EvalWorld.CAPTURE, null);
-        world.model.capture(call -> List.of(note("fact", "子会话里的秘密任务", "秘密任务")));
-        world.model.chat(delegating("秘密任务：整理简历", steps(Step.say("整理好了。"))));
-        List<Call> calls = world.ask(EvalWorld.CAPTURE, user, world.session(), "秘密任务：找人整理简历。", Map.<String, Object>of("offRecord", true));
-        String child = childOf(calls);
-        JsonNode sessions = world.json(EvalWorld.CAPTURE, user, "/api/sessions").path("sessions");
-        boolean childOff = false;
-        for (JsonNode session : sessions) {
-            if (session.path("id").asString().equals(child)) {
-                childOff = session.path("offRecord").asBoolean();
-            }
-        }
-        assertTrue(childOff, "the sub-conversation of an off-the-record conversation is off the record too: " + sessions);
-        assertFalse(EvalWorld.waitFor(() -> !world.itemsWith(EvalWorld.CAPTURE, user, "秘密任务").isEmpty(), 3_000), "something was noted");
-    }
-
-    private void childIsolated() {
-        String alice = world.person(EvalWorld.PLAIN, null);
-        String bob = world.person(EvalWorld.PLAIN, null);
-        world.model.chat(delegating("查一下天气", steps(Step.say("晴。"))));
-        String child = childOf(world.ask(EvalWorld.PLAIN, alice, world.session(), "找人查一下天气。"));
-        assertEquals(200, world.send(EvalWorld.PLAIN, alice, "GET", "/api/sessions/" + child + "/messages", null).statusCode());
-        assertEquals(404, world.send(EvalWorld.PLAIN, bob, "GET", "/api/sessions/" + child + "/messages", null).statusCode(),
-                "another user cannot see the sub-conversation");
-    }
-
-    private void delegationJournal() {
-        String user = world.person(EvalWorld.PLAIN, null);
-        String session = world.session();
-        world.model.chat(delegating("数一下文件", steps(Step.say("一共 12 个。"))));
-        String child = childOf(world.ask(EvalWorld.PLAIN, user, session, "找人数一下文件。"));
-        String parent = world.get(EvalWorld.PLAIN, user, "/api/sessions/" + session + "/messages");
-        assertTrue(parent.contains("\"delegate\"") && parent.contains("一共 12 个"), "the parent journal has the call and the result: " + parent);
-        assertTrue(world.get(EvalWorld.PLAIN, user, "/api/sessions/" + child + "/messages").contains("数一下文件"), "the child journal has the task");
     }
 
     // ---- 稳 ----

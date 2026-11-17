@@ -13,7 +13,7 @@ import tantalum.value.json.Json;
 
 /**
  * {@code workspace_add}：把用户电脑上的一个目录登记成工作区（名字加目录），和用户在侧栏点“添加”是同一件事、同一套规则。
- * 登记以后可以用 {@code delegate} 的 {@code workspace} 在那里开会话。执行前先问用户（{@code WorkspaceApprovalHook}），用户不同意就不登记。电脑连着时先确认目录存在、允许；没连上照样登记，结果里写明没确认。
+ * 执行前先问用户（{@code WorkspaceApprovalHook}），用户不同意就不登记。电脑连着时先确认目录存在、允许；没连上照样登记，结果里写明没确认。
  * 它只登记，不在电脑上建目录：还没有的目录要先建好。
  */
 public final class WorkspaceAddTool implements Tool {
@@ -40,8 +40,8 @@ public final class WorkspaceAddTool implements Tool {
     @Override public String name() { return NAME; }
 
     @Override public String description() {
-        return "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it (delegate with "
-                + "workspace=<path>). path: the folder's absolute path; it must already exist. title: a short name; the folder's "
+        return "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it. "
+                + "path: the folder's absolute path; it must already exist. title: a short name; the folder's "
                 + "name is used when omitted. The user is asked to confirm before it is added. The existing workspaces are listed "
                 + "in the workspaces section.";
     }
@@ -95,7 +95,7 @@ public final class WorkspaceAddTool implements Tool {
             Project added = projects.add(context.principal(), path, ToolArguments.string(arguments, "title"));
             return ToolOutput.ok("Added workspace \"" + added.title() + "\" at " + added.path() + "."
                     + (checked ? "" : " The computer is not connected, so the folder was not checked.")
-                    // 不在结果里写工具名：模型会照着对用户说“用 delegate 并指定路径”（2026-11-16 在 8091 上看到的）
+                    // 不在结果里写工具名：模型会照着对用户说（2026-11-16 在 8091 上看到的）
                     + " Conversations can now be opened in it. Tell the user in plain words; do not mention tool names.");
         } catch (Projects.Refused refused) {
             return ToolOutput.error(switch (refused.problem()) {

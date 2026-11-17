@@ -8,13 +8,6 @@
     "changed" : false,
     "params" : [ ]
   }, {
-    "name" : "delegate",
-    "description" : "Hand a piece of work to another conversation of this user. task: what to do; brief: what it needs to know (it cannot see this conversation). session: the id of an existing conversation to hand it to; leave it out to open a new one. workspace: for a new conversation, the path of the workspace it should work in (see the workspaces section); by default it works in the same folder as this one. wait: false (default) returns at once, you go on, and its answer comes back later as a message, which is the way for long work; true waits for its answer in this turn (up to 10 minutes) and gives it as the result. Several calls in one reply run side by side. The other conversation is an ordinary one the user can open and talk to. stop: true together with session (and nothing else) takes back work you handed to that conversation: what it has not finished ends, and it answers that it did not finish.",
-    "enabled" : true,
-    "byDefault" : true,
-    "changed" : false,
-    "params" : [ ]
-  }, {
     "name" : "history_search",
     "description" : "Search this user's past conversations word for word, including parts that were compacted or left the context. Returns the matching lines with their session and time. Use it when memory_search finds nothing.",
     "enabled" : true,
@@ -30,7 +23,7 @@
     "params" : [ ]
   }, {
     "name" : "memory_note",
-    "description" : "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; quote: the user's exact words from this turn that show it (needed for it to count as what the user said; once the conversation has read files, pages or other conversations, text must also be the user's exact words, otherwise the note waits for the user to confirm). Use memory_write instead to write or rewrite a whole entry.",
+    "description" : "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; quote: the user's exact words from this turn that show it (needed for it to count as what the user said; once the conversation has read files or pages, text must also be the user's exact words, otherwise the note waits for the user to confirm). Use memory_write instead to write or rewrite a whole entry.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
@@ -79,7 +72,7 @@
     "params" : [ ]
   }, {
     "name" : "workspace_add",
-    "description" : "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it (delegate with workspace=<path>). path: the folder's absolute path; it must already exist. title: a short name; the folder's name is used when omitted. The user is asked to confirm before it is added. The existing workspaces are listed in the workspaces section.",
+    "description" : "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it. path: the folder's absolute path; it must already exist. title: a short name; the folder's name is used when omitted. The user is asked to confirm before it is added. The existing workspaces are listed in the workspaces section.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,

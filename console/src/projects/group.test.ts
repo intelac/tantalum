@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project, SessionSummary } from "../api/types";
-import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, nestChildren, nested, openedByMainWindow, projectOf, searchSessions } from "./group";
+import { FLAT, PAGE, SEARCH_LIMIT, UNGROUPED, groupSessions, mergeHits, projectOf, searchSessions } from "./group";
 
 // workspaces 任务 18（W4、W9、W10、W13）。
 
@@ -150,34 +150,5 @@ describe("mergeHits", () => {
 
   it("is the local result while content search has not answered", () => {
     expect(mergeHits(local, null, sessions, [], false)).toBe(local);
-  });
-
-  // memory-final-plan 第 12 节：委派开的子会话紧跟在父会话后面
-  it("puts delegated sub-conversations right after their parent", () => {
-    const at = (minutes: number) => new Date(Date.UTC(2026, 10, 16, 0, minutes)).toISOString();
-    const rows: SessionSummary[] = [
-      { id: "d-1", title: "child", lastActivity: at(9), runStatus: "idle", parent: "p" },
-      { id: "x", title: "other", lastActivity: at(8), runStatus: "idle" },
-      { id: "p", title: "parent", lastActivity: at(7), runStatus: "idle" },
-      { id: "d-2", title: "grandchild", lastActivity: at(6), runStatus: "idle", parent: "d-1" },
-      { id: "d-3", title: "orphan", lastActivity: at(5), runStatus: "idle", parent: "gone" },
-    ];
-    expect(nestChildren(rows).map((row) => row.id)).toEqual(["x", "p", "d-1", "d-2", "d-3"]);
-  });
-
-  // 层级只是显示：普通会话开的缩进挂在它下面；主窗口开的平铺、带标记
-  it("keeps what the main window opened flat and nests what an ordinary conversation asked", () => {
-    const at = (minutes: number) => new Date(Date.UTC(2026, 10, 16, 0, minutes)).toISOString();
-    const rows: SessionSummary[] = [
-      { id: "s-main-2026-11-16_7-0", title: "from the window", lastActivity: at(9), runStatus: "idle", parent: "main-2026-11-16" },
-      { id: "main-2026-11-16", title: "window", lastActivity: at(8), runStatus: "idle" },
-      { id: "s-a_3-0", title: "asked by a", lastActivity: at(7), runStatus: "idle", parent: "a" },
-      { id: "a", title: "ordinary", lastActivity: at(6), runStatus: "idle" },
-    ];
-    expect(nestChildren(rows).map((row) => row.id)).toEqual(["s-main-2026-11-16_7-0", "main-2026-11-16", "a", "s-a_3-0"]);
-    expect(openedByMainWindow(rows[0])).toBe(true);
-    expect(nested(rows[0])).toBe(false);
-    expect(nested(rows[2])).toBe(true);
-    expect(openedByMainWindow(rows[3])).toBe(false);
   });
 });

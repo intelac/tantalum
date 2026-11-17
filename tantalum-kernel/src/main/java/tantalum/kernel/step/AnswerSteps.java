@@ -60,9 +60,7 @@ public final class AnswerSteps {
             out.emit(new StartTimer(timer, run.ref(), timeout));
         }
         out.report(List.of(new QuestionAsked(run.ref(), askedBy, asked)));
-        RunState told = MessageSteps.tellWaiting(out, run, asked);
-        MessageSteps.tellQueued(out, told, asked);
-        out.enter(told, new AwaitingAnswer(asked, origin, toolCallId, timer));
+        out.enter(run, new AwaitingAnswer(asked, origin, toolCallId, timer));
     }
 
     /** 等人时收到回答：是当前问题、回答合法才结算，否则记一条事实、状态不变。 */

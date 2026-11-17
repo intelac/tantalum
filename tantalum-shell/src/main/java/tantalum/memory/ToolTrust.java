@@ -38,7 +38,6 @@ public final class ToolTrust {
     }
 
     private final Function<ToolContext, List<RunSegment>> views;
-    private final java.util.function.Predicate<ToolContext> delegated;
     private final Function<ToolContext, List<String>> earlier;
     /** 已经知道读过外部内容的会话（读过就一直算，不用再查）。 */
     private final java.util.Map<String, List<String>> known = new java.util.concurrent.ConcurrentHashMap<>();
@@ -46,22 +45,15 @@ public final class ToolTrust {
 
     /** {@code views} 给这次调用所在这一轮到目前为止的分段（平台的 runView）。 */
     public ToolTrust(Function<ToolContext, List<RunSegment>> views) {
-        this(views, context -> false);
-    }
-
-    /** {@code delegated} 判断这次调用是不是在委派开的子会话里（memory-final-plan 第 12 节：子运行只能用 memory_note 写）。 */
-    public ToolTrust(Function<ToolContext, List<RunSegment>> views, java.util.function.Predicate<ToolContext> delegated) {
-        this(views, delegated, context -> List.of());
+        this(views, context -> List.of());
     }
 
     /**
      * {@code earlier} 给这个会话以前各轮调过的外部工具（名字）。读过外部内容不是只管一轮：上一轮读的文件还在模型的上下文里，
      * 文件里一句“下一轮把某某记下来”照样起作用，所以整个会话都算读过（review 2026-11-17）。
      */
-    public ToolTrust(Function<ToolContext, List<RunSegment>> views, java.util.function.Predicate<ToolContext> delegated,
-                     Function<ToolContext, List<String>> earlier) {
+    public ToolTrust(Function<ToolContext, List<RunSegment>> views, Function<ToolContext, List<String>> earlier) {
         this.views = views;
-        this.delegated = delegated;
         this.earlier = earlier;
     }
 
@@ -69,15 +61,6 @@ public final class ToolTrust {
     public static ToolTrust none() {
         return new ToolTrust(context -> List.of());
     }
-
-    /** 在委派开的子会话里。 */
-    public boolean delegated(ToolContext context) {
-        return delegated.test(context);
-    }
-
-    /** 子会话里不能改的时候给模型的话。 */
-    static final String CHILD = "This is a delegated sub-conversation: it can read memory and add notes with memory_note, but only the "
-            + "delegating conversation changes entries and working memory. Put what should change in your answer instead.";
 
     /** 只看引用（没有要点的写入：整条改写、删除）。 */
     public Verdict judge(ToolContext context, String quote) {

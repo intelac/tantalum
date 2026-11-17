@@ -8,21 +8,16 @@ import tantalum.kernel.projection.UsageProjection;
 import tantalum.kernel.table.StepContext;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.value.command.Command;
-import tantalum.value.command.Confirm;
-import tantalum.value.command.Send;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.PhaseChanged;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.SessionMessage;
 import tantalum.value.hook.HookContext;
 import tantalum.value.id.CommandId;
-import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.model.Message;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.Awaiting;
-import tantalum.value.state.Inbox;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.RunState;
@@ -111,34 +106,6 @@ final class Outcome {
     }
 
     Decision decision() {
-        mail();
         return new Decision(state, commands, facts);
-    }
-
-    /**
-     * 会话之间的话不丢、不重：收到一句就回一个确认并记下编号；这一步送出去的每一句都记在这个会话的信箱里，等对方确认。
-     * 放在这里而不是各个步骤里：哪一步送话、哪条路径收话都一样，不会漏。
-     */
-    private void mail() {
-        SessionState session = state.sessions().get(envelope.session());
-        Inbox before = session == null ? null : session.inbox();
-        Inbox inbox = before;
-        if (envelope.event() instanceof SessionMessage message && message.from().principal().equals(envelope.principal())) {
-            RunRef here = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
-            commands.add(new Confirm(nextCommandId(), here, message.from().session(), message.id()));
-            if (inbox != null) {
-                inbox = inbox.saw(message.id());
-            }
-        }
-        if (inbox != null) {
-            for (Command command : commands) {
-                if (command instanceof Send send) {
-                    inbox = inbox.sent(send.to(), send.message());
-                }
-            }
-            if (!inbox.equals(before)) {
-                state = state.with(session.withInbox(inbox));
-            }
-        }
     }
 }

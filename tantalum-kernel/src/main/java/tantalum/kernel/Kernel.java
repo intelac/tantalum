@@ -1,6 +1,11 @@
 package tantalum.kernel;
 
 import java.util.List;
+
+import tantalum.value.id.RunRef;
+
+import tantalum.value.decision.StepFailed;
+
 import java.util.Optional;
 import tantalum.kernel.hook.HookChain;
 import tantalum.kernel.step.RunEnd;
@@ -9,15 +14,12 @@ import tantalum.kernel.table.StepFunction;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.kernel.tool.ToolSafety;
 import tantalum.value.decision.Decision;
-import tantalum.value.decision.StepFailed;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.id.RunId;
-import tantalum.value.id.RunRef;
 import tantalum.value.state.Awaiting;
 import tantalum.value.state.AwaitingAnswer;
-import tantalum.value.state.AwaitingReply;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -76,7 +78,7 @@ public final class Kernel {
         return table.find(run == null ? NEW_RUN : run.phase().name(), event.type());
     }
 
-    /** 等命令结果时认在途命令；等用户回答、等会话回答时只认期限的定时器。 */
+    /** 等命令结果时认在途命令；等用户回答时只认期限的定时器。 */
     private static boolean isAwaited(RunState run, ResultEvent result) {
         if (run == null) {
             return false;
@@ -84,7 +86,6 @@ public final class Kernel {
         return switch (run.phase()) {
             case Awaiting awaiting -> awaiting.commands().contains(result.command());
             case AwaitingAnswer waiting -> result.command().equals(waiting.timer());
-            case AwaitingReply waiting -> result.command().equals(waiting.timer());
             default -> false;
         };
     }

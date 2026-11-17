@@ -17,7 +17,7 @@ from scenarios import SCENARIOS, SITE as SITE_URL
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 # 真实路径：macOS 的临时目录在符号链接后面（/var → /private/var），连接程序只认允许目录的真实路径，
-# 模型把提示里的路径原样交给 workspace_add、delegate 时要对得上
+# 模型把提示里的路径原样交给 workspace_add 时要对得上
 WORK = os.path.realpath(tempfile.mkdtemp(prefix="tantalum-scenarios-"))
 ROOT = os.path.join(WORK, "inventory")
 OUTSIDE = os.path.join(WORK, "notebook")   # outside 那组服务器多允许的一个目录，不在 Git 仓库里
@@ -242,9 +242,8 @@ def run_one(user, scenario, model, recording=False):
     for project in (user.call("GET", "/api/projects")[1] or {}).get("projects", []):
         user.call("DELETE", f"/api/projects/{project['id']}")
     if os.path.isdir(OUTSIDE): fixture.write(OUTSIDE, "plan.md", "# Notebook\n\nNot under version control.\n")
-    if scenario["group"] == "交给别的会话":
-        # 这一组的模型看得到别的会话和记忆，会把活交给“已经在做这件事的会话”：上一个场景留下的会话归档（归档的不列出来）、
-        # 模型自己记下的笔记删掉，每个场景才是从头来
+    if scenario["group"] == "工作区":
+        # 这一组的模型看得到别的会话和记忆：上一个场景留下的会话归档（归档的不列出来）、模型自己记下的笔记删掉，每个场景才是从头来
         for row in (user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", []):
             if not row.get("archived"): user.call("PUT", f"/api/sessions/{row['id']}/archived", {"archived": True})
         for entry in (user.call("GET", "/api/plugin-api/memory/entries")[1] or {}).get("entries", []):
@@ -252,7 +251,7 @@ def run_one(user, scenario, model, recording=False):
     for title, path in scenario.get("workspaces") or ():
         status, body = user.call("POST", "/api/projects", {"title": title, "path": path.replace("{root}", ROOT).replace("{outside}", OUTSIDE)})
         assert status == 201, f"workspace {title}: {status} {body}"
-    # window=True 的场景在主窗口里问（编号以 main- 开头）：那里没有改文件、跑命令的工具
+    # window=True 的场景在主窗口里问（编号以 main- 开头）
     session = ("main-" if scenario.get("window") else "s-") + secrets.token_hex(4)
     started = time.time()
     prompt = scenario["prompt"].replace("{outside}", OUTSIDE) + (RECORD_NOTE if recording else "")
@@ -270,9 +269,9 @@ def run_one(user, scenario, model, recording=False):
         session2 = "s-" + secrets.token_hex(4); sessions.append(session2)
         problem = ask(user, session2, scenario["followup"], model, scenario["timeout"], scenario["answers"], scenario["max_calls"])
     ctx = Ctx(); ctx.root = ROOT; ctx.outside = OUTSIDE; ctx.approvals = approvals; ctx.seconds = time.time() - started
-    # 这次场景的会话，和会话记录所在的目录：判分要看“别的会话”干了什么时用（交给别的会话那组）
+    # 这次场景的会话，和会话记录所在的目录
     ctx.sessions = sessions; ctx.sessions_dir = f"{DATA}/sessions/dev"
-    # 工作区那组：判分时还要再查工作区和会话列表（开出去的会话是事后干活的），所以把登录着的用户也带上
+    # 工作区那组：判分时还要再查工作区列表，所以把登录着的用户也带上
     ctx.user = user
     ctx.calls, ctx.answer, ctx.model_calls, tokens, ctx.compactions, prompt_sha = [], "", 0, collections.Counter(), 0, None
     for each in sessions:
@@ -366,8 +365,8 @@ def compare(table, now, path):
 REPLAY_DIR = os.path.join(REPO, "tantalum-examples", "src", "test", "resources", "replay")
 # 回放时 bash 不真的执行，模型用命令行改的文件回放不出来：录制时在提问后面加这一句（存进 scenario.json，回放用同一句）
 RECORD_NOTE = "（改文件请用 edit_file 或 write_file，不要用命令行或脚本改文件。）"
-# 回放的测试电脑没有浏览器、联网站点、技能和知识库目录，也不开第二个会话
-NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能", "交给别的会话"}   # 最后一组跨两个会话，回放只放一个会话的回复
+# 回放的测试电脑没有浏览器、联网站点、技能和知识库目录
+NOT_REPLAYABLE_GROUPS = {"联网", "浏览器", "技能"}
 # 录制只在 macOS 上做，所以只查 macOS 和 Linux 的本机路径；Windows 盘符和转义过的代码（"usage:\\n"）分不开，不查
 SENSITIVE = re.compile(r"/Users/|/home/|/private/var/|/var/folders/|sk-ant-|api[_-]?key\s*[:=]", re.IGNORECASE)
 

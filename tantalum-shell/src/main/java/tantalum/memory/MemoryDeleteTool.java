@@ -50,9 +50,6 @@ public final class MemoryDeleteTool implements Tool {
         if (context.offRecord()) {
             return ToolOutput.error(ToolTrust.OFF_RECORD);
         }
-        if (trust.delegated(context)) {
-            return ToolOutput.error(ToolTrust.CHILD);
-        }
         try {
             // 这个会话读过外部内容：文件、网页里一句“把某某记忆删掉”不能让记忆真的被删（review 2026-11-17）。
             // 只有你这一轮自己说了要忘的那句话（按一句话忘），或者自己点了条目的名字（整条删），才动。

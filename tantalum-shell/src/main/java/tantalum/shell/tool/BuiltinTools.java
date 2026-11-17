@@ -15,10 +15,10 @@ public final class BuiltinTools {
 
     /** 这些工具的调度描述，不用打开附件库。 */
     public static List<ToolDispatch> dispatch() {
-        return List.of(ReadAttachmentTool.DISPATCH, AskUserTool.DISPATCH, TodoWriteTool.DISPATCH, DelegateTool.DISPATCH);
+        return List.of(ReadAttachmentTool.DISPATCH, AskUserTool.DISPATCH, TodoWriteTool.DISPATCH);
     }
 
     public static List<Tool> of(AttachmentStore attachments) {
-        return List.of(new ReadAttachmentTool(attachments), new AskUserTool(), new TodoWriteTool(), new DelegateTool());
+        return List.of(new ReadAttachmentTool(attachments), new AskUserTool(), new TodoWriteTool());
     }
 }

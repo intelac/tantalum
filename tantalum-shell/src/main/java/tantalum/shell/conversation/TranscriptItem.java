@@ -62,31 +62,13 @@ public sealed interface TranscriptItem {
      * {@code attachments} 按上传顺序；没有时不写出，接口和推送的格式和以前相同。
      * {@code skills} 是文字里点名的技能，按出现顺序；没有时不写出。
      * {@code attached} 是插件在提交时附的内容（memory-plugin），按插件的顺序；没有时不写出。
-     * {@code from} 不为空时这一条是另一个会话送来的（交来的活，或者回话），不是用户说的；用户说的不写出。
      */
     record UserMessage(String id, SessionId session, RunId run, Instant at, String text,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachmentRef> attachments, boolean queued,
                        @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean removed,
                        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<SkillNote> skills,
-                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachedBlock> attached,
-                       @JsonInclude(JsonInclude.Include.NON_NULL) From from)
+                       @JsonInclude(JsonInclude.Include.NON_EMPTY) List<AttachedBlock> attached)
             implements TranscriptItem {
-
-        /**
-         * 这一条不是用户说的，是另一个会话送来的：{@code session} 是那个会话；{@code reply} 为假是它交来的活，为真是它对
-         * 这个会话交出去的活的回话；{@code failed} 表示回话说的是没做成，没有时不写出。
-         * {@code asking} 为真不是回话：交出去的那件活停在等用户回答，文字是它问的那句；没有时不写出。
-         */
-        public record From(String session, boolean reply, @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean failed,
-                           @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean asking) {
-            public From {
-                Objects.requireNonNull(session, "session");
-            }
-
-            public From(String session, boolean reply, boolean failed) {
-                this(session, reply, failed, false);
-            }
-        }
 
         public UserMessage {
             Objects.requireNonNull(id, "id");
@@ -96,16 +78,6 @@ public sealed interface TranscriptItem {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
             skills = skills == null ? List.of() : List.copyOf(skills);
             attached = attached == null ? List.of() : List.copyOf(attached);
-        }
-
-        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
-                           boolean queued, boolean removed, List<SkillNote> skills, List<AttachedBlock> attached) {
-            this(id, session, run, at, text, attachments, queued, removed, skills, attached, null);
-        }
-
-        /** 另一个会话送来的一句话。 */
-        public static UserMessage from(String id, SessionId session, RunId run, Instant at, String text, From from) {
-            return new UserMessage(id, session, run, at, text, List.of(), false, false, List.of(), List.of(), Objects.requireNonNull(from, "from"));
         }
 
         public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,

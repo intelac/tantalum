@@ -1,16 +1,19 @@
 package tantalum.kernel.step;
 
+import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContext;
+import tantalum.value.model.ToolSpec;
+import tantalum.value.model.ToolChangeBlock;
+import tantalum.kernel.projection.ToolUnlocks;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import tantalum.kernel.hook.HookOutcome;
-import tantalum.kernel.projection.ToolUnlocks;
 import tantalum.kernel.table.StepContext;
 import tantalum.kernel.tool.ToolScheduler;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.Decision;
-import tantalum.value.delegate.DelegateCall;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.hook.Ask;
 import tantalum.value.hook.HookPoint;
@@ -21,13 +24,9 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Message;
 import tantalum.value.model.Role;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
-import tantalum.value.model.ToolSpec;
 import tantalum.value.question.AskUser;
 import tantalum.value.state.RunState;
-import tantalum.value.state.SessionContext;
-import tantalum.value.state.SessionState;
 import tantalum.value.state.ToolRound;
 import tantalum.value.state.ToolSlot;
 
@@ -40,10 +39,7 @@ public final class ToolSteps {
 
     static void start(Outcome out, RunState run, List<ToolCallBlock> calls) {
         List<ToolSlot> slots = calls.stream()
-                .map(call -> AskUser.NAME.equals(call.name()) ? ToolSlot.waiting(call)
-                        // delegate 不发 RunTool：当作并行安全的槽位排进来，轮到它时送话
-                        : DelegateCall.NAME.equals(call.name()) ? ToolSlot.pending(call, true)
-                        : ToolSlot.pending(call, isConcurrencySafe(out, call)))
+                .map(call -> AskUser.NAME.equals(call.name()) ? ToolSlot.waiting(call) : ToolSlot.pending(call, isConcurrencySafe(out, call)))
                 .toList();
         checkRemaining(out, run, new ToolRound(slots, 0));
     }
@@ -131,52 +127,36 @@ public final class ToolSteps {
         dispatch(out, run.withTools(round));
     }
 
-    static void dispatch(Outcome out, RunState pending) {
+    private static void dispatch(Outcome out, RunState pending) {
         RunState run = pending;
         ToolRound round = run.tools();
-        // delegate 的槽位可能当场就有结果（不等，或者参数不对）：那样就再排一次，直到没有槽位当场完成
-        boolean settledAtOnce = true;
-        while (settledAtOnce) {
-            if (round.allFinished()) {
-                List<ContentBlock> results = new ArrayList<>(round.results());
-                out.append(run.ref(), new Message(Role.USER, results, false));
-                unlock(out, run, round);
-                run = run.withTools(null);
-                out.put(run);
-                ModelSteps.callModel(out, run, null);
-                return;
-            }
-            settledAtOnce = false;
-            for (int index : ToolScheduler.next(round, out.maxParallelTools)) {
-                ToolSlot slot = round.slots().get(index);
-                if (DelegateCall.NAME.equals(slot.call().name())) {
-                    round = MessageSteps.say(out, run, round, index);
-                    // 问出去等回话的槽位不占在途名额：也要再排一次，不然排在它后面的独占工具要等到回话才发
-                    settledAtOnce |= round.slots().get(index).isFinished() || round.slots().get(index).status() == ToolSlot.Status.ASKED;
-                    continue;
-                }
-                CommandId id = out.nextCommandId();
-                out.emit(new RunTool(id, run.ref(), slot.call()));
-                round = round.withSlot(index, slot.sent(id));
-            }
+        if (round.allFinished()) {
+            List<ContentBlock> results = new ArrayList<>(round.results());
+            out.append(run.ref(), new Message(Role.USER, results, false));
+            unlock(out, run, round);
+            run = run.withTools(null);
+            out.put(run);
+            ModelSteps.callModel(out, run, null);
+            return;
+        }
+        for (int index : ToolScheduler.next(round, out.maxParallelTools)) {
+            ToolSlot slot = round.slots().get(index);
+            CommandId id = out.nextCommandId();
+            out.emit(new RunTool(id, run.ref(), slot.call()));
+            round = round.withSlot(index, slot.sent(id));
         }
         Set<CommandId> sent = new HashSet<>();
-        boolean asked = false;
         for (ToolSlot slot : round.slots()) {
             if (slot.status() == ToolSlot.Status.SENT) {
                 sent.add(slot.command());
             }
-            asked |= slot.status() == ToolSlot.Status.ASKED;
         }
-        if (!sent.isEmpty()) {
-            out.await(run.withTools(round), AWAITING_TOOLS, sent);
-        } else if (asked) {
-            // 没有在途命令了，还有问出去的话没回：停在等会话回答，没有线程在等
-            MessageSteps.await(out, run.withTools(round));
-        } else {
+        if (sent.isEmpty()) {
             // 只剩 ask_user 的槽位：按顺序问第一个（一个运行同一时刻只有一个问题，需求 1.6）
             askNext(out, run.withTools(round));
+            return;
         }
+        out.await(run.withTools(round), AWAITING_TOOLS, sent);
     }
 
     /**

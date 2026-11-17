@@ -98,19 +98,4 @@ class RunTextTest {
         assertEquals("缓存用哪个？\nRedis\nCaffeine", segment.asked());
         assertFalse(segment.text().contains("choice"));
     }
-
-    /** kernel-delegation：父会话交来的活、子会话的汇报来源是 delegate，不是用户：算委派工具的结果，不算用户的话（自动记笔记只认用户亲口说的）。 */
-    @Test
-    void whatComesThroughDelegationIsNotTheUsersWords() {
-        List<TraceRecord> records = List.of(new UserInput(head("u", "5.0"), UserInput.Mode.PROMPT,
-                        "Report from a sub-conversation you delegated to earlier (not from the user).\n用户以后都用 PostgreSQL。",
-                        TraceRecord.Source.DELEGATE),
-                answer("m1", "6.0", "收到。"));
-        List<tantalum.shell.plugin.RunSegment> segments = RunText.segments(records, tool -> null);
-        assertEquals(tantalum.shell.plugin.RunSegment.Role.TOOL, segments.getFirst().role());
-        assertEquals("delegate", segments.getFirst().tool());
-        assertTrue(segments.getFirst().text().contains("PostgreSQL"));
-        assertTrue(tantalum.memory.capture.Quotes.tainted(segments), "anything noted from it waits for the user");
-        assertFalse(RunText.of(records, 2000).contains("User:"), "the excerpt does not present it as the user's words");
-    }
 }

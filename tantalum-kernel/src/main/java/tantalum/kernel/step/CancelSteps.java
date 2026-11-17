@@ -6,7 +6,6 @@ import tantalum.value.decision.Decision;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.state.Awaiting;
 import tantalum.value.state.AwaitingAnswer;
-import tantalum.value.state.AwaitingReply;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.RunState;
 
@@ -19,11 +18,11 @@ public final class CancelSteps {
 
     /**
      * 进程已经换过，没有在途的命令可中止，也不重新执行：写操作可能已经生效。
-     * 等用户回答、等会话回答的运行没有在途命令，不收尾，照旧等（shell 启动时也不会给它发这个事件）。
+     * 等用户回答的运行没有在途命令，不收尾，照旧等（shell 启动时也不会给它发这个事件）。
      */
     public static Decision interrupted(StepContext context) {
         RunState run = context.run();
-        if (run == null || run.isEnded() || run.phase() instanceof AwaitingAnswer || run.phase() instanceof AwaitingReply) {
+        if (run == null || run.isEnded() || run.phase() instanceof AwaitingAnswer) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
@@ -46,25 +45,18 @@ public final class CancelSteps {
         return end(context, EndReason.FAILED, event.detail());
     }
 
-    static Decision end(StepContext context, EndReason reason, String detail) {
+    private static Decision end(StepContext context, EndReason reason, String detail) {
         RunState run = context.run();
         if (run == null || run.isEnded()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        end(out, run, reason, detail);
-        return out.decision();
-    }
-
-    /** 结束一轮还在跑的运行：中止在途的命令（或撤掉问题、停掉等回话的定时器），然后收尾。 */
-    static void end(Outcome out, RunState run, EndReason reason, String detail) {
         if (run.phase() instanceof Awaiting awaiting && !awaiting.commands().isEmpty()) {
             out.emit(new AbortCommands(out.nextCommandId(), run.ref(), awaiting.commands()));
         } else if (run.phase() instanceof AwaitingAnswer waiting) {
             AnswerSteps.cancelled(out, run, waiting);
-        } else if (run.phase() instanceof AwaitingReply waiting && waiting.timer() != null) {
-            out.emit(new AbortCommands(out.nextCommandId(), run.ref(), java.util.Set.of(waiting.timer())));
         }
         RunEnd.finish(out, run, reason, detail);
+        return out.decision();
     }
 }

@@ -156,12 +156,11 @@ public final class ContextHandler implements Handler {
         Optional<String> workspace = local.section(principal, dir);
         workspace.ifPresent(text -> sections.add(new ContextSection(LOCAL_TAG, escape(text), false)));
         Workspaces source = workspaces;
-        // 别的会话开出来干活的会话不能再往下交，不给它看这一段
-        if (source != null && tantalum.value.delegate.DelegateCall.openerOf(command.run().session()).isEmpty()) {
+        if (source != null) {
             // 列出来的不含“不进记忆”的会话：它们的标题不该出现在别的会话的上下文里
             // 按行比较：之后变了只把变的那几行告诉模型
             // 别的会话的标题是用户以前的原话：插件说不给的（记忆插件：忘掉的事）不写标题
-            // 主窗口不列：没有人会把活交给它，它的标题又是随口说的话，列出来只会把旧话带进每个会话
+            // 主窗口不列：它的标题是随口说的话，列出来只会把旧话带进每个会话
             SessionId here = command.run().session();
             List<WorkspaceSection.Row> rows = source.sessions(principal).stream()
                     .filter(row -> row.summary().id().equals(here) || !MainWindow.is(row.summary().id()))
@@ -235,17 +234,7 @@ public final class ContextHandler implements Handler {
             unlocks.forEach(rule -> later.addAll(rule.add()));
             enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
         }
-        // 主窗口不给的工具对这个会话来说根本不存在：不放进工具表，而不是“有但关着”。关着的工具算“会话里工具有变化”，
-        // 不支持工具变化的模型（Haiku 等）第二句话起就不能选了（2026-11-16 真模型场景发现）
         List<tantalum.value.model.ToolSpec> specs = catalog.specs();
-        if (main) {
-            java.util.Set<String> withheld = MainWindow.withheld(catalog.tools());
-            specs = specs.stream().filter(spec -> !withheld.contains(spec.name())).toList();
-            enabled = enabled.stream().filter(name -> !withheld.contains(name)).toList();
-            unlocks = unlocks.stream().map(rule -> new ToolUnlock(rule.after().stream().filter(name -> !withheld.contains(name)).toList(),
-                    rule.add().stream().filter(name -> !withheld.contains(name)).toList()))
-                    .filter(rule -> !rule.after().isEmpty() && !rule.add().isEmpty()).toList();
-        }
         // 模型不支持会话中途的工具变化（Haiku 等）时也一样：这个人现在没开着的工具不放进工具表。否则它们算“一开始就关着”，
         // 这个会话的第二句话就选不了这个模型了。接着连接程序的 Mac 上 powershell 永远关着，所以每个普通会话都中招
         // （2026-11-17 真模型场景发现）。会话的工具表在第一次组装时定下，这样的会话之后新开的工具要等压缩或新会话。

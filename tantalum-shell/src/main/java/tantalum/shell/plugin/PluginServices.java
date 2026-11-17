@@ -72,14 +72,6 @@ public interface PluginServices {
         return java.time.ZoneId.systemDefault();
     }
 
-    /**
-     * 这个会话现在这一轮是不是为回另一个会话的话开的：是的话给出那个会话，不是为空。这样的一轮不是用户亲口发起的，个人插件要更小心
-     * （记忆只许追加）。用户自己在这个会话里提问开的一轮不算。
-     */
-    default Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
-        return Optional.empty();
-    }
-
     /** 统一的敏感信息检测（memory-final-plan 第 7 节）：所有记忆写入点都过一遍。 */
     default SensitiveText sensitive() {
         return SensitiveText.current();
@@ -98,7 +90,7 @@ public interface PluginServices {
     }
 
     /**
-     * 这个会话到现在为止各轮调过的工具，去重：名字和所属插件（内置的为 null）。另一个会话交来的话、回来的结果算 {@code delegate}。
+     * 这个会话到现在为止各轮调过的工具，去重：名字和所属插件（内置的为 null）。
      * 给插件判断“这个会话读过外部内容没有”。不是这个人的或不存在时为空。
      */
     record ToolUse(String tool, String plugin) {}

@@ -4,7 +4,7 @@ import { useViewedUser } from "../api/viewing";
 import { SessionRow } from "../shell/SessionRow";
 import { useText } from "../text";
 import { Menu } from "../ui/Menu";
-import { type Group, PAGE, UNGROUPED, indentedIn } from "./group";
+import { type Group, PAGE, UNGROUPED } from "./group";
 
 interface Props {
   group: Group;
@@ -41,7 +41,6 @@ export function ProjectGroup({
 }: Props) {
   const t = useText();
   const name = group.project?.title ?? t.projects.ungrouped;
-  const indented = indentedIn(group.rows);
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   // 只读查看别人的会话时，工作区不能新建会话、改名、删除
   const viewing = useViewedUser() !== null;
@@ -86,7 +85,6 @@ export function ProjectGroup({
             <SessionRow
               key={session.id}
               session={session}
-              indent={indented.has(session.id)}
               selected={session.id === currentSession}
               onSelect={onSelectSession}
               onRename={onRenameSession}

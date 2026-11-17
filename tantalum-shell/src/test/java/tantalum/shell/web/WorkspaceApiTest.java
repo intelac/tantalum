@@ -43,11 +43,7 @@ class WorkspaceApiTest {
         if (last.equals("set up the shop")) {
             return call("c1", "workspace_add", Map.of("path", new Json.Str("/home/alice/shop"), "title", new Json.Str("Shop")));
         }
-        if (last.startsWith("Added workspace")) {
-            return call("c2", "delegate", Map.of("task", new Json.Str("list the files"), "workspace", new Json.Str("/home/alice/shop")));
-        }
-        String reply = last.startsWith("Opened conversation") ? "handed off" : last.contains("Task:\nlist the files") ? "3 files"
-                : last.contains("decided not to add") ? "not added" : last.equals("what is there") ? "looked" : "back: " + last.lines().reduce((a, b) -> b).orElse("");
+        String reply = last.startsWith("Added workspace") ? "it is set up" : last.contains("decided not to add") ? "not added" : last.equals("what is there") ? "looked" : "back: " + last.lines().reduce((a, b) -> b).orElse("");
         return new ModelOutcome.Replied(List.of(new TextBlock(reply)), StopReason.END_TURN, "m", null);
     };
 
@@ -79,42 +75,29 @@ class WorkspaceApiTest {
     }
 
     @Test
-    void theUserConfirmsANewWorkspaceAndAConversationIsOpenedInIt() throws Exception {
+    void theUserConfirmsANewWorkspaceAndTheModelIsToldAboutIt() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("ws")), model)) {
             server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"set up the shop\"}");
             JsonNode question = answer(server, "top", "add");
             assertTrue(question.get("id").asString().startsWith("workspace-"), question.toString());
             assertTrue(question.toString().contains("/home/alice/shop") && question.toString().contains("Shop"), "the card shows the folder and the name");
 
-            String messages = waitFor(server, "top", "back: 3 files");
-            assertTrue(messages.contains("back: 3 files"), "added, handed off, and the answer came back: " + messages);
+            String messages = waitFor(server, "top", "it is set up");
+            assertTrue(messages.contains("it is set up"), "added after the user said yes: " + messages);
             JsonNode projects = JSON.readTree(server.get("alice", "/api/projects").body()).get("projects");
             assertEquals(1, projects.size(), projects.toString());
             assertEquals("Shop", projects.get(0).get("title").asString());
             assertEquals("/home/alice/shop", projects.get(0).get("path").asString());
 
-            JsonNode sessions = JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions");
-            assertEquals(2, sessions.size(), sessions.toString());
-            String opened = null;
-            for (JsonNode session : sessions) {
-                if (!session.get("id").asString().equals("top")) {
-                    opened = session.get("id").asString();
-                    assertEquals("/home/alice/shop", session.path("dir").asString(), "the new conversation works in the workspace's folder");
-                    assertEquals("top", session.path("parent").asString());
-                } else {
-                    assertTrue(session.path("dir").isNull() || session.path("dir").isMissingNode(), "the opener stays where it was");
-                }
-            }
+            assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions").body()).get("sessions").size(), "no conversation is opened for it");
 
-            // 下一轮：上下文里有工作区和它下面那个会话（这一段同一个人一秒内用上一次查到的，所以等一下）
+            // 下一轮：上下文里有这个工作区（这一段同一个人一秒内用上一次查到的，所以等一下）
             Thread.sleep(1500);
             server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"what is there\"}");
             assertTrue(waitFor(server, "top", "looked").contains("looked"));
             String seen = inputs.getLast();
             assertTrue(seen.contains("- workspace \"Shop\" — /home/alice/shop") || seen.contains("- workspace \\\"Shop\\\" — /home/alice/shop"),
                     "the model is told about the workspace: " + seen);
-            assertTrue(seen.contains("- " + opened + " \"list the files\" · in \"Shop\"") || seen.contains("- " + opened + " \\\"list the files\\\" · in \\\"Shop\\\""),
-                    "and about the conversation in it, by its task: " + seen);
         }
     }
 

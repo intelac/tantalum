@@ -95,11 +95,6 @@ final class TranscriptPass {
             case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), false);
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(), false);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), true);
-            case tantalum.value.event.SessionMessage said -> {
-                if (said.isReply() || said.isWaitingForUser()) {
-                    reported(said);
-                }
-            }
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -113,9 +108,6 @@ final class TranscriptPass {
         for (Command command : decision.commands()) {
             if (command instanceof RunTool tool && tool.run().session().equals(session)) {
                 dispatched(tool);
-            }
-            if (command instanceof tantalum.value.command.Send send && send.run().session().equals(session)) {
-                asked(send);
             }
         }
         for (Fact fact : decision.facts()) {
@@ -354,78 +346,6 @@ final class TranscriptPass {
     }
 
     /** 同一事件发出的调用是一组并行调用，组名取事件序号。 */
-    /**
-     * 交活或汇报带来的一条消息：这一步开了新的一轮就是它的开头，运行正在跑、汇报成了插话时挂在那一轮上。
-     * {@code text} 为 null 时取内核刚放进去的那条消息的文字（汇报）。交回被写成工具结果或被忽略时没有条目。
-     */
-    /**
-     * 交出去的活回话了，或者说它停在等用户回答（{@code asking}，两种走同一条路）。这次调用在等它的，回话是那次工具调用的结果，不另出条目；没在等的，回话作为一条消息进这个会话
-     * （开一轮，或者插进正在跑的一轮），显示成“来自那个会话的回话”，不是用户的气泡。文字是对方的原话，不带给模型看的开场白。
-     */
-    private void reported(tantalum.value.event.SessionMessage said) {
-        String id = TranscriptItem.id(envelope.seq(), 0);
-        RunId fresh = RunId.of(session, envelope.seq());
-        SessionState current = state.sessions().get(session);
-        if (current == null || get(id) != null) {
-            return;
-        }
-        // 这句回话被一次等着它的调用接走了（写成了工具结果）：不另出条目，哪怕正好有别的回话挂着当插话
-        if (before != null && before.sessions().get(session) instanceof SessionState was && was.activeRun() != null
-                && before.runs().get(was.activeRun()) instanceof RunState waiting && waiting.tools() != null
-                && waiting.tools().slots().stream().anyMatch(slot -> slot.status() == ToolSlot.Status.ASKED
-                        && said.answers().equals(slot.command()))) {
-            return;
-        }
-        UserMessage.From from = new UserMessage.From(said.from().session().value(), true, said.failed(), said.isWaitingForUser());
-        if (state.runs().containsKey(fresh)) {
-            startedBySubmission = fresh;
-            put(UserMessage.from(id, session, fresh, at, said.text(), from));
-        } else if (current.activeRun() != null && state.runs().get(current.activeRun()) instanceof RunState now
-                && !now.pendingSteers().isEmpty()
-                && (before == null || !(before.runs().get(current.activeRun()) instanceof RunState earlier)
-                        || now.pendingSteers().size() > earlier.pendingSteers().size())
-                && firstText(now.pendingSteers().getLast()).startsWith(tantalum.value.delegate.DelegateCall.REPORT)) {
-            put(UserMessage.from(id, session, current.activeRun(), at, said.text(), from));
-        }
-    }
-
-    /**
-     * 为另一个会话交来的活开的一轮：开头是那句话，显示成“那个会话交来的活”。看这一轮的主人认出它，所以来的时候会话正忙、
-     * 排了队后来才开始的也有这一条。文字只留任务和背景。
-     */
-    private void handedIn(RunId run) {
-        if (!(state.runs().get(run) instanceof RunState started) || !(started.owner() instanceof tantalum.value.state.OwnerRef.OfMessage owner)) {
-            return;
-        }
-        SessionState current = state.sessions().get(session);
-        String id = "in-" + owner.message().value();
-        if (current == null || current.messages().isEmpty() || get(id) != null) {
-            return;
-        }
-        Message opening = current.messages().stream().filter(message -> message.role() == Role.USER).reduce((first, second) -> second)
-                .orElse(current.messages().getLast());
-        put(UserMessage.from(id, session, run, at, tantalum.value.delegate.DelegateCall.shownOf(firstText(opening)),
-                new UserMessage.From(owner.from().value(), false, false)));
-    }
-
-    private static String firstText(Message message) {
-        return message.content().stream().filter(tantalum.value.model.TextBlock.class::isInstance)
-                .map(block -> ((tantalum.value.model.TextBlock) block).text()).findFirst().orElse("");
-    }
-
-    /** 一次要等回话的 {@code delegate}：话送出去了，它的步骤从这时起算在跑，等另一个会话回话。 */
-    private void asked(tantalum.value.command.Send send) {
-        if (!(state.runs().get(send.run().run()) instanceof RunState current) || current.tools() == null) {
-            return;
-        }
-        for (ToolSlot slot : current.tools().slots()) {
-            if (slot.status() == ToolSlot.Status.ASKED && send.id().equals(slot.command())
-                    && step(slot.call().id()) instanceof ToolStep step && !step.isFinished()) {
-                put(step.running("g" + envelope.seq(), at));
-            }
-        }
-    }
-
     private void dispatched(RunTool tool) {
         if (step(tool.call().id()) instanceof ToolStep step) {
             put(step.running("g" + envelope.seq(), at));
@@ -435,10 +355,7 @@ final class TranscriptPass {
     private void phaseChanged(RunId run, String phase) {
         RunStatus existing = get(RunStatus.idOf(run)) instanceof RunStatus found ? found : null;
         RunStatus status = existing != null ? existing : RunStatus.started(session, run, at, phase);
-        if (existing == null && state.runs().get(run) instanceof RunState begun
-                && begun.owner() instanceof tantalum.value.state.OwnerRef.OfMessage) {
-            handedIn(run);
-        } else if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
+        if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
             UserMessage queued = (UserMessage) get(conversation.queued.pollFirst());
             put(queued.started(run));
         }
@@ -480,9 +397,7 @@ final class TranscriptPass {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolResultBlock result && step(result.toolCallId()) instanceof ToolStep step
                         && !step.isFinished()) {
-                    // delegate 没有自己的结果事件：交回写成工具结果，随这条消息一起到
-                    boolean delegate = tantalum.value.delegate.DelegateCall.NAME.equals(step.call().name());
-                    put(result.code() != null || delegate ? step.finished(result, at) : step.blocked(result, at));
+                    put(result.code() != null ? step.finished(result, at) : step.blocked(result, at));
                 }
             }
         }

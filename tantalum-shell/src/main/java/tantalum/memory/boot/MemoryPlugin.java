@@ -49,7 +49,6 @@ public class MemoryPlugin {
     @Bean
     tantalum.memory.ToolTrust memoryToolTrust(ObjectProvider<PluginServices> services) {
         return new tantalum.memory.ToolTrust(context -> services.getObject().runView(context.principal(), context.session(), context.run()),
-                context -> services.getObject().delegatedFrom(context.principal(), context.session()).isPresent(),
                 context -> services.getObject().toolsUsed(context.principal(), context.session()).stream()
                         .filter(use -> tantalum.memory.capture.Quotes.outside(use.tool(), use.plugin()))
                         .map(PluginServices.ToolUse::tool).distinct().toList());

@@ -7,7 +7,6 @@ import { useItem } from "../store/hooks";
 import { clockTime } from "../text/format";
 import { lookup, useText } from "../text";
 import { CopyButton } from "../ui/CopyButton";
-import { SessionNote } from "./SessionNote";
 
 interface Props {
   store: ConversationStore;
@@ -24,8 +23,6 @@ export function UserBubble({ store, id }: Props) {
   const item = useItem(store, id);
   // 排队时被移除的只留在数据里占位
   if (item === undefined || item.kind !== "user" || item.removed === true) return null;
-  // 另一个会话送来的不是用户说的，不画成气泡
-  if (item.from !== undefined) return <SessionNote item={{ ...item, from: item.from }} />;
   return (
     <div data-turn={id} className="group flex scroll-mt-4 flex-col items-end gap-1 py-2">
       <AttachmentView attachments={item.attachments ?? []} />

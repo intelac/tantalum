@@ -60,7 +60,6 @@ public final class SubmitSteps {
             out.put((existing == null ? SessionState.start(context.envelope().session(), context.envelope().principal()) : existing)
                     .withOffRecord());
         }
-        attended(out, true);
         if (context.run() == null || context.run().isEnded()) {
             startRun(out, owner, message, model);
         } else {
@@ -80,33 +79,15 @@ public final class SubmitSteps {
         Outcome out = new Outcome(context);
         RunState run = context.run();
         Message message = Message.user(event.text(), event.attachments(), blocks(event.skills()));
-        attended(out, true);
         if (run == null || run.isEnded()) {
             // 插话不带选择：空闲时开的运行用会话现在的模型
             startRun(out, new OwnerRef.OfSession(context.envelope().session()), message, null);
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());
             steers.add(message);
-            // 这一轮是替别的会话做的：记下用户插过话，回话里带上这个事实
-            RunState steered = run.owner() instanceof OwnerRef.OfMessage owner ? run.withOwner(owner.spoke()) : run;
-            out.put(steered.withPendingSteers(steers));
+            out.put(run.withPendingSteers(steers));
         }
         return out.decision();
-    }
-
-    /**
-     * 记下用户在不在场（{@link SessionState#unattended()}）：用户说话了清零；别的会话的话让会话自己开了一轮，记成至少 1。
-     * 会话还不存在时不用记（新会话从 0 开始）。
-     */
-    static void attended(Outcome out, boolean byUser) {
-        SessionState session = out.state().sessions().get(out.envelope.session());
-        if (session == null) {
-            return;
-        }
-        int want = byUser ? 0 : Math.max(1, session.unattended());
-        if (session.unattended() != want) {
-            out.put(session.withUnattended(want));
-        }
     }
 
     /**

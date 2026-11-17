@@ -49,9 +49,6 @@ public final class MemoryWriteTool implements Tool {
         if (context.offRecord()) {
             return ToolOutput.error(ToolTrust.OFF_RECORD);
         }
-        if (trust.delegated(context)) {
-            return ToolOutput.error(ToolTrust.CHILD);
-        }
         try {
             MemoryStore store = stores.of(context.principal());
             String type = ToolArguments.string(arguments, "type");

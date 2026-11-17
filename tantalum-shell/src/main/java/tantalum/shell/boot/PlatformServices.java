@@ -282,27 +282,6 @@ public final class PlatformServices implements PluginServices {
     }
 
     @Override
-    public Optional<SessionId> delegatedFrom(Principal user, SessionId session) {
-        Engine bound = engine;
-        if (bound == null) {
-            return Optional.empty();
-        }
-        // 这个会话现在这一轮是为回另一个会话的话开的：看这一轮的主人。第一版开的子会话还在旧的记录里
-        Optional<SessionId> from = bound.queries().session(user, session).flatMap(view -> view.runs().stream()
-                .filter(run -> run.ref().run().equals(view.state().activeRun())).findFirst())
-                .map(run -> run.owner() instanceof tantalum.value.state.OwnerRef.OfMessage owner ? owner.from() : null);
-        if (from.isPresent()) {
-            return from;
-        }
-        try {
-            return bound.delegations().of(user, session).map(tantalum.shell.delegate.Delegations.Delegation::parent);
-        } catch (java.sql.SQLException | RuntimeException unreadable) {
-            LOG.warn("cannot read the delegation of {}: {}", session.value(), unreadable.toString());
-            return Optional.empty();
-        }
-    }
-
-    @Override
     public Json.Obj params(String plugin, Principal user) {
         Engine bound = engine;
         return bound == null ? new Json.Obj(Map.of()) : bound.plugins().params(user, plugin);

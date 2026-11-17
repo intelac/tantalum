@@ -24,7 +24,6 @@ import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.event.SessionMessage;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
@@ -140,8 +139,7 @@ public final class EventCodec {
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
         @JsonSubTypes.Type(value = OwnerRef.OfSession.class, name = "session"),
-        @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command"),
-        @JsonSubTypes.Type(value = OwnerRef.OfMessage.class, name = "message")
+        @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command")
     })
     private interface OwnerRefMixin {}
 
@@ -238,10 +236,6 @@ public final class EventCodec {
         codec.register(SessionRenamed.TYPE, 1, SessionRenamed.class);
         codec.register(QueueChanged.TYPE, 1, QueueChanged.class);
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
-        // 会话之间说话：另一个会话说了一句话
-        codec.register(SessionMessage.TYPE, 1, SessionMessage.class);
-        codec.register(tantalum.value.event.MessageDelivered.TYPE, 1, tantalum.value.event.MessageDelivered.class);
-        codec.register(tantalum.value.event.Redeliver.TYPE, 1, tantalum.value.event.Redeliver.class);
         return codec;
     }
 

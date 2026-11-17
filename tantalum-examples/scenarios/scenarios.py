@@ -31,236 +31,43 @@ def S(id, group, risk, prompt, check, max_calls=12, answers=None, setup=None, ti
                 timeout=timeout, followup=followup, server=server, world=world, turns=list(turns), approve=approve, window=window, workspaces=list(workspaces),
                 between=between)
 
-# ---- 交给别的会话 ----
-FILE_TOOLS = ("grep", "find_files", "read_file", "list_dir", "bash", "powershell")
-
-def others(ctx):
-    """这次场景里别的会话开出来的会话各自调过哪些工具：{会话: [工具名…]}。它们的编号是 s-<开它的会话>_<序号>-<下标>。"""
-    import glob, json
-    found = {}
-    for session in ctx.sessions:
-        for path in sorted(glob.glob(os.path.join(ctx.sessions_dir, f"s-{session}_*.jsonl"))):
-            names = []
-            for line in open(path, encoding="utf-8"):
-                try: entry = json.loads(line)
-                except ValueError: continue
-                if entry.get("type") == "ModelReplied":
-                    names += [block.get("name") for block in (entry.get("payload") or {}).get("content", []) if block.get("kind") == "toolCall"]
-            found[os.path.basename(path)[:-6]] = names
-    return found
-
-def delegated(ctx, count):
-    failed = []
-    if ctx.tools.get("delegate", 0) < count: failed.append(f"delegate 只调了 {ctx.tools.get('delegate', 0)} 次，要 {count} 次")
-    mine = [name for name in FILE_TOOLS if ctx.tools.get(name, 0) > 0]
-    if mine: failed.append(f"这边自己用了 {', '.join(mine)}，没有交给别的会话")
-    opened = others(ctx)
-    if len(opened) < count: failed.append(f"只开出了 {len(opened)} 个会话，要 {count} 个")
-    idle = [session for session, names in opened.items() if not any(name in FILE_TOOLS for name in names)]
-    if idle: failed.append(f"{', '.join(idle)} 没有用电脑上的工具")
-    return failed
-
-def c_window_delegates(ctx):
-    """主窗口里没人提 delegate：模型要自己想到开一个会话去改。开出去的会话是事后干活的，等它最多两分钟。"""
-    import time
-    failed = []
-    if ctx.tools.get("delegate", 0) < 1: failed.append("主窗口没有自己想到用 delegate")
-    deadline = time.time() + 120
-    while time.time() < deadline and "EXPRESS_SURCHARGE = 25" not in read(ctx, "inventory/shipping.py"): time.sleep(2)
-    if "EXPRESS_SURCHARGE = 25" not in read(ctx, "inventory/shipping.py"): failed.append("文件没有被改成 25")
-    opened = others(ctx)
-    if not any(name in ("edit_file", "write_file", "bash") for names in opened.values() for name in names):
-        failed.append(f"开出去的会话没有用改文件的工具：{opened}")
-    return failed
-
-def raw(ctx, session):
-    try: return open(os.path.join(ctx.sessions_dir, f"{session}.jsonl"), encoding="utf-8").read()
-    except OSError: return ""
-
-def window_says(ctx, needles, seconds=240):
-    """主窗口交出去不等：结果是事后一条条回来、各开一轮说的。等到这次场景的会话记录里这些词都出现（模型回复里），最多等这么久。"""
-    import json, time
-    deadline = time.time() + seconds
-    missing = list(needles)
-    while True:
-        said = ""
-        for session in ctx.sessions:
-            for line in raw(ctx, session).splitlines():
-                try: entry = json.loads(line)
-                except ValueError: continue
-                if entry.get("type") == "ModelReplied":
-                    said += "".join(block.get("text", "") for block in (entry.get("payload") or {}).get("content", []) if block.get("kind") == "text")
-        missing = [n for n in needles if n.lower() not in said.lower()]
-        if not missing or time.time() > deadline: break
-        time.sleep(3)
-    return [f"等了 {seconds} 秒，主窗口的回复里还是没有 {n!r}" for n in missing]
-
-def c_fan_out_three(ctx):
-    """一句话交代三件互不相干的事：模型自己分给三个会话，三个都真的干了活，三个结果都回到主窗口。"""
-    failed = window_says(ctx, [FACTS["warehouse"], "shipping.py", "12"])
-    opened = others(ctx)
-    if len(opened) < 3: failed.append(f"只开出了 {len(opened)} 个会话，要 3 个：{list(opened)}")
-    idle = [session for session, names in opened.items() if not any(name in FILE_TOOLS for name in names)]
-    if idle: failed.append(f"{', '.join(idle)} 没有用电脑上的工具")
-    mine = [name for name in FILE_TOOLS if ctx.tools.get(name, 0) > 0]
-    if mine: failed.append(f"主窗口自己用了 {', '.join(mine)}")
-    answers = sum(raw(ctx, session).count('"type":"SessionMessage"') for session in ctx.sessions)
-    if answers < len(opened): failed.append(f"开出去 {len(opened)} 个会话，只回来 {answers} 句话")
-    return failed
-
-def c_take_back(ctx):
-    """交出去一件长活，接着说不用做了：模型把它收回，那个会话停下，并且照常回一句“没做成”。"""
-    import time
-    failed = []
-    stops = [call for call in ctx.calls if call["name"] == "delegate" and isinstance(call["args"], dict) and call["args"].get("stop") in (True, "true")]
-    if not stops: failed.append("没有把交出去的活收回")
-    opened = others(ctx)
-    if len(opened) != 1: failed.append(f"应该只开出 1 个会话：{list(opened)}")
-    deadline = time.time() + 60
-    marker = "taken back by the conversation that handed it over"
-    while time.time() < deadline and not any(marker in raw(ctx, session) for session in opened): time.sleep(2)
-    for session in opened:
-        if marker not in raw(ctx, session):
-            failed.append(f"{session} 没有因为被收回而停下" + ("（它在收回之前已经做完了，这次没测到）" if '"reason":"COMPLETED"' in raw(ctx, session) else ""))
-    while time.time() < deadline and not any(marker in raw(ctx, session) for session in ctx.sessions): time.sleep(2)
-    if not any(marker in raw(ctx, session) for session in ctx.sessions): failed.append("“没做成”的回话没有回到主窗口")
-    return failed
-
+# ---- 工作区 ----
 def same_dir(a, b):
     return a is not None and b is not None and os.path.realpath(a.rstrip("/")) == os.path.realpath(b.rstrip("/"))
 
-def workspace_state(ctx):
-    """现在登记着的工作区，和这次场景里开出去的会话各自的目录：{会话: 目录}。"""
-    projects = (ctx.user.call("GET", "/api/projects")[1] or {}).get("projects", [])
-    listed = (ctx.user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", [])
-    opened = {row["id"]: row.get("dir") for row in listed if row.get("parent") in ctx.sessions}
-    return projects, opened
+def workspaces_now(ctx):
+    """现在登记着的工作区。"""
+    return (ctx.user.call("GET", "/api/projects")[1] or {}).get("projects", [])
 
-def notebook_retitled(ctx, seconds=120):
-    """开出去的会话是事后干活的：等它把 plan.md 的标题改掉，最多等这么久。"""
-    import time
-    deadline = time.time() + seconds
-    path = os.path.join(ctx.outside, "plan.md")
-    while True:
-        try: text = open(path, encoding="utf-8").read()
-        except OSError: text = ""
-        if text.startswith("# Field Notes"): return True
-        if time.time() > deadline: return False
-        time.sleep(2)
+def notebook_retitled(ctx):
+    try: return open(os.path.join(ctx.outside, "plan.md"), encoding="utf-8").read().startswith("# Field Notes")
+    except OSError: return False
 
 def c_workspace_new(ctx):
-    """没有工作区：模型自己新建（卡片上用户点了“新建”），再在那里开一个会话去改。"""
+    """没有工作区：模型自己新建（卡片上用户点了“新建”），并把那里的文件改了。"""
     failed = []
     if ctx.tools.get("workspace_add", 0) < 1: failed.append("没有新建工作区")
-    changed = notebook_retitled(ctx)
-    projects, opened = workspace_state(ctx)
+    projects = workspaces_now(ctx)
     if not any(same_dir(project["path"], ctx.outside) for project in projects): failed.append(f"工作区没有登记上：{projects}")
-    if not any(same_dir(folder, ctx.outside) for folder in opened.values()): failed.append(f"没有在新工作区里开会话：{opened}")
-    if not changed: failed.append("plan.md 的标题没有改")
+    if not notebook_retitled(ctx): failed.append("plan.md 的标题没有改")
     return failed
 
 def c_workspace_pick(ctx):
-    """已经有两个工作区：模型按名字挑对的那个开会话，不新建。"""
+    """已经有两个工作区：模型按名字找到对的那个目录，不新建。"""
     failed = []
     if ctx.tools.get("workspace_add", 0): failed.append("工作区已经有了，却又去新建")
-    changed = notebook_retitled(ctx)
-    projects, opened = workspace_state(ctx)
+    projects = workspaces_now(ctx)
     if len(projects) != 2: failed.append(f"工作区数量变了：{projects}")
-    if not any(same_dir(folder, ctx.outside) for folder in opened.values()): failed.append(f"没有在 notebook 工作区里开会话：{opened}")
-    if not changed: failed.append("plan.md 的标题没有改")
+    if not notebook_retitled(ctx): failed.append("plan.md 的标题没有改")
     return failed
 
 def c_workspace_denied(ctx):
-    """用户在卡片上点了“不建”：不登记，不再试第二次，也不绕过去直接在那个目录里开会话。"""
-    import time
+    """用户在卡片上点了“不建”：不登记，不再试第二次。"""
     failed = []
     if ctx.tools.get("workspace_add", 0) != 1: failed.append(f"workspace_add 调了 {ctx.tools.get('workspace_add', 0)} 次，应该正好 1 次")
-    time.sleep(10)   # 万一它还是开了会话，给列表一点时间
-    projects, opened = workspace_state(ctx)
+    projects = workspaces_now(ctx)
     if projects: failed.append(f"用户说不建，却登记了：{projects}")
-    if any(same_dir(folder, ctx.outside) for folder in opened.values()): failed.append(f"用户说不建，却直接在那个目录里开了会话：{opened}")
     return failed
-
-def c_workspace_reuse(ctx):
-    """同一件事接着做：第二次交给第一次开的那个会话，不再另开一个；两处都改了。"""
-    import time
-    failed = []
-    path = os.path.join(ctx.outside, "plan.md")
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        text = open(path, encoding="utf-8").read()
-        if text.startswith("# Field Notes") and "Kept by hand." in text: break
-        time.sleep(2)
-    text = open(path, encoding="utf-8").read()
-    if not text.startswith("# Field Notes"): failed.append("标题没有改")
-    if "Kept by hand." not in text: failed.append("第二句没有改")
-    projects, opened = workspace_state(ctx)
-    if len(opened) != 1: failed.append(f"应该只开一个会话、第二次接着用它，实际开了 {len(opened)} 个：{opened}")
-    if ctx.tools.get("delegate", 0) < 2: failed.append("两次都应该交出去")
-    return failed
-
-LARGE_TOKENS = 100_000   # WorkspaceSection.LARGE：会话的上下文到这么多，模型看到的那一行标 (large)
-
-def fill_opened_session(run, user, session, model):
-    """把第一句话开出来的那个会话的上下文撑到 10 万 token 以上：像真人那样往里贴一份很长的日志，让它收着。"""
-    import random, time
-    outside = run.OUTSIDE
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        try:
-            if open(os.path.join(outside, "plan.md"), encoding="utf-8").read().startswith("# Field Notes"): break
-        except OSError: pass
-        time.sleep(2)
-    else: return "setup: the first change was never made"
-    time.sleep(4)   # 等它那一轮结束
-    listed = (user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", [])
-    opened = [row["id"] for row in listed if row.get("parent") == session]
-    if len(opened) != 1: return f"setup: expected one opened conversation, got {opened}"
-    rng, lines = random.Random(7), []
-    zones = ["local", "national", "overseas"]
-    while sum(len(line) + 1 for line in lines) < 225_000:
-        lines.append(f"2026-10-{rng.randint(1, 31):02d} {rng.randint(0, 23):02d}:{rng.randint(0, 59):02d} order {rng.randint(10000, 99999)} "
-                     f"shipped to {rng.choice(zones)} weight {rng.randint(1, 400) / 10} kg fee {rng.randint(100, 9000) / 100} carrier {rng.choice(['north', 'delta', 'kite'])}")
-    problem = run.ask(user, opened[0], "这是上个月的发运日志，先收着，后面可能要查。现在不用分析，回一句“收到”就行。\n\n" + "\n".join(lines),
-                      model, 300, {}, 4)
-    if problem: return "setup: " + problem
-    size = 0
-    for line in open(f"{run.DATA}/sessions/dev/{opened[0]}.jsonl", encoding="utf-8"):
-        try: entry = json.loads(line)
-        except ValueError: continue
-        if entry.get("type") == "ModelReplied":
-            usage = (entry.get("payload") or {}).get("usage") or {}
-            size = usage.get("input", 0) + usage.get("cacheRead", 0) + usage.get("cacheWrite", 0)
-    if size < LARGE_TOKENS: return f"setup: the conversation only reached {size} tokens"
-    return None
-
-def c_workspace_large(ctx):
-    """同一件事接着做，但已经在做它的那个会话上下文很大：在同一个工作区另开一个会话，不再往大的那个里塞；两处都改了。"""
-    import time
-    failed = []
-    path = os.path.join(ctx.outside, "plan.md")
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        text = open(path, encoding="utf-8").read()
-        if text.startswith("# Field Notes") and "Kept by hand." in text: break
-        time.sleep(2)
-    text = open(path, encoding="utf-8").read()
-    if not text.startswith("# Field Notes"): failed.append("标题没有改")
-    if "Kept by hand." not in text: failed.append("第二句没有改")
-    projects, opened = workspace_state(ctx)
-    if len(opened) != 2: failed.append(f"上下文大的那个会话不该接着用，应该另开一个（共 2 个），实际 {len(opened)} 个：{opened}")
-    if not all(same_dir(folder, ctx.outside) for folder in opened.values()): failed.append(f"新会话没有开在 notebook 工作区：{opened}")
-    if len(projects) != 2: failed.append(f"工作区数量变了：{projects}")
-    handed = [call for call in ctx.calls if call["name"] == "delegate"]
-    if len(handed) < 2: failed.append("两次都应该交出去")
-    elif isinstance(handed[-1]["args"], dict) and handed[-1]["args"].get("session"): failed.append(f"第二次还是交给了原来的会话：{handed[-1]['args'].get('session')}")
-    return failed
-
-def c_delegate_find(ctx):
-    return delegated(ctx, 1) + says(ctx, "shipping.py", "orders.py", "reports.py", "cli.py")
-
-def c_delegate_two(ctx):
-    return delegated(ctx, 2) + says(ctx, FACTS["warehouse"], "shipping.py")
 
 # ---- 找和读 ----
 def c_find_def(ctx):
@@ -1241,52 +1048,23 @@ SCENARIOS += [
       c_head_error, setup=setup_head_error, max_calls=8),
     S("not-git", "Git", "不是 Git 仓库时说清楚、不编提交", "{outside} 这个目录的提交历史是什么样的？最近一次提交是谁做的？",
       c_not_git, server="outside", max_calls=8),
-    # ---- 交给别的会话（delegate）：另一个会话真的用电脑上的工具干活，再把结论交回来 ----
-    S("delegate-find", "交给别的会话", "等结果的 subagent：它用工具查，这边只拿结论",
-      "请调用 delegate 工具（wait 设为 true），让另一个会话去查：compute_shipping_fee 这个函数定义在哪个文件，项目里还有哪些文件调用了它。"
-      "你自己不要读文件、不要搜索。拿到它的回答后，把文件名列给我。", c_delegate_find, max_calls=6, timeout=420),
-    S("delegate-two", "交给别的会话", "一次回复里同时问两个会话，都等结果",
-      "请在同一次回复里调用两次 delegate 工具（wait 都设为 true），让两个会话各查一件事：一个查 inventory/data/catalog.py 里 SKU-2187 的 "
-      "warehouse_code 是什么；另一个查 compute_shipping_fee 定义在哪个文件。你自己不要读文件、不要搜索。两个回答都拿到后一起告诉我。",
-      c_delegate_two, max_calls=6, timeout=480),
-    # 多个会话（2026-11-17 Yi：“多个子 agent 测试了吗”）。提示里不提任何工具名，主窗口不等结果，结果事后各自回来
-    S("fan-out-three", "交给别的会话", "一句话三件互不相干的事：分给三个会话同时干，三个结果都回到主窗口",
-      "有三件互不相干的事，分给三个会话同时去查，都回来以后告诉我结果：一是 inventory/data/catalog.py 里 SKU-2187 的 warehouse_code 是什么；"
-      "二是 compute_shipping_fee 这个函数定义在哪个文件；三是 inventory/shipping.py 里 EXPRESS_SURCHARGE 现在的值是多少。",
-      c_fan_out_three, max_calls=10, timeout=420, window=True),
-    S("take-back", "交给别的会话", "交出去的长活，用户说不用做了：模型收回，那个会话停下并回一句没做成",
-      "开一个会话去做这件事：把 inventory 目录下每个 .py 文件逐个读一遍，每个文件写一段不少于 300 字的中文说明，全部写完再汇总给我。",
-      c_take_back, max_calls=8, timeout=300, window=True, turns=["算了，刚才交出去的那件事不用做了，让它停下。"]),
-    S("window-delegates", "交给别的会话", "主窗口里不提 delegate，模型自己决定开一个会话去改文件",
-      "把 inventory/shipping.py 里 EXPRESS_SURCHARGE 的值改成 25。", c_window_delegates, max_calls=6, timeout=300, window=True),
-    # 工作区（2026-11-16 Yi）：模型知道有哪些工作区，自己决定新建、在哪个里面开会话；新建前先问用户。提示里不提任何工具名
-    S("workspace-new", "交给别的会话", "没有合适的工作区时，模型自己新建（先问用户），再在那里开会话干活",
-      "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活。先把里面 plan.md 的标题改成 “# Field Notes”。",
-      c_workspace_new, max_calls=8, timeout=300, window=True, server="outside", answers={"*": "add"}),
-    S("workspace-pick", "交给别的会话", "已经有的工作区，模型按名字挑对的那个开会话，不重复新建",
+    # 工作区（2026-11-16 Yi）：模型知道有哪些工作区，可以新建；新建前先问用户。提示里不提任何工具名
+    S("workspace-new", "工作区", "没有合适的工作区时，模型自己新建（先问用户）",
+      "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活，把它加成工作区。再把里面 plan.md 的标题改成 “# Field Notes”。",
+      c_workspace_new, max_calls=8, timeout=300, server="outside", answers={"*": "add"}),
+    S("workspace-pick", "工作区", "已经有的工作区，模型按名字找到对的那个目录，不重复新建",
       "notebook 那个项目里 plan.md 的标题改成 “# Field Notes”。",
-      c_workspace_pick, max_calls=8, timeout=300, window=True, server="outside",
+      c_workspace_pick, max_calls=8, timeout=300, server="outside",
       workspaces=[("shop", "{root}"), ("notebook", "{outside}")]),
-    S("workspace-reuse", "交给别的会话", "同一件事的下一步，交给已经在做它的那个会话，不另开",
-      "notebook 那个项目里 plan.md 的标题改成 “# Field Notes”。",
-      c_workspace_reuse, max_calls=8, timeout=300, window=True, server="outside",
-      workspaces=[("shop", "{root}"), ("notebook", "{outside}")],
-      turns=["同一个文件里，把 “Not under version control.” 那句改成 “Kept by hand.”。"]),
-    S("workspace-large", "交给别的会话", "已经在做这件事的会话上下文超过 10 万 token：在同一个工作区另开会话，不接着往里塞",
-      "notebook 那个项目里 plan.md 的标题改成 “# Field Notes”。",
-      c_workspace_large, max_calls=8, timeout=300, window=True, server="outside",
-      workspaces=[("shop", "{root}"), ("notebook", "{outside}")], between=fill_opened_session,
-      turns=["同一个文件里，把 “Not under version control.” 那句改成 “Kept by hand.”。"]),
-    S("workspace-denied", "交给别的会话", "用户在卡片上说不建：不登记、不重试、不绕过去",
-      "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活。先把里面 plan.md 的标题改成 “# Field Notes”。",
-      c_workspace_denied, max_calls=8, timeout=300, window=True, server="outside", answers={"*": "deny"}),
+    S("workspace-denied", "工作区", "用户在卡片上说不建：不登记、不重试",
+      "我有个新项目放在 {outside} 这个目录里，以后会经常在那边干活，把它加成工作区。",
+      c_workspace_denied, max_calls=8, timeout=300, server="outside", answers={"*": "deny"}),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
 ANSWER_ONLY = {"find-def", "big-file", "tree", "odd-files", "binary", "pdf", "run-tests", "noisy", "slow", "stdin", "network", "git-history",
                "git-blame", "git-dirty", "web", "web-404", "web-redirect", "web-huge", "form", "wait", "skill", "wiki", "memory", "parallel",
                "secret-env", "missing-cmd", "needle-log", "doc-qa",
-               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot",
-               "delegate-find", "delegate-two"}   # window-delegates 查文件，不在这里
+               "approve", "approve-session", "head-error", "cite-grep", "grep-glob", "not-git", "tabs-shot"}
 for _scenario in SCENARIOS:
     _scenario["world"] = _scenario["id"] not in ANSWER_ONLY

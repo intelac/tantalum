@@ -77,49 +77,4 @@ class WorkspaceApprovalHookTest {
         assertTrue(assertInstanceOf(Stop.class, answered(null)).reason().contains("before the deadline"));
         assertSame(Allow.PLAIN, HOOK.onAnswer(KernelState.empty(), HookContext.of(RUN, Instant.EPOCH)), "not its question");
     }
-
-    private static ToolCallBlock opens(String workspace) {
-        Map<String, Json> fields = new LinkedHashMap<>();
-        fields.put("task", new Json.Str("do it"));
-        if (workspace != null) {
-            fields.put("workspace", new Json.Str(workspace));
-        }
-        return new ToolCallBlock("d1", "delegate", "{}", new Json.Obj(fields));
-    }
-
-    private static HookResult opening(tantalum.value.state.SessionState session, String workspace) {
-        return HOOK.beforeToolCall(KernelState.empty().with(session), HookContext.of(RUN, Instant.EPOCH).withCall(opens(workspace)));
-    }
-
-    /**
-     * 模型在某个目录里开会话：只能是用户的工作区（上下文那一段列着的）、这个会话自己的目录、或者这个会话里刚确认新建的；
-     * 别的目录拦下，不然“新建前先问”就被绕过去了。
-     */
-    @Test
-    void aConversationCanOnlyBeOpenedInAFolderTheUserHasAsAWorkspace() {
-        tantalum.value.state.SessionState session = tantalum.value.state.SessionState.start(RUN.session(), RUN.principal()).withDir("/home/u/here")
-                .withContext(new tantalum.value.state.SessionContext("sys", List.of(), null, List.of(new tantalum.value.state.ContextSection(
-                        "workspaces", "Workspaces are folders.\n- workspace \"App\" — /home/u/app\n- workspace \"Win\" — C:\\Work\\Site\n", true))));
-        assertSame(Allow.PLAIN, opening(session, null), "no workspace given: same folder as this conversation");
-        assertSame(Allow.PLAIN, opening(session, "/home/u/app"));
-        assertSame(Allow.PLAIN, opening(session, "/home/u/app/"), "a trailing slash is the same folder");
-        assertSame(Allow.PLAIN, opening(session, "c:/work/site"), "Windows paths compare without case and slash direction");
-        assertSame(Allow.PLAIN, opening(session, "/home/u/here"), "this conversation's own folder");
-        tantalum.value.hook.Stop stop = assertInstanceOf(tantalum.value.hook.Stop.class, opening(session, "/home/u/other"));
-        assertTrue(stop.reason().contains("not one of the user's workspaces") && stop.reason().contains("asked to confirm"), stop.reason());
-        assertInstanceOf(tantalum.value.hook.Stop.class, opening(session, "/home/u/app/../other"));
-        assertInstanceOf(tantalum.value.hook.Stop.class, opening(session, "/home/u"), "a parent of a workspace is not a workspace");
-
-        // 这个会话里用户刚点了“新建”：那一段还没更新，也认；点了“不建”（结果是错误）不认
-        tantalum.value.state.SessionState added = session
-                .append(new tantalum.value.model.Message(tantalum.value.model.Role.ASSISTANT, List.of(call("workspace_add", "/home/u/other", null)), false))
-                .append(new tantalum.value.model.Message(tantalum.value.model.Role.USER,
-                        List.of(new tantalum.value.model.ToolResultBlock("c1", "Added workspace \"other\" at /home/u/other.", false, null)), false));
-        assertSame(Allow.PLAIN, opening(added, "/home/u/other"));
-        tantalum.value.state.SessionState refused = session
-                .append(new tantalum.value.model.Message(tantalum.value.model.Role.ASSISTANT, List.of(call("workspace_add", "/home/u/other", null)), false))
-                .append(new tantalum.value.model.Message(tantalum.value.model.Role.USER,
-                        List.of(new tantalum.value.model.ToolResultBlock("c1", "The user decided not to add this workspace.", true, null)), false));
-        assertInstanceOf(tantalum.value.hook.Stop.class, opening(refused, "/home/u/other"));
-    }
 }

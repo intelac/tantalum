@@ -126,7 +126,7 @@ public final class RecordReplay {
         tantalum.value.decision.SessionChange fixed = new tantalum.value.decision.SessionChange(change.id(), change.principal(),
                 change.created(), change.appended(), change.activeRun(), change.lastRun(), change.followUps(), change.context(),
                 change.compaction(), change.anchor(), change.omittedImages(), change.toolsSeen(), change.notes(), change.model(),
-                change.followUpModels(), change.dir(), new tantalum.value.decision.SessionChange.Changed<>(true), change.inbox());
+                change.followUpModels(), change.dir(), new tantalum.value.decision.SessionChange.Changed<>(true));
         return new tantalum.value.decision.StepRecord(record.seq(), fixed, record.runs(), record.removedRuns(), record.usageDay(),
                 record.usage(), record.commands(), record.facts());
     }

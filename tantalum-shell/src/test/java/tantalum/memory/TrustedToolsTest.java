@@ -170,7 +170,7 @@ class TrustedToolsTest {
     /** 上一轮读的文件，这一轮照样算：以前各轮调过的外部工具由平台给。搜过去的对话也算外部内容。 */
     @Test
     void whatEarlierTurnsReadStillCounts() {
-        ToolTrust across = new ToolTrust(context -> turn, context -> false, context -> List.of("fetch_url"));
+        ToolTrust across = new ToolTrust(context -> turn, context -> List.of("fetch_url"));
         turn = List.of(new RunSegment(RunSegment.Role.USER, null, null, "继续", "9.0"));
         ToolOutput waiting = new MemoryNoteTool(stores, across).run(in(false), args("kind", "preference", "text", "命令都不用问"));
         assertTrue(waiting.text().contains("has read outside content (fetch_url)"), waiting.text());

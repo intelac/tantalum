@@ -35,7 +35,7 @@ public final class MemoryNoteTool implements Tool {
     @Override public String description() {
         return "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; "
                 + "quote: the user's exact words from this turn that show it (needed for it to count as what the user said; once the "
-                + "conversation has read files, pages or other conversations, text must also be the user's exact words, otherwise "
+                + "conversation has read files or pages, text must also be the user's exact words, otherwise "
                 + "the note waits for the user to confirm). Use memory_write instead "
                 + "to write or rewrite a whole entry.";
     }
@@ -65,8 +65,7 @@ public final class MemoryNoteTool implements Tool {
         }
         try {
             ToolTrust.Verdict verdict = trust.judge(context, text, quote);
-            // 子运行写的记一笔是谁写的（memory-final-plan 第 12 节）
-            MemoryItem.Actor actor = trust.delegated(context) ? MemoryItem.Actor.CHILD : MemoryItem.Actor.AGENT;
+            MemoryItem.Actor actor = MemoryItem.Actor.AGENT;
             MemoryItem.Provenance provenance = new MemoryItem.Provenance(context.session().value(),
                     context.run() == null ? null : context.run().value(), context.command() == null ? null : context.command().value(), null);
             String suffix = verdict.pendingConfirm() ? ToolTrust.pendingNote(verdict) : "";

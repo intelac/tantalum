@@ -166,8 +166,6 @@ export interface SessionSummary {
   pinned?: boolean;
   /** 不进记忆的会话（memory-final-plan 第 11 节）；不是时不出现。 */
   offRecord?: boolean;
-  /** 另一个会话开出来的会话：开它的那个会话；不是时不出现。只用于显示（主窗口开的平铺带标记，普通会话开的缩进）。 */
-  parent?: string;
 }
 
 /** 按内容搜到的一个会话（session-find-pin R3）。 */
@@ -273,19 +271,6 @@ export interface UserItem extends ItemBase {
   skills?: SkillNote[];
   /** 插件在提交时附的内容（memory-plugin），按插件的顺序；没有时不出现。 */
   attached?: AttachedNote[];
-  /** 有它时这一条不是用户说的，是另一个会话送来的；用户说的没有。 */
-  from?: SessionSource;
-}
-
-/**
- * 送来这句话的会话。`reply` 为假是它交来的活，为真是它对这个会话交出去的活的回话；`failed` 是回话说没做成，没有时不出现。
- * `asking` 为真不是回话：交出去的那件活停在等用户回答，正文是它问的那句；没有时不出现。
- */
-export interface SessionSource {
-  session: string;
-  reply: boolean;
-  failed?: boolean;
-  asking?: boolean;
 }
 
 /** 插件附在用户消息上的一段文字。 */

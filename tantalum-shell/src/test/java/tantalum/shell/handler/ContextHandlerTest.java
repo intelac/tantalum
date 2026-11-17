@@ -505,33 +505,17 @@ class ContextHandlerTest {
         }
     }
 
-    /**
-     * memory-final-plan 第 11 节：主窗口不开改文件、命令、Git、浏览器；读文件和服务器上的工具照开。不给的工具连定义也不给：
-     * “有定义但关着”算会话里工具有变化，不支持工具变化的模型（Haiku）在主窗口第二句话起就选不了。
-     */
+    /** 主窗口只是保留的原话少（memory-final-plan 第 11 节）：工具和平常的会话一样，改文件、命令、Git、浏览器都照给。 */
     @Test
-    void theMainWindowLeavesOutToolsThatDoThings() throws Exception {
+    void theMainWindowHasTheSameToolsAsAnyConversation() throws Exception {
         ContextAssembled everyday = browserContext(SONNET);
         ContextAssembled main = browserContext(SONNET, new SessionId("main-2026-11-16"));
-        List<String> doing = List.of("edit_file", "write_file", "bash", "git_log", "git_diff", "browser_navigate", "browser_tabs");
-        for (String name : doing) {
-            assertTrue(everyday.enabledTools().contains(name), name);
-            assertFalse(main.enabledTools().contains(name), name);
-        }
-        for (String name : List.of("read_file", "grep", "list_dir", "find_files")) {
-            assertTrue(main.enabledTools().contains(name), name);
-        }
-        assertNull(main.unlocks(), "no browser rule without the browser");
-        List<String> offered = main.tools().stream().map(tantalum.value.model.ToolSpec::name).toList();
-        for (String name : doing) {
-            assertFalse(offered.contains(name), name + " is not defined in the main window at all");
-        }
-        // 主窗口里“有定义但关着”的，只剩平常会话里本来就关着的（这里是没配技能的 skill），不因为主窗口多出来
-        List<String> off = offered.stream().filter(name -> !main.enabledTools().contains(name)).toList();
-        List<String> everydayOff = everyday.tools().stream().map(tantalum.value.model.ToolSpec::name)
-                .filter(name -> !everyday.enabledTools().contains(name) && offered.contains(name)).toList();
-        assertEquals(everydayOff, off, "the main window adds no tool that is defined but off");
-        assertTrue(main.system().contains("are not offered here"));
+        assertEquals(everyday.enabledTools(), main.enabledTools());
+        assertEquals(everyday.tools().stream().map(tantalum.value.model.ToolSpec::name).toList(),
+                main.tools().stream().map(tantalum.value.model.ToolSpec::name).toList());
+        assertEquals(everyday.unlocks(), main.unlocks());
+        assertTrue(main.system().contains("## Main window"));
+        assertFalse(everyday.system().contains("## Main window"));
     }
 
     private static List<String> browser(List<String> tools) {

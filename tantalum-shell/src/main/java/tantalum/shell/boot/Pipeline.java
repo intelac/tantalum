@@ -87,9 +87,6 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
-                // 送话：只把事件送进另一个会话的入口
-                tantalum.value.command.Send.class, new tantalum.shell.handler.SendHandler(results::post, storage::claim),
-                tantalum.value.command.Confirm.class, new tantalum.shell.handler.SendHandler(results::post, storage::claim),
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),

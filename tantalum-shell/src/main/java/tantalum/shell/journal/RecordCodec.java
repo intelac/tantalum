@@ -68,9 +68,7 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = RunTool.class, name = "RunTool"),
         @JsonSubTypes.Type(value = DoWork.class, name = "DoWork"),
         @JsonSubTypes.Type(value = StartTimer.class, name = "StartTimer"),
-        @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands"),
-        @JsonSubTypes.Type(value = tantalum.value.command.Send.class, name = "Send"),
-        @JsonSubTypes.Type(value = tantalum.value.command.Confirm.class, name = "Confirm")
+        @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands")
     })
     private interface CommandMixin {}
 
@@ -94,7 +92,6 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = Deciding.class, name = "Deciding"),
         @JsonSubTypes.Type(value = Awaiting.class, name = "Awaiting"),
         @JsonSubTypes.Type(value = AwaitingAnswer.class, name = "AwaitingAnswer"),
-        @JsonSubTypes.Type(value = tantalum.value.state.AwaitingReply.class, name = "AwaitingReply"),
         @JsonSubTypes.Type(value = Ended.class, name = "Ended")
     })
     private interface PhaseMixin {}

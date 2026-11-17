@@ -72,7 +72,6 @@ public final class RunEnd {
 
     /**
      * 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。
-     * 为回另一个会话的话而开的运行把结果送回去（{@link MessageSteps}）。
      * {@code compacting} 原样保留：在等摘要时结束的运行，迟到的摘要回复据此不进历史。
      */
     static void finish(Outcome out, RunState run, EndReason reason, String detail) {
@@ -88,21 +87,11 @@ public final class RunEnd {
 
         SessionState session = out.session(run.ref()).endRun();
         out.put(session);
-        // 这一轮是为回另一个会话的一句话开的：把结果送回去
-        MessageSteps.answer(out, run, session, reason, detail);
-        if (session.followUps().isEmpty() && !session.inbox().isEmpty()) {
-            // 别的会话排队的话：用户排队的提问优先，没有了再轮到它
-            tantalum.value.event.SessionMessage next = session.inbox().waiting().getFirst();
-            out.put(session.withInbox(session.inbox().rest()));
-            MessageSteps.begin(out, next);
-            return;
-        }
         if (!session.followUps().isEmpty()) {
             Message next = session.followUps().getFirst();
             ModelChoice requested = session.followUpModels().getFirst();
             int size = session.followUps().size();
-            // 排队的是用户的提问：这一轮算用户开的
-            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)).withUnattended(0));
+            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)));
             SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next, requested);
         }
     }

@@ -157,7 +157,6 @@ public final class Engine implements AutoCloseable {
             pipeline.cleanroomRing().start();
             pipeline.input().start();
             interrupted = interrupt(unfinished);
-            redeliver();
             try {
                 pipeline.deadlines().arm(stores.storage().index.awaitingWithDeadline());
             } catch (SQLException failure) {
@@ -210,33 +209,6 @@ public final class Engine implements AutoCloseable {
 
     Stores stores() {
         return stores;
-    }
-
-    private tantalum.shell.delegate.Delegations delegations;
-
-    /**
-     * 旧的委派记录（2026-11-16 之前的第一版，子会话是谁开的记在 {@code delegations.db} 里）。只读，只为那时开的会话。
-     */
-    public synchronized tantalum.shell.delegate.Delegations delegations() {
-        if (delegations == null) {
-            try {
-                delegations = tantalum.shell.delegate.Delegations.open(dataDir);
-            } catch (java.io.IOException | java.sql.SQLException failure) {
-                throw new IllegalStateException("cannot open the delegation records", failure);
-            }
-        }
-        return delegations;
-    }
-
-    private synchronized void closeDelegations() {
-        if (delegations != null) {
-            try {
-                delegations.close();
-            } catch (java.sql.SQLException ignored) {
-                // 关不掉不影响退出
-            }
-            delegations = null;
-        }
     }
 
     public java.nio.file.Path dataDir() {
@@ -366,71 +338,9 @@ public final class Engine implements AutoCloseable {
      * 重启前没结束的运行在开门前收尾，等它们走完管线，这样第一个请求看到的就是结束后的状态。
      * 这些会话和平时一样由用户通道从文件载入；载入失败的会话按平时的规则拒绝，不拦住启动。
      */
-    /**
-     * 上一个进程可能死在“送话记了账、还没送进对方会话”之间：有话送出去没确认的会话各收到一条 {@link tantalum.value.event.Redeliver}，
-     * 内核照原来的编号重送，对方按编号去重。放不进输入环的这次不送（话还在信箱里，下一次巡查再送），不拦住启动。
-     */
-    private void redeliver() {
-        redeliver(session -> true);
-        // 运行当中也会送不到（输入环一直满、归属一时查不了，送话的处理器放弃了）：以前只有重启才重送，对方等不到、这边也不知道。
-        // 现在隔一会儿巡查一次，连续两次都还没确认的才重送（刚送出去、确认还在路上的不算）。
-        redelivery = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(task -> {
-            Thread thread = new Thread(task, "tantalum-redeliver");
-            thread.setDaemon(true);
-            return thread;
-        });
-        long every = Math.max(1, Long.getLong(REDELIVER_SECONDS, 30));
-        redelivery.scheduleWithFixedDelay(this::sweepUnconfirmed, every, every, java.util.concurrent.TimeUnit.SECONDS);
-    }
-
-    /** 隔多少秒看一次有没有送出去一直没确认的话（系统属性，默认 30；测试里调小）。 */
-    static final String REDELIVER_SECONDS = "tantalum.redeliver-seconds";
-    private volatile java.util.concurrent.ScheduledExecutorService redelivery;
-    /** 上一次巡查时有话没确认的会话。 */
-    private java.util.Set<tantalum.value.id.SessionId> unconfirmedBefore = java.util.Set.of();
-
-    /** 一次巡查：上一次就有话没确认、现在还有的会话，让它重送。出错只记日志，下次再来。 */
-    void sweepUnconfirmed() {
-        try {
-            java.util.Set<tantalum.value.id.SessionId> before = unconfirmedBefore;
-            unconfirmedBefore = redeliver(session -> before.contains(session.session()));
-        } catch (RuntimeException failure) {
-            LOG.warn("could not check for unconfirmed messages: {}", failure.toString());
-        }
-    }
-
-    /** 让有话没确认、又符合 {@code due} 的会话重送；返回此刻有话没确认的全部会话。 */
-    private java.util.Set<tantalum.value.id.SessionId> redeliver(java.util.function.Predicate<SessionIndex.Session> due) {
-        List<SessionIndex.Session> pending;
-        try {
-            pending = stores.storage().index.withUnconfirmed();
-        } catch (SQLException failure) {
-            throw new IllegalStateException("cannot read which sessions have unconfirmed messages", failure);
-        }
-        int asked = 0;
-        int wanted = 0;
-        java.util.Set<tantalum.value.id.SessionId> all = new java.util.HashSet<>();
-        for (SessionIndex.Session session : pending) {
-            all.add(session.session());
-            if (!due.test(session)) {
-                continue;
-            }
-            wanted++;
-            if (pipeline.input().tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(), session.session(),
-                    null, new tantalum.value.event.Redeliver()))) {
-                asked++;
-            }
-        }
-        if (wanted > 0) {
-            LOG.info("{} of {} sessions with unconfirmed messages were asked to send them again", asked, wanted);
-        }
-        return all;
-    }
-
     private int interrupt(List<SessionIndex.Session> all) {
-        // 等用户回答、等会话回答的运行没有在途命令，不收尾，照旧等
-        List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())
-                && !tantalum.value.state.AwaitingReply.NAME.equals(session.runStatus())).toList();
+        // 等用户回答的运行没有在途命令，不收尾，照旧等
+        List<SessionIndex.Session> unfinished = all.stream().filter(session -> !AwaitingAnswer.NAME.equals(session.runStatus())).toList();
         if (unfinished.isEmpty()) {
             return 0;
         }
@@ -471,10 +381,6 @@ public final class Engine implements AutoCloseable {
      */
     @Override
     public void close() throws IOException {
-        java.util.concurrent.ScheduledExecutorService sweeping = redelivery;
-        if (sweeping != null) {
-            sweeping.shutdownNow();
-        }
         Shutdown.run(List.of(
                 new Shutdown.Step("refuse new submissions", () -> closing.set(true)),
                 new Shutdown.Step("close event streams", queries.hub()::closeEveryone),
@@ -482,7 +388,6 @@ public final class Engine implements AutoCloseable {
                 new Shutdown.Step("wait for running handlers", this::awaitHandlers),
                 new Shutdown.Step("stop answer deadline timers", pipeline.deadlines()),
                 new Shutdown.Step("close local links", toolbox.localLinks()),
-                new Shutdown.Step("close delegation records", this::closeDelegations),
 new Shutdown.Step("close egress", () -> {
                     if (toolbox.egress() != null) {
                         toolbox.egress().close();
