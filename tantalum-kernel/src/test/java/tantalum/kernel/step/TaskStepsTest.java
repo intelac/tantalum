@@ -154,6 +154,20 @@ class TaskStepsTest {
         assertEquals(1, loop.session().tasks().open().size());
     }
 
+    /** 任务用放出它的那一轮的模型：不带上的话任务会落到默认路线上（2026-11-18 真模型测试发现，任务跑在了本机的小模型上）。 */
+    @Test
+    void aTaskRunsOnTheModelOfTheRunThatStartedIt() {
+        LoopFixture loop = new LoopFixture();
+        tantalum.value.model.ModelChoice sonnet = new tantalum.value.model.ModelChoice("claude", "claude-sonnet-5-5", "medium");
+        loop.prompt("look into module A");
+        loop.feed(loop.runId(), new tantalum.value.event.ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of(), null, null,
+                Map.of(), sonnet, null, null));
+
+        StartTask start = only(calls(loop, task("c1", "Check module A.")), StartTask.class);
+
+        assertEquals(sonnet, start.model());
+    }
+
     @Test
     void theUserCanGoOnTalkingWhileATaskIsOut() {
         LoopFixture loop = new LoopFixture();

@@ -27,7 +27,11 @@ public interface Agents {
     /** 这个人现在有哪些 agent。{@code dir} 是会话的工作目录，没有为 null。 */
     List<Agent> list(Principal user, String dir);
 
-    default Found find(Principal user, String name, String dir) {
+    /**
+     * 找点了名的 agent，连同它的提示词。{@code session} 是为任务开的会话（读文件的那一方据此记账）。
+     * 这里可以去问用户的电脑，所以会等、会被中断。
+     */
+    default Found find(Principal user, tantalum.value.id.SessionId session, String name, String dir) throws InterruptedException {
         if (name == null) {
             return new Found(null, null);
         }

@@ -18,7 +18,7 @@ class SkillSectionTest {
     }
 
     private static SkillList.Item item(String name, String description) {
-        return new SkillList.Item(name, description, true, true);
+        return new SkillList.Item(name, description, true, true, null, null);
     }
 
     @Test
@@ -44,7 +44,7 @@ class SkillSectionTest {
 
     @Test
     void skillsTheUserTurnedOffOrThatAreNotForTheModelAreLeftOut() {
-        SkillList skills = list(item("deploy", "Ship."), new SkillList.Item("manual-only", "By hand.", false, true), item("pdf-tools", "PDF."));
+        SkillList skills = list(item("deploy", "Ship."), new SkillList.Item("manual-only", "By hand.", false, true, null, null), item("pdf-tools", "PDF."));
         String text = SkillSection.text(skills, Set.of("deploy"));
         assertTrue(text.contains("- `pdf-tools`: PDF.\n"), text);
         assertFalse(text.contains("deploy"), text);
@@ -56,7 +56,7 @@ class SkillSectionTest {
         assertEquals("", SkillSection.text(null, Set.of()));
         assertEquals("", SkillSection.text(list(), Set.of()));
         assertEquals("", SkillSection.text(list(item("deploy", "Ship.")), Set.of("deploy")));
-        assertEquals("", SkillSection.text(list(new SkillList.Item("manual-only", "By hand.", false, true)), Set.of()));
+        assertEquals("", SkillSection.text(list(new SkillList.Item("manual-only", "By hand.", false, true, null, null)), Set.of()));
         assertEquals("", SkillSection.text(SkillList.unusable(DirState.OUTSIDE), Set.of()));
         assertEquals("", SkillSection.text(SkillList.unusable(DirState.MISSING), Set.of()));
     }

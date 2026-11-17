@@ -103,8 +103,8 @@ class WireTest {
 
     private static SkillList skills() {
         return new SkillList("/Users/yi/.agents/skills", DirState.OK,
-                List.of(new SkillList.Item("pdf-tools", "Extract text from PDFs", true, true),
-                        new SkillList.Item("release", "Cut a release", false, true)),
+                List.of(new SkillList.Item("pdf-tools", "Extract text from PDFs", true, true, null, null),
+                        new SkillList.Item("release", "Cut a release", false, true, null, null)),
                 List.of(new SkillList.Problem("Bad Name", "name-invalid", "Bad Name"), new SkillList.Problem("empty", "description-missing", null)));
     }
 

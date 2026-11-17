@@ -84,7 +84,8 @@ class SessionDirCodecTest {
         SessionChange change = new SessionChange(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null, null,
                 null, null, null, null, new SessionChange.Changed<>(tasks));
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null,
-                List.of(new tantalum.value.command.StartTask(new tantalum.value.id.CommandId("c2"), run, "t3-0", child, "reviewer", "check module A\nand report", "/home/alice/app", false),
+                List.of(new tantalum.value.command.StartTask(new tantalum.value.id.CommandId("c2"), run, "t3-0", child, "reviewer", "check module A\nand report", "/home/alice/app", false,
+                                new tantalum.value.model.ModelChoice("claude", "claude-sonnet-5-5", "medium")),
                         new tantalum.value.command.ReturnTask(new tantalum.value.id.CommandId("c3"), run, SESSION, "t3-0", tantalum.value.task.TaskOutcome.COMPLETED, "fine"),
                         new tantalum.value.command.StopTask(new tantalum.value.id.CommandId("c4"), run, "t3-0", child)),
                 List.of(new tantalum.value.decision.TaskStarted(run, "t3-0", child, "reviewer", "check module A", "call-1"),

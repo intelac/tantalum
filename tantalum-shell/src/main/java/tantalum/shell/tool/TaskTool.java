@@ -33,7 +33,8 @@ public final class TaskTool implements Tool {
     @Override public Json schema() {
         Map<String, Json> properties = new LinkedHashMap<>();
         properties.put(TaskTools.PROMPT, property("Everything the task needs: what to do, where, what you already know, what to report back."));
-        properties.put(TaskTools.AGENT, property("The name of the agent to use, when one of the listed agents fits. Leave out for the general one."));
+        properties.put(TaskTools.AGENT, property("The name of one of the user's skills (the ones listed for you), to have the task follow that skill "
+                + "as its instructions. Leave out for a general task."));
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));
         schema.put("properties", new Json.Obj(properties));

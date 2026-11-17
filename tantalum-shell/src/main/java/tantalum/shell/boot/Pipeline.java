@@ -85,7 +85,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
         // 任务的三条命令都是往别的会话放事件，同一个处理器
-        Handler tasks = new tantalum.shell.handler.TaskHandler(clock, input::tryPublish, tantalum.shell.handler.Agents.NONE,
+        Handler tasks = new tantalum.shell.handler.TaskHandler(clock, input::tryPublish,
+                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()),
                 (user, session) -> queries.queries().session(user, session).map(found -> found.state().activeRun() != null).orElse(false));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),

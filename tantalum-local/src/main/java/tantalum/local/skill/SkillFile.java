@@ -7,14 +7,18 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import tantalum.local.wire.SkillList;
 
 /**
  * 一个读好、校验过的技能（skills-wiki 需求 1）。{@code base} 是技能目录的真实路径，{@code body} 是 {@code SKILL.md} 去掉属性块之后的正文。
+ * {@code tools}、{@code taskModel} 只在技能被当作任务的 agent 用时有意义（subagent 需求 8）：属性块里的 {@code tools: read_file, grep}
+ * （逗号隔开的工具名）和 {@code model: 路线/模型}，没写为 null。写了但不是文字的，整个技能不加载。
  */
-record SkillFile(String name, String description, boolean model, boolean user, Path base, String body) {
+record SkillFile(String name, String description, boolean model, boolean user, Path base, String body, List<String> tools,
+                 String taskModel) {
 
     static final String FILE = "SKILL.md";
     /** 两边都没有上限，DSH 把“正文没有大小上限”列为缺陷。 */
@@ -67,7 +71,25 @@ record SkillFile(String name, String description, boolean model, boolean user, P
         if (description.length() > MAX_DESCRIPTION) {
             description = description.substring(0, description.offsetByCodePoints(0, description.codePointCount(0, MAX_DESCRIPTION)));
         }
-        return new SkillFile(name, description, !hidden, invocable, file.getParent(), parsed.body().strip());
+        return new SkillFile(name, description, !hidden, invocable, file.getParent(), parsed.body().strip(),
+                names(fields, "tools"), text(fields, "model"));
+    }
+
+    /** 可选的文字属性：没写为 null；写了但不是文字（列表、嵌套的表、布尔）时整个技能不加载。 */
+    private static String text(Map<String, Object> fields, String key) throws Rejected {
+        if (!fields.containsKey(key)) {
+            return null;
+        }
+        if (fields.get(key) instanceof String value && !value.isBlank()) {
+            return value.strip();
+        }
+        throw new Rejected("yaml-invalid", key + " must be plain text");
+    }
+
+    /** 逗号隔开的名字（pi 的 agent 文件就是这么写 {@code tools} 的）；没写为 null。 */
+    private static List<String> names(Map<String, Object> fields, String key) throws Rejected {
+        String value = text(fields, key);
+        return value == null ? null : java.util.Arrays.stream(value.split(",")).map(String::strip).filter(name -> !name.isEmpty()).toList();
     }
 
     /** 写了但不是布尔的开关不按默认值放行，整个技能不加载（DSH：失败时默认拒绝）。 */
@@ -110,6 +132,6 @@ record SkillFile(String name, String description, boolean model, boolean user, P
     }
 
     SkillList.Item item() {
-        return new SkillList.Item(name, description, model, user);
+        return new SkillList.Item(name, description, model, user, tools, taskModel);
     }
 }

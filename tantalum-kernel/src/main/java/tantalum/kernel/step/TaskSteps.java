@@ -116,7 +116,9 @@ public final class TaskSteps {
         if (timer != null) {
             out.emit(new StartTimer(timer, run.ref(), limit));
         }
-        out.emit(new StartTask(out.nextCommandId(), run.ref(), id, child, agent, prompt, session.dir(), session.offRecord()));
+        // 任务用放出它的这一轮的模型（这一轮还没定下模型时用会话现在的选择）
+        out.emit(new StartTask(out.nextCommandId(), run.ref(), id, child, agent, prompt, session.dir(), session.offRecord(),
+                run.model() != null ? run.model() : session.model()));
         out.report(List.of(new TaskStarted(run.ref(), id, child, agent, brief, call.id())));
         return new Result("Started task " + id + ". It runs on its own while you go on; its result arrives in this conversation"
                 + " when it ends. Do not wait for it or ask about it.", false);

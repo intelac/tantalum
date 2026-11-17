@@ -54,6 +54,20 @@ class SkillsTest {
 
     // ---- 列 ----
 
+    /** 技能当作任务的 agent 用时（subagent 需求 8）：属性块里可以多写 tools（逗号隔开）和 model；写成别的东西时这个技能不加载。 */
+    @Test
+    void aSkillCanSayWhichToolsAndModelATaskUsingItGets() throws Exception {
+        skill("reviewer", "---\ndescription: Reviews code\ntools: read_file, grep ,find_files\nmodel: claude/claude-haiku-5-5\n---\nYou review code.\n");
+        skill("plain", "---\ndescription: No extras\n---\nBody\n");
+        skill("broken", "---\ndescription: Tools as a list\ntools:\n  - read_file\n---\nBody\n");
+        SkillList list = list();
+        assertEquals(List.of(
+                new SkillList.Item("plain", "No extras", true, true, null, null),
+                new SkillList.Item("reviewer", "Reviews code", true, true, List.of("read_file", "grep", "find_files"), "claude/claude-haiku-5-5")),
+                list.items());
+        assertEquals(List.of("broken:yaml-invalid"), problems(list));
+    }
+
     @Test
     void listsSkillsSortedByNameWithTheirFlags() throws Exception {
         skill("pdf-tools", "---\nname: pdf-tools\ndescription: Work with   PDF\n  files.\n---\nBody\n");
@@ -63,9 +77,9 @@ class SkillsTest {
         assertEquals(DirState.OK, list.state());
         assertEquals(skills.toString(), list.dir());
         assertEquals(List.of(
-                new SkillList.Item("background", "House rules", true, false),
-                new SkillList.Item("deploy", "Ship it", false, true),
-                new SkillList.Item("pdf-tools", "Work with PDF files.", true, true)), list.items());
+                new SkillList.Item("background", "House rules", true, false, null, null),
+                new SkillList.Item("deploy", "Ship it", false, true, null, null),
+                new SkillList.Item("pdf-tools", "Work with PDF files.", true, true, null, null)), list.items());
         assertEquals(List.of(), list.problems());
     }
 
@@ -128,7 +142,7 @@ class SkillsTest {
         skill("b-copy", "---\nname: shared\ndescription: Second\n---\nx");
         skill("a-original", "---\nname: shared\ndescription: First\n---\nx");
         SkillList list = list();
-        assertEquals(List.of(new SkillList.Item("shared", "First", true, true)), list.items());
+        assertEquals(List.of(new SkillList.Item("shared", "First", true, true, null, null)), list.items());
         assertEquals(List.of(new SkillList.Problem("b-copy", "name-duplicate", "shared")), list.problems());
     }
 

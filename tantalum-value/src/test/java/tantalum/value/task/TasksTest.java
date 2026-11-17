@@ -140,13 +140,13 @@ class TasksTest {
         assertEquals("TaskSettled", new TaskSettled(RUN, "t", TaskOutcome.STOPPED, false).type());
 
         CommandId id = new CommandId("c");
-        assertEquals("go", new StartTask(id, RUN, "t", SESSION, null, "go", null, false).prompt());
+        assertEquals("go", new StartTask(id, RUN, "t", SESSION, null, "go", null, false, null).prompt());
         assertEquals(TaskOutcome.FAILED, new ReturnTask(id, RUN, SESSION, "t", TaskOutcome.FAILED, "boom").outcome());
         assertEquals(SESSION, new StopTask(id, RUN, "t", SESSION).session());
 
         assertThrows(NullPointerException.class, () -> new TaskAssigned(null, SESSION, "go", null, null, null, null, null, false));
         assertThrows(NullPointerException.class, () -> new TaskEnded("t", null, null));
-        assertThrows(NullPointerException.class, () -> new StartTask(id, RUN, "t", SESSION, null, null, null, false));
+        assertThrows(NullPointerException.class, () -> new StartTask(id, RUN, "t", SESSION, null, null, null, false, null));
         assertThrows(NullPointerException.class, () -> new ReturnTask(id, RUN, null, "t", TaskOutcome.FAILED, null));
         assertThrows(NullPointerException.class, () -> new StopTask(id, RUN, "t", null));
         assertThrows(NullPointerException.class, () -> new TaskStarted(null, "t", SESSION, null, "go", null));

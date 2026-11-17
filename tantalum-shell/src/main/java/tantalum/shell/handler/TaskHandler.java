@@ -60,14 +60,15 @@ public final class TaskHandler implements Handler {
     }
 
     private void assign(Principal user, StartTask start) throws InterruptedException {
-        Agents.Found found = agents.find(user, start.agent(), start.dir());
+        Agents.Found found = agents.find(user, start.session(), start.agent(), start.dir());
         if (found.agent() == null && start.agent() != null) {
             send(user, start.run().session(), new TaskEnded(start.task(), TaskOutcome.FAILED, found.problem()));
             return;
         }
         Agents.Agent agent = found.agent();
         send(user, start.session(), new TaskAssigned(start.task(), start.run().session(), start.prompt(), start.agent(),
-                agent == null ? null : agent.instructions(), agent == null ? null : agent.tools(), agent == null ? null : agent.model(),
+                agent == null ? null : agent.instructions(), agent == null ? null : agent.tools(),
+                agent == null || agent.model() == null ? start.model() : agent.model(),
                 start.dir(), start.offRecord()));
     }
 

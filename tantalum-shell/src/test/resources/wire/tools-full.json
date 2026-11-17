@@ -751,7 +751,7 @@
         },
         "agent": {
           "type": "string",
-          "description": "The name of the agent to use, when one of the listed agents fits. Leave out for the general one."
+          "description": "The name of one of the user's skills (the ones listed for you), to have the task follow that skill as its instructions. Leave out for a general task."
         }
       },
       "required": [

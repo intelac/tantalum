@@ -20,12 +20,19 @@ public record SkillList(String dir, DirState state, List<Item> items, List<Probl
         return new SkillList(null, state, List.of(), List.of());
     }
 
-    /** {@code model}：模型能不能自己加载；{@code user}：用户能不能用 {@code /name} 点名。 */
-    public record Item(String name, String description, boolean model, boolean user) {
+    /**
+     * {@code model}：模型能不能自己加载；{@code user}：用户能不能用 {@code /name} 点名。
+     * 技能被当作任务的 agent 用时（subagent）：{@code tools} 是这个任务能用的工具名（属性块里的 {@code tools: a, b}），
+     * {@code taskModel} 是它用的模型（属性块里的 {@code model: 路线/模型}）。没写的不出现，旧的连接程序也不送。
+     */
+    public record Item(String name, String description, boolean model, boolean user,
+                       @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) List<String> tools,
+                       @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String taskModel) {
 
         public Item {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(description, "description");
+            tools = tools == null ? null : List.copyOf(tools);
         }
     }
 

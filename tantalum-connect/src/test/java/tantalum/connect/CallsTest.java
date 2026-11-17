@@ -433,7 +433,7 @@ class CallsTest {
         ContextResult result = calls(false).context(new Context("x-1", null, skills, wiki.toString()));
 
         assertEquals("Use tabs.", result.agents());
-        assertEquals(new SkillList(skills, DirState.OK, List.of(new SkillList.Item("pdf-tools", "SECRET-DESCRIPTION", true, true)),
+        assertEquals(new SkillList(skills, DirState.OK, List.of(new SkillList.Item("pdf-tools", "SECRET-DESCRIPTION", true, true, null, null)),
                 List.of(new SkillList.Problem("broken", "description-missing", null))), result.skills());
         assertEquals(new WikiList(wiki.toString(), DirState.OK, List.of(new WikiList.Page("setup.md", "SECRET-TITLE")), 1, "SECRET-INDEX"),
                 result.wiki());

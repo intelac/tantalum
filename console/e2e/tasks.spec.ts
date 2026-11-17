@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { composer, login, openNewSession, OTHER_USER, send } from "./app";
+import { composer, login, openNewSession, OTHER_USER, send, SKILL_USER } from "./app";
 
 // 任务（subagent 需求 10）。E2eModel 的 “tasks: 交代一|交代二” 剧本每一段放出一个任务，然后说一句就结束这一轮；
 // 任务里按交代的内容走别的剧本：subtask: 停 1.5 秒、写一张清单、再停 1.5 秒、交结论；approve: 调 write_file；ask: 问用户。
@@ -83,6 +83,36 @@ test.describe("任务", () => {
     } finally {
       await login(page, OTHER_USER);
       await setApproval(page, false);
+    }
+  });
+
+  test("用一个技能当任务的 agent：任务照技能的写法做，点了没有的技能就不开始并说明有哪些", async ({ page }) => {
+    await openNewSession(page, SKILL_USER);
+    // 填技能目录（测试电脑上有 greeting、by-hand 两个技能）
+    await page.getByRole("button", { name: "插件", exact: true }).first().click();
+    const local = page.getByRole("dialog", { name: "插件" }).getByRole("region", { name: "本机工作区" });
+    const allowed = ((await local.getByText(/^允许的目录：/).textContent()) ?? "").replace(/^允许的目录：/, "").trim();
+    const skills = local.getByLabel("技能目录");
+    await skills.fill(allowed.includes("\\") ? `${allowed}\\skills` : `${allowed}/skills`);
+    await skills.press("Enter");
+    await expect(local.getByText("找到 2 个技能")).toBeVisible();
+    await page.keyboard.press("Escape");
+    try {
+      await send(page, "taskas:greeting 写一句问候");
+      const card = page.getByRole("region", { name: "subtask: 写一句问候" });
+      await expect(card).toContainText(/任务 t\d+-0 · greeting/, { timeout: 30_000 });
+      await expect(page.getByRole("region", { name: /任务 t\d+-0 的结果/ })).toContainText("写一句问候：有 2 处没处理的错误。（照技能 greeting 做的）", {
+        timeout: 30_000,
+      });
+
+      // 没有这个技能：任务不开始，结果是失败，写明有哪些
+      await send(page, "taskas:nope 另一件事");
+      const failed = page.getByRole("region", { name: /任务 t\d+-0 的结果/ }).last();
+      await expect(failed).toContainText("失败", { timeout: 30_000 });
+      await expect(failed).toContainText(/no skill named "nope".*greeting/);
+    } finally {
+      await login(page, SKILL_USER);
+      for (const path of ["/api/local/skills", "/api/local/wiki"]) await page.request.put(path, { data: { dir: "" } });
     }
   });
 

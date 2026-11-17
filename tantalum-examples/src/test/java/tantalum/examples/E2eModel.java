@@ -108,6 +108,13 @@ public final class E2eModel implements ModelClient {
                 }
                 return reply(List.of(), calls.toArray(ContentBlock[]::new));
             }
+            // “taskas:技能名 交代”：放出一个用这个技能当 agent 的任务（subagent 需求 8）
+            if (text.contains("taskas:")) {
+                String rest = text.substring(text.indexOf("taskas:") + "taskas:".length()).strip();
+                int space = rest.indexOf(' ');
+                return results > 0 ? answer(chunks, "已经放出 1 个任务，我先做别的。")
+                        : reply(List.of(), call("task", Map.of("prompt", "subtask: " + rest.substring(space + 1).strip(), "agent", rest.substring(0, space))));
+            }
             // 任务里的活：停一下，写一张清单（卡片展开时看得到这一步），再停一下，交结论
             if (text.contains("subtask:")) {
                 String what = text.substring(text.indexOf("subtask:") + "subtask:".length()).lines().findFirst().orElse("").strip();
@@ -118,7 +125,9 @@ public final class E2eModel implements ModelClient {
                             new Json.Obj(Map.of("todos", new Json.Arr(List.of(new Json.Obj(Map.of("content", new Json.Str("查 " + what),
                                     "status", new Json.Str("in_progress")))))))));
                 }
-                return answer(chunks, what + "：有 2 处没处理的错误。");
+                // 任务是照某个技能做的：技能的正文在它的 system 里
+                String role = prompt.system().contains("greeting-e2e-body") ? "（照技能 greeting 做的）" : "";
+                return answer(chunks, what + "：有 2 处没处理的错误。" + role);
             }
             if (text.contains("long")) {
                 return longAnswer(text, prompt, chunks);
