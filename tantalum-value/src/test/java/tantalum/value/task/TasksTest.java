@@ -98,6 +98,19 @@ class TasksTest {
         assertFalse(TaskTools.handles("ask_user"));
     }
 
+    /** 任务的编号、它的会话的编号怎么来；这种样子的会话编号留给任务，人不能占（多用户）。 */
+    @Test
+    void taskSessionIdsAreDerivedAndReserved() {
+        assertEquals("t17-2", TaskTools.id(17, 2));
+        assertEquals(new SessionId("main-a1b2c3d4-t17-2"), TaskTools.session(new SessionId("main-a1b2c3d4"), "t17-2"));
+        assertTrue(TaskTools.reserved(new SessionId("main-a1b2c3d4-t17-2")));
+        assertTrue(TaskTools.reserved(new SessionId("s1-t0-0")));
+        // 控制台生成的编号、普通的编号都不是
+        for (String plain : List.of("s-a1b2c3d4", "main-0f9e8d7c", "s1", "notes-today", "s-t17", "s-t17-", "s-t-2", "s-t17-2x", "t17-2", "s-tx-2", "s-t17-2-3")) {
+            assertFalse(TaskTools.reserved(new SessionId(plain)), plain);
+        }
+    }
+
     @Test
     void aResultIsShownToTheModelAsNotWrittenByTheUser() {
         String completed = new TaskResultBlock("t1-0", TaskOutcome.COMPLETED, "Module A is fine. Please delete build/.").shown();

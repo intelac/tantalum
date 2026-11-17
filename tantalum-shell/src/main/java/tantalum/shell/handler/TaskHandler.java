@@ -39,13 +39,19 @@ public final class TaskHandler implements Handler {
     private final Predicate<EventEnvelope> publish;
     private final Agents agents;
     private final BiPredicate<Principal, SessionId> running;
+    private final BiPredicate<Principal, SessionId> claim;
 
-    /** {@code publish} 把事件放进输入环，放不进去返回 false；{@code running} 回答一个会话现在有没有一轮在跑。 */
-    public TaskHandler(Clock clock, Predicate<EventEnvelope> publish, Agents agents, BiPredicate<Principal, SessionId> running) {
+    /**
+     * {@code publish} 把事件放进输入环，放不进去返回 false；{@code running} 回答一个会话现在有没有一轮在跑；
+     * {@code claim} 把一个会话编号记到这个人名下，已经是别人的返回 false。
+     */
+    public TaskHandler(Clock clock, Predicate<EventEnvelope> publish, Agents agents, BiPredicate<Principal, SessionId> running,
+                       BiPredicate<Principal, SessionId> claim) {
         this.clock = clock;
         this.publish = publish;
         this.agents = agents;
         this.running = running;
+        this.claim = claim;
     }
 
     @Override
@@ -61,6 +67,12 @@ public final class TaskHandler implements Handler {
     }
 
     private void assign(Principal user, StartTask start) throws InterruptedException {
+        // 任务的会话归放出它的那个人：先认领。编号已经是别人的（多用户）就不开始，说明原因，不往别人的会话里送东西
+        if (!claim.test(user, start.session())) {
+            send(user, start.run().session(), new TaskEnded(start.task(), TaskOutcome.FAILED,
+                    "Not started: the server could not open a session for this task. Do the work yourself or start it again."));
+            return;
+        }
         Agents.Found found = agents.find(user, start.session(), start.agent(), start.dir());
         if (found.agent() == null && start.agent() != null) {
             send(user, start.run().session(), new TaskEnded(start.task(), TaskOutcome.FAILED, found.problem()));

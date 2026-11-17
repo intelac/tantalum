@@ -97,6 +97,10 @@ public final class Intake {
         if (residency.failure(session) != null) {
             return 500;
         }
+        // 任务的会话不接受人的东西，它那种样子的编号也不能靠上传附件来占（同提交）：一律当作没有这个会话
+        if (tantalum.value.task.TaskTools.reserved(session)) {
+            return 404;
+        }
         SessionState existing = view.current().sessions().get(session);
         if (existing != null) {
             return existing.principal().equals(principal) ? 200 : 404;
@@ -157,15 +161,16 @@ public final class Intake {
         if (existing != null && !existing.principal().equals(principal)) {
             return Submission.rejected(404);
         }
+        // 为任务开的会话只做那一件事：不接受提问、排队、插话（内核也不理）。任务会话那种样子的编号留给任务，
+        // 人不能用它开会话：否则可以先占住一个编号，让别人的任务送不进去。这一条要在认领之前：被拒的请求不能把编号占下
+        if (existing != null && existing.tasks().origin() != null || tantalum.value.task.TaskTools.reserved(session)) {
+            return Submission.rejected(409);
+        }
         if (existing == null) {
             int owner = claims.claim(principal, session);
             if (owner != 200) {
                 return Submission.rejected(owner);
             }
-        }
-        // 为任务开的会话只做那一件事：不接受提问、排队、插话（内核也不理）
-        if (existing != null && existing.tasks().origin() != null) {
-            return Submission.rejected(409);
         }
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {

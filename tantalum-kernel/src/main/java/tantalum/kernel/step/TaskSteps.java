@@ -105,8 +105,8 @@ public final class TaskSteps {
             return Result.refused("Not started: " + tasks.unattendedTasks() + " tasks have been started since the user last spoke,"
                     + " which is the limit. Tell the user where things stand; the count starts over when they reply.");
         }
-        String id = "t" + out.envelope.seq() + "-" + index;
-        SessionId child = new SessionId(session.id().value() + "-" + id);
+        String id = TaskTools.id(out.envelope.seq(), index);
+        SessionId child = TaskTools.session(session.id(), id);
         // 期限默认没有；管理员设了才起定时器
         java.time.Duration limit = out.taskLimits.deadline();
         CommandId timer = limit == null ? null : out.nextCommandId();
@@ -147,7 +147,9 @@ public final class TaskSteps {
         TaskAssigned event = (TaskAssigned) context.envelope().event();
         EventEnvelope envelope = context.envelope();
         SessionState existing = context.state().sessions().get(envelope.session());
-        if (existing != null && (!existing.messages().isEmpty() || existing.tasks().origin() != null)) {
+        // 已经有内容：重复送达。会话是别人的：不是给这个任务的（多用户，各人的会话互不相通）。都不动
+        if (existing != null && (!existing.messages().isEmpty() || existing.tasks().origin() != null
+                || !existing.principal().equals(envelope.principal()))) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
@@ -210,7 +212,8 @@ public final class TaskSteps {
     public static Decision ended(StepContext context) {
         TaskEnded event = (TaskEnded) context.envelope().event();
         SessionState session = context.state().sessions().get(context.envelope().session());
-        if (session == null || session.tasks().find(event.task()).isEmpty()) {
+        // 名单里没有：已经结束过了。不是这个人的会话：结果只能回到放出任务的那个人自己的会话
+        if (session == null || !session.principal().equals(context.envelope().principal()) || session.tasks().find(event.task()).isEmpty()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
@@ -245,7 +248,7 @@ public final class TaskSteps {
     public static Decision stopRequested(StepContext context) {
         TaskStopRequested event = (TaskStopRequested) context.envelope().event();
         SessionState session = context.state().sessions().get(context.envelope().session());
-        if (session == null || session.lastRun() == null) {
+        if (session == null || session.lastRun() == null || !session.principal().equals(context.envelope().principal())) {
             return Decision.unchanged(context.state());
         }
         List<OpenTask> stopping = session.tasks().open().stream()

@@ -42,12 +42,14 @@ class TaskHandlerTest {
 
     private final List<EventEnvelope> sent = new ArrayList<>();
     private boolean running = true;
+    /** 任务的会话编号认领得到（不是别人的）。 */
+    private boolean mine = true;
     private final Agents agents = (user, dir) -> List.of(
             new Agents.Agent("reviewer", "Reviews code.", "You review code.", List.of("read_file", "grep"), null),
             new Agents.Agent("quick", "Fast checks.", "Be quick.", null, HAIKU));
 
     private TaskHandler handler() {
-        return new TaskHandler(Clock.fixed(NOW, ZoneOffset.UTC), sent::add, agents, (user, session) -> running);
+        return new TaskHandler(Clock.fixed(NOW, ZoneOffset.UTC), sent::add, agents, (user, session) -> running, (user, session) -> mine);
     }
 
     private static StartTask start(String agent) {
@@ -94,6 +96,20 @@ class TaskHandlerTest {
         assertEquals("t3-0", ended.task());
         assertEquals(TaskOutcome.FAILED, ended.outcome());
         assertTrue(ended.text().contains("\"nope\"") && ended.text().contains("reviewer, quick"), ended.text());
+    }
+
+    /** 多用户：任务的会话编号已经是别人的。不往那个会话里送任何东西，放出任务的人得到失败和原因。 */
+    @Test
+    void whenTheTasksSessionBelongsToSomeoneElseNothingIsSentThere() throws Exception {
+        mine = false;
+        handler().handle(start(null));
+
+        EventEnvelope envelope = only();
+        assertEquals(PARENT, envelope.session());
+        assertEquals(ALICE, envelope.principal());
+        TaskEnded ended = (TaskEnded) envelope.event();
+        assertEquals(TaskOutcome.FAILED, ended.outcome());
+        assertTrue(ended.text().startsWith("Not started: the server could not open a session"), ended.text());
     }
 
     @Test
