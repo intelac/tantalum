@@ -25,7 +25,8 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                                  String provider, Loop loop, Claude claude, Map<String, OpenAiRoute> openaiRoutes,
                                  Knowledge knowledge,
                                  Compaction compaction, Index index, Evictor.Settings residency, Duration shutdownWait, Hooks hooks,
-                                 AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights) {
+                                 AttachmentLimits attachments, Web web, Console console, Map<String, Weights> usageWeights,
+                                 Tasks tasks) {
 
     /** Claude 路线的名字，固定。 */
     public static final String CLAUDE_ROUTE = "claude";
@@ -433,6 +434,25 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
     /** 联网的配置；没有配置时用默认值。 */
     public Web webSettings() {
         return web == null ? Web.defaults() : web;
+    }
+
+    /**
+     * 任务的上限（{@code tantalum.tasks.*}，subagent 需求 5）：同时在外面的任务数；从上一次人说话以来自动开的轮数、放出的任务数；
+     * 一个任务最多跑多久（默认不设）。没写的用默认值；负数、不是正数的期限时拒绝启动。
+     */
+    public record Tasks(Integer maxOpen, Integer maxUnattendedRuns, Integer maxUnattendedTasks, Duration deadline) {
+
+        public tantalum.value.task.TaskLimits limits() {
+            tantalum.value.task.TaskLimits standard = tantalum.value.task.TaskLimits.DEFAULT;
+            return new tantalum.value.task.TaskLimits(maxOpen == null ? standard.maxOpen() : maxOpen,
+                    maxUnattendedRuns == null ? standard.maxUnattendedRuns() : maxUnattendedRuns,
+                    maxUnattendedTasks == null ? standard.maxUnattendedTasks() : maxUnattendedTasks, deadline);
+        }
+    }
+
+    /** 任务的上限；没有这一节时全是默认值。 */
+    public tantalum.value.task.TaskLimits taskLimits() {
+        return tasks == null ? tantalum.value.task.TaskLimits.DEFAULT : tasks.limits();
     }
 
     /** 主窗口保留多少最近的原话（token，{@code tantalum.compaction.main-window-tokens}，memory-final-plan 第 11 节）。 */

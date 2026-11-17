@@ -354,12 +354,13 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
-    /** 写进索引的样子：一行一个任务，四段用制表符隔开（编号、会话、期限、定时器）。四样都不含制表符和换行。 */
+    /** 写进索引的样子：一行一个任务，四段用制表符隔开（编号、会话、期限、定时器；没设期限时后两段是空的）。四样都不含制表符和换行。 */
     static String encode(List<tantalum.value.task.OpenTask> tasks) {
         StringBuilder text = new StringBuilder();
         for (tantalum.value.task.OpenTask task : tasks) {
-            text.append(task.id()).append('\t').append(task.session().value()).append('\t').append(task.deadline()).append('\t')
-                    .append(task.timer().value()).append('\n');
+            text.append(task.id()).append('\t').append(task.session().value()).append('\t')
+                    .append(task.deadline() == null ? "" : task.deadline().toString()).append('\t')
+                    .append(task.timer() == null ? "" : task.timer().value()).append('\n');
         }
         return text.toString();
     }
@@ -373,9 +374,10 @@ public final class SessionIndex implements AutoCloseable {
                 SessionId session = new SessionId(result.getString(1));
                 Principal principal = new Principal(result.getString(2));
                 for (String line : result.getString(3).split("\n")) {
-                    String[] parts = line.split("\t");
+                    String[] parts = line.split("\t", -1);
                     if (parts.length == 4) {
-                        found.add(new tantalum.shell.loop.TaskRecovery.Outstanding(session, principal, parts[0], new SessionId(parts[1]), Instant.parse(parts[2]), new CommandId(parts[3])));
+                        found.add(new tantalum.shell.loop.TaskRecovery.Outstanding(session, principal, parts[0], new SessionId(parts[1]),
+                                parts[2].isEmpty() ? null : Instant.parse(parts[2]), parts[3].isEmpty() ? null : new CommandId(parts[3])));
                     }
                 }
             }

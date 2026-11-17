@@ -23,7 +23,7 @@ import tantalum.value.task.TaskOutcome;
  * <ul>
  * <li>不存在：任务没送到。结果是“中断”，不重新放出（和重启不重新执行工具同一个理由）。</li>
  * <li>它那一轮已经结束：按它账里的结局补发（和正常结束时交回的是同一个结果）。</li>
- * <li>它那一轮还在（重启不打断等用户回答的运行）：不动，只把期限的定时器重新起来。</li>
+ * <li>它那一轮还在（重启不打断等用户回答的运行）：不动；设了期限的把期限的定时器重新起来。</li>
  * </ul>
  *
  * 补发的结果可能和正常送到的重复：内核按名单去重，第二个不生效。这里是纯计算，不做 I/O。
@@ -50,7 +50,7 @@ public final class TaskRecovery {
             Optional<TaskEnded> ended = ended(task, child);
             if (ended.isPresent()) {
                 settle.add(new EventEnvelope(EventEnvelope.UNASSIGNED, now, task.principal(), task.session(), null, ended.get()));
-            } else {
+            } else if (task.deadline() != null) {
                 // 期限的定时器不属于哪一轮：信封不带运行，内核按“没人等的定时器”认出它是哪个任务的
                 rearm.add(new AnswerDeadline(task.session(), task.principal(), null, task.deadline(), task.timer()));
             }

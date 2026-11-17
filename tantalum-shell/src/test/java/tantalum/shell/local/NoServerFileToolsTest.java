@@ -26,7 +26,7 @@ class NoServerFileToolsTest {
 
     /** 只碰服务器自己的数据：附件目录（只读）、每人的记忆；ask_user 和 todo_write 什么都不碰（清单就是调用参数，记在会话里）。 */
     private static final Set<String> SERVER_TOOLS = Set.of("ask_user", "read_attachment", "memory_read", "memory_write", "memory_delete", "memory_note",
-            "now", "memory_search", "history_search", "todo_write", "workspace_add");
+            "now", "memory_search", "history_search", "todo_write", "workspace_add", "task", "task_stop");
 
     /** 联网工具：名字一个不多，包只能是 fetch 和 browser。 */
     /** 服务器上的联网工具只剩抓网页；浏览器工具是转发到用户电脑的本机工具（local-browser）。 */
@@ -58,6 +58,8 @@ class NoServerFileToolsTest {
                 assertTrue(tool instanceof ReadAttachmentTool || tool instanceof tantalum.shell.tool.AskUserTool || tool instanceof tantalum.shell.tool.TodoWriteTool
                         // workspace_add 只在服务器的工作区表里登记一行（先问用户），不碰文件
                         || tool instanceof tantalum.shell.project.WorkspaceAddTool
+                        // task、task_stop 只有定义，调用由内核截下（subagent）
+                        || tool instanceof tantalum.shell.tool.TaskTool || tool instanceof tantalum.shell.tool.TaskStopTool
                         || tool.getClass().getPackageName().startsWith("tantalum.memory"), tool.getClass().getName());
             }
             assertEquals(SERVER_TOOLS, Set.copyOf(tools.stream().filter(tool -> !(tool instanceof LocalTool) && !web(tool)).map(Tool::name).toList()));

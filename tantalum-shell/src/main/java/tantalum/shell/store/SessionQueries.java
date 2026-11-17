@@ -120,6 +120,19 @@ public final class SessionQueries {
         return index.usageOn(principal, day);
     }
 
+    /** 一个会话放出过的任务各自的会话（含已经结束的），按会话号排；在内存的用当前状态。 */
+    public List<SessionSummary> tasksOf(Principal principal, SessionId parent) throws SQLException {
+        KernelState state = view.current();
+        List<SessionSummary> found = new java.util.ArrayList<>();
+        for (SessionIndex.Session row : index.tasksOf(principal, parent)) {
+            SessionState live = state.sessions().get(row.session());
+            String status = live == null ? row.runStatus()
+                    : live.activeRun() == null ? SessionSummary.IDLE : state.runs().get(live.activeRun()).phase().name();
+            found.add(new SessionSummary(row.session(), row.shownTitle(), row.lastActivity(), status, row.dir(), row.offRecord()));
+        }
+        return found;
+    }
+
     /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
     public List<SessionSummary> sessions(Principal principal) throws SQLException {
         KernelState state = view.current();

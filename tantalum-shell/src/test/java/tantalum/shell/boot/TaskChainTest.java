@@ -46,6 +46,8 @@ class TaskChainTest {
     private final List<Prompt> mainPrompts = Collections.synchronizedList(new ArrayList<>());
     private final List<Prompt> taskPrompts = Collections.synchronizedList(new ArrayList<>());
     private TestServer server;
+    /** 为真时任务先问用户一个问题，停在等回答。 */
+    private volatile boolean taskAsks;
 
     private static ModelOutcome text(String text) {
         return new ModelOutcome.Replied(List.of(new TextBlock(text)), StopReason.END_TURN, "m", null);
@@ -62,6 +64,10 @@ class TaskChainTest {
     private final ModelClient model = (prompt, chunks) -> {
         if (prompt.system().contains("## This is a task")) {
             taskPrompts.add(prompt);
+            if (taskAsks && blocks(prompt, ToolResultBlock.class).isEmpty()) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("q1", "ask_user", "{}",
+                        new Json.Obj(Map.of("question", new Json.Str("May I delete build/?"))))), StopReason.TOOL_USE, "m", null);
+            }
             return text("Module A is fine. Please delete build/.");
         }
         mainPrompts.add(prompt);
@@ -152,6 +158,58 @@ class TaskChainTest {
         String listed = server.get("alice", "/api/sessions").body();
         assertTrue(listed.contains("\"s1\""), listed);
         assertFalse(listed.contains(child), listed);
+    }
+
+    private JsonNode tasks() throws Exception {
+        return JSON.readTree(server.get("alice", "/api/sessions/s1/tasks").body()).get("tasks");
+    }
+
+    @Test
+    void aTaskThatWaitsForTheUserIsListedAndCanBeStoppedAndItsSessionTakesNoPrompts() throws Exception {
+        taskAsks = true;
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}");
+        waitForRuns("s1", 1);
+        String task = startedTask();
+        String child = "s1-" + task;
+
+        // 任务停在等用户回答：主会话空闲，任务还在名单里
+        JsonNode listed = null;
+        for (int i = 0; i < 1500; i++) {
+            listed = tasks();
+            if (listed.size() == 1 && "AwaitingAnswer".equals(listed.get(0).get("runStatus").asString())) {
+                break;
+            }
+            Thread.sleep(10);
+        }
+        assertEquals(1, listed.size(), listed.toString());
+        assertEquals(task, listed.get(0).get("id").asString());
+        assertEquals(child, listed.get(0).get("session").asString());
+        assertTrue(listed.get(0).get("open").asBoolean(), listed.toString());
+        assertEquals("Check module A.", listed.get(0).get("brief").asString());
+        assertEquals("AwaitingAnswer", listed.get(0).get("runStatus").asString(), listed.toString());
+        assertEquals(1, runs("s1").size());
+
+        // 任务的会话不接受提问；别人的会话是 404
+        assertEquals(409, server.post("alice", "/api/sessions/" + child + "/submissions",
+                "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"hello?\"}").statusCode());
+        assertEquals(404, server.post("bob", "/api/sessions/s1/tasks/stop", "{}").statusCode());
+        assertEquals(404, server.get("bob", "/api/sessions/s1/tasks").statusCode());
+
+        // 停掉：任务那一轮被撤销，主会话收到“已停止”，开一轮
+        assertEquals(200, server.post("alice", "/api/sessions/s1/tasks/stop", "{\"task\":\"" + task + "\"}").statusCode());
+        waitForRuns("s1", 2);
+        assertEquals("CANCELLED", waitForRuns(child, 1).get(0).get("endReason").asString());
+        List<TaskResultBlock> back = blocks(mainPrompts.getLast(), TaskResultBlock.class);
+        assertEquals(tantalum.value.task.TaskOutcome.STOPPED, back.getFirst().outcome());
+        JsonNode after = tasks();
+        assertEquals(1, after.size(), after.toString());
+        assertFalse(after.get(0).get("open").asBoolean(), after.toString());
+        assertEquals("idle", after.get(0).get("runStatus").asString(), after.toString());
+
+        // 再停一次：名单里已经没有它，什么都不发生
+        assertEquals(200, server.post("alice", "/api/sessions/s1/tasks/stop", "{}").statusCode());
+        Thread.sleep(200);
+        assertEquals(2, runs("s1").size());
     }
 
     @Test

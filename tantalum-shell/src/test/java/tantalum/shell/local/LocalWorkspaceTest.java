@@ -39,7 +39,7 @@ class LocalWorkspaceTest {
     private static final List<String> READ = List.of("find_files", "grep", "list_dir", "read_file");
     private static final List<String> GIT = List.of("git_blame", "git_branches", "git_diff", "git_log", "git_show");
     private static final List<String> WRITE = List.of("edit_file", "write_file");
-    private static final List<String> SERVER = List.of("ask_user", "read_attachment", "todo_write");
+    private static final List<String> SERVER = List.of("ask_user", "read_attachment", "task", "task_stop", "todo_write");
 
     @TempDir
     Path temp;

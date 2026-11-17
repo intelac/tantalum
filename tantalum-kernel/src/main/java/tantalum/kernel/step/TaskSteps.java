@@ -48,7 +48,7 @@ import tantalum.value.task.Tasks;
  *
  * <p>没有新的等待状态。{@code task} 当场有结果，放出它的那一轮不停；任务执行到哪了只在它自己那一轮的状态里。
  * 放出的会话只记“哪些还没回来”（{@link Tasks#open()}），名单里的每一条恰好对应一个生效的 {@link TaskEnded}：
- * 任务那一轮结束（含被停、重启打断）、期限的定时器到、启动时的核对，谁先到谁生效，后到的在名单里找不到，什么都不改。
+ * 任务那一轮结束（含被停、重启打断）、启动时的核对、设了期限时期限的定时器到，谁先到谁生效，后到的在名单里找不到，什么都不改。
  */
 public final class TaskSteps {
 
@@ -107,11 +107,15 @@ public final class TaskSteps {
         }
         String id = "t" + out.envelope.seq() + "-" + index;
         SessionId child = new SessionId(session.id().value() + "-" + id);
-        CommandId timer = out.nextCommandId();
+        // 期限默认没有；管理员设了才起定时器
+        java.time.Duration limit = out.taskLimits.deadline();
+        CommandId timer = limit == null ? null : out.nextCommandId();
         String brief = brief(prompt);
         out.put(session.withTasks(tasks.started(new OpenTask(id, child, agent, brief, out.envelope.at(),
-                out.envelope.at().plus(out.taskLimits.deadline()), timer))));
-        out.emit(new StartTimer(timer, run.ref(), out.taskLimits.deadline()));
+                limit == null ? null : out.envelope.at().plus(limit), timer))));
+        if (timer != null) {
+            out.emit(new StartTimer(timer, run.ref(), limit));
+        }
         out.emit(new StartTask(out.nextCommandId(), run.ref(), id, child, agent, prompt, session.dir(), session.offRecord()));
         out.report(List.of(new TaskStarted(run.ref(), id, child, agent, brief, call.id())));
         return new Result("Started task " + id + ". It runs on its own while you go on; its result arrives in this conversation"
@@ -210,8 +214,10 @@ public final class TaskSteps {
         Outcome out = new Outcome(context);
         OpenTask task = session.tasks().find(event.task()).orElseThrow();
         RunRef ref = settled(out, session, event.task(), event.outcome(), event.text());
-        // 期限的定时器不用再等了：让它停下。它要是已经到了，迟到的那一下在名单里找不到任务，不生效
-        out.emit(new AbortCommands(out.nextCommandId(), ref, Set.of(task.timer())));
+        if (task.timer() != null) {
+            // 期限的定时器不用再等了：让它停下。它要是已经到了，迟到的那一下在名单里找不到任务，不生效
+            out.emit(new AbortCommands(out.nextCommandId(), ref, Set.of(task.timer())));
+        }
         return out.decision();
     }
 
@@ -223,7 +229,7 @@ public final class TaskSteps {
         TimerFired event = (TimerFired) context.envelope().event();
         SessionState session = context.state().sessions().get(context.envelope().session());
         Optional<OpenTask> task = session == null ? Optional.empty()
-                : session.tasks().open().stream().filter(open -> open.timer().equals(event.command())).findFirst();
+                : session.tasks().open().stream().filter(open -> event.command().equals(open.timer())).findFirst();
         if (task.isEmpty()) {
             return Decision.unchanged(context.state());
         }

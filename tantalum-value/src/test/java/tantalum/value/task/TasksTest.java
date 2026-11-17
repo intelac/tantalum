@@ -84,6 +84,9 @@ class TasksTest {
         assertThrows(IllegalArgumentException.class, () -> new TaskLimits(-1, 1, 1, Duration.ofMinutes(1)));
         assertThrows(IllegalArgumentException.class, () -> new TaskLimits(1, -1, 1, Duration.ofMinutes(1)));
         assertThrows(IllegalArgumentException.class, () -> new TaskLimits(1, 1, -1, Duration.ofMinutes(1)));
+        // 默认不设期限；设了就得是正的
+        assertNull(TaskLimits.DEFAULT.deadline());
+        assertEquals(Duration.ofHours(2), new TaskLimits(1, 1, 1, Duration.ofHours(2)).deadline());
         assertThrows(IllegalArgumentException.class, () -> new TaskLimits(1, 1, 1, Duration.ZERO));
         assertThrows(IllegalArgumentException.class, () -> new TaskLimits(1, 1, 1, Duration.ofMinutes(-1)));
     }
@@ -151,5 +154,11 @@ class TasksTest {
         assertThrows(NullPointerException.class, () -> new TaskResultBlock("t", null, null));
         assertThrows(NullPointerException.class, () -> new OpenTask("t", SESSION, null, null, AT, AT, id));
         assertThrows(NullPointerException.class, () -> new TaskOrigin(null, "t", null, null, null));
+        // 期限和它的定时器要么都有、要么都没有
+        assertNull(new OpenTask("t", SESSION, null, "go", AT, null, null).timer());
+        assertThrows(IllegalArgumentException.class, () -> new OpenTask("t", SESSION, null, "go", AT, AT, null));
+        assertThrows(IllegalArgumentException.class, () -> new OpenTask("t", SESSION, null, "go", AT, null, id));
+        assertEquals("TaskCancelled", new tantalum.value.event.TaskCancelled("t").type());
+        assertEquals(1, new tantalum.value.event.TaskCancelled("t").version());
     }
 }

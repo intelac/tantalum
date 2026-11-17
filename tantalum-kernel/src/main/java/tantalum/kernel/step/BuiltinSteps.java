@@ -58,6 +58,8 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, TaskAssigned.TYPE, TaskSteps::assigned);
         table.register(TransitionTable.ANY_STATE, TaskEnded.TYPE, TaskSteps::ended);
         table.register(TransitionTable.ANY_STATE, TaskStopRequested.TYPE, TaskSteps::stopRequested);
+        // 放出任务的一方要它停：任务那一轮和被撤销一样结束
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.TaskCancelled.TYPE, CancelSteps::cancel);
         table.register(TransitionTable.ANY_STATE, TimerFired.TYPE, TaskSteps::timerFired);
     }
 }

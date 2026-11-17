@@ -162,6 +162,20 @@ class TantalumPropertiesTest {
         assertEquals(TantalumProperties.Web.defaults(), properties("claude", 0, 0, null).webSettings(), "no web section: defaults");
     }
 
+    /** 任务的上限（subagent 需求 5）：默认 4、10、10、不设期限；每一项都能改；没道理的值拒绝启动。 */
+    @Test
+    void taskLimitsHaveDefaultsAndCanBeSet() throws Exception {
+        assertEquals(tantalum.value.task.TaskLimits.DEFAULT, bind().taskLimits());
+        assertEquals(new tantalum.value.task.TaskLimits(4, 10, 10, null), bind().taskLimits());
+        assertEquals(new tantalum.value.task.TaskLimits(2, 3, 5, Duration.ofHours(2)), bind("tantalum.tasks.max-open", "2",
+                "tantalum.tasks.max-unattended-runs", "3", "tantalum.tasks.max-unattended-tasks", "5", "tantalum.tasks.deadline", "2h").taskLimits());
+        // 0 是合法的：关掉任务、或者不允许无人说话时自动继续
+        assertEquals(0, bind("tantalum.tasks.max-open", "0").taskLimits().maxOpen());
+        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.max-open", "-1").taskLimits());
+        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.deadline", "0s").taskLimits());
+        assertEquals(tantalum.value.task.TaskLimits.DEFAULT, properties("claude", 0, 0, null).taskLimits(), "no tasks section: defaults");
+    }
+
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {
         return new TantalumProperties(null, null, "per-user", "p", java.time.Duration.ofSeconds(60), provider, Loop.defaults(),
                 new TantalumProperties.Claude("claude-sonnet-5-5", 64000, "medium", true, java.time.Duration.ofSeconds(1),
@@ -170,7 +184,7 @@ class TantalumPropertiesTest {
                         16384, java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(1), 1, openAiWindow, 2.0, false, null,
                         null, null, null)),
                 TantalumProperties.Knowledge.none(), compaction, TantalumProperties.Index.defaults(),
-                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null);
+                Evictor.Settings.defaults(), Duration.ofSeconds(30), new TantalumProperties.Hooks(8, List.of()), null, null, null, null, null);
     }
 
     /** 压缩参数和模型无关；预留按模型另算（CompactionPolicyTest）。路线配置的窗口不大于预留时启动失败（context-compaction 需求 9）。 */

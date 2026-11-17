@@ -140,8 +140,10 @@ class TaskStepsTest {
         OpenTask open = loop.session().tasks().open().getFirst();
         assertEquals(start.task(), open.id());
         assertEquals("Check module A.", open.brief());
-        assertEquals(LoopFixture.AT.plus(TaskLimits.DEFAULT.deadline()), open.deadline());
-        assertEquals(open.timer(), only(decision, StartTimer.class).id());
+        // 默认不设期限：不起定时器
+        assertNull(open.deadline());
+        assertNull(open.timer());
+        assertTrue(decision.commands().stream().noneMatch(StartTimer.class::isInstance));
         assertTrue(resultOf(loop, "c1").startsWith("Started task " + start.task()));
         assertTrue(decision.facts().stream().anyMatch(fact -> fact instanceof TaskStarted started && started.task().equals(start.task())));
 
@@ -166,7 +168,7 @@ class TaskStepsTest {
 
     @Test
     void aTaskIsRefusedWithAReasonAndNothingIsStarted() {
-        LoopFixture loop = new LoopFixture(10, new TaskLimits(1, 10, 10, Duration.ofMinutes(30)));
+        LoopFixture loop = new LoopFixture(10, new TaskLimits(1, 10, 10, null));
         ask(loop, "go");
         Decision decision = calls(loop, task("c1", "  "), task("c2", "first"), task("c3", "second"));
 
@@ -179,7 +181,7 @@ class TaskStepsTest {
 
     @Test
     void tasksStartedSinceTheUserLastSpokeAreCountedAndTheCountStartsOverWhenTheySpeak() {
-        LoopFixture loop = new LoopFixture(10, new TaskLimits(10, 10, 2, Duration.ofMinutes(30)));
+        LoopFixture loop = new LoopFixture(10, new TaskLimits(10, 10, 2, null));
         ask(loop, "go");
         calls(loop, task("c1", "one"), task("c2", "two"), task("c3", "three"));
 
@@ -297,7 +299,7 @@ class TaskStepsTest {
 
     @Test
     void afterTheLimitOfUnattendedRunsAResultIsKeptButStartsNothingUntilThePersonSpeaks() {
-        LoopFixture loop = new LoopFixture(10, new TaskLimits(4, 1, 10, Duration.ofMinutes(30)));
+        LoopFixture loop = new LoopFixture(10, new TaskLimits(4, 1, 10, null));
         ask(loop, "go");
         calls(loop, task("c1", "one"), task("c2", "two"));
         List<OpenTask> open = loop.session().tasks().open();
@@ -312,9 +314,7 @@ class TaskStepsTest {
 
         assertNull(loop.session().activeRun());
         assertEquals(last, loop.session().lastRun());
-        // 没有开运行：唯一的命令是撤掉这个任务期限的定时器
-        assertEquals(List.of(open.get(1).timer()), paused.commands().stream()
-                .flatMap(command -> ((tantalum.value.command.AbortCommands) command).commands().stream()).toList());
+        assertTrue(paused.commands().isEmpty());
         assertEquals(List.of(new TaskResultBlock(open.get(1).id(), TaskOutcome.COMPLETED, "two done")),
                 loop.session().messages().getLast().content());
         assertTrue(paused.facts().stream().anyMatch(fact -> fact instanceof TaskSettled settled && settled.paused()));
@@ -325,9 +325,14 @@ class TaskStepsTest {
     }
 
     @Test
-    void theDeadlineEndsATaskThatHasNotComeBackAndALaterResultChangesNothing() {
-        LoopFixture loop = new LoopFixture();
-        OpenTask open = startOne(loop);
+    void whenADeadlineIsSetItEndsATaskThatHasNotComeBackAndALaterResultChangesNothing() {
+        LoopFixture loop = new LoopFixture(10, new TaskLimits(4, 10, 10, Duration.ofMinutes(30)));
+        ask(loop, "look into the three modules");
+        Decision started = calls(loop, task("c1", "Check module A.\nReport what you find."));
+        OpenTask open = loop.session().tasks().open().getLast();
+        assertEquals(LoopFixture.AT.plus(Duration.ofMinutes(30)), open.deadline());
+        assertEquals(open.timer(), only(started, StartTimer.class).id());
+        done(loop, "started");
 
         // 别的定时器：不动
         assertSame(loop.state, loop.feed(null, new TimerFired(new CommandId("someone-else"))).newState());
@@ -341,6 +346,29 @@ class TaskStepsTest {
 
         assertSame(loop.state, loop.feed(null, new TaskEnded(open.id(), TaskOutcome.STOPPED, null)).newState());
         assertSame(loop.state, loop.feed(null, new TimerFired(open.timer())).newState());
+    }
+
+    @Test
+    void aResultTellsTheDeadlineTimerToStop() {
+        LoopFixture loop = new LoopFixture(10, new TaskLimits(4, 10, 10, Duration.ofMinutes(30)));
+        OpenTask open = startOne(loop);
+
+        Decision ended = loop.feed(null, new TaskEnded(open.id(), TaskOutcome.COMPLETED, "done"));
+
+        assertEquals(java.util.Set.of(open.timer()), only(ended, tantalum.value.command.AbortCommands.class).commands());
+    }
+
+    @Test
+    void theOneWhoStartedATaskCanCallItOff() {
+        LoopFixture loop = new LoopFixture();
+        startOne(loop);
+        StartTask start = (StartTask) loop.commands.stream().filter(StartTask.class::isInstance).findFirst().orElseThrow();
+        RunId run = assign(loop, start);
+
+        Decision stopped = loop.feed(start.session(), null, new tantalum.value.event.TaskCancelled(start.task()));
+
+        assertTrue(loop.state.runs().get(run).isEnded());
+        assertEquals(TaskOutcome.STOPPED, only(stopped, ReturnTask.class).outcome());
     }
 
     @Test
@@ -386,7 +414,7 @@ class TaskStepsTest {
         RunId run = assign(loop, start);
         reply(loop, start.session(), run, loop.onlyCommandId(), StopReason.END_TURN, LoopFixture.text("done").getFirst());
         loop.feed(null, new TaskEnded(open.id(), TaskOutcome.COMPLETED, "done"));
-        loop.feed(null, new TimerFired(open.timer()));
+        loop.feed(null, new TimerFired(new CommandId("late")));
 
         Replay.Result again = Replay.run(loop.kernel, loop.journal);
 

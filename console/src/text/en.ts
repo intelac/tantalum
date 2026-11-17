@@ -1166,6 +1166,8 @@ export const en: Text = {
       memory_read: ["Read memory", "Reads the content of a long-term memory."],
       memory_write: ["Write memory", "Creates or updates a long-term memory."],
       todo_write: ["Todo list", "The model writes down its plan for multi-step work and updates it as it goes; the plan bar above the input shows the progress."],
+      task: ["Start a task", "The model hands a piece of work that can be done on its own to another agent and goes on with something else; the result comes back to this conversation when it is done. A task shows as a card in the conversation that you can open and stop."],
+      task_stop: ["Stop a task", "The model stops a task it started that has not come back yet."],
       ask_user: ["Ask the user", "Pauses the run to ask you a question and continues once you answer in the conversation; it can wait indefinitely, even across restarts."],
       memory_delete: ["Delete memory", "Deletes a long-term memory."],
       memory_note: ["Note one thing", "Notes a preference, fact, decision or something noticed; it counts as yours only with your exact words."],

@@ -163,6 +163,10 @@ public final class Intake {
                 return Submission.rejected(owner);
             }
         }
+        // 为任务开的会话只做那一件事：不接受提问、排队、插话（内核也不理）
+        if (existing != null && existing.tasks().origin() != null) {
+            return Submission.rejected(409);
+        }
         boolean needsNewRun = existing == null || existing.activeRun() == null;
         return publish(principal, session, request, needsNewRun, submission -> switch (mode) {
             case "steer" -> new SteerSubmitted(submission, request, text, attachments, skills);
@@ -231,6 +235,28 @@ public final class Intake {
                 submission -> new QueueChanged(submission, request, action, index, expected, attachments, text));
     }
 
+    /**
+     * 停这个会话放出去的任务，{@code task} 为 null 是全部。返回 HTTP 状态；会话不存在或不是该用户的 → 404。
+     * 和取消一样不去重、不占活跃运行名额；名单里没有这个任务时内核什么都不改。
+     */
+    public int stopTasks(Principal principal, SessionId session, String task) {
+        if (sessions.find(principal, session).isEmpty()) {
+            return 404;
+        }
+        ExternalGate.Verdict verdict = gate.admit(principal, false);
+        if (verdict != ExternalGate.Verdict.ADMITTED) {
+            return status(verdict);
+        }
+        EventEnvelope stop = envelope(principal, session, null,
+                new tantalum.value.event.TaskStopRequested(new RequestId(UUID.randomUUID().toString()), task));
+        Probes.event(input.probe(), Stage.INTAKE, stop, null);
+        if (!input.tryPublish(stop)) {
+            gate.release(principal);
+            return 429;
+        }
+        return 200;
+    }
+
     /** 返回 HTTP 状态。取消不去重，也不占活跃运行名额。 */
     public int cancel(Principal principal, RunRef run) {
         ExternalGate.Verdict verdict = gate.admit(principal, false);
@@ -251,6 +277,7 @@ public final class Intake {
         switch (envelope.event()) {
             case Submitted submitted -> release(envelope.principal(), submitted.submission());
             case Cancel cancel -> gate.release(envelope.principal());
+            case tantalum.value.event.TaskStopRequested stop -> gate.release(envelope.principal());
             default -> { }
         }
     }
