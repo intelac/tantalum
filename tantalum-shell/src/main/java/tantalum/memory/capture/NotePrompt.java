@@ -76,10 +76,9 @@ public final class NotePrompt {
             is true. When something the user said shows it, copy the user's words, not the assistant's; copy from the \
             answer only when nothing the user said shows it. A note whose words cannot be found in the turn is thrown away, \
             so copy them exactly.
-            A note counts as something the user said only when it says what the copied words say. Keep the user's own \
-            words for the thing in the note; do not rename it, translate it or add what the user did not say. When the \
-            user only agreed to something ("yes, the second one"), copy enough of their words, and say in the note what \
-            they agreed to; such a note is kept for the user to confirm.
+            Say in the note only what the copied words say, in the user's own wording where you can. When the turn used \
+            tools, a note counts as the user's own statement only if the note itself is the user's exact words; any other \
+            note from such a turn is kept for the user to confirm.
             Write the notes in the language the user wrote in. At most 6 lines, no headings, no preamble. Never include \
             passwords, API keys, tokens, ID numbers or phone numbers.
             If nothing is worth keeping, reply exactly NOTHING.

@@ -74,7 +74,7 @@ public final class MemoryDeleteTool implements Tool {
                 int gone = result.gone();
                 String kept = result.kept().isEmpty() ? "" : " Not touched: " + result.kept().size() + " decision"
                         + (result.kept().size() == 1 ? "" : "s") + " the user approved (\"" + result.kept().getFirst().text()
-                        + "\"); only the user can remove an approved decision, in the console (Settings > Memory). Tell the user.";
+                        + "\"); only the user can remove an approved decision, in the console (Settings > Memory).";
                 return ToolOutput.ok((gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."
                         : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back.")
                         + kept);

@@ -16,9 +16,8 @@ import tantalum.shell.plugin.SensitiveText;
 /**
  * 把一轮的笔记归档（memory-final-plan 第 7 节）：
  * <ol>
- *   <li>原话在你的话里找到、要点说的也是那段话里的事（你亲口说的，见 {@link Quotes#match}）直接生效：偏好、事实、决定写成页面上的说法，在做的事、答应的事、在等的事进工作记忆，都进当天卡；</li>
+ *   <li>原话在你的话里找到的（你亲口说的；这一轮读过外部内容时要点本身也得逐字出自你的话，见 {@link Quotes#match}）直接生效：偏好、事实、决定写成页面上的说法，在做的事、答应的事、在等的事进工作记忆，都进当天卡；</li>
  *   <li>原话只在回答里的（推断）：这一轮没读过外部内容时只进当天卡；读过的话，偏好、事实、决定、事项记成“待你确认”，不进当天卡；</li>
- *   <li>原话是你说的、但要点说的不是那段话里的事（模型引申的）：进当天卡；偏好、事实、决定、事项另记成“待你确认”。</li>
  *   <li>原话哪里都找不到的、命中敏感信息检测的，丢掉。</li>
  * </ol>
  * 另外两件不靠模型判断真假的事：
@@ -114,7 +113,7 @@ public final class NoteFiler {
             Optional<String> hit = sensitive.detect(note.text(), note.quote());
             // “了结”的正文是事项的编号，不是一句话：只看原话在不在
             Quotes.Match match = hit.isPresent() ? Quotes.Match.NONE
-                    : Quotes.match(note.kind() == NotePrompt.Kind.DONE ? null : note.text(), note.quote(), turn.segments());
+                    : Quotes.match(note.kind() == NotePrompt.Kind.DONE ? null : note.text(), note.quote(), turn.segments(), turn.tainted());
             MemoryItem.Source source = match.source();
             if (source == null) {
                 dropped++;
@@ -139,9 +138,6 @@ public final class NoteFiler {
             }
             if (said) {
                 promote(note, source, provenance, false);
-            } else if (match == Quotes.Match.DERIVED && note.kind() != NotePrompt.Kind.NOTE && promote(note, source, provenance, true)) {
-                // 原话是你说的，但要点是模型引申的（你说“就按第二个来”，要点写的是第二个方案的内容）：不直接生效，等你确认
-                pending++;
             }
             card.add("- " + note.text());
             kept++;

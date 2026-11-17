@@ -22,15 +22,8 @@ public final class Forgetting {
 
     private Forgetting() {}
 
-    /**
-     * 这一行说的是不是忘掉的那句。按较短一边的词算重合；但只对上一个词、另一边又长的不算（一个“项目”带不走每一行提到项目的话）。
-     */
+    /** 这一行说的是不是忘掉的那句：按 memory-final-plan 第 9 节的词重合（较短一边的一半以上）。 */
     static boolean says(String line, String text) {
-        int a = tantalum.memory.recall.Terms.of(line).size();
-        int b = tantalum.memory.recall.Terms.of(text).size();
-        if (a == 0 || b == 0 || Math.min(a, b) < 2 && Math.max(a, b) > 3) {
-            return false;
-        }
         return Overlap.of(line, text) >= SAME;
     }
 

@@ -97,10 +97,6 @@ class ForgettingTest {
         assertTrue(left.live());
         assertEquals("- 用户让把订单页的按钮改成蓝色", new DailyNotes(ledger).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body());
         assertFalse(recalled("商城项目的负责人是谁？").isEmpty(), "the rest of the entry is still found");
-
-        // 只对上一个词、另一边又长：不算同一件事
-        assertEquals(0, Forgetting.forget(ledger, "项目", MemoryItem.Actor.USER), "one common word does not match every line that has it");
-        assertEquals(left.text(), ledger.get(page.id()).orElseThrow().text());
     }
 
     /** 同一轮、同一句原话记出来的别的条目一起忘掉：模型换了个说法写的同一件事，词对不上，但出处是同一句话。 */

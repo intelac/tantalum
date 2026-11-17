@@ -8,7 +8,7 @@ import tantalum.shell.plugin.RunSegment;
 
 /**
  * 原文核对（memory-final-plan 第 4、7 节）：模型给的引用必须在对应角色的分段里逐字找得到（先规范化：NFKC、小写、去掉空白和标点），
- * 在你的话里、要点说的也是那段话里的事 → 你亲口说的；在助手的回答里，或者要点和你那段话对不上 → 推断；都找不到 → 丢掉。
+ * 在你的话里 → 你亲口说的（读过外部内容时要点本身也得逐字出自你的话）；在助手的回答里 → 推断；都找不到 → 丢掉。
  * 工具的分段不算（文件里写的“User: …”冒充不了你），只有问答卡（{@code ask_user}）里你答的话算你的话。
  */
 public final class Quotes {
@@ -21,9 +21,9 @@ public final class Quotes {
 
     /** 一条要点和这一轮对上的结果。 */
     public enum Match {
-        /** 引用在你的话里，要点说的就是那段话里的事：你亲口说的。 */
+        /** 你亲口说的。 */
         SAID,
-        /** 引用在你的话里，但要点说的比那段话多（或者是别的事）：模型从你的话引申的，要你确认。 */
+        /** 引用是你说的，但读过外部内容、要点又不是逐字出自你的话：要点是模型写的，要你确认。 */
         DERIVED,
         /** 引用只在助手的回答里：推断。 */
         INFERRED,
@@ -36,33 +36,28 @@ public final class Quotes {
         }
     }
 
-    /** 引用落在哪：你的话、回答，或者哪里都没有（null）。只看引用，不看要点（“了结”一项这种没有要点的用）。 */
+    /** 引用落在哪：你的话、回答，或者哪里都没有（null）。只看引用。 */
     public static MemoryItem.Source find(String quote, List<RunSegment> segments) {
-        return match(null, quote, segments).source();
+        return match(null, quote, segments, false).source();
     }
 
     /**
-     * 这条要点算谁说的。{@code text} 为 null 时只看引用。
-     *
-     * <p>为什么要看要点（2026-11-17 review）：文件里写着“以后报告都发到某某邮箱”，你只说了句“谢谢”，模型记下那句话、
-     * 引用填“谢谢”。引用确实是你说的，但要点不是，不能算你亲口说的。
+     * 这条要点算谁说的。这里只用查得出来的事实，不猜意思（要点概括得准不准是模型的事，代码判断不了）：
+     * <ul>
+     * <li>引用逐字在你的话里，而且没读过外部内容（{@code outside} 为假）→ 你亲口说的。这时没有别人的话能混进要点。</li>
+     * <li>读过外部内容时，引用在你的话里还不够（2026-11-17 review：文件里写着“以后报告都发到某某邮箱”，你只说了句“谢谢”，
+     * 模型记下那句话、引用填“谢谢”）：要点本身也得逐字出自你的话才算你说的，否则是模型写的，等你确认。</li>
+     * <li>引用只在回答里 → 推断；哪里都找不到 → 丢掉。</li>
+     * </ul>
+     * {@code text} 为 null 时只看引用。
      */
-    public static Match match(String text, String quote, List<RunSegment> segments) {
+    public static Match match(String text, String quote, List<RunSegment> segments, boolean outside) {
         String wanted = normalize(quote);
         if (wanted.length() < (cjk(wanted) ? MIN_CJK : MIN_LATIN)) {
             return Match.NONE;
         }
-        boolean yours = false;
-        for (RunSegment segment : segments) {
-            if (userWords(segment) && normalize(segment.text()).contains(wanted)) {
-                yours = true;
-                if (text == null || supports(segment, text)) {
-                    return Match.SAID;
-                }
-            }
-        }
-        if (yours) {
-            return Match.DERIVED;
+        if (segments.stream().anyMatch(segment -> userWords(segment) && normalize(segment.text()).contains(wanted))) {
+            return text == null || !outside || verbatim(text, segments) ? Match.SAID : Match.DERIVED;
         }
         for (RunSegment segment : segments) {
             if (segment.role() == RunSegment.Role.ASSISTANT && normalize(segment.text()).contains(wanted)) {
@@ -72,47 +67,13 @@ public final class Quotes {
         return Match.NONE;
     }
 
-    /** 要点里的词至少这么多出自那段话，才算说的是那段话里的事。 */
-    static final double SUPPORT = 0.5;
-    /** 拉丁字母的词前这么多个字母相同就算同一个词（report / reports，write / written）。 */
-    static final int STEM = 4;
-    /** 要点里常见的主语，不算词（“用户喜欢……”“The user prefers …”）。 */
-    private static final java.util.Set<String> SUBJECT = java.util.Set.of("user", "users", "用户");
-
-    /** 这段你的话撑不撑得起这条要点：问答卡的回答连同问的那句一起看（你答“好”，认的是问的那件事）。 */
-    static boolean supports(RunSegment segment, String text) {
-        return supported(text, segment.asked() == null ? segment.text() : segment.asked() + "\n" + segment.text());
-    }
-
-    /** 这一轮里你说的话（所有分段合起来）撑不撑得起这句话：删、改记忆时看这句是不是你这一轮自己说要动的。 */
-    public static boolean saidThisTurn(String text, List<RunSegment> segments) {
-        StringBuilder words = new StringBuilder();
-        for (RunSegment segment : segments) {
-            if (userWords(segment)) {
-                words.append(segment.text()).append('\n');
-            }
-        }
-        return !words.isEmpty() && supported(text, words.toString());
-    }
-
-    /** {@code text} 里的词有一半以上在 {@code words} 里。没有词可比时（太短）看是不是逐字包含。 */
-    public static boolean supported(String text, String words) {
-        java.util.Set<String> wanted = new java.util.LinkedHashSet<>(tantalum.memory.recall.Terms.of(text));
-        wanted.removeAll(SUBJECT);
-        if (wanted.isEmpty()) {
-            String flat = normalize(text);
-            return !flat.isEmpty() && normalize(words).contains(flat);
-        }
-        java.util.Set<String> have = tantalum.memory.recall.Terms.of(words);
-        long found = wanted.stream().filter(term -> have.contains(term) || have.stream().anyMatch(other -> sameWord(term, other))).count();
-        return (double) found / wanted.size() >= SUPPORT;
-    }
-
-    private static boolean sameWord(String a, String b) {
-        if (a.length() < STEM || b.length() < STEM || !Character.isLetter(a.charAt(0)) || a.charAt(0) > 0x24F) {
+    /** 这句话逐字出自这一轮你说的话（规范化后包含；太短的不算）。 */
+    public static boolean verbatim(String text, List<RunSegment> segments) {
+        String wanted = normalize(text);
+        if (wanted.length() < (cjk(wanted) ? MIN_CJK : MIN_LATIN)) {
             return false;
         }
-        return a.regionMatches(0, b, 0, STEM);
+        return segments.stream().anyMatch(segment -> userWords(segment) && normalize(segment.text()).contains(wanted));
     }
 
     /** 不算“外部内容”的工具：问答卡（你的回答）、待办清单（模型自己的计划）。 */

@@ -100,8 +100,7 @@ public final class MessageSteps {
         boolean alone = run.owner() instanceof OwnerRef.OfSession && session.unattended() > 0;
         if (alone && session.unattended() > MAX_UNATTENDED) {
             return done(round, index, "Not handed off: this conversation has handed off " + MAX_UNATTENDED + " pieces of work on its own "
-                    + "since the user last spoke. Tell the user what was done and what is left, and wait for them; you can hand off "
-                    + "again after they answer.", true);
+                    + "since the user last spoke, which is the limit. Hand-offs are possible again after the user's next message.", true);
         }
         long sent = round.slots().stream().filter(each -> DelegateCall.NAME.equals(each.call().name())
                 && (each.status() == ToolSlot.Status.ASKED || each.status() == ToolSlot.Status.DONE && !each.result().error())).count();
@@ -350,9 +349,10 @@ public final class MessageSteps {
         RunState run = context.run();
         String from = event.from().session().value();
         String asked = event.text().strip();
-        String told = "Conversation " + from + " has stopped to ask the user" + (asked.isEmpty() ? " something" : ":\n" + asked + "\n")
-                + (asked.isEmpty() ? ". " : "") + "It waits there until the user answers in that conversation; you cannot answer for them. "
-                + "Tell the user to open it and answer. Its result comes back here as a message when it is done.";
+        // 只陈述事实，怎么跟用户说由模型定
+        String told = "Conversation " + from + " has stopped to ask the user" + (asked.isEmpty() ? " something. " : ":\n" + asked + "\n")
+                + "It waits there until the user answers in that conversation; it cannot be answered from here. "
+                + "Its result comes back here as a message when it is done.";
         if (run != null && !run.isEnded() && run.tools() != null) {
             ToolRound round = run.tools();
             for (int i = 0; i < round.slots().size(); i++) {
