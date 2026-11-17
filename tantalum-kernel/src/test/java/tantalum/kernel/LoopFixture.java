@@ -33,6 +33,7 @@ public final class LoopFixture {
 
     public static final Principal USER = new Principal("u");
     public static final SessionId SESSION = new SessionId("s");
+    public static final Instant AT = Instant.parse("2026-10-31T01:00:00Z");
 
     public final Kernel kernel;
     public final List<EventEnvelope> journal = new ArrayList<>();
@@ -47,15 +48,24 @@ public final class LoopFixture {
     }
 
     public LoopFixture(int maxParallelTools, KernelHook... hooks) {
+        this(maxParallelTools, tantalum.value.task.TaskLimits.DEFAULT, hooks);
+    }
+
+    public LoopFixture(int maxParallelTools, tantalum.value.task.TaskLimits tasks, KernelHook... hooks) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(List.of(hooks)),
-                (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds()));
+                (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds(), tasks));
     }
 
     public Decision feed(RunId run, Event event) {
-        EventEnvelope envelope = new EventEnvelope(seq++, Instant.parse("2026-10-31T01:00:00Z"),
-                USER, SESSION, run, event);
+        return feed(SESSION, run, event);
+    }
+
+    /** 喂给别的会话（为任务开的会话）；序号是所有会话共用的一串。 */
+    public Decision feed(SessionId session, RunId run, Event event) {
+        EventEnvelope envelope = new EventEnvelope(seq++, AT,
+                USER, session, run, event);
         journal.add(envelope);
         last = kernel.step(state, envelope);
         state = last.newState();

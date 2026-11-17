@@ -88,7 +88,11 @@ class EventCodecTest {
                 new ToolResultBlock("c", "out", true, "TOOL_OUTCOME_UNKNOWN"));
         List<Event> events = List.of(
                 UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi"),
-                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfCommand(CMD), "child"),
+                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfTask(new SessionId("s"), "t3-0"), "child"),
+                new tantalum.value.event.TaskAssigned("t3-0", new SessionId("s"), "check module A", "reviewer", "You review code.", List.of("read"), null, "/home/alice/app", true),
+                new tantalum.value.event.TaskEnded("t3-0", tantalum.value.task.TaskOutcome.COMPLETED, "fine"),
+                new tantalum.value.event.TaskEnded("t3-1", tantalum.value.task.TaskOutcome.INTERRUPTED, null),
+                new tantalum.value.event.TaskStopRequested(REQ, null),
                 SteerSubmittedFixture.of(SUB, REQ, "x"),
                 FollowUpSubmittedFixture.of(SUB, REQ, "x"),
                 new Cancel(REQ),

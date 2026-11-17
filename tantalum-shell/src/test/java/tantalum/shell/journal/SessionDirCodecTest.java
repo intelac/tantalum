@@ -51,7 +51,7 @@ class SessionDirCodecTest {
     void theSessionChangeCarriesTheDirectory() {
         RecordCodec records = new RecordCodec(codec);
         SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, new SessionChange.Changed<>("/home/alice/app"));
+                null, null, new SessionChange.Changed<>("/home/alice/app"), null, null);
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of());
         String line = records.encode(record, RecordMemo.writer(USER, SESSION));
         assertTrue(line.contains("\"dir\":\"/home/alice/app\""), line);
@@ -63,11 +63,45 @@ class SessionDirCodecTest {
     void theSessionChangeCarriesOffTheRecord() {
         RecordCodec records = new RecordCodec(codec);
         SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, null, new SessionChange.Changed<>(true));
+                null, null, null, new SessionChange.Changed<>(true), null);
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of());
         String line = records.encode(record, RecordMemo.writer(USER, SESSION));
         assertTrue(line.contains("\"offRecord\":true"), line);
         assertEquals(record, records.decode(line, RecordMemo.reader(USER, SESSION)).record());
+    }
+
+    /** 任务这一块（subagent 需求 4.5）：放出去还没回来的、会话是为哪个任务开的、无人说话时的计数，都写进账、原样读回；命令和事实也是。 */
+    @Test
+    void theSessionChangeCarriesTheTasks() {
+        RecordCodec records = new RecordCodec(codec);
+        java.time.Instant at = java.time.Instant.parse("2026-11-17T10:00:00Z");
+        tantalum.value.id.RunRef run = new tantalum.value.id.RunRef(USER, SESSION, tantalum.value.id.RunId.of(SESSION, 1));
+        tantalum.value.id.SessionId child = new tantalum.value.id.SessionId("s-t3-0");
+        tantalum.value.task.Tasks tasks = new tantalum.value.task.Tasks(
+                List.of(new tantalum.value.task.OpenTask("t3-0", child, "reviewer", "check module A", at, at.plusSeconds(1800),
+                        new tantalum.value.id.CommandId("c1"))),
+                new tantalum.value.task.TaskOrigin(new tantalum.value.id.SessionId("parent"), "t9-1", null, "You review code.", List.of("read")), 2, 3);
+        SessionChange change = new SessionChange(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null, null,
+                null, null, null, null, new SessionChange.Changed<>(tasks));
+        StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null,
+                List.of(new tantalum.value.command.StartTask(new tantalum.value.id.CommandId("c2"), run, "t3-0", child, "reviewer", "check module A\nand report", "/home/alice/app", false),
+                        new tantalum.value.command.ReturnTask(new tantalum.value.id.CommandId("c3"), run, SESSION, "t3-0", tantalum.value.task.TaskOutcome.COMPLETED, "fine"),
+                        new tantalum.value.command.StopTask(new tantalum.value.id.CommandId("c4"), run, "t3-0", child)),
+                List.of(new tantalum.value.decision.TaskStarted(run, "t3-0", child, "reviewer", "check module A", "call-1"),
+                        new tantalum.value.decision.TaskSettled(run, "t3-0", tantalum.value.task.TaskOutcome.TIMED_OUT, true)));
+        String line = records.encode(record, RecordMemo.writer(USER, SESSION));
+        assertTrue(line.contains("\"tasks\""), line);
+        assertEquals(record, records.decode(line, RecordMemo.reader(USER, SESSION)).record());
+    }
+
+    /** 没用任务的会话一个字不多写。 */
+    @Test
+    void unchangedTasksAreNotWritten() {
+        RecordCodec records = new RecordCodec(codec);
+        SessionChange change = SessionChangeFixture.of(SESSION, USER, true, List.of(), null, null, null, null, null, null, null);
+        String line = records.encode(new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of()),
+                RecordMemo.writer(USER, SESSION));
+        assertFalse(line.contains("\"tasks\""), line);
     }
 
     @Test

@@ -29,7 +29,8 @@ final class KernelFactory {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         return new Kernel(table, new HookChain(failClosed(hooks, Set.copyOf(properties.hooks().required()))), safety,
-                new Limits(properties.loop().maxParallelTools(), properties.hooks().maxWorkRounds()));
+                new Limits(properties.loop().maxParallelTools(), properties.hooks().maxWorkRounds(),
+                        tantalum.value.task.TaskLimits.DEFAULT));
     }
 
     /**

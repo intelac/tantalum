@@ -36,6 +36,7 @@ import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
+import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.SystemUpdates;
 import tantalum.value.model.TextBlock;
@@ -372,6 +373,7 @@ public final class OpenAiClient implements ModelClient {
                 case HookTextBlock note -> append(text, SystemUpdates.HEADER + note.text());
                 case SkillBlock skill -> append(text, skill.text());
                 case AttachedBlock attached -> append(text, attached.wrapped());
+                case TaskResultBlock result -> append(text, result.shown());
                 case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");
                 case AttachmentBlock attachment when vision && attachment.ref() instanceof ImageRef image -> {
                     flush(parts, text);

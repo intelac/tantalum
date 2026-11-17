@@ -39,6 +39,7 @@ import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.SkillBlock;
+import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -78,7 +79,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = ModelChangeBlock.class, name = "modelChange"),
         @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText"),
         @JsonSubTypes.Type(value = SkillBlock.class, name = "skill"),
-        @JsonSubTypes.Type(value = AttachedBlock.class, name = "attached")
+        @JsonSubTypes.Type(value = AttachedBlock.class, name = "attached"),
+        @JsonSubTypes.Type(value = TaskResultBlock.class, name = "taskResult")
     })
     private interface ContentBlockMixin {}
 
@@ -139,7 +141,7 @@ public final class EventCodec {
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
     @JsonSubTypes({
         @JsonSubTypes.Type(value = OwnerRef.OfSession.class, name = "session"),
-        @JsonSubTypes.Type(value = OwnerRef.OfCommand.class, name = "command")
+        @JsonSubTypes.Type(value = OwnerRef.OfTask.class, name = "task")
     })
     private interface OwnerRefMixin {}
 
@@ -236,6 +238,9 @@ public final class EventCodec {
         codec.register(SessionRenamed.TYPE, 1, SessionRenamed.class);
         codec.register(QueueChanged.TYPE, 1, QueueChanged.class);
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
+        codec.register(tantalum.value.event.TaskAssigned.TYPE, 1, tantalum.value.event.TaskAssigned.class);
+        codec.register(tantalum.value.event.TaskEnded.TYPE, 1, tantalum.value.event.TaskEnded.class);
+        codec.register(tantalum.value.event.TaskStopRequested.TYPE, 1, tantalum.value.event.TaskStopRequested.class);
         return codec;
     }
 

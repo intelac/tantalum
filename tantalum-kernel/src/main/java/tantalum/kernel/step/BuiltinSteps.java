@@ -15,6 +15,9 @@ import tantalum.value.event.QueueChanged;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.TaskAssigned;
+import tantalum.value.event.TaskEnded;
+import tantalum.value.event.TaskStopRequested;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -51,5 +54,10 @@ public final class BuiltinSteps {
         table.register(AnswerSteps.AWAITING_ANSWER, Answered.TYPE, AnswerSteps::answered);
         table.register(AnswerSteps.AWAITING_ANSWER, TimerFired.TYPE, AnswerSteps::expired);
         table.register(TransitionTable.ANY_STATE, Answered.TYPE, AnswerSteps::ignored);
+        // 任务：到了为它开的会话；结果回到放出它的会话；用户要停；期限到（没人等的定时器都走这一行，不是任务的不动）
+        table.register(TransitionTable.ANY_STATE, TaskAssigned.TYPE, TaskSteps::assigned);
+        table.register(TransitionTable.ANY_STATE, TaskEnded.TYPE, TaskSteps::ended);
+        table.register(TransitionTable.ANY_STATE, TaskStopRequested.TYPE, TaskSteps::stopRequested);
+        table.register(TransitionTable.ANY_STATE, TimerFired.TYPE, TaskSteps::timerFired);
     }
 }

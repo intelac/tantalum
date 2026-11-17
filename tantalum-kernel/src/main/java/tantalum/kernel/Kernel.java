@@ -49,7 +49,7 @@ public final class Kernel {
             return Decision.unchanged(state);
         }
         StepContext context = new StepContext(state, envelope, run, hooks, toolSafety,
-                limits.maxParallelTools(), limits.maxWorkRounds());
+                limits.maxParallelTools(), limits.maxWorkRounds(), limits.tasks());
         try {
             return step.get().apply(context);
         } catch (RuntimeException failure) {

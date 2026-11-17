@@ -77,7 +77,9 @@ public final class AnswerSteps {
         if (!waiting.question().accepts(event.answer())) {
             return ignored(out, run, event, "answer not accepted by the question");
         }
-        settle(out, run, waiting, event.answer(), QuestionSettled.Reason.ANSWERED);
+        // 回答问题也是人说话：无人值守的计数清零
+        TaskSteps.attended(out, context.envelope().session());
+        settle(out, out.run(run.ref()), waiting, event.answer(), QuestionSettled.Reason.ANSWERED);
         return out.decision();
     }
 

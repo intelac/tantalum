@@ -34,7 +34,7 @@ class OffRecordReplayTest {
         UserPrompt prompt = new UserPrompt(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi", List.of(), null,
                 null, List.of(), List.of(), offRecord);
         SessionChange change = new SessionChange(SESSION, USER, created, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, null, written);
+                null, null, null, written, null);
         return new Line(new EventEnvelope(0, Instant.parse("2026-11-16T00:00:00Z"), USER, SESSION, null, prompt),
                 new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of()), Map.of());
     }

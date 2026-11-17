@@ -60,7 +60,7 @@ public final class RecordCodec {
 
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
-            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled", "QueueEdited");
+            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled", "QueueEdited", "TaskStarted", "TaskSettled");
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
     @JsonSubTypes({
@@ -68,7 +68,10 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = RunTool.class, name = "RunTool"),
         @JsonSubTypes.Type(value = DoWork.class, name = "DoWork"),
         @JsonSubTypes.Type(value = StartTimer.class, name = "StartTimer"),
-        @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands")
+        @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands"),
+        @JsonSubTypes.Type(value = tantalum.value.command.StartTask.class, name = "StartTask"),
+        @JsonSubTypes.Type(value = tantalum.value.command.ReturnTask.class, name = "ReturnTask"),
+        @JsonSubTypes.Type(value = tantalum.value.command.StopTask.class, name = "StopTask")
     })
     private interface CommandMixin {}
 
@@ -83,6 +86,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = QuestionAsked.class, name = "QuestionAsked"),
         @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled"),
         @JsonSubTypes.Type(value = QueueEdited.class, name = "QueueEdited"),
+        @JsonSubTypes.Type(value = tantalum.value.decision.TaskStarted.class, name = "TaskStarted"),
+        @JsonSubTypes.Type(value = tantalum.value.decision.TaskSettled.class, name = "TaskSettled"),
         @JsonSubTypes.Type(value = StepFailed.class, name = "StepFailed")
     })
     private interface FactMixin {}

@@ -30,6 +30,6 @@ class PhaseTest {
     @Test
     void ownersAreDistinct() {
         assertEquals(new Deciding(), new Deciding());
-        assertNotEquals(new OwnerRef.OfSession(new SessionId("a")), new OwnerRef.OfCommand(new CommandId("a")));
+        assertNotEquals(new OwnerRef.OfSession(new SessionId("a")), new OwnerRef.OfTask(new SessionId("a"), "t1-0"));
     }
 }

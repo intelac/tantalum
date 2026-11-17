@@ -45,6 +45,7 @@ import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
+import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -406,6 +407,8 @@ final class ClaudeRequest {
             case SkillBlock skill -> ContentBlockParam.ofText(TextBlockParam.builder().text(skill.text()).build());
             // 插件在提交时附的内容（memory-plugin）：包在 <attached plugin="…"> 里的又一段文字
             case AttachedBlock attached -> ContentBlockParam.ofText(TextBlockParam.builder().text(attached.wrapped()).build());
+            // 任务的结果：用户消息里的一段文字，开头写明不是用户写的
+            case TaskResultBlock result -> ContentBlockParam.ofText(TextBlockParam.builder().text(result.shown()).build());
         };
     }
 

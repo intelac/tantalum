@@ -15,6 +15,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.SkillBlock;
+import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
@@ -105,6 +106,7 @@ public record TokenEstimate(double bytesPerToken) {
             case HookTextBlock note -> ofText(note.text());
             case SkillBlock skill -> ofText(skill.text());
             case AttachedBlock attached -> ofText(attached.wrapped());
+            case TaskResultBlock result -> ofText(result.shown());
         };
     }
 

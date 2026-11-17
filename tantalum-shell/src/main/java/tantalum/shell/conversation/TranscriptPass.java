@@ -51,6 +51,7 @@ import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
+import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
@@ -305,6 +306,7 @@ final class TranscriptPass {
                 case HookTextBlock ignored -> { } // 钩子的说明也只在系统消息里
                 case SkillBlock ignored -> { } // 点名的技能内容只在用户消息里
                 case AttachedBlock ignored -> { } // 插件附的内容也只在用户消息里
+                case TaskResultBlock ignored -> { } // 任务的结果也只在用户角色的消息里
             }
         }
         // 摘要调用在上面已经返回：它的用量在压缩标记上，不算进这次运行。放在内容之后，状态条目仍是这一步里最后变的

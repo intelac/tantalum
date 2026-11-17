@@ -87,6 +87,9 @@ public final class RunEnd {
 
         SessionState session = out.session(run.ref()).endRun();
         out.put(session);
+        if (run.owner() instanceof OwnerRef.OfTask task) {
+            TaskSteps.returned(out, run, task, reason, detail);
+        }
         if (!session.followUps().isEmpty()) {
             Message next = session.followUps().getFirst();
             ModelChoice requested = session.followUpModels().getFirst();

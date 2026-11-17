@@ -48,7 +48,11 @@ public final class SubmitSteps {
      * 正在跑的运行不受影响。{@code dir} 只在会话还没有任何消息时定下工作目录，之后带了也不理。
      */
     private static Decision submit(StepContext context, OwnerRef owner, Message message, ModelChoice model, String dir, boolean offRecord) {
+        if (forTask(context)) {
+            return Decision.unchanged(context.state());
+        }
         Outcome out = new Outcome(context);
+        TaskSteps.attended(out, context.envelope().session());
         SessionState existing = out.state().sessions().get(context.envelope().session());
         if (dir != null && (existing == null || existing.messages().isEmpty())) {
             out.put((existing == null ? SessionState.start(context.envelope().session(), context.envelope().principal()) : existing)
@@ -76,7 +80,11 @@ public final class SubmitSteps {
 
     public static Decision steer(StepContext context) {
         SteerSubmitted event = (SteerSubmitted) context.envelope().event();
+        if (forTask(context)) {
+            return Decision.unchanged(context.state());
+        }
         Outcome out = new Outcome(context);
+        TaskSteps.attended(out, context.envelope().session());
         RunState run = context.run();
         Message message = Message.user(event.text(), event.attachments(), blocks(event.skills()));
         if (run == null || run.isEnded()) {
@@ -88,6 +96,12 @@ public final class SubmitSteps {
             out.put(run.withPendingSteers(steers));
         }
         return out.decision();
+    }
+
+    /** 为任务开的会话只做那一件事，不接受人的提问、排队和插话：入口已经拒绝，这里再拦一道。 */
+    private static boolean forTask(StepContext context) {
+        SessionState session = context.state().sessions().get(context.envelope().session());
+        return session != null && session.tasks().origin() != null;
     }
 
     /**

@@ -22,6 +22,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.value.task.TaskLimits;
 
 /** 一次 step 内累积的结果。只活在一次纯函数调用里，不会逃逸到外面。 */
 final class Outcome {
@@ -31,6 +32,7 @@ final class Outcome {
     final ToolSafety toolSafety;
     final int maxParallelTools;
     final int maxWorkRounds;
+    final TaskLimits taskLimits;
     private KernelState state;
     private final List<Command> commands = new ArrayList<>();
     private final List<Fact> facts = new ArrayList<>();
@@ -43,6 +45,7 @@ final class Outcome {
         this.toolSafety = context.toolSafety();
         this.maxParallelTools = context.maxParallelTools();
         this.maxWorkRounds = context.maxWorkRounds();
+        this.taskLimits = context.tasks();
     }
 
     KernelState state() {

@@ -128,8 +128,9 @@ public final class ToolSteps {
     }
 
     private static void dispatch(Outcome out, RunState pending) {
-        RunState run = pending;
-        ToolRound round = run.tools();
+        // task、task_stop 由内核自己处理：过了钩子就当场有结果，这一轮不为它停
+        ToolRound round = TaskSteps.settle(out, pending, pending.tools());
+        RunState run = pending.withTools(round);
         if (round.allFinished()) {
             List<ContentBlock> results = new ArrayList<>(round.results());
             out.append(run.ref(), new Message(Role.USER, results, false));
