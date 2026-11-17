@@ -48,6 +48,8 @@ class TaskChainTest {
     private TestServer server;
     /** 为真时任务先问用户一个问题，停在等回答。 */
     private volatile boolean taskAsks;
+    /** 默认已经放行；要让任务先停着的测试换一个没放行的。 */
+    private volatile java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(0);
 
     private static ModelOutcome text(String text) {
         return new ModelOutcome.Replied(List.of(new TextBlock(text)), StopReason.END_TURN, "m", null);
@@ -64,6 +66,14 @@ class TaskChainTest {
     private final ModelClient model = (prompt, chunks) -> {
         if (prompt.system().contains("## This is a task")) {
             taskPrompts.add(prompt);
+            try {
+                // 任务等放行后才交结论（测“放出它的会话被回收之后结果回来”）
+                if (!release.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("the task was never released");
+                }
+            } catch (InterruptedException stopping) {
+                Thread.currentThread().interrupt();
+            }
             if (taskAsks && blocks(prompt, ToolResultBlock.class).isEmpty()) {
                 return new ModelOutcome.Replied(List.of(new ToolCallBlock("q1", "ask_user", "{}",
                         new Json.Obj(Map.of("question", new Json.Str("May I delete build/?"))))), StopReason.TOOL_USE, "m", null);
@@ -210,6 +220,30 @@ class TaskChainTest {
         assertEquals(200, server.post("alice", "/api/sessions/s1/tasks/stop", "{}").statusCode());
         Thread.sleep(200);
         assertEquals(2, runs("s1").size());
+    }
+
+    /** 放出任务的会话空闲久了会被回收出内存；结果回来时它从文件载回来，照常开一轮（subagent 设计“现有代码里已经确认的事实”）。 */
+    @Test
+    void aResultFindsTheSessionThatStartedItEvenAfterItLeftMemory() throws Exception {
+        server.close();
+        release = new java.util.concurrent.CountDownLatch(1);
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model,
+                "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s");
+        Engine engine = server.context.getBean(Engine.class);
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}");
+        waitForRuns("s1", 1);
+        tantalum.value.id.SessionId s1 = new tantalum.value.id.SessionId("s1");
+        for (int i = 0; i < 1500 && engine.state().sessions().containsKey(s1); i++) {
+            Thread.sleep(10);
+        }
+        assertFalse(engine.state().sessions().containsKey(s1), "the session that started the task left memory while the task was running");
+
+        release.countDown();
+
+        JsonNode runs = waitForRuns("s1", 2);
+        assertEquals("COMPLETED", runs.get(1).get("endReason").asString(), runs.toString());
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+        assertFalse(tasks().get(0).get("open").asBoolean());
     }
 
     @Test
