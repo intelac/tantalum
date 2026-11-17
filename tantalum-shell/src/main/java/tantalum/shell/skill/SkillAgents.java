@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.Set;
 import tantalum.local.wire.SkillList;
 import tantalum.local.wire.SkillLoaded;
-import tantalum.shell.handler.Agents;
 import tantalum.shell.local.LocalLinks.Reply;
 import tantalum.shell.local.LocalWorkspace;
 import tantalum.value.id.Principal;

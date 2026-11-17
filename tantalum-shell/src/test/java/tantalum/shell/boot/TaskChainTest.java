@@ -48,6 +48,8 @@ class TaskChainTest {
     private TestServer server;
     /** 为真时任务先问用户一个问题，停在等回答。 */
     private volatile boolean taskAsks;
+    /** 为真时主对话一次回复里放出两个任务。 */
+    private volatile boolean twoTasks;
     /** 默认已经放行；要让任务先停着的测试换一个没放行的。 */
     private volatile java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(0);
 
@@ -86,8 +88,13 @@ class TaskChainTest {
             return text("The task reported: " + back.getLast().text());
         }
         if (blocks(prompt, ToolResultBlock.class).isEmpty()) {
-            return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", TaskTools.TASK, "{}",
-                    new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module A.\nReport what you find."))))), StopReason.TOOL_USE, "m", null);
+            List<ContentBlock> calls = new ArrayList<>();
+            calls.add(new ToolCallBlock("c1", TaskTools.TASK, "{}",
+                    new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module A.\nReport what you find.")))));
+            if (twoTasks) {
+                calls.add(new ToolCallBlock("c2", TaskTools.TASK, "{}", new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module B.")))));
+            }
+            return new ModelOutcome.Replied(calls, StopReason.TOOL_USE, "m", null);
         }
         return text("Started; I will tell you when it is back.");
     };
@@ -253,6 +260,129 @@ class TaskChainTest {
 
         JsonNode runs = waitForRuns("s1", 2);
         assertEquals("COMPLETED", runs.get(1).get("endReason").asString(), runs.toString());
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+        assertFalse(tasks().get(0).get("open").asBoolean());
+    }
+
+    private void restart(String... extra) {
+        server.close();
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model, extra);
+    }
+
+    private void say(String request, String text) throws Exception {
+        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
+                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}").statusCode());
+    }
+
+    /** 两个会话的账重放出来和当时记下的结果一致（record-results）：任务的事件、命令、状态都在账里。 */
+    @Test
+    void theJournalsOfBothSessionsReplayToWhatWasRecorded() throws Exception {
+        twoTasks = true;
+        say("r1", "look into both modules");
+        waitForRuns("s1", 2);
+        for (int i = 0; i < 500 && tasks().toString().contains("\"open\":true"); i++) {
+            Thread.sleep(10);
+        }
+        Thread.sleep(300);
+        server.close();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        int code = RecordCheckCommand.run(new String[] {"--tantalum.data-dir=" + temp.resolve("data"), "--tantalum.workspace=" + temp.resolve("ws")},
+                new java.io.PrintStream(out, true, java.nio.charset.StandardCharsets.UTF_8),
+                tantalum.shell.cli.CliText.of(tantalum.value.text.Language.EN));
+        assertEquals(0, code, out.toString(java.nio.charset.StandardCharsets.UTF_8));
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model);
+    }
+
+    /** 上限是配置项（subagent 需求 5）：同时在外面的任务数到了，多出来的那次调用得到说明原因的错误，别的照常。 */
+    @Test
+    void withALimitOfOneOpenTaskTheSecondCallIsRefusedWithAReason() throws Exception {
+        restart("--tantalum.tasks.max-open=1");
+        twoTasks = true;
+        say("r1", "look into both modules");
+        waitForRuns("s1", 2);
+        List<ToolResultBlock> answers = blocks(mainPrompts.get(1), ToolResultBlock.class);
+        assertEquals(2, answers.size());
+        assertTrue(answers.get(0).text().startsWith("Started task"), answers.toString());
+        assertTrue(answers.get(1).error() && answers.get(1).text().startsWith("Not started: 1 tasks are already running"), answers.toString());
+        assertEquals(1, tasks().size());
+    }
+
+    /** 不让它自己接着做（max-unattended-runs=0）：结果记进对话，不开运行；人下一次说话时模型看到它。 */
+    @Test
+    void withNoUnattendedRunsAResultWaitsForThePersonToSpeak() throws Exception {
+        restart("--tantalum.tasks.max-unattended-runs=0");
+        say("r1", "look into module A");
+        waitForRuns("s1", 1);
+        for (int i = 0; i < 1500 && tasks().toString().contains("\"open\":true"); i++) {
+            Thread.sleep(10);
+        }
+        assertFalse(tasks().get(0).get("open").asBoolean());
+        Thread.sleep(300);
+        assertEquals(1, runs("s1").size(), "no run was started by the result");
+        String messages = server.get("alice", "/api/sessions/s1/messages").body();
+        assertTrue(messages.contains("\"kind\":\"taskResult\"") && messages.contains("\"paused\":true"), messages);
+
+        say("r2", "go on");
+        waitForRuns("s1", 2);
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+    }
+
+    /** 管理员设了期限（tantalum.tasks.deadline）：到时任务按超时结束并被停掉，放出它的对话照常得到结果。 */
+    @Test
+    void withADeadlineATaskThatDoesNotEndIsTimedOutAndStopped() throws Exception {
+        restart("--tantalum.tasks.deadline=1s");
+        release = new java.util.concurrent.CountDownLatch(1);
+        try {
+            say("r1", "look into module A");
+            JsonNode runs = waitForRuns("s1", 2);
+            assertEquals("COMPLETED", runs.get(1).get("endReason").asString());
+            TaskResultBlock result = blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst();
+            assertEquals(tantalum.value.task.TaskOutcome.TIMED_OUT, result.outcome());
+            String child = "s1-" + result.task();
+            assertEquals("CANCELLED", waitForRuns(child, 1).get(0).get("endReason").asString());
+            assertFalse(tasks().get(0).get("open").asBoolean());
+        } finally {
+            release.countDown();
+        }
+    }
+
+    /**
+     * 任务停在等用户回答时服务器重启：重启不打断等人的运行，任务还在名单里；回答之后它做完，结果照常回来。
+     * 索引库删掉重建也一样（它是从账算出来的）：任务的会话仍然不在会话清单里。
+     */
+    @Test
+    void aTaskWaitingForTheUserSurvivesARestartAndARebuiltIndex() throws Exception {
+        taskAsks = true;
+        say("r1", "look into module A");
+        waitForRuns("s1", 1);
+        String child = "s1-" + startedTask();
+        for (int i = 0; i < 1500 && !tasks().toString().contains("AwaitingAnswer"); i++) {
+            Thread.sleep(10);
+        }
+        assertTrue(tasks().toString().contains("AwaitingAnswer"), tasks().toString());
+
+        server.close();
+        try (java.util.stream.Stream<Path> files = java.nio.file.Files.walk(temp.resolve("data"))) {
+            for (Path file : files.filter(path -> path.getFileName().toString().startsWith("index.db")).toList()) {
+                java.nio.file.Files.delete(file);
+            }
+        }
+        server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model);
+
+        JsonNode listed = tasks();
+        assertEquals(1, listed.size(), listed.toString());
+        assertTrue(listed.get(0).get("open").asBoolean(), listed.toString());
+        assertEquals("AwaitingAnswer", listed.get(0).get("runStatus").asString(), listed.toString());
+        String sessions = server.get("alice", "/api/sessions").body();
+        assertTrue(sessions.contains("\"s1\"") && !sessions.contains(child), sessions);
+        assertTrue(sessions.contains("\"openTasks\":1"), sessions);
+        assertEquals(1, runs("s1").size(), "nothing was started by the restart");
+
+        JsonNode question = JSON.readTree(server.get("alice", "/api/sessions/" + child + "/questions").body()).get("questions").get(0);
+        assertEquals(200, server.post("alice", "/api/sessions/" + child + "/questions/" + question.get("id").asString(),
+                "{\"text\":\"yes\"}").statusCode());
+        JsonNode runs = waitForRuns("s1", 2);
+        assertEquals("COMPLETED", runs.get(1).get("endReason").asString());
         assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
         assertFalse(tasks().get(0).get("open").asBoolean());
     }

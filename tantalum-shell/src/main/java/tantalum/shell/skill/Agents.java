@@ -1,4 +1,4 @@
-package tantalum.shell.handler;
+package tantalum.shell.skill;
 
 import java.util.List;
 import tantalum.value.id.Principal;
