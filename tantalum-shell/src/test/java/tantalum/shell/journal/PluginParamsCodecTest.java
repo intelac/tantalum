@@ -26,6 +26,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.state.SessionContext;
 import tools.jackson.databind.JsonNode;
+import tantalum.value.state.SessionContextFixture;
 
 /**
  * plugin-settings 需求 5.5：加上插件参数之后，没记参数的会话写出来和原来逐字节相同。
@@ -123,7 +124,7 @@ class PluginParamsCodecTest {
         assertEquals(event, read);
         assertEquals(written, codec.encode(read));
 
-        SessionContext context = new SessionContext("system", List.of(), null, List.of()).withPluginParams(params(500));
+        SessionContext context = SessionContextFixture.of("system", List.of(), null, List.of()).withPluginParams(params(500));
         String frozen = codec.mapper().writeValueAsString(context);
         SessionContext back = codec.mapper().readValue(frozen, SessionContext.class);
         assertEquals(context, back);

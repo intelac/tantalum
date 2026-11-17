@@ -118,11 +118,6 @@ public final class Egress implements AutoCloseable {
         return server.getLocalPort();
     }
 
-    /** 出口用的地址规则：浏览器打开网址前先查一遍，给模型清楚的原因（真正拦的还是出口）。 */
-    public AddressRules rules() {
-        return rules;
-    }
-
     /** 给 {@code web_fetch}：经出口，不自动跟跳转，连接超时 10 秒。联网的代码不自己建 {@code HttpClient}（ArchitectureTest 规则 3）。 */
     public HttpClient client() {
         return client;

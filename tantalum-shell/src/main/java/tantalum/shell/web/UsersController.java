@@ -228,7 +228,4 @@ public class UsersController {
         return view;
     }
 
-    static List<Map<String, Object>> views(List<UserStore.Account> accounts) {
-        return accounts.stream().map(UsersController::view).toList();
-    }
 }

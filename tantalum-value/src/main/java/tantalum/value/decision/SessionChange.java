@@ -35,25 +35,6 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         appended = List.copyOf(appended);
     }
 
-    /** 开着过的工具没变时（测试）。 */
-    public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
-                         Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
-                         Changed<SessionContext> context, Changed<Compaction> compaction,
-                         Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages) {
-        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null, null,
-                null, null, null);
-    }
-
-    /** 模型选择没变时。 */
-    public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
-                         Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
-                         Changed<SessionContext> context, Changed<Compaction> compaction,
-                         Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
-                         Changed<Map<String, Json.Obj>> notes) {
-        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes,
-                null, null, null);
-    }
-
     /** “不进记忆”没变时。 */
     public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
                          Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
@@ -63,16 +44,6 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                          Changed<String> dir) {
         this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes,
                 model, followUpModels, dir, null);
-    }
-
-    /** 工作目录没变时。 */
-    public SessionChange(SessionId id, Principal principal, boolean created, List<Message> appended,
-                         Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps,
-                         Changed<SessionContext> context, Changed<Compaction> compaction,
-                         Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
-                         Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<List<ModelChoice>> followUpModels) {
-        this(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes,
-                model, followUpModels, null);
     }
 
     /** 比较同一个会话处理前后的状态。{@code before} 为 null 表示这一步新建了它。消息不是只追加时抛出。 */

@@ -39,6 +39,9 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.event.ContextAssembledFixture;
 
 /** 把事件喂给真实内核，再把 {@code (envelope, decision)} 交给 {@link Transcript}。每个事件时间前进 1 秒。 */
 final class TranscriptFixture {
@@ -136,7 +139,7 @@ final class TranscriptFixture {
         feed(null, prompt(text));
         RunId run = RunId.of(SESSION, lastSeq());
         CommandId assemble = lastCommands().getFirst().id();
-        feed(run, new ContextAssembled(assemble, "sys", List.of(), settings, List.of()));
+        feed(run, ContextAssembledFixture.of(assemble, "sys", List.of(), settings, List.of()));
         return run;
     }
 
@@ -149,7 +152,7 @@ final class TranscriptFixture {
 
     UserPrompt prompt(String text) {
         int n = submissions++;
-        return new UserPrompt(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
     }
 
     List<Command> lastCommands() {
@@ -184,7 +187,7 @@ final class TranscriptFixture {
     ToolFinished finished(RunId run, String callId, String text, boolean error) {
         CommandId command = state.runs().get(run).tools().slots().stream()
                 .filter(slot -> slot.call().id().equals(callId)).findFirst().orElseThrow().command();
-        return new ToolFinished(command, callId, text, error, null);
+        return ToolFinishedFixture.of(command, callId, text, error, null);
     }
 
     static ToolCallBlock call(String id, String name) {

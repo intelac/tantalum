@@ -19,6 +19,7 @@ import tantalum.value.hook.Stop;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
+import tantalum.value.hook.AllowFixture;
 
 /**
  * 测试用钩子：只管自己的会话，只在 {@code point} 返回 {@code result}，其余位置放行。
@@ -130,7 +131,7 @@ final class MatrixHook implements KernelHook, PluginInfo {
         }
         return switch (result) {
             case ALLOW -> Allow.PLAIN;
-            case PATCH -> new Allow(new PromptPatch(PATCH_TEXT, List.of(PATCH_TOOL)));
+            case PATCH -> AllowFixture.of(new PromptPatch(PATCH_TEXT, List.of(PATCH_TOOL)));
             case STOP -> new Stop(STOP_REASON);
             case WORK_OK -> work("ok");
             case WORK_FAIL -> work("fail");

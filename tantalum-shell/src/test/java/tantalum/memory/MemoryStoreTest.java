@@ -32,7 +32,7 @@ class MemoryStoreTest {
     };
 
     private MemoryStore store(int maxEntries, int maxIndexBytes, int maxEntryBytes) {
-        return new MemoryStore(temp.resolve("alice/memory"), new MemoryLimits(maxEntries, maxIndexBytes, maxEntryBytes), clock);
+        return MemoryStoreFixture.of(temp.resolve("alice/memory"), new MemoryLimits(maxEntries, maxIndexBytes, maxEntryBytes), clock);
     }
 
     private MemoryStore store() {

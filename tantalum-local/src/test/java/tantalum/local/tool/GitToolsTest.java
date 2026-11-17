@@ -50,7 +50,7 @@ class GitToolsTest {
         commit("first: add app", "Alice");
         Files.writeString(repo.resolve("App.java"), "class App {\n  int a = 2;\n}\n");
         commit("second: change a", "Bob");
-        context = new LocalContext("s", new AllowedDirs(List.of(repo)), new Observations());
+        context = LocalContextFixture.of("s", new AllowedDirs(List.of(repo)), new Observations());
     }
 
     /** 测试自己造仓库用的 git：不读用户的全局配置（签名、钩子），和被测工具无关。 */
@@ -269,7 +269,7 @@ class GitToolsTest {
     void outsideARepositoryEveryToolSaysSo() throws Exception {
         Path plain = Files.createDirectory(temp.resolve("plain"));
         Files.writeString(plain.resolve("a.txt"), "x");
-        LocalContext none = new LocalContext("s", new AllowedDirs(List.of(plain)), new Observations());
+        LocalContext none = LocalContextFixture.of("s", new AllowedDirs(List.of(plain)), new Observations());
         for (LocalTool tool : List.<LocalTool>of(log, diff, branches)) {
             assertEquals(Git.NOT_A_REPOSITORY + plain, tool.run(none, args()).text(), tool.name());
         }
@@ -289,7 +289,7 @@ class GitToolsTest {
         Files.move(repo, nested.resolve("repo"));
         Path inner = nested.resolve("repo");
         Path other = Files.createDirectory(temp.resolve("other"));
-        LocalContext plainMain = new LocalContext("s", new AllowedDirs(List.of(main, other)), new Observations());
+        LocalContext plainMain = LocalContextFixture.of("s", new AllowedDirs(List.of(main, other)), new Observations());
         assertTrue(GitCheck.installed(main));
 
         LocalResult sub = log.run(plainMain, args("path", "shop/repo"));
@@ -309,7 +309,7 @@ class GitToolsTest {
     /** 只允许了仓库里的一个子目录：仓库顶层在允许的目录外，git show 能读到外面的文件，所以不查，并照实说仓库在哪（QAgent 问题 84）。 */
     @Test
     void aRepositoryWhoseTopIsOutsideTheAllowedDirectoriesIsNotUsed() throws Exception {
-        LocalContext docsOnly = new LocalContext("s", new AllowedDirs(List.of(repo.resolve("docs"))), new Observations());
+        LocalContext docsOnly = LocalContextFixture.of("s", new AllowedDirs(List.of(repo.resolve("docs"))), new Observations());
         LocalResult output = show.run(docsOnly, args("revision", "HEAD:App.java"));
         assertTrue(output.error());
         assertEquals(Git.OUTSIDE.formatted(repo.resolve("docs"), repo), output.text());

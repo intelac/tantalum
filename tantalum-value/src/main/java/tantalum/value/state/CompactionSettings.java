@@ -30,12 +30,6 @@ public record CompactionSettings(long window, long reserve, long keepRecent, int
         }
     }
 
-    /** 旧规则的设置：没有用户选的压缩点，按字节数除以 3 估算。 */
-    public CompactionSettings(long window, long reserve, long keepRecent, int maxKeptResultBytes,
-                              int maxSummarizedResultBytes, long summaryMaxTokens) {
-        this(window, reserve, keepRecent, maxKeptResultBytes, maxSummarizedResultBytes, summaryMaxTokens, 0, 0);
-    }
-
     /** 规则 2 的阈值 T：用户选的压缩点；旧事件没有时是窗口减预留。 */
     public long threshold() {
         return point > 0 ? point : window - reserve;

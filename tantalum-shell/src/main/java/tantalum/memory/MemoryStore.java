@@ -1,7 +1,6 @@
 package tantalum.memory;
 
 import java.nio.file.Path;
-import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,11 +43,6 @@ public final class MemoryStore {
     public MemoryStore(Ledger ledger, MemoryLimits limits) {
         this.ledger = ledger;
         this.limits = limits;
-    }
-
-    /** 测试和单独使用：在 {@code dir} 打开一本账。 */
-    public MemoryStore(Path dir, MemoryLimits limits, Clock clock) {
-        this(Ledger.open(dir, clock), limits);
     }
 
     /** 账所在的目录。 */

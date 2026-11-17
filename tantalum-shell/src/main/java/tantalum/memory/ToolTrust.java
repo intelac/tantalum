@@ -22,10 +22,6 @@ public final class ToolTrust {
     public record Verdict(MemoryItem.Source source, boolean pendingConfirm, java.util.List<String> outsideTools, boolean derived,
                           List<RunSegment> segments) {
 
-        public Verdict(MemoryItem.Source source, boolean pendingConfirm, java.util.List<String> outsideTools) {
-            this(source, pendingConfirm, outsideTools, false, List.of());
-        }
-
         /** 这个会话读过外部内容。 */
         public boolean outside() {
             return !outsideTools.isEmpty();

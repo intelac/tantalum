@@ -15,6 +15,7 @@ import tantalum.value.model.Role;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContextFixture;
 
 class PromptProjectionTest {
 
@@ -23,7 +24,7 @@ class PromptProjectionTest {
     private static final ToolSpec GREP = new ToolSpec("grep", "d", new Json.Null());
 
     private static SessionState session() {
-        return SessionState.start(SESSION, USER).withContext(new SessionContext("system", List.of(GREP), null, List.of()));
+        return SessionState.start(SESSION, USER).withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()));
     }
 
     @Test

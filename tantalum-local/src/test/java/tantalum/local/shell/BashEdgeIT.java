@@ -21,6 +21,7 @@ import tantalum.local.tool.LocalTool;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.Tools;
 import tantalum.value.json.Json;
+import tantalum.local.tool.LocalContextFixture;
 
 /**
  * 命令行的边界（agent-eval 需求 1.2）：真的 bash，macOS 和 Linux 上跑；Windows 上的 PowerShell 见 {@link LocalShellIT}。
@@ -48,7 +49,7 @@ class BashEdgeIT {
             fields.put("timeout", new Json.Num(java.math.BigDecimal.valueOf(timeout[0])));
         }
         LocalTool tool = Tools.all().stream().filter(each -> each.name().equals("bash")).findFirst().orElseThrow();
-        return tool.run(new LocalContext("s", new AllowedDirs(List.of(work)), new Observations(), shell), new Json.Obj(fields));
+        return tool.run(LocalContextFixture.of("s", new AllowedDirs(List.of(work)), new Observations(), shell), new Json.Obj(fields));
     }
 
     @Test

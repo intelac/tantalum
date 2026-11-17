@@ -55,6 +55,8 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * 任务 33、34：{@code /turns}、{@code /trace} 只读运行所在的会话文件，SSE 补读只读该用户的文件，
@@ -104,7 +106,7 @@ class PerSessionQueryTest {
         writer = new IndexWriter(index, 100, Duration.ofHours(1));
         paths = new SessionPaths(dir);
         fixture = new IndexFixture(paths, writer::onDurable, writer::onStep, kernel);
-        SessionReplay replay = new SessionReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
+        SessionReplay replay = SessionReplayFixture.of(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
         query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins())), EventCodec.withBuiltins().mapper());
     }
 
@@ -139,9 +141,9 @@ class PerSessionQueryTest {
 
     private Started prompt(Principal principal, SessionId session, String text) throws Exception {
         Decision submitted = send(principal, session, null,
-                new UserPrompt(new SubmissionId("sub-" + text), new RequestId(text), new OwnerRef.OfSession(session), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId(text), new OwnerRef.OfSession(session), text));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
-        Decision assembled = send(principal, session, assemble.run().run(), new ContextAssembled(assemble.id(), "s", List.of(), null, List.of()));
+        Decision assembled = send(principal, session, assemble.run().run(), ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
         CallModel call = assembled.commands().isEmpty() ? null : (CallModel) assembled.commands().getFirst();
         return new Started(assemble.run().run(), call);
     }

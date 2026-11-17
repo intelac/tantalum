@@ -10,7 +10,4 @@ import tantalum.value.model.ModelChoice;
  */
 public record AssembleContext(CommandId id, RunRef run, ModelChoice requested, ModelChoice current) implements Command {
 
-    public AssembleContext(CommandId id, RunRef run) {
-        this(id, run, null, null);
-    }
 }

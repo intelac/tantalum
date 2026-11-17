@@ -34,6 +34,8 @@ import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.command.AssembleContextFixture;
 
 /** 需求 5 第 7 条：三种背压。无论哪种都不能阻塞环。 */
 class BackpressureTest {
@@ -50,7 +52,7 @@ class BackpressureTest {
     private static EventEnvelope prompt(int i) {
         SessionId session = new SessionId("s" + i);
         return new EventEnvelope(i, Instant.EPOCH, new Principal("u"), session, null,
-                new UserPrompt(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"));
     }
 
     @Test
@@ -101,7 +103,7 @@ class BackpressureTest {
         for (int i = 0; i < 8; i++) {
             SessionId session = new SessionId("s" + i);
             assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.EPOCH, new Principal("u"), session, null,
-                    new UserPrompt(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"))));
+                    UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"))));
         }
 
         List<RunState> failed = new ArrayList<>();
@@ -131,7 +133,7 @@ class BackpressureTest {
         assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
             for (int i = 0; i < 8; i++) {
                 tantalum.value.id.CommandId id = new tantalum.value.id.CommandId("c" + i);
-                results.publish(new tantalum.value.command.AssembleContext(id, new tantalum.value.id.RunRef(new Principal("u"),
+                results.publish(AssembleContextFixture.of(id, new tantalum.value.id.RunRef(new Principal("u"),
                         new SessionId("s"), new tantalum.value.id.RunId("r"))), new tantalum.value.event.TimerFired(id));
             }
         });

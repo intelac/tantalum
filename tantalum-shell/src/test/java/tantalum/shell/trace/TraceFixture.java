@@ -48,6 +48,12 @@ import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /** 把事件喂给真实内核，再把 {@code (事件, 处理前状态, 决定)} 交给 {@link Trace}。每个事件时间前进 1 秒。 */
 final class TraceFixture {
@@ -56,7 +62,7 @@ final class TraceFixture {
     static final SessionId SESSION = new SessionId("s");
     static final Instant T0 = Instant.parse("2026-11-01T00:00:00Z");
     /** 窗口 1000、预留 200：会话估算超过 800 时自动压缩。 */
-    static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
 
     /** 内核处理过的一步，回放和“恢复后接着处理”的测试按它重喂。 */
     record Step(EventEnvelope envelope, KernelState before, Decision decision) {}
@@ -149,22 +155,22 @@ final class TraceFixture {
     }
 
     void assembled(RunId run, CompactionSettings settings, List<ContextSection> sections) {
-        feed(run, new ContextAssembled(lastOf(Command.class).id(), "sys", List.of(tool("read_file")), settings, sections));
+        feed(run, ContextAssembledFixture.of(lastOf(Command.class).id(), "sys", List.of(tool("read_file")), settings, sections));
     }
 
     UserPrompt prompt(String text) {
         int n = submissions++;
-        return new UserPrompt(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
     }
 
     SteerSubmitted steer(String text) {
         int n = submissions++;
-        return new SteerSubmitted(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
+        return SteerSubmittedFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
     FollowUpSubmitted followUp(String text) {
         int n = submissions++;
-        return new FollowUpSubmitted(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
+        return FollowUpSubmittedFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
     QueueChanged queue(QueueChanged.Action action, int index, String expected, String text) {
@@ -203,7 +209,7 @@ final class TraceFixture {
     ToolFinished finished(RunId run, String callId, String text, boolean error) {
         CommandId command = state.runs().get(run).tools().slots().stream()
                 .filter(slot -> slot.call().id().equals(callId)).findFirst().orElseThrow().command();
-        return new ToolFinished(command, callId, text, error, now);
+        return ToolFinishedFixture.of(command, callId, text, error, now);
     }
 
     WorkDone workDone(Json result, String continueText) {

@@ -1,7 +1,7 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { reportHalted } from "./connection";
-import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, PluginUsageList, Plugins, Project, RunListPage, RunNode, RunsSummary, RunView, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, Turn, TurnSummary, User, UserList, UserSettingsView, WorkingItem } from "./types";
+import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, PluginUsageList, Plugins, Project, RunListPage, RunNode, RunsSummary, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, User, UserList, UserSettingsView, WorkingItem } from "./types";
 import { asViewed, setViewedUser, viewedUser } from "./viewing";
 
 /**
@@ -251,15 +251,6 @@ export function cancelRun(run: string): Promise<unknown> {
   return call(`/api/runs/${encodeURIComponent(run)}/cancel`, { method: "POST", body: "{}" });
 }
 
-export async function listRuns(session: string): Promise<{ runs: RunView[] }> {
-  try {
-    return await call(asViewed(`/api/sessions/${encodeURIComponent(session)}/runs`));
-  } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 404) return { runs: [] };
-    throw failure;
-  }
-}
-
 /** 轨迹的一页：不带参数取最新一页；`before` 取更早一页；`run` 从最新一直取到包含这个运行的一页。 */
 export function getTracePage(session: string, cursor: { before?: number; run?: string } = {}): Promise<TracePage> {
   const query = cursor.before !== undefined ? `?before=${cursor.before}` : cursor.run !== undefined ? `?run=${encodeURIComponent(cursor.run)}` : "";
@@ -289,14 +280,6 @@ export function getRunTree(session: string, run: string): Promise<{ root: RunNod
 /** 这个人能用的插件面板（所属插件开着的）。 */
 export function listPanels(): Promise<{ panels: PanelInfo[] }> {
   return call(asViewed("/api/panels"));
-}
-
-export function listTurns(run: string): Promise<{ turns: TurnSummary[] }> {
-  return call(asViewed(`/api/runs/${encodeURIComponent(run)}/turns`));
-}
-
-export function getTurn(run: string, number: number): Promise<Turn> {
-  return call(asViewed(`/api/runs/${encodeURIComponent(run)}/turns/${number}`));
 }
 
 // ---- 记忆：记忆插件的接口（memory-plugin），只操作当前登录用户的，接口按会话取身份。 ----

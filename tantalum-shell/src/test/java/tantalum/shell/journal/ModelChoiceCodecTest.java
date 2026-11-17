@@ -41,6 +41,10 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.JsonNode;
+import tantalum.value.command.CallModelFixture;
+import tantalum.value.decision.SessionChangeFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * model-picker 任务 1（需求 7.1、7.4）：记录选择的字段写了能读回；为空时写出的行和改动前逐字节相同；
@@ -61,10 +65,10 @@ class ModelChoiceCodecTest {
 
     @Test
     void everyNewFieldReadsBack() {
-        UserPrompt prompt = new UserPrompt(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi",
+        UserPrompt prompt = UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi",
                 List.of(), QWEN);
         assertEquals(prompt, codec.decode(UserPrompt.TYPE, 1, codec.encode(prompt)));
-        FollowUpSubmitted followUp = new FollowUpSubmitted(new SubmissionId("s"), new RequestId("r"), "next", List.of(), SONNET);
+        FollowUpSubmitted followUp = FollowUpSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "next", List.of(), SONNET);
         assertEquals(followUp, codec.decode(FollowUpSubmitted.TYPE, 1, codec.encode(followUp)));
         ContextAssembled context = assembled(QWEN);
         assertEquals(context, codec.decode(ContextAssembled.TYPE, 2, codec.encode(context)));
@@ -74,12 +78,12 @@ class ModelChoiceCodecTest {
                 "local", "qwen3.8"), new TextBlock("ok")), false);
         Message change = new Message(Role.SYSTEM, List.of(new ModelChangeBlock(SONNET.label(), QWEN.label())), false);
         RunState run = RunState.start(RUN, new OwnerRef.OfSession(SESSION)).withModel(QWEN, SONNET);
-        StepRecord record = new StepRecord(0, new SessionChange(SESSION, USER, true, List.of(change, reply), null, null,
+        StepRecord record = new StepRecord(0, SessionChangeFixture.of(SESSION, USER, true, List.of(change, reply), null, null,
                 new SessionChange.Changed<>(List.of(Message.user("next"))), null, null,
                 null, null, null, null, new SessionChange.Changed<>(QWEN), new SessionChange.Changed<>(List.of(SONNET))),
                 List.of(run), List.of(), null, null,
                 List.of(new AssembleContext(new CommandId("c-0"), RUN, QWEN, SONNET),
-                        new CallModel(new CommandId("c-1"), RUN, new Prompt("system", List.of(), List.of(change, reply)).withModel(QWEN))),
+                        CallModelFixture.of(new CommandId("c-1"), RUN, new Prompt("system", List.of(), List.of(change, reply)).withModel(QWEN))),
                 List.of());
         RecordCodec records = new RecordCodec(codec);
         String line = records.encode(record, RecordMemo.writer(USER, SESSION));
@@ -162,7 +166,7 @@ class ModelChoiceCodecTest {
 
     private static StepRecord call(long seq, Prompt prompt) {
         return new StepRecord(seq, null, List.of(), List.of(), null, null,
-                List.of(new CallModel(new CommandId("c-" + seq), RUN, prompt)), List.of());
+                List.of(CallModelFixture.of(new CommandId("c-" + seq), RUN, prompt)), List.of());
     }
 
     private static ContextAssembled assembled(ModelChoice model) {

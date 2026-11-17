@@ -56,7 +56,7 @@ class ItemJsonTest {
 
     @Test
     void queuedUserMessageHasNoRun() {
-        Map<String, Object> data = ItemJson.toMap(MAPPER, new UserMessage("5.0", SESSION, null, T0, "later", true));
+        Map<String, Object> data = ItemJson.toMap(MAPPER, TranscriptItemFixture.userMessage("5.0", SESSION, null, T0, "later", true));
         assertEquals("user", data.get("kind"));
         assertFalse(data.containsKey("run"));
         assertEquals(true, data.get("queued"));

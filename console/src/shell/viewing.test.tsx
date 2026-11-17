@@ -9,12 +9,9 @@ import {
   getContextUsage,
   getModels,
   getTracePage,
-  getTurn,
   listMessages,
   listProjects,
-  listRuns,
   listSessions,
-  listTurns,
   logout,
   renameSession,
   submit,
@@ -51,19 +48,13 @@ describe("viewing another person's sessions", () => {
     await listSessions();
     await listProjects();
     await listMessages("s1", 40);
-    await listRuns("s1");
     await getTracePage("s1", { run: "r1" });
-    await listTurns("r1");
-    await getTurn("r1", 2);
     await getContextUsage("s1");
     expect(paths).toEqual([
       "/api/sessions?viewAs=alice%20b",
       "/api/projects?viewAs=alice%20b",
       "/api/sessions/s1/messages?before=40&viewAs=alice%20b",
-      "/api/sessions/s1/runs?viewAs=alice%20b",
       "/api/sessions/s1/trace?run=r1&viewAs=alice%20b",
-      "/api/runs/r1/turns?viewAs=alice%20b",
-      "/api/runs/r1/turns/2?viewAs=alice%20b",
       "/api/sessions/s1/context?viewAs=alice%20b",
     ]);
     expect(attachmentUrl({ id: "a1", name: "shot.png" })).toBe("/api/attachments/a1?name=shot.png&viewAs=alice%20b");

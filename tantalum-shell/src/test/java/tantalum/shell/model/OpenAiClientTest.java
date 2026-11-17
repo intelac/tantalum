@@ -33,6 +33,8 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.model.PromptFixture;
 
 class OpenAiClientTest {
 
@@ -56,7 +58,7 @@ class OpenAiClientTest {
     }
 
     private OpenAiClient client(Duration first, Duration between) {
-        return new OpenAiClient(server.url(), "qwen", null, 4096, first, between, OverflowRules.defaults());
+        return OpenAiClientFixture.of(server.url(), "qwen", null, 4096, first, between, OverflowRules.defaults());
     }
 
     private ModelOutcome call(Prompt prompt) throws Exception {
@@ -195,10 +197,10 @@ class OpenAiClientTest {
     void optionsAreWhatIsSentWithoutAddressOrKey() throws Exception {
         server.body = finish("stop");
         String key = "sk-fake-" + "Hq3vN9";
-        OpenAiClient client = new OpenAiClient(server.url() + "/", "qwen", key, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
+        OpenAiClient client = OpenAiClientFixture.of(server.url() + "/", "qwen", key, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5),
                 OverflowRules.defaults());
         Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
-        Prompt summary = new Prompt("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("q")), new Prompt.Output(false, 512));
+        Prompt summary = PromptFixture.of("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("q")), new Prompt.Output(false, 512));
 
         for (Prompt prompt : List.of(HI, summary)) {
             tantalum.value.model.RequestOptions options = client.options(prompt);
@@ -263,7 +265,7 @@ class OpenAiClientTest {
     void summaryOutputDisablesToolsAndOverridesMaxTokens() throws Exception {
         server.body = finish("stop");
         Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
-        call(new Prompt("sys", List.of(new ToolSpec("grep", "search", schema)), List.of(Message.user("summarize")),
+        call(PromptFixture.of("sys", List.of(new ToolSpec("grep", "search", schema)), List.of(Message.user("summarize")),
                 new Prompt.Output(false, 8192)));
 
         String body = server.requests.getFirst();
@@ -276,7 +278,7 @@ class OpenAiClientTest {
     void defaultOutputSendsTheSameRequestAsBefore() throws Exception {
         server.body = finish("stop");
         call(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
-        call(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
+        call(PromptFixture.of("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
         assertEquals(server.requests.get(0), server.requests.get(1));
         assertFalse(server.requests.getFirst().contains("tool_choice"), server.requests.getFirst());
     }
@@ -316,7 +318,7 @@ class OpenAiClientTest {
     void connectionFailureIsRetryable() throws Exception {
         String url = server.url();
         server.close();
-        ModelOutcome outcome = new OpenAiClient(url, "m", null, 16, Duration.ofSeconds(5), Duration.ofSeconds(5),
+        ModelOutcome outcome = OpenAiClientFixture.of(url, "m", null, 16, Duration.ofSeconds(5), Duration.ofSeconds(5),
                 OverflowRules.defaults()).call(HI, listener);
         ModelOutcome.Failed failed = assertInstanceOf(ModelOutcome.Failed.class, outcome);
         assertEquals(FailureReason.CONNECTION_ERROR, failed.reason());
@@ -376,7 +378,7 @@ class OpenAiClientTest {
     // ---- 附件（attachments 任务 16）：openai-attachment-requests.txt，收图片和不收图片各一组 ----
 
     private static final java.nio.file.Path ATTACHMENT_EXPECTED = java.nio.file.Path.of("src/test/resources/model/openai-attachment-requests.txt");
-    private static final ImageRef PNG = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
+    private static final ImageRef PNG = ImageRefFixture.of("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
     private static final FileRef PDF = new FileRef("sha256:" + "d".repeat(64), "report.pdf", "application/pdf", 9, 3);
 
     /** 图片字节固定是 {@code IMG}；OpenAI 兼容路线不读文件内容。 */

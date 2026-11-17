@@ -43,6 +43,22 @@
       <version>1.5.1</version>
       <scope>test</scope>
     </dependency>
+    <!-- 测试里的简短建法（*Fixture 一类）放在对方的测试包里。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-value</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <!-- 测试里的简短建法（*Fixture 一类）放在对方的测试包里。 -->
+    <dependency>
+      <groupId>dev.tantalum</groupId>
+      <artifactId>tantalum-local</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

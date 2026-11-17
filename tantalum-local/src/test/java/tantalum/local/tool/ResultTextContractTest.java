@@ -76,7 +76,7 @@ class ResultTextContractTest {
 
     private String bash(int exitCode, Tail.Text output, boolean timedOut) throws Exception {
         next = new Shell.Run(exitCode, output, timedOut);
-        return new Bash().run(new LocalContext("s", dirs, new Observations(), fake), args("command", "x", "timeout", 5)).text();
+        return new Bash().run(LocalContextFixture.of("s", dirs, new Observations(), fake), args("command", "x", "timeout", 5)).text();
     }
 
     private static Tail.Text whole(String text) {
@@ -88,7 +88,7 @@ class ResultTextContractTest {
     }
 
     private String grep(String pattern) {
-        return new Grep().run(new LocalContext("s", dirs, new Observations()), args("pattern", pattern)).text();
+        return new Grep().run(LocalContextFixture.of("s", dirs, new Observations()), args("pattern", pattern)).text();
     }
 
     @Test

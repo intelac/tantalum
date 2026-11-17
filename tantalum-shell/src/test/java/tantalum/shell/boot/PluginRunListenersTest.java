@@ -56,7 +56,7 @@ class PluginRunListenersTest {
         List<RunFinishedListener.FinishedRun> broken = new CopyOnWriteArrayList<>();
         List<RunFinishedListener.FinishedRun> memory = new CopyOnWriteArrayList<>();
         List<RunFinishedListener.FinishedRun> off = new CopyOnWriteArrayList<>();
-        try (PluginRunListeners listeners = new PluginRunListeners(
+        try (PluginRunListeners listeners = PluginRunListenersFixture.of(
                 List.of(listener("broken", broken, true), listener("memory", memory, false), listener("off", off, false)),
                 (plugin, user) -> !plugin.equals("off"), (user, session, run) -> List.of(), session -> "标题")) {
             listeners.deliver(row(TraceRecord.RunHead.Trigger.PROMPT));
@@ -84,7 +84,7 @@ class PluginRunListenersTest {
                 heard.countDown();
             }
         };
-        try (PluginRunListeners listeners = new PluginRunListeners(List.of(latch), (plugin, user) -> true,
+        try (PluginRunListeners listeners = PluginRunListenersFixture.of(List.of(latch), (plugin, user) -> true,
                 (user, session, run) -> List.of(), session -> "")) {
             listeners.offer(row(TraceRecord.RunHead.Trigger.MANUAL_COMPACTION));
             assertTrue(heard.await(5, TimeUnit.SECONDS));

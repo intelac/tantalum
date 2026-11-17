@@ -1,6 +1,5 @@
 package tantalum.memory;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,11 +43,6 @@ public final class DailyNotes {
 
     public DailyNotes(Ledger ledger) {
         this.ledger = Objects.requireNonNull(ledger, "ledger");
-    }
-
-    /** 测试和单独使用：在 {@code dir} 打开一本账。 */
-    public DailyNotes(java.nio.file.Path dir) {
-        this(Ledger.open(dir, Clock.systemUTC()));
     }
 
     /** 这些笔记所在的记忆账。 */

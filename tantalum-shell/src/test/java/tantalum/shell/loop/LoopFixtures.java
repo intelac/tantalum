@@ -65,14 +65,14 @@ public final class LoopFixtures {
     }
 
     static Evictor never(Projections projections) {
-        return new Evictor(NEVER, new Residency(), projections, Clock.systemUTC());
+        return EvictorFixture.of(NEVER, new Residency(), projections, Clock.systemUTC());
     }
 
     /** 不监听步骤、不回收的 cleanroom。 */
     public static Cleanroom cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
                                       Projection projection, FactListener facts, StateView view, ResultPublisher results) {
         Projections projections = new Projections(projection, new Trace());
-        return new Cleanroom(kernel, halted, output, projections, facts, view, results, NO_STEPS, never(projections));
+        return CleanroomFixture.of(kernel, halted, output, projections, facts, view, results, NO_STEPS, never(projections));
     }
 
     /** 不载入冷会话的分发器，下游只看事件。 */

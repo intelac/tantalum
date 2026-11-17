@@ -22,6 +22,7 @@ import tantalum.shell.model.OpenAiClient;
 import tantalum.shell.model.OverflowRules;
 import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
+import tantalum.shell.model.OpenAiClientFixture;
 
 /** 设置 {@code TANTALUM_SMOKE_STRATA} 才运行；未设置时跳过，不算失败。 */
 @EnabledIfEnvironmentVariable(named = "TANTALUM_SMOKE_STRATA", matches = ".+")
@@ -34,7 +35,7 @@ class StrataSmokeTest {
     Path temp;
 
     private static OpenAiClient client() {
-        return new OpenAiClient(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(300), Duration.ofSeconds(60), OverflowRules.defaults());
+        return OpenAiClientFixture.of(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(300), Duration.ofSeconds(60), OverflowRules.defaults());
     }
 
     @Test

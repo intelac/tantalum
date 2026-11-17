@@ -25,11 +25,16 @@ import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** 任务 9：提问、排队、插话带的附件都进用户消息，顺序是先文字、再按上传顺序的附件（设计第 1 节）。 */
 class AttachmentSubmitTest {
 
-    private static final ImageRef IMAGE = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 10, 4, 3);
+    private static final ImageRef IMAGE = ImageRefFixture.of("sha256:" + "a".repeat(64), "cat.png", "image/png", 10, 4, 3);
     private static final FileRef FILE = new FileRef("sha256:" + "b".repeat(64), "notes.txt", "text/plain", 5, null);
     private static final List<AttachmentRef> BOTH = List.of(IMAGE, FILE);
 
@@ -38,12 +43,12 @@ class AttachmentSubmitTest {
     }
 
     private static void prompt(LoopFixture loop, String text, List<AttachmentRef> attachments) {
-        loop.feed(null, new UserPrompt(new SubmissionId("p" + text), new RequestId("p" + text),
+        loop.feed(null, UserPromptFixture.of(new SubmissionId("p" + text), new RequestId("p" + text),
                 new OwnerRef.OfSession(LoopFixture.SESSION), text, attachments));
     }
 
     private static CallModel toModel(LoopFixture loop) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return assertInstanceOf(CallModel.class, loop.onlyCommand());
     }
 
@@ -72,9 +77,9 @@ class AttachmentSubmitTest {
         LoopFixture loop = new LoopFixture();
         loop.prompt("first");
         var pending = loop.onlyCommandId();
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "and this", BOTH));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "and this", BOTH));
         assertEquals(List.of(expected("and this")), loop.session().followUps());
-        loop.feed(loop.runId(), new ContextAssembled(pending, "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(pending, "s", List.of(), null, List.of()));
         reply(loop);
         assertEquals(List.of(), loop.session().followUps());
         assertEquals(expected("and this"), loop.session().messages().getLast());
@@ -86,7 +91,7 @@ class AttachmentSubmitTest {
         LoopFixture loop = new LoopFixture();
         loop.prompt("first");
         toModel(loop);
-        loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("s"), "look", BOTH));
+        loop.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("s"), "look", BOTH));
         assertEquals(List.of(expected("look")), loop.run().pendingSteers());
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
         assertEquals(expected("look"), loop.session().messages().getLast());
@@ -95,10 +100,10 @@ class AttachmentSubmitTest {
     @Test
     void steerAndFollowUpOnAnIdleSessionStartARunWithTheirAttachments() {
         LoopFixture idle = new LoopFixture();
-        idle.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("s"), "x", BOTH));
+        idle.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("s"), "x", BOTH));
         assertEquals(List.of(expected("x")), idle.session().messages());
         LoopFixture queued = new LoopFixture();
-        queued.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "y", BOTH));
+        queued.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "y", BOTH));
         assertEquals(List.of(expected("y")), queued.session().messages());
     }
 }

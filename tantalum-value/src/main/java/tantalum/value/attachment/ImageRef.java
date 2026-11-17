@@ -30,7 +30,4 @@ public record ImageRef(String id, String name, String mediaType, long bytes, int
         }
     }
 
-    public ImageRef(String id, String name, String mediaType, long bytes, int width, int height) {
-        this(id, name, mediaType, bytes, width, height, null, null);
-    }
 }

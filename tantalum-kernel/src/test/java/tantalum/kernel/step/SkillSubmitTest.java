@@ -33,6 +33,7 @@ import tantalum.value.model.SkillBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
 
 /**
  * 用户点名的技能在内核里（skills-wiki 任务 16；需求 5.2、5.3、5.6、5.8、7.6）：读到的内容接在文字和附件之后进用户消息，
@@ -65,7 +66,7 @@ class SkillSubmitTest {
     }
 
     private static CallModel toModel(LoopFixture loop) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return assertInstanceOf(CallModel.class, loop.onlyCommand());
     }
 
@@ -95,7 +96,7 @@ class SkillSubmitTest {
         var pending = loop.onlyCommandId();
         loop.feed(null, followUp("/pdf-tools later", List.of(PDF)));
         assertEquals(List.of(withPdf("/pdf-tools later")), loop.session().followUps());
-        loop.feed(loop.runId(), new ContextAssembled(pending, "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(pending, "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("ok"), StopReason.END_TURN, "m", null, null, null, null));
         assertEquals(withPdf("/pdf-tools later"), loop.session().messages().getLast());
         assertEquals(withPdf("/pdf-tools later"), toModel(loop).prompt().messages().getLast());

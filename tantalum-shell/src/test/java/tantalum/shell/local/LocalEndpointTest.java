@@ -38,6 +38,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.local.wire.HelloFixture;
 
 /**
  * local-workspace 需求 1.2–1.6：真服务器、真 WebSocket（JDK 客户端）。握手的关闭码、替换、到期时刻断开、断开时在跑的调用。
@@ -45,8 +46,8 @@ import tantalum.value.model.TextBlock;
  */
 class LocalEndpointTest {
 
-    private static final Hello HELLO = new Hello(Wire.PROTOCOL, "test", new Hello.Device("mac", "macos", "26.2", "arm64"),
-            List.of(new Hello.Root("/Users/someone/work")), false, new Hello.Shell(false, "--allow-shell was not given"), true, true);
+    private static final Hello HELLO = HelloFixture.of(Wire.PROTOCOL, "test", new Hello.Device("mac", "macos", "26.2", "arm64"),
+            List.of(new Hello.Root("/Users/someone/work")), false, HelloFixture.shell(false, "--allow-shell was not given"), true, true);
     private static final Json ARGS = new Json.Obj(Map.of("path", new Json.Str("a.txt")));
 
     @TempDir
@@ -144,7 +145,7 @@ class LocalEndpointTest {
     @Test
     void theFirstMessageMustBeAHelloOfThisProtocol() throws Exception {
         Client old = Client.connect(server.port(), token("olga"));
-        old.send(new Hello(Wire.PROTOCOL + 1, "future", HELLO.device(), HELLO.roots(), false, HELLO.shell(), true, true));
+        old.send(HelloFixture.of(Wire.PROTOCOL + 1, "future", HELLO.device(), HELLO.roots(), false, HELLO.shell(), true, true));
         assertEquals(Wire.CLOSE_PROTOCOL, old.closeCode());
 
         Client rude = Client.connect(server.port(), token("olga"));

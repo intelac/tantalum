@@ -35,7 +35,7 @@ class ListFindToolsTest {
     @BeforeEach
     void setUp() throws Exception {
         root = Files.createDirectory(temp.resolve("root"));
-        context = new LocalContext("one", new AllowedDirs(List.of(root)), new Observations());
+        context = LocalContextFixture.of("one", new AllowedDirs(List.of(root)), new Observations());
     }
 
     private static Json args(String... pairs) {
@@ -158,7 +158,7 @@ class ListFindToolsTest {
         Files.createDirectories(other.resolve("lib"));
         Files.writeString(other.resolve("lib/Util.java"), "x");
         files("src/Main.java");
-        LocalContext two = new LocalContext("one", new AllowedDirs(List.of(root, other)), new Observations());
+        LocalContext two = LocalContextFixture.of("one", new AllowedDirs(List.of(root, other)), new Observations());
         assertEquals("lib/", list.run(two, args("path", other.toString())).text());
         String found = find.run(two, args("pattern", "*.java", "path", other.toString())).text();
         assertEquals(other.resolve("lib/Util.java").toString(), found);

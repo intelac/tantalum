@@ -14,7 +14,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import tantalum.connect.Words.Key;
 import tantalum.connect.browser.Installed;
@@ -258,11 +257,6 @@ public final class Main {
         /** 测试用：浏览器子进程的环境变量为空。 */
         Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell, BrowserSettings browser) {
             this(socket, options, dirs, hello, token, shell, browser, Map.of());
-        }
-
-        /** 没有浏览器时。 */
-        Setup(URI socket, Options options, AllowedDirs dirs, Hello hello, String token, Shell shell) {
-            this(socket, options, dirs, hello, token, shell, null);
         }
 
         @Override

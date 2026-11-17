@@ -41,6 +41,8 @@ import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.WikiList;
 import tantalum.value.json.Json;
+import tantalum.local.wire.CallFixture;
+import tantalum.local.wire.ContextFixture;
 
 /** local-workspace L4、L8、L15、需求 2.3、2.5：电脑这边不信任服务器，每个调用都查；取消和断开时打断；记录里没有文件内容。 */
 class CallsTest {
@@ -68,7 +70,7 @@ class CallsTest {
     }
 
     private Calls calls(boolean write) {
-        Calls calls = new Calls(dirs, write, false, journal, Tools.all());
+        Calls calls = CallsFixture.of(dirs, write, false, journal, Tools.all());
         calls.welcome("alice");
         return calls;
     }
@@ -78,7 +80,7 @@ class CallsTest {
         for (int i = 0; i < pairs.length; i += 2) {
             fields.put((String) pairs[i], new Json.Str((String) pairs[i + 1]));
         }
-        return new Call(id, user, "s-1a2b3c4d5e", tool, new Json.Obj(fields), 60_000);
+        return CallFixture.of(id, user, "s-1a2b3c4d5e", tool, new Json.Obj(fields), 60_000);
     }
 
     private Result reply() throws InterruptedException {
@@ -118,7 +120,7 @@ class CallsTest {
     /** L18：只接受发给 {@code welcome} 里这个用户的调用；还没 {@code welcome} 时一个都不接。 */
     @Test
     void aCallForAnotherUserIsRefused() throws Exception {
-        Calls fresh = new Calls(dirs, true, false, journal, Tools.all());
+        Calls fresh = CallsFixture.of(dirs, true, false, journal, Tools.all());
         fresh.call(call("c-0", "alice", "read_file", "path", "a.txt"), replies::add);
         assertEquals(new Result("c-0", Calls.OTHER_USER, true, List.of()), reply());
 
@@ -191,7 +193,7 @@ class CallsTest {
     @Test
     void cancelAndDisconnectInterruptTheCalls() throws Exception {
         Blocking blocking = new Blocking();
-        Calls calls = new Calls(dirs, true, false, journal, List.of(blocking));
+        Calls calls = CallsFixture.of(dirs, true, false, journal, List.of(blocking));
         calls.welcome("alice");
         for (String id : List.of("c-1", "c-2", "c-3")) {
             calls.call(call(id, "alice", "block"), replies::add);
@@ -215,7 +217,7 @@ class CallsTest {
     @Test
     void aDuplicateCallIdIsRefusedWhileTheFirstRuns() throws Exception {
         Blocking blocking = new Blocking();
-        Calls calls = new Calls(dirs, true, false, journal, List.of(blocking));
+        Calls calls = CallsFixture.of(dirs, true, false, journal, List.of(blocking));
         calls.welcome("alice");
         calls.call(call("c-1", "alice", "block"), replies::add);
         for (int i = 0; i < 50 && calls.running() < 1; i++) {
@@ -233,19 +235,19 @@ class CallsTest {
     @Test
     void contextReadsAgentsFromTheMainDirectory() throws Exception {
         Calls calls = calls(false);
-        assertNull(calls.context(new Context("x-1")).agents());
+        assertNull(calls.context(ContextFixture.of("x-1")).agents());
 
         Files.writeString(work.resolve("AGENTS.md"), "  Use tabs.\n");
-        assertEquals(new ContextResult("x-2", "Use tabs."), calls.context(new Context("x-2")));
+        assertEquals(new ContextResult("x-2", "Use tabs."), calls.context(ContextFixture.of("x-2")));
 
         Files.delete(work.resolve("AGENTS.md"));
         Files.writeString(outside.resolve("AGENTS.md"), "steal");
         Files.createSymbolicLink(work.resolve("AGENTS.md"), outside.resolve("AGENTS.md"));
-        assertNull(calls.context(new Context("x-3")).agents());
+        assertNull(calls.context(ContextFixture.of("x-3")).agents());
 
         Files.delete(work.resolve("AGENTS.md"));
         Files.writeString(work.resolve("AGENTS.md"), "a".repeat(ContextResult.MAX_AGENTS_BYTES - 1) + "é" + "tail");
-        String capped = calls.context(new Context("x-4")).agents();
+        String capped = calls.context(ContextFixture.of("x-4")).agents();
         assertTrue(capped.endsWith("\n\n(This file was truncated at 65536 bytes.)"), capped.substring(capped.length() - 60));
         assertFalse(capped.contains("tail"));
         assertFalse(capped.contains("�"), "cut on a UTF-8 boundary");
@@ -274,7 +276,7 @@ class CallsTest {
      */
     @Test
     void mcpCallsAreUnknownTools() throws Exception {
-        Calls calls = new Calls(dirs, true, false, journal, Tools.all());
+        Calls calls = CallsFixture.of(dirs, true, false, journal, Tools.all());
         calls.welcome("alice");
         calls.call(call("m-1", "alice", "mcp:playwright:browser_run_code_unsafe"), replies::add);
         assertEquals("Unknown tool: mcp:playwright:browser_run_code_unsafe", reply().text());
@@ -333,7 +335,7 @@ class CallsTest {
     // ---- 会话目录和列子目录（workspaces 任务 14，W5、W6） ----
 
     private Call inDir(String id, String dir, String tool, String path) {
-        return new Call(id, "alice", "s-1a2b3c4d5e", tool, new Json.Obj(Map.of("path", new Json.Str(path))), 60_000, dir);
+        return CallFixture.of(id, "alice", "s-1a2b3c4d5e", tool, new Json.Obj(Map.of("path", new Json.Str(path))), 60_000, dir);
     }
 
     @Test
@@ -369,9 +371,9 @@ class CallsTest {
         Files.writeString(work.resolve("AGENTS.md"), "main rules");
         Files.writeString(app.resolve("AGENTS.md"), "app rules");
         Calls calls = calls(false);
-        assertEquals("app rules", calls.context(new Context("x-1", app.toString())).agents());
-        assertEquals("main rules", calls.context(new Context("x-2")).agents());
-        assertNull(calls.context(new Context("x-3", outside.toString())).agents());
+        assertEquals("app rules", calls.context(ContextFixture.of("x-1", app.toString())).agents());
+        assertEquals("main rules", calls.context(ContextFixture.of("x-2")).agents());
+        assertNull(calls.context(ContextFixture.of("x-3", outside.toString())).agents());
     }
 
     @Test
@@ -442,7 +444,7 @@ class CallsTest {
     @Test
     void contextWithoutTheNewFieldsAnswersAsBefore() throws Exception {
         skill("pdf-tools", "---\ndescription: D\n---\nx");
-        ContextResult result = calls(false).context(new Context("x-1"));
+        ContextResult result = calls(false).context(ContextFixture.of("x-1"));
         assertNull(result.skills());
         assertNull(result.wiki());
         assertEquals("", printed());
@@ -471,7 +473,7 @@ class CallsTest {
         assertFalse(loaded.error(), loaded.text());
         assertTrue(loaded.text().contains("<skill_instructions>\nSECRET-BODY\n</skill_instructions>"), loaded.text());
 
-        calls.call(new Call("c-2", "alice", "s-1a2b3c4d5e", "skill", name, 60_000), replies::add);
+        calls.call(CallFixture.of("c-2", "alice", "s-1a2b3c4d5e", "skill", name, 60_000), replies::add);
         assertEquals(new Result("c-2", "Error: skill \"pdf-tools\" is unknown or no longer available", true, List.of()), reply());
 
         assertTrue(printed().contains("skill pdf-tools ok"), printed());
@@ -538,7 +540,7 @@ class CallsTest {
         assertEquals("External web content follows.\nPAGE-CONTENT account 4242", reply().text());
         calls.call(call("c-2", "alice", "browser_type", "ref", "e7", "text", "hunter2-PASSWORD"), replies::add);
         reply();
-        calls.call(new Call("c-3", "alice", "s-1a2b3c4d5e", "browser_select_option", new Json.Obj(Map.of("ref", new Json.Str("e9"),
+        calls.call(CallFixture.of("c-3", "alice", "s-1a2b3c4d5e", "browser_select_option", new Json.Obj(Map.of("ref", new Json.Str("e9"),
                 "values", new Json.Arr(List.of(new Json.Str("SECRET-OPTION"))))), 60_000), replies::add);
         reply();
         calls.call(call("c-4", "alice", "browser_press_key", "key", "Enter"), replies::add);

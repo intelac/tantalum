@@ -31,11 +31,12 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.FailureReason;
+import tantalum.value.command.AssembleContextFixture;
 
 class HandlerDispatcherTest {
 
     private static final RunRef RUN = new RunRef(new Principal("p"), new SessionId("s"), new RunId("r"));
-    private static final Command CONTEXT = new AssembleContext(new CommandId("c"), RUN);
+    private static final Command CONTEXT = AssembleContextFixture.of(new CommandId("c"), RUN);
 
     private final BlockingQueue<EventEnvelope> results = new LinkedBlockingQueue<>();
     private final InFlightCommands inFlight = new InFlightCommands();
@@ -91,7 +92,7 @@ class HandlerDispatcherTest {
         }));
         long start = System.nanoTime();
         send(dispatcher, CONTEXT);
-        send(dispatcher, new AssembleContext(new CommandId("d"), RUN));
+        send(dispatcher, AssembleContextFixture.of(new CommandId("d"), RUN));
         assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start) < 5);
         assertTrue(running.await(5, TimeUnit.SECONDS));
         hold.countDown();
@@ -138,7 +139,7 @@ class HandlerDispatcherTest {
     void completedCommandsLeaveNoTrace() throws Exception {
         HandlerDispatcher dispatcher = dispatcher(handler(command -> new TimerFired(command.id())));
         for (int i = 0; i < 20; i++) {
-            send(dispatcher, new AssembleContext(new CommandId("c" + i), RUN));
+            send(dispatcher, AssembleContextFixture.of(new CommandId("c" + i), RUN));
         }
         for (int i = 0; i < 20; i++) {
             results.poll(5, TimeUnit.SECONDS);

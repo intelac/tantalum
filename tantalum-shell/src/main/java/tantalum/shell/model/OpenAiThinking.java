@@ -44,11 +44,6 @@ public enum OpenAiThinking {
                 + "enable-thinking, chat-template, thinking-type");
     }
 
-    /** 开关式的写法。 */
-    public boolean toggle() {
-        return this == ENABLE_THINKING || this == CHAT_TEMPLATE || this == THINKING_TYPE;
-    }
-
     /**
      * 这一档要加进请求体的字段，按顺序；{@code OpenAiClient} 把它们放进请求选项的 {@code extra}，请求体和轨迹页都从那里读。
      * {@link #NONE} 和 {@code level} 为 null（这个模型没有档位）时为空。开关式的写法只收 {@code on}、{@code off}，

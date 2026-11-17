@@ -3,7 +3,6 @@ package tantalum.shell.boot;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.ToIntFunction;
@@ -104,7 +103,4 @@ final class PluginModelGate {
         return priority == PluginServices.Priority.FOREGROUND ? FOREGROUND_WAIT : BACKGROUND_WAIT;
     }
 
-    static long millis(Duration duration) {
-        return TimeUnit.NANOSECONDS.toMillis(duration.toNanos());
-    }
 }

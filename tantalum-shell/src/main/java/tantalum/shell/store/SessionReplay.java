@@ -42,10 +42,6 @@ public final class SessionReplay {
     private final Usage usage;
     private final Kernel kernel;
 
-    public SessionReplay(SessionPaths paths, SessionFileReader reader, UsageLedger usage, Kernel kernel) {
-        this(paths, reader, (Usage) usage::cursor, kernel);
-    }
-
     public SessionReplay(SessionPaths paths, SessionFileReader reader, Usage usage, Kernel kernel) {
         this.paths = paths;
         this.reader = reader;
@@ -69,15 +65,6 @@ public final class SessionReplay {
         }
         return Optional.of(new SessionSlice(progress.state.sessions().get(session), List.copyOf(progress.state.runs().values()),
                 transcript.export(session), trace.export(session), progress.seq));
-    }
-
-    /**
-     * 从头重放一个会话文件的全部事件，每个事件前注入截至该序号的用量，所以钩子的结果和当时相同。
-     * 回答要逐个事件内容的问题（{@code /turns}、{@code /trace}、SSE 补读）。文件不存在时什么也不做。
-     * 收文件而不是会话 ID：SSE 补读按目录列出文件，长 ID 的文件名是哈希，反推不出 ID。
-     */
-    public void each(Principal principal, Path file, Step step) throws IOException, SQLException, InterruptedException {
-        replay(principal, file, new Progress(), Long.MAX_VALUE, step);
     }
 
     /** 同 {@link #each}，只重放序号小于 {@code beforeSeq} 的事件（请求详情只需要到发出那条命令为止）。 */

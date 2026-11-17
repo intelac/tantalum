@@ -37,6 +37,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.memory.DailyNotesFixture;
 
 /**
  * LongMemEval 导入（tier 3，不进 CI）：把每道题的旧对话按原来的日期一轮一轮交给真的记笔记（{@link NoteTaker#note}），
@@ -134,7 +135,7 @@ public final class LongMemEvalImport {
         Ledger ledger = Ledger.open(dir, clock);
         DailyNotes notes = new DailyNotes(ledger);
         NoteFiler filer = new NoteFiler(new MemoryStore(ledger, MemoryLimits.defaults()), new WorkingMemory(ledger), notes, SensitiveText.current());
-        NoteTaker taker = new NoteTaker(new CaptureSettings(true, null, MODEL, null, null, 1, 3), user -> true, user -> notes, user -> filer,
+        NoteTaker taker = NoteTakerFixture.of(new CaptureSettings(true, null, MODEL, null, null, 1, 3), user -> true, user -> notes, user -> filer,
                 (user, system, text, maxTokens) -> write(client, system, text, maxTokens), NoteTaker.Catchup.NONE, ZoneOffset.UTC,
                 new long[] {2000, 8000, 20000});
         List<Session> sessions = sessions(question);

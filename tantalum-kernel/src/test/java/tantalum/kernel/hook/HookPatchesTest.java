@@ -26,6 +26,7 @@ import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionContext.HookState;
 import tantalum.value.state.SessionContext.HookState.HookTool;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContextFixture;
 
 /** hook-patch 需求 1、2：补丁变成追加的 system 消息，变化才追加，工具以 deferred 定义加工具变化表达。 */
 class HookPatchesTest {
@@ -39,7 +40,7 @@ class HookPatchesTest {
 
     private static SessionState session() {
         return SessionState.start(SESSION, USER)
-                .withContext(new SessionContext("system", List.of(GREP), null, List.of()))
+                .withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()))
                 .append(Message.user("hi"));
     }
 
@@ -101,7 +102,7 @@ class HookPatchesTest {
     @Test
     void afterCompactionTheTextIsAppendedAgain() {
         SessionState once = HookPatches.apply(session(), List.of(patch("q", 5)), new PromptPatch("brief", List.of()), RUN).session();
-        SessionState refrozen = once.withContext(new SessionContext("system", List.of(GREP), null, List.of()));
+        SessionState refrozen = once.withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()));
         SessionState again = HookPatches.apply(refrozen, List.of(patch("q", 5)), new PromptPatch("brief", List.of()), RUN).session();
         assertEquals(once.messages().size() + 1, again.messages().size());
         assertEquals(system(new HookTextBlock("q", "brief")), again.messages().getLast());

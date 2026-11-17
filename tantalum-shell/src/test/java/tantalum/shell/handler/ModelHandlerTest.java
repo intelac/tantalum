@@ -30,11 +30,12 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.value.command.CallModelFixture;
 
 class ModelHandlerTest {
 
     private static final RunRef RUN = new RunRef(new Principal("p"), new SessionId("s"), new RunId("r"));
-    private static final CallModel COMMAND = new CallModel(new CommandId("c"), RUN, new Prompt("s", List.of(), List.of()));
+    private static final CallModel COMMAND = CallModelFixture.of(new CommandId("c"), RUN, new Prompt("s", List.of(), List.of()));
 
     private static final Instant T0 = Instant.parse("2026-11-03T01:00:00Z");
     private static final Instant T1 = T0.plusMillis(250);
@@ -50,7 +51,7 @@ class ModelHandlerTest {
     }
 
     private ModelHandler handler(ModelClient client, CallLimiter limiter, Duration wait) {
-        return new ModelHandler(client, limiter, wait, this::listener, clock);
+        return ModelHandlerFixture.of(client, limiter, wait, this::listener, clock);
     }
 
     /** compaction-threshold T2：上下文超长时通知再读窗口，别的失败不通知。 */
@@ -143,7 +144,7 @@ class ModelHandlerTest {
             listener.onText("Hi");
             return new ModelOutcome.Replied(List.of(), StopReason.END_TURN, "m", null);
         };
-        assertInstanceOf(ModelReplied.class, new ModelHandler(client, new CallLimiter(1), Duration.ofSeconds(1), run -> broken, clock).handle(COMMAND));
+        assertInstanceOf(ModelReplied.class, ModelHandlerFixture.of(client, new CallLimiter(1), Duration.ofSeconds(1), run -> broken, clock).handle(COMMAND));
     }
 
     // ---- 开始时刻和首 token：在处理器一处量，客户端只管协议 ----

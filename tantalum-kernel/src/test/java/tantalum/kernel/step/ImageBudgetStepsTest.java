@@ -24,23 +24,27 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /** 任务 14：组 prompt 时按图片预算省略；会话记住省略过的图片；回放得到同样的省略；摘要请求同样经过省略。 */
 class ImageBudgetStepsTest {
 
     private static final long FIVE_MIB_BASE64 = 3L * 1024 * 1024 * 5 / 4;
-    private static final CompactionSettings LARGE = new CompactionSettings(100_000, 200, 70, 60, 30, 500);
+    private static final CompactionSettings LARGE = CompactionSettingsFixture.of(100_000, 200, 70, 60, 30, 500);
 
     private static ImageRef image(char tag) {
-        return new ImageRef("sha256:" + String.valueOf(tag).repeat(64), tag + ".png", "image/png", FIVE_MIB_BASE64, 10, 10);
+        return ImageRefFixture.of("sha256:" + String.valueOf(tag).repeat(64), tag + ".png", "image/png", FIVE_MIB_BASE64, 10, 10);
     }
 
     private static void prompt(LoopFixture loop, String text, List<AttachmentRef> images) {
-        loop.feed(null, new UserPrompt(new SubmissionId(text), new RequestId(text), new OwnerRef.OfSession(LoopFixture.SESSION), text, images));
+        loop.feed(null, UserPromptFixture.of(new SubmissionId(text), new RequestId(text), new OwnerRef.OfSession(LoopFixture.SESSION), text, images));
     }
 
     private static CallModel assemble(LoopFixture loop) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), LARGE, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), LARGE, List.of()));
         return assertInstanceOf(CallModel.class, loop.onlyCommand());
     }
 
@@ -105,13 +109,13 @@ class ImageBudgetStepsTest {
     /** 一张单独就超出预算的图片：摘要请求里同样换成省略说明，不会把原图发出去。 */
     @Test
     void theSummaryRequestIsBudgetedToo() {
-        ImageRef huge = new ImageRef("sha256:" + "f".repeat(64), "huge.png", "image/png", FIVE_MIB_BASE64 * 5, 10, 10);
+        ImageRef huge = ImageRefFixture.of("sha256:" + "f".repeat(64), "huge.png", "image/png", FIVE_MIB_BASE64 * 5, 10, 10);
         LoopFixture loop = new LoopFixture();
         prompt(loop, "q1", List.of(huge));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), CompactStepsTest.SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), CompactStepsTest.SETTINGS, List.of()));
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, CompactStepsTest.block("a1"), 100));
         loop.prompt(CompactStepsTest.block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), CompactStepsTest.SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), CompactStepsTest.SETTINGS, List.of()));
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, CompactStepsTest.block("a2"), 200));
         loop.feed(null, CompactStepsTest.compactRequest(null));
         assertEquals("AwaitingSummary", loop.phase());

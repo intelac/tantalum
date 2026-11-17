@@ -12,8 +12,6 @@ export interface TimeRange {
   end: number;
 }
 
-export const LANES = ["input", "model", "tool", "plugin"] as const;
-
 /** 一条记录在当前画法下的段。`firstToken` 是助手段首 token 的位置（只在按实际时长时有）；`running` 的段只画开始标记。 */
 export interface Span extends TimeRange {
   id: string;

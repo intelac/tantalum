@@ -31,6 +31,8 @@ import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionContext;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.state.SessionContextFixture;
 
 /**
  * plugin-settings 任务 17、18（P9，需求 5.2、5.3、5.6）：钩子插件的参数在组装上下文时记进会话，
@@ -115,7 +117,7 @@ class PluginParamsTest {
         assemble(loop, obj("quota", obj("tokens", 500)));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(call("c1", "grep")), StopReason.TOOL_USE, "m", null,
                 null, null, null));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "c1", "found", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "c1", "found", false, null));
         endTurn(loop);
         assertEquals(3, quota.params.size());
         quota.params.forEach(seen -> assertEquals(500, seen.number("tokens", 0)));
@@ -173,7 +175,7 @@ class PluginParamsTest {
         assertEquals(mine, context.withCompaction(null, null).params());
         assertSame(Params.NONE, context.withParams(null).params());
 
-        SessionContext session = new SessionContext("s", List.of(), null, List.of()).withPluginParams(obj("quota", obj("tokens", 500)));
+        SessionContext session = SessionContextFixture.of("s", List.of(), null, List.of()).withPluginParams(obj("quota", obj("tokens", 500)));
         assertEquals(mine, session.withSections(List.of()).paramsOf("quota"));
         assertEquals(mine, session.withCompaction(null).paramsOf("quota"));
         assertEquals(mine, session.withActive(null, null).paramsOf("quota"));

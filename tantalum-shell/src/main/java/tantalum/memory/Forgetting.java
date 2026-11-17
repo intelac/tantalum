@@ -126,9 +126,6 @@ public final class Forgetting {
     /** {@code removed} 是去掉的原文：整条去掉的是那条说法的全文，只去掉几行的是那几行。给调用的一方照实看到带走了什么。 */
     public record Result(int gone, List<MemoryItem> kept, List<String> removed) {
 
-        public Result(int gone, List<MemoryItem> kept) {
-            this(gone, kept, List.of());
-        }
     }
 
     /**

@@ -28,10 +28,6 @@ public record Prompt(String system, List<ToolSpec> tools, List<Message> messages
         messages = List.copyOf(messages);
     }
 
-    public Prompt(String system, List<ToolSpec> tools, List<Message> messages, Output output) {
-        this(system, tools, messages, output, null);
-    }
-
     public Prompt(String system, List<ToolSpec> tools, List<Message> messages) {
         this(system, tools, messages, Output.DEFAULT, null);
     }

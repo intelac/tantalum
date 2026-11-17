@@ -19,7 +19,7 @@ class DailyNotesTest {
 
     @Test
     void eachRunIsOneSectionAndIsWrittenOnce() throws Exception {
-        DailyNotes notes = new DailyNotes(dir);
+        DailyNotes notes = DailyNotesFixture.of(dir);
         assertTrue(notes.append("2026-11-15", "s-1", "读 \"README\"", "s-1_3", "16:25 · 第 1 轮", "- 用户在做 Tantalum\n- 下一步：记忆"));
         assertFalse(notes.append("2026-11-15", "s-1", "ignored", "s-1_3", "16:26", "- again"), "the same run is not noted twice");
         assertTrue(notes.append("2026-11-15", "s-1", "ignored", "s-1_9", "16:40 · 第 2 轮", "- 决定先做记忆"));
@@ -35,7 +35,7 @@ class DailyNotesTest {
 
     @Test
     void deletedAndEditedNotesDoNotComeBackOnReplay() {
-        DailyNotes notes = new DailyNotes(dir);
+        DailyNotes notes = DailyNotesFixture.of(dir);
         notes.append("2026-11-15", "s-1", "t", "s-1_3", "h", "- a");
         assertTrue(notes.write("2026-11-15", "s-1", "---\ntitle: t\n---\n\n## h\n- edited, marker removed\n"));
         assertFalse(notes.append("2026-11-15", "s-1", "t", "s-1_3", "h", "- a"), "an edit that drops the marker still remembers the run");
@@ -48,7 +48,7 @@ class DailyNotesTest {
 
     @Test
     void theListIsNewestDayFirstWithPreviews() throws Exception {
-        DailyNotes notes = new DailyNotes(dir);
+        DailyNotes notes = DailyNotesFixture.of(dir);
         notes.append("2026-11-14", "s-a", "older", "s-a_1", "h", "- old");
         notes.append("2026-11-15", "s-b", "newer", "s-b_1", "h", "- first");
         notes.append("2026-11-15", "s-b", "newer", "s-b_2", "h", "- " + "x".repeat(300));
@@ -59,12 +59,12 @@ class DailyNotesTest {
         assertEquals(2, listed.sections());
         assertTrue(listed.preview().endsWith("…") && listed.preview().length() <= DailyNotes.PREVIEW_CHARS + 1);
         assertEquals(1, notes.list(1).size());
-        assertEquals(List.of(), new DailyNotes(dir.resolve("nobody")).list(5));
+        assertEquals(List.of(), DailyNotesFixture.of(dir.resolve("nobody")).list(5));
     }
 
     @Test
     void badDaysSessionsAndRunsAreRefused() {
-        DailyNotes notes = new DailyNotes(dir);
+        DailyNotes notes = DailyNotesFixture.of(dir);
         assertThrows(IllegalArgumentException.class, () -> notes.read("../etc", "s-1"));
         assertThrows(IllegalArgumentException.class, () -> notes.read("2026-11-15", "../../x"));
         assertThrows(IllegalArgumentException.class, () -> notes.append("2026-11-15", "s-1", "t", "bad run -->", "h", "b"));

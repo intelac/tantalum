@@ -26,10 +26,6 @@ public record Allow(PromptPatch patch, List<SessionNote> notes) implements HookR
         notes = List.copyOf(notes);
     }
 
-    public Allow(PromptPatch patch) {
-        this(patch, List.of());
-    }
-
     public Allow withNote(String key, Json.Obj value) {
         List<SessionNote> added = new ArrayList<>(notes);
         added.add(new SessionNote(key, value));

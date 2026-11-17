@@ -15,6 +15,7 @@ import tantalum.value.event.QueueChanged.Action;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
+import tantalum.value.event.FollowUpSubmittedFixture;
 
 /** input-area 需求 1.3、1.5、1.6、1.11：排队的提问改了以后，对话条目跟着变，条目 ID 不变。 */
 class QueueTranscriptTest {
@@ -25,7 +26,7 @@ class QueueTranscriptTest {
     private RunId queued(String... texts) {
         RunId run = fx.start("first");
         for (String text : texts) {
-            fx.feed(null, new FollowUpSubmitted(new SubmissionId("f" + text), new RequestId("rf" + text), text));
+            fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f" + text), new RequestId("rf" + text), text));
         }
         return run;
     }

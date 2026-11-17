@@ -29,6 +29,7 @@ import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.model.PromptFixture;
 
 class ClaudeClientTest {
 
@@ -77,7 +78,7 @@ class ClaudeClientTest {
 
     private ClaudeClient client(Duration first, Duration between) {
         AnthropicClient sdk = AnthropicOkHttpClient.builder().apiKey("test-key").baseUrl(server.url()).maxRetries(0).build();
-        return new ClaudeClient(sdk, new ClaudeClient.Settings("claude-sonnet-5-5", 64000, "medium", true, first, between, OverflowRules.defaults(), false));
+        return new ClaudeClient(sdk, ClaudeClientFixture.settings("claude-sonnet-5-5", 64000, "medium", true, first, between, OverflowRules.defaults(), false));
     }
 
     private ModelOutcome call(Prompt prompt) throws Exception {
@@ -306,7 +307,7 @@ class ClaudeClientTest {
     void summaryOutputDisablesToolsAndOverridesMaxTokens() throws Exception {
         server.body = START + messageDelta("end_turn", "null") + STOP;
         Json schema = new Json.Obj(Map.of("type", new Json.Str("object")));
-        Prompt prompt = new Prompt("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("summarize")),
+        Prompt prompt = PromptFixture.of("sys", List.of(new ToolSpec("grep", "g", schema)), List.of(Message.user("summarize")),
                 new Prompt.Output(false, 8192));
 
         call(prompt);
@@ -321,7 +322,7 @@ class ClaudeClientTest {
     void defaultOutputSendsTheSameRequestAsBefore() throws Exception {
         server.body = START + messageDelta("end_turn", "null") + STOP;
         call(new Prompt("sys", List.of(), List.of(Message.user("hi"))));
-        call(new Prompt("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
+        call(PromptFixture.of("sys", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT));
         assertEquals(server.requests.get(0), server.requests.get(1));
         assertFalse(server.requests.getFirst().contains("tool_choice"), server.requests.getFirst());
         assertTrue(server.requests.getFirst().contains("\"max_tokens\":64000"), server.requests.getFirst());

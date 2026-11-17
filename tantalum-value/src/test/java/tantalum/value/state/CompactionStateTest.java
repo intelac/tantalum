@@ -19,22 +19,22 @@ class CompactionStateTest {
 
     private static final SessionId SESSION = new SessionId("s");
     private static final Principal USER = new Principal("u");
-    private static final CompactionSettings SETTINGS = new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
+    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
 
     @Test
     void settingsDeriveThresholdAndKeepBudget() {
         assertEquals(136_000, SETTINGS.threshold());
         assertEquals(20_000, SETTINGS.keepBudget());
-        CompactionSettings small = new CompactionSettings(32_000, 16_000, 20_000, 32_768, 4_096, 8_192);
+        CompactionSettings small = CompactionSettingsFixture.of(32_000, 16_000, 20_000, 32_768, 4_096, 8_192);
         assertEquals(4_000, small.keepBudget(), "K is capped at a quarter of the threshold");
     }
 
     @Test
     void settingsRejectNonPositiveAndReserveNotBelowWindow() {
-        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(0, 1, 1, 1, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(10, 10, 1, 1, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(10, 1, 0, 1, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new CompactionSettings(10, 1, 1, 1, 1, -5));
+        assertThrows(IllegalArgumentException.class, () -> CompactionSettingsFixture.of(0, 1, 1, 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> CompactionSettingsFixture.of(10, 10, 1, 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> CompactionSettingsFixture.of(10, 1, 0, 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> CompactionSettingsFixture.of(10, 1, 1, 1, 1, -5));
     }
 
     @Test
@@ -100,11 +100,11 @@ class CompactionStateTest {
         Compaction compaction = new Compaction(List.of(Message.user("s")), 0);
         SessionState session = SessionState.start(SESSION, USER).compacted(compaction).withAnchor(new UsageAnchor(5, 0));
         SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).withFollowUps(List.of(Message.user("f")))
-                .withContext(new SessionContext("sys", List.of(), SETTINGS, List.of()));
+                .withContext(SessionContextFixture.of("sys", List.of(), SETTINGS, List.of()));
         assertEquals(compaction, changed.compaction());
         assertEquals(new UsageAnchor(5, 0), changed.anchor());
         assertEquals(SETTINGS, changed.context().compaction());
-        assertNull(new SessionContext("sys", List.of(), null, List.of()).compaction());
+        assertNull(SessionContextFixture.of("sys", List.of(), null, List.of()).compaction());
         assertEquals(SETTINGS, changed.context().withSections(List.of()).compaction());
     }
 

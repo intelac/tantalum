@@ -54,6 +54,7 @@ import tantalum.value.model.TokenUsage;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.KernelState;
+import tantalum.value.hook.AllowFixture;
 
 /** 轨迹投影：每种记录、分组、请求编号和重试归并、压缩组、钩子补丁的来源、工作的关联、恢复后接着处理。工具状态在 {@link TraceToolTest}。 */
 class TracePassTest {
@@ -63,10 +64,10 @@ class TracePassTest {
         return new KernelHook() {
             @Override public String name() { return name; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-                return new Allow(new PromptPatch(system, List.of(tools).stream().map(TraceFixture::tool).toList()));
+                return AllowFixture.of(new PromptPatch(system, List.of(tools).stream().map(TraceFixture::tool).toList()));
             }
             @Override public HookResult beforeToolCall(KernelState state, HookContext context) {
-                return new Allow(new PromptPatch(system, List.of()));
+                return AllowFixture.of(new PromptPatch(system, List.of()));
             }
         };
     }

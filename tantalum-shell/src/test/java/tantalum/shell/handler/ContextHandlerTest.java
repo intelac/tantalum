@@ -54,6 +54,9 @@ import tantalum.value.model.Prompt;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.memory.MemoryStoresFixture;
+import tantalum.shell.local.LocalWorkspaceFixture;
+import tantalum.value.command.AssembleContextFixture;
 
 class ContextHandlerTest {
 
@@ -62,7 +65,7 @@ class ContextHandlerTest {
     private static final AssembleContext COMMAND = command(ALICE);
 
     private static AssembleContext command(Principal principal) {
-        return new AssembleContext(new CommandId("c"), new RunRef(principal, new SessionId("s"), new RunId("r")));
+        return AssembleContextFixture.of(new CommandId("c"), new RunRef(principal, new SessionId("s"), new RunId("r")));
     }
 
     @TempDir
@@ -81,7 +84,7 @@ class ContextHandlerTest {
         links = new LocalLinks(tokens, Clock.systemUTC(), new LocalLinks.Timing(Duration.ofSeconds(5), Duration.ofHours(1),
                 Duration.ofHours(1), Duration.ofMillis(300)));
         switches = PluginSwitches.inMemory(Clock.systemUTC());
-        local = new LocalWorkspace(switches, links);
+        local = LocalWorkspaceFixture.of(switches, links);
         mac = Files.createDirectories(dir.resolve("mac"));
     }
 
@@ -113,7 +116,7 @@ class ContextHandlerTest {
 
     /** 记忆插件的存储，目录照平台的插件数据目录规矩（memory-plugin）。 */
     private MemoryStores stores(Workspaces workspaces) {
-        return new MemoryStores(user -> tantalum.shell.boot.PlatformServices.dataDir(workspaces, dir.resolve("data"), MemoryStores.DIR, user),
+        return MemoryStoresFixture.of(user -> tantalum.shell.boot.PlatformServices.dataDir(workspaces, dir.resolve("data"), MemoryStores.DIR, user),
                 MemoryLimits.defaults(), Clock.systemUTC());
     }
 
@@ -128,7 +131,7 @@ class ContextHandlerTest {
     }
 
     private ContextHandler handler(Workspaces workspaces, KnowledgeBase knowledge) {
-        return new ContextHandler(local, "Base prompt.", catalog(), memoryGate(), memories(workspaces), knowledge, "", noCompaction(), NO_WINDOW, NOBODY);
+        return ContextHandlerFixture.of(local, "Base prompt.", catalog(), memoryGate(), memories(workspaces), knowledge, "", noCompaction(), NO_WINDOW, NOBODY);
     }
 
     private ContextHandler shared() {
@@ -176,7 +179,7 @@ class ContextHandlerTest {
     @Test
     void compactionSettingsFollowTheUsersChoiceOnEveryAssembly() throws Exception {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
         assertEquals(new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 936_000, 1.5), assembled(handler, COMMAND).compaction());
         users.setCompactionPercent(COMMAND.run().principal(), 50);
         assertEquals(500_000, assembled(handler, COMMAND).compaction().threshold());
@@ -194,7 +197,7 @@ class ContextHandlerTest {
     @Test
     void theModelIsTheRequestedThenTheSessionsThenTheUsersThenTheDefault() throws Exception {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", new CompactionPolicy(users, LIMITS), MILLION, users);
         ModelChoice gone = new ModelChoice("claude", "claude-opus-4-1", "high");
         assertEquals(OPUS, assembled(handler, assemble(OPUS, SONNET)).model(), "what the submission asked for");
         assertEquals(OPUS, assembled(handler, assemble(null, OPUS)).model(), "the session's current one");
@@ -208,7 +211,7 @@ class ContextHandlerTest {
     /** M11：system 里不写模型名，换模型前后 system 和工具逐字节相同。 */
     @Test
     void systemAndToolsDoNotDependOnTheModel() throws Exception {
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), memoryGate(), memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
         ContextAssembled sonnet = assembled(handler, assemble(SONNET, null));
         ContextAssembled opus = assembled(handler, assemble(OPUS, SONNET));
         assertEquals(sonnet.system(), opus.system());
@@ -227,7 +230,7 @@ class ContextHandlerTest {
             }
         }
         PluginGate gate = PluginGate.allOn(catalog(), List.of(new Quota()), List.of(), List.of());
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), gate, memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), gate, memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), MILLION, NOBODY);
         tantalum.value.json.Json.Obj recorded = assembled(handler, COMMAND).pluginParams();
         assertEquals(java.util.Set.of("quota"), recorded.fields().keySet());
         assertEquals(1000, new tantalum.value.hook.Params((tantalum.value.json.Json.Obj) recorded.fields().get("quota")).number("tokens", 0));
@@ -338,7 +341,7 @@ class ContextHandlerTest {
         UserSettings users = UserSettings.inMemory(Clock.systemUTC());
         users.setTimezone(ALICE, java.time.ZoneId.of("Asia/Tokyo"));
         Clock evening = Clock.fixed(Instant.parse("2026-11-15T22:30:00Z"), java.time.ZoneOffset.UTC);
-        ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog(), memoryGate(), memories(Workspaces.shared(dir)),
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base prompt.", catalog(), memoryGate(), memories(Workspaces.shared(dir)),
                 KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, users).clock(evening);
         String system = assembled(handler, COMMAND).system();
         assertEquals("Base prompt.\n\n" + MemoryGuidance.TEXT.strip() + "\n\n<today>\nToday is 2026-11-16 (Monday, time zone Asia/Tokyo).\n</today>", system);
@@ -355,7 +358,7 @@ class ContextHandlerTest {
         Files.writeString(mac.resolve("AGENTS.md"), "Agents rules.");
         connect();
         memories.of(ALICE).write("java", "user", "Java 25 only", "body");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction(), NO_WINDOW, NOBODY);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), new KnowledgeBase(Optional.of(knowledgeDir), 64 * 1024), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String system = assembled(handler, command(ALICE)).system();
 
@@ -385,7 +388,7 @@ class ContextHandlerTest {
             @Override public Optional<String> wikiDir(Principal user) { return Optional.of(mac.resolve("wiki").toString()); }
             @Override public java.util.Set<String> off(Principal user) { return java.util.Set.of(); }
         };
-        ContextHandler handler = new ContextHandler(new LocalWorkspace(switches, links, filled), "Base.", catalog(),
+        ContextHandler handler = ContextHandlerFixture.of(new LocalWorkspace(switches, links, filled), "Base.", catalog(),
                 memoryGate(), List.of(new MemoryContext(memories)), KnowledgeBase.none(), "",
                 noCompaction(), NO_WINDOW, NOBODY);
         try (TestComputer ignored = connect()) {
@@ -409,7 +412,7 @@ class ContextHandlerTest {
         MemoryStores memories = stores(workspaces);
         memories.of(ALICE).write("alice-fact", "user", "alice likes tabs", "x");
         memories.of(BOB).write("bob-fact", "user", "bob likes spaces", "x");
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog(), memoryGate(), List.of(new MemoryContext(memories)), KnowledgeBase.none(), "", noCompaction(), NO_WINDOW, NOBODY);
 
         String alice = assembled(handler, command(ALICE)).system();
         String bob = assembled(handler, command(BOB)).system();
@@ -465,7 +468,7 @@ class ContextHandlerTest {
         };
         catalog.register(fetch);
         Workspaces workspaces = Workspaces.shared(dir);
-        ContextHandler handler = new ContextHandler(local, "Base prompt.", catalog,
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base prompt.", catalog,
                 new PluginGate(catalog, switches, List.of(local, new tantalum.shell.access.WebAccess(switches, true, false)),
                         List.of(), List.of(), List.of(), java.util.Set.of()), memories(workspaces), KnowledgeBase.none(), "",
                 noCompaction(), NO_WINDOW, NOBODY);
@@ -496,7 +499,7 @@ class ContextHandlerTest {
     private ContextAssembled browserContext(ModelChoice model, SessionId session) throws Exception {
         ToolCatalog catalog = new ToolCatalog();
         LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
-        ContextHandler handler = new ContextHandler(local, "Base.", catalog,
+        ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog,
                 new PluginGate(catalog, switches, List.of(local), List.of(), List.of(), List.of(), java.util.Set.of()),
                 memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), TWO_MODELS, NOBODY);
         try (TestComputer ignored = TestComputer.connectEverything(links, ALICE, Instant.now().plus(Duration.ofHours(1)), mac)) {

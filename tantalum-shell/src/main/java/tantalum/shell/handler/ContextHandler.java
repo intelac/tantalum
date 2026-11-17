@@ -73,12 +73,6 @@ public final class ContextHandler implements Handler {
     private volatile java.util.function.Predicate<SessionId> offRecord = session -> false;
     private final SkillCatalog skills;
 
-    /** 会话都没有工作目录时（测试）。 */
-    public ContextHandler(LocalWorkspace local, String basePrompt, ToolCatalog catalog, PluginGate gate, List<ContextContributor> contributors,
-                          KnowledgeBase knowledge, String fixedNote, CompactionPolicy compaction, Routes routes, UserSettings users) {
-        this(local, basePrompt, catalog, gate, contributors, knowledge, fixedNote, compaction, routes, users, session -> null);
-    }
-
     /**
      * {@code fixedNote} 是部署决定的固定说明（如外部工具结果不可信），放在基础提示之后，不随运行变化。
      * {@code compaction} 每次按这个用户当前选的压缩点和这次用的模型的窗口算出压缩设置，随事件写进 journal。{@code routes}、{@code users} 用来定这次用哪个模型。

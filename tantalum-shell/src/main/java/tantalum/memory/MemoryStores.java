@@ -37,11 +37,6 @@ public final class MemoryStores {
         this.clock = clock;
     }
 
-    /** 账和旧目录是同一个目录时（测试）。 */
-    public MemoryStores(Function<Principal, Path> dirs, MemoryLimits limits, Clock clock) {
-        this(dirs, dirs, limits, clock);
-    }
-
     /** 这个人的记忆账。 */
     public Ledger ledger(Principal principal) {
         Objects.requireNonNull(principal, "principal");

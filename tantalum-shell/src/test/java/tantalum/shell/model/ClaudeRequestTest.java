@@ -61,6 +61,10 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.shell.handler.ModelHandlerFixture;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.command.CallModelFixture;
+import tantalum.value.model.PromptFixture;
 
 /**
  * 发给 Claude 的请求体和 beta 头必须逐字节不变：期望文件是把组请求的代码移进 {@code ClaudeRequest} 之前取的样。
@@ -97,7 +101,7 @@ class ClaudeRequestTest {
     private record Sample(String name, ClaudeClient.Settings settings, Prompt prompt) {}
 
     private static ClaudeClient.Settings settings(long maxTokens, String effort, boolean fallbacks, boolean strictThinking) {
-        return new ClaudeClient.Settings("claude-sonnet-5-5", maxTokens, effort, fallbacks, Duration.ofSeconds(5), Duration.ofSeconds(5),
+        return ClaudeClientFixture.settings("claude-sonnet-5-5", maxTokens, effort, fallbacks, Duration.ofSeconds(5), Duration.ofSeconds(5),
                 OverflowRules.defaults(), strictThinking);
     }
 
@@ -129,7 +133,7 @@ class ClaudeRequestTest {
                 new TextBlock(""),
                 new ToolCallBlock("t1", "read_file", "{\"path\":\"a\"}", new Json.Obj(Map.of("path", new Json.Str("a")))),
                 new ToolCallBlock("t2", "grep", "{oops", null));
-        return new Prompt("you are helpful", List.of(new ToolSpec("read_file", "read a file", new Json.Obj(schema)),
+        return PromptFixture.of("you are helpful", List.of(new ToolSpec("read_file", "read a file", new Json.Obj(schema)),
                 new ToolSpec("grep", "search", new Json.Obj(Map.of("type", new Json.Str("object"))))), List.of(
                 Message.user("q"),
                 new Message(Role.ASSISTANT, assistant, false),
@@ -226,8 +230,8 @@ class ClaudeRequestTest {
         ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(key).baseUrl(server.url()).maxRetries(0).build(),
                 settings(8192, "high", true, true));
         RunRef run = new RunRef(new Principal("alice"), new SessionId("s1"), new RunId("r1"));
-        ModelReplied reply = (ModelReplied) new ModelHandler(client, new CallLimiter(1), Duration.ofSeconds(5), ignored -> IGNORE,
-                Clock.systemUTC()).handle(new CallModel(new CommandId("c1"), run, history(Prompt.Output.DEFAULT)));
+        ModelReplied reply = (ModelReplied) ModelHandlerFixture.of(client, new CallLimiter(1), Duration.ofSeconds(5), ignored -> IGNORE,
+                Clock.systemUTC()).handle(CallModelFixture.of(new CommandId("c1"), run, history(Prompt.Output.DEFAULT)));
 
         assertEquals(client.options(history(Prompt.Output.DEFAULT)), reply.options());
         // SDK 放在哪个请求头由它决定，这里只要求密钥确实随请求发出，下面的“找不到”才有意义。
@@ -257,7 +261,7 @@ class ClaudeRequestTest {
     private static final Path TOOL_CHANGE_EXPECTED = Path.of("src/test/resources/model/claude-tool-change-requests.txt");
 
     private static ClaudeClient.Settings model(String model, boolean fallbacks) {
-        return new ClaudeClient.Settings(model, 8192, "medium", fallbacks, Duration.ofSeconds(5), Duration.ofSeconds(5),
+        return ClaudeClientFixture.settings(model, 8192, "medium", fallbacks, Duration.ofSeconds(5), Duration.ofSeconds(5),
                 OverflowRules.defaults(), true);
     }
 
@@ -356,7 +360,7 @@ class ClaudeRequestTest {
     }
 
     private static final Path ATTACHMENT_EXPECTED = Path.of("src/test/resources/model/claude-attachment-requests.txt");
-    private static final ImageRef PNG = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
+    private static final ImageRef PNG = ImageRefFixture.of("sha256:" + "a".repeat(64), "cat.png", "image/png", 3, 4, 3);
     private static final ImageRef SHOT = new ImageRef("sha256:" + "b".repeat(64), "shot.jpg", "image/jpeg", 3, 2048, 1024, 4096, 2048);
     private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);
     private static final FileRef PDF = new FileRef("sha256:" + "d".repeat(64), "report.pdf", "application/pdf", 9, 3);
@@ -432,7 +436,7 @@ class ClaudeRequestTest {
         int before = server.requests.size();
         ModelHandler handler = new ModelHandler(client(settings(4096, "medium", false, false)), new CallLimiter(1), Duration.ofSeconds(5),
                 ignored -> IGNORE, Clock.systemUTC(), ref -> new StoredMedia(store, new RequestImages(store), ref.principal(), ref.session()));
-        ModelFailed failed = (ModelFailed) handler.handle(new CallModel(new CommandId("c1"), run,
+        ModelFailed failed = (ModelFailed) handler.handle(CallModelFixture.of(new CommandId("c1"), run,
                 new Prompt("sys", List.of(), List.of(user("read it", pdf)))));
         assertEquals(FailureReason.INVALID_REQUEST, failed.reason());
         assertFalse(failed.retryable());

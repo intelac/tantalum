@@ -29,10 +29,5 @@ public interface RunFinishedListener {
             segments = segments == null ? java.util.List.of() : java.util.List.copyOf(segments);
         }
 
-        /** 没有分段、不是“不进记忆”的会话（旧的调用方和测试）。 */
-        public FinishedRun(Principal user, SessionId session, RunId run, Integer turn, String endReason, boolean manual, Instant start,
-                           Instant end, String title, String excerpt) {
-            this(user, session, run, turn, endReason, manual, start, end, title, excerpt, java.util.List.of(), false);
-        }
     }
 }

@@ -62,18 +62,9 @@ public record SessionContext(String system, List<ToolSpec> tools, CompactionSett
         this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, pluginParams, null);
     }
 
-    public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections) {
-        this(system, tools, compaction, sections, null, null, null, null, null);
-    }
-
     public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
                           List<String> initialTools, List<String> activeTools, List<String> activePlugins) {
         this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, null, null);
-    }
-
-    public SessionContext(String system, List<ToolSpec> tools, CompactionSettings compaction, List<ContextSection> sections,
-                          List<String> initialTools, List<String> activeTools, List<String> activePlugins, HookState hooks) {
-        this(system, tools, compaction, sections, initialTools, activeTools, activePlugins, hooks, null);
     }
 
     /** 只换告知过模型的可变内容，system 和工具不动。 */

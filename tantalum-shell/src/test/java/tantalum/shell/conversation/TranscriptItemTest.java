@@ -80,7 +80,7 @@ class TranscriptItemTest {
 
     @Test
     void queuedFollowUpBecomesActiveWhenItsRunStarts() {
-        UserMessage queued = new UserMessage("9.0", SESSION, null, T0, "later", true);
+        UserMessage queued = TranscriptItemFixture.userMessage("9.0", SESSION, null, T0, "later", true);
         UserMessage started = queued.started(new RunId("run-12"));
 
         assertNull(queued.run());

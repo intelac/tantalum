@@ -36,7 +36,7 @@ class QAgentIssuesTest {
     }
 
     private LocalContext context(Path... dirs) throws java.io.IOException {
-        return new LocalContext("s", new AllowedDirs(List.of(dirs)), new Observations());
+        return LocalContextFixture.of("s", new AllowedDirs(List.of(dirs)), new Observations());
     }
 
     /** 39：一个读不了的子目录让整次搜索失败（“Search failed: AccessDeniedException”），别处的匹配也丢了。 */

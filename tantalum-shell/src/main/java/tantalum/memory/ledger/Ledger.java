@@ -255,8 +255,4 @@ public final class Ledger {
         PrivateFiles.restrictDirectory(dir);
     }
 
-    /** 测试用：现在的时间。 */
-    Instant now() {
-        return clock.instant();
-    }
 }

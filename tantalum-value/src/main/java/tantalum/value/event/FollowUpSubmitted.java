@@ -29,18 +29,6 @@ public record FollowUpSubmitted(SubmissionId submission, RequestId request, Stri
         this(submission, request, text, attachments, model, skills, List.of());
     }
 
-    public FollowUpSubmitted(SubmissionId submission, RequestId request, String text, List<AttachmentRef> attachments, ModelChoice model) {
-        this(submission, request, text, attachments, model, List.of());
-    }
-
-    public FollowUpSubmitted(SubmissionId submission, RequestId request, String text, List<AttachmentRef> attachments) {
-        this(submission, request, text, attachments, null, List.of());
-    }
-
-    public FollowUpSubmitted(SubmissionId submission, RequestId request, String text) {
-        this(submission, request, text, List.of(), null, List.of());
-    }
-
     @Override
     public String type() {
         return TYPE;

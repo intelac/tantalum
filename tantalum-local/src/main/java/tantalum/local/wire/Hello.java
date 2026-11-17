@@ -32,12 +32,6 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
         this(protocol, connector, device, roots, write, shell, network, git, browser, null);
     }
 
-    /** 没有浏览器这一项的连接程序（协议 4 及以前）。 */
-    public Hello(int protocol, String connector, Device device, List<Root> roots, boolean write, Shell shell, boolean network,
-                 boolean git) {
-        this(protocol, connector, device, roots, write, shell, network, git, null);
-    }
-
     public Hello {
         Objects.requireNonNull(connector, "connector");
         Objects.requireNonNull(device, "device");
@@ -63,14 +57,6 @@ public record Hello(int protocol, String connector, Device device, List<Root> ro
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Shell(boolean available, String reason, String code, Map<String, String> params, String kind, String path) {
-
-        public Shell(boolean available, String reason) {
-            this(available, reason, null, null, null, null);
-        }
-
-        public Shell(boolean available, String reason, String code, Map<String, String> params) {
-            this(available, reason, code, params, null, null);
-        }
 
         /** {@code kind} 是 {@code bash} 或 {@code powershell}（协议 6 起），{@code path} 是找到的程序；老的连接程序不送，为 null。 */
         public static Shell of(tantalum.local.shell.Shell shell) {

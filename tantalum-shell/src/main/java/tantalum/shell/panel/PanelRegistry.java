@@ -52,10 +52,6 @@ public final class PanelRegistry {
         return Optional.ofNullable(panels.get(name));
     }
 
-    public List<Panel> all() {
-        return List.copyOf(panels.values());
-    }
-
     /** 所属插件开着的面板。 */
     public List<Listed> list(Predicate<String> pluginEnabled) {
         List<Listed> listed = new ArrayList<>();

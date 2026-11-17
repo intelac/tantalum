@@ -22,21 +22,6 @@ public record LocalContext(String session, AllowedDirs dirs, Observations observ
         browser = browser == null ? Browser.NOT_ALLOWED : browser;
     }
 
-    /** 没有浏览器的调用。 */
-    public LocalContext(String session, AllowedDirs dirs, Observations observations, Shell shell, String skills) {
-        this(session, dirs, observations, shell, skills, null);
-    }
-
-    /** 不跑命令的调用：文件和 Git 工具用不到 shell。 */
-    public LocalContext(String session, AllowedDirs dirs, Observations observations) {
-        this(session, dirs, observations, NO_SHELL, null, null);
-    }
-
-    /** 不是调 {@code skill} 工具时。 */
-    public LocalContext(String session, AllowedDirs dirs, Observations observations, Shell shell) {
-        this(session, dirs, observations, shell, null, null);
-    }
-
     /** 同一份上下文，带上这次调用的技能目录。 */
     public LocalContext withSkills(String dir) {
         return new LocalContext(session, dirs, observations, shell, dir, browser);

@@ -35,7 +35,7 @@ class ReadFileImagesTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        context = new LocalContext("s", new AllowedDirs(List.of(root)), observations);
+        context = LocalContextFixture.of("s", new AllowedDirs(List.of(root)), observations);
     }
 
     private LocalResult read(String path) {

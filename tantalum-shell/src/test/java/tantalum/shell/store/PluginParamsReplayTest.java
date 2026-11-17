@@ -48,6 +48,7 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * plugin-settings 任务 20（P9，需求 5.4、5.5）：带参数的会话，读结果行恢复出来的和重放内核得到的、和当时内存里的都一样；
@@ -101,7 +102,7 @@ class PluginParamsReplayTest {
     /** 问一次：提交、组装（带这次的参数）、模型放行了就回答。返回组装那一步的决定。 */
     private Decision ask(Sender sender, Json.Obj params) throws Exception {
         String request = "req-" + requests++;
-        Decision submitted = sender.send(null, new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request),
+        Decision submitted = sender.send(null, UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request),
                 new OwnerRef.OfSession(SESSION), "question " + request));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
@@ -130,7 +131,7 @@ class PluginParamsReplayTest {
 
     private SessionSlice replayed() throws Exception {
         scenario.writer.flush();
-        return new SessionReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
+        return SessionReplayFixture.of(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
                 new UsageLedger(scenario.index, scenario.writer), scenario.kernel).load(ALICE, SESSION, Long.MAX_VALUE).orElseThrow();
     }
 

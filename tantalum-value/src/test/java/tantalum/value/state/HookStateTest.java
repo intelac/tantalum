@@ -18,7 +18,7 @@ import tantalum.value.state.SessionContext.HookState.HookTool;
 class HookStateTest {
 
     private static final ToolSpec CITE = new ToolSpec("cite", "cite sources", new Json.Obj(Map.of()));
-    private static final SessionContext PLAIN = new SessionContext("sys", List.of(CITE), null, List.of());
+    private static final SessionContext PLAIN = SessionContextFixture.of("sys", List.of(CITE), null, List.of());
 
     @Test
     void aHookTextNamesItsHookAndSaysSomething() {

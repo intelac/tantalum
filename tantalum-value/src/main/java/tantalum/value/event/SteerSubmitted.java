@@ -19,14 +19,6 @@ public record SteerSubmitted(SubmissionId submission, RequestId request, String 
         skills = skills == null ? List.of() : List.copyOf(skills);
     }
 
-    public SteerSubmitted(SubmissionId submission, RequestId request, String text, List<AttachmentRef> attachments) {
-        this(submission, request, text, attachments, List.of());
-    }
-
-    public SteerSubmitted(SubmissionId submission, RequestId request, String text) {
-        this(submission, request, text, List.of(), List.of());
-    }
-
     @Override
     public String type() {
         return TYPE;

@@ -26,6 +26,9 @@ import tantalum.value.model.Message;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.Role;
+import tantalum.value.decision.SessionChangeFixture;
+import tantalum.value.command.AssembleContextFixture;
+import tantalum.value.state.SessionContextFixture;
 
 /** record-results 任务 2–4：结果行编码的边角。正常路径由 {@code RecordRoundTripTest} 用真实内核覆盖。 */
 class RecordCodecTest {
@@ -39,7 +42,7 @@ class RecordCodecTest {
     private final RecordCodec codec = new RecordCodec(events);
 
     private static StepRecord appending(long seq, String text) {
-        SessionChange change = new SessionChange(SESSION, USER, false, List.of(Message.user(text)),
+        SessionChange change = SessionChangeFixture.of(SESSION, USER, false, List.of(Message.user(text)),
                 null, null, null, null, null, null, null);
         return new StepRecord(seq, change, List.of(), List.of(), null, null, List.of(), List.of(new PhaseChanged(RUN, "Deciding")));
     }
@@ -99,7 +102,7 @@ class RecordCodecTest {
     void sessionNotesRoundTrip() {
         java.util.Map<String, tantalum.value.json.Json.Obj> notes = java.util.Map.of("approval", new tantalum.value.json.Json.Obj(
                 java.util.Map.of("write_file", new tantalum.value.json.Json.Bool(true))));
-        SessionChange change = new SessionChange(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null,
+        SessionChange change = SessionChangeFixture.of(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null,
                 new SessionChange.Changed<>(notes));
         StepRecord record = new StepRecord(3, change, List.of(), List.of(), null, null, List.of(), List.of());
         String line = codec.encode(record, RecordMemo.writer());
@@ -112,13 +115,13 @@ class RecordCodecTest {
     @Test
     void hookStateRoundTripsAndIsAbsentWhenNone() {
         tantalum.value.model.ToolSpec cite = new tantalum.value.model.ToolSpec("cite", "cite sources", new tantalum.value.json.Json.Null());
-        tantalum.value.state.SessionContext plain = new tantalum.value.state.SessionContext("sys", List.of(), null, List.of());
+        tantalum.value.state.SessionContext plain = SessionContextFixture.of("sys", List.of(), null, List.of());
         tantalum.value.state.SessionContext.HookState hooks = new tantalum.value.state.SessionContext.HookState(
                 List.of(new tantalum.value.model.HookTextBlock("style", "be brief")),
                 List.of(new tantalum.value.state.SessionContext.HookState.HookTool("style", cite)), List.of("cite"));
-        SessionChange first = new SessionChange(SESSION, USER, true, List.of(), null, null, null, new SessionChange.Changed<>(plain),
+        SessionChange first = SessionChangeFixture.of(SESSION, USER, true, List.of(), null, null, null, new SessionChange.Changed<>(plain),
                 null, null, null, null, null);
-        SessionChange second = new SessionChange(SESSION, USER, false,
+        SessionChange second = SessionChangeFixture.of(SESSION, USER, false,
                 List.of(new Message(Role.SYSTEM, List.of(new tantalum.value.model.HookTextBlock("style", "be brief")), false)),
                 null, null, null, new SessionChange.Changed<>(plain.withHooks(hooks)), null, null, null, null, null);
         RecordMemo writer = RecordMemo.writer();
@@ -218,7 +221,7 @@ class RecordCodecTest {
                 RUN.run(), new tantalum.value.event.ModelReplied(new CommandId("s_3-0"), content,
                 tantalum.value.model.StopReason.END_TURN, "m", null, null, null, null));
         Message reply = new Message(Role.ASSISTANT, content, false);
-        StepRecord record = new StepRecord(4, new SessionChange(SESSION, USER, false, List.of(reply), null, null, null, null, null, null, null),
+        StepRecord record = new StepRecord(4, SessionChangeFixture.of(SESSION, USER, false, List.of(reply), null, null, null, null, null, null, null),
                 List.of(), List.of(), null, null, List.of(), List.of());
         RecordMemo writer = RecordMemo.writer();
         writer.seeEvent(event);
@@ -247,7 +250,7 @@ class RecordCodecTest {
     @Test
     void anUnknownCommandOrFieldIsCorrupt() {
         String line = codec.encode(new StepRecord(1, null, List.of(), List.of(), null, null,
-                List.of(new tantalum.value.command.AssembleContext(new CommandId("c"), RUN)), List.of()), RecordMemo.writer());
+                List.of(AssembleContextFixture.of(new CommandId("c"), RUN)), List.of()), RecordMemo.writer());
 
         assertThrows(IllegalArgumentException.class,
                 () -> codec.decode(line.replace("AssembleContext", "Teleport"), RecordMemo.reader()));
@@ -264,7 +267,7 @@ class RecordCodecTest {
                 "small", new tantalum.value.json.Json.Num(new java.math.BigDecimal("1E-7"))));
         Message call = new Message(Role.ASSISTANT, List.of(new tantalum.value.model.ToolCallBlock("c1", "tool", "{}", arguments),
                 new TextBlock("x".repeat(200))), false);
-        SessionChange change = new SessionChange(SESSION, USER, false, List.of(call, call), null, null, null, null, null, null, null);
+        SessionChange change = SessionChangeFixture.of(SESSION, USER, false, List.of(call, call), null, null, null, null, null, null, null);
         StepRecord record = new StepRecord(1, change, List.of(), List.of(), null, null, List.of(), List.of());
         RecordMemo writer = RecordMemo.writer();
         String line = codec.encode(record, writer);
@@ -292,7 +295,7 @@ class RecordCodecTest {
     @Test
     void theRunOfAStepIsWrittenOnce() {
         StepRecord record = new StepRecord(1, null, List.of(), List.of(), null, null,
-                List.of(new tantalum.value.command.AssembleContext(new CommandId("c"), RUN)),
+                List.of(AssembleContextFixture.of(new CommandId("c"), RUN)),
                 List.of(new PhaseChanged(RUN, "AwaitingContext"), new HookReported(RUN, "h", "d")));
         String line = codec.encode(record, RecordMemo.writer());
 

@@ -38,6 +38,9 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** H9：用一份“进程死在工具调用途中”的文件启动真实服务，看收尾、继续提交和第二次重启。 */
 class RestartInterruptTest {
@@ -73,8 +76,8 @@ class RestartInterruptTest {
     private void diedDuringTool(Event... more) throws Exception {
         Files.createDirectories(data());
         List<EventEnvelope> events = new java.util.ArrayList<>(List.of(
-                event(1, null, new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "hi")),
-                event(2, RUN, new ContextAssembled(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
+                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "hi")),
+                event(2, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 event(3, RUN, new ModelReplied(new CommandId("s1_2-0"),
                         List.of(new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(java.util.Map.of()))), StopReason.TOOL_USE, "m", null, null, null, null))));
         long seq = 4;
@@ -140,7 +143,7 @@ class RestartInterruptTest {
 
     @Test
     void queuedFollowUpStillRuns() throws Exception {
-        diedDuringTool(new FollowUpSubmitted(new SubmissionId("sub2"), new RequestId("req2"), "next please"));
+        diedDuringTool(FollowUpSubmittedFixture.of(new SubmissionId("sub2"), new RequestId("req2"), "next please"));
         try (TestServer server = server()) {
             for (int i = 0; i < 500 && !runs(server).contains("COMPLETED"); i++) {
                 Thread.sleep(10);
@@ -188,8 +191,8 @@ class RestartInterruptTest {
         SessionId other = new SessionId("s3");
         RunId otherRun = RunId.of(other, 20);
         ResultWriter.write(new SessionPaths(data()), List.of(
-                new EventEnvelope(20, AT, ALICE, other, null, new UserPrompt(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
-                new EventEnvelope(21, AT, ALICE, other, otherRun, new ContextAssembled(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
+                new EventEnvelope(20, AT, ALICE, other, null, UserPromptFixture.of(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
+                new EventEnvelope(21, AT, ALICE, other, otherRun, ContextAssembledFixture.of(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
         // 先让索引记下两个未结束的运行，再把 s1 的中间一行改坏：启动时索引仍说它没结束，载入时才发现坏了。
         Path s1 = new SessionPaths(data()).sessionFile(ALICE, S1);
         try (var index = tantalum.shell.store.SessionIndex.open(data())) {

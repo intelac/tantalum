@@ -24,6 +24,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.shell.trace.TraceRecordFixture;
 
 class SseHubTest {
 
@@ -67,7 +68,7 @@ class SseHubTest {
         TraceRecord.Head head = new TraceRecord.Head("u:7", "7.0", new RunId("s_7"), 1, 1, null, Instant.EPOCH, Instant.EPOCH);
 
         hub.onFact(7, 0, fact(ALICE, "AwaitingContext"));
-        hub.onRecord(7, 1, ALICE, new TraceRecord.UserInput(head, TraceRecord.UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER));
+        hub.onRecord(7, 1, ALICE, TraceRecordFixture.userInput(head, TraceRecord.UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER));
 
         alice.poll(1, TimeUnit.SECONDS);
         SseMessage message = alice.poll(1, TimeUnit.SECONDS);

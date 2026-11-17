@@ -80,11 +80,6 @@ public final class OpenAiClient implements ModelClient {
     private final Function<String, OpenAiThinking> thinking;
 
     public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
-                        Duration betweenChunks, OverflowRules overflow) {
-        this(baseUrl, model, apiKey, maxTokens, firstChunk, betweenChunks, overflow, false);
-    }
-
-    public OpenAiClient(String baseUrl, String model, String apiKey, int maxTokens, Duration firstChunk,
                         Duration betweenChunks, OverflowRules overflow, boolean vision) {
         this(baseUrl, model, apiKey, maxTokens, firstChunk, betweenChunks, overflow, name -> vision, name -> OpenAiThinking.NONE);
     }

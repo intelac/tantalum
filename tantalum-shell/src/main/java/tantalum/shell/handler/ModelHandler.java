@@ -53,11 +53,6 @@ public final class ModelHandler implements Handler {
     private final String defaultRoute;
 
     public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
-                        Clock clock) {
-        this(client, limiter, waitTimeout, listeners, clock, run -> AttachmentMedia.NONE);
-    }
-
-    public ModelHandler(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners,
                         Clock clock, Function<RunRef, AttachmentMedia> media) {
         this(client, limiter, waitTimeout, listeners, clock, media, () -> {});
     }
@@ -77,13 +72,8 @@ public final class ModelHandler implements Handler {
     /**
      * 按路线调用：{@code prompt.model().route()} 指哪条就用哪条的客户端，
      * 每条路线自己的并发上限，一条路线忙不影响别的；等名额最多等这条路线的首块超时。没有选择的 prompt 用默认路线。
-     * 超长时只让这一条路线重读列表。
+     * 超长时只让这一条路线重读列表。回复的用量按 {@code weights} 折算后再记下（qagent-align 需求 3）。
      */
-    public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media) {
-        this(routes, listeners, clock, media, UsageWeights.NONE);
-    }
-
-    /** 同上，回复的用量按 {@code weights} 折算后再记下（qagent-align 需求 3）。 */
     public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media,
                         UsageWeights weights) {
         this.weights = weights;

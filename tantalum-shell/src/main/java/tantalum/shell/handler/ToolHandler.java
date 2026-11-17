@@ -44,10 +44,6 @@ public final class ToolHandler implements Handler {
     /** 执行的结果和真正开始的时刻；没拿到名额时开始时刻为 null。 */
     private record Ran(ToolOutput output, Instant startedAt) {}
 
-    public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock) {
-        this(catalog, workspaces, gate, timeout, clock, session -> null);
-    }
-
     /** {@code dirs} 查会话在用户电脑上的工作目录（没有为 null），放进 {@link ToolContext#dir()}。 */
     public ToolHandler(ToolCatalog catalog, Workspaces workspaces, PluginGate gate, Duration timeout, Clock clock,
                        Function<SessionId, String> dirs) {

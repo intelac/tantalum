@@ -26,11 +26,6 @@ public final class ToolImages {
         this.store = store;
     }
 
-    /** 一个结果最多收几张图片，同“一条消息最多几张”（{@code tantalum.attachments.max-images-per-message}）。 */
-    public int maxImages() {
-        return store.limits().maxImagesPerMessage();
-    }
-
     /**
      * 存好每张图，文字后面逐行加 {@link AttachmentText#image} 那一行。{@code name} 是附件的名字，几张图同名也没关系：
      * 名字属于每一次出现，存储只看内容。存不下（配额满、太大、不是图片）时整个结果是错误，写明原因。

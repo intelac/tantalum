@@ -122,10 +122,6 @@ public final class PollStreams {
         gone.close();
     }
 
-    int size() {
-        return held.size();
-    }
-
     void sweep(long now) {
         for (Held each : List.copyOf(held.values())) {
             if (each.closed() || now - each.lastUsed > idleMillis) {

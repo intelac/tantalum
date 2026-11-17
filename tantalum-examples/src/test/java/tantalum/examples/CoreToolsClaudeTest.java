@@ -33,6 +33,8 @@ import tantalum.value.event.ModelReplied;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.ToolCallBlock;
+import tantalum.shell.model.ClaudeClientFixture;
+import tantalum.value.hook.AllowFixture;
 
 /**
  * core-tools 非功能“真实模型”：三项，各有判定标准。会产生费用；同时设置 {@code ANTHROPIC_API_KEY} 和 {@code TANTALUM_SMOKE_CLAUDE}
@@ -50,7 +52,7 @@ class CoreToolsClaudeTest {
     /** 备用模型打开：会话里出现工具变化后请求不该再带它。 */
     private static ClaudeClient strict(String effort) {
         return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                new ClaudeClient.Settings(MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(),
+                ClaudeClientFixture.settings(MODEL, 8192, effort, true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(),
                         true));
     }
 
@@ -245,11 +247,11 @@ class CoreToolsClaudeTest {
                         .filter(message -> message.role() == tantalum.value.model.Role.USER
                                 && message.content().stream().noneMatch(tantalum.value.model.ToolResultBlock.class::isInstance)).count();
                 return switch ((int) turn) {
-                    case 1 -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                    case 1 -> AllowFixture.of(new tantalum.value.hook.PromptPatch(
                             "House rule for this turn: answer in at most two sentences.", List.of()));
-                    case 2 -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                    case 2 -> AllowFixture.of(new tantalum.value.hook.PromptPatch(
                             "House rule for this turn: you must call stamp_answer with the final number before you reply.", List.of(stamp)));
-                    default -> new tantalum.value.hook.Allow(new tantalum.value.hook.PromptPatch(
+                    default -> AllowFixture.of(new tantalum.value.hook.PromptPatch(
                             "House rule for this turn: stamp_answer is gone; if asked about it, say it is no longer available.", List.of()));
                 };
             }

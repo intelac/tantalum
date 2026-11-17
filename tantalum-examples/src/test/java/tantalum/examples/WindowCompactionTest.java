@@ -31,6 +31,8 @@ import tantalum.value.event.ModelReplied;
 import tantalum.value.model.FailureReason;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.shell.model.ClaudeClientFixture;
+import tantalum.shell.model.OpenAiClientFixture;
 
 /**
  * compaction-threshold 的真实模型测试：窗口从模型读，用户选 50%，在大窗口下按选的点压缩。
@@ -53,7 +55,7 @@ class WindowCompactionTest {
     @EnabledIfEnvironmentVariable(named = "TANTALUM_SMOKE_CLAUDE", matches = ".+")
     void claudeAtHalfOfOneMillion() throws Exception {
         ClaudeClient claude = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300),
+                ClaudeClientFixture.settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300),
                         OverflowRules.defaults(), true));
         // 每个约 48 KB、3.2 万 token：一次 8 个约 26 万，两次 52 万，越过 50 万
         scenario(claude, "claude", 1_000_000, 500_000, 8, 750, "--tantalum.claude.max-tokens=8192");
@@ -63,7 +65,7 @@ class WindowCompactionTest {
     @Timeout(value = 30, unit = TimeUnit.MINUTES)
     @EnabledIfEnvironmentVariable(named = "TANTALUM_SMOKE_STRATA", matches = ".+")
     void localQwenAtHalfOfItsWindow() throws Exception {
-        OpenAiClient qwen = new OpenAiClient("http://127.0.0.1:8090/v1", "qwen3.8-flash-next-unsloth-ud-q4_k_xl", null, 16384,
+        OpenAiClient qwen = OpenAiClientFixture.of("http://127.0.0.1:8090/v1", "qwen3.8-flash-next-unsloth-ud-q4_k_xl", null, 16384,
                 Duration.ofSeconds(600), Duration.ofSeconds(120), OverflowRules.defaults());
         // 每个约 16 KB、1.4 万 token：一次 3 个约 4.3 万，两次 8.6 万，越过 65536
         scenario(qwen, "qwen", 131_072, 65_536, 3, 250, "--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072");

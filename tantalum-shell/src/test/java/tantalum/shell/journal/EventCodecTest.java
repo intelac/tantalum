@@ -47,6 +47,13 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 class EventCodecTest {
 
@@ -80,16 +87,16 @@ class EventCodecTest {
                 new ToolCallBlock("bad", "grep", "{oops", null),
                 new ToolResultBlock("c", "out", true, "TOOL_OUTCOME_UNKNOWN"));
         List<Event> events = List.of(
-                new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi"),
-                new UserPrompt(SUB, REQ, new OwnerRef.OfCommand(CMD), "child"),
-                new SteerSubmitted(SUB, REQ, "x"),
-                new FollowUpSubmitted(SUB, REQ, "x"),
+                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi"),
+                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfCommand(CMD), "child"),
+                SteerSubmittedFixture.of(SUB, REQ, "x"),
+                FollowUpSubmittedFixture.of(SUB, REQ, "x"),
                 new Cancel(REQ),
                 new tantalum.value.event.Answered(SUB, REQ, "approval-c1", tantalum.value.question.Answer.of("once")),
                 new tantalum.value.event.Answered(SUB, REQ, "ask-a1", new tantalum.value.question.Answer("keep", "归档到 old/")),
                 new tantalum.value.event.RunInterrupted(),
-                new ContextAssembled(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson())), null, List.of()),
-                new ContextAssembled(CMD, "system", List.of(), new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192),
+                ContextAssembledFixture.of(CMD, "system", List.of(new ToolSpec("grep", "d", complexJson())), null, List.of()),
+                ContextAssembledFixture.of(CMD, "system", List.of(), CompactionSettingsFixture.of(200_000, 64_000, 20_000, 32_768, 4_096, 8_192),
                 List.of(new tantalum.value.state.ContextSection("memory-index", "idx", true))),
                 new tantalum.value.event.CompactRequested(SUB, REQ, "focus on the test results"),
                 new tantalum.value.event.CompactRequested(SUB, REQ, null),
@@ -98,7 +105,7 @@ class EventCodecTest {
                 new ModelFailed(CMD, FailureReason.RATE_LIMITED, true, Duration.ofSeconds(30), "partial", "429", null, null, null),
                 new ModelFailed(CMD, FailureReason.REFUSAL, false, null, null, "cyber", null, null, null),
                 new ModelInterrupted(CMD, "partial", null, null, null),
-                new ToolFinished(CMD, "c", "out", false, null),
+                ToolFinishedFixture.of(CMD, "c", "out", false, null),
                 new TimerFired(CMD),
                 new WorkDone(CMD, "citation", complexJson(), false, "fix it", null),
                 new WorkDone(CMD, "citation", new Json.Null(), true, null, null));
@@ -138,7 +145,7 @@ class EventCodecTest {
                         StopReason.TOOL_USE, "m", new TokenUsage(1, 2, 3, 4), null, null, null),
                 new ModelFailed(CMD, FailureReason.RATE_LIMITED, true, Duration.ofSeconds(30), "partial", "429", null, null, null),
                 new ModelInterrupted(CMD, "partial", null, null, null),
-                new ToolFinished(CMD, "c", "out", true, null),
+                ToolFinishedFixture.of(CMD, "c", "out", true, null),
                 new WorkDone(CMD, "citation", oldJson(), false, "fix it", null));
     }
 
@@ -149,7 +156,7 @@ class EventCodecTest {
                 new ModelReplied(CMD, List.of(), StopReason.END_TURN, "m", null, STARTED, null, null),
                 new ModelFailed(CMD, FailureReason.SERVER_ERROR, true, null, "", "529", STARTED, FIRST, OPTIONS),
                 new ModelInterrupted(CMD, "partial", STARTED, FIRST, OPTIONS),
-                new ToolFinished(CMD, "c", "out", false, STARTED),
+                ToolFinishedFixture.of(CMD, "c", "out", false, STARTED),
                 new WorkDone(CMD, "citation", complexJson(), false, null, STARTED));
         events.forEach(this::assertRoundTrip);
         String line = codec.encode(events.getFirst());
@@ -196,9 +203,9 @@ class EventCodecTest {
     @Test
     void enabledListsAndToolChangesSurviveARoundTrip() {
         ToolSpec read = new ToolSpec("read_file", "read", new Json.Obj(Map.of()));
-        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of("quota")));
-        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of(), List.of()));
-        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of(),
+        assertRoundTrip(ContextAssembledFixture.of(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of("quota")));
+        assertRoundTrip(ContextAssembledFixture.of(CMD, "sys", List.of(read), null, List.of(), List.of(), List.of()));
+        assertRoundTrip(ContextAssembledFixture.of(CMD, "sys", List.of(read), null, List.of(), List.of("read_file"), List.of(),
                 Map.of("read_file", "builtin", "browser_navigate", "mcp:browser")));
         assertRoundTrip(new ModelReplied(CMD, List.of(new ToolChangeBlock(List.of("write_file"), List.of("grep"))), StopReason.END_TURN,
                 "m", null, null, null, null));
@@ -207,7 +214,7 @@ class EventCodecTest {
     /** 不带名单时写出的行和加字段之前逐字节相同；旧行读出来名单是 null，表示全部开着。deferred 为 false 时不写出。 */
     @Test
     void contextWithoutListsWritesTheSameBytesAsBefore() {
-        ContextAssembled old = new ContextAssembled(CMD, "sys", List.of(new ToolSpec("read_file", "read", new Json.Obj(Map.of()))), null,
+        ContextAssembled old = ContextAssembledFixture.of(CMD, "sys", List.of(new ToolSpec("read_file", "read", new Json.Obj(Map.of()))), null,
                 List.of());
         assertEquals(OLD_ASSEMBLED, codec.encode(old));
         ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 2, OLD_ASSEMBLED);
@@ -219,8 +226,8 @@ class EventCodecTest {
     /** compaction-threshold：旧设置不写出压缩点和系数，和加字段之前逐字节相同；旧行读出来是 0，按旧规则算。 */
     @Test
     void compactionSettingsWithoutAPointWriteTheSameBytesAsBefore() {
-        CompactionSettings legacy = new CompactionSettings(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
-        ContextAssembled old = new ContextAssembled(CMD, "sys", List.of(), legacy, List.of());
+        CompactionSettings legacy = CompactionSettingsFixture.of(200_000, 64_000, 20_000, 32_768, 4_096, 8_192);
+        ContextAssembled old = ContextAssembledFixture.of(CMD, "sys", List.of(), legacy, List.of());
         String line = codec.encode(old);
         assertEquals("{\"command\":{\"value\":\"1-0\"},\"system\":\"sys\",\"tools\":[],\"compaction\":{\"window\":200000,"
                 + "\"reserve\":64000,\"keepRecent\":20000,\"maxKeptResultBytes\":32768,\"maxSummarizedResultBytes\":4096,"
@@ -231,8 +238,8 @@ class EventCodecTest {
         assertEquals(3, decoded.bytesPerTokenOrLegacy());
 
         CompactionSettings chosen = new CompactionSettings(1_000_000, 64_000, 20_000, 32_768, 4_096, 8_192, 500_000, 1.5);
-        assertRoundTrip(new ContextAssembled(CMD, "sys", List.of(), chosen, List.of()));
-        assertTrue(codec.encode(new ContextAssembled(CMD, "sys", List.of(), chosen, List.of()))
+        assertRoundTrip(ContextAssembledFixture.of(CMD, "sys", List.of(), chosen, List.of()));
+        assertTrue(codec.encode(ContextAssembledFixture.of(CMD, "sys", List.of(), chosen, List.of()))
                 .contains("\"point\":500000,\"bytesPerToken\":1.5"));
     }
 
@@ -246,7 +253,7 @@ class EventCodecTest {
 
     @Test
     void anEmptyEnabledListIsNotTheSameAsNoList() {
-        String none = codec.encode(new ContextAssembled(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
+        String none = codec.encode(ContextAssembledFixture.of(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
         assertTrue(none.contains("\"enabledTools\":[]"), none);
         assertEquals(List.of(), ((ContextAssembled) codec.decode(ContextAssembled.TYPE, 2, none)).enabledTools());
     }
@@ -261,9 +268,9 @@ class EventCodecTest {
     @Test
     void attachmentsSurviveARoundTrip() {
         List<AttachmentRef> refs = List.of(IMAGE, PDF, TEXT);
-        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "", refs));
-        assertRoundTrip(new SteerSubmitted(SUB, REQ, "look", refs));
-        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "later", refs));
+        assertRoundTrip(UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "", refs));
+        assertRoundTrip(SteerSubmittedFixture.of(SUB, REQ, "look", refs));
+        assertRoundTrip(FollowUpSubmittedFixture.of(SUB, REQ, "later", refs));
         assertRoundTrip(new ToolFinished(CMD, "c", "Image ...", false, null, List.of(IMAGE)));
         assertRoundTrip(new ModelReplied(CMD, List.of(new TextBlock("x"), new AttachmentBlock(IMAGE), new AttachmentBlock(PDF),
                 new ToolResultBlock("c", "out", false, null, List.of(IMAGE))), StopReason.END_TURN, "m", null, null, null, null));
@@ -272,7 +279,7 @@ class EventCodecTest {
     /** {@code kind} 在前，没有值的字段不写：没缩小过的图片没有 source*，不是 PDF 的文件没有 pages。 */
     @Test
     void attachmentRefsHaveKindFirstAndOmitEmptyFields() {
-        String line = codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(new ImageRef(IMAGE.id(), "a.png", "image/png", 1, 2, 3), TEXT)));
+        String line = codec.encode(SteerSubmittedFixture.of(SUB, REQ, "x", List.of(ImageRefFixture.of(IMAGE.id(), "a.png", "image/png", 1, 2, 3), TEXT)));
         assertTrue(line.contains("\"attachments\":[{\"kind\":\"image\",\"id\":\"sha256:" + HASH + "\",\"name\":\"a.png\","
                 + "\"mediaType\":\"image/png\",\"bytes\":1,\"width\":2,\"height\":3},{\"kind\":\"file\","), line);
         assertTrue(line.endsWith("\"mediaType\":\"text/plain\",\"bytes\":5}]}"), line);
@@ -286,13 +293,13 @@ class EventCodecTest {
         String steer = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\"}";
         String replied = "{\"command\":{\"value\":\"1-0\"},\"content\":[{\"kind\":\"toolResult\",\"toolCallId\":\"c\","
                 + "\"text\":\"out\",\"error\":false}],\"stop\":\"END_TURN\",\"actualModel\":\"m\"}";
-        UserPrompt userPrompt = new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi");
+        UserPrompt userPrompt = UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi");
         ModelReplied reply = new ModelReplied(CMD, List.of(new ToolResultBlock("c", "out", false, null)), StopReason.END_TURN, "m",
                 null, null, null, null);
         assertEquals(prompt, codec.encode(userPrompt));
-        assertEquals(steer, codec.encode(new SteerSubmitted(SUB, REQ, "x")));
-        assertEquals(steer, codec.encode(new FollowUpSubmitted(SUB, REQ, "x")));
-        assertEquals(OLD_TOOL, codec.encode(new ToolFinished(CMD, "c", "out", true, null)));
+        assertEquals(steer, codec.encode(SteerSubmittedFixture.of(SUB, REQ, "x")));
+        assertEquals(steer, codec.encode(FollowUpSubmittedFixture.of(SUB, REQ, "x")));
+        assertEquals(OLD_TOOL, codec.encode(ToolFinishedFixture.of(CMD, "c", "out", true, null)));
         assertEquals(replied, codec.encode(reply));
 
         assertEquals(List.of(), ((UserPrompt) codec.decode(UserPrompt.TYPE, 1, prompt)).attachments());
@@ -306,7 +313,7 @@ class EventCodecTest {
     @Test
     void unknownFieldsAreIgnored() {
         String later = OLD_TOOL.substring(0, OLD_TOOL.length() - 1) + ",\"queuedFor\":{\"ms\":3}}";
-        assertEquals(new ToolFinished(CMD, "c", "out", true, null), codec.decode(ToolFinished.TYPE, 1, later));
+        assertEquals(ToolFinishedFixture.of(CMD, "c", "out", true, null), codec.decode(ToolFinished.TYPE, 1, later));
     }
 
     @Test

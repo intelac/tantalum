@@ -17,15 +17,17 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
 
 class FollowUpTest {
 
     private static FollowUpSubmitted followUp(String text) {
-        return new FollowUpSubmitted(new SubmissionId("f" + text), new RequestId("r" + text), text);
+        return FollowUpSubmittedFixture.of(new SubmissionId("f" + text), new RequestId("r" + text), text);
     }
 
     private static void finish(LoopFixture loop) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
     }
 
@@ -40,7 +42,7 @@ class FollowUpTest {
         assertEquals(first, loop.runId());
         assertEquals(List.of(Message.user("a"), Message.user("b")), loop.session().followUps());
 
-        loop.feed(first, new ContextAssembled(pending, "s", List.of(), null, List.of()));
+        loop.feed(first, ContextAssembledFixture.of(pending, "s", List.of(), null, List.of()));
         loop.feed(first, new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
 
         assertNotEquals(first, loop.runId());

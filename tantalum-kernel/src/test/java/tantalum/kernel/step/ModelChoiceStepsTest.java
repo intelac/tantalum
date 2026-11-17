@@ -38,6 +38,11 @@ import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * model-picker 设计“一次提问怎么选模型”第 3、5、6 步和“换到窗口更小的模型”：运行开始时把提交里的选择交给 shell，shell 定下的
@@ -55,7 +60,7 @@ class ModelChoiceStepsTest {
     private static final CompactionSettings SMALL = new CompactionSettings(1000, 200, 70, 60, 30, 500, 800, 3);
 
     private static UserPrompt prompt(LoopFixture loop, String text, ModelChoice model) {
-        return new UserPrompt(new SubmissionId("sub-" + text), new RequestId("req-" + text), new OwnerRef.OfSession(LoopFixture.SESSION),
+        return UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId("req-" + text), new OwnerRef.OfSession(LoopFixture.SESSION),
                 text, List.of(), model);
     }
 
@@ -98,7 +103,7 @@ class ModelChoiceStepsTest {
         assembled(loop, QWEN, BIG);
         assertEquals(QWEN, call(loop).prompt().model());
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         assertEquals(QWEN, call(loop).prompt().model(), "the tool round keeps the model");
         assertEquals(QWEN, loop.session().model());
         assertEquals(QWEN, loop.run().model());
@@ -140,7 +145,7 @@ class ModelChoiceStepsTest {
     void theFirstChoiceOfAnOldSessionIsNotASwitch() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("q1");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         assertNull(call(loop).prompt().model(), "old events carry no choice");
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a1", 100));
         int size = loop.session().messages().size();
@@ -158,8 +163,8 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(loop.runId(), new SteerSubmitted(new SubmissionId("s1"), new RequestId("rs1"), "also this"));
-        loop.feed(loop.runId(), new ToolFinished(tool, "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), SteerSubmittedFixture.of(new SubmissionId("s1"), new RequestId("rs1"), "also this"));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         CallModel call = call(loop);
         assertEquals(SONNET, call.prompt().model());
         assertEquals(Message.user("also this"), call.prompt().messages().getLast());
@@ -173,9 +178,9 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f1"), new RequestId("rf1"), "next", List.of(), QWEN));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "next", List.of(), QWEN));
         assertEquals(List.of(QWEN), loop.session().followUpModels());
-        loop.feed(loop.runId(), new ToolFinished(tool, "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         assertEquals(SONNET, call(loop).prompt().model(), "the running run is not affected");
 
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a1", 100));
@@ -193,10 +198,10 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f1"), new RequestId("rf1"), "a", List.of(), null));
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f2"), new RequestId("rf2"), "b", List.of(), QWEN));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "a", List.of(), null));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "b", List.of(), QWEN));
         assertEquals(java.util.Arrays.asList(null, QWEN), loop.session().followUpModels());
-        loop.feed(loop.runId(), new ToolFinished(tool, "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a1", 100));
         AssembleContext first = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
         assertNull(first.requested(), "the first queued prompt carried no choice");
@@ -231,7 +236,7 @@ class ModelChoiceStepsTest {
         loop.feed(null, prompt(loop, "q1", model));
         assembled(loop, model, settings);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1") + block("r2"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1") + block("r2"), false, null));
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, block("a1"), 790));
         return loop;
     }
@@ -297,17 +302,17 @@ class ModelChoiceStepsTest {
         List<ToolSpec> all = List.of(new ToolSpec("grep", "grep", new Json.Obj(Map.of())), new ToolSpec("bash", "bash", new Json.Obj(Map.of())));
         LoopFixture allOn = new LoopFixture();
         allOn.prompt("q1");
-        allOn.feed(allOn.runId(), new ContextAssembled(allOn.onlyCommandId(), "s", all, null, List.of(), List.of("grep", "bash"), null));
+        allOn.feed(allOn.runId(), ContextAssembledFixture.of(allOn.onlyCommandId(), "s", all, null, List.of(), List.of("grep", "bash"), null));
         assertFalse(allOn.session().toolChangesInHistory());
 
         LoopFixture oneOff = new LoopFixture();
         oneOff.prompt("q1");
-        oneOff.feed(oneOff.runId(), new ContextAssembled(oneOff.onlyCommandId(), "s", all, null, List.of(), List.of("grep"), null));
+        oneOff.feed(oneOff.runId(), ContextAssembledFixture.of(oneOff.onlyCommandId(), "s", all, null, List.of(), List.of("grep"), null));
         assertTrue(oneOff.session().toolChangesInHistory(), "bash was off from the start");
 
         allOn.feed(allOn.runId(), CompactStepsTest.endTurn(allOn, "a1", 100));
         allOn.prompt("q2");
-        allOn.feed(allOn.runId(), new ContextAssembled(allOn.onlyCommandId(), "s", all, null, List.of(), List.of("grep"), null));
+        allOn.feed(allOn.runId(), ContextAssembledFixture.of(allOn.onlyCommandId(), "s", all, null, List.of(), List.of("grep"), null));
         assertTrue(allOn.session().toolChangesInHistory(), "bash was turned off mid-session");
     }
 }

@@ -141,12 +141,8 @@ final class ClaudeRequest {
      * 按选项组装请求并放 prompt caching 断点。缓存层级是固定的“工具 → system → 消息”，前缀逐字节相同才命中，所以断点放在
      * 最后一个工具定义、system 块和最后一条消息的最后一个内容块上：工具和 system 在整个运行里不变，历史只追加，
      * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
+     * 附件内容从 {@code media} 取。
      */
-    MessageCreateParams params(Prompt prompt, RequestOptions options) {
-        return params(prompt, options, AttachmentMedia.NONE);
-    }
-
-    /** 同上，附件内容从 {@code media} 取。 */
     MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media) {
         Map<String, Json> extra = ((Json.Obj) options.extra()).fields();
         MessageCreateParams.Builder params = MessageCreateParams.builder()

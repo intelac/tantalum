@@ -16,6 +16,8 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** workspaces 任务 2（W3、需求 2.1、2.2）：会话的目录在第一次提问时记下，之后不变。 */
 class SessionDirStepsTest {
@@ -23,7 +25,7 @@ class SessionDirStepsTest {
     private static final CompactionSettings BIG = new CompactionSettings(10000, 200, 70, 60, 30, 500, 5000, 3);
 
     private static UserPrompt prompt(String text, String dir) {
-        return new UserPrompt(new SubmissionId("sub-" + text), new RequestId("req-" + text), new OwnerRef.OfSession(LoopFixture.SESSION),
+        return UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId("req-" + text), new OwnerRef.OfSession(LoopFixture.SESSION),
                 text, List.of(), null, dir);
     }
 
@@ -61,7 +63,7 @@ class SessionDirStepsTest {
         LoopFixture loop = new LoopFixture();
         loop.feed(null, prompt("one", "/home/u/app"));
         loop.feed(null, prompt("two", "/home/u/other"));
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "three", List.of(), null));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "three", List.of(), null));
         assertEquals("/home/u/app", loop.session().dir());
         assertEquals(2, loop.session().followUps().size());
     }

@@ -83,6 +83,14 @@ import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.hook.AllowFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /**
  * 浏览器看到的 JSON：{@code /messages} 的条目和 SSE 消息。改序列化代码时这些必须逐字节不变
@@ -94,7 +102,7 @@ class WireFormatTest {
             new DefaultPrettyPrinter().withObjectIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE.withLinefeed("\n"));
 
     private static final Path EXPECTED = Path.of("src/test/resources/wire");
-    private static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
     private static final JsonMapper SORTED = JsonMapper.builder().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
 
     private final EventCodec codec = EventCodec.withBuiltins();
@@ -107,7 +115,7 @@ class WireFormatTest {
     private RunId nextRun(String text) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
-        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         return run;
     }
 
@@ -121,7 +129,7 @@ class WireFormatTest {
         fx.feed(second, fx.reply(new TokenUsage(790, 10, 0, 0), text(block("a2"))));
         RunId third = nextRun(block("q3"));
         fx.feed(third, fx.reply(new TokenUsage(50, 20, 0, 0), claudeThinking("summarizing"), text("Goal: q")));
-        fx.feed(third, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+        fx.feed(third, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         fx.feed(third, fx.reply(text("a3")));
         RunId refused = nextRun("q4");
         fx.tick(Duration.ofSeconds(30));
@@ -178,7 +186,7 @@ class WireFormatTest {
     private static final KernelHook STYLE = new KernelHook() {
         @Override public String name() { return "style"; }
         @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-            return new Allow(new PromptPatch("\nFollow the house style.", List.of(new ToolSpec("style_check", "Check style", new Json.Obj(Map.of())))));
+            return AllowFixture.of(new PromptPatch("\nFollow the house style.", List.of(new ToolSpec("style_check", "Check style", new Json.Obj(Map.of())))));
         }
     };
 
@@ -214,12 +222,12 @@ class WireFormatTest {
     }
 
     private static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
-        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), system, List.of(READ), SETTINGS, sections));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), system, List.of(READ), SETTINGS, sections));
     }
 
     private static ToolFinished startedFinish(TranscriptFixture fx, RunId run, String call, String text, boolean error) {
         ToolFinished finished = fx.finished(run, call, text, error);
-        return new ToolFinished(finished.command(), finished.toolCallId(), text, error, fx.now().minusMillis(400));
+        return ToolFinishedFixture.of(finished.command(), finished.toolCallId(), text, error, fx.now().minusMillis(400));
     }
 
     /**
@@ -234,7 +242,7 @@ class WireFormatTest {
         fx.feed(first, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, Duration.ofSeconds(2), "", "HTTP 429: slow down",
                 fx.now().minusMillis(900), null, OPTIONS));
         CommandId timer = fx.lastCommands().getFirst().id();
-        fx.feed(first, new SteerSubmitted(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
+        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
         coldLoadAt = fx.envelopes.size();
         fx.feed(first, new TimerFired(timer));
         fx.feed(first, new ModelReplied(fx.callModel(), List.of(claudeThinking("plan"), call("c1", "read_file"),
@@ -413,7 +421,7 @@ class WireFormatTest {
 
     /** 用户开着的工具名单随组装一起记下；全集不变。 */
     private static void assembledWith(TranscriptFixture fx, RunId run, List<String> enabled) {
-        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(READ, WRITE), null, List.of(), enabled,
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(READ, WRITE), null, List.of(), enabled,
                 List.of()));
     }
 
@@ -462,22 +470,22 @@ class WireFormatTest {
     private static final ImageRef PHOTO = new ImageRef("sha256:" + "a".repeat(64), "photo.jpg", "image/jpeg", 16_000_000, 2048, 1536, 4000, 3000);
     private static final FileRef REPORT = new FileRef("sha256:" + "b".repeat(64), "report.pdf", "application/pdf", 90_000, 3);
     private static final FileRef NOTES = new FileRef("sha256:" + "c".repeat(64), "notes.txt", "text/plain", 12, null);
-    private static final ImageRef SKETCH = new ImageRef("sha256:" + "d".repeat(64), "sketch.png", "image/png", 2_000, 40, 30);
+    private static final ImageRef SKETCH = ImageRefFixture.of("sha256:" + "d".repeat(64), "sketch.png", "image/png", 2_000, 40, 30);
 
     /** 不压缩：图片和 PDF 的估算远超上面那组设置的窗口。 */
     private static void assembledWithoutCompaction(TranscriptFixture fx, RunId run) {
-        fx.feed(run, new ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(READ), null, List.of()));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(READ), null, List.of()));
     }
 
     /** 提问带图片和 PDF；运行中插话带文件；排队的提交只有图片、没有文字，运行结束后开下一轮。 */
     private TranscriptFixture attachmentScenario() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());
-        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
                 "what is this?", List.of(PHOTO, REPORT)));
         RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, first);
-        fx.feed(first, new SteerSubmitted(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
-        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
+        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
+        fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
         fx.feed(first, fx.reply(text("a photo and a report")));
         fx.feed(first, fx.reply(text("and the notes"))); // 插话让运行多调一次模型，这次才结束
         RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());

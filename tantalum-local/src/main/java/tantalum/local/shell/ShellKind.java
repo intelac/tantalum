@@ -29,13 +29,4 @@ public enum ShellKind {
         return osName.toLowerCase(Locale.ROOT).startsWith("windows") ? POWERSHELL : BASH;
     }
 
-    /** 协议里的写法转回来；不认得（老的连接程序不送）时为 null。 */
-    public static ShellKind fromWire(String wire) {
-        for (ShellKind kind : values()) {
-            if (kind.wire.equals(wire)) {
-                return kind;
-            }
-        }
-        return null;
-    }
 }

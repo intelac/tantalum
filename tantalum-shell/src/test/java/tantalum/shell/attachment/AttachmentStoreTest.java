@@ -36,6 +36,7 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.id.Principal;
+import tantalum.value.attachment.ImageRefFixture;
 
 /** 任务 5：目录布局、去重、配额、按用户隔离、临时文件、完整性。 */
 class AttachmentStoreTest {
@@ -115,7 +116,7 @@ class AttachmentStoreTest {
         assertEquals(sha256(stored), image.id());
         assertEquals(stored.length, image.bytes());
         assertEquals(image.id(), upload(store, ALICE, "again.jpg", sample("rotated.jpg")).id());
-        assertEquals(Optional.of(new ImageRef(image.id(), "shown.jpg", "image/jpeg", image.bytes(), 8, 16)),
+        assertEquals(Optional.of(ImageRefFixture.of(image.id(), "shown.jpg", "image/jpeg", image.bytes(), 8, 16)),
                 store.ref(ALICE, image.id(), "shown.jpg"));
     }
 

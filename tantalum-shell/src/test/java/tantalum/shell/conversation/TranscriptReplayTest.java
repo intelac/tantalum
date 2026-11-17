@@ -22,6 +22,9 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /** 回放得到的条目与实时相同：重启后对话区和工具链完整还原。 */
 class TranscriptReplayTest {
@@ -38,10 +41,10 @@ class TranscriptReplayTest {
         RunId run = live.start("hi");
         live.feed(run, live.reply(claudeThinking("plan"), call("c1", "write"), call("c2", "write"), badCall("c3", "write")));
         live.feed(run, live.finished(run, "c1", "ok", false));
-        live.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("rf"), "later"));
+        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
         // input-area 需求 1.11：改排队的提问也是事件，重放得到同样的条目
-        live.feed(null, new FollowUpSubmitted(new SubmissionId("f2"), new RequestId("rf2"), "dropped"));
-        live.feed(null, new FollowUpSubmitted(new SubmissionId("f3"), new RequestId("rf3"), "steered"));
+        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "dropped"));
+        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f3"), new RequestId("rf3"), "steered"));
         live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q1"), new RequestId("rq1"),
                 tantalum.value.event.QueueChanged.Action.EDIT, 0, "later", List.of(), "later, edited"));
         live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q2"), new RequestId("rq2"),
@@ -77,20 +80,20 @@ class TranscriptReplayTest {
     /** 压缩后的视图、分隔条目和截断标记都从 journal 重算出来，和实时逐字节相同。 */
     @Test
     void replayOfACompactedConversationMatches() {
-        tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
+        tantalum.value.state.CompactionSettings settings = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
         String q = ("q ").repeat(45);
         TranscriptFixture live = new TranscriptFixture(true, List.of());
         RunId first = live.start(q, settings);
         live.feed(first, live.reply(new tantalum.value.model.TokenUsage(700, 10, 0, 0), text(("a ").repeat(45))));
         live.feed(null, live.prompt(q));
         RunId second = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
-        live.feed(second, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
+        live.feed(second, ContextAssembledFixture.of(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(second, live.reply(new tantalum.value.model.TokenUsage(790, 10, 0, 0), text(("b ").repeat(45))));
         live.feed(null, live.prompt(q));
         RunId third = RunId.of(TranscriptFixture.SESSION, live.lastSeq());
-        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
+        live.feed(third, ContextAssembledFixture.of(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(third, live.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
-        live.feed(third, new tantalum.value.event.ContextAssembled(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
+        live.feed(third, ContextAssembledFixture.of(live.lastCommands().getFirst().id(), "sys", List.of(), settings, List.of()));
         live.feed(third, live.truncatedReply("a3 cut"));
 
         Transcript transcript = new Transcript();

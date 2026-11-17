@@ -24,6 +24,7 @@ import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContextFixture;
 
 /** 拿去找记忆的那句话是用户的问题，不是问题后面内核写的说明。 */
 class RecallHookTest {
@@ -31,7 +32,7 @@ class RecallHookTest {
     private static final RunRef RUN = new RunRef(new Principal("u"), new SessionId("s"), new RunId("r"));
 
     private static KernelState state(Message... messages) {
-        SessionState session = SessionState.start(RUN.session(), RUN.principal()).withContext(new SessionContext("sys", List.of(), null,
+        SessionState session = SessionState.start(RUN.session(), RUN.principal()).withContext(SessionContextFixture.of("sys", List.of(), null,
                 List.of(new ContextSection(MemoryContext.INDEX_TAG, "- about-me: who the user is", true))));
         for (Message message : messages) {
             session = session.append(message);

@@ -53,10 +53,6 @@ public final class Evictor {
     private final Map<SessionId, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
     private long lastSweep = Long.MIN_VALUE / 2;
 
-    public Evictor(Settings settings, Residency residency, Projections projections, Clock clock) {
-        this(settings, residency, projections, clock, session -> {});
-    }
-
     /** {@code evicted} 在会话离开内存后调用，让 shell 里按会话记的东西（如先读后写的记录）一起丢掉。 */
     public Evictor(Settings settings, Residency residency, Projections projections, Clock clock, Consumer<SessionId> evicted) {
         this.settings = settings;

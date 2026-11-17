@@ -25,6 +25,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
+import tantalum.value.command.AssembleContextFixture;
 
 class ResultPublisherTest {
 
@@ -46,7 +47,7 @@ class ResultPublisherTest {
     }
 
     private static Command command(String id) {
-        return new AssembleContext(new CommandId(id), RUN);
+        return AssembleContextFixture.of(new CommandId(id), RUN);
     }
 
     private void drain(int expected) throws Exception {

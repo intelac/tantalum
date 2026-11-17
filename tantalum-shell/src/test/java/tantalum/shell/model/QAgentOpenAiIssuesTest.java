@@ -26,7 +26,7 @@ class QAgentOpenAiIssuesTest {
             Prompt prompt = new Prompt("sys", List.of(), List.of(Message.user("branches?"),
                     new Message(Role.ASSISTANT, List.of(new ToolCallBlock("c1", "git_branches", "", new Json.Obj(Map.of()))), false),
                     new Message(Role.USER, List.of(new ToolResultBlock("c1", "* main", false, null)), false)));
-            new OpenAiClient(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5), OverflowRules.defaults())
+            OpenAiClientFixture.of(server.url(), "qwen", null, 4096, Duration.ofSeconds(5), Duration.ofSeconds(5), OverflowRules.defaults())
                     .call(prompt, new ChunkListener() {
                         @Override public void onText(String text) {}
                         @Override public void onReasoning(String text) {}

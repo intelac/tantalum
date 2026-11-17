@@ -27,6 +27,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.value.attachment.ImageRefFixture;
 
 /** 任务 10：提交里的附件引用只认本人目录里的元数据；数量、合计大小和模型是否收图片在服务器再查一遍。 */
 class SubmitAttachmentsTest {
@@ -102,7 +103,7 @@ class SubmitAttachmentsTest {
 
         List<ContentBlock> content = firstUserMessage("alice").content();
         assertEquals(new TextBlock("look"), content.get(0));
-        assertEquals(new AttachmentBlock(new ImageRef(id, "shown.jpg", "image/jpeg", image.get("bytes").asLong(), 8, 16)), content.get(1));
+        assertEquals(new AttachmentBlock(ImageRefFixture.of(id, "shown.jpg", "image/jpeg", image.get("bytes").asLong(), 8, 16)), content.get(1));
         assertEquals(new AttachmentBlock(new FileRef(file.get("id").asString(), "n.txt", "application/octet-stream", 5, null)), content.get(2));
     }
 

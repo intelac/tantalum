@@ -107,7 +107,7 @@ class LinkIT {
     }
 
     private CompletableFuture<Integer> start(Main.Setup setup, List<LocalTool> tools) {
-        Calls calls = new Calls(setup.dirs(), setup.hello().write(), setup.hello().shell().available(),
+        Calls calls = CallsFixture.of(setup.dirs(), setup.hello().write(), setup.hello().shell().available(),
                 new Journal(out, Clock.systemDefaultZone()), tools);
         Link link = new Link(setup.socket(), setup.token(), setup.hello(), calls, out, ZH, List.of(Duration.ofMillis(100)), Link.SILENCE);
         started.add(link);

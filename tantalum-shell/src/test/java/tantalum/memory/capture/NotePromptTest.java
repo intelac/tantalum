@@ -16,8 +16,8 @@ class NotePromptTest {
     void notesComeWithAKindAndAQuoteAndNothingMeansNoNote() {
         assertEquals(List.of(), NotePrompt.notes("NOTHING"));
         assertEquals(List.of(), NotePrompt.notes("  nothing \n"));
-        assertEquals(List.of(new Note(Kind.PREFERENCE, "回答用简体中文", "以后用简体中文"), new Note(Kind.TASK, "下一步：记忆", "下一步做记忆"),
-                new Note(Kind.NOTE, "在做 Tantalum", "我在做 Tantalum"), new Note(Kind.FACT, "没有原话的一条", "没有原话的一条")),
+        assertEquals(List.of(NotePromptFixture.note(Kind.PREFERENCE, "回答用简体中文", "以后用简体中文"), NotePromptFixture.note(Kind.TASK, "下一步：记忆", "下一步做记忆"),
+                NotePromptFixture.note(Kind.NOTE, "在做 Tantalum", "我在做 Tantalum"), NotePromptFixture.note(Kind.FACT, "没有原话的一条", "没有原话的一条")),
                 NotePrompt.notes("# Notes\n- [preference] 回答用简体中文 «以后用简体中文»\n* [task] 下一步：记忆 “下一步做记忆”\n"
                         + "- 在做 Tantalum \"我在做 Tantalum\"\n- [fact] 没有原话的一条\n喜欢简体中文\n"),
                 "a line without a quote uses its own text as the quote, which then has to be found in the user's words");
@@ -36,7 +36,7 @@ class NotePromptTest {
         String prompt = NotePrompt.user("标题", "2026-11-17", "User: 修好了吗", List.of(new NotePrompt.Open("mm1abc", "折扣测试没过，\n要排查")));
         assertTrue(prompt.contains("</turn>\n\n<open-items>\n- mm1abc: 折扣测试没过， 要排查\n</open-items>"), prompt);
         assertFalse(NotePrompt.user("标题", "2026-11-17", "User: 你好").contains("open-items"), "no list when nothing is open");
-        assertEquals(List.of(new Note(Kind.DONE, "mm1abc", "8 个测试全部通过"), new Note(Kind.DONE, "mm2def", "不做了")),
+        assertEquals(List.of(NotePromptFixture.note(Kind.DONE, "mm1abc", "8 个测试全部通过"), NotePromptFixture.note(Kind.DONE, "mm2def", "不做了")),
                 NotePrompt.notes("- [done] mm1abc «8 个测试全部通过»\n- [done] mm2def: 折扣那件事 «不做了»\n- [done] mm3ghi"));
     }
 

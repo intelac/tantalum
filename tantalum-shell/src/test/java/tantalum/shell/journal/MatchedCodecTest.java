@@ -29,6 +29,7 @@ import tantalum.value.state.Compacting;
 import tantalum.value.state.ContextSection;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.value.event.ContextAssembledFixture;
 
 /** one-line-journal 需求 3：配上了什么只在变化时记，读回来和原来的事件逐字段相同。 */
 class MatchedCodecTest {
@@ -58,7 +59,7 @@ class MatchedCodecTest {
     private static ContextAssembled assembled(String system, List<ToolSpec> tools, List<String> enabled, List<ContextSection> sections) {
         Map<String, String> sources = new java.util.LinkedHashMap<>();
         tools.forEach(tool -> sources.put(tool.name(), tool == FETCH ? "mcp:web" : "builtin"));
-        return new ContextAssembled(new CommandId("c-" + System.nanoTime()), system, tools, SETTINGS, sections, enabled, List.of("quota"),
+        return ContextAssembledFixture.of(new CommandId("c-" + System.nanoTime()), system, tools, SETTINGS, sections, enabled, List.of("quota"),
                 sources);
     }
 

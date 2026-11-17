@@ -26,6 +26,7 @@ import tantalum.shell.tool.BuiltinTools;
 import tantalum.shell.tool.ToolCatalog;
 import tantalum.shell.tool.Workspaces;
 import tantalum.value.id.Principal;
+import tantalum.local.wire.HelloFixture;
 
 /**
  * 本机工作区的开关和可用性（local-workspace 任务 14，L9、L17，需求 6.1、6.2）：总开关 × 子开关 × 电脑连着 × 连接程序允许。
@@ -57,7 +58,7 @@ class LocalWorkspaceTest {
         ToolCatalog catalog = new ToolCatalog();
         BuiltinTools.of(null).forEach(catalog::register);
         LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
-        gate = new PluginGate(catalog, switches, List.of(new LocalWorkspace(switches, links)), List.of(), List.of(), List.of(), java.util.Set.of());
+        gate = new PluginGate(catalog, switches, List.of(LocalWorkspaceFixture.of(switches, links)), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }
 
@@ -130,20 +131,20 @@ class LocalWorkspaceTest {
 
     @Test
     void theConnectorDecidesWhatEachKindNeeds() {
-        Hello hello = new Hello(Wire.PROTOCOL, "t", new Hello.Device("m", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root("/w"), new Hello.Root("/x")), false, new Hello.Shell(false, "no"), true, true);
+        Hello hello = HelloFixture.of(Wire.PROTOCOL, "t", new Hello.Device("m", "macos", "26.2", "arm64"),
+                List.of(new Hello.Root("/w"), new Hello.Root("/x")), false, HelloFixture.shell(false, "no"), true, true);
         assertTrue(LocalWorkspace.allows(hello, tantalum.local.tool.LocalTool.Kind.READ));
         assertFalse(LocalWorkspace.allows(hello, tantalum.local.tool.LocalTool.Kind.WRITE));
         assertFalse(LocalWorkspace.allows(hello, tantalum.local.tool.LocalTool.Kind.SHELL));
         // B1：git 装了就有 Git 工具，不看主目录是不是仓库（每次调用在电脑上按路径找仓库）
         assertTrue(LocalWorkspace.allows(hello, tantalum.local.tool.LocalTool.Kind.GIT));
-        Hello noGit = new Hello(Wire.PROTOCOL, "t", hello.device(), hello.roots(), false, hello.shell(), true, false);
+        Hello noGit = HelloFixture.of(Wire.PROTOCOL, "t", hello.device(), hello.roots(), false, hello.shell(), true, false);
         assertFalse(LocalWorkspace.allows(noGit, tantalum.local.tool.LocalTool.Kind.GIT));
     }
 
     @Test
     void switchStatesAreListedInOrder() {
-        LocalWorkspace workspace = new LocalWorkspace(switches, links);
+        LocalWorkspace workspace = LocalWorkspaceFixture.of(switches, links);
         switches.set(ALICE, Kind.LOCAL, "shell", false);
         assertEquals(Map.of("local-workspace", true, "fs-read", true, "git", true, "file-edit", true, "shell", false, "skills", true,
                 "wiki", true, "browser", true), workspace.switches(ALICE));
@@ -157,8 +158,8 @@ class LocalWorkspaceTest {
     void theSectionNamesTheSessionDirectoryWhenTheConnectorUnderstandsIt() {
         Hello.Device mac = new Hello.Device("m", "macos", "26.2", "arm64");
         List<Hello.Root> roots = List.of(new Hello.Root("/w"), new Hello.Root("/x"));
-        Hello three = new Hello(3, "t", mac, roots, true, new Hello.Shell(false, "no"), true, true);
-        Hello two = new Hello(2, "t", mac, roots, true, new Hello.Shell(false, "no"), true, true);
+        Hello three = HelloFixture.of(3, "t", mac, roots, true, HelloFixture.shell(false, "no"), true, true);
+        Hello two = HelloFixture.of(2, "t", mac, roots, true, HelloFixture.shell(false, "no"), true, true);
 
         String inside = LocalWorkspace.describe(three, true, false, "/w/app");
         assertTrue(inside.contains(" Working directory: /w/app. Allowed directories: /w, /x."), inside);

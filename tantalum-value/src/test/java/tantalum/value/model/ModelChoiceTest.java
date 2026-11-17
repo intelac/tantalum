@@ -24,6 +24,10 @@ import tantalum.value.json.Json;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.value.command.AssembleContextFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** model-picker 任务 1（M12、M13）：选择是“路线 + 模型 + 档位”；只换档位不算换模型；新字段在旧的构造里为空。 */
 class ModelChoiceTest {
@@ -49,10 +53,10 @@ class ModelChoiceTest {
         assertNull(new Prompt("s", List.of(), List.of()).model());
         assertEquals(SONNET, new Prompt("s", List.of(), List.of()).withModel(SONNET).model());
         assertNull(new ReasoningBlock("claude", new Json.Str("x")).route());
-        assertNull(new UserPrompt(new SubmissionId("a"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "t").model());
-        assertNull(new FollowUpSubmitted(new SubmissionId("a"), new RequestId("r"), "t").model());
-        assertNull(new ContextAssembled(new CommandId("c"), "s", List.of(), null, List.of()).model());
-        AssembleContext assemble = new AssembleContext(new CommandId("c"), new RunRef(USER, SESSION, new RunId("r")));
+        assertNull(UserPromptFixture.of(new SubmissionId("a"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "t").model());
+        assertNull(FollowUpSubmittedFixture.of(new SubmissionId("a"), new RequestId("r"), "t").model());
+        assertNull(ContextAssembledFixture.of(new CommandId("c"), "s", List.of(), null, List.of()).model());
+        AssembleContext assemble = AssembleContextFixture.of(new CommandId("c"), new RunRef(USER, SESSION, new RunId("r")));
         assertNull(assemble.requested());
         assertNull(assemble.current());
     }

@@ -31,10 +31,6 @@ public final class LineCodec {
         this.matched = new MatchedCodec(events.mapper());
     }
 
-    public RecordCodec records() {
-        return records;
-    }
-
     /** 编码一行（不含换行符），并把这一行写过的内容记进 {@code memo}。 */
     public String encode(Line line, RecordMemo memo) {
         EventEnvelope envelope = line.envelope();

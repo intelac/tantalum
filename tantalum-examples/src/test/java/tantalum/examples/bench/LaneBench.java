@@ -27,6 +27,8 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.Message;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.decision.SessionChangeFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * 写路径预算（非功能需求）：走真实的写入分发、用户通道和每会话文件（每批 fsync），
@@ -57,7 +59,7 @@ public final class LaneBench {
                 UserPrompt prompt = (UserPrompt) envelope.event();
                 String request = prompt.request().value();
                 // 结果行里有这次追加的用户消息，和真实的第一步一样大
-                StepRecord record = new StepRecord(envelope.seq(), new SessionChange(envelope.session(), envelope.principal(), false,
+                StepRecord record = new StepRecord(envelope.seq(), SessionChangeFixture.of(envelope.session(), envelope.principal(), false,
                         List.of(Message.user(prompt.text())), null, null, null, null, null, null, null), List.of(), List.of(), null, null,
                         List.of(), List.of());
                 holder[0].release(envelope, record, () -> {
@@ -79,7 +81,7 @@ public final class LaneBench {
                     SessionId id = new SessionId("warm" + session);
                     sent.put(request, System.nanoTime());
                     input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
-                            new UserPrompt(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)));
+                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)));
                     Thread.sleep(10);
                 }
                 Thread.sleep(2_000);
@@ -98,7 +100,7 @@ public final class LaneBench {
                     SessionId id = new SessionId("s" + session);
                     sent.put(request, System.nanoTime());
                     if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
-                            new UserPrompt(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)))) {
+                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)))) {
                         throw new IllegalStateException("input ring full");
                     }
                 }

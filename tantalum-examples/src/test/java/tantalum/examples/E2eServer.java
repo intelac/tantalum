@@ -42,6 +42,8 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * Playwright 端到端测试用的服务：固定端口、临时数据目录、脚本化模型（{@link E2eModel}），不访问外网。
@@ -256,7 +258,7 @@ public final class E2eServer {
         Files.writeString(Files.createDirectories(workspace.resolve(OTHER_USER)).resolve(LONG_FILE), "big-e2e-head " + "x".repeat(387));
         // 上次进程在这个运行刚开始时被杀：会话文件停在用户提问之后。启动时它要收尾为“因重启中断”。
         ResultWriter.write(new SessionPaths(data), List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER),
-                new SessionId(CRASHED_SESSION), null, new UserPrompt(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
+                new SessionId(CRASHED_SESSION), null, UserPromptFixture.of(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
                         new OwnerRef.OfSession(new SessionId(CRASHED_SESSION)), "hello 崩溃前"))));
         // 上次进程在执行工具时被杀：模型要读一个文件，命令已经发出，结果没有回来。
         Principal user = new Principal(USER);
@@ -265,9 +267,9 @@ public final class E2eServer {
         Instant at = Instant.parse("2026-11-01T09:05:00Z");
         ToolSpec readFile = new ToolSpec("read_file", "Read a file.", new Json.Obj(java.util.Map.of("type", new Json.Str("object"))), false);
         ResultWriter.write(new SessionPaths(data), List.of(
-                new EventEnvelope(1, at, user, tool, null, new UserPrompt(new SubmissionId("crashed-tool-submission"),
+                new EventEnvelope(1, at, user, tool, null, UserPromptFixture.of(new SubmissionId("crashed-tool-submission"),
                         new RequestId("crashed-tool-request"), new OwnerRef.OfSession(tool), "读一下 notes/hello.md")),
-                new EventEnvelope(2, at, user, tool, run, new ContextAssembled(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
+                new EventEnvelope(2, at, user, tool, run, ContextAssembledFixture.of(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
                         List.of(readFile), null, List.of())),
                 new EventEnvelope(3, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_2-0"),
                         List.of(new ToolCallBlock("crashed-call", "read_file", "{\"path\":\"notes/hello.md\"}",

@@ -40,6 +40,9 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** 需求 2.1a、H9：每个等待状态下收尾后都能接着用这段历史，且不重新执行任何东西。 */
 class RunInterruptedTest {
@@ -49,7 +52,7 @@ class RunInterruptedTest {
     private static LoopFixture atModel(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return loop;
     }
 
@@ -108,7 +111,7 @@ class RunInterruptedTest {
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
                 List.of(call("a", "safe1"), call("b", "safe2"), call("c", "write")), StopReason.TOOL_USE, "m", null, null, null, null));
         assertEquals("AwaitingTools", loop.phase());
-        loop.feed(loop.runId(), new ToolFinished(loop.last.commands().getFirst().id(), "a", "done", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.last.commands().getFirst().id(), "a", "done", false, null));
         assertClosed(loop);
 
         List<ContentBlock> results = loop.session().messages().getLast().content();
@@ -142,7 +145,7 @@ class RunInterruptedTest {
     @Test
     void unreadSteerIsKeptForTheNextRun() {
         LoopFixture loop = atModel();
-        loop.feed(loop.runId(), new SteerSubmitted(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(loop.runId(), SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
         assertClosed(loop);
         Message last = loop.session().messages().getLast();
         assertEquals(Role.USER, last.role());

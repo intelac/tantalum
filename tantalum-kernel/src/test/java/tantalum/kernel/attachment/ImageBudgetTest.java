@@ -14,6 +14,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolResultBlock;
+import tantalum.value.attachment.ImageRefFixture;
 
 /** 任务 14：从新往旧累计 base64 大小，超过 20 MiB 后更早的全部省略；省略过的一直省略（A10）。 */
 class ImageBudgetTest {
@@ -22,7 +23,7 @@ class ImageBudgetTest {
     private static final long FIVE_MIB_BASE64 = 3L * 1024 * 1024 * 5 / 4;
 
     private static ImageRef image(char tag, long bytes) {
-        return new ImageRef("sha256:" + String.valueOf(tag).repeat(64), tag + ".png", "image/png", bytes, 10, 10);
+        return ImageRefFixture.of("sha256:" + String.valueOf(tag).repeat(64), tag + ".png", "image/png", bytes, 10, 10);
     }
 
     private static Message user(ImageRef... images) {

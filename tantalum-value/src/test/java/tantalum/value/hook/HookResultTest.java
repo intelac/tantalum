@@ -18,14 +18,14 @@ class HookResultTest {
     @Test
     void allowCanCarryData() {
         ToolSpec tool = new ToolSpec("t", "d", new Json.Null());
-        Allow allow = new Allow(new PromptPatch("extra", List.of(tool)));
+        Allow allow = AllowFixture.of(new PromptPatch("extra", List.of(tool)));
         assertEquals("extra", allow.patch().systemAppend());
         assertEquals(List.of(tool), allow.patch().addTools());
     }
 
     @Test
     void requiredFieldsAreChecked() {
-        assertThrows(NullPointerException.class, () -> new Allow(null));
+        assertThrows(NullPointerException.class, () -> AllowFixture.of(null));
         assertThrows(NullPointerException.class, () -> new Stop(null));
         assertThrows(NullPointerException.class, () -> new NeedWork(null, new Json.Null()));
         assertThrows(NullPointerException.class, () -> new NeedWork("w", null));

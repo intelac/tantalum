@@ -26,6 +26,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.value.event.UserPromptFixture;
 
 /** 用内置转移表逐个喂事件，记录序列。不启线程、不用 mock。 */
 public final class LoopFixture {
@@ -63,7 +64,7 @@ public final class LoopFixture {
     }
 
     public Decision prompt(String text) {
-        return feed(null, new UserPrompt(new SubmissionId("sub" + seq), new RequestId("req" + seq),
+        return feed(null, UserPromptFixture.of(new SubmissionId("sub" + seq), new RequestId("req" + seq),
                 new OwnerRef.OfSession(SESSION), text));
     }
 

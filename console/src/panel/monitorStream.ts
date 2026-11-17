@@ -35,8 +35,3 @@ export function subscribeMonitor(listener: Listener): () => void {
     }
   };
 }
-
-/** 测试用：现在开没开。 */
-export function monitorOpen(): boolean {
-  return source !== null;
-}

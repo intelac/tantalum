@@ -30,6 +30,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.EndReason;
+import tantalum.shell.trace.TraceRecordFixture;
 
 /** 运行表（run-tree 需求 3、4）：实时写入和启动补齐结果相同，重启后结束的运行重算，筛选、排序和翻页。 */
 class RunIndexTest {
@@ -180,14 +181,14 @@ class RunIndexTest {
         List<RunRow> emitted = new ArrayList<>();
         RunCollector collector = new RunCollector(emitted::add, (owner, session, id) -> { throw new AssertionError("no rebuild"); });
         collector.onRecords(5, YI, List.of(
-                new UserInput(new Head("u", "5.0", run, 1, null, null, T1, T1), UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER),
+                TraceRecordFixture.userInput(new Head("u", "5.0", run, 1, null, null, T1, T1), UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER),
                 new RunHead(head, RunHead.Trigger.PROMPT, "RUNNING", null, null)));
         assertEquals(1, emitted.size());
         assertEquals("hi", emitted.getFirst().prompt());
         // 结束和同一步的最后一条记录一起到，运行头排在前面：最终行要包括那条记录
         collector.onRecords(6, YI, List.of(
                 new RunHead(head.ended(T2), RunHead.Trigger.PROMPT, "IDLE", EndReason.COMPLETED, null),
-                new UserInput(new Head("u2", "6.0", run, 1, null, null, T1, T1), UserInput.Mode.STEER, "more", TraceRecord.Source.USER)));
+                TraceRecordFixture.userInput(new Head("u2", "6.0", run, 1, null, null, T1, T1), UserInput.Mode.STEER, "more", TraceRecord.Source.USER)));
         assertEquals(2, emitted.size());
         assertEquals(EndReason.COMPLETED, emitted.getLast().endReason());
         assertEquals(0, collector.openRuns());

@@ -392,14 +392,6 @@ export interface Messages {
   toolChangesInHistory?: boolean;
 }
 
-export interface RunView {
-  run: string;
-  session: string;
-  phase: string;
-  endReason?: EndReason;
-  detail?: string;
-}
-
 // ---- 轨迹记录（`/api/sessions/{s}/trace`），和 `tantalum.shell.trace.TraceRecord` 一一对应。 ----
 
 export type HookPoint = "BEFORE_MODEL_CALL" | "BEFORE_TOOL_CALL" | "ON_FAILURE" | "BEFORE_RUN_END" | "ON_WORK_RESULT" | "BEFORE_COMPACT";
@@ -632,13 +624,6 @@ export interface TraceCall {
   additions?: { hook: string; text: string }[];
 }
 
-export interface TurnSummary {
-  number: number;
-  command: string;
-  messages: number;
-  outcome: "replied" | "failed" | "pending";
-}
-
 export interface Message {
   role: "USER" | "ASSISTANT" | "SYSTEM";
   content: ContentBlock[];
@@ -650,17 +635,6 @@ export interface TokenUsage {
   output: number;
   cacheRead: number;
   cacheWrite: number;
-}
-
-export interface Turn {
-  number: number;
-  prompt: {
-    system: string;
-    tools: { name: string; description: string }[];
-    messages: Message[];
-  };
-  reply?: { content: ContentBlock[]; stop: string; actualModel: string; usage?: TokenUsage };
-  failure?: { reason: FailureReason; retryable: boolean; detail: string; partialText?: string };
 }
 
 /** SSE 的 `chunk` 事件。 */
@@ -678,11 +652,6 @@ export interface Question {
   /** 补充说明，如工具参数的 JSON；可以为空。 */
   detail: LocalText;
   choices: { id: string; label: LocalText }[];
-}
-
-/** SSE 的 `question` 事件：这个会话的问题变了，再去取。 */
-export interface QuestionChanged {
-  session: string;
 }
 
 /** SSE 的 `PhaseChanged` 事件。 */

@@ -40,7 +40,6 @@ import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.model.ModelChoice;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 
@@ -79,23 +78,8 @@ public final class Engine implements AutoCloseable {
 
     /**
      * 打开存储，建环，把 Handler 接上，收尾上次没结束的运行，然后开门。失败时已经打开的倒序关掉再抛。
-     * {@code tools}、{@code hooks}、{@code workTypes}、{@code afterHooks} 是插件注册的；{@code routes} 是模型路线，这里启动它。
-     */
-    public Engine(TantalumProperties properties, Routes routes,
-                  List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
-                  EventCodec codec, Clock clock) throws IOException {
-        this(properties, routes, tools, hooks, workTypes, afterHooks, List.of(), codec, clock);
-    }
-
-    /** 同上，另有插件的面板（plugin-panel）。 */
-    public Engine(TantalumProperties properties, Routes routes,
-                  List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,
-                  List<Panel> panels, EventCodec codec, Clock clock) throws IOException {
-        this(properties, routes, tools, hooks, workTypes, afterHooks, panels, List.of(), codec, clock);
-    }
-
-    /**
-     * 同上，另有 memory-plugin 的插件成员（运行结束的听众、提交时附加内容、插件接口、上下文的一份）。
+     * {@code tools}、{@code hooks}、{@code workTypes}、{@code afterHooks}、{@code panels} 是插件注册的；{@code routes} 是模型路线，这里启动它。
+     * {@code members} 是 memory-plugin 的插件成员（运行结束的听众、提交时附加内容、插件接口、上下文的一份）。
      */
     public Engine(TantalumProperties properties, Routes routes,
                   List<Tool> tools, List<KernelHook> hooks, List<WorkType> workTypes, List<AfterToolHook> afterHooks,

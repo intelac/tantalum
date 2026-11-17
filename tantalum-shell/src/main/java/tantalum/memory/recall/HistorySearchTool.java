@@ -28,15 +28,6 @@ public final class HistorySearchTool implements Tool {
     private final Function<ToolContext, List<tantalum.memory.Forgetting.Forgotten>> forgotten;
     private final tantalum.memory.SearchBudget budget;
 
-    public HistorySearchTool(Function<ToolContext, PluginServices> services) {
-        this(services, context -> List.of());
-    }
-
-    public HistorySearchTool(Function<ToolContext, PluginServices> services,
-                             Function<ToolContext, List<tantalum.memory.Forgetting.Forgotten>> forgotten) {
-        this(services, forgotten, new tantalum.memory.SearchBudget());
-    }
-
     /** {@code forgotten} 给这个人忘掉过的说法（结果里按它过滤）；{@code budget} 是和另外两个找记忆的工具共用的一轮次数。 */
     public HistorySearchTool(Function<ToolContext, PluginServices> services,
                              Function<ToolContext, List<tantalum.memory.Forgetting.Forgotten>> forgotten, tantalum.memory.SearchBudget budget) {

@@ -25,6 +25,8 @@ import tantalum.shell.plugin.RunSegment;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.memory.DailyNotesFixture;
+import tantalum.shell.plugin.RunFinishedListenerFixture;
 
 /** memory-capture 需求 1、2、4、5：什么时候记、记一次、没值得记的不写、密钥不记、开关、排队、重试；摘录来自平台（memory-plugin）。 */
 class NoteTakerTest {
@@ -62,7 +64,7 @@ class NoteTakerTest {
         DailyNotes notes = new DailyNotes(ledger);
         NoteFiler filer = new NoteFiler(new MemoryStore(ledger, MemoryLimits.defaults()), new WorkingMemory(ledger), notes,
                 tantalum.shell.plugin.SensitiveText.current());
-        return new NoteTaker(settings, user -> userWants, user -> notes, user -> filer, writer, catchup, ZONE, new long[] {1, 1});
+        return NoteTakerFixture.of(settings, user -> userWants, user -> notes, user -> filer, writer, catchup, ZONE, new long[] {1, 1});
     }
 
     private static CaptureSettings on() {
@@ -74,7 +76,7 @@ class NoteTakerTest {
         NoteTaker taker = taker(true, model, on());
         assertTrue(taker.note(run("s-1_5", "COMPLETED", false)));
         assertFalse(taker.note(run("s-1_5", "COMPLETED", false)), "the same run is noted once");
-        DailyNotes.Note note = new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow();
+        DailyNotes.Note note = DailyNotesFixture.of(dir).read("2026-11-15", "s-1").orElseThrow();
         assertEquals("记忆计划", note.title());
         assertTrue(note.sections().getFirst().body().endsWith("- 用户在做 Tantalum 的记忆功能\n- 把记忆往前提"), note.sections().getFirst().body());
         assertTrue(note.sections().getFirst().body().startsWith("> "), "the card opens with what the user said, word for word");
@@ -82,7 +84,7 @@ class NoteTakerTest {
         assertTrue(note.sections().getFirst().heading().startsWith("07:24"));
         assertEquals(1, prompts.size(), "the second time does not even call the model");
         assertTrue(prompts.getFirst().contains("<turn>\n" + EXCERPT + "\n</turn>"), prompts.getFirst());
-        assertEquals(List.of("把记忆往前提"), new WorkingMemory(new DailyNotes(dir).ledger()).open().stream().map(item -> item.text()).toList(),
+        assertEquals(List.of("把记忆往前提"), new WorkingMemory(DailyNotesFixture.of(dir).ledger()).open().stream().map(item -> item.text()).toList(),
                 "only the task in the user's own words goes into working memory; the inferred note stays in the day's card");
     }
 
@@ -96,8 +98,8 @@ class NoteTakerTest {
         NoteTaker taker = new NoteTaker(on(), user -> true, user -> notes, user -> filer, model, NoteTaker.Catchup.NONE,
                 (tantalum.value.id.Principal user) -> ZoneId.of("America/Los_Angeles"));
         assertTrue(taker.note(run("s-1_5", "COMPLETED", false)));
-        assertTrue(new DailyNotes(dir).read("2026-11-15", "s-1").isEmpty());
-        DailyNotes.Note note = new DailyNotes(dir).read("2026-11-14", "s-1").orElseThrow();
+        assertTrue(DailyNotesFixture.of(dir).read("2026-11-15", "s-1").isEmpty());
+        DailyNotes.Note note = DailyNotesFixture.of(dir).read("2026-11-14", "s-1").orElseThrow();
         assertTrue(note.sections().getFirst().heading().startsWith("23:24"), note.sections().getFirst().heading());
         taker.close();
     }
@@ -109,7 +111,7 @@ class NoteTakerTest {
         assertFalse(NoteTaker.worthNoting(run("r", "CANCELLED", false)));
         assertFalse(NoteTaker.worthNoting(run("r", "STOPPED", false)));
         assertFalse(NoteTaker.worthNoting(run("r", "COMPLETED", true)));
-        assertFalse(NoteTaker.worthNoting(new FinishedRun(YI, S1, new RunId("r"), 1, null, false, END, null, "", "")));
+        assertFalse(NoteTaker.worthNoting(RunFinishedListenerFixture.finishedRun(YI, S1, new RunId("r"), 1, null, false, END, null, "", "")));
         NoteTaker taker = taker(true, model, on());
         taker.runFinished(new FinishedRun(YI, S1, new RunId("r"), 1, "COMPLETED", false, END, END, "", "", SEGMENTS, true));
         assertEquals(0, taker.pending(), "an off-the-record run is not queued");
@@ -121,12 +123,12 @@ class NoteTakerTest {
         NoteTaker taker = taker(true, model, on());
         reply = "NOTHING";
         assertFalse(taker.note(run("s-1_5", "COMPLETED", false)));
-        assertTrue(new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body().lines()
+        assertTrue(DailyNotesFixture.of(dir).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body().lines()
                 .allMatch(line -> line.startsWith("> ")), "nothing was noted; the card only keeps what the user said");
         String key = "sk-" + "ant-" + "api03-" + "B".repeat(40);
         reply = "- [fact] 用户的 key 是 " + key + " «把记忆往前提»\n- [note] 用户想先做记忆 «先做记忆»\n- [fact] 用户喜欢 Vim «喜欢 Vim»";
         assertTrue(taker.note(run("s-1_6", "COMPLETED", false)));
-        String body = new DailyNotes(dir).read("2026-11-15", "s-1").orElseThrow().sections().getLast().body();
+        String body = DailyNotesFixture.of(dir).read("2026-11-15", "s-1").orElseThrow().sections().getLast().body();
         assertEquals("- 用户想先做记忆", body.lines().filter(line -> !line.startsWith("> ")).collect(java.util.stream.Collectors.joining("\n")),
                 "the key and the unquoted claim are dropped");
     }

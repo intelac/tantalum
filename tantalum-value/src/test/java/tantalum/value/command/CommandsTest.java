@@ -24,8 +24,8 @@ class CommandsTest {
     @Test
     void everyCommandCarriesIdAndRun() {
         List<Command> commands = List.of(
-                new AssembleContext(ID, RUN),
-                new CallModel(ID, RUN, new Prompt("s", List.of(), List.of())),
+                AssembleContextFixture.of(ID, RUN),
+                CallModelFixture.of(ID, RUN, new Prompt("s", List.of(), List.of())),
                 new RunTool(ID, RUN, new ToolCallBlock("c", "grep", "{}", new Json.Null())),
                 new StartTimer(ID, RUN, Duration.ofSeconds(1)),
                 new DoWork(ID, RUN, "citation", new Json.Null()),

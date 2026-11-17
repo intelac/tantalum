@@ -1,6 +1,5 @@
 package tantalum.connect;
 
-import java.util.HashMap;
 import java.util.Map;
 import tantalum.local.shell.Unavailable;
 import tantalum.value.text.Bundle;
@@ -75,10 +74,6 @@ final class Words {
 
     Words(Language language) {
         this.bundle = Bundle.load(BUNDLE, language);
-    }
-
-    Language language() {
-        return bundle.language();
     }
 
     String say(Key key) {

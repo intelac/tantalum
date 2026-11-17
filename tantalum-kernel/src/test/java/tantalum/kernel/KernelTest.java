@@ -33,6 +33,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.value.event.UserPromptFixture;
 
 class KernelTest {
 
@@ -140,7 +141,7 @@ class KernelTest {
         table.register(Kernel.NEW_RUN, "UserPrompt", context -> { throw new IllegalStateException("boom"); });
         KernelState before = KernelState.empty();
         EventEnvelope prompt = new EventEnvelope(5, Instant.EPOCH, USER, SESSION, null,
-                new UserPrompt(new SubmissionId("sub"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi"));
         Decision decision = kernel(table).step(before, prompt);
         assertSame(before, decision.newState());
         assertEquals(List.of(new StepFailed(new RunRef(USER, SESSION, RunId.of(SESSION, 5)), "UserPrompt", "IllegalStateException")),

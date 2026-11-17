@@ -39,6 +39,8 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * waiting-state 需求 3：用一份“进程停在等用户回答”的数据目录启动真实服务。等人的运行不按“因重启中断”收尾，问题还在，
@@ -84,8 +86,8 @@ class WaitingRestartTest {
             arguments.put("timeout_seconds", new Json.Num(BigDecimal.valueOf(timeoutSeconds)));
         }
         ResultWriter.write(new SessionPaths(data()), List.of(
-                event(1, null, new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "clean up")),
-                event(2, RUN, new ContextAssembled(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
+                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "clean up")),
+                event(2, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 event(3, RUN, new ModelReplied(new CommandId("s1_2-0"),
                         List.of(new ToolCallBlock("a1", "ask_user", "{}", new Json.Obj(arguments))), StopReason.TOOL_USE, "m", null, null, null, null))));
     }

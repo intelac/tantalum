@@ -43,6 +43,7 @@ import tantalum.value.attachment.ImageRef;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
+import tantalum.local.wire.HelloFixture;
 
 /**
  * local-browser 需求 1.5、4.5、7.1、7.2、7.6：浏览器工具是转发到用户电脑的本机工具。什么时候可用、给模型的那句话、截图怎么进附件。
@@ -88,7 +89,7 @@ class LocalBrowserToolsTest {
             catalog.register(tool);
             tools.put(tool.name(), tool);
         }
-        workspace = new LocalWorkspace(switches, links);
+        workspace = LocalWorkspaceFixture.of(switches, links);
         gate = new PluginGate(catalog, switches, List.of(workspace), List.of(), List.of(), List.of(), java.util.Set.of());
         mac = Files.createDirectories(temp.resolve("mac"));
     }
@@ -219,7 +220,7 @@ class LocalBrowserToolsTest {
             assertTrue(gate.enabledTools(ALICE).contains("skill") || gate.enabledTools(ALICE).contains("read_file"));
         }
         Hello four = new Hello(4, "t", new Hello.Device("m", "macos", "26.2", "arm64"), List.of(new Hello.Root("/w")), true,
-                new Hello.Shell(false, "no"), true, true, Hello.Browser.available("Google Chrome", false));
+                HelloFixture.shell(false, "no"), true, true, Hello.Browser.available("Google Chrome", false));
         assertFalse(LocalWorkspace.allows(four, tantalum.local.tool.LocalTool.Kind.BROWSER), "protocol 4 never has browser tools");
         Hello five = new Hello(Wire.PROTOCOL, "t", four.device(), four.roots(), true, four.shell(), true, true, four.browser());
         assertTrue(LocalWorkspace.allows(five, tantalum.local.tool.LocalTool.Kind.BROWSER));

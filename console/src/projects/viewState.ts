@@ -77,7 +77,3 @@ export function readPending(session: string, area: Area | null = sessionArea()):
 export function savePending(session: string, id: string | null, area: Area | null = sessionArea()): void {
   writeStored(PENDING + session, id ?? "", area);
 }
-
-export function clearPending(session: string, area: Area | null = sessionArea()): void {
-  removeStored(PENDING + session, area);
-}

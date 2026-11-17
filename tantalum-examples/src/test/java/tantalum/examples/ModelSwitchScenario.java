@@ -52,6 +52,7 @@ import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.RequestOptions;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
+import tantalum.shell.model.ClaudeClientFixture;
 
 /**
  * model-picker 任务 17（M9、M11，需求 6.5）：真实的 Claude（严格思考校验 {@code prefix_mismatch_behavior: error}）和本机 qwen
@@ -156,7 +157,7 @@ class ModelSwitchScenario {
         List<String> qwenBodies = Collections.synchronizedList(new ArrayList<>());
         HttpServer proxy = recordingProxy(qwenBodies);
         ClaudeClient claude = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(),
-                new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "medium", false, Duration.ofSeconds(300), Duration.ofSeconds(300),
+                ClaudeClientFixture.settings("claude-sonnet-5-5", 8192, "medium", false, Duration.ofSeconds(300), Duration.ofSeconds(300),
                         OverflowRules.defaults(), true));
         OpenAiClient qwen = new OpenAiClient("http://127.0.0.1:" + proxy.getAddress().getPort() + "/v1", QWEN, null, 4096,
                 Duration.ofSeconds(300), Duration.ofSeconds(60), OverflowRules.defaults(), model -> false, model -> OpenAiThinking.CHAT_TEMPLATE);

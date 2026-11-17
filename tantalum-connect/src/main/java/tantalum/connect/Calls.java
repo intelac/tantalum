@@ -18,7 +18,6 @@ import java.util.stream.Stream;
 import tantalum.connect.Journal.Outcome;
 import tantalum.local.fs.AllowedDirs;
 import tantalum.local.shell.Shell;
-import tantalum.local.shell.Unavailable;
 import tantalum.local.tool.Browser;
 import tantalum.local.tool.LocalContext;
 import tantalum.local.tool.LocalResult;
@@ -74,16 +73,6 @@ final class Calls {
     /** 在跑的调用。取消或断开时从这里拿走并打断；线程跑完时自己拿不到，就知道已被取消，不再回结果。 */
     private final Map<String, Thread> running = new ConcurrentHashMap<>();
     private volatile String user;
-
-    /** {@code shell}：有 {@code --allow-shell} 而且电脑上找到了 shell（{@code commands} 可用）。 */
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal) {
-        this(dirs, write, shell, commands, journal, Tools.all());
-    }
-
-    /** 测试用：不能跑命令、换一套工具。 */
-    Calls(AllowedDirs dirs, boolean write, boolean shell, Journal journal, List<LocalTool> tools) {
-        this(dirs, write, shell, Shell.unavailable(Unavailable.of(Unavailable.Code.SHELL_NOT_ALLOWED)), journal, tools);
-    }
 
     Calls(AllowedDirs dirs, boolean write, boolean shell, Shell commands, Journal journal, List<LocalTool> tools) {
         this(dirs, write, shell, commands, journal, tools, null);

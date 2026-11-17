@@ -16,6 +16,7 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.model.PromptFixture;
 
 /** 两个真实模型共用的摘要模式请求：形状和内核将来发出的摘要调用相同。 */
 final class SummaryModePrompt {
@@ -34,7 +35,7 @@ final class SummaryModePrompt {
                 new Message(Role.ASSISTANT, List.of(new TextBlock("The port is 8443.")), false),
                 Message.user("Summarize the conversation so far in at most five lines: goal, constraints, progress, next steps. "
                         + "Keep file names and numbers exactly. Do not call any tool."));
-        return new Prompt("You are a helpful agent.", List.of(read), history, new Prompt.Output(false, 512));
+        return PromptFixture.of("You are a helpful agent.", List.of(read), history, new Prompt.Output(false, 512));
     }
 
     static String text(ModelOutcome.Replied replied) {

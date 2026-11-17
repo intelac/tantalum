@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,8 +151,4 @@ public final class LibrarianProposals {
         return store.addClaim(page, type, description, claim).isPresent();
     }
 
-    /** 测试用：现在的提议条数。 */
-    List<MemoryItem> pending() {
-        return new ArrayList<>(new PendingItems(ledger).list());
-    }
 }

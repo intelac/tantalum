@@ -29,18 +29,21 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.attachment.ImageRefFixture;
 
 class ToolStepsTest {
 
     private static void reply(LoopFixture loop, ContentBlock... calls) {
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(calls), StopReason.TOOL_USE, "m", null, null, null, null));
     }
 
     private static ToolFinished finished(Command command, String text, boolean error) {
         RunTool run = (RunTool) command;
-        return new ToolFinished(run.id(), run.call().id(), text, error, null);
+        return ToolFinishedFixture.of(run.id(), run.call().id(), text, error, null);
     }
 
     @Test
@@ -157,7 +160,7 @@ class ToolStepsTest {
     /** attachments 任务 17：工具交给模型的图片进工具结果，下一次请求带着它；回放得到同样的请求。 */
     @Test
     void toolImagesReachTheNextRequestAndReplayTheSame() {
-        tantalum.value.attachment.ImageRef shot = new tantalum.value.attachment.ImageRef("sha256:" + "a".repeat(64), "shot.png",
+        tantalum.value.attachment.ImageRef shot = ImageRefFixture.of("sha256:" + "a".repeat(64), "shot.png",
                 "image/png", 10, 4, 3);
         LoopFixture loop = new LoopFixture();
         reply(loop, call("a", "safe1"));

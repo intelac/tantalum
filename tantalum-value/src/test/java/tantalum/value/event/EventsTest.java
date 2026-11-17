@@ -27,15 +27,15 @@ class EventsTest {
     @Test
     void everyEventNamesItsTypeAndVersion() {
         List<Event> events = List.of(
-                new UserPrompt(SUB, REQ, new OwnerRef.OfSession(SESSION), "hi"),
-                new SteerSubmitted(SUB, REQ, "hi"),
-                new FollowUpSubmitted(SUB, REQ, "hi"),
+                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(SESSION), "hi"),
+                SteerSubmittedFixture.of(SUB, REQ, "hi"),
+                FollowUpSubmittedFixture.of(SUB, REQ, "hi"),
                 new Cancel(REQ),
-                new ContextAssembled(CMD, "system", List.of(), null, List.of()),
+                ContextAssembledFixture.of(CMD, "system", List.of(), null, List.of()),
                 new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null, null, null, null),
                 new ModelFailed(CMD, FailureReason.TIMEOUT, true, Duration.ZERO, "", "", null, null, null),
                 new ModelInterrupted(CMD, "partial", null, null, null),
-                new ToolFinished(CMD, "call", "out", false, null),
+                ToolFinishedFixture.of(CMD, "call", "out", false, null),
                 new TimerFired(CMD),
                 new WorkDone(CMD, "citation", new Json.Null(), false, null, null));
 

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tantalum.shell.model.OpenAiClient;
 import tantalum.shell.model.OverflowRules;
 import tantalum.shell.web.TestServer;
+import tantalum.shell.model.OpenAiClientFixture;
 
 /**
  * 本地 strata（qwen）跑与 Claude 相同的压缩场景：压缩是通用逻辑，两个模型用同一个用例。
@@ -36,7 +37,7 @@ class StrataScenarioTest {
         Files.createDirectories(workspace.resolve("notes"));
         CompactionScenario.writeNotes(workspace.resolve("notes"));
         Path data = temp.resolve("data");
-        OpenAiClient client = new OpenAiClient(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(600), Duration.ofSeconds(120),
+        OpenAiClient client = OpenAiClientFixture.of(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(600), Duration.ofSeconds(120),
                 OverflowRules.defaults());
         CompactionScenario.Verdict verdict;
         try (TestServer server = new TestServer(data, workspace, client, CompactionScenario.SETTINGS_OPENAI)) {
@@ -92,6 +93,6 @@ class StrataScenarioTest {
     }
 
     private static OpenAiClient client() {
-        return new OpenAiClient(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(600), Duration.ofSeconds(120), OverflowRules.defaults());
+        return OpenAiClientFixture.of(BASE + "/v1", MODEL, null, 16384, Duration.ofSeconds(600), Duration.ofSeconds(120), OverflowRules.defaults());
     }
 }

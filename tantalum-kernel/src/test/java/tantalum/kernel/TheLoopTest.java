@@ -25,6 +25,8 @@ import tantalum.value.model.StopReason;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** 设计图上的十圈。任何一条回边被改坏，都会在具体的一圈失败。 */
 class TheLoopTest {
@@ -45,7 +47,7 @@ class TheLoopTest {
         assertInstanceOf(AssembleContext.class, loop.onlyCommand(), "turn 1");
 
         // 第 2 圈
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         assertEquals("AwaitingModel", loop.phase(), "turn 2");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 2");
 
@@ -56,7 +58,7 @@ class TheLoopTest {
         RunTool search = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 3");
 
         // 第 4 圈：工具错误，索引还在建
-        loop.feed(loop.runId(), new ToolFinished(search.id(), "1", "index still building", true, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(search.id(), "1", "index still building", true, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 4");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 4");
 
@@ -67,7 +69,7 @@ class TheLoopTest {
         RunTool grep = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 5");
 
         // 第 6 圈
-        loop.feed(loop.runId(), new ToolFinished(grep.id(), "2", "INTEREST.cbl:42", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(grep.id(), "2", "INTEREST.cbl:42", false, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 6");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 6");
 
@@ -78,7 +80,7 @@ class TheLoopTest {
         RunTool read = assertInstanceOf(RunTool.class, loop.onlyCommand(), "turn 7");
 
         // 第 8 圈
-        loop.feed(loop.runId(), new ToolFinished(read.id(), "3", "COMPUTE INTEREST ...", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(read.id(), "3", "COMPUTE INTEREST ...", false, null));
         assertEquals("AwaitingModel", loop.phase(), "turn 8");
         assertInstanceOf(CallModel.class, loop.onlyCommand(), "turn 8");
 

@@ -18,10 +18,6 @@ public record ToolFinished(CommandId command, String toolCallId, String text, bo
         images = images == null ? List.of() : List.copyOf(images);
     }
 
-    public ToolFinished(CommandId command, String toolCallId, String text, boolean error, Instant startedAt) {
-        this(command, toolCallId, text, error, startedAt, List.of());
-    }
-
     @Override
     public String type() {
         return TYPE;

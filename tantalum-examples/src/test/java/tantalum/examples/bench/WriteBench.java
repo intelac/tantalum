@@ -30,6 +30,7 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * 写路径对比。四种写法，内容和大小相同，完成后读回核对条数：
@@ -183,7 +184,7 @@ public final class WriteBench {
                             pause(session * pace / sessions, i == 0, pace);
                         }
                         EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.EPOCH, principal, id, null,
-                                new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(id), TEXT));
+                                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(id), TEXT));
                         long begin = System.nanoTime();
                         try {
                             sink.write(session, seq.getAndIncrement(), envelope);

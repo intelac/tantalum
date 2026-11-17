@@ -44,14 +44,14 @@ class SkillUseTest {
     @Test
     void submissionsHaveNoSkillsUnlessGivenAndKeepTheirOwnCopy() {
         OwnerRef owner = new OwnerRef.OfSession(new SessionId("s"));
-        assertEquals(List.of(), new UserPrompt(SUB, REQ, owner, "hi").skills());
-        assertEquals(List.of(), new UserPrompt(SUB, REQ, owner, "hi", List.of(), null, "/work").skills());
+        assertEquals(List.of(), UserPromptFixture.of(SUB, REQ, owner, "hi").skills());
+        assertEquals(List.of(), UserPromptFixture.of(SUB, REQ, owner, "hi", List.of(), null, "/work").skills());
         assertEquals(List.of(), new UserPrompt(SUB, REQ, owner, "hi", List.of(), null, null, null).skills());
-        assertEquals(List.of(), new SteerSubmitted(SUB, REQ, "hi").skills());
-        assertEquals(List.of(), new SteerSubmitted(SUB, REQ, "hi", List.of()).skills());
+        assertEquals(List.of(), SteerSubmittedFixture.of(SUB, REQ, "hi").skills());
+        assertEquals(List.of(), SteerSubmittedFixture.of(SUB, REQ, "hi", List.of()).skills());
         assertEquals(List.of(), new SteerSubmitted(SUB, REQ, "hi", List.of(), null).skills());
-        assertEquals(List.of(), new FollowUpSubmitted(SUB, REQ, "hi").skills());
-        assertEquals(List.of(), new FollowUpSubmitted(SUB, REQ, "hi", List.of(), null).skills());
+        assertEquals(List.of(), FollowUpSubmittedFixture.of(SUB, REQ, "hi").skills());
+        assertEquals(List.of(), FollowUpSubmittedFixture.of(SUB, REQ, "hi", List.of(), null).skills());
         assertEquals(List.of(), new FollowUpSubmitted(SUB, REQ, "hi", List.of(), null, null).skills());
 
         List<SkillUse> given = new ArrayList<>(List.of(READ, FAILED));

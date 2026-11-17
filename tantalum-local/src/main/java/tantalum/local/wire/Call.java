@@ -26,13 +26,4 @@ public record Call(String id, String user, String session, String tool, Json arg
         arguments = arguments == null ? new Json.Obj(Map.of()) : arguments;
     }
 
-    /** 没有会话目录时。 */
-    public Call(String id, String user, String session, String tool, Json arguments, long timeoutMs) {
-        this(id, user, session, tool, arguments, timeoutMs, null, null);
-    }
-
-    /** 不是调 {@code skill} 工具时。 */
-    public Call(String id, String user, String session, String tool, Json arguments, long timeoutMs, String dir) {
-        this(id, user, session, tool, arguments, timeoutMs, dir, null);
-    }
 }

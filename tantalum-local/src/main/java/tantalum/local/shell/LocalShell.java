@@ -34,10 +34,6 @@ public final class LocalShell implements Shell {
     /** 放完整输出的目录；null 时只留头尾（测试、建不了临时目录时）。 */
     private final Spill spill;
 
-    public LocalShell(ShellKind kind, Path program, Map<String, String> env) {
-        this(kind, program, env, null);
-    }
-
     public LocalShell(ShellKind kind, Path program, Map<String, String> env, Spill spill) {
         this.kind = kind;
         this.program = program;

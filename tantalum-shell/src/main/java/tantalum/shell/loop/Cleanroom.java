@@ -50,11 +50,6 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     /** 内核或状态发布抛出后置位：之后的事件全部跳过，入口返回 503，而不是让消费者线程静默死掉。 */
     private volatile boolean broken;
 
-    public Cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
-                     Projections projections, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
-        this(kernel, halted, output, projections, facts, view, results, steps, evictor, Release.IMMEDIATE, envelope -> { });
-    }
-
     /** {@code processed} 在一个事件走完全程（结果落盘、命令放行，或者根本没交给内核）后调用。 */
     public Cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
                      Projections projections, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor,

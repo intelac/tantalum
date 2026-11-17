@@ -24,7 +24,7 @@ class MessagePageTest {
     /** 一个运行：提问、状态、{@code replies} 条回复。 */
     private RunId run(int replies) {
         RunId run = RunId.of(S, next);
-        items.add(new TranscriptItem.UserMessage((next++) + ".0", S, run, AT, "q", false));
+        items.add(TranscriptItemFixture.userMessage((next++) + ".0", S, run, AT, "q", false));
         items.add(TranscriptItem.RunStatus.started(S, run, AT, "AwaitingModel"));
         for (int i = 0; i < replies; i++) {
             items.add(new TranscriptItem.Text((next++) + ".0", S, run, AT, "a", false, false));
@@ -118,9 +118,9 @@ class MessagePageTest {
             run(1);
         }
         RunId running = RunId.of(S, next);
-        items.add(new TranscriptItem.UserMessage((next++) + ".0", S, running, AT, "q", false));
+        items.add(TranscriptItemFixture.userMessage((next++) + ".0", S, running, AT, "q", false));
         RunId queued = RunId.of(S, next);
-        items.add(new TranscriptItem.UserMessage((next++) + ".0", S, queued, AT, "queued", false));
+        items.add(TranscriptItemFixture.userMessage((next++) + ".0", S, queued, AT, "queued", false));
         for (int i = 0; i < 60; i++) {
             items.add(new TranscriptItem.Text((next++) + ".0", S, running, AT, "a", false, false));
         }

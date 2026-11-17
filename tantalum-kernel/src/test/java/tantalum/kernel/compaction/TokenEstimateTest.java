@@ -24,6 +24,8 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.SessionState;
+import tantalum.value.attachment.ImageRefFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 class TokenEstimateTest {
 
@@ -51,7 +53,7 @@ class TokenEstimateTest {
 
     @Test
     void settingsWithoutACoefficientEstimateTheOldWay() {
-        assertEquals(TokenEstimate.LEGACY, TokenEstimate.of(new CompactionSettings(1_000, 100, 10, 10, 10, 10)));
+        assertEquals(TokenEstimate.LEGACY, TokenEstimate.of(CompactionSettingsFixture.of(1_000, 100, 10, 10, 10, 10)));
         assertEquals(new TokenEstimate(1.5), TokenEstimate.of(new CompactionSettings(1_000, 100, 10, 10, 10, 10, 500, 1.5)));
         assertThrows(IllegalArgumentException.class, () -> new TokenEstimate(0));
     }
@@ -95,7 +97,7 @@ class TokenEstimateTest {
 
     // ---- 附件（A11）----
 
-    private static final ImageRef IMAGE = new ImageRef("sha256:" + "a".repeat(64), "cat.png", "image/png", 99, 2048, 1536);
+    private static final ImageRef IMAGE = ImageRefFixture.of("sha256:" + "a".repeat(64), "cat.png", "image/png", 99, 2048, 1536);
 
     @Test
     void imagesCountTheirPixelsPlusTheHandleText() {

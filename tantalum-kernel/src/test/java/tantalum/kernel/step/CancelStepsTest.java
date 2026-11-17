@@ -25,6 +25,8 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 class CancelStepsTest {
 
@@ -45,7 +47,7 @@ class CancelStepsTest {
     void unanweredToolCallsArePairedWithSyntheticResults() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
                 List.of(call("a", "safe1"), call("b", "write")), StopReason.TOOL_USE, "m", null, null, null, null));
         RunId run = loop.runId();
@@ -62,7 +64,7 @@ class CancelStepsTest {
     void lateToolResultAfterCancelDoesNotChangeHistory() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(),
                 List.of(call("a", "safe1")), StopReason.TOOL_USE, "m", null, null, null, null));
         var sent = loop.onlyCommandId();
@@ -70,7 +72,7 @@ class CancelStepsTest {
         loop.feed(run, CANCEL);
         KernelState before = loop.state;
 
-        loop.feed(run, new ToolFinished(sent, "a", "late", false, null));
+        loop.feed(run, ToolFinishedFixture.of(sent, "a", "late", false, null));
 
         assertSame(before, loop.state);
     }

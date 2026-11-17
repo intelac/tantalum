@@ -40,7 +40,7 @@ class ReadGrepTest {
         Files.createDirectory(root.resolve("sub"));
         Files.writeString(root.resolve("sub/b.cbl"), "COMPUTE TAX\n; rm -rf /tmp/x\n");
         Files.writeString(temp.resolve("secret.txt"), "COMPUTE SECRET");
-        context = new LocalContext("s", new AllowedDirs(List.of(root)), new Observations());
+        context = LocalContextFixture.of("s", new AllowedDirs(List.of(root)), new Observations());
         read = new ReadFile();
         grep = new Grep();
     }
@@ -200,7 +200,7 @@ class ReadGrepTest {
     void grepInAnotherAllowedDirectoryShowsAbsolutePaths() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other")).toRealPath();
         Files.writeString(other.resolve("c.cbl"), "COMPUTE OTHER\n");
-        LocalContext two = new LocalContext("s", new AllowedDirs(List.of(root, other)), new Observations());
+        LocalContext two = LocalContextFixture.of("s", new AllowedDirs(List.of(root, other)), new Observations());
         assertEquals(other.resolve("c.cbl") + ":1:COMPUTE OTHER", grep.run(two, args("pattern", "COMPUTE", "path", other.toString())).text());
         assertTrue(grep.run(two, args("pattern", "COMPUTE")).text().contains("sub/b.cbl:1:COMPUTE TAX"));
         assertTrue(grep.run(context, args("pattern", "COMPUTE", "path", other.toString())).error());

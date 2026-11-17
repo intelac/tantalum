@@ -24,6 +24,7 @@ import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContextFixture;
 
 /** 记录 64 个活跃运行、长会话下 {@code Kernel.step} 的 P99。门槛 5 ms，不含 journal 写入。 */
 class KernelStepBenchmarkTest {
@@ -47,7 +48,7 @@ class KernelStepBenchmarkTest {
             for (int m = 0; m < 500; m++) {
                 history = history.append(Message.user("message " + m));
             }
-            state = state.with(history.startRun(ref.run()).withContext(new SessionContext("system", List.of(), null, List.of())))
+            state = state.with(history.startRun(ref.run()).withContext(SessionContextFixture.of("system", List.of(), null, List.of())))
                     .with(RunState.start(ref, new OwnerRef.OfSession(session))
                             .withPhase(new Awaiting(Set.of(waiting), "AwaitingModel")));
         }

@@ -23,6 +23,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.model.ToolUnlock;
+import tantalum.value.event.ToolFinishedFixture;
 
 /**
  * browser-on-demand 需求 2：调过入口工具以后，同一轮的下一次调用模型就有其余的工具；只加一次；下一次提问、压缩后都留着；
@@ -54,7 +55,7 @@ class ToolUnlockStepsTest {
     private static void finishAll(LoopFixture loop, boolean error) {
         for (Command command : loop.last.commands()) {
             RunTool run = (RunTool) command;
-            loop.feed(loop.runId(), new ToolFinished(run.id(), run.call().id(), "done", error, null));
+            loop.feed(loop.runId(), ToolFinishedFixture.of(run.id(), run.call().id(), "done", error, null));
         }
     }
 

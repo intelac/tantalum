@@ -60,11 +60,6 @@ public final class LocalWorkspace implements ToolGroup {
     private final LocalLinks links;
     private final LocalDirs dirs;
 
-    /** 没有地方填目录时（测试）：技能和知识库都当没填。 */
-    public LocalWorkspace(PluginSwitches switches, LocalLinks links) {
-        this(switches, links, LocalDirs.NONE);
-    }
-
     public LocalWorkspace(PluginSwitches switches, LocalLinks links, LocalDirs dirs) {
         this.switches = switches;
         this.links = links;
@@ -268,19 +263,6 @@ public final class LocalWorkspace implements ToolGroup {
 
     private static String osName(String os) {
         return "macos".equalsIgnoreCase(os) ? "macOS" : os;
-    }
-
-    /** 电脑主目录里的 {@code AGENTS.md}；没连上、总开关关着、2 秒没回都是空。 */
-    public Optional<String> agents(Principal user) throws InterruptedException {
-        return agents(user, null);
-    }
-
-    /** 同上，会话有工作目录时从那里读。 */
-    public Optional<String> agents(Principal user, String dir) throws InterruptedException {
-        if (!switches.enabled(user, LOCAL, MASTER)) {
-            return Optional.empty();
-        }
-        return links.agents(user, dir);
     }
 
     /**

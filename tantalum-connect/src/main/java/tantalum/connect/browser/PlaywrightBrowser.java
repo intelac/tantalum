@@ -52,10 +52,6 @@ public final class PlaywrightBrowser implements Browser {
     /** Playwright MCP 写快照、截图文件的目录（{@code --output-dir}）；每次调用后清空，不让它只增不删（QAgent 问题 26）。可以为 null。 */
     private final java.nio.file.Path output;
 
-    public PlaywrightBrowser(Tools mcp) {
-        this(mcp, null);
-    }
-
     public PlaywrightBrowser(Tools mcp, java.nio.file.Path output) {
         this.mcp = mcp;
         this.output = output;

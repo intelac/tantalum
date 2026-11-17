@@ -61,13 +61,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
     /** 只供跳号回归：让序号跳号运行，证明没有代码依赖序号连续。 */
     private static final String SEQUENCE_STEP = "tantalum.test.sequence-step";
 
-    static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
-                         BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened) {
-        return open(properties, stores, toolbox, queries, clock, receipts, closing, hooks, opened, Probe.NONE, List.of());
-    }
-
     /**
-     * 同上，{@code probe} 是实时监视的埋点（live-monitor），接到各个环节上；{@code contributors} 是插件给上下文的那一份（memory-plugin）。
+     * 按引用顺序把环和 Handler 接起来。{@code probe} 是实时监视的埋点（live-monitor），接到各个环节上；{@code contributors} 是插件给上下文的那一份（memory-plugin）。
      */
     static Pipeline open(TantalumProperties properties, Stores stores, Toolbox toolbox, Queries queries, Clock clock, Receipts receipts,
                          BooleanSupplier closing, List<KernelHook> hooks, List<AutoCloseable> opened, Probe probe,

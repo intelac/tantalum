@@ -44,11 +44,6 @@ final class PluginRunListeners implements AutoCloseable {
     private final List<Thread> workers = new ArrayList<>();
     private volatile boolean closed;
 
-    PluginRunListeners(List<RunFinishedListener> listeners, BiPredicate<String, Principal> enabled, Records records,
-                       Function<SessionId, String> titles) {
-        this(listeners, enabled, records, titles, tool -> null, (user, session) -> false, java.util.Set::of);
-    }
-
     /**
      * {@code pluginOf} 查工具属于哪个插件（分段里用）；{@code offRecord} 查会话是不是“不进记忆”的，{@code personal} 是个人插件的名字：
      * 不进记忆的会话不通知个人插件（memory-final-plan 第 11 节）。

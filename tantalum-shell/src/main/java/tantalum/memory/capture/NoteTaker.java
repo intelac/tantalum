@@ -85,21 +85,13 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
     private final long[] backoff;
     private volatile boolean closed;
 
-    /** {@code filers} 给这个人的归档（写页面、工作记忆、当天卡）；{@code catchup} 补抓用。 */
-    public NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
-                     Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, ZoneId zone) {
-        this(settings, userWants, notes, filers, writer, catchup, user -> zone, BACKOFF_MILLIS);
-    }
-
-    /** 同上，时区按人（{@link tantalum.shell.plugin.PluginServices#zone}）。 */
+    /**
+     * {@code filers} 给这个人的归档（写页面、工作记忆、当天卡）；{@code catchup} 补抓用；
+     * {@code zones} 是每个人的时区（{@link tantalum.shell.plugin.PluginServices#zone}）。
+     */
     public NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
                      Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, Function<Principal, ZoneId> zones) {
         this(settings, userWants, notes, filers, writer, catchup, zones, BACKOFF_MILLIS);
-    }
-
-    NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,
-              Function<Principal, NoteFiler> filers, Writer writer, Catchup catchup, ZoneId zone, long[] backoff) {
-        this(settings, userWants, notes, filers, writer, catchup, user -> zone, backoff);
     }
 
     NoteTaker(CaptureSettings settings, Predicate<Principal> userWants, Function<Principal, DailyNotes> notes,

@@ -87,10 +87,6 @@ public final class ViewAs extends OncePerRequestFilter {
     private final Map<String, Long> seen = new ConcurrentHashMap<>();
     private final Map<String, Long> recorded = new ConcurrentHashMap<>();
 
-    public ViewAs(UserStore users, boolean enabled, Clock clock) {
-        this(users, enabled, clock, null);
-    }
-
     /** {@code log} 是查看记录（memory-final-plan 第 13 节），可以为 null（测试）。 */
     public ViewAs(UserStore users, boolean enabled, Clock clock, ViewLog log) {
         this.users = users;

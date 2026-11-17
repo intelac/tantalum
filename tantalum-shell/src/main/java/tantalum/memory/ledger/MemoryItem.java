@@ -42,7 +42,6 @@ public record MemoryItem(String id, int version, State state, Kind kind, String 
                          Instant created, Instant updated) {
 
     public static final String PERSONAL = "personal";
-    public static final String PROJECT_PREFIX = "project:";
 
     public MemoryItem {
         Objects.requireNonNull(id, "id");
@@ -120,12 +119,6 @@ public record MemoryItem(String id, int version, State state, Kind kind, String 
     public MemoryItem withLastConfirmed(Instant value) {
         return new MemoryItem(id, version, state, kind, page, scope, source, quote, provenance, actor, validFrom, supersededBy,
                 value, confidence, derivedFrom, status, pendingConfirm, text, attrs, owner, visibleTo, certifiedHash, consent,
-                created, updated);
-    }
-
-    public MemoryItem withConfidence(Confidence value) {
-        return new MemoryItem(id, version, state, kind, page, scope, source, quote, provenance, actor, validFrom, supersededBy,
-                lastConfirmed, value, derivedFrom, status, pendingConfirm, text, attrs, owner, visibleTo, certifiedHash, consent,
                 created, updated);
     }
 

@@ -27,6 +27,7 @@ import tantalum.shell.web.TestServer;
 import tantalum.value.event.EventEnvelope;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tantalum.shell.model.ClaudeClientFixture;
 
 /**
  * 任务恢复，用真实的 Claude：在模型调用进行中杀掉 JVM，重启后运行自动收尾且不会重放那次调用；
@@ -121,7 +122,7 @@ class ClaudeCrashRecoveryTest {
         assertTrue(types.getLast().equals("ContextAssembled") || types.getLast().equals("ToolFinished"),
                 "the journal must end right before a model call: " + types);
 
-        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
+        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), ClaudeClientFixture.settings("claude-sonnet-5-5", 8192, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
         try (TestServer restarted = new TestServer(data, workspace, client)) {
             // 文件工具在电脑上执行（local-workspace）：恢复后连一台测试电脑，接着问时模型能读 note.txt
             restarted.connectComputer("alice", workspace.resolve("alice"), false);

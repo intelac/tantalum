@@ -18,6 +18,8 @@ import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
 import tantalum.value.model.StopReason;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** core-tools C16、需求 8 第 5、6 条：钩子按会话记下的插件名单过滤。 */
 class PluginFilterTest {
@@ -38,7 +40,7 @@ class PluginFilterTest {
     }
 
     private static void assemble(LoopFixture loop, List<String> plugins) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of(), List.of(), plugins));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of(), List.of(), plugins));
     }
 
     private static void endTurn(LoopFixture loop) {
@@ -73,7 +75,7 @@ class PluginFilterTest {
         assemble(loop, List.of("notes"));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(call("c1", "grep")), StopReason.TOOL_USE, "m", null,
                 null, null, null));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "c1", "found", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "c1", "found", false, null));
         endTurn(loop);
         assertEquals(List.of("beforeModelCall", "beforeToolCall", "beforeModelCall"), notes.calls);
 

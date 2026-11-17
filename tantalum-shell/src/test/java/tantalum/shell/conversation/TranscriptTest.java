@@ -32,6 +32,10 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.FailureReason;
 import tantalum.value.state.EndReason;
+import tantalum.value.event.FollowUpSubmittedFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /** 消息、思考和回复文本的顺序。工具链的细节在 {@link TranscriptToolTest}。 */
 class TranscriptTest {
@@ -40,7 +44,7 @@ class TranscriptTest {
 
     /** 窗口 1000、预留 200、保留 70：阈值 800。 */
     private static final tantalum.value.state.CompactionSettings SETTINGS =
-            new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
+            CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
 
     private static String block(String tag) {
         return (tag + " ").repeat(45).substring(0, 90);
@@ -58,7 +62,7 @@ class TranscriptTest {
     private RunId nextRun(String text) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
-        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
         return run;
     }
 
@@ -79,7 +83,7 @@ class TranscriptTest {
         assertTrue(fx.items(Text.class).stream().noneMatch(item -> item.text().contains("Goal")), "the summary is not a reply");
         assertTrue(fx.items(Thinking.class).stream().noneMatch(item -> item.text().equals("summarizing")));
         assertEquals("AwaitingContext", fx.status(run).phase(), "the context is reassembled after compaction");
-        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
 
         fx.feed(run, fx.reply(text("a3")));
         assertEquals("a3", fx.items(Text.class).getLast().text());
@@ -95,7 +99,7 @@ class TranscriptTest {
         RunId run = runNeedingCompaction();
         fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(50, 20, 0, 0), text("Goal: q")));
         assertNull(fx.status(run).usage(), "the summary call is on the compaction mark, not on the run");
-        fx.feed(run, new tantalum.value.event.ContextAssembled(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
+        fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), "sys", List.of(), SETTINGS, List.of()));
 
         fx.feed(run, fx.reply(new tantalum.value.model.TokenUsage(100, 5, 40, 7), TranscriptFixture.call("c1", "read_file")));
         assertEquals(new tantalum.value.model.TokenUsage(100, 5, 40, 7), fx.status(run).usage());
@@ -237,7 +241,7 @@ class TranscriptTest {
     @Test
     void steerDuringRunBelongsToThatRunAndIsNotQueued() {
         RunId run = fx.start("hi");
-        fx.feed(null, new SteerSubmitted(new SubmissionId("st"), new RequestId("rs"), "also this"));
+        fx.feed(null, SteerSubmittedFixture.of(new SubmissionId("st"), new RequestId("rs"), "also this"));
 
         UserMessage steer = fx.items(UserMessage.class).get(1);
         assertEquals("also this", steer.text());
@@ -248,7 +252,7 @@ class TranscriptTest {
     @Test
     void followUpIsQueuedUntilItsOwnRunStarts() {
         RunId first = fx.start("hi");
-        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("rf"), "later"));
+        fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
 
         UserMessage queued = fx.items(UserMessage.class).get(1);
         assertTrue(queued.queued());

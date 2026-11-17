@@ -40,24 +40,6 @@ public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef ow
         this(submission, request, owner, text, attachments, model, dir, skills, List.of());
     }
 
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,
-                      ModelChoice model, String dir) {
-        this(submission, request, owner, text, attachments, model, dir, List.of());
-    }
-
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,
-                      ModelChoice model) {
-        this(submission, request, owner, text, attachments, model, null, List.of());
-    }
-
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments) {
-        this(submission, request, owner, text, attachments, null, null, List.of());
-    }
-
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text) {
-        this(submission, request, owner, text, List.of(), null, null, List.of());
-    }
-
     @Override
     public String type() {
         return TYPE;

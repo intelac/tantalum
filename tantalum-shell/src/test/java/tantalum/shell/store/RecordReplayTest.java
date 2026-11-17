@@ -38,7 +38,7 @@ class RecordReplayTest {
     void start() throws Exception {
         scenario = new ReplayScenario(dir);
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
-        replay = new SessionReplay(scenario.paths, reader, new UsageLedger(scenario.index, scenario.writer), scenario.kernel);
+        replay = SessionReplayFixture.of(scenario.paths, reader, new UsageLedger(scenario.index, scenario.writer), scenario.kernel);
         records = new RecordReplay(scenario.paths, reader);
         scenario.run();
         scenario.writer.flush();

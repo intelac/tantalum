@@ -45,6 +45,10 @@ import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /**
  * 一组交错的会话，用真实内核走、写真实文件：工具轮和 thinking、压缩、另一个用户、额度用完。
@@ -58,7 +62,7 @@ final class ReplayScenario implements AutoCloseable {
     static final SessionId COMPACTED = new SessionId("compacted");
     static final SessionId STOPPED = new SessionId("stopped");
     static final SessionId BOBS = new SessionId("bobs");
-    static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
     static final Instant AT = Instant.parse("2026-11-02T01:00:00Z");
     static final long QUOTA = 3000;
 
@@ -117,7 +121,7 @@ final class ReplayScenario implements AutoCloseable {
     void prompt(Principal principal, SessionId session, String text) throws Exception {
         String request = "req-" + requests++;
         track(principal, session, fixture.send(principal, session, null, AT,
-                new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text)));
+                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text)));
     }
 
     private static ToolCallBlock call(String id) {
@@ -130,7 +134,7 @@ final class ReplayScenario implements AutoCloseable {
         var run = next.command().run().run();
         switch (next.command()) {
             case AssembleContext assemble -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ContextAssembled(assemble.id(), "system", List.of(), SETTINGS,
+                    ContextAssembledFixture.of(assemble.id(), "system", List.of(), SETTINGS,
                     List.of(new ContextSection("memory-index", "memory-" + dynamic++, true)))));
             case CallModel model -> {
                 boolean summary = !model.prompt().output().toolsAllowed();
@@ -141,7 +145,7 @@ final class ReplayScenario implements AutoCloseable {
                         new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0), null, null, null)));
             }
             case RunTool tool -> track(next.principal(), next.session(), fixture.send(next.principal(), next.session(), run, AT,
-                    new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null)));
+                    ToolFinishedFixture.of(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null)));
             default -> { }
         }
     }

@@ -25,11 +25,13 @@ import tantalum.value.state.Plan;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 import tantalum.value.state.UsageAnchor;
+import tantalum.value.state.CompactionSettingsFixture;
+import tantalum.value.state.SessionContextFixture;
 
 class CompactorTest {
 
     /** 窗口 1000、预留 200：阈值 800，K = min(100, 200) = 100。 */
-    private static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 100, 60, 30, 500);
+    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 100, 60, 30, 500);
     private static final List<ToolSpec> NO_TOOLS = List.of();
 
     /** 每条消息 30 token（90 字节）。 */
@@ -43,7 +45,7 @@ class CompactorTest {
 
     private static SessionState session(CompactionSettings settings, Message... messages) {
         SessionState session = SessionState.start(new SessionId("s"), new Principal("u"))
-                .withContext(new SessionContext("sys", NO_TOOLS, settings, List.of()));
+                .withContext(SessionContextFixture.of("sys", NO_TOOLS, settings, List.of()));
         for (Message message : messages) {
             session = session.append(message);
         }

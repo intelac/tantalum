@@ -48,6 +48,8 @@ import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** 真实的环、journal 和内核，只有 Handler 是假的。 */
 class RingIntegrationTest {
@@ -82,7 +84,7 @@ class RingIntegrationTest {
             InputRing input = new InputRing(1024);
             ResultPublisher publisher = new ResultPublisher(input, inFlight, Clock.systemUTC(), 640);
             HandlerDispatcher dispatcher = new HandlerDispatcher(Map.of(
-                    AssembleContext.class, handler(c -> new ContextAssembled(c.id(), "system", List.of(), null, List.of())),
+                    AssembleContext.class, handler(c -> ContextAssembledFixture.of(c.id(), "system", List.of(), null, List.of())),
                     CallModel.class, handler(c -> new ModelReplied(c.id(), List.of(new TextBlock("done")),
                             StopReason.END_TURN, "m", null, null, null, null))), inFlight, publisher);
             OutputRing output = new OutputRing(1024, dispatcher);
@@ -107,7 +109,7 @@ class RingIntegrationTest {
             for (int i = 0; i < sessions; i++) {
                 SessionId session = new SessionId("s" + i);
                 assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.EPOCH,
-                        new Principal("u" + (i % 3)), session, null, new UserPrompt(new SubmissionId("sub" + i),
+                        new Principal("u" + (i % 3)), session, null, UserPromptFixture.of(new SubmissionId("sub" + i),
                                 new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"))));
             }
 

@@ -23,9 +23,6 @@ public final class NotePrompt {
     /** 一条笔记：种类、要点、模型给的原话；{@code replaces} 是模型写明它取代的那条已有说法的编号，没有为 null。 */
     public record Note(Kind kind, String text, String quote, String replaces) {
 
-        public Note(Kind kind, String text, String quote) {
-            this(kind, text, quote, null);
-        }
     }
 
     /** 笔记的种类：前三种进页面，中间三种进工作记忆，“笔记”只进当天卡；“了结”不是新笔记，是关掉一项开着的事（要点是那一项的编号）。 */

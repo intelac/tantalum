@@ -14,6 +14,7 @@ import java.util.jar.Manifest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tantalum.local.wire.Hello;
+import tantalum.local.wire.HelloFixture;
 
 /** 服务器提供下载的连接程序和版本比较（connector-jar 需求 2）。 */
 class ConnectorJarTest {
@@ -34,7 +35,7 @@ class ConnectorJarTest {
 
     private static Hello hello(int protocol, String version, String sha) {
         return new Hello(protocol, version, new Hello.Device("pc", "windows-11", "10.0", "amd64"), List.of(), false,
-                new Hello.Shell(false, "--allow-shell was not given"), true, false, null, sha);
+                HelloFixture.shell(false, "--allow-shell was not given"), true, false, null, sha);
     }
 
     @Test

@@ -16,6 +16,7 @@ import tantalum.shell.trace.TraceRecord.Source;
 import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
+import tantalum.shell.trace.TraceRecordFixture;
 
 /** 按运行从新到旧切页：至少 20 个运行或 400 条记录，满足其一就停，至少一个运行；{@code before} 游标；按运行定位。 */
 class TracePageTest {
@@ -29,7 +30,7 @@ class TracePageTest {
             RunId run = RunId.of(SESSION, 10L * i);
             for (int j = 0; j < size; j++) {
                 Head head = new Head("u:" + i + "." + j, (10L * i) + "." + j, run, i + 1, 1, null, Instant.EPOCH, Instant.EPOCH);
-                records.add(new UserInput(head, UserInput.Mode.PROMPT, "x", Source.USER));
+                records.add(TraceRecordFixture.userInput(head, UserInput.Mode.PROMPT, "x", Source.USER));
             }
         }
         Collections.reverse(records);

@@ -67,7 +67,7 @@ class ForgettingTest {
     @Test
     void takingBackOneStatementKeepsTheRestOfThePage() {
         tantalum.value.id.Principal user = new tantalum.value.id.Principal("u");
-        MemoryStores stores = new MemoryStores(principal -> dir, MemoryLimits.defaults(), Clock.fixed(Instant.parse("2026-11-16T01:00:00Z"), ZoneOffset.UTC));
+        MemoryStores stores = MemoryStoresFixture.of(principal -> dir, MemoryLimits.defaults(), Clock.fixed(Instant.parse("2026-11-16T01:00:00Z"), ZoneOffset.UTC));
         MemoryStore pages = stores.of(user);
         Ledger account = stores.ledger(user);
         pages.write("preferences", "feedback", "How the user wants things done", "跟用户说话要简短\n所有费用按整数计算，不要小数\n");
@@ -122,7 +122,7 @@ class ForgettingTest {
     @Test
     void theModelCannotForgetADecisionYouApproved() {
         tantalum.value.id.Principal user = new tantalum.value.id.Principal("u");
-        MemoryStores stores = new MemoryStores(principal -> dir, MemoryLimits.defaults(), Clock.fixed(Instant.parse("2026-11-16T01:00:00Z"), ZoneOffset.UTC));
+        MemoryStores stores = MemoryStoresFixture.of(principal -> dir, MemoryLimits.defaults(), Clock.fixed(Instant.parse("2026-11-16T01:00:00Z"), ZoneOffset.UTC));
         MemoryStore pages = stores.of(user);
         Ledger account = stores.ledger(user);
         pages.write("decision-database", "project", "数据库选型", "数据库用 PostgreSQL 16");

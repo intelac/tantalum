@@ -46,12 +46,6 @@ public final class SessionIndex implements AutoCloseable {
     public record Session(SessionId session, Principal principal, String title, Instant lastActivity, String runStatus,
                           RunId activeRun, long fileOffset, String dir, String renamed, boolean offRecord) {
 
-        /** 不是“不进记忆”的会话时（测试）。 */
-        public Session(SessionId session, Principal principal, String title, Instant lastActivity, String runStatus,
-                       RunId activeRun, long fileOffset, String dir, String renamed) {
-            this(session, principal, title, lastActivity, runStatus, activeRun, fileOffset, dir, renamed, false);
-        }
-
         /** 侧栏显示的名字：改过的优先。 */
         public String shownTitle() {
             return renamed == null ? title : renamed;

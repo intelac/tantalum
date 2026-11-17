@@ -42,6 +42,9 @@ import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 class TurnQueryTest {
 
@@ -82,8 +85,8 @@ class TurnQueryTest {
     }
 
     private void writeScript() throws Exception {
-        write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), null, List.of()));
+        write(null, UserPromptFixture.of(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), "hi"));
+        write(RUN, ContextAssembledFixture.of(new CommandId("s_0-0"), "system prompt", List.of(), null, List.of()));
         write(RUN, new ModelFailed(new CommandId("s_1-0"), FailureReason.SERVER_ERROR, true, null, "pa", "500", null, null, null));
         write(RUN, new TimerFired(new CommandId("s_2-0")));
         write(RUN, new ModelReplied(new CommandId("s_3-0"), List.of(new TextBlock("answer")), StopReason.END_TURN, "m", null, null, null, null));
@@ -132,22 +135,22 @@ class TurnQueryTest {
     /** 摘要调用是一个 turn，prompt 里工具被禁用；压缩结果在轨迹里看（TracePassTest）。 */
     @Test
     void summaryCallIsATurnWithToolsDisabled() throws Exception {
-        tantalum.value.state.CompactionSettings settings = new tantalum.value.state.CompactionSettings(1000, 200, 70, 60, 30, 500);
+        tantalum.value.state.CompactionSettings settings = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
         String q = ("q ").repeat(45);
-        write(null, new UserPrompt(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
-        write(RUN, new ContextAssembled(new CommandId("s_0-0"), "system prompt", List.of(), settings, List.of()));
+        write(null, UserPromptFixture.of(new SubmissionId("a"), new RequestId("a"), new OwnerRef.OfSession(SESSION), q));
+        write(RUN, ContextAssembledFixture.of(new CommandId("s_0-0"), "system prompt", List.of(), settings, List.of()));
         write(RUN, new ModelReplied(new CommandId("s_1-0"), List.of(new TextBlock(("a ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(700, 10, 0, 0), null, null, null));
-        write(null, new UserPrompt(new SubmissionId("b"), new RequestId("b"), new OwnerRef.OfSession(SESSION), q));
-        write(RunId.of(SESSION, 3), new ContextAssembled(new CommandId("s_3-0"), "system prompt", List.of(), settings, List.of()));
+        write(null, UserPromptFixture.of(new SubmissionId("b"), new RequestId("b"), new OwnerRef.OfSession(SESSION), q));
+        write(RunId.of(SESSION, 3), ContextAssembledFixture.of(new CommandId("s_3-0"), "system prompt", List.of(), settings, List.of()));
         write(RunId.of(SESSION, 3), new ModelReplied(new CommandId("s_4-0"), List.of(new TextBlock(("b ").repeat(45))), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(790, 10, 0, 0), null, null, null));
-        write(null, new UserPrompt(new SubmissionId("c"), new RequestId("c"), new OwnerRef.OfSession(SESSION), q));
+        write(null, UserPromptFixture.of(new SubmissionId("c"), new RequestId("c"), new OwnerRef.OfSession(SESSION), q));
         RunId second = RunId.of(SESSION, 6);
-        write(second, new ContextAssembled(new CommandId("s_6-0"), "system prompt", List.of(), settings, List.of()));
+        write(second, ContextAssembledFixture.of(new CommandId("s_6-0"), "system prompt", List.of(), settings, List.of()));
         write(second, new ModelReplied(new CommandId("s_7-0"), List.of(new TextBlock("Goal: q")), StopReason.END_TURN, "m",
                 new tantalum.value.model.TokenUsage(50, 20, 0, 0), null, null, null));
-        write(second, new ContextAssembled(new CommandId("s_8-0"), "system prompt", List.of(), settings, List.of()));
+        write(second, ContextAssembledFixture.of(new CommandId("s_8-0"), "system prompt", List.of(), settings, List.of()));
         write(second, new ModelReplied(new CommandId("s_9-0"), List.of(new TextBlock("a3")), StopReason.END_TURN, "m", null, null, null, null));
 
         List<TurnQuery.Turn> turns = query.turns(USER, second);

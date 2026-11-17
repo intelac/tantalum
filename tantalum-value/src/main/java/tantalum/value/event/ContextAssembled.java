@@ -54,25 +54,6 @@ public record ContextAssembled(CommandId command, String system, List<ToolSpec> 
         this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, toolSources, model, null);
     }
 
-    /** 不记选择时（旧事件、测试）。 */
-    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
-                            List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins,
-                            Map<String, String> toolSources) {
-        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, toolSources, null);
-    }
-
-    /** 不记工具来源时（测试）。 */
-    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
-                            List<ContextSection> sections, List<String> enabledTools, List<String> enabledPlugins) {
-        this(command, system, tools, compaction, sections, enabledTools, enabledPlugins, Map.of(), null);
-    }
-
-    /** 不区分用户开关时（全部开着）。 */
-    public ContextAssembled(CommandId command, String system, List<ToolSpec> tools, CompactionSettings compaction,
-                            List<ContextSection> sections) {
-        this(command, system, tools, compaction, sections, null, null, Map.of(), null);
-    }
-
     @Override
     public String type() {
         return TYPE;

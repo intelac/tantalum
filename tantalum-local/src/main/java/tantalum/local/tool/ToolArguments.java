@@ -78,24 +78,6 @@ public final class ToolArguments {
         return null;
     }
 
-    /** 全部参数都是字符串；{@code required} 写进 schema 的 {@code required} 数组，模型才知道哪些不能省。 */
-    public static Json schema(List<String> required, List<String> optional) {
-        Map<String, Json> properties = new LinkedHashMap<>();
-        for (String name : required) {
-            properties.put(name, new Json.Obj(Map.of("type", new Json.Str("string"))));
-        }
-        for (String name : optional) {
-            properties.put(name, new Json.Obj(Map.of("type", new Json.Str("string"))));
-        }
-        Map<String, Json> schema = new LinkedHashMap<>();
-        schema.put("type", new Json.Str("object"));
-        schema.put("properties", new Json.Obj(properties));
-        List<Json> names = new ArrayList<>();
-        required.forEach(name -> names.add(new Json.Str(name)));
-        schema.put("required", new Json.Arr(names));
-        return new Json.Obj(schema);
-    }
-
     /** 参数里有、定义（{@code properties}）里没有的名字，按出现的顺序；参数或定义不是对象时为空。 */
     public static List<String> unknown(Json schema, Json arguments) {
         if (!(arguments instanceof Json.Obj given) || !(schema instanceof Json.Obj definition)

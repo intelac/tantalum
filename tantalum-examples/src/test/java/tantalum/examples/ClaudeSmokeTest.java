@@ -40,6 +40,9 @@ import tantalum.value.model.Role;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.shell.handler.ModelHandlerFixture;
+import tantalum.shell.model.ClaudeClientFixture;
+import tantalum.value.command.CallModelFixture;
 
 /** 调用真实 API，会产生费用。同时设置 {@code ANTHROPIC_API_KEY} 和 {@code TANTALUM_SMOKE_CLAUDE} 才运行。 */
 @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
@@ -50,7 +53,7 @@ class ClaudeSmokeTest {
     Path temp;
 
     private static ClaudeClient client() {
-        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 4096, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
+        return new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), ClaudeClientFixture.settings("claude-sonnet-5-5", 4096, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
     }
 
     private static final ChunkListener IGNORE = new ChunkListener() {
@@ -77,11 +80,11 @@ class ClaudeSmokeTest {
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void resultCarriesTimingAndTheOptionsThatWereSent() {
         Instant before = Instant.now();
-        ModelHandler handler = new ModelHandler(client(), new CallLimiter(1),
+        ModelHandler handler = ModelHandlerFixture.of(client(), new CallLimiter(1),
                 Duration.ofSeconds(30), run -> IGNORE, Clock.systemUTC());
         RunRef run = new RunRef(new Principal("smoke"),
                 new SessionId("s"), new RunId("s_0"));
-        CallModel call = new CallModel(new CommandId("s_0-0"), run,
+        CallModel call = CallModelFixture.of(new CommandId("s_0-0"), run,
                 new Prompt("Answer in one word.", List.of(), List.of(Message.user("Name the colour of a clear daytime sky."))));
         ModelReplied reply = assertInstanceOf(ModelReplied.class, handler.handle(call));
         Instant after = Instant.now();
@@ -103,7 +106,7 @@ class ClaudeSmokeTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void thinkingBlocksSurviveTheRoundTrip() {
-        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 8192, "high", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
+        ClaudeClient client = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), ClaudeClientFixture.settings("claude-sonnet-5-5", 8192, "high", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), false));
         ToolSpec lookup = new ToolSpec("lookup_price", "Look up the price of an item.",
                 new Json.Obj(Map.of("type", new Json.Str("object"), "properties",
                         new Json.Obj(Map.of("item", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
@@ -142,7 +145,7 @@ class ClaudeSmokeTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void historyMayCallAToolThatIsNoLongerListed() {
-        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), new ClaudeClient.Settings("claude-sonnet-5-5", 1024, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true));
+        ClaudeClient strict = new ClaudeClient(AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY")).maxRetries(0).build(), ClaudeClientFixture.settings("claude-sonnet-5-5", 1024, "low", true, Duration.ofSeconds(300), Duration.ofSeconds(300), OverflowRules.defaults(), true));
         ToolSpec other = new ToolSpec("read_file", "Read a file.", new Json.Obj(Map.of("type", new Json.Str("object"),
                 "properties", new Json.Obj(Map.of("path", new Json.Obj(Map.of("type", new Json.Str("string"))))))));
         List<Message> messages = List.of(

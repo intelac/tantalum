@@ -37,6 +37,7 @@ import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.value.command.CallModelFixture;
 
 /** model-picker 任务 10（需求 5.1、5.8，M16）：按 {@code Prompt.model} 的路线调用，每条路线自己的并发上限。 */
 class RoutedModelHandlerTest {
@@ -77,11 +78,11 @@ class RoutedModelHandlerTest {
         routes = Routes.create(List.of(claude(), local(localWait)), "claude", (route, key) -> {
             throw new AssertionError("no real client");
         }, new RouteClients(Map.of("claude", claude, "local", local)), name -> null, true, Clock.systemUTC()).start(Duration.ofSeconds(2));
-        return new ModelHandler(routes, run -> QUIET, Clock.systemUTC(), run -> AttachmentMedia.NONE);
+        return ModelHandlerFixture.of(routes, run -> QUIET, Clock.systemUTC(), run -> AttachmentMedia.NONE);
     }
 
     private static CallModel call(String id, ModelChoice model) {
-        return new CallModel(new CommandId(id), RUN, new Prompt("s", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, model));
+        return CallModelFixture.of(new CommandId(id), RUN, new Prompt("s", List.of(), List.of(Message.user("hi")), Prompt.Output.DEFAULT, model));
     }
 
     private static String repliedBy(Event event) {

@@ -22,6 +22,7 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.RunRef;
 import tantalum.value.id.SessionId;
+import tantalum.value.command.AssembleContextFixture;
 
 class RingTest {
 
@@ -33,7 +34,7 @@ class RingTest {
     }
 
     private static Command command(int i) {
-        return new AssembleContext(new CommandId("c" + i), RUN);
+        return AssembleContextFixture.of(new CommandId("c" + i), RUN);
     }
 
     /** 消费者抛出后环必须继续转并留下信号；Disruptor 默认处理器会把线程杀掉而无人知道。 */

@@ -12,6 +12,7 @@ import tantalum.value.event.ContextAssembled;
 import tantalum.value.id.CommandId;
 import tantalum.value.model.ToolUnlock;
 import tantalum.value.state.SessionContext;
+import tantalum.value.state.SessionContextFixture;
 
 /**
  * browser-on-demand 需求 2.4、4.2：按需出现的工具的规则写进组装事件和会话上下文，读回来一样；没有规则时不写出这个字段
@@ -52,6 +53,6 @@ class ToolUnlockCodecTest {
                 null, null, Map.of(), null, null, List.of());
         assertNull(event.unlocks());
         assertFalse(codec.encode(event).contains("unlocks"));
-        assertEquals(List.of(), new SessionContext("s", List.of(), null, List.of()).withUnlocks(List.of()).unlockRules());
+        assertEquals(List.of(), SessionContextFixture.of("s", List.of(), null, List.of()).withUnlocks(List.of()).unlockRules());
     }
 }

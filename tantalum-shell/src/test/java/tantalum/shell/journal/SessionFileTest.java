@@ -31,6 +31,7 @@ import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.UserPromptFixture;
 
 class SessionFileTest {
 
@@ -44,7 +45,7 @@ class SessionFileTest {
     static EventEnvelope event(Principal principal, SessionId session, long seq, String text) {
         return new EventEnvelope(seq, Instant.parse("2026-11-02T00:00:00.123456Z"), principal, session,
                 seq % 2 == 0 ? null : new RunId(session.value() + "_" + seq),
-                new UserPrompt(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(session), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(session), text));
     }
 
     private SessionFiles files(SessionPaths paths) {

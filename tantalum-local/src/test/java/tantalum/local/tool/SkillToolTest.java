@@ -36,7 +36,7 @@ class SkillToolTest {
     }
 
     private LocalResult run(String skillsDir, Json arguments) {
-        return tool.run(new LocalContext("s-1", dirs, new Observations(), LocalContext.NO_SHELL, skillsDir), arguments);
+        return tool.run(LocalContextFixture.of("s-1", dirs, new Observations(), LocalContext.NO_SHELL, skillsDir), arguments);
     }
 
     private static Json name(String name) {

@@ -16,6 +16,7 @@ import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
+import tantalum.value.state.SessionContextFixture;
 
 /** core-tools C14 和设计第 1 节：投影出的 prompt 里工具全集不变、没开的标 deferred，工具变化总在合法的位置。 */
 class ToolChangeProjectionTest {
@@ -41,7 +42,7 @@ class ToolChangeProjectionTest {
     @Test
     void oldSessionsHaveNothingDeferred() {
         SessionState session = SessionState.start(new SessionId("s"), new Principal("u"))
-                .withContext(new SessionContext("sys", List.of(GREP, WRITE), null, List.of()));
+                .withContext(SessionContextFixture.of("sys", List.of(GREP, WRITE), null, List.of()));
         assertEquals(List.of(GREP, WRITE), PromptProjection.project(session).tools());
     }
 

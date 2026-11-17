@@ -36,6 +36,8 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** 用真实内核走事件，写真实文件，再把变化交给可替换的监听器。和线上 cleanroom 的顺序相同：先落盘，再处理。 */
 final class IndexFixture {
@@ -93,11 +95,11 @@ final class IndexFixture {
     Pending prompt(Principal principal, SessionId session, Instant at, String text, String dir) throws Exception {
         String request = "req-" + requests++;
         Decision submitted = send(principal, session, null, at,
-                new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text, List.of(),
+                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text, List.of(),
                         null, dir));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
-        Decision assembled = send(principal, session, run, at, new ContextAssembled(assemble.id(), "s", List.of(), null, List.of()));
+        Decision assembled = send(principal, session, run, at, ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
         CallModel call = (CallModel) assembled.commands().getFirst();
         return new Pending(principal, session, run, call.id());
     }

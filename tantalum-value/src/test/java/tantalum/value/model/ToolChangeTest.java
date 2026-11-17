@@ -14,6 +14,8 @@ import tantalum.value.event.ContextAssembled;
 import tantalum.value.id.CommandId;
 import tantalum.value.json.Json;
 import tantalum.value.state.SessionContext;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.state.SessionContextFixture;
 
 /** core-tools C14、C15 的值类型。 */
 class ToolChangeTest {
@@ -40,17 +42,17 @@ class ToolChangeTest {
 
     @Test
     void assembledContextWithoutListsMeansEverythingIsOn() {
-        ContextAssembled old = new ContextAssembled(new CommandId("c"), "sys", List.of(READ), null, List.of());
+        ContextAssembled old = ContextAssembledFixture.of(new CommandId("c"), "sys", List.of(READ), null, List.of());
         assertEquals(null, old.enabledTools());
         assertEquals(null, old.enabledPlugins());
-        ContextAssembled lists = new ContextAssembled(new CommandId("c"), "sys", List.of(READ), null, List.of(),
+        ContextAssembled lists = ContextAssembledFixture.of(new CommandId("c"), "sys", List.of(READ), null, List.of(),
                 new ArrayList<>(List.of("read_file")), List.of());
         assertEquals(List.of("read_file"), lists.enabledTools());
     }
 
     @Test
     void sessionContextKnowsWhatIsActive() {
-        SessionContext old = new SessionContext("sys", List.of(READ), null, List.of());
+        SessionContext old = SessionContextFixture.of("sys", List.of(READ), null, List.of());
         assertTrue(old.toolActive("anything"));
         assertTrue(old.pluginActive("anything"));
         SessionContext started = new SessionContext("sys", List.of(READ), null, List.of(), List.of(), List.of(), List.of("quota"));

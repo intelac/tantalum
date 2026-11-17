@@ -125,14 +125,6 @@ public sealed interface TraceRecord {
             this(head, mode, text, source, attachments, skills, List.of());
         }
 
-        public UserInput(Head head, Mode mode, String text, Source source, List<AttachmentRef> attachments) {
-            this(head, mode, text, source, attachments, List.of());
-        }
-
-        public UserInput(Head head, Mode mode, String text, Source source) {
-            this(head, mode, text, source, List.of(), List.of());
-        }
-
         @Override
         public UserInput withHead(Head newHead) {
             return new UserInput(newHead, mode, text, source, attachments, skills, attached);
@@ -146,10 +138,6 @@ public sealed interface TraceRecord {
     record ContextChange(Head head, List<Section> sections,
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsAdded,
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsRemoved) implements TraceRecord {
-
-        public ContextChange(Head head, List<Section> sections) {
-            this(head, sections, List.of(), List.of());
-        }
 
         @Override
         public ContextChange withHead(Head newHead) {

@@ -72,7 +72,7 @@ class BashTest {
     }
 
     private LocalResult run(Json arguments) throws Exception {
-        return new Bash().run(new LocalContext("s", dirs, new Observations(), fake), arguments);
+        return new Bash().run(LocalContextFixture.of("s", dirs, new Observations(), fake), arguments);
     }
 
     @Test
@@ -139,7 +139,7 @@ class BashTest {
                 + "3000 lines (limit 2000 lines or 50 KB). Full output saved to " + full + "; read parts of it with read_file (offset "
                 + "and limit) or search it with grep.]\n\nCommand exited with code 1.", result.text());
         // 模型照着路径能读到
-        LocalResult read = new ReadFile().run(new LocalContext("s", dirs, new Observations()), args("path", full.toString()));
+        LocalResult read = new ReadFile().run(LocalContextFixture.of("s", dirs, new Observations()), args("path", full.toString()));
         assertTrue(!read.error() && read.text().contains("all"), read.text());
     }
 }

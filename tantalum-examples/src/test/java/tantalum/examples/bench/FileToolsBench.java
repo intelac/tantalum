@@ -16,6 +16,7 @@ import tantalum.local.tool.LocalResult;
 import tantalum.local.tool.Observations;
 import tantalum.local.tool.ReadFile;
 import tantalum.value.json.Json;
+import tantalum.local.tool.LocalContextFixture;
 
 /**
  * 文件工具预算（core-tools 非功能“性能”）：64 MB、约 70 万行的文件，从中间读一个 100 行的窗口（要数完全部行数才能写出“共多少行”）；
@@ -35,7 +36,7 @@ public final class FileToolsBench {
         int lines = bigFile(root.resolve("big.log"));
         tree(root.resolve("tree"));
         // 工具在用户电脑上的连接程序里执行（local-workspace），这里直接调 tantalum-local 的同一份代码
-        LocalContext context = new LocalContext("bench", new AllowedDirs(List.of(root)), new Observations());
+        LocalContext context = LocalContextFixture.of("bench", new AllowedDirs(List.of(root)), new Observations());
         System.out.printf("big.log %.1f MB, %d lines%n", Files.size(root.resolve("big.log")) / 1048576.0, lines);
 
         ReadFile read = new ReadFile();

@@ -39,19 +39,6 @@ public final class ToolArguments {
         }
     }
 
-    /** 布尔参数；没给时返回 {@code fallback}。也认字符串 "true"、"false"。 */
-    public static boolean bool(Json arguments, String name, boolean fallback) {
-        Json value = arguments instanceof Json.Obj object ? object.fields().get(name) : null;
-        return switch (value) {
-            case null -> fallback;
-            case Json.Null ignored -> fallback;
-            case Json.Bool flag -> flag.value();
-            case Json.Str text when text.value().equalsIgnoreCase("true") -> true;
-            case Json.Str text when text.value().equalsIgnoreCase("false") -> false;
-            default -> throw new IllegalArgumentException(name + " must be true or false");
-        };
-    }
-
     public static Json schema(List<Param> params) {
         Map<String, Json> properties = new LinkedHashMap<>();
         List<Json> required = new ArrayList<>();

@@ -63,15 +63,6 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
                 followUpModels, dir, false);
     }
 
-    /** 没有工作目录时。 */
-    public SessionState(SessionId id, Principal principal, List<Message> messages,
-                        RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
-                        Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
-                        Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels) {
-        this(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model,
-                followUpModels, null);
-    }
-
     public static SessionState start(SessionId id, Principal principal) {
         return new SessionState(id, principal, List.of(), null, null, List.of(), null, null, null, List.of(), List.of(), Map.of(), null, null,
                 null);

@@ -59,7 +59,7 @@ class PlaywrightBrowserTest {
     private final List<String> sent = new ArrayList<>();
 
     private PlaywrightBrowser browser(Map<String, LocalResult> answers) {
-        return new PlaywrightBrowser((tool, arguments) -> {
+        return PlaywrightBrowserFixture.of((tool, arguments) -> {
             sent.add(tool + " " + Wire.text(arguments));
             return answers.getOrDefault(tool, LocalResult.ok("### Result\nok"));
         });

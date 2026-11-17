@@ -36,14 +36,6 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
                           Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord) {
 
-    /** 不是“不进记忆”的会话时（测试）。 */
-    public IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
-                       RunId activeRun, Usage usage, Submission submission, boolean runEnded,
-                       Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text) {
-        this(principal, session, seq, at, title, runStatus, activeRun, usage, submission, runEnded, answerDeadline, answerTimer, dir, rename,
-                text, false);
-    }
-
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
 

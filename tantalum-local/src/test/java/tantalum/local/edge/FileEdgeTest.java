@@ -29,6 +29,7 @@ import tantalum.local.tool.Observations;
 import tantalum.local.tool.ReadFile;
 import tantalum.local.tool.WriteFile;
 import tantalum.value.json.Json;
+import tantalum.local.tool.LocalContextFixture;
 
 /**
  * 文件工具的边界（agent-eval 需求 1.3–1.5）：直接调连接程序里真的工具，不经过服务器和模型。每条测试名是那个边界的一句话。
@@ -48,7 +49,7 @@ class FileEdgeTest {
     void setUp() throws Exception {
         root = Files.createDirectory(temp.resolve("root")).toRealPath();
         outside = Files.createDirectory(temp.resolve("outside")).toRealPath();
-        context = new LocalContext("one", new AllowedDirs(List.of(root)), new Observations());
+        context = LocalContextFixture.of("one", new AllowedDirs(List.of(root)), new Observations());
     }
 
     private static Json args(String... pairs) {

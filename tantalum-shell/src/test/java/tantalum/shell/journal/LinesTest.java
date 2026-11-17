@@ -27,6 +27,8 @@ import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.decision.SessionChangeFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /** one-line-journal 任务 1、2：一步一行，按顺序读回；结果能引用同一行和前面的正文；读文件只解析一次。 */
 class LinesTest {
@@ -42,11 +44,11 @@ class LinesTest {
 
     private static EventEnvelope prompt(long seq, String text) {
         return new EventEnvelope(seq, Instant.EPOCH, USER, SESSION, null,
-                new UserPrompt(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(SESSION), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(SESSION), text));
     }
 
     private static StepRecord appended(long seq, String text) {
-        return new StepRecord(seq, new SessionChange(SESSION, USER, seq == 0, List.of(Message.user(text)),
+        return new StepRecord(seq, SessionChangeFixture.of(SESSION, USER, seq == 0, List.of(Message.user(text)),
                 null, null, null, null, null, null, null), List.of(), List.of(), null, null, List.of(), List.of());
     }
 

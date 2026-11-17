@@ -35,6 +35,8 @@ import tantalum.local.wire.SkillLoad;
 import tantalum.local.wire.SkillLoaded;
 import tantalum.local.wire.Wire;
 import tantalum.value.id.Principal;
+import tantalum.local.tool.LocalContextFixture;
+import tantalum.local.wire.HelloFixture;
 
 /**
  * 测试用的电脑：不经过 WebSocket，直接接到 {@link LocalLinks} 上，用 {@code tantalum-local} 的真实工具在允许的目录里执行调用。
@@ -81,7 +83,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
                                                   tantalum.local.tool.Browser browser) throws IOException {
         Path real = main.toRealPath();
         Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString())), true, new Hello.Shell(false, "--allow-shell was not given"), true, true, state);
+                List.of(new Hello.Root(real.toString())), true, HelloFixture.shell(false, "--allow-shell was not given"), true, true, state);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)), browser);
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
                 .orElseThrow(() -> new IllegalStateException("revoked"));
@@ -106,7 +108,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
     public static TestComputer connectEverything(LocalLinks links, Principal user, Instant expiresAt, Path main) throws IOException {
         Path real = main.toRealPath();
         Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString())), true, new Hello.Shell(true, null), true, true,
+                List.of(new Hello.Root(real.toString())), true, HelloFixture.shell(true, null), true, true,
                 Hello.Browser.available("Google Chrome", false));
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
@@ -122,7 +124,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
                                                 java.util.Deque<LocalResult> shell) throws IOException {
         Path real = main.toRealPath();
         Hello hello = new Hello(Wire.PROTOCOL, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(true, null), true, true,
+                List.of(new Hello.Root(real.toString())), write, HelloFixture.shell(true, null), true, true,
                 Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED));
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.recordedShell = shell;
@@ -143,7 +145,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         Path real = main.toRealPath();
         // 协议 5 起的连接程序总会说浏览器的情况；这台没给 --allow-browser。更老的没有这一项
         Hello hello = new Hello(protocol, "test", new Hello.Device("Test Mac", "macos", "26.2", "arm64"),
-                List.of(new Hello.Root(real.toString())), write, new Hello.Shell(false, "--allow-shell was not given"), true, git,
+                List.of(new Hello.Root(real.toString())), write, HelloFixture.shell(false, "--allow-shell was not given"), true, git,
                 protocol >= 5 ? Hello.Browser.unavailable(Hello.Browser.NOT_ALLOWED) : null);
         TestComputer computer = new TestComputer(hello, new AllowedDirs(List.of(real)));
         computer.link = links.attach(user, expiresAt, System.nanoTime(), hello, computer)
@@ -295,7 +297,7 @@ public final class TestComputer implements LocalLinks.Peer, AutoCloseable {
         }
         try {
             Observations seen = observations.computeIfAbsent(call.session(), ignored -> new Observations());
-            return tool.get().invoke(new LocalContext(call.session(), scoped, seen).withSkills(call.skills()).withBrowser(browser),
+            return tool.get().invoke(LocalContextFixture.of(call.session(), scoped, seen).withSkills(call.skills()).withBrowser(browser),
                     call.arguments());
         } catch (Exception failure) {
             return LocalResult.error("Tool failed: " + failure);

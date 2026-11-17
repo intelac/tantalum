@@ -73,6 +73,11 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.shell.store.SessionReplayFixture;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /**
  * 任务 29（需求 9.1）：同一组输入在“从不回收”“每个事件后回收”下，
@@ -86,7 +91,7 @@ class EvictionInvarianceTest {
     private static final SessionId COMPACTED = new SessionId("compacted");
     private static final SessionId STOPPED = new SessionId("stopped");
     private static final SessionId BOBS = new SessionId("bobs");
-    private static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
     private static final Instant AT = Instant.parse("2026-11-02T01:00:00Z");
     private static final Duration WAIT = Duration.ofSeconds(10);
     private static final long QUOTA = 3000;
@@ -146,14 +151,14 @@ class EvictionInvarianceTest {
             index = SessionIndex.open(dir);
             writer = new IndexWriter(index, 100, Duration.ofHours(1));
             files = new SessionFiles(paths, codec, 16, writer::onDurable);
-            SessionReplay replay = new SessionReplay(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
+            SessionReplay replay = SessionReplayFixture.of(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
             this.replay = replay;
             this.records = new RecordReplay(paths, new SessionFileReader(codec));
             Residency residency = new Residency();
             transcript = new Transcript();
             Projections projections = new Projections(transcript, trace);
-            Evictor evictor = mode == Mode.NEVER ? new Evictor(LoopFixtures.NEVER, residency, projections, Clock.systemUTC())
-                    : new Evictor(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO, null), residency, projections, Clock.systemUTC());
+            Evictor evictor = mode == Mode.NEVER ? EvictorFixture.of(LoopFixtures.NEVER, residency, projections, Clock.systemUTC())
+                    : EvictorFixture.of(new Evictor.Settings(Duration.ZERO, Integer.MAX_VALUE, Duration.ZERO, null), residency, projections, Clock.systemUTC());
 
             input = new InputRing(64);
             ring = new CleanroomRing(64);
@@ -262,7 +267,7 @@ class EvictionInvarianceTest {
         void prompt(Principal principal, SessionId session, String text) throws Exception {
             String request = "req-" + requests++;
             pipeline.send(principal, session, null,
-                    new UserPrompt(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
+                    UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
         }
 
         private static ToolCallBlock call(String id) {
@@ -277,7 +282,7 @@ class EvictionInvarianceTest {
                 RunId run = next.run().run();
                 switch (next) {
                     case AssembleContext assemble -> pipeline.send(principal, session, run,
-                            new ContextAssembled(assemble.id(), "system", List.of(), SETTINGS,
+                            ContextAssembledFixture.of(assemble.id(), "system", List.of(), SETTINGS,
                     List.of(new tantalum.value.state.ContextSection("memory-index", "memory-" + dynamic++, true))));
                     case CallModel model -> {
                         boolean summary = !model.prompt().output().toolsAllowed();
@@ -287,7 +292,7 @@ class EvictionInvarianceTest {
                         pipeline.send(principal, session, run, new ModelReplied(model.id(), content, stop, "m", new TokenUsage(summary ? 50 : 790, 10, 0, 0), null, null, null));
                     }
                     case RunTool tool -> pipeline.send(principal, session, run,
-                            new ToolFinished(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null));
+                            ToolFinishedFixture.of(tool.id(), tool.call().id(), "result of " + tool.call().id(), false, null));
                     default -> { }
                 }
             }

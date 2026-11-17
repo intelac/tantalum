@@ -69,7 +69,7 @@ class EvictorTest {
                 removed.add(session);
             }
         };
-        return new Evictor(new Evictor.Settings(idle, max, NONE, null), residency, new Projections(projection, new Trace()), clock);
+        return EvictorFixture.of(new Evictor.Settings(idle, max, NONE, null), residency, new Projections(projection, new Trace()), clock);
     }
 
     private static SessionState idle(SessionId id) {
@@ -167,7 +167,7 @@ class EvictorTest {
 
     @Test
     void sweepsAreThrottled() {
-        Evictor evictor = new Evictor(new Evictor.Settings(NONE, 1000, Duration.ofSeconds(1), null), residency,
+        Evictor evictor = EvictorFixture.of(new Evictor.Settings(NONE, 1000, Duration.ofSeconds(1), null), residency,
                 new Projections(LoopFixtures.NO_PROJECTION, new Trace()), clock);
         KernelState state = state(idle(A));
         evictor.sweep(state);

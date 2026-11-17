@@ -31,7 +31,7 @@ class ReadFileWindowTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        context = new LocalContext("s", new AllowedDirs(List.of(root)), observations);
+        context = LocalContextFixture.of("s", new AllowedDirs(List.of(root)), observations);
     }
 
     private static Json args(Object... pairs) {

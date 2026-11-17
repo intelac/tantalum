@@ -139,7 +139,7 @@ class PlaywrightMcpIT {
             assertTrue(System.nanoTime() < deadline, "playwright MCP did not start: " + host.state() + " " + host.reason());
             Thread.sleep(100);
         }
-        return new PlaywrightBrowser(host::call);
+        return PlaywrightBrowserFixture.of(host::call);
     }
 
     private LocalResult call(PlaywrightBrowser browser, String session, String tool, Object... pairs) throws Exception {

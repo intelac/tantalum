@@ -12,7 +12,4 @@ public record CallModel(CommandId id, RunRef run, Prompt prompt, List<String> om
         omittedImages = omittedImages == null ? List.of() : List.copyOf(omittedImages);
     }
 
-    public CallModel(CommandId id, RunRef run, Prompt prompt) {
-        this(id, run, prompt, List.of());
-    }
 }

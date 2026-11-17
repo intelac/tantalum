@@ -64,11 +64,6 @@ public final class ClaudeClient implements ModelClient {
     public record Settings(String defaultModel, long maxTokens, String defaultEffort, boolean fallbacks, Duration firstChunk,
                            Duration betweenChunks, OverflowRules overflow, boolean strictThinking, boolean hourCache) {
 
-        /** 缓存默认 1 小时（{@code tantalum.claude.cache-ttl}，QAgent 问题 87）。 */
-        public Settings(String defaultModel, long maxTokens, String defaultEffort, boolean fallbacks, Duration firstChunk,
-                        Duration betweenChunks, OverflowRules overflow, boolean strictThinking) {
-            this(defaultModel, maxTokens, defaultEffort, fallbacks, firstChunk, betweenChunks, overflow, strictThinking, true);
-        }
     }
 
     public ClaudeClient(AnthropicClient client, Settings settings) {

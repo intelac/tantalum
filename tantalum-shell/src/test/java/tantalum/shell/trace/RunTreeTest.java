@@ -116,7 +116,7 @@ class RunTreeTest {
 
     @Test
     void groupsFollowTheRequestPositionAndLooseRecordsTheirOwn() {
-        UserInput prompt = new UserInput(head("u", "5.1", null, 0, 0L), UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER);
+        UserInput prompt = TraceRecordFixture.userInput(head("u", "5.1", null, 0, 0L), UserInput.Mode.PROMPT, "hi", TraceRecord.Source.USER);
         // 第 10 号事件排在第 9 号之后（按数字，不按字符串）
         RunTree tree = RunTree.of(RUN, List.of(runHead(20_000L, EndReason.COMPLETED),
                 request("m2", "10.0", 2, "claude", "claude-x", new TokenUsage(30, 1, 0, 0), 12_000, 13_000), prompt,

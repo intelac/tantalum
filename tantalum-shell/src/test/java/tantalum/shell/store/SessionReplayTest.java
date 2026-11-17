@@ -86,7 +86,7 @@ class SessionReplayTest {
         scenario = new ReplayScenario(dir);
         fixture = scenario.fixture;
         kernel = scenario.kernel;
-        replay = new SessionReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
+        replay = SessionReplayFixture.of(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
                 new UsageLedger(scenario.index, scenario.writer), kernel);
     }
 

@@ -17,6 +17,7 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.SessionContext;
+import tantalum.value.event.ContextAssembledFixture;
 
 /** core-tools C14：每次提问开始时按用户现在的开关换名单，变了就追加一条系统消息。 */
 class ToolSwitchStepsTest {
@@ -29,7 +30,7 @@ class ToolSwitchStepsTest {
 
     private static void ask(LoopFixture loop, String text, List<String> tools, List<String> plugins) {
         loop.prompt(text);
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", ALL, null, List.of(), tools, plugins));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", ALL, null, List.of(), tools, plugins));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("ok"), StopReason.END_TURN, "m", null, null, null, null));
     }
 

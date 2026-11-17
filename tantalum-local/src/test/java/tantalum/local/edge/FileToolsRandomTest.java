@@ -32,6 +32,7 @@ import tantalum.local.tool.Observations;
 import tantalum.local.tool.ReadFile;
 import tantalum.local.tool.WriteFile;
 import tantalum.value.json.Json;
+import tantalum.local.tool.LocalContextFixture;
 
 /**
  * 文件工具的随机序列（agent-eval 需求 1.6，照 pi {@code packages/env/test/differential.test.ts} 带种子的做法）：对一个临时目录随机做
@@ -78,7 +79,7 @@ class FileToolsRandomTest {
     @MethodSource("seeds")
     void toolsAgreeWithAPlainModelOfTheFiles(long seed) throws Exception {
         root = Files.createDirectory(temp.resolve("root")).toRealPath();
-        context = new LocalContext("one", new AllowedDirs(List.of(root)), new Observations());
+        context = LocalContextFixture.of("one", new AllowedDirs(List.of(root)), new Observations());
         Random random = new Random(seed);
         for (int step = 1; step <= STEPS; step++) {
             try {

@@ -36,7 +36,7 @@ class WriteEditToolsTest {
     @BeforeEach
     void setUp() throws Exception {
         root = Files.createDirectory(temp.resolve("root"));
-        context = new LocalContext("one", new AllowedDirs(List.of(root)), observations);
+        context = LocalContextFixture.of("one", new AllowedDirs(List.of(root)), observations);
     }
 
     private static Json args(Object... pairs) {
@@ -118,7 +118,7 @@ class WriteEditToolsTest {
     @Test
     void aReadInAnotherSessionDoesNotCount() throws Exception {
         Files.writeString(root.resolve("a.txt"), "v1");
-        read.run(new LocalContext("two", context.dirs(), observations), args("path", "a.txt"));
+        read.run(LocalContextFixture.of("two", context.dirs(), observations), args("path", "a.txt"));
         assertTrue(write("a.txt", "v2").error());
     }
 
@@ -275,7 +275,7 @@ class WriteEditToolsTest {
     @Test
     void filesInAnotherAllowedDirectoryAreWrittenByAbsolutePath() throws Exception {
         Path other = Files.createDirectory(temp.resolve("other")).toRealPath();
-        LocalContext two = new LocalContext("one", new AllowedDirs(List.of(root, other)), observations);
+        LocalContext two = LocalContextFixture.of("one", new AllowedDirs(List.of(root, other)), observations);
         String created = other.resolve("notes/a.txt").toString();
         assertEquals("Created " + created + " (5 bytes).", write.run(two, args("path", created, "content", "hello")).text());
         assertEquals("hello", read.run(two, args("path", created)).text());
@@ -290,7 +290,7 @@ class WriteEditToolsTest {
     @Test
     void aReadByOneSpellingCountsForAnother() throws Exception {
         Path sub = Files.createDirectory(root.resolve("sub")).toRealPath();
-        LocalContext nested = new LocalContext("one", new AllowedDirs(List.of(root, sub)), observations);
+        LocalContext nested = LocalContextFixture.of("one", new AllowedDirs(List.of(root, sub)), observations);
         Files.writeString(sub.resolve("a.txt"), "v1");
         read.run(nested, args("path", "sub/a.txt"));
         assertEquals("Edited " + sub.resolve("a.txt") + ": replaced 1 occurrence.",

@@ -42,6 +42,8 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * record-results 需求 3.3、11.2：钩子的规则改了，旧对话不变。恢复只读结果行，不经过钩子；用新规则重放内核（以前的做法）
@@ -91,9 +93,9 @@ class PluginChangeTest {
 
         SessionSlice restored = new RecordReplay(scenario.paths, reader).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
                 .orElseThrow().slice();
-        SessionSlice withOldRule = new SessionReplay(scenario.paths, reader, usage, scenario.kernel)
+        SessionSlice withOldRule = SessionReplayFixture.of(scenario.paths, reader, usage, scenario.kernel)
                 .load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE).orElseThrow();
-        SessionSlice withNewRule = new SessionReplay(scenario.paths, reader, usage, narrower)
+        SessionSlice withNewRule = SessionReplayFixture.of(scenario.paths, reader, usage, narrower)
                 .load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE).orElseThrow();
 
         assertTrue(restored.session().messages().toString().contains("result of t1"), "the tools really ran back then");
@@ -117,14 +119,14 @@ class PluginChangeTest {
     /** 接着旧对话再问一次，模型要调一个工具：返回内核对这次调用的决定。组装上下文、自动压缩的摘要调用照常回答。 */
     private static Decision nextToolCall(Kernel kernel, KernelState state, long lastSeq) {
         long seq = lastSeq + 1;
-        Decision decision = kernel.step(state, envelope(seq++, null, new UserPrompt(new SubmissionId("sub-next"),
+        Decision decision = kernel.step(state, envelope(seq++, null, UserPromptFixture.of(new SubmissionId("sub-next"),
                 new RequestId("req-next"), new OwnerRef.OfSession(ReplayScenario.TOOLS), "one more file")));
         while (true) {
             var command = decision.commands().getFirst();
             var run = command.run().run();
             switch (command) {
                 case AssembleContext assemble -> decision = kernel.step(decision.newState(), envelope(seq++, run,
-                        new ContextAssembled(assemble.id(), "system", List.of(), ReplayScenario.SETTINGS, List.of())));
+                        ContextAssembledFixture.of(assemble.id(), "system", List.of(), ReplayScenario.SETTINGS, List.of())));
                 case CallModel call when !call.prompt().output().toolsAllowed() -> decision = kernel.step(decision.newState(),
                         envelope(seq++, run, new ModelReplied(call.id(), List.of(new TextBlock("the summary of everything so far")),
                                 StopReason.END_TURN, "m", null, null, null, null)));

@@ -18,6 +18,9 @@ import tantalum.value.model.Role;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.CompactionSettings;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /**
  * compaction-threshold T6：每次提问组装上下文时换上 shell 按用户当前选择算出的压缩设置。窗口 1000、预留 200，
@@ -29,10 +32,10 @@ class CompactionSwitchTest {
         return new CompactionSettings(1000, 200, 70, 60, 30, 500, point, 3);
     }
 
-    private static final CompactionSettings LEGACY = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    private static final CompactionSettings LEGACY = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
 
     private static void assemble(LoopFixture loop, CompactionSettings settings) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), settings, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), settings, List.of()));
     }
 
     /** 第一次提问：组装、回复（实测 400），运行结束；然后第二次提问。 */
@@ -75,7 +78,7 @@ class CompactionSwitchTest {
     @Test
     void oldEventsKeepTheFirstSettings() {
         LoopFixture loop = secondQuestion(LEGACY);
-        assemble(loop, new CompactionSettings(1000, 100, 70, 60, 30, 500));
+        assemble(loop, CompactionSettingsFixture.of(1000, 100, 70, 60, 30, 500));
         assertEquals(LEGACY, loop.session().context().compaction(), "before compaction-threshold the first settings stayed");
     }
 
@@ -100,7 +103,7 @@ class CompactionSwitchTest {
         loop.prompt(block("q1"));
         assemble(loop, point(800));
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         assertEquals("AwaitingModel", loop.phase());
         assertEquals(point(800), loop.session().context().compaction());
         assertNull(loop.run().compacting());

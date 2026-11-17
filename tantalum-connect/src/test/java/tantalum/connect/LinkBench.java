@@ -33,6 +33,7 @@ import tantalum.value.id.Principal;
 import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
+import tantalum.local.tool.LocalContextFixture;
 
 /**
  * local-workspace 的性能要求（NFR Performance，任务 24）：
@@ -95,7 +96,7 @@ class LinkBench {
                 }
 
                 ReadFile readFile = new ReadFile();
-                LocalContext direct = new LocalContext("bench", new AllowedDirs(List.of(work)), new Observations());
+                LocalContext direct = LocalContextFixture.of("bench", new AllowedDirs(List.of(work)), new Observations());
                 long[] local = time(() -> readFile.run(direct, arguments));
                 long[] linked = time(() -> links.call(user, "bench", "read_file", arguments, Duration.ofSeconds(10)));
                 report("直接执行 read_file", local);

@@ -29,6 +29,8 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** one-line-journal 需求 4：工具没了要告诉模型，压缩之后也一样；之后每次变化都重申仍不能用的工具。 */
 class ToolsGoneStepsTest {
@@ -40,7 +42,7 @@ class ToolsGoneStepsTest {
     }
 
     private static ContextAssembled assembled(LoopFixture loop, List<String> enabled) {
-        return new ContextAssembled(loop.onlyCommandId(), "system", ALL, SETTINGS, List.of(), enabled, List.of());
+        return ContextAssembledFixture.of(loop.onlyCommandId(), "system", ALL, SETTINGS, List.of(), enabled, List.of());
     }
 
     private static void ask(LoopFixture loop, String text, List<String> enabled) {
@@ -85,7 +87,7 @@ class ToolsGoneStepsTest {
         loop.prompt(block("q1"));
         loop.feed(loop.runId(), assembled(loop, List.of("fetch_url", "grep")));
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), assembled(loop, List.of("grep")));
@@ -111,7 +113,7 @@ class ToolsGoneStepsTest {
         loop.prompt(block("q1"));
         loop.feed(loop.runId(), assembled(loop, List.of("grep")));
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         loop.prompt(block("q2"));
         loop.feed(loop.runId(), assembled(loop, List.of("grep")));

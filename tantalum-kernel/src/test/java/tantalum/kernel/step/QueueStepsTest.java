@@ -18,6 +18,8 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
 
 /** input-area 需求 1.3、1.5、1.6、1.11：改排队的提问。 */
 class QueueStepsTest {
@@ -34,9 +36,9 @@ class QueueStepsTest {
     private static LoopFixture queued() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("first");
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("fa"), new RequestId("ra"), "a"));
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("fb"), new RequestId("rb"), "b", List.of(), QWEN));
-        loop.feed(null, new FollowUpSubmitted(new SubmissionId("fc"), new RequestId("rc"), "c"));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("fa"), new RequestId("ra"), "a"));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("fb"), new RequestId("rb"), "b", List.of(), QWEN));
+        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("fc"), new RequestId("rc"), "c"));
         return loop;
     }
 
@@ -69,14 +71,14 @@ class QueueStepsTest {
         loop.prompt("first");
         var pending = loop.onlyCommandId();
         for (String text : List.of("a", "b", "c")) {
-            loop.feed(null, new FollowUpSubmitted(new SubmissionId("f" + text), new RequestId("r" + text), text));
+            loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f" + text), new RequestId("r" + text), text));
         }
         Decision decision = loop.feed(null, change(Action.STEER, 2, "c", null));
         assertEquals(List.of(Message.user("a"), Message.user("b")), loop.session().followUps());
         assertEquals(List.of(Message.user("c")), loop.run().pendingSteers());
         assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.STEER, 2)), edited(decision));
 
-        loop.feed(loop.runId(), new ContextAssembled(pending, "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(pending, "s", List.of(), null, List.of()));
         assertEquals("AwaitingModel", loop.phase());
         assertEquals(List.of(Message.user("first"), Message.user("c")), loop.session().messages());
         assertTrue(loop.run().pendingSteers().isEmpty());

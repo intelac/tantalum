@@ -41,9 +41,9 @@ class WireTest {
     }
 
     private static Hello hello() {
-        return new Hello(Wire.PROTOCOL, "0.1.0", new Hello.Device("Yi's MacBook", "macos", "26.2", "arm64"),
+        return HelloFixture.of(Wire.PROTOCOL, "0.1.0", new Hello.Device("Yi's MacBook", "macos", "26.2", "arm64"),
                 List.of(new Hello.Root("/Users/yi/work/shop"), new Hello.Root("/Users/yi/.m2")), true,
-                new Hello.Shell(false, "--allow-shell was not given"), true, true);
+                HelloFixture.shell(false, "--allow-shell was not given"), true, true);
     }
 
     private static Hello helloWith(Hello.Browser browser) {
@@ -57,7 +57,7 @@ class WireTest {
     void withoutTheBrowserFieldsFramesAreWhatProtocol4Sent() throws Exception {
         assertEquals(Set.of("type", "protocol", "connector", "device", "roots", "write", "shell", "network", "git"), keys(hello()));
         assertEquals("{\"type\":\"result\",\"id\":\"c\",\"text\":\"t\",\"error\":false,\"images\":[{\"mime\":\"image/png\",\"base64\":\"AQID\"}]}",
-                Wire.encode(new Result("c", "t", false, List.of(new Result.Image("image/png", "AQID")))));
+                Wire.encode(new Result("c", "t", false, List.of(ResultFixture.image("image/png", "AQID")))));
         Hello old = (Hello) Wire.decode(Wire.encode(hello()));
         assertEquals(null, old.browser());
         JsonNode browser = PLAIN.readTree(Wire.encode(helloWith(Hello.Browser.available("Google Chrome", true)))).get("browser");
@@ -73,17 +73,17 @@ class WireTest {
         return Stream.of(
                 hello(),
                 new Welcome("yi", Instant.parse("2026-11-06T03:00:00Z")),
-                new Call("c-1", "yi", "s-1a2b", "read_file", arguments(), 60_000),
+                CallFixture.of("c-1", "yi", "s-1a2b", "read_file", arguments(), 60_000),
                 new Result("c-1", "line 1", false, List.of()),
-                new Result("c-2", "Image a.png (image/png, 3 bytes).", false, List.of(new Result.Image("image/png", "AQID"))),
+                new Result("c-2", "Image a.png (image/png, 3 bytes).", false, List.of(ResultFixture.image("image/png", "AQID"))),
                 new Result("c-4", "Screenshot of https://a.example/", false,
                         List.of(new Result.Image("image/png", "AQID", "screenshot-a.example.png"))),
                 helloWith(Hello.Browser.available("Google Chrome", false)),
                 helloWith(Hello.Browser.unavailable(Hello.Browser.NOT_FOUND)),
                 new Cancel("c-1"),
-                new Call("c-3", "yi", "s-1a2b", "bash", arguments(), 60_000, "C:\\APPL\\Quattro"),
-                new Context("x-1"),
-                new Context("x-3", "/Users/yi/work/shop/app"),
+                CallFixture.of("c-3", "yi", "s-1a2b", "bash", arguments(), 60_000, "C:\\APPL\\Quattro"),
+                ContextFixture.of("x-1"),
+                ContextFixture.of("x-3", "/Users/yi/work/shop/app"),
                 new ContextResult("x-1", "# Rules\nUse tabs.\n"),
                 new Browse("b-1", null),
                 new Browse("b-2", "/Users/yi/work"),
@@ -116,8 +116,8 @@ class WireTest {
     /** console-i18n I12：新版连接程序在 shell 里加上原因的代码和参数，老服务器不认识的字段照常忽略。 */
     private static Hello withCode() {
         Hello hello = hello();
-        return new Hello(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(),
-                new Hello.Shell(false, "MXC could not start the sandbox: denied", "sandbox/start-failed", Map.of("detail", "denied")),
+        return HelloFixture.of(hello.protocol(), hello.connector(), hello.device(), hello.roots(), hello.write(),
+                HelloFixture.shell(false, "MXC could not start the sandbox: denied", "sandbox/start-failed", Map.of("detail", "denied")),
                 hello.network(), hello.git());
     }
 
@@ -140,13 +140,13 @@ class WireTest {
                 new TreeSet<>(PLAIN.readTree(Wire.encode(withCode())).get("shell").propertyNames()));
         assertEquals(Set.of("type", "user", "expiresAt"), keys(new Welcome("yi", Instant.EPOCH)));
         assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs"),
-                keys(new Call("c", "yi", "s", "grep", arguments(), 1)));
+                keys(CallFixture.of("c", "yi", "s", "grep", arguments(), 1)));
         assertEquals(Set.of("type", "id", "text", "error", "images"), keys(new Result("c", "", true, List.of())));
         assertEquals(Set.of("type", "id"), keys(new Cancel("c")));
         assertEquals(Set.of("type", "id", "user", "session", "tool", "arguments", "timeoutMs", "dir"),
-                keys(new Call("c", "yi", "s", "grep", arguments(), 1, "/w")));
-        assertEquals(Set.of("type", "id"), keys(new Context("x")));
-        assertEquals(Set.of("type", "id", "dir"), keys(new Context("x", "/w")));
+                keys(CallFixture.of("c", "yi", "s", "grep", arguments(), 1, "/w")));
+        assertEquals(Set.of("type", "id"), keys(ContextFixture.of("x")));
+        assertEquals(Set.of("type", "id", "dir"), keys(ContextFixture.of("x", "/w")));
         assertEquals(Set.of("type", "id"), keys(new Browse("b", null)));
         assertEquals(Set.of("type", "id", "path"), keys(new Browse("b", "/w")));
         assertEquals(Set.of("type", "id", "path", "dirs", "truncated"), keys(new BrowseResult("b", "/w", List.of("/w/a"), true, null)));
@@ -174,10 +174,10 @@ class WireTest {
     /** 没带新字段时，写出来的和协议 3 一字节不差：对老的连接程序发的就是这些。 */
     @Test
     void withoutTheNewFieldsFramesAreWhatProtocol3Sent() {
-        assertEquals("{\"type\":\"context\",\"id\":\"x\",\"dir\":\"/w\"}", Wire.encode(new Context("x", "/w")));
+        assertEquals("{\"type\":\"context\",\"id\":\"x\",\"dir\":\"/w\"}", Wire.encode(ContextFixture.of("x", "/w")));
         assertEquals("{\"type\":\"contextResult\",\"id\":\"x\",\"agents\":null}", Wire.encode(new ContextResult("x", null)));
         assertEquals("{\"type\":\"call\",\"id\":\"c\",\"user\":\"yi\",\"session\":\"s\",\"tool\":\"list_dir\",\"arguments\":{},\"timeoutMs\":5,\"dir\":\"/w\"}",
-                Wire.encode(new Call("c", "yi", "s", "list_dir", new Json.Obj(Map.of()), 5, "/w")));
+                Wire.encode(CallFixture.of("c", "yi", "s", "list_dir", new Json.Obj(Map.of()), 5, "/w")));
         // 协议 3 的连接程序回来的帧照常解码
         assertEquals(new ContextResult("x", "a", null, null), Wire.decode("{\"type\":\"contextResult\",\"id\":\"x\",\"agents\":\"a\"}"));
     }
@@ -217,7 +217,7 @@ class WireTest {
     /** 模型给的参数原样过去：键的顺序和数字的写法都不变（1.50 不变成 1.5）。 */
     @Test
     void argumentsKeepOrderAndNumberText() {
-        String encoded = Wire.encode(new Call("c", "yi", "s", "read_file", arguments(), 1));
+        String encoded = Wire.encode(CallFixture.of("c", "yi", "s", "read_file", arguments(), 1));
         assertTrue(encoded.contains("\"arguments\":{\"path\":\"src/App.java\",\"offset\":10,\"ratio\":1.50,\"flags\":[true,null]}"), encoded);
         Call missing = (Call) Wire.decode("{\"type\":\"call\",\"id\":\"c\",\"user\":\"yi\",\"session\":\"s\",\"tool\":\"list_dir\",\"timeoutMs\":5}");
         assertEquals(new Json.Obj(Map.of()), missing.arguments());

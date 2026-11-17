@@ -29,10 +29,6 @@ public record Result(String id, String text, boolean error, List<Image> images) 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Image(String mime, String base64, String name) {
 
-        public Image(String mime, String base64) {
-            this(mime, base64, null);
-        }
-
         public Image {
             Objects.requireNonNull(mime, "mime");
             Objects.requireNonNull(base64, "base64");

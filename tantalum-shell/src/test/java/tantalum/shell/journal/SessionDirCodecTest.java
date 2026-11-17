@@ -16,6 +16,8 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.decision.SessionChangeFixture;
+import tantalum.value.event.UserPromptFixture;
 
 /**
  * workspaces 任务 1、2（W3、需求 2.1、2.7、2.8）：提问带的目录和会话变化里的目录写了能读回；没有目录时一个字也不多写。
@@ -29,7 +31,7 @@ class SessionDirCodecTest {
     private final EventCodec codec = EventCodec.withBuiltins();
 
     private static UserPrompt prompt(String dir) {
-        return new UserPrompt(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi", List.of(), null, dir);
+        return UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi", List.of(), null, dir);
     }
 
     @Test
@@ -71,7 +73,7 @@ class SessionDirCodecTest {
     @Test
     void anUnchangedDirectoryIsNotWritten() {
         RecordCodec records = new RecordCodec(codec);
-        SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null);
+        SessionChange change = SessionChangeFixture.of(SESSION, USER, true, List.of(), null, null, null, null, null, null, null);
         String line = records.encode(new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of()),
                 RecordMemo.writer(USER, SESSION));
         assertFalse(line.contains("\"dir\""), line);

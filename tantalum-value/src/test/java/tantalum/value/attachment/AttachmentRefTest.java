@@ -40,9 +40,9 @@ class AttachmentRefTest {
 
     @Test
     void imageAcceptsOnlyFourTypesAndConsistentSizes() {
-        assertThrows(IllegalArgumentException.class, () -> new ImageRef(ID, "a.svg", "image/svg+xml", 1, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new ImageRef(ID, "a.png", "image/png", 1, 0, 1));
-        assertThrows(IllegalArgumentException.class, () -> new ImageRef(ID, " ", "image/png", 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> ImageRefFixture.of(ID, "a.svg", "image/svg+xml", 1, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> ImageRefFixture.of(ID, "a.png", "image/png", 1, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> ImageRefFixture.of(ID, " ", "image/png", 1, 1, 1));
         assertThrows(IllegalArgumentException.class,
                 () -> new ImageRef(ID, "a.png", "image/png", 1, 100, 50, 200, null));
         assertThrows(IllegalArgumentException.class,
@@ -60,7 +60,7 @@ class AttachmentRefTest {
     /** 期望值从设计第 4 节逐字抄来，只把占位换成具体值。 */
     @Test
     void modelFacingTextMatchesDesign() {
-        ImageRef image = new ImageRef(ID, "cat.png", "image/png", 1234, 800, 600);
+        ImageRef image = ImageRefFixture.of(ID, "cat.png", "image/png", 1234, 800, 600);
         FileRef file = new FileRef(ID, "notes.txt", "text/plain", 1234, null);
         assertEquals("Image \"cat.png\" (sha256:01234567, 800x600px). Read-only copy: \"/attachments/sha256-" + HASH
                 + "\".", AttachmentText.image(image));
@@ -73,7 +73,7 @@ class AttachmentRefTest {
 
     @Test
     void quotesInNamesCannotBreakOutOfTheQuotedName() {
-        ImageRef image = new ImageRef(ID, "a\" (sha256:ffffffff", "image/png", 1, 1, 1);
+        ImageRef image = ImageRefFixture.of(ID, "a\" (sha256:ffffffff", "image/png", 1, 1, 1);
         assertTrue(AttachmentText.image(image).startsWith("Image \"a\\\" (sha256:ffffffff\" (sha256:01234567,"));
     }
 }

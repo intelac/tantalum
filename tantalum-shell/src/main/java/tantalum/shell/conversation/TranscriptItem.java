@@ -85,20 +85,6 @@ public sealed interface TranscriptItem {
             this(id, session, run, at, text, attachments, queued, removed, skills, List.of());
         }
 
-        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
-                           boolean queued, boolean removed) {
-            this(id, session, run, at, text, attachments, queued, removed, List.of());
-        }
-
-        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, List<AttachmentRef> attachments,
-                           boolean queued) {
-            this(id, session, run, at, text, attachments, queued, false, List.of());
-        }
-
-        public UserMessage(String id, SessionId session, RunId run, Instant at, String text, boolean queued) {
-            this(id, session, run, at, text, List.of(), queued, false, List.of());
-        }
-
         /** 排队的提问开始运行，或转成了这个运行的插话。 */
         public UserMessage started(RunId startedRun) {
             return new UserMessage(id, session, startedRun, at, text, attachments, false, false, skills);

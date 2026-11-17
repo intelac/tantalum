@@ -44,6 +44,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.UserPromptFixture;
 
 class CleanroomTest {
 
@@ -63,7 +64,7 @@ class CleanroomTest {
         SessionId session = new SessionId("s");
         CleanroomRing.Slot slot = new CleanroomRing.Slot();
         slot.envelope = new EventEnvelope(seq, Instant.EPOCH, new Principal("u"), session, null,
-                new UserPrompt(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(session), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(session), "hi"));
         return slot;
     }
 

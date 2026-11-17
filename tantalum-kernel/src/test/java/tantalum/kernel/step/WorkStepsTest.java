@@ -42,6 +42,8 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 class WorkStepsTest {
 
@@ -56,7 +58,7 @@ class WorkStepsTest {
     private static LoopFixture atWork(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("x"), StopReason.END_TURN, "m", null, null, null, null));
         assertInstanceOf(DoWork.class, loop.onlyCommand());
         return loop;
@@ -100,7 +102,7 @@ class WorkStepsTest {
 
         // 第二个运行里，失败的工作带了 note 也不记；已有的还在
         loop.prompt("again");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("y"), StopReason.END_TURN, "m", null, null, null, null));
         loop.feed(loop.runId(), new WorkDone(loop.onlyCommandId(), "check", new Json.Str("timed out"), true, null, null,
                 new Json.Obj(Map.of("bash", new Json.Bool(true)))));
@@ -179,7 +181,7 @@ class WorkStepsTest {
     private static LoopFixture started(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return loop;
     }
 
@@ -196,7 +198,7 @@ class WorkStepsTest {
                 case DoWork work -> loop.feed(loop.runId(), new WorkDone(work.id(), work.workType(), work.input(), false, continueText, null));
                 case CallModel model -> loop.feed(loop.runId(), new ModelReplied(model.id(),
                         scripted.isEmpty() ? text("done") : scripted.poll(), StopReason.END_TURN, "m", null, null, null, null));
-                case RunTool tool -> loop.feed(loop.runId(), new ToolFinished(tool.id(), tool.call().id(), "ok", false, null));
+                case RunTool tool -> loop.feed(loop.runId(), ToolFinishedFixture.of(tool.id(), tool.call().id(), "ok", false, null));
                 default -> fail("unexpected command " + command);
             }
         }
@@ -368,7 +370,7 @@ class WorkStepsTest {
         LoopFixture loop = new LoopFixture(CHECK_ONCE);
         for (int i = 0; i < 10; i++) {
             loop.prompt("hi " + i);
-            loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+            loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
             drive(loop, null);
             assertCompleted(loop);
         }

@@ -38,6 +38,7 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
+import tantalum.memory.MemoryStoreFixture;
 
 /**
  * 只在真实的 Windows 上有意义的文件行为（windows-server 设计“Windows 上才跑的测试”）：ACL 继承、超过 260 字符的路径、保留名、
@@ -97,7 +98,7 @@ class WindowsFilesTest {
         AttachmentRef ref = store.upload(ALICE, "long.txt", "text/plain", new ByteArrayInputStream("long".getBytes(StandardCharsets.UTF_8)), 4);
         assertEquals("long", new String(store.bytes(ALICE, ref.id()), StandardCharsets.UTF_8));
 
-        MemoryStore memory = new MemoryStore(data.resolve("workspaces").resolve("alice").resolve("memory"),
+        MemoryStore memory = MemoryStoreFixture.of(data.resolve("workspaces").resolve("alice").resolve("memory"),
                 new MemoryLimits(200, 16384, 8192), Clock.systemUTC());
         memory.write("a-memory-with-a-long-name-" + "x".repeat(30), "user", "first", "one");
         memory.write("a-memory-with-a-long-name-" + "x".repeat(30), "user", "second", "two");

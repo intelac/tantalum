@@ -11,6 +11,8 @@ import tantalum.value.id.CommandId;
 import tantalum.value.id.RunId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolSpec;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** one-line-journal 需求 5：工具变了，对话里在那个位置出一条，写明新增、关掉的和已经没有的。 */
 class TranscriptToolChangeTest {
@@ -24,7 +26,7 @@ class TranscriptToolChangeTest {
         fixture.feed(null, fixture.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
         CommandId assemble = fixture.lastCommands().getFirst().id();
-        fixture.feed(run, new ContextAssembled(assemble, "sys", offered.stream().map(TranscriptToolChangeTest::spec).toList(), null,
+        fixture.feed(run, ContextAssembledFixture.of(assemble, "sys", offered.stream().map(TranscriptToolChangeTest::spec).toList(), null,
                 List.of(), enabled, List.of()));
         fixture.feed(run, fixture.reply(TranscriptFixture.text("ok")));
         return run;
@@ -53,12 +55,12 @@ class TranscriptToolChangeTest {
         List<ToolSpec> tools = List.of(spec("lookup"), spec("memory_read"), spec("read_file"));
         fixture.feed(null, fixture.prompt("q1"));
         RunId first = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
-        fixture.feed(first, new ContextAssembled(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
+        fixture.feed(first, ContextAssembledFixture.of(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
                 List.of("lookup", "memory_read", "read_file"), List.of(), sources));
         fixture.feed(first, fixture.reply(TranscriptFixture.text("ok")));
         fixture.feed(null, fixture.prompt("q2"));
         RunId second = RunId.of(TranscriptFixture.SESSION, fixture.lastSeq());
-        fixture.feed(second, new ContextAssembled(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
+        fixture.feed(second, ContextAssembledFixture.of(fixture.lastCommands().getFirst().id(), "sys", tools, null, List.of(),
                 List.of("lookup", "memory_read"), List.of(), sources));
 
         ToolChange change = fixture.items(ToolChange.class).getFirst();
@@ -91,7 +93,7 @@ class TranscriptToolChangeTest {
         assertEquals(List.of(), fixture.items(ToolChange.class));
         fixture.feed(run, fixture.reply(TranscriptFixture.call("a", "browser_navigate")));
         tantalum.value.command.RunTool tool = fixture.runTools().getFirst();
-        fixture.feed(run, new tantalum.value.event.ToolFinished(tool.id(), "a", "page", false, null));
+        fixture.feed(run, ToolFinishedFixture.of(tool.id(), "a", "page", false, null));
 
         ToolChange change = fixture.items(ToolChange.class).getFirst();
         assertEquals(List.of("browser_click", "browser_type"), change.added());

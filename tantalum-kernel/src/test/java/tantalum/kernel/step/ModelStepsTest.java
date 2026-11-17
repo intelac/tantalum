@@ -40,6 +40,9 @@ import tantalum.value.state.ContextSection;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.SteerSubmittedFixture;
+import tantalum.value.hook.AllowFixture;
 
 class ModelStepsTest {
 
@@ -59,7 +62,7 @@ class ModelStepsTest {
 
     private static void toModel(LoopFixture loop) {
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
     }
 
     private static ModelReplied reply(LoopFixture loop, String text) {
@@ -89,7 +92,7 @@ class ModelStepsTest {
     /** hook-patch：补丁不拼进 system，而是提问后面一条 system 消息，块上记着钩子名。 */
     @Test
     void beforeModelCallPatchBecomesASystemMessage() {
-        LoopFixture loop = new LoopFixture(beforeModel(new Allow(new PromptPatch("+x", List.of()))));
+        LoopFixture loop = new LoopFixture(beforeModel(AllowFixture.of(new PromptPatch("+x", List.of()))));
         toModel(loop);
         CallModel call = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals("system", call.prompt().system());
@@ -153,7 +156,7 @@ class ModelStepsTest {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
         CommandId waiting = loop.onlyCommandId();
-        loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
         assertEquals(List.of(), loop.last.commands());
         loop.feed(loop.runId(), new ModelReplied(waiting, text("x"), StopReason.END_TURN, "m", null, null, null, null));
 
@@ -186,14 +189,14 @@ class ModelStepsTest {
         var two = List.of(new tantalum.value.state.ContextSection("memory-index", "- a\n- b", true));
         LoopFixture loop = new LoopFixture();
         loop.prompt("one");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, one));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys", List.of(), null, one));
         loop.feed(loop.runId(), reply(loop, "a"));
         loop.prompt("two");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, one));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys", List.of(), null, one));
         assertEquals(Message.user("two"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "b"));
         loop.prompt("three");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, two));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys", List.of(), null, two));
         Message update = assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast();
         String text = ((tantalum.value.model.TextBlock) update.content().getFirst()).text();
         assertTrue(ContextUpdate.isUpdate(text), text);
@@ -208,18 +211,18 @@ class ModelStepsTest {
         var idx2 = List.of(new ContextSection("memory-index", "idx2", false));
         LoopFixture loop = new LoopFixture();
         loop.prompt("one");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
         loop.feed(loop.runId(), reply(loop, "a"));
 
         loop.prompt("two");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys idx1", List.of(), null, idx1));
         CallModel same = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals("sys idx1", same.prompt().system());
         assertEquals(Message.user("two"), same.prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "b"));
 
         loop.prompt("three");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys idx2", List.of(
                 new tantalum.value.model.ToolSpec("late", "d", new Json.Null())), null, idx2));
         CallModel changed = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals("sys idx1", changed.prompt().system());
@@ -229,11 +232,11 @@ class ModelStepsTest {
 
         // 没再变就不重复说明；清空也要说明。
         loop.prompt("four");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys idx2", List.of(), null, idx2));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys idx2", List.of(), null, idx2));
         assertEquals(Message.user("four"), assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
         loop.feed(loop.runId(), reply(loop, "d"));
         loop.prompt("five");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "sys", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "sys", List.of(), null, List.of()));
         assertEquals(ContextUpdate.message("memory-index no longer applies; ignore what you were given earlier."),
                 assertInstanceOf(CallModel.class, loop.onlyCommand()).prompt().messages().getLast());
     }
@@ -319,14 +322,14 @@ class ModelStepsTest {
     void pendingSteersJoinTheHistoryWhenTheRunIsCancelled() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
 
         assertEquals(Message.user("also this"), loop.session().messages().getLast());
         assertEquals(List.of(), loop.run().pendingSteers());
         loop.prompt("next");
         CallModel call = null;
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         call = assertInstanceOf(CallModel.class, loop.onlyCommand());
         assertEquals(List.of(Message.user("hi"), Message.user("also this"), Message.user("next")),
                 call.prompt().messages());

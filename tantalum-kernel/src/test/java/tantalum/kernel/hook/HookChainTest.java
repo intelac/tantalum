@@ -44,6 +44,9 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.KernelState;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.hook.AllowFixture;
 
 class HookChainTest {
 
@@ -111,9 +114,9 @@ class HookChainTest {
     @Test
     void allowPatchesAreMergedInOrder() {
         HookOutcome outcome = modelCall(
-                hook("a", false, new Allow(new PromptPatch("one", List.of()))),
-                hook("b", false, new Allow(new PromptPatch("two", List.of()))));
-        assertEquals(new Allow(new PromptPatch("onetwo", List.of())), outcome.result());
+                hook("a", false, AllowFixture.of(new PromptPatch("one", List.of()))),
+                hook("b", false, AllowFixture.of(new PromptPatch("two", List.of()))));
+        assertEquals(AllowFixture.of(new PromptPatch("onetwo", List.of())), outcome.result());
     }
 
     @Test
@@ -216,7 +219,7 @@ class HookChainTest {
                         new HookDecided(RUN, "h", point, HookDecided.Kind.STOP, "quota", 0, List.of(), callAt(point), null)),
                 Arguments.of(point, new NeedWork("citation", new Json.Null()),
                         new HookDecided(RUN, "h", point, HookDecided.Kind.NEED_WORK, null, 0, List.of(), callAt(point), "citation")),
-                Arguments.of(point, new Allow(new PromptPatch("cite sources", List.of(CITE, LOOKUP))),
+                Arguments.of(point, AllowFixture.of(new PromptPatch("cite sources", List.of(CITE, LOOKUP))),
                         new HookDecided(RUN, "h", point, HookDecided.Kind.PATCH, null, 12, List.of("cite", "lookup"), callAt(point), null)),
                 // 问用户（waiting-state）：问题 id 放 reason 位，questionId() 读
                 Arguments.of(point, new tantalum.value.hook.Ask(new tantalum.value.question.Question("q-1",
@@ -237,24 +240,24 @@ class HookChainTest {
     void halfAPatchIsStillAPatch(HookPoint point) {
         assertEquals(List.of(new HookDecided(RUN, "tools", point, HookDecided.Kind.PATCH, null, 0, List.of("cite"), callAt(point), null),
                         new HookDecided(RUN, "system", point, HookDecided.Kind.PATCH, null, 3, List.of(), callAt(point), null)),
-                facts(point, everywhere("tools", false, new Allow(new PromptPatch("", List.of(CITE)))),
-                        everywhere("system", false, new Allow(new PromptPatch("abc", List.of())))));
+                facts(point, everywhere("tools", false, AllowFixture.of(new PromptPatch("", List.of(CITE)))),
+                        everywhere("system", false, AllowFixture.of(new PromptPatch("abc", List.of())))));
     }
 
     @ParameterizedTest
     @EnumSource(HookPoint.class)
     void allowWithoutAPatchIsNotReported(HookPoint point) {
         assertEquals(List.of(), facts(point, everywhere("plain", false, Allow.PLAIN),
-                everywhere("empty", false, new Allow(new PromptPatch("", List.of())))));
+                everywhere("empty", false, AllowFixture.of(new PromptPatch("", List.of())))));
     }
 
     /** 每个钩子报自己的补丁（不是合并后的），按注册顺序；拦截之后的钩子不再运行，也不报。 */
     @Test
     void severalHooksReportInOrderWithTheirOwnPatch() {
         List<Fact> facts = facts(HookPoint.BEFORE_MODEL_CALL,
-                everywhere("a", false, new Allow(new PromptPatch("one", List.of(CITE)))),
+                everywhere("a", false, AllowFixture.of(new PromptPatch("one", List.of(CITE)))),
                 everywhere("b", false, Allow.PLAIN),
-                everywhere("c", false, new Allow(new PromptPatch("three!", List.of(LOOKUP, CITE)))),
+                everywhere("c", false, AllowFixture.of(new PromptPatch("three!", List.of(LOOKUP, CITE)))),
                 everywhere("d", false, new NeedWork("check", new Json.Null())),
                 everywhere("e", false, new Stop("never asked")));
         assertEquals(List.of(
@@ -297,7 +300,7 @@ class HookChainTest {
         KernelHook patcher = new KernelHook() {
             @Override public String name() { return "patcher"; }
             @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-                return new Allow(new PromptPatch("be brief", List.of(CITE)));
+                return AllowFixture.of(new PromptPatch("be brief", List.of(CITE)));
             }
         };
         KernelHook blocker = new KernelHook() {
@@ -315,7 +318,7 @@ class HookChainTest {
         LoopFixture loop = new LoopFixture(patcher, blocker, checker);
         List<Fact> live = new ArrayList<>();
         live.addAll(loop.prompt("hi").facts());
-        live.addAll(loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of())).facts());
+        live.addAll(loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of())).facts());
         int modelCalls = 0;
         for (int step = 0; step < 20 && !loop.run().isEnded(); step++) {
             Command command = loop.last.commands().getFirst();
@@ -324,7 +327,7 @@ class HookChainTest {
                         ? loop.feed(loop.runId(), new ModelReplied(model.id(), List.of(LoopFixture.call("t1", "safe_read"),
                                 LoopFixture.call("t2", "danger")), StopReason.TOOL_USE, "m", null, null, null, null))
                         : loop.feed(loop.runId(), new ModelReplied(model.id(), LoopFixture.text("done"), StopReason.END_TURN, "m", null, null, null, null));
-                case RunTool tool -> loop.feed(loop.runId(), new ToolFinished(tool.id(), tool.call().id(), "ok", false, null));
+                case RunTool tool -> loop.feed(loop.runId(), ToolFinishedFixture.of(tool.id(), tool.call().id(), "ok", false, null));
                 case DoWork work -> loop.feed(loop.runId(), new WorkDone(work.id(), work.workType(), new Json.Null(), false, null, null));
                 default -> throw new AssertionError("unexpected command " + command);
             };

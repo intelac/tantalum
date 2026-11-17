@@ -59,10 +59,6 @@ public final class LoginContextRepository implements SecurityContextRepository {
         }
     }
 
-    public Duration timeout() {
-        return timeout;
-    }
-
     /** 这次请求的登录 id，没登录为 null。 */
     public static String currentLogin(HttpServletRequest request) {
         return request.getAttribute(LOGIN_ID) instanceof String id ? id : null;

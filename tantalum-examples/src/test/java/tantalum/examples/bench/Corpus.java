@@ -53,6 +53,10 @@ import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.OwnerRef;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.event.UserPromptFixture;
+import tantalum.value.state.CompactionSettingsFixture;
 
 /**
  * 合成 journal：事件由真实内核逐步推出，所以序列一定合法。多用户、多会话交错，含工具轮和压缩，所有运行都正常结束。
@@ -70,7 +74,7 @@ public final class Corpus {
     private static final int ACTIVE_SESSIONS = 20;
     private static final int SESSIONS_PER_USER = 20;
     private static final Instant START = Instant.parse("2026-10-01T00:00:00Z");
-    private static final CompactionSettings COMPACTION = new CompactionSettings(32_000, 8_000, 6_000, 4_096, 2_048, 1_024);
+    private static final CompactionSettings COMPACTION = CompactionSettingsFixture.of(32_000, 8_000, 6_000, 4_096, 2_048, 1_024);
     private static final String SYSTEM = "You are a coding agent working in the user's workspace. ".repeat(50);
     private static final List<ToolSpec> TOOLS = List.of(
             new ToolSpec("read_file", "Read a file.", schema()),
@@ -203,7 +207,7 @@ public final class Corpus {
     private void startPrompt(SessionPlan plan) {
         plan.prompts--;
         long id = ids++;
-        pending.add(new Pending(plan.session, plan.principal, null, new UserPrompt(new SubmissionId("sub-" + id),
+        pending.add(new Pending(plan.session, plan.principal, null, UserPromptFixture.of(new SubmissionId("sub-" + id),
                 new RequestId("req-" + id), new OwnerRef.OfSession(plan.session), words(40 + random.nextInt(400)))));
     }
 
@@ -238,9 +242,9 @@ public final class Corpus {
 
     private Event resultOf(Command command) {
         return switch (command) {
-            case AssembleContext assemble -> new ContextAssembled(assemble.id(), SYSTEM, TOOLS, COMPACTION, List.of());
+            case AssembleContext assemble -> ContextAssembledFixture.of(assemble.id(), SYSTEM, TOOLS, COMPACTION, List.of());
             case CallModel call -> reply(call);
-            case RunTool tool -> new ToolFinished(tool.id(), tool.call().id(), words(200 + random.nextInt(3800)), false, null);
+            case RunTool tool -> ToolFinishedFixture.of(tool.id(), tool.call().id(), words(200 + random.nextInt(3800)), false, null);
             default -> throw new IllegalStateException("corpus does not produce " + command);
         };
     }

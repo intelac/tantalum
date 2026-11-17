@@ -15,6 +15,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
+import tantalum.value.hook.AllowFixture;
 
 /**
  * 端到端测试轨迹页用的钩子，只对最后一条用户消息带 {@value #KEYWORD} 的运行起作用，其它测试不受影响：
@@ -32,7 +33,7 @@ final class E2eTraceHook implements KernelHook {
 
     @Override
     public HookResult beforeModelCall(KernelState state, HookContext context) {
-        return applies(state, context) ? new Allow(new PromptPatch(PATCH, List.of())) : Allow.PLAIN;
+        return applies(state, context) ? AllowFixture.of(new PromptPatch(PATCH, List.of())) : Allow.PLAIN;
     }
 
     @Override

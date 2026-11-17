@@ -48,11 +48,15 @@ import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.UsageAnchor;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
+import tantalum.value.state.CompactionSettingsFixture;
+import tantalum.value.event.FollowUpSubmittedFixture;
 
 /** 自动压缩和超长恢复的逐步断言。窗口 1000、预留 200：阈值 800，K = min(70, 200) = 70。 */
 class CompactStepsTest {
 
-    static final CompactionSettings SETTINGS = new CompactionSettings(1000, 200, 70, 60, 30, 500);
+    static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
 
     /** 90 字节、30 token 的文本。 */
     static String block(String tag) {
@@ -75,7 +79,7 @@ class CompactStepsTest {
     static LoopFixture start(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt(block("q1"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         return loop;
     }
 
@@ -86,18 +90,18 @@ class CompactStepsTest {
     static LoopFixture overThreshold(KernelHook... hooks) {
         LoopFixture loop = start(hooks);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         assertEquals(EndReason.COMPLETED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
         assertEquals(new UsageAnchor(800, 4), loop.session().anchor());
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         return loop;
     }
 
     /** 压缩后的重新组装。 */
     static void assembled(LoopFixture loop) {
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
     }
 
     static CallModel onlyCall(LoopFixture loop) {
@@ -129,7 +133,7 @@ class CompactStepsTest {
         loop.feed(loop.runId(), new tantalum.value.event.WorkDone(loop.onlyCommandId(), "check", new Json.Null(), false, null, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 790));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         assertEquals("AwaitingWork", loop.phase());
         calls.set(0);
         sawWork.clear();
@@ -156,10 +160,10 @@ class CompactStepsTest {
     void sessionWithoutSettingsNeverCompacts() {
         LoopFixture loop = new LoopFixture();
         loop.prompt(block("q1"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 5000));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         assertEquals("AwaitingModel", loop.phase());
         assertNull(loop.session().context().compaction());
     }
@@ -235,7 +239,7 @@ class CompactStepsTest {
         assertEquals(new UsageAnchor(310, loop.session().messages().size()), loop.session().anchor());
         // 再追问，大小按新锚点算，不再触发。
         loop.prompt("q3");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         assertEquals("AwaitingModel", loop.phase());
         assertEquals(5, onlyCall(loop).prompt().messages().size(), "view = replacement(3) + a2 + q3");
     }
@@ -253,14 +257,14 @@ class CompactStepsTest {
 
         // 同一运行里再到模型调用前（工具轮后），仍超阈值但不再压缩。
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t2"), StopReason.TOOL_USE, new TokenUsage(900, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", block("r2"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t2", block("r2"), false, null));
         assertEquals("AwaitingModel", loop.phase());
         assertTrue(onlyCall(loop).prompt().output().toolsAllowed());
 
         // 下一个运行可以再试。
         loop.feed(loop.runId(), endTurn(loop, "a2", 950));
         loop.prompt("q3");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         assertEquals("AwaitingSummary", loop.phase());
     }
 
@@ -384,12 +388,12 @@ class CompactStepsTest {
     static LoopFixture overflowed(KernelHook... hooks) {
         LoopFixture loop = start(hooks);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t2"), StopReason.TOOL_USE, new TokenUsage(300, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t2", "y".repeat(1200), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t2", "y".repeat(1200), false, null));
         assertEquals("AwaitingModel", loop.phase(), "the estimate says it fits, so no automatic compaction");
         return loop;
     }
@@ -398,10 +402,10 @@ class CompactStepsTest {
     void overflowCompactsToTheLastUnitAndRetriesOnce() {
         LoopFixture loop = start();
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", block("r1"), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", block("r1"), false, null));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         assertEquals("AwaitingModel", loop.phase(), "the estimate says it fits");
 
         loop.feed(loop.runId(), overflow(loop));
@@ -474,7 +478,7 @@ class CompactStepsTest {
         LoopFixture loop = start();
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 200));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), overflow(loop));
         loop.feed(loop.runId(), reply(loop, text("x"), StopReason.MAX_TOKENS, null));
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
@@ -488,10 +492,10 @@ class CompactStepsTest {
     void sessionWithoutSettingsDoesNotRecoverFromOverflow() {
         LoopFixture loop = new LoopFixture();
         loop.prompt("q1");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         loop.feed(loop.runId(), endTurn(loop, "a1", 10));
         loop.prompt("q2");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), null, List.of()));
         loop.feed(loop.runId(), overflow(loop));
         assertEquals(EndReason.FAILED, assertInstanceOf(Ended.class, loop.run().phase()).reason());
     }
@@ -505,7 +509,7 @@ class CompactStepsTest {
         LoopFixture loop = start(hooks);
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 100));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), endTurn(loop, block("a2"), 200));
         assertNull(loop.session().activeRun());
         return loop;
@@ -531,7 +535,7 @@ class CompactStepsTest {
         assertEquals(3, run.compacting().plan().headMessages());
 
         // 压缩期间的提交排队，压缩结束后开始。
-        loop.feed(null, new tantalum.value.event.FollowUpSubmitted(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
+        loop.feed(null, FollowUpSubmittedFixture.of(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
         assertEquals(List.of(Message.user("q3")), loop.session().followUps());
 
         loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0), null, null, null));
@@ -587,11 +591,11 @@ class CompactStepsTest {
     void hugeToolResultWithASmallHeadIsTrimmedWithoutASummaryCall() {
         LoopFixture loop = start();
         loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
         assertEquals("AwaitingContext", loop.phase(), "no summary call; the context is reassembled after trimming");
         assertNotNull(loop.session().compaction());
         assertFalse(loop.run().autoCompactionFailed());
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));
         assertEquals("AwaitingModel", loop.phase());
         String kept = ((tantalum.value.model.ToolResultBlock) onlyCall(loop).prompt().messages().getLast().content().getFirst()).text();
         assertTrue(kept.contains("of 30000 bytes truncated"), kept);
@@ -600,16 +604,16 @@ class CompactStepsTest {
     /** 需求 1.1：同样的情况走超长恢复。 */
     @Test
     void overflowFromAHugeToolResultWithASmallHeadRecovers() {
-        CompactionSettings large = new CompactionSettings(100_000, 200, 70, 60, 30, 500);
+        CompactionSettings large = CompactionSettingsFixture.of(100_000, 200, 70, 60, 30, 500);
         LoopFixture loop = new LoopFixture();
         loop.prompt(block("q1"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), large, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), large, List.of()));
         loop.feed(loop.runId(), reply(loop, List.of(LoopFixture.call("t1", "safe_read")), StopReason.TOOL_USE, new TokenUsage(30, 10, 0, 0)));
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "t1", "y".repeat(30_000), false, null));
         assertEquals("AwaitingModel", loop.phase(), "the estimate fits, so no automatic compaction");
         loop.feed(loop.runId(), overflow(loop));
         assertEquals("AwaitingContext", loop.phase());
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "system", List.of(), large, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), large, List.of()));
         assertEquals("AwaitingModel", loop.phase());
     }
 
@@ -656,10 +660,10 @@ class CompactStepsTest {
     void nothingFitsInASummaryCallSoNoneIsSent() {
         LoopFixture loop = new LoopFixture();
         loop.prompt(block("q1"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), endTurn(loop, block("a1"), 1500));
         loop.prompt(block("q2"));
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s".repeat(3000), List.of(), SETTINGS, List.of()));
         loop.feed(loop.runId(), overflow(loop));
         assertTrue(loop.last.commands().stream().noneMatch(CallModel.class::isInstance));
         Ended ended = assertInstanceOf(Ended.class, loop.run().phase());
@@ -685,7 +689,7 @@ class CompactStepsTest {
         loop.feed(loop.runId(), reply(loop, text("Goal: q1"), StopReason.END_TURN, new TokenUsage(50, 20, 0, 0)));
         assertEquals("AwaitingContext", loop.phase());
         int size = loop.session().view().size();
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "new system", List.of(), SETTINGS,
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "new system", List.of(), SETTINGS,
                 List.of(new tantalum.value.state.ContextSection("memory-index", "new index", true))));
         assertEquals("AwaitingModel", loop.phase());
         CallModel call = onlyCall(loop);

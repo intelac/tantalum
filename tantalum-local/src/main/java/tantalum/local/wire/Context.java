@@ -15,13 +15,4 @@ public record Context(String id, String dir, String skills, String wiki) impleme
         Objects.requireNonNull(id, "id");
     }
 
-    /** 从主目录读。 */
-    public Context(String id) {
-        this(id, null, null, null);
-    }
-
-    /** 只要 {@code AGENTS.md}。 */
-    public Context(String id, String dir) {
-        this(id, dir, null, null);
-    }
 }

@@ -58,6 +58,8 @@ import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.text.LocalText;
+import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.ToolFinishedFixture;
 
 /** 等用户回答（waiting-state 需求 1、2、5、8）。 */
 class AnswerStepsTest {
@@ -125,7 +127,7 @@ class AnswerStepsTest {
     private static LoopFixture started(KernelHook... hooks) {
         LoopFixture loop = new LoopFixture(hooks);
         loop.prompt("hi");
-        loop.feed(loop.runId(), new ContextAssembled(loop.onlyCommandId(), "s", List.of(), null, List.of()));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));
         return loop;
     }
 
@@ -188,7 +190,7 @@ class AnswerStepsTest {
         loop.feed(loop.runId(), answer("approval-c1", "session"));
         assertEquals(new Json.Bool(true), loop.session().note("approval").fields().get("write_file"));
         assertInstanceOf(RunTool.class, loop.onlyCommand());
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "c1", "ok", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "c1", "ok", false, null));
         loop.feed(loop.runId(), reply(loop, List.of(call("c2", "write_file"))));
         assertEquals("write_file", assertInstanceOf(RunTool.class, loop.onlyCommand()).call().name());
     }
@@ -382,7 +384,7 @@ class AnswerStepsTest {
                 "choices", new Json.Arr(List.of(new Json.Str("delete"), new Json.Str("keep"))))));
         loop.feed(loop.runId(), reply(loop, List.of(ask, call("r1", "safe_read"))));
         assertEquals("safe_read", assertInstanceOf(RunTool.class, loop.onlyCommand()).call().name());
-        loop.feed(loop.runId(), new ToolFinished(loop.onlyCommandId(), "r1", "contents", false, null));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.onlyCommandId(), "r1", "contents", false, null));
         AwaitingAnswer waiting = waiting(loop);
         assertEquals("a1", waiting.toolCallId());
         assertNull(waiting.origin());
