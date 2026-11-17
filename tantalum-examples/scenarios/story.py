@@ -3,12 +3,13 @@
 一台临时的真服务器接着测试电脑和样例项目。说的都是人平常会说的话，不提任何工具名、不提“工作区”这些做法，
 做法由模型自己定。
 
-一个人五天的工作（同一台服务器、同一个人，后面几天靠前面留下的记忆、会话和工作区）：
+一个人六天的工作（同一台服务器、同一个人，后面几天靠前面留下的记忆、会话和工作区）：
   第一天（主窗口）：自我介绍和习惯 → 看一个数 → 改它并跑测试 → 同一处接着做一件事
   第二天（新的主窗口）：问昨天定了什么 → 另一个目录里的活 → 两边各查一件事 → 一件要用到“习惯”的活 → 让它忘掉一条
   第三天（新的主窗口 + 一个普通会话）：忘掉的不该再出现；普通会话里也认得人、知道现状
   第四天：一句话两件事（两个目录）→ 说得含糊（该先问我）→ 反悔，只撤一处
   第五天：问昨天动了什么，不能把撤回的说成现状
+  第六天：三件互不相干的活（可以分给任务同时做，分不分由模型定）→ 接着问结论
 
 判定看两样：电脑上的文件真的变了没有、回答里有没有该有的（不该有的）内容。
 全程的原话、回答、每个会话用过的工具都写进结果文件，供人读。
@@ -53,6 +54,22 @@ def all_sessions(user):
     return (user.call("GET", "/api/sessions?limit=200")[1] or {}).get("sessions", [])
 
 
+def tasks_of(user, session):
+    """这个会话放出过的任务（含已经结束的）：编号、任务自己的会话、现在的状态、是不是还没回来。"""
+    return (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", [])
+
+
+def with_tasks(user, rows):
+    """会话清单加上各个会话放出的任务自己的会话（清单里不列它们）：等它们停下来、替它们答卡片、记下它们用的工具。"""
+    found = list(rows)
+    for row in rows:
+        for task in tasks_of(user, row["id"]):
+            found.append({"id": task["session"], "title": "任务 " + task["id"] + "：" + (task.get("brief") or ""), "dir": row.get("dir"),
+                          "runStatus": task.get("runStatus", "idle"), "awaitingAnswer": task.get("runStatus") == "AwaitingAnswer",
+                          "task": task["id"], "open": task.get("open", False)})
+    return found
+
+
 class Story:
     def __init__(self, user, model):
         self.user, self.model = user, model
@@ -61,7 +78,7 @@ class Story:
 
     def answer_cards(self):
         """对话页上出现的卡片：新建工作区的点“新建”；模型自己多问的，选第一个选项或者说“你定”。"""
-        for row in all_sessions(self.user):
+        for row in with_tasks(self.user, all_sessions(self.user)):
             if not row.get("awaitingAnswer"): continue
             for question in (self.user.call("GET", f"/api/sessions/{row['id']}/questions")[1] or {}).get("questions", []):
                 title = question.get("title"); title = title.get("zh") or next(iter(title.values()), "") if isinstance(title, dict) else str(title or "")
@@ -82,7 +99,7 @@ class Story:
         self.workspace_choice = workspace_choice
         self.reply, self.reply_words = reply, reply_words   # 模型反过来问我时怎么答
         before_cards = len(self.cards)
-        known = {row["id"] for row in all_sessions(self.user)}
+        known = {row["id"] for row in with_tasks(self.user, all_sessions(self.user))}
         for each in known: self.seen.setdefault(each, len(entries(each)))
         body = {"requestId": secrets.token_hex(6), "mode": "prompt", "text": text.replace("{root}", run.ROOT).replace("{outside}", run.OUTSIDE),
                 "model": self.model}
@@ -93,8 +110,9 @@ class Story:
         while problem is None:
             time.sleep(2)
             self.answer_cards()
-            rows = all_sessions(self.user)
-            busy = [row["id"] for row in rows if row.get("runStatus") != "idle"]
+            rows = with_tasks(self.user, all_sessions(self.user))
+            # 还在跑的：有运行没结束的会话，和放出去还没回来的任务
+            busy = [row["id"] for row in rows if row.get("runStatus") != "idle" or row.get("open") or row.get("openTasks")]
             mine = (self.user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
             quiet = quiet + 1 if not busy and mine and mine[-1].get("endReason") else 0
             if quiet >= 4: break
@@ -104,12 +122,12 @@ class Story:
                 "cards": self.cards[before_cards:], "others": []}
         turn["answers"], turn["calls"], used = replies(session, self.seen.get(session, 0))
         self.tokens.update(used); self.seen[session] = len(entries(session))
-        for row in all_sessions(self.user):
+        for row in with_tasks(self.user, all_sessions(self.user)):
             if row["id"] == session: continue
             texts, calls, used = replies(row["id"], self.seen.get(row["id"], 0))
             self.tokens.update(used); self.seen[row["id"]] = len(entries(row["id"]))
             if texts or calls:
-                turn["others"].append({"id": row["id"], "title": row.get("title"), "dir": row.get("dir"), "new": row["id"] not in known, "tools": [name for name, _ in calls], "calls": calls, "answers": texts})
+                turn["others"].append({"task": row.get("task"), "id": row["id"], "title": row.get("title"), "dir": row.get("dir"), "new": row["id"] not in known, "tools": [name for name, _ in calls], "calls": calls, "answers": texts})
         turn["checks"] = ([("这一轮正常结束", False, problem)] if problem else []) + [self.judge(turn, check) for check in checks]
         self.turns.append(turn)
         ok = all(passed for _, passed, _ in turn["checks"])
@@ -247,6 +265,33 @@ def main():
             ("说到了费率调了又撤回", lambda t: any(said(t, word) is True for word in ("撤", "恢复", "改回", "还原")) or f"没提撤回：{t['answers'][-1][:300]!r}"),
             ("没有说费率现在是 4", lambda t: not re.search(r"(现在|目前|当前)[^。\n]{0,20}海外[^。\n]{0,12}4\b", "\n".join(t["answers"]))),
         ], note="隔天问昨天：靠记忆和过去的对话，不能把撤回的说成现状")
+
+        # ---------------- 第六天：几件互不相干的活，可以分出去同时做 ----------------
+        day6 = "main-" + secrets.token_hex(4)
+        user_turns = lambda session: sum(1 for entry in entries(session) if entry.get("type") in ("UserPrompt", "FollowUpSubmitted", "SteerSubmitted"))
+        runs_of = lambda session: (user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
+        review = story.say(day6, "库存系统里 orders.py、reports.py、cli.py 这三个文件，各帮我仔细过一遍，看有没有明显的毛病，每个文件单独给个结论。"
+                                 "三个互不相干，可以同时看。趁它们在看，先告诉我加急附加费现在是多少。", [
+            ("先答了加急附加费是 15", lambda t: said(t, "15")),
+            ("三个文件都有结论", lambda t: said(t, "orders", "reports", "cli")),
+            ("没有改文件（只是看）", lambda t: not ({"edit_file", "write_file"} & ({name for name, _ in t["calls"]}
+                                                                           | {name for other in t["others"] for name in other["tools"]}))),
+            ("我只说了一句话：后面几轮是结果回来自己接着做的", lambda t: user_turns(day6) == 1 or f"账里有 {user_turns(day6)} 条人说的话"),
+            ("放出去的任务都回来了", lambda t: not [task for task in tasks_of(user, day6) if task.get("open")]
+                or f"还没回来：{[task['id'] for task in tasks_of(user, day6) if task.get('open')]}"),
+        ], note="几件互不相干的活：要不要分出去由模型自己定（看下面“任务”一栏）", timeout=900)
+        started = tasks_of(user, day6)
+        # 这三条是观察，不算对错：分不分出去是模型的判断
+        review["checks"].append((f"观察：模型放出了 {len(started)} 个任务", True, None))
+        if started:
+            review["checks"].append(("放出任务后没有停下来等：那一轮先结束了，结果回来另开了一轮", len(runs_of(day6)) >= 2,
+                                     None if len(runs_of(day6)) >= 2 else f"主窗口只有 {len(runs_of(day6))} 轮"))
+            review["checks"].append(("任务里没有再放任务", not any(tasks_of(user, task["session"]) for task in started), None))
+        story.say(day6, "这三个文件里，哪个的问题最要紧？一句话。", [
+            ("答的是三个文件之一", lambda t: any(said(t, name) is True for name in ("orders", "reports", "cli")) or f"没提到文件：{t['answers'][-1][:200]!r}"),
+            ("不用再去看一遍：没有再读文件", lambda t: not ({"read_file", "grep", "task"} & {name for name, _ in t["calls"]})
+                or f"又用了 {sorted({name for name, _ in t['calls']})}"),
+        ], note="接着问：任务带回来的结论应该还在它手里")
     finally:
         report(story, user, args)
         run.stop_all(keep=args.keep)
@@ -313,7 +358,7 @@ def report(story, user, args):
         for card in turn["cards"]:
             lines += ["", f"卡片（{card['session']}）：{card['title']} — {card['detail'][:200]!r} → {card['answered']}"]
         for other in turn["others"]:
-            lines += ["", f"别的会话 {other['id']}（{'新开' if other['new'] else '已有'}，目录 {other['dir'] or '无'}）用的工具：" + "、".join(other["tools"]),
+            lines += ["", (f"任务 {other['task']} 的会话" if other.get("task") else "别的会话") + f" {other['id']}（{'新开' if other['new'] else '已有'}，目录 {other['dir'] or '无'}）用的工具：" + "、".join(other["tools"]),
                       "它的回话：" + (other["answers"][-1][:600] if other["answers"] else "（没有）")]
         for position, text in enumerate(turn["answers"], 1):
             lines += ["", f"**它说（{position}）：** " + text[:1500]]
