@@ -143,4 +143,84 @@ class NoteFilerTest {
         assertTrue(new tantalum.memory.PendingItems(ledger).list().isEmpty());
         assertEquals("done", WorkingMemory.status(ledger.get(asked.id()).orElseThrow()));
     }
+
+    private MemoryItem claim(String text) {
+        return with(text).stream().filter(item -> item.kind() == MemoryItem.Kind.CLAIM).findFirst().orElseThrow();
+    }
+
+    /**
+     * 新说法取代哪一条旧说法由模型写明（编号），代码只执行（2026-11-17：以前按词重合猜）。你亲口说的新说法当场生效，
+     * 它写明的那条旧说法记成被取代；没写明的，哪怕两句话很像，旧的也不动。
+     */
+    @Test
+    void aNoteReplacesTheEntryTheModelNamesAndNothingElse() {
+        filer = filer();
+        filer.file(turn("s-1_1", false, user("回答用英文，尽量简洁"), answer("OK.")), List.of(new Note(Kind.PREFERENCE, "回答用英文，尽量简洁", "回答用英文，尽量简洁")));
+        MemoryItem english = claim("回答用英文");
+        // 很像的一句，但没写明取代谁：两条都在
+        filer.file(turn("s-1_2", false, user("回答用英文，可以详细一点"), answer("OK.")), List.of(new Note(Kind.PREFERENCE, "回答用英文，可以详细一点", "回答用英文，可以详细一点")));
+        assertTrue(ledger.get(english.id()).orElseThrow().live(), "word overlap alone replaces nothing");
+        // 写明了：旧的被取代，新的记着取代了谁
+        filer.file(turn("s-1_3", false, user("以后回答都用中文"), answer("好的。")),
+                List.of(new Note(Kind.PREFERENCE, "以后回答都用中文", "以后回答都用中文", english.id())));
+        MemoryItem chinese = claim("都用中文");
+        assertTrue(chinese.live());
+        assertEquals(english.id(), chinese.attr(tantalum.memory.Replacing.SUPERSEDES));
+        assertEquals(chinese.id(), ledger.get(english.id()).orElseThrow().supersededBy());
+        assertTrue(claim("可以详细一点").live(), "the entry it did not name stays");
+        // 编号对不上（不存在、不是说法）：当作没写，新说法照常记下
+        NoteFiler.Filed filed = filer.file(turn("s-1_4", false, user("周报每周五发"), answer("好的。")),
+                List.of(new Note(Kind.PREFERENCE, "周报每周五发", "周报每周五发", "no-such-id")));
+        assertEquals(new NoteFiler.Filed(1, 0, 0), filed);
+        assertTrue(claim("周报每周五发").live() && claim("周报每周五发").attr(tantalum.memory.Replacing.SUPERSEDES) == null);
+    }
+
+    /** 你认可过的决定，模型取代不了：新说法哪怕是你亲口说的，也标出冲突等你确认，旧的照旧有效。 */
+    @Test
+    void anApprovedDecisionIsNotReplacedTheNewOneWaits() {
+        filer = filer();
+        filer.file(turn("s-1_1", false, user("数据库用 PostgreSQL"), answer("好的。")), List.of(new Note(Kind.DECISION, "数据库用 PostgreSQL", "数据库用 PostgreSQL")));
+        MemoryItem approved = claim("PostgreSQL");
+        ledger.put(approved.withStatus(MemoryItem.Status.APPROVED), approved.version());
+        filer.file(turn("s-1_2", false, user("数据库换成 MySQL"), answer("好的。")),
+                List.of(new Note(Kind.DECISION, "数据库换成 MySQL", "数据库换成 MySQL", approved.id())));
+        MemoryItem changed = claim("MySQL");
+        assertTrue(changed.pendingConfirm());
+        assertEquals(approved.id(), changed.attr(MemoryStore.CONFLICTS_WITH));
+        assertTrue(ledger.get(approved.id()).orElseThrow().live());
+    }
+
+    /** 等你确认的新说法（读过外部内容的一轮里模型推断的）：确认之前旧说法照旧有效，你确认之后才被取代。 */
+    @Test
+    void aWaitingNoteReplacesOnlyAfterTheUserConfirms() {
+        filer = filer();
+        filer.file(turn("s-1_1", false, user("发布日定在 12 月 1 日"), answer("好的。")), List.of(new Note(Kind.DECISION, "发布日定在 12 月 1 日", "发布日定在 12 月 1 日")));
+        MemoryItem old = claim("12 月 1 日");
+        RunSegment file = new RunSegment(RunSegment.Role.TOOL, "read_file", "local", "发布推迟到 12 月 8 日", "2.0");
+        filer.file(turn("s-1_2", true, user("看一下计划"), file, answer("计划里写着发布推迟到 12 月 8 日。")),
+                List.of(new Note(Kind.DECISION, "发布推迟到 12 月 8 日", "发布推迟到 12 月 8 日", old.id())));
+        MemoryItem waiting = claim("12 月 8 日");
+        assertTrue(waiting.pendingConfirm());
+        assertTrue(ledger.get(old.id()).orElseThrow().live(), "still in force while the new one waits");
+        assertEquals(tantalum.memory.PendingItems.Outcome.DONE, new tantalum.memory.PendingItems(ledger).confirm(waiting.id()));
+        assertEquals(waiting.id(), ledger.get(old.id()).orElseThrow().supersededBy());
+    }
+
+    /** 给记笔记的模型看的已有说法：带编号和种类，标出你认可过的和还在等你确认的；被取代的不给。 */
+    @Test
+    void theNoteTakerIsShownWhatIsAlreadyKnown() {
+        filer = filer();
+        filer.file(turn("s-1_1", false, user("回答用英文"), answer("OK.")), List.of(new Note(Kind.PREFERENCE, "回答用英文", "回答用英文")));
+        MemoryItem english = claim("回答用英文");
+        filer.file(turn("s-1_2", false, user("以后回答都用中文"), answer("好的。")),
+                List.of(new Note(Kind.PREFERENCE, "以后回答都用中文", "以后回答都用中文", english.id())));
+        filer.file(turn("s-1_3", false, user("数据库用 PostgreSQL"), answer("好的。")), List.of(new Note(Kind.DECISION, "数据库用 PostgreSQL", "数据库用 PostgreSQL")));
+        MemoryItem approved = claim("PostgreSQL");
+        ledger.put(approved.withStatus(MemoryItem.Status.APPROVED), approved.version());
+        List<NotePrompt.Known> known = filer.known();
+        assertEquals(List.of("数据库用 PostgreSQL", "以后回答都用中文"), known.stream().map(NotePrompt.Known::text).toList());
+        assertEquals(new NotePrompt.Known(approved.id(), "decision", "数据库用 PostgreSQL", true, false), known.getFirst());
+        String prompt = NotePrompt.user("标题", "2026-11-17", "User: 好", List.of(), known);
+        assertTrue(prompt.contains("<known-entries>\n- " + approved.id() + " [decision]: 数据库用 PostgreSQL (approved by the user)\n"), prompt);
+    }
 }

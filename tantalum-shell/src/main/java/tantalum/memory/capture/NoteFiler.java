@@ -64,6 +64,21 @@ public final class NoteFiler {
         return items.stream().limit(OPEN_LIMIT).map(item -> new NotePrompt.Open(item.id(), cut(item.text(), OPEN_CHARS))).toList();
     }
 
+    /**
+     * 给记笔记的模型看的已有说法：偏好、事实、决定这三页上生效的和等你确认的，加上别的页上你认可过的决定，新的在前，最多 {@link #KNOWN_LIMIT} 条。
+     * 模型据此不重复记，并写明新说法取代哪一条（{@link tantalum.memory.Replacing}）。
+     */
+    public List<NotePrompt.Known> known() {
+        Map<String, String> kinds = Map.of(PREFERENCES.page(), "preference", ABOUT.page(), "fact", DECISIONS.page(), "decision");
+        return store.ledger().items(item -> item.kind() == MemoryItem.Kind.CLAIM && item.state() == MemoryItem.State.CONFIRMED
+                        && item.supersededBy() == null && item.page() != null
+                        && (kinds.containsKey(item.page()) || item.status() == MemoryItem.Status.APPROVED)).stream()
+                .sorted(java.util.Comparator.comparing(MemoryItem::created).reversed()).limit(KNOWN_LIMIT)
+                .map(item -> new NotePrompt.Known(item.id(), kinds.getOrDefault(item.page(), "decision"), cut(item.text(), OPEN_CHARS),
+                        item.status() == MemoryItem.Status.APPROVED, item.pendingConfirm())).toList();
+    }
+
+    static final int KNOWN_LIMIT = 40;
     static final int OPEN_LIMIT = 20;
     static final int OPEN_CHARS = 160;
     static final int SAID_CHARS = 240;
@@ -162,32 +177,13 @@ public final class NoteFiler {
         if (shelf != null) {
             MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, source, MemoryItem.Actor.AGENT, note.text(),
                     store.ledger().clock().instant()).withQuote(note.quote()).withProvenance(provenance).withPendingConfirm(pendingConfirm);
-            List<MemoryItem> replaced = List.of();
-            if (!pendingConfirm && note.kind() == NotePrompt.Kind.DECISION) {
-                // 和你认可过的决定冲突：标出来、等你确认（memory-final-plan 第 9 节“写入”）
-                Optional<MemoryItem> approved = tantalum.memory.recall.Overlap.approvedConflict(store.ledger(), note.text());
-                if (approved.isPresent()) {
-                    java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
-                    attrs.put(MemoryStore.CONFLICTS_WITH, approved.get().id());
-                    claim = claim.withPendingConfirm(true).withAttrs(attrs);
-                }
-            } else if (!pendingConfirm && note.kind() == NotePrompt.Kind.PREFERENCE) {
-                // 你对自己偏好的新说法自动取代旧说法，不问你
-                replaced = tantalum.memory.recall.Overlap.supersededPreferences(store.ledger(), shelf.page(), note.text());
-                if (!replaced.isEmpty()) {
-                    java.util.Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
-                    attrs.put("supersedes", replaced.getFirst().id());
-                    claim = claim.withAttrs(attrs);
-                }
+            // 取代哪一条由模型写明（编号），这里只执行：你认可过的决定取代不了，标出冲突等你确认；别的在新说法生效时被它取代
+            Optional<MemoryItem> old = tantalum.memory.Replacing.target(store.ledger(), note.replaces());
+            if (old.isPresent()) {
+                claim = tantalum.memory.Replacing.mark(claim, old.get());
             }
             Optional<MemoryItem> added = store.addClaim(shelf.page(), shelf.type(), shelf.description(), claim);
-            added.ifPresent(written -> {
-                for (MemoryItem old : List.copyOf(tantalum.memory.recall.Overlap.supersededPreferences(store.ledger(), shelf.page(), written.text()))) {
-                    if (!old.id().equals(written.id()) && written.attr("supersedes") != null) {
-                        store.ledger().put(old.withSupersededBy(written.id()), old.version());
-                    }
-                }
-            });
+            added.ifPresent(written -> tantalum.memory.Replacing.apply(store.ledger(), written));
             return added.isPresent();
         }
         MemoryItem.Kind kind = switch (note.kind()) {

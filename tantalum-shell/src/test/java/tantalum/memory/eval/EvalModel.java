@@ -53,7 +53,12 @@ final class EvalModel implements ModelClient {
     static final String SUMMARY = "（之前的对话摘要：用户和助手聊了一些杂事。）";
 
     /** 记笔记的模型写的一条：种类（preference、fact、decision、task、commitment、waiting、note）、要点、原话。 */
-    record Note(String kind, String text, String quote) {}
+    record Note(String kind, String text, String quote, String replaces) {
+
+        Note(String kind, String text, String quote) {
+            this(kind, text, quote, null);
+        }
+    }
 
     private final List<Call> calls = new CopyOnWriteArrayList<>();
     private volatile Function<Call, Step> chat = call -> Step.say("好的。");
@@ -76,7 +81,7 @@ final class EvalModel implements ModelClient {
                 }
                 List<Note> notes = capture.apply(call);
                 yield replied(notes.isEmpty() ? NotePrompt.NOTHING
-                        : String.join("\n", notes.stream().map(n -> "- [" + n.kind() + "] " + n.text() + " «" + n.quote() + "»").toList()), usage);
+                        : String.join("\n", notes.stream().map(n -> "- [" + n.kind() + "] " + n.text() + " «" + n.quote() + "»" + (n.replaces() == null ? "" : " (replaces " + n.replaces() + ")")).toList()), usage);
             }
             case COMPACT -> replied(summary(call.input()), usage);
             case OTHER -> replied(call.system().startsWith(REWRITE) ? rewrite(call.lastUser()) : call.lastUser(), usage);

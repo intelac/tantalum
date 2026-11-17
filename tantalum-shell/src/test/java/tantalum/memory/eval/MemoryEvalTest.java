@@ -252,10 +252,19 @@ class MemoryEvalTest {
 
     private void decisionConflict() {
         String user = world.person(EvalWorld.CAPTURE, "alice");
-        world.model.capture(call -> call.turn().contains("MySQL") ? List.of(note("decision", "数据库改用 MySQL", "数据库换成 MySQL")) : List.of());
+        // 记笔记的模型看得到已有的说法和编号，由它写明新说法取代哪一条；这里的脚本模型照着写 a-db
+        java.util.concurrent.atomic.AtomicBoolean listed = new java.util.concurrent.atomic.AtomicBoolean();
+        world.model.capture(call -> {
+            if (!call.turn().contains("MySQL")) {
+                return List.of();
+            }
+            listed.set(call.input().contains("- a-db [decision]:") && call.input().contains("(approved by the user)"));
+            return List.of(new EvalModel.Note("decision", "数据库改用 MySQL", "数据库换成 MySQL", "a-db"));
+        });
         int from = world.model.count();
         world.ask(EvalWorld.CAPTURE, user, world.session(), "把数据库换成 MySQL 吧。");
         waitCapture(from);
+        assertTrue(listed.get(), "the note taker must be shown the approved decision with its id");
         List<JsonNode> changed = remembered(EvalWorld.CAPTURE, user, "改用 MySQL");
         assertFalse(changed.isEmpty(), "the change was not remembered at all");
         for (JsonNode item : changed) {

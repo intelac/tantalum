@@ -39,4 +39,19 @@ class NotePromptTest {
         assertEquals(List.of(new Note(Kind.DONE, "mm1abc", "8 个测试全部通过"), new Note(Kind.DONE, "mm2def", "不做了")),
                 NotePrompt.notes("- [done] mm1abc «8 个测试全部通过»\n- [done] mm2def: 折扣那件事 «不做了»\n- [done] mm3ghi"));
     }
+
+    /** 模型在一行末尾写 (replaces 编号)：读成这条笔记取代的那条已有说法；没写为 null。全角括号也认。 */
+    @Test
+    void aNoteCanNameTheEntryItReplaces() {
+        List<NotePrompt.Note> notes = NotePrompt.notes("""
+                - [preference] 以后回答都用中文 «以后回答都用中文» (replaces mmw1abc)
+                - [decision] 发布推迟到 12 月 8 日 «推迟到 12 月 8 日»（replaces mmw2def）
+                - [fact] 负责库存系统 «我负责库存系统»
+                """);
+        assertEquals(new NotePrompt.Note(NotePrompt.Kind.PREFERENCE, "以后回答都用中文", "以后回答都用中文", "mmw1abc"), notes.get(0));
+        assertEquals("mmw2def", notes.get(1).replaces());
+        assertEquals("推迟到 12 月 8 日", notes.get(1).quote());
+        assertEquals(null, notes.get(2).replaces());
+        assertTrue(NotePrompt.system().contains("(replaces id)"));
+    }
 }

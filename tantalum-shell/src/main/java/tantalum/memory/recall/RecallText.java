@@ -27,7 +27,9 @@ public final class RecallText {
         for (Recall.Hit hit : hits) {
             MemoryItem item = hit.item();
             text.append("- [").append(item.page() != null ? item.page() : "daily note").append(" · ")
-                    .append(WHEN.format(item.validFrom().atZone(zone))).append(" · ").append(source(item)).append("] ")
+                    .append(WHEN.format(item.validFrom().atZone(zone))).append(" · ").append(source(item))
+                    // 说法带上编号：模型记一条取代它的新说法时要写明是哪一条（memory_note 的 replaces）
+                    .append(item.kind() == MemoryItem.Kind.CLAIM ? " · id " + item.id() : "").append("] ")
                     .append(item.text().replaceAll("\\s+", " ").strip()).append('\n');
         }
         return text.append("</").append(TAG).append(">").toString();

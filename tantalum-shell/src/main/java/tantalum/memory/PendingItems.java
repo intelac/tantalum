@@ -51,8 +51,8 @@ public final class PendingItems {
                     && other.pendingConfirm() && other.state() == MemoryItem.State.CONFIRMED)) {
                 ledger.put(page.withPendingConfirm(false).withActor(MemoryItem.Actor.USER), page.version());
             }
-            // 图书管理员的改正：确认后取代那条旧说法
-            String supersedes = item.attr("supersedes");
+            // 写明取代某一条的（图书管理员的改正、模型记的新说法）：确认后取代那条旧说法
+            String supersedes = item.attr(Replacing.SUPERSEDES);
             if (supersedes != null) {
                 ledger.get(supersedes).filter(MemoryItem::live).ifPresent(old -> ledger.put(old.withSupersededBy(item.id()), old.version()));
             }

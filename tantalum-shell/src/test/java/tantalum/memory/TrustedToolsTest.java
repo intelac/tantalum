@@ -182,14 +182,14 @@ class TrustedToolsTest {
         assertEquals(List.of("history_search"), verdict.outsideTools(), "past conversations may carry what was read then; memory itself does not");
     }
 
-    /** 用工具记一条和你认可过的决定相反的“决定”：不直接生效，等你确认，原来那条照旧。 */
+    /** 用工具记一条“决定”并写明它取代你认可过的那条：不直接生效，等你确认，原来那条照旧。哪一条由模型给编号，代码不猜。 */
     @Test
     void aNotedDecisionThatDiffersFromAnApprovedOneWaits() {
         MemoryStore store = stores.of(ALICE);
         store.write("decision-database", "project", "数据库选型", "数据库用 PostgreSQL 16");
         MemoryItem claim = store.ledger().items(item -> item.kind() == MemoryItem.Kind.CLAIM).getFirst();
         store.ledger().put(claim.withStatus(MemoryItem.Status.APPROVED), claim.version());
-        ToolOutput output = new MemoryNoteTool(stores, trust).run(in(false), args("kind", "decision", "text", "数据库用 MySQL 8"));
+        ToolOutput output = new MemoryNoteTool(stores, trust).run(in(false), args("kind", "decision", "text", "数据库用 MySQL 8", "replaces", claim.id()));
         assertTrue(output.text().contains("differs from a decision the user approved"), output.text());
         MemoryItem waiting = new PendingItems(store.ledger()).list().getFirst();
         assertEquals(claim.id(), waiting.attr(MemoryStore.CONFLICTS_WITH));

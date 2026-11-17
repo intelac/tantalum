@@ -36,10 +36,11 @@ public final class MemoryNoteTool implements Tool {
         return "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; "
                 + "quote: the user's exact words from this turn that show it (needed for it to count as what the user said; once the "
                 + "conversation has read files or pages, text must also be the user's exact words, otherwise "
-                + "the note waits for the user to confirm). Use memory_write instead "
-                + "to write or rewrite a whole entry.";
+                + "the note waits for the user to confirm). replaces: when this note takes the place of an entry recalled from "
+                + "memory (the user changed their mind or decided otherwise), the id shown with that entry. Use memory_write "
+                + "instead to write or rewrite a whole entry.";
     }
-    @Override public Json schema() { return ToolArguments.schema(List.of("kind", "text"), List.of("quote")); }
+    @Override public Json schema() { return ToolArguments.schema(List.of("kind", "text"), List.of("quote", "replaces")); }
     @Override public String server() { return MemoryTools.SERVER; }
     @Override public String plugin() { return MemoryTools.PLUGIN; }
     @Override public int serverConcurrency() { return MemoryTools.CONCURRENCY; }
@@ -83,18 +84,20 @@ public final class MemoryNoteTool implements Tool {
             MemoryItem claim = MemoryItem.create(store.ledger().newId(), MemoryItem.Kind.CLAIM, verdict.source(), actor,
                     text.strip(), store.ledger().clock().instant()).withQuote(quote).withProvenance(provenance)
                     .withPendingConfirm(verdict.pendingConfirm());
-            if (kind.equals("decision") && !claim.pendingConfirm()) {
-                // 和你认可过的决定冲突：不直接生效，标出来等你确认（和自动记笔记同一条规矩）
-                Optional<MemoryItem> approved = tantalum.memory.recall.Overlap.approvedConflict(store.ledger(), text.strip());
-                if (approved.isPresent()) {
-                    Map<String, String> attrs = new java.util.LinkedHashMap<>(claim.attrs());
-                    attrs.put(MemoryStore.CONFLICTS_WITH, approved.get().id());
-                    claim = claim.withPendingConfirm(true).withAttrs(attrs);
-                    suffix = " It differs from a decision the user approved (\"" + approved.get().text() + "\"), so it waits for the user to "
+            // 取代哪一条由模型写明（编号），这里只执行（和自动记笔记同一条规矩，见 Replacing）
+            Optional<MemoryItem> old = Replacing.target(store.ledger(), ToolArguments.string(arguments, "replaces"));
+            if (old.isPresent()) {
+                boolean waited = claim.pendingConfirm();
+                claim = Replacing.mark(claim, old.get());
+                if (Replacing.approved(old.get())) {
+                    suffix = " It differs from a decision the user approved (\"" + old.get().text() + "\"), so it waits for the user to "
                             + "confirm it in the console; the approved one stays in force until then. Tell the user.";
+                } else if (waited) {
+                    suffix += " The entry it replaces stays in force until the user confirms.";
                 }
             }
             Optional<MemoryItem> added = store.addClaim(shelf[0], shelf[1], shelf[2], claim);
+            added.ifPresent(written -> Replacing.apply(store.ledger(), written));
             return ToolOutput.ok(added.isEmpty() ? "Already noted in " + shelf[0] + "." : "Noted in " + shelf[0] + "." + suffix);
         } catch (RuntimeException failure) {
             return MemoryTools.unavailable(failure);

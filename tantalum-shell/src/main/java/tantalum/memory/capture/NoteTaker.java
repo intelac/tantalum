@@ -209,7 +209,7 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             }
             String title = run.title();
             NoteFiler filer = filers.apply(run.user());
-            String reply = ask(run, NotePrompt.user(title, day, turn, filer.open()));
+            String reply = ask(run, NotePrompt.user(title, day, turn, filer.open(), filer.known()));
             if (reply == null) {
                 // 模型失败：不记标记，之后补抓
                 return false;
