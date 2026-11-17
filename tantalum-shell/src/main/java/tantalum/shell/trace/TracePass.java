@@ -104,7 +104,7 @@ final class TracePass {
             case tantalum.value.event.SessionMessage said -> {
                 // 撤回不是给模型的话
                 if (!said.isWithdrawal()) {
-                    delegateInput(said.isReply() ? null : said.text());
+                    delegateInput(said.isRequest() ? said.text() : null);
                 }
             }
             case ContextAssembled assembled -> system.contextAssembled(assembled);

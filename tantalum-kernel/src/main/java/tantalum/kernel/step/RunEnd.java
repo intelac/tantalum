@@ -101,7 +101,8 @@ public final class RunEnd {
             Message next = session.followUps().getFirst();
             ModelChoice requested = session.followUpModels().getFirst();
             int size = session.followUps().size();
-            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)));
+            // 排队的是用户的提问：这一轮算用户开的
+            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)).withUnattended(0));
             SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next, requested);
         }
     }

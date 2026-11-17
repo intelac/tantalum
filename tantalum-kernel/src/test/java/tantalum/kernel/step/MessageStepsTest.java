@@ -670,4 +670,136 @@ class MessageStepsTest {
         assertEquals(1, world.last.commands().stream().filter(tantalum.value.command.RunTool.class::isInstance).count(),
                 "the tool does not wait for the other conversation: " + world.last.commands());
     }
+
+    /**
+     * 两个会话不会自己一直转下去：回话到了空闲的会话，它自己开一轮，那一轮又能交活……没有人看着。从用户最后一次说话算起，
+     * 这样的轮次总共只能再交 {@link MessageSteps#MAX_UNATTENDED} 件；到了就得停下来向用户汇报。用户一说话重新算。
+     */
+    @Test
+    void conversationsLeftAloneStopHandingWorkBackAndForth() {
+        World world = new World();
+        CallModel call = world.ask(A, "keep improving the report");
+        world.reply(A, call, delegate("c0", "improve it", false, null));
+        Send sent = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        SessionId b = sent.to();
+        assertEquals(0, world.session(A).unattended(), "the user's own turn is not counted");
+        world.reply(A, world.only(CallModel.class), new TextBlock("handed off"));
+
+        for (int round = 1; round <= MessageSteps.MAX_UNATTENDED; round++) {
+            Send back = finishes(world, sent, "improved, round " + round);
+            world.deliver(back);
+            // A 空闲：自己开一轮处理回话，又交出去一件
+            CallModel alone = world.assembled(A, world.only(AssembleContext.class));
+            world.reply(A, alone, delegate("c" + round, "improve it again", false, b.value()));
+            sent = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+            assertFalse(results(world, A).getFirst().error(), "round " + round);
+            assertEquals(round + 1, world.session(A).unattended());
+            world.reply(A, world.only(CallModel.class), new TextBlock("handed off again"));
+        }
+        Send back = finishes(world, sent, "improved once more");
+        world.deliver(back);
+        CallModel alone = world.assembled(A, world.only(AssembleContext.class));
+        world.reply(A, alone, delegate("c-last", "improve it again", false, b.value()));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "nothing more is handed off");
+        ToolResultBlock refused = results(world, A).getFirst();
+        assertTrue(refused.error() && refused.text().contains("since the user last spoke"), refused.text());
+        world.reply(A, world.only(CallModel.class), new TextBlock("here is where things stand"));
+        assertInstanceOf(Ended.class, world.run(A).phase());
+
+        // 用户说话了：重新算
+        CallModel fresh = world.ask(A, "go on then");
+        assertEquals(0, world.session(A).unattended());
+        world.reply(A, fresh, delegate("c-new", "improve it again", false, b.value()));
+        assertEquals(1, world.last.commands().stream().filter(Send.class::isInstance).count());
+        assertEquals(0, world.session(A).unattended());
+    }
+
+    private static ToolCallBlock question(String id, String text) {
+        return new ToolCallBlock(id, "ask_user", "{}", new Json.Obj(Map.of("question", new Json.Str(text))));
+    }
+
+    /**
+     * 接了活的会话停下来等用户回答：告诉交活的一方一声，不然那边只知道“还没回话”，用户也不知道该去哪里回答，两边一直等。
+     * 等着它的那次调用当场得到“它在等用户”，这一轮接着走；那件活做完时照常有它的一句回话。一轮只说一次。
+     */
+    @Test
+    void workThatStopsToAskTheUserTellsTheConversationThatHandedItOver() {
+        World world = new World();
+        Send sent = asked(world);
+        SessionId b = sent.to();
+        assertInstanceOf(AwaitingReply.class, world.run(A).phase());
+        world.deliver(sent);
+        CallModel work = world.assembled(b, world.only(AssembleContext.class));
+        world.reply(b, work, question("q1", "Delete the old build directory?"));
+        assertEquals(tantalum.value.state.AwaitingAnswer.NAME, world.run(b).phase().name());
+        Send told = world.only(Send.class);
+        assertTrue(told.message().isWaitingForUser() && !told.message().isReply() && !told.message().isRequest());
+        assertEquals(sent.message().id(), told.message().answers());
+        assertEquals("Delete the old build directory?", told.message().text());
+
+        world.deliver(told);
+        ToolResultBlock result = results(world, A).getFirst();
+        assertFalse(result.error());
+        assertTrue(result.text().contains("has stopped to ask the user") && result.text().contains("Delete the old build directory?"),
+                result.text());
+        assertFalse(world.run(A).phase() instanceof AwaitingReply, "the turn goes on, to tell the user");
+        assertTrue(world.last.commands().stream().anyMatch(AbortCommands.class::isInstance), "the wait's timer is dropped");
+        world.reply(A, world.only(CallModel.class), new TextBlock("please answer in that conversation"));
+        assertInstanceOf(Ended.class, world.run(A).phase());
+
+        // 用户在那个会话里回答了；它再问一次，不再说第二遍
+        world.feed(b, world.run(b).ref().run(), new tantalum.value.event.Answered(new SubmissionId("ans1"), new RequestId("r-ans1"),
+                "ask-q1", new tantalum.value.question.Answer(null, "yes")));
+        world.reply(b, world.only(CallModel.class), question("q2", "And the cache too?"));
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), "told once per turn");
+        world.feed(b, world.run(b).ref().run(), new tantalum.value.event.Answered(new SubmissionId("ans2"), new RequestId("r-ans2"),
+                "ask-q2", new tantalum.value.question.Answer(null, "no")));
+        world.reply(b, world.only(CallModel.class), new TextBlock("deleted the build directory"));
+        Send answer = world.only(Send.class);
+        assertTrue(answer.message().isReply() && !answer.message().failed());
+
+        // 回话照常来：已经没有调用在等，当一条消息，A 空闲就开一轮
+        world.deliver(answer);
+        world.assembled(A, world.only(AssembleContext.class));
+        assertTrue(lastText(world, A).contains("deleted the build directory"), lastText(world, A));
+    }
+
+    /** 没在等的（不等结果的交活）：“在等人”当一条消息，会话空闲就开一轮好去告诉用户。 */
+    @Test
+    void theNoticeBecomesAMessageWhenNobodyIsWaitingForTheAnswer() {
+        World world = new World();
+        CallModel call = world.ask(A, "clean up in the background");
+        world.reply(A, call, delegate("c1", "clean up", false, null));
+        Send sent = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        world.reply(A, world.only(CallModel.class), new TextBlock("started"));
+        world.deliver(sent);
+        world.reply(sent.to(), world.assembled(sent.to(), world.only(AssembleContext.class)), question("q1", "Delete build/?"));
+        world.deliver(world.only(Send.class));
+        world.assembled(A, world.only(AssembleContext.class));
+        assertTrue(lastText(world, A).startsWith(DelegateCall.REPORT) && lastText(world, A).contains("Delete build/?"), lastText(world, A));
+        assertEquals(1, world.session(A).unattended(), "a turn nobody asked for");
+    }
+
+    /** 重送时，“在等人”只在那一轮还等着用户的时候送；已经答了、结束了的去掉不送（旧账回放出来的也一样）。 */
+    @Test
+    void aStaleWaitingNoticeIsDroppedInsteadOfSentAgain() {
+        World world = new World();
+        Send sent = asked(world);
+        SessionId b = sent.to();
+        world.deliver(sent);
+        world.reply(b, world.assembled(b, world.only(AssembleContext.class)), question("q1", "Delete build/?"));
+        Send told = world.only(Send.class);
+        assertEquals(1, world.session(b).inbox().unconfirmed().size(), "not confirmed yet");
+
+        // 还在等：重送
+        world.feed(b, null, new tantalum.value.event.Redeliver());
+        assertEquals(told.message().id(), world.only(Send.class).message().id());
+
+        // 用户答了，这一轮不再等：不送，从信箱里去掉
+        world.feed(b, world.run(b).ref().run(), new tantalum.value.event.Answered(new SubmissionId("ans"), new RequestId("r-ans"),
+                "ask-q1", new tantalum.value.question.Answer(null, "yes")));
+        world.feed(b, null, new tantalum.value.event.Redeliver());
+        assertTrue(world.last.commands().stream().noneMatch(Send.class::isInstance), world.last.commands().toString());
+        assertTrue(world.session(b).inbox().unconfirmed().isEmpty());
+    }
 }

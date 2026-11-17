@@ -75,10 +75,16 @@ public sealed interface TranscriptItem {
         /**
          * 这一条不是用户说的，是另一个会话送来的：{@code session} 是那个会话；{@code reply} 为假是它交来的活，为真是它对
          * 这个会话交出去的活的回话；{@code failed} 表示回话说的是没做成，没有时不写出。
+         * {@code asking} 为真不是回话：交出去的那件活停在等用户回答，文字是它问的那句；没有时不写出。
          */
-        public record From(String session, boolean reply, @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean failed) {
+        public record From(String session, boolean reply, @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean failed,
+                           @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean asking) {
             public From {
                 Objects.requireNonNull(session, "session");
+            }
+
+            public From(String session, boolean reply, boolean failed) {
+                this(session, reply, failed, false);
             }
         }
 

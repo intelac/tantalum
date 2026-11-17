@@ -84,6 +84,7 @@ export const ja: Text = {
     handedIn: (name) => `「${name}」から任された作業`,
     handedBack: (name) => `「${name}」からの返答`,
     handedBackFailed: (name) => `「${name}」は完了しませんでした`,
+    handedWaiting: (name) => `「${name}」があなたの返答を待っています`,
     openSession: (name) => `会話を開く：${name}`,
     otherSession: "別の会話",
     noteShowAll: "すべて表示",

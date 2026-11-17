@@ -88,6 +88,17 @@ class RunTextTest {
         assertEquals("7.0", segments.get(1).pos());
     }
 
+    /** 问答卡的分段：只有你答的话是正文（不是原始 JSON，字段名不算你说的），问的那句和选项另放（review 2026-11-17）。 */
+    @Test
+    void anAnsweredQuestionKeepsTheAnswerApartFromTheQuestion() {
+        ToolCall asked = new ToolCall(head("q", "7.0"), "q", "ask_user", null, "{\"question\":\"缓存用哪个？\",\"choices\":[\"Redis\",\"Caffeine\"]}",
+                null, ToolCall.Status.DONE, "{\"choice\":\"Caffeine\",\"text\":\"本机就够了\"}", null, null, "g", T, T, "m1");
+        tantalum.shell.plugin.RunSegment segment = RunText.segments(List.of(asked), tool -> null).getFirst();
+        assertEquals("Caffeine\n本机就够了", segment.text());
+        assertEquals("缓存用哪个？\nRedis\nCaffeine", segment.asked());
+        assertFalse(segment.text().contains("choice"));
+    }
+
     /** kernel-delegation：父会话交来的活、子会话的汇报来源是 delegate，不是用户：算委派工具的结果，不算用户的话（自动记笔记只认用户亲口说的）。 */
     @Test
     void whatComesThroughDelegationIsNotTheUsersWords() {

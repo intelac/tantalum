@@ -231,6 +231,20 @@ public final class PlatformServices implements PluginServices {
     }
 
     @Override
+    public List<ToolUse> toolsUsed(Principal user, SessionId session) {
+        Engine bound = engine;
+        if (bound == null) {
+            return List.of();
+        }
+        java.util.Set<ToolUse> used = new java.util.LinkedHashSet<>();
+        bound.queries().session(user, session).ifPresent(view -> view.runs().forEach(run -> tantalum.shell.trace.RunText
+                .segments(bound.queries().runs().records(user, session, run.ref().run()), bound::toolPlugin).stream()
+                .filter(segment -> segment.role() == tantalum.shell.plugin.RunSegment.Role.TOOL)
+                .forEach(segment -> used.add(new ToolUse(segment.tool(), segment.plugin())))));
+        return List.copyOf(used);
+    }
+
+    @Override
     public List<FinishedRef> finishedRuns(Principal user, java.time.Instant since, int limit) {
         Engine bound = engine;
         if (bound == null || limit <= 0) {

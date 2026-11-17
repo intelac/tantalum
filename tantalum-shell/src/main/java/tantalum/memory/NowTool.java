@@ -91,7 +91,7 @@ public final class NowTool implements Tool {
         if (sensitive.isPresent()) {
             return ToolOutput.error(CredentialGuard.REASON);
         }
-        ToolTrust.Verdict verdict = trust.judge(context, ToolArguments.string(arguments, "quote"));
+        ToolTrust.Verdict verdict = trust.judge(context, text, ToolArguments.string(arguments, "quote"));
         Map<String, String> attrs = details(arguments);
         attrs.put(WorkingMemory.SESSION, context.session().value());
         Optional<MemoryItem> added = working.add(kind, text, attrs, verdict.source(), MemoryItem.Actor.AGENT,
@@ -135,10 +135,11 @@ public final class NowTool implements Tool {
         if (changes.values().stream().anyMatch(value -> value != null && tantalum.shell.plugin.SensitiveText.current().detect(value).isPresent())) {
             return ToolOutput.error(CredentialGuard.REASON);
         }
-        // 改写一项的文字：这一轮读过外部内容就不改（原来那句是你说的，不能被文件里的话悄悄换掉）；改状态不受影响
+        // 改写一项的文字：这个会话读过外部内容的话，新的那句得是你这一轮自己说的才改（原来那句是你说的，不能被文件里的话
+        // 悄悄换掉）；改状态不受影响
         if (text != null) {
-            ToolTrust.Verdict verdict = trust.judge(context, ToolArguments.string(arguments, "quote"));
-            if (verdict.pendingConfirm()) {
+            ToolTrust.Verdict verdict = trust.judge(context, text, ToolArguments.string(arguments, "quote"));
+            if (verdict.outside() && !verdict.said(text)) {
                 return ToolOutput.error(ToolTrust.outsideNote(verdict));
             }
         }

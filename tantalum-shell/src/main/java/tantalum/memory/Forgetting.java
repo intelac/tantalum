@@ -9,8 +9,9 @@ import tantalum.memory.ledger.MemoryItem;
 import tantalum.memory.recall.Overlap;
 
 /**
- * 遗忘：“不再使用”（memory-final-plan 第 10 节①）。忘掉的说法留墓碑；顺着 {@code derivedFrom} 把衍生的一起标掉；
- * 当天卡里复述过它的那几行删掉（卡改写一版，别的要点留着；删空了整张留墓碑）；工作记忆里说的是它的也标掉。
+ * 遗忘：“不再使用”（memory-final-plan 第 10 节①）。忘掉的说法留墓碑；同一轮、同一句原话记出来的别的条目和顺着
+ * {@code derivedFrom} 衍生的一起标掉；多行的条目和当天卡里只删说它的那几行（别的留着；删空了整条留墓碑）；工作记忆里说的是它的也标掉。
+ * 一律按行比，不把整条多行正文当一句话。你认可过的决定，只有你本人操作时才动。
  * 找回和写入时按和墓碑文字的相似度过滤（{@link #shadowed}），换说法问也找不回来，捕获也不会再把它记回去。
  */
 public final class Forgetting {
@@ -21,23 +22,69 @@ public final class Forgetting {
 
     private Forgetting() {}
 
-    /** 忘掉这些说法以后连带标掉的条目数（衍生的、卡里的行、工作记忆）。 */
+    /**
+     * 这一行说的是不是忘掉的那句。按较短一边的词算重合；但只对上一个词、另一边又长的不算（一个“项目”带不走每一行提到项目的话）。
+     */
+    static boolean says(String line, String text) {
+        int a = tantalum.memory.recall.Terms.of(line).size();
+        int b = tantalum.memory.recall.Terms.of(text).size();
+        if (a == 0 || b == 0 || Math.min(a, b) < 2 && Math.max(a, b) > 3) {
+            return false;
+        }
+        return Overlap.of(line, text) >= SAME;
+    }
+
+    /**
+     * 从一条多行的正文里去掉说这些话的那几行（2026-11-17 review：以前整条正文当一句话比，一句短话能带走整条多行条目）。
+     * 没有一行对得上返回 null；全去掉了返回空串；否则返回剩下的。
+     */
+    static String without(String body, List<String> texts) {
+        List<String> kept = new ArrayList<>();
+        boolean dropped = false;
+        for (String line : body.split("\n", -1)) {
+            if (!line.isBlank() && texts.stream().anyMatch(text -> says(line, text))) {
+                dropped = true;
+            } else {
+                kept.add(line);
+            }
+        }
+        return dropped ? String.join("\n", kept).strip() : null;
+    }
+
+    /** 忘掉这些说法以后连带标掉的条目数（同一句原话记出来的、衍生的、卡里的行、工作记忆）。 */
     public static int cascade(Ledger ledger, List<MemoryItem> forgotten, MemoryItem.Actor actor) {
         Set<String> ids = new HashSet<>();
         List<String> texts = new ArrayList<>();
+        Set<String> utterances = new HashSet<>();
         for (MemoryItem item : forgotten) {
             ids.add(item.id());
             if (item.text() != null && !item.text().isBlank()) {
                 texts.add(item.text());
             }
+            utterance(item).ifPresent(utterances::add);
         }
         int touched = 0;
-        // 衍生的（可能一层套一层）
+        // 同一轮、同一句原话记出来的别的条目：模型换了个说法写的同一件事（词对不上，但出处是同一句话）
+        if (!utterances.isEmpty()) {
+            for (MemoryItem item : ledger.items(each -> each.state() == MemoryItem.State.CONFIRMED && !ids.contains(each.id())
+                    && (each.kind() == MemoryItem.Kind.CLAIM || WorkingMemory.KINDS.contains(each.kind()))
+                    && utterance(each).filter(utterances::contains).isPresent())) {
+                if (guarded(item, actor)) {
+                    continue;
+                }
+                if (ledger.tombstone(item.id(), actor, REASON + ": same words")) {
+                    ids.add(item.id());
+                    texts.add(item.text());
+                    touched++;
+                }
+            }
+        }
+        // 衍生的（可能一层套一层）。现在还没有哪里写 derivedFrom（图书管理员合并条目时才会有），先留着
         boolean grew = true;
         while (grew) {
             grew = false;
             for (MemoryItem item : ledger.items(each -> each.derivedFrom().stream().anyMatch(ids::contains))) {
-                if (ledger.tombstone(item.id(), actor, REASON + ": derived")) {
+                if (!guarded(item, actor) && ledger.tombstone(item.id(), actor, REASON + ": derived")) {
                     ids.add(item.id());
                     texts.add(item.text());
                     touched++;
@@ -49,20 +96,11 @@ public final class Forgetting {
             return touched;
         }
         for (MemoryItem card : ledger.items(item -> item.kind() == MemoryItem.Kind.CARD && item.state() == MemoryItem.State.CONFIRMED)) {
-            List<String> kept = new ArrayList<>();
-            boolean dropped = false;
-            for (String line : card.text().split("\n", -1)) {
-                if (!line.isBlank() && texts.stream().anyMatch(text -> Overlap.of(line, text) >= SAME)) {
-                    dropped = true;
-                } else {
-                    kept.add(line);
-                }
-            }
-            if (!dropped) {
+            String rest = without(card.text(), texts);
+            if (rest == null) {
                 continue;
             }
             touched++;
-            String rest = String.join("\n", kept).strip();
             if (rest.isEmpty()) {
                 ledger.tombstone(card.id(), actor, REASON + ": restated");
             } else {
@@ -70,24 +108,75 @@ public final class Forgetting {
             }
         }
         for (MemoryItem item : ledger.items(each -> WorkingMemory.KINDS.contains(each.kind()) && each.state() == MemoryItem.State.CONFIRMED)) {
-            if (texts.stream().anyMatch(text -> Overlap.of(item.text(), text) >= SAME) && ledger.tombstone(item.id(), actor, REASON)) {
+            if (texts.stream().anyMatch(text -> says(item.text(), text)) && ledger.tombstone(item.id(), actor, REASON)) {
                 touched++;
             }
         }
         return touched;
     }
 
+    /** 这一条是哪一轮、照哪句原话记的；没有出处或没有原话时为空。 */
+    private static java.util.Optional<String> utterance(MemoryItem item) {
+        if (item.provenance() == null || item.provenance().run() == null || item.quote() == null) {
+            return java.util.Optional.empty();
+        }
+        String quote = tantalum.memory.capture.Quotes.normalize(item.quote());
+        return quote.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(item.provenance().run() + "\n" + quote);
+    }
+
+    /** 你认可过的决定，模型动不了（memory-final-plan 第 4 节）：只有你自己能忘掉它。 */
+    private static boolean guarded(MemoryItem item, MemoryItem.Actor actor) {
+        return actor != MemoryItem.Actor.USER && item.status() == MemoryItem.Status.APPROVED && item.live();
+    }
+
+    /** 忘掉的结果：去掉了几处（说法、页面上的行），和因为是你认可过的决定而没动的那几条。 */
+    public record Result(int gone, List<MemoryItem> kept) {}
+
     /**
-     * 按一句话忘掉（接口 {@code POST forget}）：和它重合一半以上的生效说法留墓碑，再连带标掉衍生的、卡里复述的、工作记忆里的。
-     * 返回忘掉的说法条数。
+     * 按一句话忘掉（接口 {@code POST forget}）：生效的说法里说这句话的那几行去掉（多行的条目别的行留着，去空了整条留墓碑，页面空了
+     * 一起留墓碑），再连带标掉同一句原话记出来的、衍生的、卡里复述的、工作记忆里的。返回去掉的处数。
      */
     public static int forget(Ledger ledger, String text, MemoryItem.Actor actor) {
-        List<MemoryItem> matching = ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && item.state() == MemoryItem.State.CONFIRMED
-                && Overlap.of(item.text(), text) >= SAME);
+        return forgetting(ledger, text, actor).gone();
+    }
+
+    /** 同 {@link #forget}，并说明哪些认可过的决定没动（不是你本人操作时）。 */
+    public static Result forgetting(Ledger ledger, String text, MemoryItem.Actor actor) {
+        List<String> wanted = List.of(text);
         List<MemoryItem> gone = new ArrayList<>();
-        for (MemoryItem claim : matching) {
-            if (ledger.tombstone(claim.id(), actor, REASON)) {
-                gone.add(claim);
+        List<MemoryItem> kept = new ArrayList<>();
+        Set<String> pages = new HashSet<>();
+        int places = 0;
+        for (MemoryItem claim : ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && item.state() == MemoryItem.State.CONFIRMED)) {
+            String rest = without(claim.text(), wanted);
+            if (rest == null) {
+                continue;
+            }
+            if (guarded(claim, actor)) {
+                kept.add(claim);
+                continue;
+            }
+            if (rest.isEmpty()) {
+                if (ledger.tombstone(claim.id(), actor, REASON)) {
+                    gone.add(claim);
+                    places++;
+                }
+            } else if (ledger.put(claim.withText(rest).withActor(actor), claim.version()) instanceof Ledger.Result.Written) {
+                places++;
+            }
+            if (claim.page() != null) {
+                pages.add(claim.page());
+            }
+        }
+        // 页面：改过的版本加一（控制台里开着旧版本的人保存时会被拦下）；一条生效的说法都不剩的留墓碑
+        for (MemoryItem page : ledger.items(item -> item.kind() == MemoryItem.Kind.PAGE && item.state() == MemoryItem.State.CONFIRMED
+                && pages.contains(item.page()))) {
+            boolean empty = ledger.items(item -> item.kind() == MemoryItem.Kind.CLAIM && page.page().equals(item.page())
+                    && (item.live() || item.pendingConfirm() && item.state() == MemoryItem.State.CONFIRMED)).isEmpty();
+            if (empty) {
+                ledger.tombstone(page.id(), actor, REASON);
+            } else {
+                ledger.put(page.withActor(actor), page.version());
             }
         }
         // 只说了一句话、账上没有对应说法时，卡里和工作记忆里复述它的也要去掉
@@ -96,43 +185,24 @@ public final class Forgetting {
         List<MemoryItem> cascadeFrom = new ArrayList<>(gone);
         cascadeFrom.add(said);
         cascade(ledger, cascadeFrom, actor);
-        return gone.size();
+        return new Result(places, kept);
     }
 
     /**
      * 对话里用户说“这条忘掉吧”（2026-11-16 真模型端到端：模型只会整条删或者改写页面，改写不留墓碑，那句话还会从笔记、工作记忆、
-     * 会话标题里回来）：按一句话忘掉，页面里说它的那几行删掉、别的行留着（删空了整条删），再照 {@link #forget} 连带标掉，
-     * 并给这句话本身留一个墓碑，以后的找回、笔记、标题都按它过滤。返回去掉的行数和说法数。
+     * 会话标题里回来）：照 {@link #forgetting} 按一句话忘掉，并给这句话本身留一个墓碑，以后的找回、笔记、标题都按它过滤。
+     * 你认可过的决定不动（模型替你忘的时候），结果里说明。
      */
-    public static int statement(MemoryStore store, String text, MemoryItem.Actor actor) {
+    public static Result statement(MemoryStore store, String text, MemoryItem.Actor actor) {
         Ledger ledger = store.ledger();
-        int gone = 0;
-        for (MemoryEntry entry : store.list()) {
-            List<String> kept = new ArrayList<>();
-            int dropped = 0;
-            for (String line : entry.content().split("\n", -1)) {
-                if (!line.isBlank() && Overlap.of(line, text) >= SAME) {
-                    dropped++;
-                } else {
-                    kept.add(line);
-                }
-            }
-            if (dropped == 0) {
-                continue;
-            }
-            gone += dropped;
-            String rest = String.join("\n", kept).strip();
-            if (rest.isEmpty()) {
-                store.delete(entry.name(), actor);
-            } else {
-                store.write(entry.name(), entry.type().key(), entry.description(), rest + "\n");
-            }
+        Result result;
+        synchronized (store) {
+            result = forgetting(ledger, text, actor);
         }
-        gone += forget(ledger, text, actor);
         MemoryItem said = MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.USER_SAID, actor, text, ledger.clock().instant());
         ledger.put(said, 0);
         ledger.tombstone(said.id(), actor, REASON);
-        return gone;
+        return result;
     }
 
     /** 忘掉的一句：原文和忘掉的时刻。 */
@@ -153,6 +223,12 @@ public final class Forgetting {
      * 这一条说的是忘掉过的事，而且是在忘掉之前就有的（旧的副本）。忘掉以后你又说了一遍的，是新的，不算（比如换了新车牌）。
      */
     public static boolean shadowed(List<Forgotten> forgotten, MemoryItem item) {
-        return forgotten.stream().anyMatch(gone -> item.created().isBefore(gone.at()) && Overlap.of(gone.text(), item.text()) >= SAME);
+        // 你认可过的决定不会被模型替你忘掉的一句话盖住（要忘它得你自己来，那时它本身就留了墓碑）
+        if (item.status() == MemoryItem.Status.APPROVED && item.live()) {
+            return false;
+        }
+        List<String> lines = item.text().lines().filter(line -> !line.isBlank()).toList();
+        return forgotten.stream().anyMatch(gone -> item.created().isBefore(gone.at()) && !lines.isEmpty()
+                && lines.stream().allMatch(line -> says(line, gone.text())));
     }
 }

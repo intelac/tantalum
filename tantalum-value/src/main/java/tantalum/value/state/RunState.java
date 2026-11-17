@@ -40,6 +40,11 @@ public record RunState(RunRef ref, OwnerRef owner, RunPhase phase, ToolRound too
                 compacting, autoCompactionFailed, overflowRecovered, workRounds, endWorkRounds, model, modelBefore);
     }
 
+    public RunState withOwner(OwnerRef newOwner) {
+        return new RunState(ref, newOwner, phase, tools, pendingSteers, retries, workOrigin,
+                compacting, autoCompactionFailed, overflowRecovered, workRounds, endWorkRounds, model, modelBefore);
+    }
+
     public RunState withPendingSteers(List<Message> newSteers) {
         return new RunState(ref, owner, phase, tools, newSteers, retries, workOrigin,
                 compacting, autoCompactionFailed, overflowRecovered, workRounds, endWorkRounds, model, modelBefore);

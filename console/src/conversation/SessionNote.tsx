@@ -1,4 +1,4 @@
-import { CornerDownLeft, CornerDownRight, TriangleAlert } from "lucide-react";
+import { CircleHelp, CornerDownLeft, CornerDownRight, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import type { UserItem } from "../api/types";
 import { navigate, sessionPath } from "../app/router";
@@ -20,18 +20,26 @@ interface Props {
 }
 
 /**
- * 另一个会话送来的一句话：交来的活，或者对交出去的活的回话。它不是用户说的，所以不是右边的气泡：左对齐的带边框一块，
+ * 另一个会话送来的一句话：交来的活、对交出去的活的回话，或者“交出去的那件活停在等你回答”。它不是用户说的，所以不是右边的气泡：左对齐的带边框一块，
  * 第一行写明是哪个会话送来的（点它打开那个会话），下面是正文（模型写的，按 Markdown 显示），长的先收起。
  */
 export function SessionNote({ item }: Props) {
   const t = useText();
   const sessions = useSessions();
   const [open, setOpen] = useState(false);
-  const { session, reply, failed } = item.from;
+  const { session, reply, failed, asking } = item.from;
   const known = sessions.data?.find((each) => each.id === session);
   const name = session.startsWith("main-") ? t.sidebar.mainWindow : known === undefined ? t.conversation.otherSession : sessionTitle(known, t);
-  const label = !reply ? t.conversation.handedIn(name) : failed === true ? t.conversation.handedBackFailed(name) : t.conversation.handedBack(name);
-  const Icon = !reply ? CornerDownRight : failed === true ? TriangleAlert : CornerDownLeft;
+  // 在等你回答：不是回话，那件活还没做完；点这一行去那个会话里回答
+  const label =
+    asking === true
+      ? t.conversation.handedWaiting(name)
+      : !reply
+        ? t.conversation.handedIn(name)
+        : failed === true
+          ? t.conversation.handedBackFailed(name)
+          : t.conversation.handedBack(name);
+  const Icon = asking === true ? CircleHelp : !reply ? CornerDownRight : failed === true ? TriangleAlert : CornerDownLeft;
   const lines = item.text.split("\n");
   const long = lines.length > FOLD_LINES;
   let shown = long && !open ? lines.slice(0, FOLD_LINES).join("\n") : item.text;

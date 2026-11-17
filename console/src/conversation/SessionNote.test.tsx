@@ -52,6 +52,12 @@ describe("SessionNote", () => {
     expect(screen.queryByRole("button", { name: "「另一个会话」没做成" })).toBeNull();
   });
 
+  it("says when handed-off work has stopped to wait for the user, and opens that conversation to answer", () => {
+    mount({ text: "Run `rm -rf build`?", from: { session: "s-a", reply: true, asking: true } }, [{ id: "s-a", title: "清理构建" }]);
+    fireEvent.click(screen.getByRole("button", { name: "「清理构建」在等你回答" }));
+    expect(window.location.pathname).toContain("s-a");
+  });
+
   it("closes a code block that the fold cuts through", () => {
     const text = ["before", "", "```", ...Array.from({ length: 20 }, (_, i) => `code ${i + 1}`), "```", "", "after the block"].join("\n");
     const { container } = mount({ text, from: { session: "s-a", reply: true } }, [{ id: "s-a", title: "t" }]);

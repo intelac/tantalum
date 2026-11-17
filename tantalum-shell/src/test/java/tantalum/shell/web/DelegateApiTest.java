@@ -196,6 +196,61 @@ class DelegateApiTest {
      * 会话编号是全服务器唯一的。一个用户的模型把活交给“另一个用户的会话编号”：那个会话一个字都不能多，
      * 交活的这边得到一句“没做成”，不会一直等。
      */
+    /**
+     * 接了活的会话停下来问用户：交活的会话被告知“它在等你回答”（显示成一块，不是回话），自己开一轮去告诉用户；
+     * 用户在那个会话里回答以后活做完，回话照常回来。
+     */
+    @Test
+    void workThatStopsToAskTheUserSaysSoWhereItWasHandedOver() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> opened = new java.util.concurrent.atomic.AtomicReference<>();
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
+            if (last.equals("start")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{}",
+                        new Json.Obj(Map.of("task", new Json.Str("clean up the build"))))), StopReason.TOOL_USE, "m", null);
+            }
+            if (last.contains("Task:\nclean up the build")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("q1", "ask_user", "{}",
+                        new Json.Obj(Map.of("question", new Json.Str("Delete the build directory?"))))), StopReason.TOOL_USE, "m", null);
+            }
+            if (last.startsWith("Opened conversation ")) {
+                opened.set(last.substring("Opened conversation ".length(), last.indexOf('.')));
+                return new ModelOutcome.Replied(List.of(new TextBlock("handed off")), StopReason.END_TURN, "m", null);
+            }
+            if (last.contains("has stopped to ask the user")) {
+                return new ModelOutcome.Replied(List.of(new TextBlock("please answer there")), StopReason.END_TURN, "m", null);
+            }
+            if (last.contains("\"text\":\"yes\"")) {
+                return new ModelOutcome.Replied(List.of(new TextBlock("deleted it")), StopReason.END_TURN, "m", null);
+            }
+            return new ModelOutcome.Replied(List.of(new TextBlock("heard: " + last.lines().reduce((a, b) -> b).orElse(""))), StopReason.END_TURN, "m", null);
+        };
+        try (TestServer server = new TestServer(temp.resolve("data6"), Files.createDirectory(temp.resolve("ws6")), window)) {
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("please answer there"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("please answer there"), messages);
+            JsonNode notice = users(JSON.readTree(messages)).getLast();
+            assertEquals(opened.get(), notice.path("from").path("session").asString());
+            assertTrue(notice.path("from").path("asking").asBoolean(), notice.toString());
+            assertEquals("Delete the build directory?", notice.path("text").asString());
+
+            assertEquals(200, server.post("alice", "/api/sessions/" + opened.get() + "/questions/ask-q1", "{\"text\":\"yes\"}").statusCode());
+            for (int i = 0; i < 1500 && !messages.contains("heard: deleted it"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("heard: deleted it"), messages);
+            JsonNode answer = users(JSON.readTree(messages)).getLast();
+            assertTrue(answer.path("from").path("reply").asBoolean() && !answer.path("from").path("asking").asBoolean(), answer.toString());
+        }
+    }
+
     @Test
     void workCannotBeHandedToAnotherUsersConversation() throws Exception {
         ModelClient window = (prompt, chunks) -> {
@@ -294,6 +349,38 @@ class DelegateApiTest {
                     assertEquals(1, JSON.readTree(server.get("alice", "/api/sessions/" + session.get("id").asString() + "/runs").body()).get("runs").size());
                 }
             }
+        }
+    }
+
+    /** 不用等重启：送出去一直没确认的话，服务器隔一会儿巡查到就重送（以前在途中丢了只有重启才重送）。 */
+    @Test
+    void aMessageThatNeverArrivedIsSentAgainWithoutARestart() throws Exception {
+        ModelClient window = (prompt, chunks) -> {
+            String last = prompt.messages().stream().map(message -> message.content().stream().map(block -> block instanceof TextBlock text ? text.text()
+                    : block instanceof ToolResultBlock result ? result.text() : "").reduce("", String::concat))
+                    .filter(text -> !text.startsWith("[Context update")).reduce((a, b) -> b).orElse("");
+            if (last.equals("start")) {
+                return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "delegate", "{\"task\":\"count the files\"}",
+                        new Json.Obj(Map.of("task", new Json.Str("count the files"))))), StopReason.TOOL_USE, "m", null);
+            }
+            String reply = last.startsWith("Opened conversation") ? "handed off" : last.contains("Task:\ncount the files") ? "42 files"
+                    : "the other conversation says: " + last.lines().reduce((a, b) -> b).orElse("");
+            return new ModelOutcome.Replied(List.of(new TextBlock(reply)), StopReason.END_TURN, "m", null);
+        };
+        System.setProperty("tantalum.test.drop-send-numbers", "1");
+        System.setProperty("tantalum.redeliver-seconds", "1");
+        try (TestServer server = new TestServer(temp.resolve("data7"), Files.createDirectory(temp.resolve("ws7")), window)) {
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"start\"}");
+            String messages = "";
+            for (int i = 0; i < 1500 && !messages.contains("the other conversation says: 42 files"); i++) {
+                Thread.sleep(10);
+                messages = server.get("alice", "/api/sessions/top/messages").body();
+            }
+            assertTrue(messages.contains("the other conversation says: 42 files"), "sent again by the sweep: " + messages);
+            assertEquals(2, JSON.readTree(server.get("alice", "/api/sessions/top/runs").body()).get("runs").size());
+        } finally {
+            System.clearProperty("tantalum.test.drop-send-numbers");
+            System.clearProperty("tantalum.redeliver-seconds");
         }
     }
 }

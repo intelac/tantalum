@@ -51,6 +51,23 @@ class NoteFilerTest {
         return ledger.everything(item -> item.text().contains(text));
     }
 
+    /**
+     * 原话是你说的、但要点说的不是那段话里的事（review 2026-11-17）：不算你亲口说的。你只说了“就按第二个来”，要点写的是第二个方案
+     * 的内容：进当天卡，另记一条等你确认，确认前不在页面上。
+     */
+    @Test
+    void aNoteThatSaysMoreThanTheQuotedWordsWaitsForTheUser() {
+        filer = filer();
+        NoteFiler.Filed filed = filer.file(turn("s-1_1", false, user("好，就按第二个来"), answer("好的，缓存用 Caffeine。")),
+                List.of(new Note(Kind.DECISION, "缓存用 Caffeine", "就按第二个来")));
+        assertEquals(new NoteFiler.Filed(1, 1, 0), filed);
+        MemoryItem claim = with("缓存用 Caffeine").stream().filter(item -> item.kind() == MemoryItem.Kind.CLAIM).findFirst().orElseThrow();
+        assertTrue(claim.pendingConfirm());
+        assertEquals(MemoryItem.Source.ASSISTANT_INFERRED, claim.source());
+        assertTrue(new MemoryStore(ledger, MemoryLimits.defaults()).read("decisions").isEmpty(), "not on the page until confirmed");
+        assertTrue(with("缓存用 Caffeine").stream().anyMatch(item -> item.kind() == MemoryItem.Kind.CARD), "but the day's card has it");
+    }
+
     @Test
     void inACleanTurnTheUsersWordsTakeEffectAndInferencesOnlyGoToTheCard() {
         filer = filer();

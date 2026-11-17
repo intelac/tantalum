@@ -30,7 +30,7 @@
     "params" : [ ]
   }, {
     "name" : "memory_note",
-    "description" : "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; quote: the user's exact words that show it (needed for it to count as what the user said). Use memory_write instead to write or rewrite a whole entry.",
+    "description" : "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; quote: the user's exact words from this turn that say it (the note counts as what the user said only when it says what those words say, in the user's wording; anything else is kept as your inference). Use memory_write instead to write or rewrite a whole entry.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,

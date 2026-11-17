@@ -60,7 +60,9 @@ public final class MemoryWriteTool implements Tool {
             // memory-final-plan 第 7 节：读过外部内容的一轮里写的等你确认；第 4 节：你认可过的决定只能由你改
             ToolTrust.Verdict verdict = trust.judge(context, null);
             java.util.Optional<tantalum.memory.ledger.MemoryItem> approved = store.approved(name);
-            if (verdict.pendingConfirm() || approved.isPresent()) {
+            // 读过外部内容的会话里，写的内容是你这一轮自己说的（词对得上）就照常写，不用等确认
+            boolean waits = verdict.pendingConfirm() && !verdict.said(content);
+            if (waits || approved.isPresent()) {
                 MemoryStore.WriteResult result = store.writePending(name, type, description, content, verdict.source(),
                         new tantalum.memory.ledger.MemoryItem.Provenance(context.session().value(),
                                 context.run() == null ? null : context.run().value(), context.command() == null ? null : context.command().value(),

@@ -277,11 +277,15 @@ export interface UserItem extends ItemBase {
   from?: SessionSource;
 }
 
-/** 送来这句话的会话。`reply` 为假是它交来的活，为真是它对这个会话交出去的活的回话；`failed` 是回话说没做成，没有时不出现。 */
+/**
+ * 送来这句话的会话。`reply` 为假是它交来的活，为真是它对这个会话交出去的活的回话；`failed` 是回话说没做成，没有时不出现。
+ * `asking` 为真不是回话：交出去的那件活停在等用户回答，正文是它问的那句；没有时不出现。
+ */
 export interface SessionSource {
   session: string;
   reply: boolean;
   failed?: boolean;
+  asking?: boolean;
 }
 
 /** 插件附在用户消息上的一段文字。 */

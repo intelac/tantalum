@@ -78,11 +78,14 @@ public final class RunText {
                     }
                 }
                 case ToolCall tool -> {
-                    String text = tool.finished() && tool.status() != ToolCall.Status.DONE
-                            ? "failed: " + (tool.code() != null ? tool.code() : tool.status().name())
-                            : tool.result() == null ? "" : cutKeepingLines(SecretMask.mask(clean(tool.result())), SEGMENT_CHARS);
+                    boolean failed = tool.finished() && tool.status() != ToolCall.Status.DONE;
+                    boolean answer = ASK_USER.equals(tool.name()) && !failed && tool.result() != null;
+                    String text = failed ? "failed: " + (tool.code() != null ? tool.code() : tool.status().name())
+                            : tool.result() == null ? ""
+                            : cutKeepingLines(SecretMask.mask(answer ? values(tool.result()) : clean(tool.result())), SEGMENT_CHARS);
                     segments.add(new tantalum.shell.plugin.RunSegment(tantalum.shell.plugin.RunSegment.Role.TOOL, tool.name(),
-                            pluginOf.apply(tool.name()), text, record.head().pos()));
+                            pluginOf.apply(tool.name()), text, record.head().pos(),
+                            answer ? cutKeepingLines(SecretMask.mask(values(tool.rawArguments())), SEGMENT_CHARS) : null));
                 }
                 case ModelRequest request when request.purpose() == ModelRequest.Purpose.NORMAL && request.text() != null
                         && !request.text().isBlank() -> segments.add(new tantalum.shell.plugin.RunSegment(
@@ -94,6 +97,33 @@ public final class RunText {
     }
 
     static final int SEGMENT_CHARS = 2000;
+    private static final String ASK_USER = "ask_user";
+
+    /**
+     * JSON 里的字符串值，一行一个（问答卡的回答 {@code {"choice":"…","text":"…"}} 只留你选的、你填的；问题那边留问的那句和各个选项）。
+     * 字段名不留：不然 {@code choice}、{@code text} 这些字也成了“你说的话”。不是 JSON 时原样给。
+     */
+    static String values(String json) {
+        if (json == null || json.isBlank()) {
+            return "";
+        }
+        tantalum.value.json.Json parsed = tantalum.shell.json.JsonText.parseOrNull(json);
+        if (parsed == null) {
+            return clean(json);
+        }
+        List<String> found = new java.util.ArrayList<>();
+        strings(parsed, found);
+        return String.join("\n", found);
+    }
+
+    private static void strings(tantalum.value.json.Json value, List<String> found) {
+        switch (value) {
+            case tantalum.value.json.Json.Str text when !text.value().isBlank() -> found.add(text.value().strip());
+            case tantalum.value.json.Json.Arr array -> array.items().forEach(item -> strings(item, found));
+            case tantalum.value.json.Json.Obj object -> object.fields().values().forEach(item -> strings(item, found));
+            default -> { }
+        }
+    }
 
     /** 截到 {@code max} 个字符，保留换行（分段要能按行看）。 */
     static String cutKeepingLines(String text, int max) {

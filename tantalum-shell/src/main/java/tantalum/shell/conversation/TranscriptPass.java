@@ -96,7 +96,7 @@ final class TranscriptPass {
             case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(), false);
             case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), true);
             case tantalum.value.event.SessionMessage said -> {
-                if (said.isReply()) {
+                if (said.isReply() || said.isWaitingForUser()) {
                     reported(said);
                 }
             }
@@ -359,7 +359,7 @@ final class TranscriptPass {
      * {@code text} 为 null 时取内核刚放进去的那条消息的文字（汇报）。交回被写成工具结果或被忽略时没有条目。
      */
     /**
-     * 交出去的活回话了。这次调用在等它的，回话是那次工具调用的结果，不另出条目；没在等的，回话作为一条消息进这个会话
+     * 交出去的活回话了，或者说它停在等用户回答（{@code asking}，两种走同一条路）。这次调用在等它的，回话是那次工具调用的结果，不另出条目；没在等的，回话作为一条消息进这个会话
      * （开一轮，或者插进正在跑的一轮），显示成“来自那个会话的回话”，不是用户的气泡。文字是对方的原话，不带给模型看的开场白。
      */
     private void reported(tantalum.value.event.SessionMessage said) {
@@ -376,7 +376,7 @@ final class TranscriptPass {
                         && said.answers().equals(slot.command()))) {
             return;
         }
-        UserMessage.From from = new UserMessage.From(said.from().session().value(), true, said.failed());
+        UserMessage.From from = new UserMessage.From(said.from().session().value(), true, said.failed(), said.isWaitingForUser());
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
             put(UserMessage.from(id, session, fresh, at, said.text(), from));

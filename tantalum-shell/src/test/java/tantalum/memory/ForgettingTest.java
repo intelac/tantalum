@@ -77,11 +77,72 @@ class ForgettingTest {
         String title = "你好，我有个习惯：凡是费用，我都要按整数算，不要小";
         assertFalse(context.hides(user, title, Instant.EPOCH), "control: shown before it is taken back");
 
-        assertTrue(Forgetting.statement(pages, "费用都按整数算，不要小数", MemoryItem.Actor.AGENT) >= 1);
+        assertTrue(Forgetting.statement(pages, "费用都按整数算，不要小数", MemoryItem.Actor.AGENT).gone() >= 1);
         assertEquals("跟用户说话要简短", pages.read("preferences").orElseThrow().content().strip(), "the other line stays");
         assertTrue(account.items(item -> item.text().contains("整数")).isEmpty(), "nothing alive says it: " + account.items(item -> item.text().contains("整数")));
         assertTrue(Forgetting.forgotten(account).stream().anyMatch(gone -> gone.text().contains("整数")), "and it is remembered as forgotten");
         assertTrue(context.hides(user, title, Instant.EPOCH), "a conversation title that says it is not shown to the model");
+    }
+
+    /** 一句短话不能带走整条多行的条目，也不能盖住整张当天卡：按行比，别的行留着（review 2026-11-17）。 */
+    @Test
+    void oneSentenceDoesNotTakeAWholeMultiLineEntryWithIt() {
+        open(Instant.parse("2026-11-16T01:00:00Z"));
+        MemoryItem page = claim("project-shop", "商城项目用 PostgreSQL 16\n每周三下午发布\n发布前要跑全量回归\n负责人是小王");
+        new DailyNotes(ledger).append("2026-11-15", "s-1", "商城", "r-1", "10:00", "- 商城项目每周三下午发布\n- 用户让把订单页的按钮改成蓝色");
+
+        assertEquals(1, Forgetting.forget(ledger, "每周三下午发布", MemoryItem.Actor.USER));
+        MemoryItem left = ledger.get(page.id()).orElseThrow();
+        assertEquals("商城项目用 PostgreSQL 16\n发布前要跑全量回归\n负责人是小王", left.text(), "only the line that says it goes");
+        assertTrue(left.live());
+        assertEquals("- 用户让把订单页的按钮改成蓝色", new DailyNotes(ledger).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body());
+        assertFalse(recalled("商城项目的负责人是谁？").isEmpty(), "the rest of the entry is still found");
+
+        // 只对上一个词、另一边又长：不算同一件事
+        assertEquals(0, Forgetting.forget(ledger, "项目", MemoryItem.Actor.USER), "one common word does not match every line that has it");
+        assertEquals(left.text(), ledger.get(page.id()).orElseThrow().text());
+    }
+
+    /** 同一轮、同一句原话记出来的别的条目一起忘掉：模型换了个说法写的同一件事，词对不上，但出处是同一句话。 */
+    @Test
+    void itemsNotedFromTheSameWordsGoTogether() {
+        open(Instant.parse("2026-11-16T01:00:00Z"));
+        MemoryItem.Provenance from = new MemoryItem.Provenance("s-1", "r-9", null, null);
+        MemoryItem plate = ledger.put(MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.USER_SAID,
+                MemoryItem.Actor.AGENT, "车牌号是 京A-7Q2KD", ledger.clock().instant()).withPage("about-me")
+                .withQuote("我的车挂的是京A-7Q2KD").withProvenance(from), 0) instanceof Ledger.Result.Written written ? written.item() : null;
+        MemoryItem reworded = new WorkingMemory(ledger).add(MemoryItem.Kind.NOTICED, "座驾登记信息已提供", Map.of(), MemoryItem.Source.USER_SAID,
+                MemoryItem.Actor.AGENT, "我的车挂的是 京A-7Q2KD", from, false, null).orElseThrow();
+        MemoryItem other = new WorkingMemory(ledger).add(MemoryItem.Kind.TASK, "周五前交季度报告", Map.of(), MemoryItem.Source.USER_SAID,
+                MemoryItem.Actor.AGENT, "周五前把季度报告交了", from, false, null).orElseThrow();
+
+        assertEquals(1, Forgetting.forget(ledger, "车牌号 京A-7Q2KD", MemoryItem.Actor.USER));
+        assertTrue(ledger.tombstoned(plate.id()));
+        assertTrue(ledger.tombstoned(reworded.id()), "noted from the same words in the same turn");
+        assertFalse(ledger.tombstoned(other.id()), "another thing said in that turn stays");
+    }
+
+    /** 模型替你按一句话忘的时候，你认可过的决定不动、也不被这句话盖住；你自己忘才动。 */
+    @Test
+    void theModelCannotForgetADecisionYouApproved() {
+        tantalum.value.id.Principal user = new tantalum.value.id.Principal("u");
+        MemoryStores stores = new MemoryStores(principal -> dir, MemoryLimits.defaults(), Clock.fixed(Instant.parse("2026-11-16T01:00:00Z"), ZoneOffset.UTC));
+        MemoryStore pages = stores.of(user);
+        Ledger account = stores.ledger(user);
+        pages.write("decision-database", "project", "数据库选型", "数据库用 PostgreSQL 16");
+        MemoryItem decision = account.items(item -> item.kind() == MemoryItem.Kind.CLAIM).getFirst();
+        account.put(decision.withStatus(MemoryItem.Status.APPROVED), decision.version());
+        pages.write("notes", "project", "杂记", "讨论过数据库用 PostgreSQL 16\n周会改到周四");
+
+        Forgetting.Result result = Forgetting.statement(pages, "数据库用 PostgreSQL 16", MemoryItem.Actor.AGENT);
+        assertEquals(1, result.kept().size());
+        assertEquals("数据库用 PostgreSQL 16", pages.read("decision-database").orElseThrow().content(), "the approved decision stays");
+        assertEquals("周会改到周四", pages.read("notes").orElseThrow().content().strip(), "the unapproved copy is gone");
+        MemoryItem approved = account.get(decision.id()).orElseThrow();
+        assertFalse(Forgetting.shadowed(Forgetting.forgotten(account), approved), "and recall still brings it back");
+
+        assertEquals(1, Forgetting.forget(account, "数据库用 PostgreSQL 16", MemoryItem.Actor.USER), "the user can");
+        assertTrue(pages.read("decision-database").isEmpty());
     }
 
     @Test

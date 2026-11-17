@@ -97,6 +97,16 @@ public interface PluginServices {
         return List.of();
     }
 
+    /**
+     * 这个会话到现在为止各轮调过的工具，去重：名字和所属插件（内置的为 null）。另一个会话交来的话、回来的结果算 {@code delegate}。
+     * 给插件判断“这个会话读过外部内容没有”。不是这个人的或不存在时为空。
+     */
+    record ToolUse(String tool, String plugin) {}
+
+    default List<ToolUse> toolsUsed(Principal user, SessionId session) {
+        return List.of();
+    }
+
     /** 这个人 {@code since} 以后开始、已经正常结束的轮次，新的在前，最多 {@code limit} 个（补抓用）。 */
     default List<FinishedRef> finishedRuns(Principal user, Instant since, int limit) {
         return List.of();

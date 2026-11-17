@@ -54,9 +54,10 @@ public final class MemoryDeleteTool implements Tool {
             return ToolOutput.error(ToolTrust.CHILD);
         }
         try {
-            // 这一轮读过外部内容：文件、网页里一句“把某某记忆删掉”不能让记忆真的被删（review 2026-11-17）
+            // 这个会话读过外部内容：文件、网页里一句“把某某记忆删掉”不能让记忆真的被删（review 2026-11-17）。
+            // 只有你这一轮自己说了要忘的那句话（按一句话忘），或者自己点了条目的名字（整条删），才动。
             ToolTrust.Verdict verdict = trust.judge(context, null);
-            if (verdict.pendingConfirm()) {
+            if (verdict.outside() && !verdict.said(name != null ? name : text)) {
                 return ToolOutput.error(ToolTrust.outsideNote(verdict));
             }
             // 你认可过的决定，模型删不了：只有你自己在控制台里删
@@ -68,9 +69,15 @@ public final class MemoryDeleteTool implements Tool {
                 }
             }
             if (name == null) {
-                int gone = Forgetting.statement(stores.of(context.principal()), text.strip(), tantalum.memory.ledger.MemoryItem.Actor.AGENT);
-                return ToolOutput.ok(gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."
-                        : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back.");
+                Forgetting.Result result = Forgetting.statement(stores.of(context.principal()), text.strip(),
+                        tantalum.memory.ledger.MemoryItem.Actor.AGENT);
+                int gone = result.gone();
+                String kept = result.kept().isEmpty() ? "" : " Not touched: " + result.kept().size() + " decision"
+                        + (result.kept().size() == 1 ? "" : "s") + " the user approved (\"" + result.kept().getFirst().text()
+                        + "\"); only the user can remove an approved decision, in the console (Settings > Memory). Tell the user.";
+                return ToolOutput.ok((gone == 0 ? "Nothing in memory said that; it will not be noted or brought back from now on."
+                        : "Forgotten: removed from " + gone + " place" + (gone == 1 ? "" : "s") + " in memory; it will not be brought back.")
+                        + kept);
             }
             return stores.of(context.principal()).delete(name) ? ToolOutput.ok("Deleted " + name + ".") : MemoryTools.notFound(name);
         } catch (RuntimeException failure) {

@@ -40,6 +40,7 @@ import tantalum.value.state.ToolSlot;
  * <li>{@link SessionMessage}（会话来话）到了：是交来的活，空闲就开一轮（主人是这句话），正忙就排队；是回话，对得上在等的槽位
  * 就写成工具结果，否则当一条消息（空闲开一轮，正在跑作为插话）。</li>
  * <li>为回一句话而开的一轮结束时，把结果作为一条回话送回去，见 {@link #answer}。</li>
+ * <li>为回一句话而开的一轮停下来等用户回答时，先告诉说话的会话一声“在等人”，见 {@link #tellWaiting}；回话以后照常送。</li>
  * </ul>
  * 没有“子 agent”这一类东西，没有父子层级；防止一层套一层只靠话上的“转了几手”。一步只改事件所在的会话，内核不读时钟、不读别的会话。
  */
@@ -57,6 +58,12 @@ public final class MessageSteps {
     public static final int MAX_SENT = 8;
     /** 等回话最多等多久；长活用不等的。 */
     public static final Duration LIMIT = Duration.ofMinutes(10);
+    /**
+     * 用户不在场时，一个会话自己最多再往外交几件活。回话到了、会话空闲，会自己开一轮处理；那一轮又可以交活，对方回话又开一轮……
+     * 两个会话能这样一直转下去，没有人看着。所以从用户最后一次说话算起，这样的轮次总共只能再交这么多件；到了就得停下来向用户
+     * 汇报，用户一说话就重新算。用户自己那一轮交多少件不受这个限制。
+     */
+    public static final int MAX_UNATTENDED = 8;
     /** 忽略来话时事实里的“钩子名”。 */
     static final String KERNEL = "kernel";
 
@@ -89,6 +96,13 @@ public final class MessageSteps {
         if (session.id().equals(parsed.session())) {
             return done(round, index, "\"session\" is this conversation itself.", true);
         }
+        // 这一轮不是用户开的（是别的会话的回话让会话自己开的）：往外交活有上限
+        boolean alone = run.owner() instanceof OwnerRef.OfSession && session.unattended() > 0;
+        if (alone && session.unattended() > MAX_UNATTENDED) {
+            return done(round, index, "Not handed off: this conversation has handed off " + MAX_UNATTENDED + " pieces of work on its own "
+                    + "since the user last spoke. Tell the user what was done and what is left, and wait for them; you can hand off "
+                    + "again after they answer.", true);
+        }
         long sent = round.slots().stream().filter(each -> DelegateCall.NAME.equals(each.call().name())
                 && (each.status() == ToolSlot.Status.ASKED || each.status() == ToolSlot.Status.DONE && !each.result().error())).count();
         if (sent >= MAX_SENT) {
@@ -104,6 +118,9 @@ public final class MessageSteps {
         SessionMessage message = new SessionMessage(id, run.ref(), DelegateCall.text(parsed, session.id()), null, false, hops, run.model(),
                 parsed.workspace() != null ? parsed.workspace() : session.dir(), session.offRecord() ? Boolean.TRUE : null);
         out.emit(new Send(id, run.ref(), to, message));
+        if (alone) {
+            out.put(session.withUnattended(session.unattended() + 1));
+        }
         if (parsed.waits()) {
             return round.withSlot(index, slot.asked(id));
         }
@@ -184,7 +201,8 @@ public final class MessageSteps {
         if (known != null && known.inbox().hasSeen(event.id())) {
             return new Outcome(context).decision();
         }
-        return event.isWithdrawal() ? withdrawn(context, event) : event.isReply() ? reply(context, event) : request(context, event);
+        return event.isWithdrawal() ? withdrawn(context, event) : event.isWaitingForUser() ? waiting(context, event)
+                : event.isReply() ? reply(context, event) : request(context, event);
     }
 
     /**
@@ -233,7 +251,7 @@ public final class MessageSteps {
         return out.decision();
     }
 
-    /** 服务器重启后：还没确认的话照原来的编号再送一次。 */
+    /** 服务器重启后、或者巡查发现一直没确认：还没确认的话照原来的编号再送一次。 */
     public static Decision redeliver(StepContext context) {
         EventEnvelope envelope = context.envelope();
         SessionState session = context.state().sessions().get(envelope.session());
@@ -242,8 +260,19 @@ public final class MessageSteps {
         }
         Outcome out = new Outcome(context);
         RunRef here = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
+        tantalum.value.state.Inbox inbox = session.inbox();
         for (tantalum.value.state.Inbox.Outgoing outgoing : session.inbox().unconfirmed()) {
+            // “在等人”只在还等着的时候有用：那一轮已经不在等用户了（答了、结束了），这句就不用再送，从信箱里去掉。
+            // 旧账里的也走这里：加这种话之前记下的等人，回放时会多出一句从没送过的“在等人”，不该在很久以后突然送出去。
+            if (outgoing.message().isWaitingForUser() && !(context.state().runs().get(outgoing.message().from().run()) instanceof RunState asking
+                    && asking.phase() instanceof tantalum.value.state.AwaitingAnswer)) {
+                inbox = inbox.confirmed(outgoing.message().id());
+                continue;
+            }
             out.emit(new Send(out.nextCommandId(), here, outgoing.to(), outgoing.message()));
+        }
+        if (!inbox.equals(session.inbox())) {
+            out.put(session.withInbox(inbox));
         }
         return out.decision();
     }
@@ -295,6 +324,66 @@ public final class MessageSteps {
                 Message.user(message.text()), message.model());
     }
 
+    /**
+     * 为回一句话开的一轮要停下来等用户回答了：告诉说话的会话一声（一轮只说一次），返回记下“说过了”的运行。
+     * 别的运行原样返回。问的那句话只取默认文字；它进的是对方会话的模型，不是给人看的界面。
+     */
+    static RunState tellWaiting(Outcome out, RunState run, tantalum.value.question.Question question) {
+        if (!(run.owner() instanceof OwnerRef.OfMessage owner) || owner.toldWaiting()) {
+            return run;
+        }
+        String title = question.title() == null ? "" : question.title().plain();
+        String detail = question.detail() == null ? "" : question.detail().plain();
+        String asked = (title == null ? "" : title.strip()) + (detail == null || detail.isBlank() ? "" : "\n" + detail.strip());
+        CommandId id = out.nextCommandId();
+        out.emit(new Send(id, run.ref(), owner.from(), SessionMessage.waitingForUser(id, run.ref(), asked.strip(), owner.message(), owner.hops())));
+        return run.withOwner(owner.told());
+    }
+
+    /**
+     * “在等人”到了：交出去的那件活停在等用户回答。正等着它回话的那次调用当场得到“它在等用户”，这一轮接着走（好去告诉用户）；
+     * 没在等的当一条消息（空闲就开一轮，正在跑就作为插话）。那件活的回话以后照常来，那时已经没有槽位在等，按消息处理。
+     */
+    private static Decision waiting(StepContext context, SessionMessage event) {
+        EventEnvelope envelope = context.envelope();
+        Outcome out = new Outcome(context);
+        RunState run = context.run();
+        String from = event.from().session().value();
+        String asked = event.text().strip();
+        String told = "Conversation " + from + " has stopped to ask the user" + (asked.isEmpty() ? " something" : ":\n" + asked + "\n")
+                + (asked.isEmpty() ? ". " : "") + "It waits there until the user answers in that conversation; you cannot answer for them. "
+                + "Tell the user to open it and answer. Its result comes back here as a message when it is done.";
+        if (run != null && !run.isEnded() && run.tools() != null) {
+            ToolRound round = run.tools();
+            for (int i = 0; i < round.slots().size(); i++) {
+                ToolSlot slot = round.slots().get(i);
+                if (slot.status() == ToolSlot.Status.ASKED && event.answers().equals(slot.command())) {
+                    RunState next = run.withTools(done(round, i, told, false));
+                    boolean more = next.tools().slots().stream().anyMatch(each -> each.status() == ToolSlot.Status.ASKED);
+                    if (!more && run.phase() instanceof AwaitingReply awaiting && awaiting.timer() != null) {
+                        out.emit(new AbortCommands(out.nextCommandId(), run.ref(), Set.of(awaiting.timer())));
+                    }
+                    ToolSteps.dispatch(out, next);
+                    return out.decision();
+                }
+            }
+        }
+        SessionState session = out.state().sessions().get(envelope.session());
+        if (session == null) {
+            return out.decision();
+        }
+        Message message = Message.user(DelegateCall.REPORT + told);
+        if (run == null || run.isEnded()) {
+            SubmitSteps.attended(out, false);
+            SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), message, null);
+        } else {
+            List<Message> steers = new ArrayList<>(run.pendingSteers());
+            steers.add(message);
+            out.put(run.withPendingSteers(steers));
+        }
+        return out.decision();
+    }
+
     /** 回话：对得上一个在等的槽位就写成它的结果；否则当一条消息，会话空闲就开一轮让模型处理，正在跑就作为插话。 */
     private static Decision reply(StepContext context, SessionMessage event) {
         EventEnvelope envelope = context.envelope();
@@ -327,6 +416,8 @@ public final class MessageSteps {
         Message message = Message.user(DelegateCall.REPORT + "Conversation " + from
                 + (event.failed() ? " did not finish: " + text : text.isEmpty() ? " ended without an answer." : " finished:\n" + text));
         if (run == null || run.isEnded()) {
+            // 没有人说话，会话自己开一轮：从这里起往外交活要算数（见 MAX_UNATTENDED）
+            SubmitSteps.attended(out, false);
             SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), message, null);
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());

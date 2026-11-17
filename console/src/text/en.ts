@@ -89,6 +89,7 @@ export const en: Text = {
     handedIn: (name) => `Handed in by “${name}”`,
     handedBack: (name) => `Answer from “${name}”`,
     handedBackFailed: (name) => `“${name}” did not finish`,
+    handedWaiting: (name) => `“${name}” is waiting for your answer`,
     openSession: (name) => `Open conversation: ${name}`,
     otherSession: "another conversation",
     noteShowAll: "Show all",

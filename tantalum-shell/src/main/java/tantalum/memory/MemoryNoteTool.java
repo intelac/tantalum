@@ -13,7 +13,7 @@ import tantalum.value.json.Json;
 
 /**
  * 随手记一条（memory-final-plan 第 9 节的 {@code memory_note}）：偏好、事实、决定进对应的页面，注意到的进工作记忆。
- * 带上你的原话（quote）就算你亲口说的；这一轮读过外部内容又没有原话的，等你确认。
+ * 带上你的原话（quote）、记下的那句说的也是原话里的事，就算你亲口说的；这个会话读过外部内容又不是你亲口说的，等你确认。
  */
 public final class MemoryNoteTool implements Tool {
 
@@ -34,7 +34,8 @@ public final class MemoryNoteTool implements Tool {
     @Override public String name() { return NAME; }
     @Override public String description() {
         return "Note one thing worth remembering for this user. kind: preference | fact | decision | noticed; text: one sentence; "
-                + "quote: the user's exact words that show it (needed for it to count as what the user said). Use memory_write instead "
+                + "quote: the user's exact words from this turn that say it (the note counts as what the user said only when it says what "
+                + "those words say, in the user's wording; anything else is kept as your inference). Use memory_write instead "
                 + "to write or rewrite a whole entry.";
     }
     @Override public Json schema() { return ToolArguments.schema(List.of("kind", "text"), List.of("quote")); }
@@ -62,7 +63,7 @@ public final class MemoryNoteTool implements Tool {
             return ToolOutput.error(CredentialGuard.REASON);
         }
         try {
-            ToolTrust.Verdict verdict = trust.judge(context, quote);
+            ToolTrust.Verdict verdict = trust.judge(context, text, quote);
             // 子运行写的记一笔是谁写的（memory-final-plan 第 12 节）
             MemoryItem.Actor actor = trust.delegated(context) ? MemoryItem.Actor.CHILD : MemoryItem.Actor.AGENT;
             MemoryItem.Provenance provenance = new MemoryItem.Provenance(context.session().value(),

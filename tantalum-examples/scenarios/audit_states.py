@@ -41,13 +41,14 @@ def main(folder):
             for command in result.get("commands") or []:
                 if command.get("type") == "Send":
                     message = command["message"]
-                    sends[message["id"]["value"]] = {"from": session, "to": command["to"]["value"], "reply": message.get("answers") is not None,
+                    sends[message["id"]["value"]] = {"from": session, "to": command["to"]["value"], "reply": message.get("answers") is not None and message.get("asking") is not True,
+                                                     "asking": message.get("asking") is True,
                                                      "withdraw": message.get("withdraw") is True,
                                                      "answers": (message.get("answers") or {}).get("value") if isinstance(message.get("answers"), dict) else message.get("answers")}
             if entry["type"] == "SessionMessage":
                 payload = entry["payload"]
                 answers = payload.get("answers")
-                arrived[payload["id"]["value"]] = {"in": session, "reply": answers is not None,
+                arrived[payload["id"]["value"]] = {"in": session, "reply": answers is not None and payload.get("asking") is not True,
                                                   "answers": answers.get("value") if isinstance(answers, dict) else answers,
                                                   "handled": json.dumps(result, ensure_ascii=False)[:2000]}
     problems = []
@@ -56,8 +57,9 @@ def main(folder):
     for identifier, send in sends.items():
         if identifier not in arrived: problems.append(f"送出去没送到：{identifier}（{send['from']} → {send['to']}）")
     # 撤回没有回话：它让对方把还没做完的活停下，那些活各自照常回话
-    requests = {identifier: send for identifier, send in sends.items() if not send["reply"] and not send["withdraw"]}
+    requests = {identifier: send for identifier, send in sends.items() if not send["reply"] and not send["withdraw"] and not send["asking"]}
     withdrawals = sum(1 for send in sends.values() if send["withdraw"])
+    notices = sum(1 for send in sends.values() if send["asking"])
     answered = {send["answers"] for send in sends.values() if send["reply"]} | {item["answers"] for item in arrived.values() if item["reply"]}
     for identifier, send in requests.items():
         if identifier not in answered: problems.append(f"交出去的活没有回话：{identifier}（{send['from']} → {send['to']}）")
@@ -66,7 +68,7 @@ def main(folder):
         if unconfirmed: problems.append(f"还有 {unconfirmed} 句送出去的话没得到确认：{session}")
     ended = collections.Counter(phase for phase in runs.values())
     print(f"会话 {len(glob.glob(os.path.join(folder, '*.jsonl')))} 个，运行 {len(runs)} 轮：{dict(ended)}")
-    print(f"送话命令 {len(sends)} 条（交活 {len(requests)}，回话 {len(sends) - len(requests) - withdrawals}，撤回 {withdrawals}）；会话来话事件 {len(arrived)} 条")
+    print(f"送话命令 {len(sends)} 条（交活 {len(requests)}，回话 {len(sends) - len(requests) - withdrawals - notices}，撤回 {withdrawals}，在等人 {notices}）；会话来话事件 {len(arrived)} 条")
     print("问题：" + ("没有" if not problems else ""))
     for problem in problems: print("  - " + problem)
     return 1 if problems else 0

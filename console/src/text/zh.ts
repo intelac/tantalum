@@ -100,6 +100,7 @@ export const zh = {
     handedIn: (name: string) => `「${name}」交来的活`,
     handedBack: (name: string) => `「${name}」的回话`,
     handedBackFailed: (name: string) => `「${name}」没做成`,
+    handedWaiting: (name: string) => `「${name}」在等你回答`,
     openSession: (name: string) => `打开会话：${name}`,
     otherSession: "另一个会话",
     noteShowAll: "展开全部",

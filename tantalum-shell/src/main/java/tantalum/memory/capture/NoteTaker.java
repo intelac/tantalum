@@ -233,6 +233,9 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
             if (segment.role() == RunSegment.Role.USER) {
                 text.append("User: ").append(segment.text()).append("\n\n");
             } else if (segment.role() == RunSegment.Role.TOOL && "ask_user".equals(segment.tool()) && !segment.text().isBlank()) {
+                if (segment.asked() != null && !segment.asked().isBlank()) {
+                    text.append("Assistant asked (question and choices): ").append(segment.asked().replace('\n', ' ')).append('\n');
+                }
                 text.append("User (answering the assistant's question): ").append(segment.text()).append("\n\n");
             } else if (segment.role() == RunSegment.Role.ASSISTANT) {
                 answer = segment.text();

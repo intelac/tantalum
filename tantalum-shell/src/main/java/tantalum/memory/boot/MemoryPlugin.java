@@ -45,11 +45,14 @@ public class MemoryPlugin {
                 user -> services.getObject().dataDir(MemoryTools.PLUGIN, MemoryStores.DIR, user), limits, Clock.systemUTC());
     }
 
-    /** 记忆工具写入时的信任判断：这一轮读过外部内容没有（平台的 runView）。 */
+    /** 记忆工具写入时的信任判断：这个会话读过外部内容没有（这一轮看平台的 runView，以前各轮看 toolsUsed）。 */
     @Bean
     tantalum.memory.ToolTrust memoryToolTrust(ObjectProvider<PluginServices> services) {
         return new tantalum.memory.ToolTrust(context -> services.getObject().runView(context.principal(), context.session(), context.run()),
-                context -> services.getObject().delegatedFrom(context.principal(), context.session()).isPresent());
+                context -> services.getObject().delegatedFrom(context.principal(), context.session()).isPresent(),
+                context -> services.getObject().toolsUsed(context.principal(), context.session()).stream()
+                        .filter(use -> tantalum.memory.capture.Quotes.outside(use.tool(), use.plugin()))
+                        .map(PluginServices.ToolUse::tool).distinct().toList());
     }
 
     @Bean
