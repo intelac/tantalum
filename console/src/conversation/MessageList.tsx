@@ -3,6 +3,7 @@ import type { Block } from "./blocks";
 import { CompactionMark } from "./CompactionMark";
 import { JumpToBottom } from "./JumpToBottom";
 import { RunBlock } from "./RunBlock";
+import { TaskResultNote } from "../tasks/TaskResultNote";
 import { TurnRail } from "./TurnRail";
 import { UserBubble } from "./UserBubble";
 import { useScrollFollow } from "./useScrollFollow";
@@ -28,6 +29,8 @@ export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
               <UserBubble key={block.id} store={store} id={block.id} />
             ) : block.kind === "compaction" ? (
               <CompactionMark key={block.id} store={store} id={block.id} />
+            ) : block.kind === "taskResult" ? (
+              <TaskResultNote key={block.id} store={store} id={block.id} />
             ) : (
               <RunBlock
                 key={block.run}
@@ -37,6 +40,8 @@ export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
                 reply={block.reply}
                 notices={block.notices}
                 questions={block.questions}
+                results={block.results}
+                tasks={block.tasks}
               />
             ),
           )}

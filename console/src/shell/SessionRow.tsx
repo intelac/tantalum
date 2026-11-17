@@ -95,6 +95,9 @@ export function SessionRow({ session, selected, onSelect, now, onRename, onArchi
           </span>
           {detail !== undefined && <span className="truncate text-xs text-fg-faint">{detail}</span>}
         </span>
+        {(session.openTasks ?? 0) > 0 && (
+          <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-label={t.tasks.inSidebar} role="img" title={t.tasks.inSidebar} />
+        )}
         {waiting && (
           <span className="flex shrink-0 items-center gap-1 text-xs text-warning" aria-label={t.sidebar.awaitingAnswer}>
             <CircleHelp size={12} aria-hidden="true" />

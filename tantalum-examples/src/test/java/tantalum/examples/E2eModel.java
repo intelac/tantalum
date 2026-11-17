@@ -57,6 +57,8 @@ public final class E2eModel implements ModelClient {
     static final Duration SLOW_STEP = Duration.ofMillis(250);
     static final int SLOW_STEPS = 40;
 
+    /** 任务里每一步前停多久：页面要来得及看到“进行中”。 */
+    private static final java.time.Duration TASK_PAUSE = java.time.Duration.ofMillis(1500);
     private final AtomicInteger callIds = new AtomicInteger();
     /** 已经故意失败过一次的 {@code trace:} 提问，重试时成功。 */
     private final java.util.Set<String> rateLimited = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -88,6 +90,35 @@ public final class E2eModel implements ModelClient {
         try {
             if (!prompt.output().toolsAllowed()) {
                 return summary(prompt);
+            }
+            // 任务（subagent）：最后一条是任务的结果时，这一轮是它开的（或者它进了这一轮）：把结果说出来
+            tantalum.value.model.TaskResultBlock back = taskResult(prompt);
+            if (back != null) {
+                return answer(chunks, "任务回来了（" + back.outcome().said() + "）：" + (back.text() == null ? "" : back.text()));
+            }
+            // “tasks: 交代一|交代二”：每一段放出一个任务，然后说一句就结束；任务里按交代的内容走别的剧本
+            if (text.contains("tasks:")) {
+                String[] briefs = text.substring(text.indexOf("tasks:") + "tasks:".length()).split("\\|");
+                if (results > 0) {
+                    return answer(chunks, "已经放出 " + briefs.length + " 个任务，我先做别的。");
+                }
+                List<ContentBlock> calls = new ArrayList<>();
+                for (String brief : briefs) {
+                    calls.add(call("task", Map.of("prompt", brief.strip() + "\n只报告结论。")));
+                }
+                return reply(List.of(), calls.toArray(ContentBlock[]::new));
+            }
+            // 任务里的活：停一下，写一张清单（卡片展开时看得到这一步），再停一下，交结论
+            if (text.contains("subtask:")) {
+                String what = text.substring(text.indexOf("subtask:") + "subtask:".length()).lines().findFirst().orElse("").strip();
+                Thread.sleep(TASK_PAUSE.toMillis());
+                if (results == 0) {
+                    return reply(List.of(), new ToolCallBlock("c" + callIds.incrementAndGet(), "todo_write",
+                            "{\"todos\":[{\"content\":\"查 " + what + "\",\"status\":\"in_progress\"}]}",
+                            new Json.Obj(Map.of("todos", new Json.Arr(List.of(new Json.Obj(Map.of("content", new Json.Str("查 " + what),
+                                    "status", new Json.Str("in_progress")))))))));
+                }
+                return answer(chunks, what + "：有 2 处没处理的错误。");
             }
             if (text.contains("long")) {
                 return longAnswer(text, prompt, chunks);
@@ -442,6 +473,24 @@ public final class E2eModel implements ModelClient {
      * 最后一条有文字或附件的用户消息（工具结果也是用户消息，但两样都没有）。内核追加的上下文更新（如电脑连上后“本机工作区”一段变了）
      * 也是用户消息，但不是用户写的，跳过。
      */
+    /** 最后一条消息里任务的结果（后面跟着的上下文更新不算）；不是任务的结果时为 null。 */
+    private static tantalum.value.model.TaskResultBlock taskResult(Prompt prompt) {
+        List<Message> messages = prompt.messages();
+        int last = messages.size() - 1;
+        while (last >= 0 && userText(messages.get(last)).startsWith(tantalum.kernel.projection.ContextUpdate.PREFIX)) {
+            last--;
+        }
+        tantalum.value.model.TaskResultBlock found = null;
+        if (last >= 0) {
+            for (ContentBlock block : messages.get(last).content()) {
+                if (block instanceof tantalum.value.model.TaskResultBlock result) {
+                    found = result;
+                }
+            }
+        }
+        return found;
+    }
+
     private static int lastUserText(List<Message> messages) {
         for (int i = messages.size() - 1; i >= 0; i--) {
             if (userText(messages.get(i)).startsWith(tantalum.kernel.projection.ContextUpdate.PREFIX)) {

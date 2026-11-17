@@ -5,6 +5,8 @@ import type { Item } from "../api/types";
 export type Block =
   | { kind: "user"; id: string }
   | { kind: "compaction"; id: string }
+  /** 自动继续到了上限时回来的任务结果：没有开运行，单独一块。 */
+  | { kind: "taskResult"; id: string }
   | {
       kind: "run";
       run: string;
@@ -16,9 +18,13 @@ export type Block =
       notices?: string[];
       /** 这轮问用户的问题（waiting-state），显示在过程区下面、回复上面；没有时不出现。 */
       questions?: string[];
+      /** 这轮看到的任务结果（subagent），显示在最上面：这一轮就是因为它们才接着做的；没有时不出现。 */
+      results?: string[];
+      /** 这轮放出的任务，各是一张卡片，显示在过程区下面；没有时不出现。 */
+      tasks?: string[];
     };
 
-type Shape = Pick<Item, "kind" | "run">;
+type Shape = Pick<Item, "kind" | "run"> & { paused?: boolean };
 
 export function groupBlocks(order: readonly string[], shapeOf: (id: string) => Shape | undefined): Block[] {
   const blocks: Block[] = [];
@@ -30,6 +36,10 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
     if (shape === undefined) continue;
     if (shape.kind === "compaction") {
       blocks.push({ kind: "compaction", id });
+      continue;
+    }
+    if (shape.kind === "taskResult" && shape.paused === true) {
+      blocks.push({ kind: "taskResult", id });
       continue;
     }
     if (shape.kind === "user" || shape.run === undefined) {
@@ -52,6 +62,16 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
     if (shape.kind === "question") {
       const block = runs.get(shape.run);
       if (block !== undefined) block.questions = [...(block.questions ?? []), id];
+      continue;
+    }
+    if (shape.kind === "taskResult") {
+      const block = runs.get(shape.run);
+      if (block !== undefined) block.results = [...(block.results ?? []), id];
+      continue;
+    }
+    if (shape.kind === "task") {
+      const block = runs.get(shape.run);
+      if (block !== undefined) block.tasks = [...(block.tasks ?? []), id];
       continue;
     }
     // 运行状态条目由 RunStatusRow 按运行 ID 自己取，不进过程区也不进回复。

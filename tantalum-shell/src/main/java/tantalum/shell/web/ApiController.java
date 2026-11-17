@@ -84,8 +84,16 @@ public class ApiController {
         Principal user = WebJson.currentUser();
         Set<SessionId> archived = engine.marks().allArchived(user);
         Set<SessionId> pinned = engine.marks().allPinned(user);
-        List<Map<String, Object>> sessions = engine.queries().sessions(user).stream()
-                .map(summary -> describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()))).toList();
+        Map<SessionId, Integer> openTasks = engine.queries().openTasks(user);
+        List<Map<String, Object>> sessions = engine.queries().sessions(user).stream().map(summary -> {
+            Map<String, Object> view = describe(summary, archived.contains(summary.id()), pinned.contains(summary.id()));
+            // 放出去还没回来的任务数（subagent）：侧栏的标记；只在有的时候给
+            Integer open = openTasks.get(summary.id());
+            if (open != null) {
+                view.put("openTasks", open);
+            }
+            return view;
+        }).toList();
         return json.json(200, Map.of("sessions", sessions));
     }
 

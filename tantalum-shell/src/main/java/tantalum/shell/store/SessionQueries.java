@@ -120,6 +120,21 @@ public final class SessionQueries {
         return index.usageOn(principal, day);
     }
 
+    /** 这个人的各个会话放出去还没回来的任务数（侧栏的标记）：读索引，在内存的会话用当前状态。没有的不在里面。 */
+    public Map<SessionId, Integer> openTasks(Principal principal) throws SQLException {
+        Map<SessionId, Integer> counts = new HashMap<>(index.openTaskCounts(principal));
+        for (SessionState session : view.current().sessions().values()) {
+            if (session.principal().equals(principal)) {
+                if (session.tasks().open().isEmpty()) {
+                    counts.remove(session.id());
+                } else {
+                    counts.put(session.id(), session.tasks().open().size());
+                }
+            }
+        }
+        return counts;
+    }
+
     /** 一个会话放出过的任务各自的会话（含已经结束的），按会话号排；在内存的用当前状态。 */
     public List<SessionSummary> tasksOf(Principal principal, SessionId parent) throws SQLException {
         KernelState state = view.current();

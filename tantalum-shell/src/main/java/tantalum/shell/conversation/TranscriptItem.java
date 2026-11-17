@@ -37,7 +37,9 @@ import tantalum.value.state.RunState;
     @JsonSubTypes.Type(value = TranscriptItem.CompactionMark.class, name = "compaction"),
     @JsonSubTypes.Type(value = TranscriptItem.ToolChange.class, name = "toolChange"),
     @JsonSubTypes.Type(value = TranscriptItem.ModelChange.class, name = "modelChange"),
-    @JsonSubTypes.Type(value = TranscriptItem.Question.class, name = "question")
+    @JsonSubTypes.Type(value = TranscriptItem.Question.class, name = "question"),
+    @JsonSubTypes.Type(value = TranscriptItem.Task.class, name = "task"),
+    @JsonSubTypes.Type(value = TranscriptItem.TaskResult.class, name = "taskResult")
 })
 public sealed interface TranscriptItem {
 
@@ -344,6 +346,48 @@ public sealed interface TranscriptItem {
 
         public Duration elapsed() {
             return Duration.between(at, updatedAt);
+        }
+    }
+
+    /**
+     * 放出去的一个任务（对话里的一张卡片）。它占着放出它的那次 {@code task} 调用的位置：条目的 id 就是那次调用的步骤的 id。
+     * {@code taskSession} 是专门为它开的会话的编号（接口里就是一个字符串），页面展开时读那个会话；{@code brief} 是交代的第一行，{@code prompt} 是交代的全部。
+     * 还没回来时 {@code outcome}、{@code endedAt} 为空；回来后 {@code outcome} 是结局
+     * （COMPLETED、FAILED、STOPPED、TIMED_OUT、INTERRUPTED）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record Task(String id, SessionId session, RunId run, Instant at, String task, String taskSession, String agent, String brief,
+                String prompt, String outcome, Instant endedAt) implements TranscriptItem {
+
+        public Task {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(task, "task");
+            Objects.requireNonNull(taskSession, "taskSession");
+        }
+
+        public Task ended(String how, Instant when) {
+            return new Task(id, session, run, at, task, taskSession, agent, brief, prompt, how, when);
+        }
+    }
+
+    /**
+     * 一个任务的结果回到了这个对话。不是用户说的话，页面不画成用户气泡。{@code run} 是看到它的那一轮（正在跑的，或为它新开的）。
+     * {@code paused} 为真时自动开的轮数到了上限：结果只记在这里，没有开运行，等人说话。{@code text} 可以为空。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record TaskResult(String id, SessionId session, RunId run, Instant at, String task, String outcome, String text, boolean paused)
+            implements TranscriptItem {
+
+        public TaskResult {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(run, "run");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(task, "task");
+            Objects.requireNonNull(outcome, "outcome");
         }
     }
 }

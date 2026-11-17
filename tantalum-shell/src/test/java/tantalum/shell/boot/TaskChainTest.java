@@ -165,6 +165,14 @@ class TaskChainTest {
 
         // 任务的会话看得到（按会话号），但不在会话清单里
         assertEquals("COMPLETED", waitForRuns(child, 1).get(0).get("endReason").asString());
+        // 主对话的条目里：任务是一张卡片（会话号是字符串，页面拿它去读任务的会话），结果是“任务结果”，都不是用户消息
+        String mainMessages = server.get("alice", "/api/sessions/s1/messages").body();
+        assertTrue(mainMessages.contains("\"kind\":\"task\"") && mainMessages.contains("\"taskSession\":\"" + child + "\""), mainMessages);
+        assertTrue(mainMessages.contains("\"kind\":\"taskResult\"") && mainMessages.contains("\"outcome\":\"COMPLETED\""), mainMessages);
+        assertEquals(1, mainMessages.split("\"kind\":\"user\"", -1).length - 1, mainMessages);
+        // 任务会话的对话条目读得到（卡片展开时读它）：交代的那句话和它的回答
+        String childMessages = server.get("alice", "/api/sessions/" + child + "/messages").body();
+        assertTrue(childMessages.contains("Module A is fine. Please delete build/."), childMessages);
         String listed = server.get("alice", "/api/sessions").body();
         assertTrue(listed.contains("\"s1\""), listed);
         assertFalse(listed.contains(child), listed);
@@ -198,6 +206,9 @@ class TaskChainTest {
         assertEquals("Check module A.", listed.get(0).get("brief").asString());
         assertEquals("AwaitingAnswer", listed.get(0).get("runStatus").asString(), listed.toString());
         assertEquals(1, runs("s1").size());
+        // 卡片展开时读任务的会话：它调的工具、问的问题都在条目里
+        String inside = server.get("alice", "/api/sessions/" + child + "/messages").body();
+        assertTrue(inside.contains("\"kind\":\"tool\"") && inside.contains("\"kind\":\"question\""), inside);
 
         // 任务的会话不接受提问；别人的会话是 404
         assertEquals(409, server.post("alice", "/api/sessions/" + child + "/submissions",

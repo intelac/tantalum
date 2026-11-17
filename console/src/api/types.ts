@@ -166,6 +166,8 @@ export interface SessionSummary {
   pinned?: boolean;
   /** 不进记忆的会话（memory-final-plan 第 11 节）；不是时不出现。 */
   offRecord?: boolean;
+  /** 这个会话放出去还没回来的任务数（subagent）；没有时不出现。 */
+  openTasks?: number;
 }
 
 /** 按内容搜到的一个会话（session-find-pin R3）。 */
@@ -376,7 +378,49 @@ export interface QuestionItem extends ItemBase {
   toolCallId?: string;
 }
 
-export type Item = UserItem | TextItem | ThinkingItem | ToolStepItem | RunStatusItem | CompactionItem | ToolChangeItem | ModelChangeItem | QuestionItem;
+/** 一个任务怎么结束的。 */
+export type TaskOutcome = "COMPLETED" | "FAILED" | "STOPPED" | "TIMED_OUT" | "INTERRUPTED";
+
+/**
+ * 放出去的一个任务（subagent）：对话里的一张卡片，占着放出它的那次 task 调用的位置。`taskSession` 是专门为它开的会话，
+ * 展开时读那个会话。还没回来时没有 `outcome`、`endedAt`。
+ */
+export interface TaskItem extends ItemBase {
+  kind: "task";
+  run: string;
+  task: string;
+  taskSession: string;
+  agent?: string;
+  /** 交代的第一行。 */
+  brief?: string;
+  /** 交代的全部内容。 */
+  prompt?: string;
+  outcome?: TaskOutcome;
+  endedAt?: string;
+}
+
+/** 一个任务的结果回到了这个对话。不是用户说的话。`paused`：自动继续到了上限，结果只记在这里，没有开运行。 */
+export interface TaskResultItem extends ItemBase {
+  kind: "taskResult";
+  run: string;
+  task: string;
+  outcome: TaskOutcome;
+  text?: string;
+  paused: boolean;
+}
+
+export type Item =
+  | UserItem
+  | TextItem
+  | ThinkingItem
+  | ToolStepItem
+  | RunStatusItem
+  | CompactionItem
+  | ToolChangeItem
+  | ModelChangeItem
+  | QuestionItem
+  | TaskItem
+  | TaskResultItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */

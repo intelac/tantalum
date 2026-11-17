@@ -247,6 +247,14 @@ export function compactSession(session: string, instructions?: string): Promise<
   });
 }
 
+/** 停这个会话放出去的任务：给了 `task` 停那一个，不给全部停。任务的结果照常回来（已停止）。 */
+export function stopTasks(session: string, task?: string): Promise<unknown> {
+  return call(`/api/sessions/${encodeURIComponent(session)}/tasks/stop`, {
+    method: "POST",
+    body: JSON.stringify(task === undefined ? {} : { task }),
+  });
+}
+
 export function cancelRun(run: string): Promise<unknown> {
   return call(`/api/runs/${encodeURIComponent(run)}/cancel`, { method: "POST", body: "{}" });
 }

@@ -8,6 +8,8 @@ import { RunStatusRow } from "./RunStatusRow";
 import { TurnUsage } from "./TurnUsage";
 import { useRunStatus } from "../store/hooks";
 import { settleReply } from "./blocks";
+import { TaskCard } from "../tasks/TaskCard";
+import { TaskResultNote } from "../tasks/TaskResultNote";
 import { ToolChangeNotice } from "./ToolChangeNotice";
 
 interface Props {
@@ -21,10 +23,14 @@ interface Props {
   notices?: readonly string[];
   /** 这轮问用户的问题（waiting-state）。 */
   questions?: readonly string[];
+  /** 这轮看到的任务结果（subagent）。 */
+  results?: readonly string[];
+  /** 这轮放出的任务。 */
+  tasks?: readonly string[];
 }
 
-/** 一次运行：工具变化、过程区、问用户的问题、回复、还在流式输出的部分，以及没有正常完成时的说明。 */
-export function RunBlock({ store, run, process: grouped, reply: trailing, notices = [], questions = [] }: Props) {
+/** 一次运行：工具变化、看到的任务结果、过程区、放出的任务、问用户的问题、回复、还在流式输出的部分，以及没有正常完成时的说明。 */
+export function RunBlock({ store, run, process: grouped, reply: trailing, notices = [], questions = [], results = [], tasks = [] }: Props) {
   const status = useRunStatus(store, run);
   const { process, reply } =
     status?.endReason === undefined
@@ -39,7 +45,13 @@ export function RunBlock({ store, run, process: grouped, reply: trailing, notice
           <ToolChangeNotice key={id} store={store} id={id} />
         ),
       )}
+      {results.map((id) => (
+        <TaskResultNote key={id} store={store} id={id} />
+      ))}
       <ProcessGroup store={store} run={run} ids={process} />
+      {tasks.map((id) => (
+        <TaskCard key={id} store={store} id={id} />
+      ))}
       {questions.map((id) => (
         <QuestionItem key={id} store={store} id={id} />
       ))}

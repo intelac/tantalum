@@ -365,6 +365,20 @@ public final class SessionIndex implements AutoCloseable {
         return text.toString();
     }
 
+    /** 这个人的各个会话放出去还没回来的任务数；没有的不在里面。 */
+    public synchronized Map<SessionId, Integer> openTaskCounts(Principal principal) throws SQLException {
+        Map<SessionId, Integer> counts = new HashMap<>();
+        try (PreparedStatement select = connection.prepareStatement("SELECT session, tasks FROM sessions WHERE principal = ? AND tasks <> ''")) {
+            select.setString(1, principal.value());
+            try (ResultSet result = select.executeQuery()) {
+                while (result.next()) {
+                    counts.put(new SessionId(result.getString(1)), (int) result.getString(2).lines().count());
+                }
+            }
+        }
+        return counts;
+    }
+
     /** 所有放出去还没回来的任务，按会话排。 */
     public synchronized List<tantalum.shell.loop.TaskRecovery.Outstanding> outstandingTasks() throws SQLException {
         List<tantalum.shell.loop.TaskRecovery.Outstanding> found = new ArrayList<>();

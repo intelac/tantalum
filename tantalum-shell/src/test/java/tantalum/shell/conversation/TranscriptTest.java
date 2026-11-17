@@ -155,6 +155,43 @@ class TranscriptTest {
         assertEquals("reply truncated", fx.status(run).detail());
     }
 
+    /** 任务（subagent 需求 10.2）：task 调用的位置上是任务的卡片；结果回来时卡片记下结局，另有一条“任务结果”，不是用户消息。 */
+    @Test
+    void aStartedTaskIsACardInPlaceOfTheCallAndItsResultIsNotAUserMessage() {
+        RunId run = fx.start("look into module A");
+        tantalum.value.model.ToolCallBlock task = new tantalum.value.model.ToolCallBlock("c1", "task", "{}", new tantalum.value.json.Json.Obj(java.util.Map.of(
+                "prompt", new tantalum.value.json.Json.Str("Check module A.\nReport what you find."))));
+        tantalum.value.model.ToolCallBlock refused = new tantalum.value.model.ToolCallBlock("c2", "task", "{}", new tantalum.value.json.Json.Obj(java.util.Map.of(
+                "prompt", new tantalum.value.json.Json.Str(" "))));
+        fx.feed(run, fx.reply(task, refused));
+
+        TranscriptItem.Task card = fx.items(TranscriptItem.Task.class).getFirst();
+        assertEquals("Check module A.", card.brief());
+        assertEquals("Check module A.\nReport what you find.", card.prompt());
+        assertEquals("s-" + card.task(), card.taskSession());
+        assertEquals(null, card.outcome());
+        // 被拒绝的那次调用还是一个工具步骤，是失败（执行过了、结果是错误），不是“被拦下”
+        ToolStep failed = fx.items(ToolStep.class).getFirst();
+        assertEquals(TranscriptItem.StepStatus.FAILED, failed.status());
+        assertTrue(failed.result().text().startsWith("task needs a non-empty"));
+        fx.feed(run, fx.reply(text("started")));
+        int users = fx.items(UserMessage.class).size();
+
+        fx.feed(null, new tantalum.value.event.TaskEnded(card.task(), tantalum.value.task.TaskOutcome.COMPLETED, "Module A is fine."));
+
+        TranscriptItem.Task ended = fx.items(TranscriptItem.Task.class).getFirst();
+        assertEquals(card.id(), ended.id());
+        assertEquals("COMPLETED", ended.outcome());
+        TranscriptItem.TaskResult result = fx.items(TranscriptItem.TaskResult.class).getFirst();
+        assertEquals(card.task(), result.task());
+        assertEquals("Module A is fine.", result.text());
+        assertFalse(result.paused());
+        assertEquals(users, fx.items(UserMessage.class).size());
+        // 卡片还在原来的位置：在“started”那段文字之前
+        List<String> order = fx.items().stream().map(item -> item.getClass().getSimpleName()).toList();
+        assertTrue(order.indexOf("Task") < order.indexOf("Text"), order.toString());
+    }
+
     @Test
     void thinkingBeforeAndAfterEachToolCallIsKeptInOrder() {
         RunId run = fx.start("hi");
@@ -174,6 +211,8 @@ class TranscriptTest {
             case TranscriptItem.ToolChange c -> "tools";
             case TranscriptItem.ModelChange c -> "model";
             case TranscriptItem.Question q -> "question";
+            case TranscriptItem.Task k -> "task:" + k.task();
+            case TranscriptItem.TaskResult r -> "taskResult:" + r.task();
         }).toList();
         assertEquals(List.of("user:hi", "run", "think:plan", "tool:read_file", "think:check", "tool:grep",
                 "think:wrap up", "text:done"), kinds);

@@ -9,6 +9,8 @@ import tantalum.shell.conversation.TranscriptItem.ModelChange;
 import tantalum.shell.conversation.TranscriptItem.Question;
 import tantalum.shell.conversation.TranscriptItem.QuestionStatus;
 import tantalum.shell.conversation.TranscriptItem.RunStatus;
+import tantalum.shell.conversation.TranscriptItem.Task;
+import tantalum.shell.conversation.TranscriptItem.TaskResult;
 import tantalum.shell.conversation.TranscriptItem.Text;
 import tantalum.shell.conversation.TranscriptItem.Thinking;
 import tantalum.shell.conversation.TranscriptItem.ToolChange;
@@ -121,6 +123,8 @@ final class TranscriptPass {
                         askedAbout(asked.run().run())));
                 case QuestionSettled settled -> questionSettled(settled);
                 case QueueEdited edited -> queueEdited(edited);
+                case tantalum.value.decision.TaskStarted started -> taskStarted(started);
+                case tantalum.value.decision.TaskSettled settled -> taskSettled(settled);
                 default -> { }
             }
         }
@@ -230,6 +234,29 @@ final class TranscriptPass {
      * 排队的提问被改了：{@code conversation.queued} 和内核的队列一一对应，内核说动的是第几条，这里就动第几条。
      * 移除的条目留着占位、标成已移除；转成插话的归到当前运行，和直接插话的一样。
      */
+    /** 放出了任务：那次 task 调用的步骤换成任务的卡片，位置不变（同一个 id）。 */
+    private void taskStarted(tantalum.value.decision.TaskStarted started) {
+        if (!(step(started.toolCallId()) instanceof ToolStep step)) {
+            return;
+        }
+        String prompt = step.call().arguments() instanceof tantalum.value.json.Json.Obj arguments
+                && arguments.fields().get(tantalum.value.task.TaskTools.PROMPT) instanceof tantalum.value.json.Json.Str text ? text.value().strip() : null;
+        put(new Task(step.id(), session, step.run(), step.at(), started.task(), started.session().value(), started.agent(), started.brief(),
+                prompt, null, null));
+    }
+
+    /** 任务有了结果：卡片记下结局，另出一个“任务结果”条目（不是用户说的话）。 */
+    private void taskSettled(tantalum.value.decision.TaskSettled settled) {
+        String outcome = settled.outcome().name();
+        for (TranscriptItem item : List.copyOf(conversation.items.values())) {
+            if (item instanceof Task card && card.task().equals(settled.task()) && card.outcome() == null) {
+                put(card.ended(outcome, at));
+            }
+        }
+        String text = envelope.event() instanceof tantalum.value.event.TaskEnded ended ? ended.text() : null;
+        put(new TaskResult(TranscriptItem.id(envelope.seq(), 0), session, settled.run().run(), at, settled.task(), outcome, text, settled.paused()));
+    }
+
     private void queueEdited(QueueEdited edited) {
         if (edited.index() < 0 || edited.index() >= conversation.queued.size()) {
             return;
@@ -399,7 +426,9 @@ final class TranscriptPass {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolResultBlock result && step(result.toolCallId()) instanceof ToolStep step
                         && !step.isFinished()) {
-                    put(result.code() != null ? step.finished(result, at) : step.blocked(result, at));
+                    // task、task_stop 由内核当场给结果，没有自己的事件：它们是执行过了，不是被拦下
+                    boolean answered = result.code() != null || tantalum.value.task.TaskTools.handles(step.call().name());
+                    put(answered ? step.finished(result, at) : step.blocked(result, at));
                 }
             }
         }

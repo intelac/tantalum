@@ -54,4 +54,24 @@ describe("groupBlocks", () => {
   it("skips unknown ids", () => {
     expect(groupBlocks(["nope"], () => undefined)).toEqual([]);
   });
+
+  it("任务：卡片和结果归到它们的那一轮；自动继续停住时回来的结果单独一块（subagent）", () => {
+    const shapes: Record<string, { kind: string; run?: string; paused?: boolean }> = {
+      u1: { kind: "user", run: "r1" },
+      s1: { kind: "run", run: "r1" },
+      card: { kind: "task", run: "r1" },
+      t1: { kind: "text", run: "r1" },
+      s2: { kind: "run", run: "r2" },
+      back: { kind: "taskResult", run: "r2", paused: false },
+      t2: { kind: "text", run: "r2" },
+      late: { kind: "taskResult", run: "r2", paused: true },
+    };
+    const blocks = groupBlocks(Object.keys(shapes), (id) => shapes[id] as never);
+    expect(blocks).toEqual([
+      { kind: "user", id: "u1" },
+      { kind: "run", run: "r1", process: [], reply: ["t1"], tasks: ["card"] },
+      { kind: "run", run: "r2", process: [], reply: ["t2"], results: ["back"] },
+      { kind: "taskResult", id: "late" },
+    ]);
+  });
 });

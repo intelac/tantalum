@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import type { Config, Project, UserItem } from "../api/types";
 import { projectOf } from "../projects/group";
@@ -20,6 +21,9 @@ import { ProjectChip } from "./ProjectChip";
 import { QueueDock } from "./queue/QueueDock";
 import { useQueueActions } from "./queue/useQueueActions";
 import { StatusBar } from "./StatusBar";
+import { firstApproval, openTasks, pausedResults } from "../tasks/taskState";
+import { TaskStrip } from "../tasks/TaskStrip";
+import { taskSessionKey, useOpenTaskSessions } from "../tasks/useTaskSession";
 import { useMenuSkills } from "../skills/useSkills";
 import { findModel, findRoute, useModels, useSessionChoice } from "./useModels";
 
@@ -58,7 +62,15 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const { run, running } = useLatestRun(store, session);
   const version = useRunVersion(store, run);
   const items = useItems(store, useOrder(store, session));
-  const pending = useMemo(() => pendingApproval(items), [items]);
+  const own = useMemo(() => pendingApproval(items), [items]);
+  // 任务（subagent）：还没回来的、自动继续停住后没处理的结果、任务里等着批准的问题
+  const tasksOut = useMemo(() => openTasks(items), [items]);
+  const pausedOnes = useMemo(() => pausedResults(items), [items]);
+  const taskItems = useOpenTaskSessions(tasksOut);
+  const queries = useQueryClient();
+  // 这个对话自己的批准在先；没有时轮到任务里的，一次一个
+  const fromTask = own === null ? firstApproval(tasksOut, taskItems) : null;
+  const pending = own ?? fromTask?.pending ?? null;
   // 排队的消息就是对话里 queued 的用户条目，顺序和内核的队列相同
   const queued = useMemo(() => items.filter((item): item is UserItem => item?.kind === "user" && item.queued), [items]);
   const queueActions = useQueueActions(session);
@@ -92,7 +104,15 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
     <div className="mx-auto w-full max-w-[var(--content-width)] shrink-0 px-4 pb-2">
       <PendingStrip session={session} running={running} />
       <QueueDock queued={queued} running={running} actions={queueActions} />
-      {pending !== null && <ApprovalCard key={pending.question.id} pending={pending} />}
+      <TaskStrip session={session} open={tasksOut} paused={running ? [] : pausedOnes} />
+      {pending !== null && (
+        <ApprovalCard
+          key={pending.question.id}
+          pending={pending}
+          from={fromTask == null ? undefined : t.tasks.from(fromTask.task.task, fromTask.task.brief ?? "")}
+          onAnswered={fromTask == null ? undefined : () => void queries.invalidateQueries({ queryKey: taskSessionKey(fromTask.task.taskSession) })}
+        />
+      )}
       <div hidden={pending !== null}>
         <Composer
           session={session}

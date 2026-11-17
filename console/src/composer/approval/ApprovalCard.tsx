@@ -13,6 +13,10 @@ import type { PendingApproval } from "./pending";
 
 interface Props {
   pending: PendingApproval;
+  /** 问题来自一个任务（subagent）时，写明是哪个任务；不是时没有。 */
+  from?: string;
+  /** 回答交上以后调用（任务的会话不走这个页面的推送，调用方据此重读）。 */
+  onAnswered?: () => void;
 }
 
 /** Esc 选的那个选项的 id：规则插件想让 Esc 能拒绝，就把拒绝的选项叫这个名字。 */
@@ -30,7 +34,7 @@ function notForCard(event: KeyboardEvent): boolean {
  * 批准卡片（input-area 需求 2；DSH `ApprovalCard.tsx`）：规则插件在工具调用前问你时，它顶替输入框。
  * 回车选第一个选项，Esc 选 id 是 deny 的选项（没有就不动）。点了以后全部禁用，等对话里的问题变成已回答；没交上就恢复并说明。
  */
-export function ApprovalCard({ pending }: Props) {
+export function ApprovalCard({ pending, from, onAnswered }: Props) {
   const { question, step } = pending;
   const t = useText();
   const text = t.conversation;
@@ -38,7 +42,10 @@ export function ApprovalCard({ pending }: Props) {
   const titleId = useId();
   const card = useRef<HTMLDivElement>(null);
   const left = useCountdown(question.deadline);
-  const answer = useMutation({ mutationFn: (choice: string) => answerQuestion(question.session, question.questionId, { choice }) });
+  const answer = useMutation({
+    mutationFn: (choice: string) => answerQuestion(question.session, question.questionId, { choice }),
+    onSuccess: () => onAnswered?.(),
+  });
   // 回答已经交上（200）但条目还没更新：保持禁用，不交第二次
   const busy = answer.isPending || answer.isSuccess;
   const failure = answer.error;
@@ -71,6 +78,7 @@ export function ApprovalCard({ pending }: Props) {
       aria-labelledby={titleId}
       className="focus-plain rounded-2xl border border-warning/50 bg-raised px-4 py-3 shadow-sm"
     >
+      {from !== undefined && <p className="mb-1 truncate text-xs text-warning">{from}</p>}
       <div className="flex items-center gap-1.5 text-xs text-warning">
         <ShieldQuestion size={14} aria-hidden="true" />
         <span>{text.approval.waiting}</span>
