@@ -87,7 +87,9 @@ public final class SubmitSteps {
         } else {
             List<Message> steers = new ArrayList<>(run.pendingSteers());
             steers.add(message);
-            out.put(run.withPendingSteers(steers));
+            // 这一轮是替别的会话做的：记下用户插过话，回话里带上这个事实
+            RunState steered = run.owner() instanceof OwnerRef.OfMessage owner ? run.withOwner(owner.spoke()) : run;
+            out.put(steered.withPendingSteers(steers));
         }
         return out.decision();
     }

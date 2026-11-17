@@ -940,4 +940,29 @@ class MessageStepsTest {
         assertTrue(answer.session(sent.to()).inbox().unconfirmed().isEmpty());
         assertTrue(answer.last.facts().stream().anyMatch(fact -> fact.toString().contains(reply.id().value())), answer.last.facts().toString());
     }
+
+    /** 接了活的会话正做着，用户在那里插了话：回话带上这个事实，交活的一方的模型看得到；没插话的不带。 */
+    @Test
+    void anAnswerSaysWhenTheUserSpokeInThatConversationWhileItWorked() {
+        World world = new World();
+        Send sent = asked(world);
+        SessionId b = sent.to();
+        world.deliver(sent);
+        CallModel work = world.assembled(b, world.only(AssembleContext.class));
+        world.feed(b, world.run(b).ref().run(), new tantalum.value.event.SteerSubmitted(new SubmissionId("st1"), new RequestId("r-st1"),
+                "count only the java files", List.of(), List.of()));
+        assertTrue(((OwnerRef.OfMessage) world.run(b).owner()).userSpoke());
+        world.reply(b, work, new TextBlock("12 files"));
+        // 插话在这次回答后交给模型，这一轮接着走
+        world.reply(b, world.only(CallModel.class), new TextBlock("7 java files"));
+        Send answer = world.last.commands().stream().filter(Send.class::isInstance).map(Send.class::cast).findFirst().orElseThrow();
+        assertEquals(Boolean.TRUE, answer.message().steered());
+        world.deliver(answer);
+        String result = results(world, A).getFirst().text();
+        assertTrue(result.startsWith("The user also wrote in conversation " + b.value()) && result.contains("7 java files"), result);
+
+        World plain = new World();
+        Send other = asked(plain);
+        assertNull(finishes(plain, other, "42").message().steered());
+    }
 }

@@ -301,7 +301,7 @@ public final class MessageSteps {
             if (lost.message().isRequest()) {
                 // 交出去的活没送到：这个会话得到一句“没做成”，和对方回话说没做成走同一条路
                 arrived(out, lost.to().value(), lost.message().id(), true, "the work was not handed over. Nothing confirmed that it "
-                        + "arrived after " + MAX_REDELIVER + " tries, and it is not sent again.");
+                        + "arrived after " + MAX_REDELIVER + " tries, and it is not sent again.", false);
             } else {
                 out.report(List.of(new HookReported(here, KERNEL, "message " + lost.message().id().value() + " to " + lost.to().value()
                         + " dropped: not confirmed after " + MAX_REDELIVER + " tries")));
@@ -457,12 +457,14 @@ public final class MessageSteps {
     /** 回话：对得上一个在等的槽位就写成它的结果；否则当一条消息，会话空闲就开一轮让模型处理，正在跑就作为插话。 */
     private static Decision reply(StepContext context, SessionMessage event) {
         Outcome out = new Outcome(context);
-        arrived(out, event.from().session().value(), event.answers(), event.failed(), event.text().strip());
+        arrived(out, event.from().session().value(), event.answers(), event.failed(), event.text().strip(), Boolean.TRUE.equals(event.steered()));
         return out.decision();
     }
 
     /** 会话 {@code from} 对编号 {@code answers} 那件活有了结局（{@code failed} 为真是没做成），写进事件所在的会话。 */
-    private static void arrived(Outcome out, String from, CommandId answers, boolean failed, String text) {
+    private static void arrived(Outcome out, String from, CommandId answers, boolean failed, String text, boolean steered) {
+        // 只陈述事实：要不要跟用户核对由模型定
+        String spoke = steered ? "The user also wrote in conversation " + from + " while it worked on this.\n" : "";
         EventEnvelope envelope = out.envelope;
         SessionState session = out.state().sessions().get(envelope.session());
         if (session == null) {
@@ -475,8 +477,8 @@ public final class MessageSteps {
             for (int i = 0; i < round.slots().size(); i++) {
                 ToolSlot slot = round.slots().get(i);
                 if (slot.status() == ToolSlot.Status.ASKED && answers.equals(slot.command())) {
-                    String result = failed ? "Conversation " + from + " did not finish: " + text
-                            : text.isEmpty() ? "Conversation " + from + " ended without an answer." : "Answer from conversation " + from + ":\n" + text;
+                    String result = spoke + (failed ? "Conversation " + from + " did not finish: " + text
+                            : text.isEmpty() ? "Conversation " + from + " ended without an answer." : "Answer from conversation " + from + ":\n" + text);
                     RunState next = run.withTools(done(round, i, result, failed || text.isEmpty()));
                     boolean more = next.tools().slots().stream().anyMatch(each -> each.status() == ToolSlot.Status.ASKED);
                     if (!more && run.phase() instanceof AwaitingReply waiting && waiting.timer() != null) {
@@ -487,7 +489,7 @@ public final class MessageSteps {
                 }
             }
         }
-        Message message = Message.user(DelegateCall.REPORT + "Conversation " + from
+        Message message = Message.user(DelegateCall.REPORT + spoke + "Conversation " + from
                 + (failed ? " did not finish: " + text : text.isEmpty() ? " ended without an answer." : " finished:\n" + text));
         if (run == null || run.isEnded()) {
             // 没有人说话，会话自己开一轮：从这里起往外交活要算数（见 MAX_UNATTENDED）
@@ -519,8 +521,8 @@ public final class MessageSteps {
                     : "it was cancelled" + (detail == null ? "." : ": " + detail);
         };
         CommandId id = out.nextCommandId();
-        out.emit(new Send(id, run.ref(), owner.from(), new SessionMessage(id, run.ref(), text, owner.message(), failed, owner.hops(),
-                null, null, null)));
+        out.emit(new Send(id, run.ref(), owner.from(), SessionMessage.reply(id, run.ref(), text, owner.message(), failed, owner.hops(),
+                owner.userSpoke())));
     }
 
     /** 这一轮最后的回答：会话最后一条消息是助手的才算，取它的文字。 */

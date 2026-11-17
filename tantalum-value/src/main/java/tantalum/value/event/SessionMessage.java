@@ -24,13 +24,16 @@ import tantalum.value.model.ModelChoice;
  * 撤回本身没有回话。只有交活的那个会话能撤回自己交的。撤回带着 {@code unarrived}：交出去、对方还没确认收到的那几件
  * （平时为空），免得撤回先到、活后到又开了工。
  * <p>
+ * 回话上的 {@code steered}（平时为空）：那件活做的时候，用户在那个会话里插过话。结果可能已经不是交活的一方原来要的，
+ * 它得知道有这回事；怎么处理由它的模型定。
+ * <p>
  * 第四种话是“在等人”（{@code asking} 为真，平时为空）：为回 {@code answers} 那句话开的一轮停下来等用户回答了（问答卡、
  * 工具审批）。不然交活的一方只知道“还没回话”，用户也不知道该去那个会话里回答，两边一直等下去。它不是回话：那件活做完时
  * 照常有它的那一句回话。一轮最多说一次。
  */
 public record SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                              ModelChoice model, String dir, Boolean offRecord, Boolean withdraw, Boolean asking,
-                             List<CommandId> unarrived) implements Event {
+                             List<CommandId> unarrived, Boolean steered) implements Event {
 
     public static final String TYPE = "SessionMessage";
 
@@ -43,17 +46,17 @@ public record SessionMessage(CommandId id, RunRef from, String text, CommandId a
 
     public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                           ModelChoice model, String dir, Boolean offRecord, Boolean withdraw, Boolean asking) {
-        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, asking, null);
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, asking, null, null);
     }
 
     public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                           ModelChoice model, String dir, Boolean offRecord) {
-        this(id, from, text, answers, failed, hops, model, dir, offRecord, null, null, null);
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, null, null, null, null);
     }
 
     public SessionMessage(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops,
                           ModelChoice model, String dir, Boolean offRecord, Boolean withdraw) {
-        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, null, null);
+        this(id, from, text, answers, failed, hops, model, dir, offRecord, withdraw, null, null, null);
     }
 
     /**
@@ -61,7 +64,12 @@ public record SessionMessage(CommandId id, RunRef from, String text, CommandId a
      * 那件活的回话以后照常来。
      */
     public static SessionMessage waitingForUser(CommandId id, RunRef from, String text, CommandId answers, int hops) {
-        return new SessionMessage(id, from, text, answers, false, hops, null, null, null, null, Boolean.TRUE);
+        return new SessionMessage(id, from, text, answers, false, hops, null, null, null, null, Boolean.TRUE, null, null);
+    }
+
+    /** 一句回话；{@code steered} 为真表示做的时候用户在那个会话里插过话。 */
+    public static SessionMessage reply(CommandId id, RunRef from, String text, CommandId answers, boolean failed, int hops, boolean steered) {
+        return new SessionMessage(id, from, text, answers, failed, hops, null, null, null, null, null, null, steered ? Boolean.TRUE : null);
     }
 
     /** 这是一句“在等人”。 */
@@ -74,7 +82,7 @@ public record SessionMessage(CommandId id, RunRef from, String text, CommandId a
      * 撤回可能比它们先到，对方据此把它们记成“见过”并各回一句“没做成”，以后真到了也不开工。
      */
     public static SessionMessage withdrawal(CommandId id, RunRef from, List<CommandId> unarrived) {
-        return new SessionMessage(id, from, "", null, false, 0, null, null, null, Boolean.TRUE, null, unarrived);
+        return new SessionMessage(id, from, "", null, false, 0, null, null, null, Boolean.TRUE, null, unarrived, null);
     }
 
     public static SessionMessage withdrawal(CommandId id, RunRef from) {
