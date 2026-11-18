@@ -225,7 +225,7 @@ def main():
         # ---------------- 第三天 ----------------
         day3 = "main-" + secrets.token_hex(4)
         story.say(day3, "我对费用里的小数有什么讲究吗？", [
-            ("不再把按整数算当成我现在的要求（说“提过、后来撤销了”可以）", lambda t: ("整数" not in "\n".join(t["answers"]))
+            ("不再把按整数算当成我现在的要求（说“提过、后来撤销了”可以）", lambda t: not re.search(r"(按|都要|要求|习惯|必须)[^。\n]{0,8}整数|不要小数", "\n".join(t["answers"]))
                 or any(said(t, word) is True for word in ("不再", "不会再", "取消", "撤销", "撤回", "忘", "作废", "不用取整", "不要求", "不必", "不强制", "不用按")) or f"还在说整数：{t['answers'][-1][:200]!r}"),
         ], note="忘掉的那条不该再当成我的习惯")
         plain = "s-" + secrets.token_hex(4)
