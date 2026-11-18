@@ -40,7 +40,7 @@ java -jar tantalum-0.1.0.jar --tantalum.provider=local \
 
 ## 往哪儿走
 
-账在中心。三样东西从账里长出来，是投影，不是另建的系统：每个人的记忆（一座 wiki，照阿里的 [ReMe](https://github.com/agentscope-ai/ReMe)）、公司经人认证的知识（照 NVIDIA 的 [Auto Ontology](https://github.com/NVIDIA/auto-ontology)）、按团队规则从外部事件接活的代理（照 DeepSeek 的 [super-agent 原型](https://github.com/deepseek-ai/dsh-superagent-prototype)）。内核只加五样原语、不加阶段：外部事件、委派、两种新归属、带负责人的代理身份、每次工具调用前的闸。第一个里程碑是一个能证伪的实验：两个身份和权限不同的代理，在没人在线的情况下合作完成一件长活，中途重启一次，全程在账里，内核不打补丁。细节见 [ROADMAP.zh.md](ROADMAP.zh.md)。
+账在中心。三样东西从账里长出来，是投影，不是另建的系统：每个人的记忆（一座 wiki，照阿里的 [ReMe](https://github.com/agentscope-ai/ReMe)）、公司经人认证的知识（照 NVIDIA 的 [Auto Ontology](https://github.com/NVIDIA/auto-ontology)）、按团队规则从外部事件接活的代理（照 DeepSeek 的 [super-agent 原型](https://github.com/deepseek-ai/dsh-superagent-prototype)）。内核只加五样原语、不加阶段：外部事件、委派、两种新归属、带负责人的代理身份、每次工具调用前的闸。原先设想的第一个实验（两个身份和权限不同的代理，在没人在线时合作完成一件长活）已搁置，等有了真实场景再做；五样里已经做出来的是委派，叫“任务”。细节见 [ROADMAP.zh.md](ROADMAP.zh.md)。
 
 ## 代码结构
 

@@ -17,7 +17,7 @@
         permit: ["放行", "LaneDispatcher"], lane: ["用户通道", "UserLane"], cring: ["净室环", "CleanroomRing"], kernel: ["净室 · 内核走一步", "状态机"],
         hooks: ["钩子插件", "beforeModelCall …"], journal: ["写 journal", "UserLane · fsync"], out: ["输出环", "OutputRing"], hub: ["推送中心", "SSE Hub"],
         index: ["索引", "会话列表、运行表"], disp: ["分发", "HandlerDispatcher"], ctx: ["组装上下文", "ContextHandler"], model: ["调模型", "ModelHandler"],
-        tool: ["执行工具", "ToolHandler"], work: ["插件工作", "WorkHandler"], timer: ["定时器", "TimerHandler"], after: ["工具后处理插件", "密钥遮盖 · 截断"],
+        tool: ["执行工具", "ToolHandler"], task: ["任务", "TaskHandler"], work: ["插件工作", "WorkHandler"], timer: ["定时器", "TimerHandler"], after: ["工具后处理插件", "密钥遮盖 · 截断"],
         links: ["本机连接", "LocalLinks"], llm: ["模型", "Claude API · 本机 qwen"], conn: ["连接程序", "tantalum-connect"],
         files: ["文件 · Git · 命令", ""], browser: ["浏览器", "Playwright → Chrome"]
       },
@@ -35,7 +35,7 @@
         permit: ["Permit", "LaneDispatcher"], lane: ["User lane", "UserLane"], cring: ["Cleanroom ring", "CleanroomRing"], kernel: ["Cleanroom · kernel step", "State machine"],
         hooks: ["Hook plugins", "beforeModelCall …"], journal: ["Write journal", "UserLane · fsync"], out: ["Output ring", "OutputRing"], hub: ["Push hub", "SSE Hub"],
         index: ["Index", "Sessions, runs"], disp: ["Dispatch", "HandlerDispatcher"], ctx: ["Context", "ContextHandler"], model: ["Model call", "ModelHandler"],
-        tool: ["Run tool", "ToolHandler"], work: ["Plugin work", "WorkHandler"], timer: ["Timer", "TimerHandler"], after: ["After-tool plugins", "Masking · truncation"],
+        tool: ["Run tool", "ToolHandler"], task: ["Tasks", "TaskHandler"], work: ["Plugin work", "WorkHandler"], timer: ["Timer", "TimerHandler"], after: ["After-tool plugins", "Masking · truncation"],
         links: ["Local link", "LocalLinks"], llm: ["Model", "Claude API · local qwen"], conn: ["Connector", "tantalum-connect"],
         files: ["Files · Git · shell", ""], browser: ["Browser", "Playwright → Chrome"]
       },
@@ -54,7 +54,7 @@
         permit: ["許可", "LaneDispatcher"], lane: ["ユーザーレーン", "UserLane"], cring: ["クリーンルームリング", "CleanroomRing"], kernel: ["カーネル 1 ステップ", "状態機械"],
         hooks: ["フックプラグイン", "beforeModelCall …"], journal: ["journal 書き込み", "UserLane · fsync"], out: ["出力リング", "OutputRing"], hub: ["プッシュ", "SSE Hub"],
         index: ["インデックス", "会話一覧・実行"], disp: ["振り分け", "HandlerDispatcher"], ctx: ["コンテキスト", "ContextHandler"], model: ["モデル呼び出し", "ModelHandler"],
-        tool: ["ツール実行", "ToolHandler"], work: ["プラグイン処理", "WorkHandler"], timer: ["タイマー", "TimerHandler"], after: ["ツール後処理", "マスク · 切り詰め"],
+        tool: ["ツール実行", "ToolHandler"], task: ["タスク", "TaskHandler"], work: ["プラグイン処理", "WorkHandler"], timer: ["タイマー", "TimerHandler"], after: ["ツール後処理", "マスク · 切り詰め"],
         links: ["ローカル接続", "LocalLinks"], llm: ["モデル", "Claude API · ローカル qwen"], conn: ["コネクター", "tantalum-connect"],
         files: ["ファイル · Git · コマンド", ""], browser: ["ブラウザ", "Playwright → Chrome"]
       },
@@ -72,7 +72,7 @@
     intake: [215, 48, 125, 52], input: [365, 48, 125, 52], permit: [515, 48, 125, 52], lane: [665, 48, 125, 52],
     cring: [665, 165, 125, 50], kernel: [440, 160, 190, 60], hooks: [232, 168, 180, 46, "plug"],
     journal: [440, 305, 190, 52], out: [665, 305, 125, 52], hub: [215, 305, 125, 52], index: [215, 380, 125, 40],
-    disp: [665, 430, 125, 48],
+    disp: [665, 430, 125, 48], task: [440, 388, 150, 52],
     ctx: [215, 528, 112, 50], model: [337, 528, 112, 50], tool: [459, 528, 112, 50], work: [581, 528, 100, 50], timer: [691, 528, 100, 50],
     after: [459, 598, 112, 48, "plug"], links: [691, 600, 100, 52],
     llm: [835, 60, 150, 90],
@@ -98,6 +98,8 @@
     "disp>tool": "M690,478 C660,500 540,500 515,526",
     "disp>work": "M710,478 C690,500 650,500 631,526",
     "disp>timer": "M745,478 L745,526",
+    "disp>task": "M665,442 C640,442 625,414 592,414",
+    "task>input": "M440,414 L360,414 L360,436 L207,436 L207,150 L427,150 L427,102",
     "tool>after": "M515,578 L515,596",
     "after>input": "M459,622 C330,622 207,640 207,560 L207,150 L427,150 L427,102",
     "ctx>input": "M245,528 L245,505 L207,505 L207,150 L427,150 L427,102",
@@ -112,7 +114,7 @@
   };
   var REVERSIBLE = { "tool>links": true, "links>conn": true, "conn>files": true, "conn>browser": true };
   var PLUGIN_EDGES = { "kernel>hooks": true, "tool>after": true };
-  var HANDLER = { AssembleContext: "ctx", CallModel: "model", DoWork: "work", StartTimer: "timer" };
+  var HANDLER = { AssembleContext: "ctx", CallModel: "model", DoWork: "work", StartTimer: "timer", StartTask: "task", StopTask: "task", ReturnTask: "task" };
 
   var context = null;
   var nodeEls = {};

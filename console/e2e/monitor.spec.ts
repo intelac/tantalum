@@ -25,4 +25,18 @@ test.describe("实时监视面板", () => {
     await frame.getByRole("button", { name: "继续" }).click();
     await expect(frame.getByRole("button", { name: "暂停" })).toBeVisible();
   });
+
+  test("放出任务时亮的是“任务”节点，不是“执行工具”", async ({ page }) => {
+    await openNewSession(page);
+    await page.getByRole("button", { name: "面板", exact: true }).click();
+    await page.getByRole("menuitem", { name: "实时监视" }).click();
+    const frame = page.frameLocator("iframe[title=实时监视]");
+    await expect(frame.locator("#empty")).toContainText("等待事件");
+
+    // E2eModel 的 tasks: 剧本放出一个任务，这一轮没有调别的工具
+    await send(page, "tasks: subtask: billing 模块");
+    const lit = () => frame.locator("g.node.done, g.node.cur").allTextContents();
+    await expect.poll(lit, { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringContaining("TaskHandler")]));
+    expect((await lit()).some((text) => text.includes("ToolHandler"))).toBe(false);
+  });
 });
