@@ -15,6 +15,16 @@ import tantalum.kernel.Replay;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.ReturnTask;
+import tantalum.value.command.DoWork;
+import tantalum.value.command.AssembleContext;
+import tantalum.value.event.WorkDone;
+import tantalum.value.hook.NeedWork;
+import tantalum.value.hook.Allow;
+import tantalum.value.hook.HookResult;
+import tantalum.kernel.hook.KernelHook;
+import tantalum.value.hook.HookContext;
+import tantalum.value.state.KernelState;
+import tantalum.value.state.SessionState;
 import tantalum.value.command.RunTool;
 import tantalum.value.command.StartTask;
 import tantalum.value.command.StartTimer;
@@ -49,7 +59,6 @@ import tantalum.value.model.ToolResultBlock;
 import tantalum.value.state.Ended;
 import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
-import tantalum.value.state.SessionState;
 import tantalum.value.task.OpenTask;
 import tantalum.value.task.TaskLimits;
 import tantalum.value.task.TaskOutcome;
@@ -252,6 +261,36 @@ class TaskStepsTest {
         assertEquals(TaskOutcome.COMPLETED, back.outcome());
         assertEquals("Module A is fine.", back.text());
         assertTrue(loop.state.runs().get(run).phase() instanceof Ended);
+    }
+
+    /** 结束前的钩子让任务改一处（比如引用核对）：任务于是答了两次。交回的是这一轮的每一次回答，不能只剩那句更正。 */
+    @Test
+    void whenAHookMadeTheTaskAnswerAgainEveryAnswerIsHandedBack() {
+        KernelHook check = new KernelHook() {
+            @Override public String name() { return "check"; }
+            @Override public HookResult beforeRunEnd(KernelState state, HookContext context) {
+                SessionState session = state.sessions().get(context.run().session());
+                boolean task = session.tasks().origin() != null;
+                long answers = session.messages().stream().filter(m -> m.role() == tantalum.value.model.Role.ASSISTANT).count();
+                return task && answers == 1 && context.work() == null ? new NeedWork("check", new Json.Null()) : Allow.PLAIN;
+            }
+        };
+        LoopFixture loop = new LoopFixture(check);
+        startOne(loop);
+        StartTask start = (StartTask) loop.commands.stream().filter(StartTask.class::isInstance).findFirst().orElseThrow();
+        RunId run = assign(loop, start);
+
+        Decision first = reply(loop, start.session(), run, loop.onlyCommandId(), StopReason.END_TURN,
+                LoopFixture.text("Module A is fine, see a.py:9.").getFirst());
+        DoWork work = only(first, DoWork.class);
+        assertTrue(first.commands().stream().noneMatch(ReturnTask.class::isInstance), "the task has not ended yet");
+        Decision again = loop.feed(start.session(), run, new WorkDone(work.id(), "check", new Json.Null(), false, "a.py:9 was never read; fix it", null));
+        if (again.commands().getFirst() instanceof AssembleContext assemble) {
+            again = loop.feed(start.session(), run, ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
+        }
+        Decision ended = reply(loop, start.session(), run, modelCall(again), StopReason.END_TURN, LoopFixture.text("Correction: it is a.py:7.").getFirst());
+
+        assertEquals("Module A is fine, see a.py:9.\n\nCorrection: it is a.py:7.", only(ended, ReturnTask.class).text());
     }
 
     @Test

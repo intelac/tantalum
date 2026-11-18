@@ -184,15 +184,18 @@ public final class TaskSteps {
 
     /** 交回的文字：完成时是最后的回答，否则是结束的详情。 */
     public static String textOf(TaskOutcome outcome, SessionState session, String detail) {
-        return outcome == TaskOutcome.COMPLETED ? lastAnswer(session) : detail;
+        return outcome == TaskOutcome.COMPLETED ? answers(session) : detail;
     }
 
-    /** 最后一条助手消息里的文字；过程不带回。 */
-    static String lastAnswer(SessionState session) {
-        List<Message> messages = session.messages();
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Message message = messages.get(i);
-            if (message.role() != Role.ASSISTANT) {
+    /**
+     * 任务这一轮的回答：不带工具调用的助手消息里的文字，按先后接起来。通常只有一条；结束前的钩子让它再答一次时
+     * （比如引用核对要它改一处）就有几条，后一条往往只是更正，只带它会把原来的结论丢掉（2026-11-18 真模型测试里发现）。
+     * 边调工具边说的话是过程，不带回。
+     */
+    static String answers(SessionState session) {
+        StringBuilder all = new StringBuilder();
+        for (Message message : session.messages()) {
+            if (message.role() != Role.ASSISTANT || message.content().stream().anyMatch(ToolCallBlock.class::isInstance)) {
                 continue;
             }
             StringBuilder text = new StringBuilder();
@@ -202,10 +205,10 @@ public final class TaskSteps {
                 }
             }
             if (!text.toString().isBlank()) {
-                return text.toString().strip();
+                all.append(all.isEmpty() ? "" : "\n\n").append(text.toString().strip());
             }
         }
-        return null;
+        return all.isEmpty() ? null : all.toString();
     }
 
     /** 放出的任务有了结果。名单里没有它：已经结束过了（重复、迟到的），不动。 */
