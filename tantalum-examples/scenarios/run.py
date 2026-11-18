@@ -306,6 +306,8 @@ SERVERS = {
     "approval": ["--tantalum.local.command-approval.enabled=true"],
     # 连接程序多允许一个不在 Git 仓库里的目录（not-git 场景），见 start()
     "outside": [],
+    # 任务有期限、很短（tasks-timeout 场景）：仔细审一个文件一定做不完；无人值守时最多再放几个，免得反复重放
+    "task-deadline": ["--tantalum.tasks.deadline=10s", "--tantalum.tasks.max-unattended-tasks=6"],
 }
 # 每组服务器起来后给用户设的压缩点（设置页“模型”一栏的百分比），按模型分：本机 12k 窗口用满（压缩点 10k；qwen 压缩一次后系统提示、工具、摘要和保留的消息就有九千二左右，压缩点低于这个数时每一步都要再压，10k、11k 的窗口一轮压六到十次、丢进度；qwen 光系统提示和
 # 工具就 5.4k；9k 时也能压缩，但一轮要压七八次、模型会丢进度）；Claude 第一次调用就有九千多 token，18k 窗口取 50%（9k）。
@@ -374,7 +376,7 @@ def replayable(scenario):
     # 用到测试站的（注入网页等）也不录：回放时没有这个站
     # 审批、多一个允许目录的服务器配置回放里没有（回放的“电脑”不答审批卡片、只有一个目录），这两组不录
     return (scenario["group"] not in NOT_REPLAYABLE_GROUPS and not scenario["followup"] and SITE_URL not in scenario["prompt"]
-            and scenario["server"] not in ("approval", "outside"))
+            and scenario["server"] not in ("approval", "outside", "task-deadline"))
 
 def tree(root):
     """项目里的文件（不含 .git、__pycache__、node_modules 的内容）：相对路径 → 字节。"""

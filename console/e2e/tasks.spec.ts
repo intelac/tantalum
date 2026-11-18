@@ -66,6 +66,25 @@ test.describe("任务", () => {
     await expect(page.getByText(/任务回来了（stopped before it finished）/)).toBeVisible({ timeout: 30_000 });
   });
 
+  test("全部停止：两个都在等你回答的任务一起停，各回来一个已停止的结果，提示行消失", async ({ page }) => {
+    await openNewSession(page);
+    await send(page, "tasks: ask: 选一个|ask: 再选一个");
+    const first = page.getByRole("region", { name: "ask: 选一个" });
+    const second = page.getByRole("region", { name: "ask: 再选一个" });
+    await expect(first).toContainText("等你回答", { timeout: 30_000 });
+    await expect(second).toContainText("等你回答", { timeout: 30_000 });
+    await expect(page.getByText("2 个任务进行中")).toBeVisible();
+
+    await page.getByRole("button", { name: "全部停止" }).click();
+    await expect(first).toContainText("已停止", { timeout: 30_000 });
+    await expect(second).toContainText("已停止", { timeout: 30_000 });
+    await expect(page.getByRole("region", { name: /任务 t\d+-\d+ 的结果/ })).toHaveCount(2);
+    await expect(page.getByText(/个任务进行中/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "全部停止" })).toHaveCount(0);
+    // 停掉以后输入框回到平常的样子，不再显示任务的问题
+    await expect(composer(page)).toBeEnabled();
+  });
+
   test("任务里要批准：问题显示在主对话的输入框位置，标明来自哪个任务", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     await setApproval(page, true);

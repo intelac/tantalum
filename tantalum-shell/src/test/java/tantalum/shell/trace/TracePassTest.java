@@ -1,5 +1,6 @@
 package tantalum.shell.trace;
 
+import tantalum.kernel.Limits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -288,7 +289,7 @@ class TracePassTest {
     /** hook-patch：钩子的说明在消息里，system 就是冻结的那份；钩子加的工具标插件来源；钩子决定行照旧报长度。 */
     @Test
     void patchesLeaveTheSystemAloneAndHookToolsAreAttributed() {
-        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A-rules", "alpha_tool"), patch("beta", "BB")));
+        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A-rules", "alpha_tool"), patch("beta", "BB")), Limits.DEFAULT);
         RunId run = fx.start("hi");
 
         SystemPrompt system = fx.records(SystemPrompt.class).getFirst();
@@ -305,7 +306,7 @@ class TracePassTest {
 
     @Test
     void patchesAreNotAdoptedWhenALaterHookStopsAndIneffectiveBeforeAToolCall() {
-        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A"), HALT));
+        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A"), HALT), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "read_file")));
         fx.feed(run, fx.steer("halt"));
@@ -328,7 +329,7 @@ class TracePassTest {
 
     @Test
     void hookAskingForWorkLinksBothWaysAndContinueTextIsAPluginUserRecord() {
-        TraceFixture fx = new TraceFixture(true, List.of(CITE));
+        TraceFixture fx = new TraceFixture(true, List.of(CITE), Limits.DEFAULT);
         RunId run = fx.start("hi");
         PluginWork running = fx.records(PluginWork.class).getFirst();
         assertEquals(PluginWork.Status.RUNNING, running.status());
@@ -357,7 +358,7 @@ class TracePassTest {
 
     @Test
     void hookExceptionIsAnErrorRecordAndAStoppingFailureKnowsItsPoint() {
-        TraceFixture fx = new TraceFixture(true, List.of(BROKEN));
+        TraceFixture fx = new TraceFixture(true, List.of(BROKEN), Limits.DEFAULT);
         fx.start("hi");
 
         HookDecision error = fx.records(HookDecision.class).getFirst();
@@ -435,7 +436,7 @@ class TracePassTest {
 
     @Test
     void workInterruptedByARestartEndsWithTheRun() {
-        TraceFixture fx = new TraceFixture(true, List.of(CITE));
+        TraceFixture fx = new TraceFixture(true, List.of(CITE), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, new RunInterrupted());
 
@@ -448,7 +449,7 @@ class TracePassTest {
     /** 在每个事件之后导出、恢复到新的投影再接着处理，推送和最终状态都和不中断时相同。 */
     @Test
     void restoringSavedStateAndContinuingEqualsNeverStopping() {
-        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A", "alpha_tool"), CITE));
+        TraceFixture fx = new TraceFixture(true, List.of(patch("alpha", " A", "alpha_tool"), CITE), Limits.DEFAULT);
         RunId first = fx.start(block("q1"), SETTINGS, List.of(new ContextSection("memory", "a", true)));
         fx.feed(first, fx.workDone(new Json.Str("found"), "cited"));
         fx.feed(first, fx.failed(FailureReason.RATE_LIMITED, true, "HTTP 429"));

@@ -106,18 +106,89 @@ def wait_for_tasks(run, user, session, model):
         time.sleep(2)
     return "放出去的任务 900 秒还没都回来"
 
-def c_tasks_common(ctx):
-    """放了任务就要守的几条（放不放是模型的判断，不算对错）：都回来了；放出后那一轮先结束，结果回来另开一轮；任务里没有再放任务。"""
+# 任务会话里答过的卡片、停任务时的情况，按主对话的会话号记，判分时看
+TASK_NOTES = collections.defaultdict(lambda: {"answered": [], "approved": [], "stopped_at": None})
+
+def attend_tasks(answer=None, stop_after=None):
+    """第一轮结束后照看放出去的任务，直到都回来、结果开的那几轮也结束。任务里的命令审批点“这一次”；别的问题：answer 写了就照它答
+    （对不上选项时当自由回答），没写选第一个。stop_after：看到有任务在外面以后过这么多秒，像用户点“全部停止”那样全停。"""
+    def between(run, user, session, model):
+        import time
+        notes = TASK_NOTES[session]
+        started, quiet, seen_open = time.time(), 0, None
+        while time.time() - started < 900:
+            tasks = (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", [])
+            runs = (user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
+            if stop_after is not None and notes["stopped_at"] is None and any(task.get("open") for task in tasks):
+                seen_open = seen_open or time.time()
+                if time.time() - seen_open >= stop_after:
+                    status, _ = user.call("POST", f"/api/sessions/{session}/tasks/stop", {})
+                    notes["stopped_at"] = {"status": status, "tasks": len(tasks), "open": sum(1 for task in tasks if task.get("open"))}
+            for task in tasks:
+                if task.get("runStatus") != "AwaitingAnswer": continue
+                for question in (user.call("GET", f"/api/sessions/{task['session']}/questions")[1] or {}).get("questions", []):
+                    if question["id"].startswith(run.APPROVAL_PREFIX):
+                        payload = {"choice": "once"}; notes["approved"].append(task["id"])
+                    else:
+                        choice = next((c["id"] for c in question.get("choices", []) if answer and (answer in str(c.get("label")) or answer == c["id"])), None)
+                        if choice: payload = {"choice": choice}
+                        elif answer and question.get("freeText"): payload = {"text": answer}
+                        elif question.get("choices"): payload = {"choice": question["choices"][0]["id"]}
+                        else: payload = {"text": answer or "ok"}
+                        notes["answered"].append(task["id"])
+                    user.call("POST", f"/api/sessions/{task['session']}/questions/{question['id']}", payload)
+            done = not any(task.get("open") for task in tasks) and runs and runs[-1].get("endReason")
+            quiet = quiet + 1 if done else 0
+            if quiet >= 3: return None
+            time.sleep(1 if stop_after is not None else 2)
+        return "放出去的任务 900 秒还没都回来"
+    return between
+
+def task_ends(ctx):
+    """每个任务生效的那个结局：任务号 -> (结局, 带回的文字)。看内核报的事实（TaskSettled），不看事件：期限到了的结局是定时器那一步定的，
+    任务那边随后交回的“已停止”来晚了、不算。文字取任务交回的那一条。"""
+    ends, texts = {}, {}
+    for line in ctx.journal.splitlines():
+        if '"TaskSettled"' not in line and '"type":"TaskEnded"' not in line: continue
+        try: entry = json.loads(line)
+        except ValueError: continue
+        if entry.get("type") == "TaskEnded":
+            payload = entry.get("payload") or {}
+            texts.setdefault((payload.get("task"), payload.get("outcome")), payload.get("text") or "")
+        for fact in (entry.get("result") or {}).get("facts", []):
+            if fact.get("type") == "TaskSettled": ends.setdefault(fact.get("task"), fact.get("outcome"))
+    return {task: (outcome, texts.get((task, outcome), "")) for task, outcome in ends.items()}
+
+def task_briefs(ctx):
+    """每个任务的会话开头那条交代：任务号 -> (agent, 交代的内容)。"""
+    briefs = {}
+    for task in tasks_of(ctx):
+        path = os.path.join(ctx.sessions_dir, task["session"] + ".jsonl")
+        if not os.path.exists(path): continue
+        for line in open(path, encoding="utf-8"):
+            if '"type":"TaskAssigned"' not in line: continue
+            payload = json.loads(line).get("payload") or {}
+            briefs[task["id"]] = (payload.get("agent"), payload.get("prompt") or "")
+            break
+    return briefs
+
+def c_tasks_common(ctx, people=1):
+    """放了任务就要守的几条（放不放是模型的判断，不算对错）：都回来了；每个结果回来以后模型都看到了；任务里没有再放任务。"""
     failed, tasks = [], tasks_of(ctx)
     still = [task["id"] for task in tasks if task.get("open")]
     if still: failed.append(f"还有任务没回来：{still}")
     if tasks:
         runs = (ctx.user.call("GET", f"/api/sessions/{ctx.sessions[0]}/runs")[1] or {}).get("runs", [])
-        if len(runs) < 2: failed.append(f"放了 {len(tasks)} 个任务，主对话却只有 {len(runs)} 轮：结果没有开出下一轮")
+        # 结果回来时主对话还在忙，就进那一轮；空闲就另开一轮。两种都对，要的是结果回来以后模型看到了它
+        seen_after, pending = False, False
+        for line in ctx.journal.splitlines():
+            if '"TaskSettled"' in line: pending = True
+            elif '"type":"ModelReplied"' in line and pending: seen_after, pending = True, False
+        if not seen_after or pending: failed.append(f"放了 {len(tasks)} 个任务（主对话 {len(runs)} 轮），最后一个结果回来以后模型没有再被调用")
         nested = [task["id"] for task in tasks if (ctx.user.call("GET", f"/api/sessions/{task['session']}/tasks")[1] or {}).get("tasks")]
         if nested: failed.append(f"任务里又放了任务：{nested}")
-    people = sum(1 for line in ctx.journal.splitlines() if '"type":"UserPrompt"' in line or '"type":"FollowUpSubmitted"' in line)
-    if people != 1: failed.append(f"账里有 {people} 条人说的话，应该只有 1 条")
+    said = sum(1 for line in ctx.journal.splitlines() if '"type":"UserPrompt"' in line or '"type":"FollowUpSubmitted"' in line)
+    if said != people: failed.append(f"账里有 {said} 条人说的话，应该只有 {people} 条")
     return failed
 
 def all_said(ctx):
@@ -136,6 +207,65 @@ def c_tasks_parallel(ctx):
     failed = c_tasks_common(ctx) + [f"回答里没有 {name!r}" for name in ("orders", "reports", "cli") if name not in said]
     edits = [name for name in ("edit_file", "write_file") if ctx.tools.get(name, 0) or task_calls(ctx).get(name, 0)]
     if edits: failed.append(f"只让看，却用了 {edits}")
+    return failed
+
+def c_tasks_ask(ctx):
+    """日期只有用户知道：不管是任务里问还是主对话问，问到了才写；写进去的是用户答的那个日期。"""
+    failed = c_tasks_common(ctx)
+    try: plan = open(os.path.join(ctx.outside, "plan.md"), encoding="utf-8").read()
+    except OSError as failure: plan = f"<{failure}>"
+    if "2026-12-05" not in plan: failed.append(f"plan.md 里没有用户答的日期：{plan[-120:]!r}")
+    if not task_calls(ctx).get("ask_user", 0):
+        failed.append("没测到：任务里没有问用户" + ("（主对话自己问了）" if ctx.tools.get("ask_user", 0) else "，日期没有问过"))
+    if "orders" not in all_said(ctx).lower(): failed.append("回答里没有 orders 的结论")
+    return failed
+
+def c_tasks_approve(ctx):
+    """开着“命令先问”：任务里跑命令也要过用户这一关；批了以后拿到测试结果，两边的结论都有。"""
+    failed, notes = c_tasks_common(ctx), TASK_NOTES[ctx.sessions[0]]
+    said = all_said(ctx)
+    failed += [f"回答里没有 {name!r}" for name in ("test_discount_takes_percent_off", "test_no_discount_keeps_the_price") if name not in said]
+    count = str(functions_in(ctx, "inventory/orders.py"))
+    if not re.search(rf"(?<!\d){count}(?!\d)", said): failed.append(f"回答里没有 orders.py 的函数个数 {count}")
+    ran = ctx.tools.get("bash", 0) + task_calls(ctx).get("bash", 0)
+    if not ran: failed.append("没有跑命令")
+    if ran and not (ctx.approvals or notes["approved"]): failed.append("跑了命令却没有出现过审批")
+    return failed
+
+def c_tasks_stop(ctx):
+    """用户中途把任务全停了：都以“已停止”回来，模型不自己再放一遍；用户再问时这一轮正常结束。"""
+    failed, notes = c_tasks_common(ctx, people=2), TASK_NOTES[ctx.sessions[0]]
+    at_stop, ends = notes["stopped_at"], task_ends(ctx)
+    if not at_stop: return failed + ["没测到：没有放任务，或者还没来得及停任务就都回来了"]
+    if at_stop["status"] != 200: failed.append(f"停任务的接口回了 {at_stop['status']}")
+    stopped = [task for task, (outcome, _) in ends.items() if outcome == "STOPPED"]
+    if not stopped: failed.append(f"没有一个任务的结局是已停止：{ {task: outcome for task, (outcome, _) in ends.items()} }")
+    if len(tasks_of(ctx)) > at_stop["tasks"]: failed.append(f"用户停了以后模型又放了任务：停的时候 {at_stop['tasks']} 个，最后 {len(tasks_of(ctx))} 个")
+    return failed
+
+def c_tasks_timeout(ctx):
+    """任务有期限、到点没做完：结局是超时。超时的那个文件，主对话要么自己看了，要么重新放的任务做完了，要么明说没做完，不能当成做完了。"""
+    failed, ends, briefs = c_tasks_common(ctx), task_ends(ctx), task_briefs(ctx)
+    timed_out = [task for task, (outcome, _) in ends.items() if outcome == "TIMED_OUT"]
+    if not timed_out: return failed + [f"没测到：没有任务超时：{ {task: outcome for task, (outcome, _) in ends.items()} }"]
+    said = all_said(ctx).lower()
+    admitted = re.search(r"超时|没(有)?(做|看|审|读)完|未完成|没(有)?完成|timed? ?out|did not finish", said)
+    for name in ("orders", "reports", "cli"):
+        mine = [task for task, (_, prompt) in briefs.items() if name in prompt.lower()]
+        if not mine or any(ends.get(task, ("",))[0] == "COMPLETED" for task in mine): continue
+        own = any(call["name"] in ("read_file", "grep", "bash") and name in json.dumps(call["args"], ensure_ascii=False).lower() for call in ctx.calls)
+        if not own and not admitted: failed.append(f"{name} 的任务超时了，主对话没有自己看、没有重做成功，也没说没做完")
+    return failed
+
+def c_tasks_agent(ctx):
+    """点名用一个技能当帮手：那个任务的 agent 就是这个技能，交回的发布说明照技能规定的格式（开头那行猜不出来）。"""
+    failed, briefs, ends = c_tasks_common(ctx), task_briefs(ctx), task_ends(ctx)
+    mine = [task for task, (agent, _) in briefs.items() if agent == "release-notes"]
+    if not mine: failed.append(f"没有用 release-notes 技能当 agent 的任务：{ {task: agent for task, (agent, _) in briefs.items()} }")
+    elif not any(FACTS["skill"] in ends.get(task, ("", ""))[1] for task in mine): failed.append("那个任务交回的内容没有照技能的格式")
+    said = all_said(ctx)
+    if FACTS["skill"] not in said: failed.append(f"给用户的回答里没有技能规定的开头 {FACTS['skill']!r}")
+    if "cli" not in said.lower(): failed.append("回答里没有 cli 的结论")
     return failed
 
 def functions_in(ctx, path):
@@ -1152,6 +1282,24 @@ SCENARIOS += [
       "分头数一下 inventory/orders.py 和 inventory/reports.py 各定义了多少个函数。两个数都拿到以后，把它们的和写进 {outside} 目录里 plan.md 的最后一行，"
       "写成 “functions: N”（N 是那个和）。",
       c_tasks_then_act, max_calls=12, timeout=600, server="outside", between=wait_for_tasks),
+    # 不顺利的情况（2026-11-19）：任务里要问人、要批准、被用户停掉、到期限没做完、点名用技能当帮手
+    S("tasks-ask", "任务", "分出去的活做到一半要用户拿主意：问得到用户，答了以后照答的做",
+      "两件事都分给帮手去做，你自己不用动手：一件是仔细看一遍 inventory/orders.py 有没有明显的毛病；另一件是在 {outside} 目录里 plan.md 的最后加一行 “release: 日期”。"
+      "日期我还没定，做第二件事的帮手做到那一步时让它直接来问我，你不用替它问。",
+      c_tasks_ask, max_calls=12, timeout=600, server="outside", answers={"*": "2026-12-05"}, between=attend_tasks(answer="2026-12-05")),
+    S("tasks-approve", "任务", "开着“命令先问”时，分出去的活里跑命令也要用户批准，批了以后照常做完",
+      "两件事分头同时做：一边跑一下测试，告诉我是哪几个测试方法失败了（写出方法名），不要修；另一边数一下 inventory/orders.py 里定义了多少个函数。",
+      c_tasks_approve, max_calls=12, timeout=600, server="approval", world=False, approve="once", between=attend_tasks()),
+    S("tasks-stop", "任务", "用户中途把分出去的活全停了：都停下来，模型不自己再放一遍，再问时说得清现在的情况",
+      "inventory 目录里 orders.py、reports.py、cli.py 这三个文件，分头同时做：每个文件从头到尾逐行读完，写一份详细的审查报告，每个函数都要评到。",
+      c_tasks_stop, max_calls=12, timeout=600, world=False, between=attend_tasks(stop_after=4),
+      turns=["我刚才把它们都停掉了，不用再看了。现在是什么情况？简单说一下。"]),
+    S("tasks-timeout", "任务", "分出去的活到了期限没做完：不把没做完的当成做完了",
+      "inventory 目录里 orders.py、reports.py、cli.py 这三个文件，分头同时做：每个文件从头到尾逐行读完，写一份详细的审查报告，每个函数都要评到。最后告诉我每个文件的结论。",
+      c_tasks_timeout, max_calls=16, timeout=600, world=False, server="task-deadline", between=attend_tasks()),
+    S("tasks-agent", "任务", "点名让帮手照一个技能做事：帮手照技能的格式交回来",
+      "两件事分头同时做：找个帮手照我的 release-notes 技能，给 git 最近三次提交写一份发布说明；另一边看看 inventory/cli.py 有没有明显的毛病。两边的结果都原样给我。",
+      c_tasks_agent, max_calls=12, timeout=600, world=False, between=attend_tasks()),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）

@@ -36,7 +36,7 @@ public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
     /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。7：运行表（run-tree 需求 3）。13：运行表里的起因多了任务的两种，旧的要重算（subagent 需求 10.5）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 13;
+    static final int VERSION = 14;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**

@@ -4,9 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tantalum.kernel.Limits;
 import tantalum.shell.trace.TraceRecord.RunHead;
 import tantalum.shell.trace.TraceRecord.RunHead.Trigger;
 import tantalum.shell.trace.TraceRecord.TaskNote;
@@ -15,11 +17,13 @@ import tantalum.shell.trace.TraceRecord.ToolCall.Status;
 import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.value.event.TaskAssigned;
 import tantalum.value.event.TaskEnded;
+import tantalum.value.event.TimerFired;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.task.OpenTask;
+import tantalum.value.task.TaskLimits;
 import tantalum.value.task.TaskOutcome;
 import tantalum.value.task.TaskTools;
 
@@ -106,6 +110,26 @@ class TraceTaskTest {
         assertEquals(1, notes.size());
         assertEquals(second, notes.getFirst().head().run());
         assertEquals(TaskOutcome.FAILED, notes.getFirst().outcome());
+    }
+
+    /** 期限到了也是任务的结果：事件是定时器，不是任务交回来的；之后任务那边交回的“已停止”来晚了，什么都不加。 */
+    @Test
+    void aTaskThatRunsOutOfTimeLeavesATimedOutRecordAndTheLateStopAddsNothing() {
+        TraceFixture fx = new TraceFixture(true, List.of(), new Limits(10, 8, new TaskLimits(4, 10, 10, Duration.ofSeconds(10))));
+        OpenTask open = startOne(fx);
+
+        fx.feed(null, new TimerFired(open.timer()));
+        RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
+        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.STOPPED, null));
+
+        List<TaskNote> notes = fx.records(TaskNote.class);
+        assertEquals(1, notes.size());
+        assertEquals(TaskOutcome.TIMED_OUT, notes.getFirst().outcome());
+        assertEquals(fresh, notes.getFirst().head().run());
+        assertEquals(open.session().value(), notes.getFirst().session());
+        assertNull(notes.getFirst().text());
+        RunHead head = fx.records(RunHead.class).stream().filter(run -> run.head().run().equals(fresh)).findFirst().orElseThrow();
+        assertEquals(Trigger.TASK_RESULT, head.trigger());
     }
 
     @Test

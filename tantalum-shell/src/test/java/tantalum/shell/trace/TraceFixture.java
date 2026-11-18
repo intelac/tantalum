@@ -81,13 +81,13 @@ final class TraceFixture {
     private int submissions;
 
     TraceFixture() {
-        this(true, List.of());
+        this(true, List.of(), Limits.DEFAULT);
     }
 
-    TraceFixture(boolean concurrencySafe, List<KernelHook> hooks) {
+    TraceFixture(boolean concurrencySafe, List<KernelHook> hooks, Limits limits) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
-        kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, Limits.DEFAULT);
+        kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, limits);
     }
 
     Decision feed(RunId run, Event event) {

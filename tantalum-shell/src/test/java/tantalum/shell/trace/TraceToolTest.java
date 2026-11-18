@@ -1,5 +1,6 @@
 package tantalum.shell.trace;
 
+import tantalum.kernel.Limits;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -47,7 +48,7 @@ class TraceToolTest {
 
     @Test
     void parallelCallsShareAGroupAndKeepTheirOwnTimesAndRawErrorText() {
-        TraceFixture fx = new TraceFixture(true, List.of());
+        TraceFixture fx = new TraceFixture(true, List.of(), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "read_file"), call("c2", "grep")));
         ToolCall first = tool(fx, "c1");
@@ -71,7 +72,7 @@ class TraceToolTest {
 
     @Test
     void exclusiveCallsWaitAndRunInTheirOwnGroup() {
-        TraceFixture fx = new TraceFixture(false, List.of());
+        TraceFixture fx = new TraceFixture(false, List.of(), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "write"), call("c2", "write")));
         assertEquals(Status.WAITING, tool(fx, "c2").status());
@@ -85,7 +86,7 @@ class TraceToolTest {
 
     @Test
     void blockedByAHookCarriesItsReasonAndTheHookRowLinksToIt() {
-        TraceFixture fx = new TraceFixture(true, List.of(NO_RM));
+        TraceFixture fx = new TraceFixture(true, List.of(NO_RM), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "rm"), call("c2", "read_file")));
 
@@ -100,7 +101,7 @@ class TraceToolTest {
 
     @Test
     void invalidArgumentsAreBlockedWithTheirOwnCode() {
-        TraceFixture fx = new TraceFixture(true, List.of());
+        TraceFixture fx = new TraceFixture(true, List.of(), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(badCall("c1", "read_file")));
 
@@ -113,7 +114,7 @@ class TraceToolTest {
 
     @Test
     void aThrowingToolHookBlocksTheCallAndTheErrorRowKnowsItsPoint() {
-        TraceFixture fx = new TraceFixture(true, List.of(THROWS));
+        TraceFixture fx = new TraceFixture(true, List.of(THROWS), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "read_file")));
 
@@ -126,7 +127,7 @@ class TraceToolTest {
 
     @Test
     void cancelLeavesSentCallsUnknownAndUnsentOnesNotSent() {
-        TraceFixture fx = new TraceFixture(false, List.of());
+        TraceFixture fx = new TraceFixture(false, List.of(), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "write"), call("c2", "write")));
         fx.feed(run, new Cancel(new RequestId("x")));
@@ -143,7 +144,7 @@ class TraceToolTest {
 
     @Test
     void restartInterruptionSaysSo() {
-        TraceFixture fx = new TraceFixture(true, List.of());
+        TraceFixture fx = new TraceFixture(true, List.of(), Limits.DEFAULT);
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(call("c1", "read_file")));
         fx.feed(run, new RunInterrupted());

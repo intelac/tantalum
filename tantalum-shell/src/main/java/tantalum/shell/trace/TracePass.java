@@ -33,6 +33,7 @@ import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
 import tantalum.value.decision.QueueEdited;
+import tantalum.value.decision.TaskSettled;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
@@ -113,10 +114,10 @@ final class TracePass {
             case ToolFinished finished -> tools.finished(finished);
             case WorkDone done -> hooks.workDone(done);
             case TaskAssigned assigned -> taskAssigned(assigned);
-            case TaskEnded ended -> taskEnded(ended);
             default -> { }
         }
         List<Fact> facts = decision.facts();
+        tasksSettled(facts);
         for (int i = 0; i < facts.size(); i++) {
             Fact fact = facts.get(i);
             if (!fact.run().session().equals(session)) {
@@ -227,7 +228,7 @@ final class TracePass {
         book.runs.put(run, track);
         Trigger trigger = track.manual ? Trigger.MANUAL_COMPACTION
                 : envelope.event() instanceof TaskAssigned ? Trigger.TASK
-                : envelope.event() instanceof TaskEnded ? Trigger.TASK_RESULT
+                : settlesATask() ? Trigger.TASK_RESULT
                 : envelope.event() instanceof Submitted ? Trigger.PROMPT : Trigger.FOLLOW_UP;
         Place place = track.manual ? compaction(run) : new Place(track.turn, null, null, false);
         add(new RunHead(head(runHeadId(run), run, place, at), trigger, phaseOf(run), null, null), place, true);
@@ -365,21 +366,30 @@ final class TracePass {
     }
 
     /**
-     * 任务的结果回到放出它的会话。只记生效的那一个（名单里有它，这一步之后没有了）：空闲时它开了一轮，正在跑时进了那一轮。
+     * 放出的任务有了结果。看的是内核报的事实，不是事件的种类：结果可能是任务交回来的（{@code TaskEnded}），也可能是期限到了
+     * （{@code TimerFired}），两种都是同一个事实，后到的那个什么都不改、也没有事实。空闲时它开了一轮，正在跑时进了那一轮。
      * 到了自动继续的上限时没有运行可挂，不记（结果在历史里，人说话后的那一轮看得到）。
      */
-    private void taskEnded(TaskEnded ended) {
-        OpenTask open = openTask(before, ended.task());
-        if (open == null || openTask(state, ended.task()) != null) {
-            return;
+    private void tasksSettled(List<Fact> facts) {
+        for (Fact fact : facts) {
+            if (!(fact instanceof TaskSettled settled) || settled.paused() || !settled.run().session().equals(session)) {
+                continue;
+            }
+            OpenTask open = openTask(before, settled.task());
+            if (open == null) {
+                continue;
+            }
+            RunId run = settled.run().run();
+            track(run);
+            String text = envelope.event() instanceof TaskEnded ended && ended.task().equals(settled.task()) ? ended.text() : null;
+            task(run, TaskNote.Side.RESULT, settled.task(), open.session(), open.agent(), settled.outcome(), text);
         }
-        RunId fresh = RunId.of(session, seq);
-        RunId run = state.runs().containsKey(fresh) && !before.runs().containsKey(fresh) ? fresh : activeRun();
-        if (run == null) {
-            return;
-        }
-        track(run);
-        task(run, TaskNote.Side.RESULT, ended.task(), open.session(), open.agent(), ended.outcome(), ended.text());
+    }
+
+    /** 这一步有没有任务的结果生效并且有运行看到它：它开的那一轮不是人发起的。 */
+    private boolean settlesATask() {
+        return decision.facts().stream().anyMatch(fact -> fact instanceof TaskSettled settled && !settled.paused()
+                && settled.run().session().equals(session));
     }
 
     private OpenTask openTask(KernelState in, String task) {
