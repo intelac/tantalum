@@ -278,6 +278,11 @@ def run_one(user, scenario, model, recording=False):
         calls, answer, model_calls, used, extra = journal(each)
         ctx.calls += calls; ctx.answer = answer or ctx.answer; ctx.model_calls += model_calls; tokens.update(used)
         ctx.compactions += extra["compactions"]; prompt_sha = prompt_sha or extra["promptSha256"]
+    # 放出去的任务各有自己的会话：它们花的 token 算进这次场景的费用，模型调用次数、压缩次数单独记（判分看得到）
+    ctx.task_model_calls, ctx.task_compactions = 0, 0
+    for path in sorted(glob.glob(f"{DATA}/sessions/dev/{session}-t*.jsonl")):
+        _, _, model_calls, used, extra = journal(os.path.basename(path)[:-len(".jsonl")])
+        tokens.update(used); ctx.task_model_calls += model_calls; ctx.task_compactions += extra["compactions"]
     ctx.tools = collections.Counter(call["name"] for call in ctx.calls)
     # 会话记录原文：判分查插件留下的痕迹（比如引用核对要模型改引用）
     ctx.journal = "".join(open(p, encoding="utf-8").read() for p in (f"{DATA}/sessions/dev/{s}.jsonl" for s in sessions) if os.path.exists(p))

@@ -107,14 +107,21 @@ def wait_for_tasks(run, user, session, model):
     return "放出去的任务 900 秒还没都回来"
 
 # 任务会话里答过的卡片、停任务时的情况，按主对话的会话号记，判分时看
-TASK_NOTES = collections.defaultdict(lambda: {"answered": [], "approved": [], "stopped_at": None})
+TASK_NOTES = collections.defaultdict(lambda: {"answered": [], "approved": [], "stopped_at": None, "side": None})
 
-def attend_tasks(answer=None, stop_after=None):
+def attend_tasks(answer=None, stop_after=None, side=None):
     """第一轮结束后照看放出去的任务，直到都回来、结果开的那几轮也结束。任务里的命令审批点“这一次”；别的问题：answer 写了就照它答
-    （对不上选项时当自由回答），没写选第一个。stop_after：看到有任务在外面以后过这么多秒，像用户点“全部停止”那样全停。"""
+    （对不上选项时当自由回答），没写选第一个。stop_after：看到有任务在外面以后过这么多秒，像用户点“全部停止”那样全停。
+    side：任务还在外面时，用户在主对话里另问的一句话；记下问之前、答完之后任务是不是还在外面。"""
     def between(run, user, session, model):
         import time
         notes = TASK_NOTES[session]
+        if side:
+            open_now = lambda: sum(1 for task in (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", []) if task.get("open"))
+            before = open_now()
+            problem = run.ask(user, session, side, model, 240, {}, 8)
+            notes["side"] = {"before": before, "after": open_now(), "answer": run.journal(session)[1]}
+            if problem: return "插话那一轮：" + problem
         started, quiet, seen_open = time.time(), 0, None
         while time.time() - started < 900:
             tasks = (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", [])
@@ -266,6 +273,39 @@ def c_tasks_agent(ctx):
     said = all_said(ctx)
     if FACTS["skill"] not in said: failed.append(f"给用户的回答里没有技能规定的开头 {FACTS['skill']!r}")
     if "cli" not in said.lower(): failed.append("回答里没有 cli 的结论")
+    return failed
+
+def task_todos(ctx):
+    """任务的会话里最后一张待办清单是不是全做完了（没用待办也算一条）。"""
+    last = None
+    for task in tasks_of(ctx):
+        path = os.path.join(ctx.sessions_dir, task["session"] + ".jsonl")
+        if not os.path.exists(path): continue
+        for line in open(path, encoding="utf-8"):
+            if '"type":"ModelReplied"' not in line: continue
+            for block in (json.loads(line).get("payload") or {}).get("content", []):
+                if block.get("kind") == "toolCall" and block.get("name") == "todo_write": last = (block.get("arguments") or {}).get("todos") or []
+    if last is None: return ["帮手没有用待办清单跟踪进度"]
+    open_items = [item.get("content") for item in last if item.get("status") != "completed"]
+    return [f"帮手最后一张清单还有没完成的：{open_items[:3]}"] if open_items else []
+
+def c_tasks_long(ctx):
+    """八步改动整个交给帮手：它在自己的会话里连着做几十步，主对话空着；这期间用户另问一句照常答；做完以后八项都对、测试通过。"""
+    failed, notes = c_tasks_common(ctx, people=2), TASK_NOTES[ctx.sessions[0]]
+    tasks = tasks_of(ctx)
+    if not tasks: return failed + ["没测到：没有放任务，主对话自己做了"]
+    if any(ctx.tools.get(name, 0) for name in ("edit_file", "write_file")): failed.append("说了不用自己动手，主对话却自己改了文件")
+    failed += _checklist(ctx) + task_todos(ctx)
+    side = notes["side"] or {}
+    if not side.get("before"): failed.append("没测到：插话的时候任务已经回来了")
+    elif FACTS["warehouse"].lower() not in (side.get("answer") or "").lower(): failed.append("任务在外面时用户另问的那句没有答对")
+    if ctx.task_model_calls < 10: failed.append(f"没测到长任务：帮手只调了 {ctx.task_model_calls} 次模型")
+    return failed
+
+def c_tasks_long_compact(ctx):
+    """同上，窗口很小：帮手的会话中途一定压缩，压缩以后要接着把八项做完。"""
+    failed = c_tasks_long(ctx)
+    if ctx.task_compactions < 1: failed.append("帮手的会话中途没有压缩（压缩点没起作用）")
     return failed
 
 def functions_in(ctx, path):
@@ -684,13 +724,13 @@ def _checklist(ctx):
     if not ok: bad.append(f"测试没过：{last}")
     return bad
 
-def _todos(ctx):
+def _todos(ctx, at_least=4):
     """模型用过 todo_write，最后一张清单全部完成。"""
     writes = [c for c in ctx.calls if c["name"] == "todo_write" and not c["error"]]
     if not writes: return ["没有用 todo_write 跟踪进度"]
     args = writes[-1]["args"] if isinstance(writes[-1]["args"], dict) else {}
     last = args.get("todos") or []
-    if len(last) < 4: return [f"最后一张清单只有 {len(last)} 项"]
+    if len(last) < at_least: return [f"最后一张清单只有 {len(last)} 项"]
     open_items = [t.get("content") for t in last if t.get("status") != "completed"]
     return [f"最后一张清单还有没完成的：{open_items[:3]}"] if open_items else []
 
@@ -698,11 +738,116 @@ def c_todo_steps(ctx):
     return _checklist(ctx) + _todos(ctx)
 
 def c_todo_compact(ctx):
-    bad = _checklist(ctx) + _todos(ctx)
+    # 压缩以后模型常常只把剩下的几项重新列一张短清单：活做完了就行，不要求清单还是原来那么长
+    bad = _checklist(ctx) + _todos(ctx, at_least=1)
     if ctx.compactions < 1: bad.append("运行中没有压缩（压缩点没起作用）")
     return bad
 
 LONG_PROMPT_CHECKLIST = "这是一个多步任务：按 docs/checklist.md 逐项完成里面的 8 项改动，用待办清单跟踪进度，最后跑全部测试确认通过。改文件用 edit_file 或 write_file，一项一项改，不要用命令行或脚本改文件。"
+
+# ---- 跑很久的活：15 批，每批 20 秒，上一批的输出里有下一批要的口令，只能一批一批按顺序跑（五分钟以上，至少 15 次命令）----
+BATCHES, BATCH_SECONDS = 15, 20
+BATCH_SCRIPT = '''"""Nightly reconciliation, one batch at a time: python3 scripts/batch.py <batch number> [pass from the previous batch]"""
+import hashlib, os, sys, time
+SEED = "%s"
+def code(kind, n): return hashlib.sha256(f"{SEED}:{kind}:{n}".encode()).hexdigest()[:8]
+n = int(sys.argv[1])
+if n > 1 and (len(sys.argv) < 3 or sys.argv[2] != code("pass", n - 1)):
+    raise SystemExit(f"batch {n}: wrong or missing pass from batch {n - 1}")
+log = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".batch-log")
+with open(log, "a") as f: f.write(f"{n} start {time.time():.0f}\\n")
+time.sleep(%d)
+with open(log, "a") as f: f.write(f"{n} done {time.time():.0f}\\n")
+for row in range(%d):
+    print(f"ledger {n:02d}-{row:02d} account {code('acct', n * 100 + row)} debit {int(code('d', n * 100 + row), 16) %% 90000} credit {int(code('c', n * 100 + row), 16) %% 90000} reconciled ok")
+print(f"batch {n} done: result={code('result', n)}" + (f" pass-for-next={code('pass', n)}" if n < %d else " (last batch)"))
+'''
+
+def setup_batches(root, batches=BATCHES, seconds=BATCH_SECONDS, ledger=0):
+    """ledger：每批多打印多少行对账明细（让会话记录长得快，小窗口下中途一定压缩）。"""
+    import secrets
+    write_text = BATCH_SCRIPT % (secrets.token_hex(8), seconds, ledger, batches)
+    with open(os.path.join(root, "scripts/batch.py"), "w", encoding="utf-8") as f: f.write(write_text)
+
+# 一步一步来的版本：25 批、每批 8 秒，用户要求每批跑完看过输出再跑下一批（不许写循环），所以至少 25 次模型调用
+STEPS, STEP_SECONDS = 25, 8
+def setup_steps(root): setup_batches(root, STEPS, STEP_SECONDS)
+def setup_steps_ledger(root): setup_batches(root, STEPS, STEP_SECONDS, ledger=30)
+
+def _batches(ctx, BATCHES=BATCHES, BATCH_SECONDS=BATCH_SECONDS):
+    """每一批真的一批一批跑完了（脚本自己记的时间），每批的结果码按顺序记进了 docs/batches.md。"""
+    import hashlib
+    seed = re.search(r'SEED = "(\w+)"', read(ctx, "scripts/batch.py"))
+    if not seed: return ["scripts/batch.py 被改坏了"]
+    code = lambda kind, n: hashlib.sha256(f"{seed.group(1)}:{kind}:{n}".encode()).hexdigest()[:8]
+    bad, log = [], read(ctx, ".batch-log")
+    done = [int(line.split()[0]) for line in log.splitlines() if " done " in line]
+    missing = [n for n in range(1, BATCHES + 1) if n not in done]
+    if missing: bad.append(f"这几批没有跑完：{missing}")
+    times = [int(line.split()[2]) for line in log.splitlines() if len(line.split()) == 3]
+    if times and max(times) - min(times) < (BATCHES - 1) * BATCH_SECONDS: bad.append(f"从头到尾只用了 {max(times) - min(times)} 秒，不是一批一批跑的")
+    notes = read(ctx, "docs/batches.md")
+    places = [notes.find(code("result", n)) for n in range(1, BATCHES + 1)]
+    if any(place < 0 for place in places): bad.append(f"docs/batches.md 里缺这几批的结果码：{[n + 1 for n, place in enumerate(places) if place < 0]}")
+    elif places != sorted(places): bad.append("docs/batches.md 里结果码的顺序不对")
+    return bad
+
+BATCH_JOB = (f"scripts/batch.py 是夜间对账，一共 {BATCHES} 批，每批大约 {BATCH_SECONDS} 秒。从第 1 批跑到第 {BATCHES} 批：每一批的输出里有一个结果码，"
+             "还有下一批要用的口令，所以只能一批一批按顺序跑（python3 scripts/batch.py 批号 上一批给的口令）。"
+             f"全部跑完以后新建 docs/batches.md，把 {BATCHES} 批的结果码按顺序一行一个记进去。中间哪一批出错了就停下来告诉我。")
+
+def c_long_run(ctx):
+    """一轮里连着跑五分钟以上、十几次命令：中间不丢口令、不跳批、不提前收工。"""
+    return _batches(ctx)
+
+def c_tasks_long_run(ctx):
+    """同一件活整个交给帮手：它自己跑五分钟以上，主对话空着；期间用户另问一句照常答；结果回来以后主对话说得清。"""
+    failed, notes = c_tasks_common(ctx, people=2), TASK_NOTES[ctx.sessions[0]]
+    if not tasks_of(ctx): return failed + ["没测到：没有放任务，主对话自己做了"]
+    if ctx.tools.get("bash", 0): failed.append("说了不用自己动手，主对话却自己跑了命令")
+    failed += _batches(ctx)
+    side = notes["side"] or {}
+    if not side.get("before") or not side.get("after"): failed.append(f"没测到：插话前后任务应该都还在外面（前 {side.get('before')}，后 {side.get('after')}）")
+    elif FACTS["warehouse"].lower() not in (side.get("answer") or "").lower(): failed.append("任务在外面时用户另问的那句没有答对")
+    ends = task_ends(ctx)
+    if any(outcome != "COMPLETED" for outcome, _ in ends.values()): failed.append(f"任务的结局不是完成：{ {task: outcome for task, (outcome, _) in ends.items()} }")
+    if "batches.md" not in all_said(ctx): failed.append("结果回来以后主对话没有告诉用户记在哪里")
+    return failed
+
+STEP_JOB = (f"scripts/batch.py 是夜间对账，一共 {STEPS} 批，每批大约 {STEP_SECONDS} 秒。从第 1 批跑到第 {STEPS} 批：每一批的输出里有一个结果码，"
+            "还有下一批要用的口令（python3 scripts/batch.py 批号 上一批给的口令）。这个对账以前出过事，所以一次只跑一批：每批跑完先看一眼输出，"
+            "没问题再跑下一批，不要写循环或脚本一口气跑完。"
+            f"全部跑完以后新建 docs/batches.md，把 {STEPS} 批的结果码按顺序一行一个记进去。中间哪一批出错了就停下来告诉我。")
+
+def _one_at_a_time(calls):
+    """有没有一条命令里跑了不止一批（循环、分号连着跑）。"""
+    many = [call["args"].get("command", "") for call in calls if call["name"] == "bash" and isinstance(call["args"], dict)
+            and (len(re.findall(r"python3? +\S*batch\.py", call["args"].get("command", ""))) > 1 or re.search(r"\b(for|while|seq|xargs)\b", call["args"].get("command", "")))]
+    return [f"一条命令里跑了不止一批：{many[0][:80]!r}"] if many else []
+
+def c_long_steps(ctx):
+    """一轮里二十五批一批一批跑：至少二十五次模型调用，口令一路接得上，照用户说的没有写循环。"""
+    bad = _batches(ctx, STEPS, STEP_SECONDS) + _one_at_a_time(ctx.calls)
+    if ctx.model_calls < STEPS: bad.append(f"没测到：只调了 {ctx.model_calls} 次模型")
+    return bad
+
+def c_tasks_long_steps(ctx):
+    """整个交给帮手，窗口很小：帮手在自己的会话里一批一批跑二十五批、中途被压缩，主对话空着；结果回来以后主对话说得清。"""
+    failed = c_tasks_common(ctx, people=2)
+    if not tasks_of(ctx): return failed + ["没测到：没有放任务，主对话自己做了"]
+    if ctx.tools.get("bash", 0): failed.append("说了不用自己动手，主对话却自己跑了命令")
+    failed += _batches(ctx, STEPS, STEP_SECONDS)
+    if ctx.task_model_calls < STEPS: failed.append(f"没测到：帮手只调了 {ctx.task_model_calls} 次模型")
+    if ctx.task_compactions < 1: failed.append("帮手的会话中途没有压缩（压缩点没起作用）")
+    side = TASK_NOTES[ctx.sessions[0]]["side"] or {}
+    if not side.get("before") or not side.get("after"): failed.append(f"没测到：插话前后任务应该都还在外面（前 {side.get('before')}，后 {side.get('after')}）")
+    elif FACTS["warehouse"].lower() not in (side.get("answer") or "").lower(): failed.append("任务在外面时用户另问的那句没有答对")
+    if any(outcome != "COMPLETED" for outcome, _ in task_ends(ctx).values()): failed.append("任务的结局不是完成")
+    return failed
+
+LONG_TASK_PROMPT = ("docs/checklist.md 里列了 8 项改动。把这件事整个交给一个帮手去做，你自己不用动手：让它逐项完成，用待办清单跟踪进度，"
+                    "最后跑全部测试确认通过；改文件用编辑文件、写文件的工具一项一项改，不要用命令行或脚本改文件。它做完以后把结果告诉我。")
+LONG_TASK_SIDE = "它做着的时候顺便帮我查一下：inventory/data/catalog.py 里 SKU-2187 的 warehouse_code 是什么？"
 
 SCENARIOS = [
     S("find-def", "找和读", "grep / find_files 的参数会不会用", "compute_shipping_fee 这个函数定义在哪个文件？项目里还有哪些文件调用了它？列出文件名。", c_find_def),
@@ -1300,6 +1445,26 @@ SCENARIOS += [
     S("tasks-agent", "任务", "点名让帮手照一个技能做事：帮手照技能的格式交回来",
       "两件事分头同时做：找个帮手照我的 release-notes 技能，给 git 最近三次提交写一份发布说明；另一边看看 inventory/cli.py 有没有明显的毛病。两边的结果都原样给我。",
       c_tasks_agent, max_calls=12, timeout=600, world=False, between=attend_tasks()),
+    # 长时间的任务（2026-11-19 Yi）：帮手在自己的会话里连着做几十步；这期间主对话空着，用户另问一句照常答
+    S("tasks-long", "任务", "一件要做几十步的活整个交给帮手：做得完，期间主对话照常能用，结果回来说得清",
+      LONG_TASK_PROMPT, c_tasks_long, setup=setup_checklist, max_calls=12, timeout=600, between=attend_tasks(side=LONG_TASK_SIDE)),
+    S("tasks-long-compact", "任务", "同上，帮手的会话中途被压缩后能不能接着做完",
+      LONG_TASK_PROMPT, c_tasks_long_compact, setup=setup_checklist, max_calls=12, timeout=600, server="small-window",
+      between=attend_tasks(side=LONG_TASK_SIDE)),
+    # 跑很久的活（2026-11-19 Yi）：五分钟以上、十几次命令，一轮里自己做一遍，整个交给帮手做一遍
+    S("long-run", "长任务", "一轮里连着跑五分钟以上、十几次命令：不丢口令、不跳批、不提前收工",
+      BATCH_JOB, c_long_run, setup=setup_batches, max_calls=40, timeout=900),
+    S("tasks-long-run", "任务", "同一件活整个交给帮手，它自己跑五分钟以上：期间主对话照常能用，结果回来说得清",
+      "这件事整个交给一个帮手去做，你自己不用动手，它做完以后把结果告诉我。" + BATCH_JOB,
+      c_tasks_long_run, setup=setup_batches, max_calls=12, timeout=600, between=attend_tasks(side=LONG_TASK_SIDE)),
+    # 一步一步来：模型上面那两个场景里写了个循环一条命令跑完（做得对，但测不到“一轮里很多次工具调用”），这里用户要求一批一批看着跑
+    S("long-steps", "长任务", "一轮里二十五批一批一批跑：几十次工具调用，口令一路接得上，不提前收工",
+      STEP_JOB, c_long_steps, setup=setup_steps, max_calls=70, timeout=900),
+    # 没有“主对话里一批一批跑、中途压缩”的场景：试过（2026-11-19），Sonnet 把每批的明细用 grep 滤掉，会话长不到压缩点。
+    # 主对话中途压缩由 todo-compact 测，帮手的会话中途压缩由下面这个测（帮手那边前几批没滤，压了四次）
+    S("tasks-long-steps", "任务", "同一件活整个交给帮手，帮手的会话中途被压缩：做得完，期间主对话照常能用",
+      "这件事整个交给一个帮手去做，你自己不用动手，它做完以后把结果告诉我。" + STEP_JOB,
+      c_tasks_long_steps, setup=setup_steps_ledger, max_calls=12, timeout=600, server="small-window", between=attend_tasks(side=LONG_TASK_SIDE)),
 ]
 
 # 问答类场景只能查回答：答案是藏在项目、网页、知识库里的编号，猜不出来，但终究是看模型说了什么（表里标“回答”）
