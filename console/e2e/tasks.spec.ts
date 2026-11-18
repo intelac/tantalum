@@ -37,7 +37,8 @@ test.describe("任务", () => {
     const result = page.getByRole("region", { name: /任务 t\d+-0 的结果/ });
     await expect(result).toContainText("billing 模块：有 2 处没处理的错误。", { timeout: 30_000 });
     await expect(result).toContainText("完成");
-    await expect(page.getByText(/任务回来了（completed）：auth 模块：有 2 处没处理的错误。/)).toBeVisible({ timeout: 30_000 });
+    // 两个结果先后各开一轮时，后一轮的回答里两个结果都有，所以这句话可能出现两次：取第一处
+    await expect(page.getByText(/任务回来了（completed）：auth 模块：有 2 处没处理的错误。/).first()).toBeVisible({ timeout: 30_000 });
     await expect(billing).toContainText("完成");
     await expect(auth).toContainText("完成");
     await expect(billing.getByRole("button", { name: "停止" })).toHaveCount(0);
