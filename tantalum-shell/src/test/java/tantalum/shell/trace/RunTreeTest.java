@@ -49,7 +49,7 @@ class RunTreeTest {
 
     private static ToolCall tool(String id, String pos, int step, ToolCall.Status status, Long startedAt, Long end, String code, String reason) {
         return new ToolCall(head(id, pos, step, 1_000, end), id, "bash", null, "{}", null, status, null, code, reason, "g", at(1_000),
-                startedAt == null ? null : at(startedAt), "req");
+                startedAt == null ? null : at(startedAt), "req", null, null);
     }
 
     private static Node child(Node node, Kind kind) {

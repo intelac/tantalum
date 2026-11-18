@@ -468,7 +468,8 @@ export interface TraceSegment {
 
 export interface RunHead extends TraceHead {
   kind: "run";
-  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION";
+  /** `TASK`：为任务开的会话里那一轮；`TASK_RESULT`：任务的结果回来时会话自己开的一轮，不是人发起的。 */
+  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION" | "TASK" | "TASK_RESULT";
   phase: string;
   endReason?: EndReason;
   endDetail?: string;
@@ -586,6 +587,20 @@ export interface ToolCall extends TraceHead {
   issuedAt?: string;
   startedAt?: string;
   request?: string;
+  /** 这次调用放出的任务和它的会话；只有 `task` 工具放成了才有。 */
+  task?: string;
+  taskSession?: string;
+}
+
+/** 任务的一头：`ASSIGNED` 在为任务开的会话里（`session` 是放出它的会话），`RESULT` 在放出任务的会话里（`session` 是任务的会话）。不是用户输入。 */
+export interface TaskNote extends TraceHead {
+  kind: "task";
+  side: "ASSIGNED" | "RESULT";
+  task: string;
+  session: string;
+  agent?: string;
+  outcome?: TaskOutcome;
+  text?: string;
 }
 
 export interface PluginWork extends TraceHead {
@@ -636,7 +651,7 @@ export interface QuestionRecord extends TraceHead {
   tool?: string;
 }
 
-export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision | QuestionRecord;
+export type TraceRecord = RunHead | SystemPrompt | UserInput | ContextChange | Compacted | ModelRequest | ToolCall | PluginWork | HookDecision | QuestionRecord | TaskNote;
 export type TraceKind = TraceRecord["kind"];
 
 /** 一页记录：按运行从新到旧切。`seq` 是重放到的最后序号；`before` 是下一页的游标。 */
@@ -1115,7 +1130,8 @@ export interface RunListItem {
   title: string;
   run: string;
   turn?: number;
-  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION";
+  /** `TASK`：为任务开的会话里那一轮；`TASK_RESULT`：任务的结果回来时会话自己开的一轮，不是人发起的。 */
+  trigger: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION" | "TASK" | "TASK_RESULT";
   start: string;
   end?: string;
   endReason?: EndReason;
@@ -1156,7 +1172,8 @@ export type RunNodeKind =
   | "tool"
   | "hook"
   | "work"
-  | "question";
+  | "question"
+  | "task";
 
 export type RunNodeState = "ok" | "error" | "running" | "waiting" | "cancelled";
 

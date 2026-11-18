@@ -13,6 +13,7 @@ import tantalum.value.decision.HookDecided;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
 import tantalum.value.json.Json;
+import tantalum.value.task.TaskOutcome;
 import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.RequestOptions;
@@ -36,7 +37,8 @@ import tantalum.value.state.EndReason;
     @JsonSubTypes.Type(value = TraceRecord.ToolCall.class, name = "tool"),
     @JsonSubTypes.Type(value = TraceRecord.PluginWork.class, name = "work"),
     @JsonSubTypes.Type(value = TraceRecord.HookDecision.class, name = "hook"),
-    @JsonSubTypes.Type(value = TraceRecord.Question.class, name = "question")
+    @JsonSubTypes.Type(value = TraceRecord.Question.class, name = "question"),
+    @JsonSubTypes.Type(value = TraceRecord.TaskNote.class, name = "task")
 })
 public sealed interface TraceRecord {
 
@@ -88,8 +90,11 @@ public sealed interface TraceRecord {
 
     /** 一个运行，即一轮。{@code phase} 是内核状态名。 */
     record RunHead(Head head, Trigger trigger, String phase, EndReason endReason, String endDetail) implements TraceRecord {
-        /** 提问含空闲时的插话和排队模式的直接开始；{@code FOLLOW_UP} 是从队列取出的提交。 */
-        public enum Trigger { PROMPT, FOLLOW_UP, MANUAL_COMPACTION }
+        /**
+         * 提问含空闲时的插话和排队模式的直接开始；{@code FOLLOW_UP} 是从队列取出的提交。{@code TASK} 是为任务开的会话里那唯一的一轮；
+         * {@code TASK_RESULT} 是任务的结果回来时会话自己开的一轮，不是人发起的。
+         */
+        public enum Trigger { PROMPT, FOLLOW_UP, MANUAL_COMPACTION, TASK, TASK_RESULT }
 
         @Override
         public RunHead withHead(Head newHead) {
@@ -128,6 +133,20 @@ public sealed interface TraceRecord {
         @Override
         public UserInput withHead(Head newHead) {
             return new UserInput(newHead, mode, text, source, attachments, skills, attached);
+        }
+    }
+
+    /**
+     * 任务的一头。{@code ASSIGNED}：为任务开的会话里，交代的内容到了（{@code session} 是放出它的会话）。{@code RESULT}：放出任务的会话里，
+     * 结果回来了（{@code session} 是任务的会话，{@code outcome} 是结局）。它不是用户输入：单独一种记录，摘要和记忆不会把它当成人说的话。
+     */
+    record TaskNote(Head head, Side side, String task, String session, String agent, TaskOutcome outcome, String text)
+            implements TraceRecord {
+        public enum Side { ASSIGNED, RESULT }
+
+        @Override
+        public TaskNote withHead(Head newHead) {
+            return new TaskNote(newHead, side, task, session, agent, outcome, text);
         }
     }
 
@@ -193,16 +212,17 @@ public sealed interface TraceRecord {
      * 回复里的一次工具调用。{@code group} 是发出它的事件，同组即并行；{@code issuedAt} 是发出时刻，{@code startedAt} 是真正开始执行。
      * {@code result} 原样保留（含只有空白的文字）；{@code code} 是合成结果的错误码，参数无效时为 {@code INVALID_ARGUMENTS}。
      */
+    /** {@code task}、{@code taskSession}：这次调用放出的任务和它的会话（只有 {@code task} 工具放成了才有），页面据此点进任务的轨迹。 */
     record ToolCall(Head head, String call, String name, String server, String rawArguments, Json arguments, Status status,
                     String result, String code, String reason, String group, Instant issuedAt, Instant startedAt,
-                    String request) implements TraceRecord {
+                    String request, String task, String taskSession) implements TraceRecord {
         /** 被拦下、没有发出、结果不明都没有自己的结果事件，由内核补的合成结果判断。 */
         public enum Status { WAITING, RUNNING, DONE, ERROR, BLOCKED, NOT_SENT, UNKNOWN }
 
         @Override
         public ToolCall withHead(Head newHead) {
             return new ToolCall(newHead, call, name, server, rawArguments, arguments, status, result, code, reason, group, issuedAt,
-                    startedAt, request);
+                    startedAt, request, task, taskSession);
         }
 
         public boolean finished() {

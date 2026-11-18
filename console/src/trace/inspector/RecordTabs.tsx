@@ -2,7 +2,7 @@
 
 import { FileText } from "lucide-react";
 import { attachmentUrl } from "../../api/client";
-import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, QuestionRecord, RunHead, SkillNote, TraceRecord, UserInput } from "../../api/types";
+import type { AttachmentRef, Compacted, ContextChange, HookDecision, PluginWork, QuestionRecord, RunHead, SkillNote, TaskNote, TraceRecord, UserInput } from "../../api/types";
 import { formatBytes } from "../../text/format";
 import { Markdown } from "../../markdown/Markdown";
 import { currentLanguage, currentText, lookup, type Text, useText } from "../../text";
@@ -11,7 +11,7 @@ import { between, formatMs, formatTokens } from "../format";
 import { JsonTree } from "./JsonTree";
 import { LineDiff } from "../../ui/LineDiff";
 import { LongText } from "./LongText";
-import { Fields, Section, sourceText, TabbedBody, Timestamp } from "./parts";
+import { Fields, Section, sourceText, TabbedBody, Timestamp, TraceLink } from "./parts";
 
 function Link({ id, onOpen }: { id: string | undefined; onOpen: (id: string) => void }) {
   const t = useText().trace;
@@ -271,6 +271,30 @@ function WorkPages(work: PluginWork, onOpen: (id: string) => void, t: Text["trac
 }
 
 /** 问用户（waiting-state）：谁问的、问了什么、结果和回答。 */
+function TaskPages(task: TaskNote, t: Text["trace"]) {
+  const tasks = currentText().tasks;
+  return [
+    {
+      id: "summary",
+      label: t.tab.summary,
+      render: () => (
+        <>
+          <Fields
+            rows={[
+              [t.taskDetails.task, <span className="font-mono">{task.task}</span>],
+              [t.taskDetails.side, t.taskSide[task.side]],
+              [t.taskDetails.agent, task.agent ?? tasks.general],
+              [t.taskDetails.outcome, task.outcome === undefined ? undefined : tasks.outcome[task.outcome]],
+              [task.side === "ASSIGNED" ? t.taskDetails.parent : t.taskDetails.session, <TraceLink session={task.session} />],
+            ]}
+          />
+          {task.text !== undefined && task.text !== "" ? <Markdown text={task.text} /> : task.side === "RESULT" ? <p className="text-xs text-fg-faint">{tasks.noText}</p> : null}
+        </>
+      ),
+    },
+  ];
+}
+
 function QuestionPages(question: QuestionRecord, t: Text["trace"]) {
   return [
     {
@@ -339,6 +363,8 @@ export function RecordTabs({ record, onOpen }: { record: Exclude<TraceRecord, { 
         return HookPages(record, onOpen, t);
       case "question":
         return QuestionPages(record, t);
+      case "task":
+        return TaskPages(record, t);
     }
   })();
   return <TabbedBody pages={pages} />;

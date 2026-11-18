@@ -31,6 +31,7 @@ export function toolLabel(record: ToolCall): string {
 function beforeRequest(record: TraceRecord): boolean {
   switch (record.kind) {
     case "user":
+    case "task":
     case "context":
     case "system":
       return true;

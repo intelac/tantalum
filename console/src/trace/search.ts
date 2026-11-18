@@ -30,6 +30,8 @@ function fields(record: TraceRecord): (string | undefined)[] {
       return [record.workType, record.hook, json(record.input), json(record.result), record.continueText];
     case "hook":
       return [record.hook, record.point, record.result, record.reason, record.workType, ...record.tools];
+    case "task":
+      return [record.task, record.session, record.agent, record.outcome, record.text];
     case "question":
       // 问题的标题可能有几种语言：都能搜到（页面上显示的是看的人的语言）
       return [record.askedBy, ...(typeof record.title === "string" ? [record.title] : Object.values(record.title)), record.status, record.choice, record.text];

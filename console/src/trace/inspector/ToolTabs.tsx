@@ -13,7 +13,7 @@ import { useTraceCall } from "../hooks";
 import { toolLabel } from "../rows";
 import { JsonTree, parseJsonContainer } from "./JsonTree";
 import { LongText } from "./LongText";
-import { Fields, Loading, TabbedBody, Timestamp } from "./parts";
+import { Fields, Loading, TabbedBody, Timestamp, TraceLink } from "./parts";
 
 function Payload({ tool }: { tool: ToolCall }) {
   const t = useText().trace;
@@ -141,6 +141,7 @@ export function ToolTabs({ session, tool, request, approval, onOpen }: {
                   [t.details.reason, tool.reason],
                   [t.details.code, tool.code],
                   [t.details.parallel, tool.group],
+                  [t.taskDetails.session, tool.taskSession === undefined ? undefined : <TraceLink session={tool.taskSession} />],
                 ]}
               />
               <Result tool={tool} />

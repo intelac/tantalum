@@ -37,6 +37,7 @@ export function laneOf(record: TraceRecord): number {
   switch (record.kind) {
     case "system":
     case "user":
+    case "task":
     case "context":
       return 0;
     case "request":

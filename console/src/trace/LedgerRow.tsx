@@ -111,6 +111,12 @@ export function contentOf(record: TraceRecord): string {
       const applied = record.applied === undefined ? "" : ` · ${t.hookApplied[record.applied]}`;
       return `${record.hook}${point} · ${t.hookResult[record.result]}${applied}${reason}`;
     }
+    case "task": {
+      const tasks = currentText().tasks;
+      const outcome = record.outcome === undefined ? "" : ` · ${tasks.outcome[record.outcome]}`;
+      const text = line(record.text);
+      return `${tasks.id(record.task)} · ${t.taskSide[record.side]}${outcome}${text === "" ? "" : ` · ${text}`}`;
+    }
     case "question": {
       const answer = [record.choice, record.text].filter((part) => part !== undefined && part !== "").join(" · ");
       return `${record.askedBy} · ${line(pick(record.title, currentLanguage()))} · ${t.questionStatus[record.status]}${answer === "" ? "" : ` · ${answer}`}`;

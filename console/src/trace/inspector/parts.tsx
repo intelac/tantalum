@@ -1,5 +1,6 @@
 // 检查器的公用小件：字段表、可切换本地时间 / Unix 时间戳的时刻、带页签的正文、来源标注。
 
+import { navigate, tracePath } from "../../app/router";
 import { useState, type ReactNode } from "react";
 import type { TraceSource } from "../../api/types";
 import { currentText, useText } from "../../text";
@@ -45,6 +46,23 @@ export function Timestamp({ iso }: { iso: string | undefined }) {
     >
       {unix ? formatUnix(iso) : formatLocal(iso)}
     </button>
+  );
+}
+
+/** 跳到另一个会话的轨迹：任务和放出它的会话互相点得过去（subagent 需求 10.5）。 */
+export function TraceLink({ session }: { session: string }) {
+  const t = useText().trace;
+  return (
+    <a
+      href={tracePath(session)}
+      onClick={(event) => {
+        event.preventDefault();
+        navigate(tracePath(session));
+      }}
+      className="text-accent hover:underline"
+    >
+      {t.taskDetails.openTrace} <span className="font-mono">{session}</span>
+    </a>
   );
 }
 

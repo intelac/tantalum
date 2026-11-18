@@ -180,9 +180,32 @@ class TaskChainTest {
         // 任务会话的对话条目读得到（卡片展开时读它）：交代的那句话和它的回答
         String childMessages = server.get("alice", "/api/sessions/" + child + "/messages").body();
         assertTrue(childMessages.contains("Module A is fine. Please delete build/."), childMessages);
+        // 轨迹（需求 10.5）：放任务的调用是完成的工具调用，带着任务的会话；结果开的那一轮写明起因，结果是一条“任务”记录；
+        // 任务自己的轨迹里，交代的内容能指回放出它的会话
+        JsonNode mainTrace = JSON.readTree(server.get("alice", "/api/sessions/s1/trace").body()).get("records");
+        JsonNode call = find(mainTrace, "tool", "name", "task");
+        assertEquals("DONE", call.get("status").asString(), call.toString());
+        assertEquals(child, call.get("taskSession").asString(), call.toString());
+        JsonNode result = find(mainTrace, "task", "side", "RESULT");
+        assertEquals(child, result.get("session").asString(), result.toString());
+        assertEquals("COMPLETED", result.get("outcome").asString(), result.toString());
+        assertEquals("TASK_RESULT", find(mainTrace, "run", "run", result.get("run").asString()).get("trigger").asString());
+        JsonNode childTrace = JSON.readTree(server.get("alice", "/api/sessions/" + child + "/trace").body()).get("records");
+        assertEquals("s1", find(childTrace, "task", "side", "ASSIGNED").get("session").asString());
+        assertEquals("TASK", find(childTrace, "run", "kind", "run").get("trigger").asString());
+
         String listed = server.get("alice", "/api/sessions").body();
         assertTrue(listed.contains("\"s1\""), listed);
         assertFalse(listed.contains(child), listed);
+    }
+
+    private static JsonNode find(JsonNode records, String kind, String field, String value) {
+        for (JsonNode record : records) {
+            if (kind.equals(record.get("kind").asString()) && record.has(field) && value.equals(record.get(field).asString())) {
+                return record;
+            }
+        }
+        throw new AssertionError("no " + kind + " with " + field + "=" + value + " in " + records);
     }
 
     private JsonNode tasks() throws Exception {

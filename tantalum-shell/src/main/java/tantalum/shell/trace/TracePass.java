@@ -14,6 +14,7 @@ import tantalum.shell.trace.TraceRecord.Head;
 import tantalum.shell.trace.TraceRecord.RunHead.Trigger;
 import tantalum.shell.trace.TraceRecord.RunHead;
 import tantalum.shell.trace.TraceRecord.Source;
+import tantalum.shell.trace.TraceRecord.TaskNote;
 import tantalum.shell.trace.TraceRecord.UserInput.Mode;
 import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.value.attachment.AttachmentRef;
@@ -43,6 +44,8 @@ import tantalum.value.event.QueueChanged;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.event.SkillUse;
 import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.TaskAssigned;
+import tantalum.value.event.TaskEnded;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -56,6 +59,8 @@ import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
+import tantalum.value.task.OpenTask;
+import tantalum.value.task.TaskOutcome;
 
 /**
  * 一次事件的轨迹投影。顺序固定：先处理事件本身（提交、结果），再按内核的事实（钩子、压缩、状态变化），
@@ -107,6 +112,8 @@ final class TracePass {
             case ModelInterrupted interrupted -> requests.interrupted(interrupted);
             case ToolFinished finished -> tools.finished(finished);
             case WorkDone done -> hooks.workDone(done);
+            case TaskAssigned assigned -> taskAssigned(assigned);
+            case TaskEnded ended -> taskEnded(ended);
             default -> { }
         }
         List<Fact> facts = decision.facts();
@@ -219,6 +226,8 @@ final class TracePass {
         track.turn = track.manual ? null : ++book.turns;
         book.runs.put(run, track);
         Trigger trigger = track.manual ? Trigger.MANUAL_COMPACTION
+                : envelope.event() instanceof TaskAssigned ? Trigger.TASK
+                : envelope.event() instanceof TaskEnded ? Trigger.TASK_RESULT
                 : envelope.event() instanceof Submitted ? Trigger.PROMPT : Trigger.FOLLOW_UP;
         Place place = track.manual ? compaction(run) : new Place(track.turn, null, null, false);
         add(new RunHead(head(runHeadId(run), run, place, at), trigger, phaseOf(run), null, null), place, true);
@@ -342,6 +351,45 @@ final class TracePass {
               List<AttachedBlock> attached) {
         Place place = pending(run);
         add(new UserInput(head("u:" + seq, run, place, at).ended(at), mode, text, source, attachments, skills, attached), place, false);
+    }
+
+    // ---- 任务 ----
+
+    /** 任务到了为它开的会话：开它那一轮，交代的内容是这一轮的起因。重复送达的不开运行，不记。 */
+    private void taskAssigned(TaskAssigned assigned) {
+        RunId fresh = RunId.of(session, seq);
+        if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
+            track(fresh);
+            task(fresh, TaskNote.Side.ASSIGNED, assigned.task(), assigned.parent(), assigned.agent(), null, assigned.prompt());
+        }
+    }
+
+    /**
+     * 任务的结果回到放出它的会话。只记生效的那一个（名单里有它，这一步之后没有了）：空闲时它开了一轮，正在跑时进了那一轮。
+     * 到了自动继续的上限时没有运行可挂，不记（结果在历史里，人说话后的那一轮看得到）。
+     */
+    private void taskEnded(TaskEnded ended) {
+        OpenTask open = openTask(before, ended.task());
+        if (open == null || openTask(state, ended.task()) != null) {
+            return;
+        }
+        RunId fresh = RunId.of(session, seq);
+        RunId run = state.runs().containsKey(fresh) && !before.runs().containsKey(fresh) ? fresh : activeRun();
+        if (run == null) {
+            return;
+        }
+        track(run);
+        task(run, TaskNote.Side.RESULT, ended.task(), open.session(), open.agent(), ended.outcome(), ended.text());
+    }
+
+    private OpenTask openTask(KernelState in, String task) {
+        SessionState state = in.sessions().get(session);
+        return state == null ? null : state.tasks().open().stream().filter(open -> open.id().equals(task)).findFirst().orElse(null);
+    }
+
+    private void task(RunId run, TaskNote.Side side, String task, SessionId other, String agent, TaskOutcome outcome, String text) {
+        Place place = pending(run);
+        add(new TaskNote(head("k:" + seq, run, place, at).ended(at), side, task, other.value(), agent, outcome, text), place, false);
     }
 
     /** 运行标题的 ID，和对话页运行状态条目的 ID 相同。 */

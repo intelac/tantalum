@@ -1,6 +1,6 @@
 // 轮次标签（trace-rounds 需求 1）：纯函数。一轮就是一个有轮号的运行；手动压缩没有轮号，不出标签，只在“全部”里。
 
-import type { TraceRecord, UserInput } from "../api/types";
+import type { RunHead, TraceRecord, UserInput } from "../api/types";
 import { runStart } from "./TraceStore";
 
 export type TurnState = "running" | "waiting" | "failed" | "done";
@@ -11,7 +11,7 @@ export interface TurnTab {
   /** 这一轮人写的那句提问；没有（比如只有插件续写）时为 undefined。 */
   prompt?: string;
   /** 这一轮是怎么触发的，没有提问时拿它当提示。 */
-  trigger?: "PROMPT" | "FOLLOW_UP" | "MANUAL_COMPACTION";
+  trigger?: RunHead["trigger"];
   state: TurnState;
 }
 

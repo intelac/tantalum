@@ -16,6 +16,7 @@ const FILL: Partial<Record<RunNode["kind"], string>> = {
   hook: "var(--color-warning)",
   work: "var(--color-warning)",
   question: "var(--color-fg-faint)",
+  task: "var(--color-accent)",
   step: "var(--color-line-strong)",
   compaction: "var(--color-line-strong)",
 };
@@ -35,7 +36,7 @@ export function nodeLabel(node: RunNode, text: ReturnType<typeof useText>): stri
   if (step !== undefined) return t.step(step);
   if (node.kind === "attempt") return `${t.kinds.attempt} ${node.id.slice(node.id.lastIndexOf("#") + 1)}`;
   if (node.kind === "context" || node.kind === "system" || node.kind === "compaction") return t.kinds[node.kind];
-  if (node.kind === "input") return t.kinds.input;
+  if (node.kind === "input" || node.kind === "task") return t.kinds[node.kind];
   return node.name ?? t.kinds[node.kind];
 }
 

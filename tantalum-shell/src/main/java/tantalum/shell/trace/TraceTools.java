@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import tantalum.kernel.step.CancelSteps;
 import tantalum.kernel.tool.ToolPairing;
+import tantalum.value.decision.TaskStarted;
+import tantalum.value.task.TaskTools;
 import tantalum.shell.trace.TracePass.Place;
 import tantalum.shell.trace.TraceRecord.ModelRequest;
 import tantalum.shell.trace.TraceRecord.ToolCall;
@@ -55,7 +57,7 @@ final class TraceTools {
                 Place place = pass.current(run);
                 String id = "t:" + pass.seq + "." + i;
                 pass.add(new ToolCall(pass.head(id, run, place, pass.at), call.id(), call.name(), server(call.name()), call.rawArguments(),
-                        call.arguments(), Status.WAITING, null, null, null, null, null, null, request.id()), place, true);
+                        call.arguments(), Status.WAITING, null, null, null, null, null, null, request.id(), null, null), place, true);
             }
         }
     }
@@ -127,6 +129,8 @@ final class TraceTools {
                 } else if (ToolPairing.ABORTED_BEFORE_DISPATCH.equals(result.code())) {
                     String why = end == null ? null : end.reason() + (end.detail() == null ? "" : ": " + end.detail());
                     settle(tool, Status.NOT_SENT, result, why);
+                } else if (TaskTools.handles(tool.name()) && tool.arguments() != null && !stoppedByHook(tool)) {
+                    task(tool, result);
                 } else if (result.code() == null) {
                     block(tool, result);
                 } else {
@@ -158,6 +162,31 @@ final class TraceTools {
         settle(tool, Status.BLOCKED, result, own != null ? own : afterWork);
     }
 
+    /** 这一步里有没有钩子拦下这个调用。 */
+    private boolean stoppedByHook(ToolCall tool) {
+        return pass.decision.facts().stream().anyMatch(fact -> fact instanceof HookDecided decided
+                && decided.kind() == HookDecided.Kind.STOP && tool.call().equals(decided.toolCall()));
+    }
+
+    /**
+     * {@code task}、{@code task_stop}：内核当场给结果，没有发出命令，也没有结果事件。放成了就记下任务和它的会话
+     * （{@link TaskStarted} 带着是哪次调用放的）；被拒绝的是出错，不是被拦下。
+     */
+    private void task(ToolCall tool, ToolResultBlock result) {
+        String task = null;
+        String session = null;
+        for (Fact fact : pass.decision.facts()) {
+            if (fact instanceof TaskStarted started && tool.call().equals(started.toolCallId())) {
+                task = started.task();
+                session = started.session().value();
+            }
+        }
+        ToolCall done = new ToolCall(tool.head().ended(pass.at), tool.call(), tool.name(), tool.server(), tool.rawArguments(), tool.arguments(),
+                result.error() ? Status.ERROR : Status.DONE, result.text(), null, null, tool.group(), pass.at, pass.at, tool.request(), task,
+                session);
+        pass.put(done, false);
+    }
+
     private void settle(ToolCall tool, Status status, ToolResultBlock result, String reason) {
         ToolCall settled = with(tool, status, result.text(), result.code(), reason, tool.group(), tool.issuedAt(), null);
         pass.put(settled.withHead(tool.head().ended(pass.at)), false);
@@ -171,6 +200,6 @@ final class TraceTools {
     private static ToolCall with(ToolCall tool, Status status, String result, String code, String reason, String group,
                                  Instant issuedAt, Instant startedAt) {
         return new ToolCall(tool.head(), tool.call(), tool.name(), tool.server(), tool.rawArguments(), tool.arguments(), status, result,
-                code, reason, group, issuedAt, startedAt, tool.request());
+                code, reason, group, issuedAt, startedAt, tool.request(), tool.task(), tool.taskSession());
     }
 }

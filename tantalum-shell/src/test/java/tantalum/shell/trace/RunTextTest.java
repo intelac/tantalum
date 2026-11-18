@@ -30,7 +30,7 @@ class RunTextTest {
     }
 
     private static ToolCall tool(String id, String pos, String args, String result, ToolCall.Status status, String code) {
-        return new ToolCall(head(id, pos), id, "read_file", null, args, null, status, result, code, null, "g", T, T, "m1");
+        return new ToolCall(head(id, pos), id, "read_file", null, args, null, status, result, code, null, "g", T, T, "m1", null, null);
     }
 
     @Test
@@ -92,7 +92,7 @@ class RunTextTest {
     @Test
     void anAnsweredQuestionKeepsTheAnswerApartFromTheQuestion() {
         ToolCall asked = new ToolCall(head("q", "7.0"), "q", "ask_user", null, "{\"question\":\"缓存用哪个？\",\"choices\":[\"Redis\",\"Caffeine\"]}",
-                null, ToolCall.Status.DONE, "{\"choice\":\"Caffeine\",\"text\":\"本机就够了\"}", null, null, "g", T, T, "m1");
+                null, ToolCall.Status.DONE, "{\"choice\":\"Caffeine\",\"text\":\"本机就够了\"}", null, null, "g", T, T, "m1", null, null);
         tantalum.shell.plugin.RunSegment segment = RunText.segments(List.of(asked), tool -> null).getFirst();
         assertEquals("Caffeine\n本机就够了", segment.text());
         assertEquals("缓存用哪个？\nRedis\nCaffeine", segment.asked());

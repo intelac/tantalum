@@ -16,6 +16,7 @@ import tantalum.shell.trace.TraceRecord.PluginWork;
 import tantalum.shell.trace.TraceRecord.Question;
 import tantalum.shell.trace.TraceRecord.RunHead;
 import tantalum.shell.trace.TraceRecord.SystemPrompt;
+import tantalum.shell.trace.TraceRecord.TaskNote;
 import tantalum.shell.trace.TraceRecord.ToolCall;
 import tantalum.shell.trace.TraceRecord.UserInput;
 import tantalum.value.id.RunId;
@@ -29,7 +30,7 @@ import tantalum.value.state.EndReason;
 public record RunTree(Node root) {
 
     /** 节点种类。{@code COMPACTED} 是压缩结果那条记录，{@code COMPACTION} 是它所在的组。 */
-    public enum Kind { RUN, STEP, COMPACTION, INPUT, CONTEXT, SYSTEM, COMPACTED, REQUEST, ATTEMPT, TOOL, HOOK, WORK, QUESTION }
+    public enum Kind { RUN, STEP, COMPACTION, INPUT, CONTEXT, SYSTEM, COMPACTED, REQUEST, ATTEMPT, TOOL, HOOK, WORK, QUESTION, TASK }
 
     public enum State { OK, ERROR, RUNNING, WAITING, CANCELLED }
 
@@ -214,6 +215,16 @@ public record RunTree(Node root) {
                     case ANSWERED -> State.OK;
                     case EXPIRED, CANCELLED -> State.CANCELLED;
                 };
+            }
+            case TaskNote note -> {
+                kind = Kind.TASK;
+                name = note.side().name();
+                state = note.outcome() == null ? State.OK : switch (note.outcome()) {
+                    case COMPLETED -> State.OK;
+                    case STOPPED -> State.CANCELLED;
+                    case FAILED, TIMED_OUT, INTERRUPTED -> State.ERROR;
+                };
+                detail = note.outcome() == null || note.outcome() == tantalum.value.task.TaskOutcome.COMPLETED ? null : note.outcome().name();
             }
             case RunHead ignored -> throw new IllegalArgumentException("a run head is the root, not a leaf");
         }
