@@ -71,6 +71,18 @@ public final class Recall {
     }
 
     public List<Hit> search(String question, String extra, String dir, ZoneId zone) {
+        return search(question, extra, dir, zone, List.of());
+    }
+
+    /** 两路各自的名次合成一个分数时用的常数（Reciprocal Rank Fusion 的惯用值）。 */
+    static final int RRF = 60;
+
+    /**
+     * 同上，再加上按意思找到的（{@code near}，像的在前，已经过了相似度门槛）：关键词一路、向量一路，各按名次给分再相加
+     * （第 n 名得 1/(60+n)），两路都找到的排在前面，只有一路找到的也留着。这样问法和记的用词对不上、或者不是一种文字时也找得到。
+     * 向量一路只认范围内、没被取代的条目（和关键词一路同一批候选）。问的是某段时间时照旧只按时间找，不用向量。
+     */
+    public List<Hit> search(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near) {
         LocalDate today = LocalDate.ofInstant(ledger.clock().instant(), zone);
         Optional<TimeWindow> window = TimeWindow.in(question, today);
         Set<String> wanted = new HashSet<>(Terms.of(question));
@@ -109,12 +121,41 @@ public final class Recall {
             picked.sort(Comparator.comparing(hit -> hit.item().validFrom()));
             return List.copyOf(picked);
         }
+        if (!near.isEmpty()) {
+            Map<String, Candidate> byId = new HashMap<>();
+            candidates.forEach(candidate -> byId.put(candidate.item.id(), candidate));
+            Map<String, Double> fused = new java.util.LinkedHashMap<>();
+            for (int rank = 0; rank < hits.size(); rank++) {
+                fused.merge(hits.get(rank).item().id(), 1.0 / (RRF + rank + 1), Double::sum);
+            }
+            int rank = 0;
+            for (Vectors.Scored scored : near) {
+                if (byId.containsKey(scored.id())) {
+                    fused.merge(scored.id(), 1.0 / (RRF + ++rank), Double::sum);
+                }
+            }
+            hits = new ArrayList<>();
+            for (Map.Entry<String, Double> each : fused.entrySet()) {
+                Candidate candidate = byId.get(each.getKey());
+                hits.add(new Hit(candidate.item, candidate.description, each.getValue()));
+            }
+            hits.sort(Comparator.comparingDouble(Hit::score).reversed().thenComparing(hit -> hit.item().validFrom(), Comparator.reverseOrder()));
+        }
         return hits.size() > LIMIT ? List.copyOf(hits.subList(0, LIMIT)) : List.copyOf(hits);
+    }
+
+    /** 该有向量的条目：生效的、没被取代的说法和当天卡，不分范围（范围在找的时候再筛）。 */
+    public List<MemoryItem> embeddable() {
+        return candidates(null, false).stream().map(Candidate::item).toList();
     }
 
     private record Candidate(MemoryItem item, String description, Set<String> terms) {}
 
     private List<Candidate> candidates(String dir) {
+        return candidates(dir, true);
+    }
+
+    private List<Candidate> candidates(String dir, boolean scoped) {
         Map<String, MemoryItem> pages = new HashMap<>();
         for (MemoryItem page : ledger.items(item -> item.kind() == MemoryItem.Kind.PAGE && item.state() == MemoryItem.State.CONFIRMED)) {
             pages.put(page.page(), page);
@@ -129,7 +170,7 @@ public final class Recall {
         }
         List<Candidate> candidates = new ArrayList<>();
         for (MemoryItem item : live) {
-            if (superseded.contains(item.id()) || !inScope(item, dir)) {
+            if (superseded.contains(item.id()) || scoped && !inScope(item, dir)) {
                 continue;
             }
             MemoryItem page = item.page() == null ? null : pages.get(item.page());

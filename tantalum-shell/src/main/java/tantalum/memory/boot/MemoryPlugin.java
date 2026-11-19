@@ -75,17 +75,28 @@ public class MemoryPlugin {
         return new tantalum.memory.recall.RecallHook();
     }
 
-    @Bean
-    tantalum.memory.recall.RecallWork memoryRecallWork(MemoryStores stores, CaptureSettings settings, ObjectProvider<PluginServices> services) {
-        PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model(), "off");
-        return new tantalum.memory.recall.RecallWork(stores, (user, system, text) -> services.getObject().complete(
-                new PluginServices.Completion(user, MemoryTools.PLUGIN, "rewrite", PluginServices.Priority.FOREGROUND, system, text, pick, 160)),
-                user -> services.getObject().zone(user));
+    /** 按意思找（memory-final-plan 第 9 节第 3 步）：向量由平台的服务给；平台没配时每次给空，找回只靠关键词。 */
+    @Bean(destroyMethod = "close")
+    tantalum.memory.recall.Semantic memorySemantic(MemoryStores stores, ObjectProvider<PluginServices> services, Environment environment) {
+        // 第一次按意思找时最多等多久把已有的记忆算成向量（tantalum.memory-vectors.first-wait，默认 4 秒）
+        return new tantalum.memory.recall.Semantic(stores,
+                user -> (texts, query) -> services.getObject().embed(user, MemoryTools.PLUGIN, texts, query),
+                environment.getProperty("tantalum.memory-vectors.first-wait", java.time.Duration.class, java.time.Duration.ofSeconds(4)));
     }
 
     @Bean
-    tantalum.memory.recall.MemorySearchTool memorySearchTool(MemoryStores stores, ObjectProvider<PluginServices> services) {
-        return new tantalum.memory.recall.MemorySearchTool(stores, user -> services.getObject().zone(user));
+    tantalum.memory.recall.RecallWork memoryRecallWork(MemoryStores stores, CaptureSettings settings, ObjectProvider<PluginServices> services,
+                                                         tantalum.memory.recall.Semantic semantic) {
+        PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model(), "off");
+        return new tantalum.memory.recall.RecallWork(stores, (user, system, text) -> services.getObject().complete(
+                new PluginServices.Completion(user, MemoryTools.PLUGIN, "rewrite", PluginServices.Priority.FOREGROUND, system, text, pick, 160)),
+                user -> services.getObject().zone(user), semantic);
+    }
+
+    @Bean
+    tantalum.memory.recall.MemorySearchTool memorySearchTool(MemoryStores stores, ObjectProvider<PluginServices> services,
+                                                             tantalum.memory.recall.Semantic semantic) {
+        return new tantalum.memory.recall.MemorySearchTool(stores, user -> services.getObject().zone(user), semantic);
     }
 
     @Bean

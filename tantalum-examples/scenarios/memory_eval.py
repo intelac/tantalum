@@ -11,7 +11,7 @@
 只跑有 tier2 的题；phase 还没到的题照样跑（看差距），表里标出来。结果写到 scenarios/results/memory-*.json 和 .md（不进 Git）。
 不碰 ~/.local/share/tantalum：服务器的数据目录在临时目录里，跑完删掉（--keep 保留）。
 """
-import argparse, collections, datetime, glob, json, os, secrets, shutil, signal, subprocess, sys, tempfile, time
+import argparse, collections, datetime, glob, json, os, secrets, shlex, shutil, signal, subprocess, sys, tempfile, time
 import urllib.error, urllib.request, http.cookiejar
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -127,7 +127,8 @@ def start(data, password, extra=()):
         f"--tantalum.workspace={data}-ws", "--tantalum.examples.enabled=true", "--tantalum.provider=local",
         f"--tantalum.openai-routes.local.base-url={LOCAL['url']}", f"--tantalum.openai-routes.local.model={LOCAL['model']}",
         "--tantalum.openai-routes.local.thinking=chat-template", "--tantalum.openai-routes.local.context-window=131072",
-        "--tantalum.memory-capture.enabled=false", *extra], env=env, stdout=open(f"{data}-server.log", "w"), stderr=subprocess.STDOUT)
+        "--tantalum.memory-capture.enabled=false", *extra, *shlex.split(os.environ.get("TANTALUM_EVAL_ARGS", ""))],
+        env=env, stdout=open(f"{data}-server.log", "w"), stderr=subprocess.STDOUT)
     admin = Client()
     for _ in range(90):
         try:

@@ -43,11 +43,14 @@ public final class RecallWork implements WorkType {
     private final MemoryStores stores;
     private final Rewriter rewriter;
     private final Function<Principal, ZoneId> zones;
+    private final Semantic semantic;
 
-    public RecallWork(MemoryStores stores, Rewriter rewriter, Function<Principal, ZoneId> zones) {
+    /** {@code semantic} 是按意思找的那一路；平台没有向量服务时它每次给空，找回只靠关键词。 */
+    public RecallWork(MemoryStores stores, Rewriter rewriter, Function<Principal, ZoneId> zones, Semantic semantic) {
         this.stores = stores;
         this.rewriter = rewriter;
         this.zones = zones;
+        this.semantic = semantic;
     }
 
     @Override
@@ -84,18 +87,23 @@ public final class RecallWork implements WorkType {
         ZoneId zone = zones.apply(context.principal());
         Recall recall = new Recall(stores.ledger(context.principal()));
         String extra = "";
-        List<Recall.Hit> hits = recall.search(question, extra, dir, zone);
+        // 关键词一路和按意思一路合起来（向量给不出来时 near 是空的，就是原来的关键词找回）
+        List<Vectors.Scored> near = semantic.near(context.principal(), question);
+        List<Recall.Hit> hits = recall.search(question, extra, dir, zone, near);
         String rewritten = null;
         if (recall.worthRewriting(question, hits, DEICTIC.matcher(question).find(), dir)) {
             rewritten = rewrite(context.principal(), question, recent);
             if (rewritten != null) {
-                hits = recall.search(question, rewritten, dir, zone);
+                hits = recall.search(question, rewritten, dir, zone, near);
             }
         }
         Map<String, Json> result = new java.util.LinkedHashMap<>();
         result.put("hits", new Json.Arr(hits.stream().map(hit -> (Json) new Json.Str(hit.item().id())).toList()));
         if (rewritten != null) {
             result.put("rewritten", new Json.Str(rewritten));
+        }
+        if (!near.isEmpty()) {
+            result.put("near", new Json.Num(java.math.BigDecimal.valueOf(near.size())));
         }
         return new WorkResult(new Json.Obj(result), RecallText.of(hits, zone));
     }

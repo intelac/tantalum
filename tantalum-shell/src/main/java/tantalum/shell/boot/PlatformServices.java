@@ -176,6 +176,21 @@ public final class PlatformServices implements PluginServices {
         this.dailyTokens = Math.max(0, limit);
     }
 
+    private volatile tantalum.shell.model.Embeddings embeddings = new tantalum.shell.model.Embeddings(tantalum.shell.model.Embeddings.Settings.OFF);
+
+    /** 向量服务（{@code tantalum.embedding.*}）；没配时关着。 */
+    public void embeddings(tantalum.shell.model.Embeddings.Settings settings) {
+        this.embeddings = new tantalum.shell.model.Embeddings(settings);
+        if (settings.on()) {
+            LOG.info("embeddings on: {} at {}", settings.model(), settings.url());
+        }
+    }
+
+    @Override
+    public Optional<List<float[]>> embed(Principal user, String plugin, List<String> texts, boolean query) {
+        return embeddings.embed(texts, query);
+    }
+
     private volatile PluginModelGate gate;
     private volatile tantalum.shell.store.PluginUsage usage;
 

@@ -161,6 +161,10 @@ public class TantalumApplication {
     PlatformServices platformServices(Environment environment) {
         PlatformServices services = new PlatformServices();
         services.dailyTokens(environment.getProperty("tantalum.plugin-models.daily-tokens", Long.class, 0L));
+        services.embeddings(new tantalum.shell.model.Embeddings.Settings(environment.getProperty("tantalum.embedding.url"),
+                environment.getProperty("tantalum.embedding.model"), environment.getProperty("tantalum.embedding.dimensions", Integer.class, 0),
+                environment.getProperty("tantalum.embedding.query-prefix", ""),
+                environment.getProperty("tantalum.embedding.timeout", java.time.Duration.class, java.time.Duration.ofSeconds(10))));
         return services;
     }
 

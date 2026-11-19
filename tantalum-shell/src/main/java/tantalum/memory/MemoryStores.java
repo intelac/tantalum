@@ -28,6 +28,7 @@ public final class MemoryStores {
     private final Map<Principal, DailyNotes> notes = new ConcurrentHashMap<>();
     private final Map<Principal, WorkingMemory> working = new ConcurrentHashMap<>();
     private final SearchBudget budget = new SearchBudget();
+    private final Map<Principal, tantalum.memory.recall.Vectors> vectors = new ConcurrentHashMap<>();
 
     /** {@code stateDirs} 给出账的目录，{@code legacyDirs} 给出旧格式目录（没有可以返回 null）；名字不安全时抛 {@link IllegalArgumentException}。 */
     public MemoryStores(Function<Principal, Path> stateDirs, Function<Principal, Path> legacyDirs, MemoryLimits limits, Clock clock) {
@@ -53,6 +54,11 @@ public final class MemoryStores {
             LegacyImport.run(legacy, dir, () -> Ledger.newId(clock), clock.instant());
             return Ledger.open(dir, clock);
         });
+    }
+
+    /** 这个人的记忆向量（从账算出来的，和账放在一起）；同一用户总是同一个实例。 */
+    public tantalum.memory.recall.Vectors vectors(Principal principal) {
+        return vectors.computeIfAbsent(principal, user -> new tantalum.memory.recall.Vectors(ledger(user).file().getParent()));
     }
 
     /** 同一用户总是同一个实例，写删的锁才有效。名字不安全时抛 {@link IllegalArgumentException}。 */

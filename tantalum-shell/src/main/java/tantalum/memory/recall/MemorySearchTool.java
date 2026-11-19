@@ -23,15 +23,17 @@ public final class MemorySearchTool implements Tool {
 
     private final MemoryStores stores;
     private final Function<Principal, ZoneId> zones;
+    private final Semantic semantic;
 
-    public MemorySearchTool(MemoryStores stores, Function<Principal, ZoneId> zones) {
+    public MemorySearchTool(MemoryStores stores, Function<Principal, ZoneId> zones, Semantic semantic) {
         this.stores = stores;
         this.zones = zones;
+        this.semantic = semantic;
     }
 
     @Override public String name() { return NAME; }
     @Override public String description() {
-        return "Search this user's memory (entries and daily notes) by keywords; results show where each came from. Words like "
+        return "Search this user's memory (entries and daily notes) by keywords and, where the server has it, by meaning; results show where each came from. Words like "
                 + "'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying "
                 + "you do not know.";
     }
@@ -56,7 +58,8 @@ public final class MemorySearchTool implements Tool {
             return ToolOutput.error("This conversation is off the record: memory is not read or written.");
         }
         ZoneId zone = zones.apply(context.principal());
-        List<Recall.Hit> hits = new Recall(stores.ledger(context.principal())).search(query, "", context.dir(), zone);
+        List<Recall.Hit> hits = new Recall(stores.ledger(context.principal())).search(query, "", context.dir(), zone,
+                semantic.near(context.principal(), query));
         String text = RecallText.of(hits, zone);
         return ToolOutput.ok(text == null ? "Nothing in memory matches \"" + query + "\". Try other words or another language." : text);
     }
