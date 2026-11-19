@@ -244,7 +244,7 @@ def main():
         ], note="我没再说目录在哪：要靠记忆和工作区知道")
         before_rate = overseas()
         vague = story.say(day4, "把那个区的运费费率调一下。", [
-            ("没有自己猜着改：先问了我（或者等我答了卡片才改）", lambda t: (overseas() == before_rate and ("？" in "\n".join(t["answers"]) or "?" in "\n".join(t["answers"])))
+            ("没有自己猜着改：先问了我（或者等我答了卡片才改）", lambda t: (overseas() == before_rate and any(mark in "\n".join(t["answers"]) for mark in ("？", "?", "请说明", "请告诉", "哪个区", "which")))
                 or any(not card["session"].startswith("x") and not str(card["answered"].get("choice", "")) in ("add", "deny") for card in t["cards"])
                 or f"没问就改了：海外费率 {before_rate} → {overseas()}，其余 {re.findall('ZONE_RATES = .*', shipping())}"),
         ], note="说得含糊：哪个区、调多少都没说", reply="海外那个区，调到 4。", reply_words=("海外", "overseas"))
