@@ -26,7 +26,7 @@ import tantalum.memory.ledger.MemoryItem;
  * 一个人的记忆向量（memory-final-plan 第 9 节第 3 步）：记忆账上每条生效的说法和当天卡一个向量，按意思找的时候用。
  * 向量是从账算出来的，随时可以整个重算，所以不进账，单独一个文件 {@code vectors.jsonl}（每行：条目号、文字的指纹、向量），
  * 和账放在一起，用户自己的工具碰不到。文字变了（指纹不同）就重算；条目不在了就丢掉。
- * <p>向量由平台的服务给（{@link Embedder}），给不出来时这里什么都不做，找回照只有关键词的办法走。
+ * <p>向量由插件参数里配的向量服务给（{@link Embedder}），给不出来时这里什么都不做，找回照只有关键词的办法走。
  */
 public final class Vectors {
 
@@ -37,6 +37,11 @@ public final class Vectors {
     @FunctionalInterface
     public interface Embedder {
         Optional<List<float[]>> embed(List<String> texts, boolean query);
+
+        /** 是哪个模型、多少维算的：换了以后旧向量和新向量不能比，指纹里带上它，换了就整个重算。 */
+        default String stamp() {
+            return "";
+        }
     }
 
     /** 一条按意思找到的：条目号和余弦相似度。 */
@@ -69,7 +74,7 @@ public final class Vectors {
         for (MemoryItem item : live) {
             ids.add(item.id());
             Entry known = entries.get(item.id());
-            if ((known == null || !known.hash().equals(hash(item.text()))) && missing.size() < max && !item.text().isBlank()) {
+            if ((known == null || !known.hash().equals(hash(embedder.stamp() + item.text()))) && missing.size() < max && !item.text().isBlank()) {
                 missing.add(item);
             }
         }
@@ -82,7 +87,7 @@ public final class Vectors {
                 break;
             }
             for (int i = 0; i < batch.size(); i++) {
-                entries.put(batch.get(i).id(), new Entry(hash(batch.get(i).text()), vectors.get().get(i)));
+                entries.put(batch.get(i).id(), new Entry(hash(embedder.stamp() + batch.get(i).text()), vectors.get().get(i)));
                 done++;
             }
         }

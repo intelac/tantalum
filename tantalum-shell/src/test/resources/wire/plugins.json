@@ -157,6 +157,75 @@
       "value" : true,
       "source" : "builtin",
       "editable" : true
+    }, {
+      "key" : "vectors",
+      "type" : "toggle",
+      "label" : {
+        "en" : "Recall by meaning",
+        "zh" : "按意思找回",
+        "ja" : "意味で思い出す"
+      },
+      "hint" : {
+        "en" : "Besides keywords, also find memories that mean the same in other words or another language. Works only when an embedding service is set below; your memory text is sent to that address.",
+        "zh" : "除了关键词，再按意思找：换了说法、换了语言也找得到。下面配了向量服务才起作用；记忆的文字会发给那个地址。",
+        "ja" : "キーワードに加えて意味でも探します。下の埋め込みサービスが設定されているときだけ働き、記憶の文章はそのアドレスに送られます。"
+      },
+      "owner" : "user",
+      "value" : true,
+      "source" : "builtin",
+      "editable" : true
+    }, {
+      "key" : "embedding-url",
+      "type" : "text",
+      "label" : {
+        "en" : "Embedding service address",
+        "zh" : "向量服务地址",
+        "ja" : "埋め込みサービスのアドレス"
+      },
+      "hint" : {
+        "en" : "An OpenAI-compatible /embeddings service, for example http://127.0.0.1:11434/v1. Empty turns recall by meaning off.",
+        "zh" : "OpenAI 兼容的 /embeddings 服务，比如 http://127.0.0.1:11434/v1。空着就不按意思找。",
+        "ja" : "OpenAI 互換の /embeddings サービス。例: http://127.0.0.1:11434/v1。空なら意味では探しません。"
+      },
+      "owner" : "admin",
+      "value" : "",
+      "source" : "builtin",
+      "editable" : false
+    }, {
+      "key" : "embedding-model",
+      "type" : "text",
+      "label" : {
+        "en" : "Embedding model",
+        "zh" : "向量模型",
+        "ja" : "埋め込みモデル"
+      },
+      "hint" : {
+        "en" : "Changing it recomputes everyone's memory vectors in the background.",
+        "zh" : "换了模型，每个人的记忆向量会在后台重算。",
+        "ja" : "変更すると、全員の記憶ベクトルがバックグラウンドで再計算されます。"
+      },
+      "owner" : "admin",
+      "value" : "",
+      "source" : "builtin",
+      "editable" : false
+    }, {
+      "key" : "embedding-dimensions",
+      "type" : "number",
+      "label" : {
+        "en" : "Vector dimensions",
+        "zh" : "向量维数",
+        "ja" : "ベクトルの次元数"
+      },
+      "hint" : {
+        "en" : "0 keeps the model's own size. A smaller number keeps only the first dimensions; set it only for models that support that.",
+        "zh" : "0 是用模型本来的维数。填小一些的数只取前这么多维，只给支持这种截断的模型填。",
+        "ja" : "0 はモデル本来の次元数。小さい数は先頭の次元だけを使います。対応するモデルでのみ設定してください。"
+      },
+      "owner" : "admin",
+      "min" : 0,
+      "value" : 0,
+      "source" : "builtin",
+      "editable" : false
     } ]
   }, {
     "name" : "notes",

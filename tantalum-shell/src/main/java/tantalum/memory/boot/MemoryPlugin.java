@@ -75,22 +75,43 @@ public class MemoryPlugin {
         return new tantalum.memory.recall.RecallHook();
     }
 
-    /** 按意思找（memory-final-plan 第 9 节第 3 步）：向量由平台的服务给；平台没配时每次给空，找回只靠关键词。 */
+    /** 按意思找回的参数的默认值（{@code tantalum.memory-vectors.*}）；参数本身在插件页上。 */
+    @Bean
+    tantalum.memory.recall.VectorSettings memoryVectorSettings(Environment environment) {
+        return Binder.get(environment).bind("tantalum.memory-vectors", tantalum.memory.recall.VectorSettings.class)
+                .orElse(tantalum.memory.recall.VectorSettings.defaults());
+    }
+
+    /**
+     * 按意思找（memory-final-plan 第 9 节第 3 步）：向量服务是记忆插件自己的参数。每次照这个人此刻的参数取服务；
+     * 他关了、或者没配地址时给空，找回只靠关键词。
+     */
     @Bean(destroyMethod = "close")
-    tantalum.memory.recall.Semantic memorySemantic(MemoryStores stores, ObjectProvider<PluginServices> services, Environment environment) {
-        // 第一次按意思找时最多等多久把已有的记忆算成向量（tantalum.memory-vectors.first-wait，默认 4 秒）
-        return new tantalum.memory.recall.Semantic(stores,
-                user -> (texts, query) -> services.getObject().embed(user, MemoryTools.PLUGIN, texts, query),
-                environment.getProperty("tantalum.memory-vectors.first-wait", java.time.Duration.class, java.time.Duration.ofSeconds(4)));
+    tantalum.memory.recall.Semantic memorySemantic(MemoryStores stores, ObjectProvider<PluginServices> services,
+                                                   tantalum.memory.recall.VectorSettings vectors) {
+        java.util.Map<tantalum.memory.recall.Embeddings.Settings, tantalum.memory.recall.Embeddings> clients = new java.util.concurrent.ConcurrentHashMap<>();
+        return new tantalum.memory.recall.Semantic(stores, user -> {
+            tantalum.memory.recall.Embeddings.Settings settings = vectors.effective(services.getObject().params(MemoryTools.PLUGIN, user));
+            tantalum.memory.recall.Embeddings client = clients.computeIfAbsent(settings, tantalum.memory.recall.Embeddings::new);
+            return new tantalum.memory.recall.Vectors.Embedder() {
+                @Override public java.util.Optional<java.util.List<float[]>> embed(java.util.List<String> texts, boolean query) {
+                    return client.embed(texts, query);
+                }
+                @Override public String stamp() {
+                    return settings.model() + "/" + settings.dimensions() + "\n";
+                }
+            };
+        }, vectors.firstWait());
     }
 
     @Bean
     tantalum.memory.recall.RecallWork memoryRecallWork(MemoryStores stores, CaptureSettings settings, ObjectProvider<PluginServices> services,
-                                                         tantalum.memory.recall.Semantic semantic) {
+                                                         tantalum.memory.recall.Semantic semantic,
+                                                         tantalum.memory.recall.VectorSettings vectors) {
         PluginServices.ModelPick pick = new PluginServices.ModelPick(settings.route(), settings.model(), "off");
         return new tantalum.memory.recall.RecallWork(stores, (user, system, text) -> services.getObject().complete(
                 new PluginServices.Completion(user, MemoryTools.PLUGIN, "rewrite", PluginServices.Priority.FOREGROUND, system, text, pick, 160)),
-                user -> services.getObject().zone(user), semantic);
+                user -> services.getObject().zone(user), semantic, vectors);
     }
 
     @Bean

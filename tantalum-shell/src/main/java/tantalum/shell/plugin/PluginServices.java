@@ -104,15 +104,6 @@ public interface PluginServices {
         return List.of();
     }
 
-    /**
-     * 把几段文字变成向量，按意思找东西用（memory-final-plan 第 9 节）：每段一个，顺序相同，已经归一化（点积就是余弦相似度），
-     * 同一个服务器上维数固定。{@code query} 为真时这些是“拿来找的话”，为假时是“被找的文字”。一次最多 32 段。
-     * 平台没配向量服务、服务失败或超时时为空：插件照没有向量的办法做。文字只发给管理员配置的地址。
-     */
-    default Optional<List<float[]>> embed(Principal user, String plugin, List<String> texts, boolean query) {
-        return Optional.empty();
-    }
-
     /** 过去对话里的一条：会话、它在账里的序号、哪一方（{@code user}/{@code assistant}/{@code tool}）、存着的全文。 */
     record ConversationLine(SessionId session, long seq, String role, String text) {}
 

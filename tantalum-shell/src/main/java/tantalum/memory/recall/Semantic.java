@@ -15,7 +15,7 @@ import tantalum.value.id.Principal;
 
 /**
  * 按意思找（memory-final-plan 第 9 节第 3 步）：把问题变成向量，在这个人的记忆向量里找最像的几条，交给 {@link Recall} 和关键词
- * 一路合起来。平台没配向量服务、服务慢了（超过 {@link #QUERY_MILLIS}）或失败时返回空，找回照只有关键词的办法走，不耽误回答。
+ * 一路合起来。这个人关了“按意思找回”、没配向量服务、服务慢了（超过 {@link #QUERY_MILLIS}）或失败时返回空，找回照只有关键词的办法走，不耽误回答。
  * <p>记忆的向量在后台跟上账（每次找的时候顺手排一次，一次最多算 {@link #SYNC_AT_ONCE} 条），所以新记的东西要等一两轮才按意思找得到；
  * 这期间关键词一路照常。一个人第一次用、已有的记忆还一条向量都没有时，先等一小会儿把它们算出来。
  */
@@ -32,7 +32,7 @@ public final class Semantic implements AutoCloseable {
     static final int SYNC_AT_ONCE = 64;
 
     private final MemoryStores stores;
-    /** 这个人的向量服务：平台没配时每次都给空。 */
+    /** 这个人的向量服务（照他此刻的插件参数）：关着时每次都给空。 */
     private final java.util.function.Function<Principal, Vectors.Embedder> embedders;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "memory-vectors");

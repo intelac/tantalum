@@ -159,4 +159,36 @@ class VectorsTest {
             assertTrue((System.nanoTime() - started) / 1_000_000 < Semantic.QUERY_MILLIS + 1000);
         }
     }
+
+    // 向量是记忆插件的参数（Yi 11-20）：每个人自己的开关，服务地址和模型由管理员定；换了模型，旧向量不能和新的比，要整个重算
+    @Test
+    void theVectorServiceIsAPluginSettingAndAModelChangeRecomputesEverything() {
+        VectorSettings server = new VectorSettings("http://127.0.0.1:11434/v1", "qwen3-embedding", 1024, "Query: ", null, null);
+        assertEquals(List.of(VectorSettings.ENABLED, VectorSettings.URL, VectorSettings.MODEL, VectorSettings.DIMENSIONS),
+                server.params().stream().map(tantalum.shell.plugin.Param::key).toList());
+        assertEquals(List.of(tantalum.shell.plugin.Param.Owner.USER, tantalum.shell.plugin.Param.Owner.ADMIN, tantalum.shell.plugin.Param.Owner.ADMIN,
+                tantalum.shell.plugin.Param.Owner.ADMIN), server.params().stream().map(tantalum.shell.plugin.Param::owner).toList(),
+                "the switch is the user's; where memory text is sent is the admin's");
+        tantalum.value.json.Json.Obj none = new tantalum.value.json.Json.Obj(java.util.Map.of());
+        assertTrue(server.effective(none).on(), "the server default applies when nothing was set on the plugin page");
+        assertEquals("Query: ", server.effective(none).queryPrefix());
+        assertFalse(server.effective(new tantalum.value.json.Json.Obj(java.util.Map.of(VectorSettings.ENABLED, new tantalum.value.json.Json.Bool(false)))).on(),
+                "the user switched it off");
+        assertFalse(server.effective(new tantalum.value.json.Json.Obj(java.util.Map.of(VectorSettings.URL, new tantalum.value.json.Json.Str(" ")))).on(),
+                "an empty address is off");
+        assertFalse(VectorSettings.defaults().effective(none).on(), "no address configured: off by default");
+
+        open();
+        claim("car", "车牌号是 7Q2KD");
+        claim("home", "卧室朝北，床靠窗");
+        Vectors vectors = new Vectors(dir);
+        Recall recall = new Recall(ledger);
+        assertEquals(2, vectors.sync(recall.embeddable(), embedder, 64));
+        Vectors.Embedder other = new Vectors.Embedder() {
+            @Override public Optional<List<float[]>> embed(List<String> texts, boolean query) { return embedder.embed(texts, query); }
+            @Override public String stamp() { return "another-model/0\n"; }
+        };
+        assertEquals(2, vectors.sync(recall.embeddable(), other, 64), "another model: every vector is computed again");
+        assertEquals(0, vectors.sync(recall.embeddable(), other, 64));
+    }
 }

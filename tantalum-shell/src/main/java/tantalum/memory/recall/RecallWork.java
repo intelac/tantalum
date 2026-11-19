@@ -23,7 +23,7 @@ import tantalum.value.text.LocalText;
  * 追加一条 {@code <memory-recall>} 消息，模型这一轮就看得到；结果进 {@code WorkDone}，回放确定。问题里有指代（“那个”“第二个”），
  * 或者一条都没找到时，先让本机模型改写一次问题（关思考，给中英日关键词），改写超时或失败就用原话。
  */
-public final class RecallWork implements WorkType {
+public final class RecallWork implements WorkType, tantalum.shell.plugin.Configurable {
 
     public static final String TYPE = "memory-recall";
     static final long REWRITE_MILLIS = 8_000;
@@ -44,13 +44,20 @@ public final class RecallWork implements WorkType {
     private final Rewriter rewriter;
     private final Function<Principal, ZoneId> zones;
     private final Semantic semantic;
+    private final VectorSettings vectors;
 
-    /** {@code semantic} 是按意思找的那一路；平台没有向量服务时它每次给空，找回只靠关键词。 */
-    public RecallWork(MemoryStores stores, Rewriter rewriter, Function<Principal, ZoneId> zones, Semantic semantic) {
+    /** {@code semantic} 是按意思找的那一路；没有向量服务或这个人关了时它每次给空，找回只靠关键词。{@code vectors} 是它在插件页上的参数。 */
+    public RecallWork(MemoryStores stores, Rewriter rewriter, Function<Principal, ZoneId> zones, Semantic semantic, VectorSettings vectors) {
         this.stores = stores;
         this.rewriter = rewriter;
         this.zones = zones;
         this.semantic = semantic;
+        this.vectors = vectors;
+    }
+
+    @Override
+    public List<tantalum.shell.plugin.Param> params() {
+        return vectors.params();
     }
 
     @Override
