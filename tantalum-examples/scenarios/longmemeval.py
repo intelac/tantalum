@@ -3,7 +3,7 @@
 
 三步：
   pick   从 longmemeval_s_cleaned.json（HuggingFace xiaowu0162/longmemeval-cleaned，MIT）里按五种能力各挑 N 道（默认 6，共 30），
-         固定种子，写成 subset.json。五种能力：找事实（single-session-user/assistant/preference）、跨会话（multi-session）、
+         固定种子，写成 subset.json（--extend 旧子集：旧题不换，每种补到 N 道）。五种能力：找事实（single-session-user/assistant/preference）、跨会话（multi-session）、
          记住更新（knowledge-update）、按时间推理（temporal-reasoning）、不知道就说不知道（question_id 以 _abs 结尾）。
   build  用真的记笔记代码导入每道题的旧对话（LongMemEvalImport，Claude Haiku 5.5 记笔记），每道题记出一本记忆账。
   ask    起一台真服务器，每道题一个新用户、放进他的账，用题目的 question_date 提问；memory（用记忆）和 none（关掉记忆）两组。
@@ -72,7 +72,14 @@ RELATIVE = __import__("re").compile(r"\d+\s*days?\s+ago|yesterday|last week", __
 def pick(args):
     data = [q for q in json.load(open(args.data, encoding="utf-8")) if not RELATIVE.search(q["question"])]
     chooser = random.Random(args.seed)
-    chosen = []
+    # --extend：已有的题一道不换（它们的账已经导入过），每种能力补到 --per 道
+    chosen = json.load(open(args.extend, encoding="utf-8")) if args.extend else []
+    have = {q["question_id"] for q in chosen}
+
+    def more(pool, wanted):
+        fresh = [q for q in pool if q["question_id"] not in have]
+        return chooser.sample(fresh, max(0, min(len(fresh), wanted - sum(1 for q in pool if q["question_id"] in have))))
+
     for name in ABILITIES:
         pool = [q for q in data if ability(q) == name]
         if name == "extraction":
@@ -80,9 +87,9 @@ def pick(args):
             kinds = ["single-session-user", "single-session-assistant", "single-session-preference"]
             for index, kind in enumerate(kinds):
                 share = args.per // 3 + (1 if index < args.per % 3 else 0)
-                chosen += chooser.sample([q for q in pool if q["question_type"] == kind], share)
+                chosen += more([q for q in pool if q["question_type"] == kind], share)
         else:
-            chosen += chooser.sample(pool, args.per)
+            chosen += more(pool, args.per)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     json.dump(chosen, open(args.out, "w", encoding="utf-8"), ensure_ascii=False)
     counts = collections.Counter(ability(q) for q in chosen)
@@ -224,7 +231,7 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="step", required=True)
     p = sub.add_parser("pick"); p.add_argument("--data", required=True); p.add_argument("--out", required=True)
-    p.add_argument("--per", type=int, default=6); p.add_argument("--seed", type=int, default=1116)
+    p.add_argument("--per", type=int, default=6); p.add_argument("--seed", type=int, default=1116); p.add_argument("--extend", default="")
     b = sub.add_parser("build"); b.add_argument("--subset", required=True); b.add_argument("--ledgers", required=True)
     b.add_argument("--parallel", type=int, default=6); b.add_argument("--repo", default="")
     a = sub.add_parser("ask"); a.add_argument("--subset", required=True); a.add_argument("--ledgers", required=True)
