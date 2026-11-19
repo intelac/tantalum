@@ -109,7 +109,7 @@ def wait_for_tasks(run, user, session, model):
 # 任务会话里答过的卡片、停任务时的情况，按主对话的会话号记，判分时看
 TASK_NOTES = collections.defaultdict(lambda: {"answered": [], "approved": [], "stopped_at": None, "side": None})
 
-def attend_tasks(answer=None, stop_after=None, side=None):
+def attend_tasks(answer=None, stop_after=None, side=None, wait=900):
     """第一轮结束后照看放出去的任务，直到都回来、结果开的那几轮也结束。任务里的命令审批点“这一次”；别的问题：answer 写了就照它答
     （对不上选项时当自由回答），没写选第一个。stop_after：看到有任务在外面以后过这么多秒，像用户点“全部停止”那样全停。
     side：任务还在外面时，用户在主对话里另问的一句话；记下问之前、答完之后任务是不是还在外面。"""
@@ -123,7 +123,7 @@ def attend_tasks(answer=None, stop_after=None, side=None):
             notes["side"] = {"before": before, "after": open_now(), "answer": run.journal(session)[1]}
             if problem: return "插话那一轮：" + problem
         started, quiet, seen_open = time.time(), 0, None
-        while time.time() - started < 900:
+        while time.time() - started < wait:
             tasks = (user.call("GET", f"/api/sessions/{session}/tasks")[1] or {}).get("tasks", [])
             runs = (user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
             if stop_after is not None and notes["stopped_at"] is None and any(task.get("open") for task in tasks):
@@ -148,7 +148,7 @@ def attend_tasks(answer=None, stop_after=None, side=None):
             quiet = quiet + 1 if done else 0
             if quiet >= 3: return None
             time.sleep(1 if stop_after is not None else 2)
-        return "放出去的任务 900 秒还没都回来"
+        return f"放出去的任务 {wait} 秒还没都回来"
     return between
 
 def task_ends(ctx):
@@ -800,12 +800,12 @@ def c_long_run(ctx):
     """一轮里连着跑五分钟以上、十几次命令：中间不丢口令、不跳批、不提前收工。"""
     return _batches(ctx)
 
-def c_tasks_long_run(ctx):
+def c_tasks_long_run(ctx, batches=BATCHES, seconds=BATCH_SECONDS):
     """同一件活整个交给帮手：它自己跑五分钟以上，主对话空着；期间用户另问一句照常答；结果回来以后主对话说得清。"""
     failed, notes = c_tasks_common(ctx, people=2), TASK_NOTES[ctx.sessions[0]]
     if not tasks_of(ctx): return failed + ["没测到：没有放任务，主对话自己做了"]
     if ctx.tools.get("bash", 0): failed.append("说了不用自己动手，主对话却自己跑了命令")
-    failed += _batches(ctx)
+    failed += _batches(ctx, batches, seconds)
     side = notes["side"] or {}
     if not side.get("before") or not side.get("after"): failed.append(f"没测到：插话前后任务应该都还在外面（前 {side.get('before')}，后 {side.get('after')}）")
     elif FACTS["warehouse"].lower() not in (side.get("answer") or "").lower(): failed.append("任务在外面时用户另问的那句没有答对")
@@ -813,6 +813,17 @@ def c_tasks_long_run(ctx):
     if any(outcome != "COMPLETED" for outcome, _ in ends.values()): failed.append(f"任务的结局不是完成：{ {task: outcome for task, (outcome, _) in ends.items()} }")
     if "batches.md" not in all_said(ctx): failed.append("结果回来以后主对话没有告诉用户记在哪里")
     return failed
+
+# 半小时：30 批、每批 60 秒。一条命令最长 10 分钟，所以一条命令跑不完，得分几次或者一批一批来
+HALF_BATCHES, HALF_SECONDS = 30, 60
+def setup_half_hour(root): setup_batches(root, HALF_BATCHES, HALF_SECONDS)
+HALF_JOB = BATCH_JOB.replace(f"一共 {BATCHES} 批，每批大约 {BATCH_SECONDS} 秒", f"一共 {HALF_BATCHES} 批，每批大约 {HALF_SECONDS} 秒，全部跑完要半小时").replace(f"第 {BATCHES} 批", f"第 {HALF_BATCHES} 批").replace(f"把 {BATCHES} 批", f"把 {HALF_BATCHES} 批")
+def c_half_hour(ctx):
+    """一轮里连着干半小时：不丢口令、不跳批、不提前收工。"""
+    return _batches(ctx, HALF_BATCHES, HALF_SECONDS)
+def c_tasks_half_hour(ctx):
+    """帮手自己干半小时：期间主对话照常能用，结果回来说得清。"""
+    return c_tasks_long_run(ctx, HALF_BATCHES, HALF_SECONDS)
 
 STEP_JOB = (f"scripts/batch.py 是夜间对账，一共 {STEPS} 批，每批大约 {STEP_SECONDS} 秒。从第 1 批跑到第 {STEPS} 批：每一批的输出里有一个结果码，"
             "还有下一批要用的口令（python3 scripts/batch.py 批号 上一批给的口令）。这个对账以前出过事，所以一次只跑一批：每批跑完先看一眼输出，"
@@ -1457,6 +1468,12 @@ SCENARIOS += [
     S("tasks-long-run", "任务", "同一件活整个交给帮手，它自己跑五分钟以上：期间主对话照常能用，结果回来说得清",
       "这件事整个交给一个帮手去做，你自己不用动手，它做完以后把结果告诉我。" + BATCH_JOB,
       c_tasks_long_run, setup=setup_batches, max_calls=12, timeout=600, between=attend_tasks(side=LONG_TASK_SIDE)),
+    # 半小时（2026-11-19 Yi 同意测）：一条命令最长 10 分钟，跑不完，要么分几条命令要么一批一批来
+    S("half-hour", "长任务", "一轮里连着干半小时：不丢口令、不跳批、不提前收工",
+      HALF_JOB, c_half_hour, setup=setup_half_hour, max_calls=80, timeout=2700),
+    S("tasks-half-hour", "任务", "同一件活整个交给帮手，它自己干半小时：期间主对话照常能用，结果回来说得清",
+      "这件事整个交给一个帮手去做，你自己不用动手，它做完以后把结果告诉我。" + HALF_JOB,
+      c_tasks_half_hour, setup=setup_half_hour, max_calls=12, timeout=2700, between=attend_tasks(side=LONG_TASK_SIDE, wait=2700)),
     # 一步一步来：模型上面那两个场景里写了个循环一条命令跑完（做得对，但测不到“一轮里很多次工具调用”），这里用户要求一批一批看着跑
     S("long-steps", "长任务", "一轮里二十五批一批一批跑：几十次工具调用，口令一路接得上，不提前收工",
       STEP_JOB, c_long_steps, setup=setup_steps, max_calls=70, timeout=900),
