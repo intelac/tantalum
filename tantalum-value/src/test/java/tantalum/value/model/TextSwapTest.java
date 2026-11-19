@@ -44,7 +44,10 @@ class TextSwapTest {
         TextSwap swap = new TextSwap(SWAPS);
         assertEquals("[withdrawn] and [withdrawn]", swap.text(PLATE + " and " + PLATE));
         assertNull(swap.text(null));
-        assertEquals(2, swap.places());
+        assertEquals(2, swap.places(PLATE + " and " + PLATE));
+        assertEquals(0, swap.places((String) null));
+        assertEquals(1, swap.places(new TextBlock("x " + PLATE)));
+        assertEquals(2, swap.places(List.of(Message.user(PLATE), Message.user("no"), Message.user(PLATE))));
 
         Map<String, Json> fields = new LinkedHashMap<>();
         fields.put("note", new Json.Arr(List.of(new Json.Str("car: " + PLATE), new Json.Num(BigDecimal.ONE))));

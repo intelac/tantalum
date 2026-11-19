@@ -51,7 +51,7 @@ public final class Forgetting {
                 }
             }
         }
-        // 衍生的（可能一层套一层）。现在还没有哪里写 derivedFrom（图书管理员合并条目时才会有），先留着
+        // 衍生的（可能一层套一层）：每天整理照笔记提的条目记着是从哪张卡、哪条说法来的
         boolean grew = true;
         while (grew) {
             grew = false;
@@ -170,6 +170,9 @@ public final class Forgetting {
         List<String> removed = new ArrayList<>();
         List<String> kept = new ArrayList<>();
         Set<String> pages = new HashSet<>();
+        // 每条动过的条目去掉了哪些字（规范化后）；整条去掉的另记
+        java.util.Map<String, String> goneFrom = new java.util.HashMap<>();
+        Set<String> whole = new HashSet<>();
         for (var entry : byItem.entrySet()) {
             MemoryItem item = ledger.get(entry.getKey()).filter(Forgetting::forgettable).orElse(null);
             int version = versions.get(entry.getKey());
@@ -196,6 +199,10 @@ public final class Forgetting {
                 continue;
             }
             gone.forEach(line -> removed.add(line.strip()));
+            goneFrom.put(item.id(), tantalum.memory.capture.Quotes.normalize(String.join("\n", gone)));
+            if (left.isEmpty()) {
+                whole.add(item.id());
+            }
             if (!left.isEmpty()) {
                 // 只去掉几行时条目还在，另留一个墓碑记下去掉的是什么、什么时候
                 MemoryItem said = MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.USER_SAID, actor,
@@ -205,6 +212,21 @@ public final class Forgetting {
             }
             if (item.kind() == MemoryItem.Kind.CLAIM && item.page() != null) {
                 pages.add(item.page());
+            }
+        }
+        // 从去掉的这些字衍生出来的（每天整理照笔记里的原话提的条目，记着出处和那句原话）：出处没了，跟着去掉。
+        // 有原话的看原话在不在去掉的字里；没有原话的要出处整条没了才算。这是账上记着的出处，不是猜
+        if (!goneFrom.isEmpty()) {
+            for (MemoryItem derived : ledger.items(each -> each.derivedFrom().stream().anyMatch(goneFrom::containsKey))) {
+                String quote = derived.quote() == null ? "" : tantalum.memory.capture.Quotes.normalize(derived.quote());
+                boolean orphaned = derived.derivedFrom().stream().anyMatch(source -> quote.isEmpty() ? whole.contains(source)
+                        : goneFrom.getOrDefault(source, "").contains(quote));
+                if (orphaned && !guarded(derived, actor) && ledger.tombstone(derived.id(), actor, REASON + ": derived")) {
+                    removed.add(derived.text().strip());
+                    if (derived.kind() == MemoryItem.Kind.CLAIM && derived.page() != null) {
+                        pages.add(derived.page());
+                    }
+                }
             }
         }
         tidyPages(ledger, pages, actor);

@@ -60,4 +60,31 @@ class LibrarianProposalsTest {
         assertTrue(store.read("decisions").orElseThrow().content().contains("12 月 1 日"));
         assertTrue(working.open().isEmpty(), "the stale task is closed");
     }
+
+    /**
+     * 提议记着出处（memory-final-plan 第 10 节的衍生关系）：照笔记里哪句原话提的。那句原话被忘掉，提出来的条目跟着去掉，
+     * 哪怕它的说法和原话用词不一样；从同一张卡别的话提出来的留着。
+     */
+    @Test
+    void aProposalGoesWhenTheWordsItCameFromAreForgotten() {
+        Ledger ledger = Ledger.open(dir, Clock.fixed(NOW, ZoneOffset.UTC));
+        MemoryStore store = new MemoryStore(ledger, MemoryLimits.defaults());
+        new DailyNotes(ledger).append("2026-11-15", "s-1", "车", "s-1_1", "10:00", "- 用户的车挂的是 京A-7Q2KD\n- 数据库用 PostgreSQL");
+        MemoryItem card = ledger.items(item -> item.kind() == MemoryItem.Kind.CARD).getFirst();
+        new LibrarianProposals(ledger, store, new WorkingMemory(ledger), ZoneOffset.UTC).propose((system, text) -> Optional.of(
+                "- [add about-me] 座驾登记号 7Q2KD «用户的车挂的是 京A-7Q2KD»\n- [add decisions] 数据库选了 PG «数据库用 PostgreSQL»"));
+        PendingItems pending = new PendingItems(ledger);
+        List<MemoryItem> proposals = pending.list();
+        assertEquals(2, proposals.size());
+        proposals.forEach(proposal -> assertEquals(List.of(card.id()), proposal.derivedFrom(), "each records the card its words are in"));
+        proposals.forEach(proposal -> assertEquals(PendingItems.Outcome.DONE, pending.confirm(proposal.id())));
+
+        // 用户只勾了笔记里的那一行；条目“座驾登记号”和它用词对不上，但出处是这一行
+        String line = Forgetting.candidates(ledger, "用户的车挂的是 京A-7Q2KD").stream()
+                .filter(place -> place.kind() == MemoryItem.Kind.CARD).findFirst().orElseThrow().id();
+        Forgetting.Chosen done = Forgetting.forget(ledger, List.of(line), MemoryItem.Actor.USER);
+        assertTrue(done.removed().contains("座驾登记号 7Q2KD"), done.removed().toString());
+        assertTrue(store.read("about-me").isEmpty(), "the entry proposed from those words is gone");
+        assertTrue(store.read("decisions").orElseThrow().content().contains("数据库选了 PG"), "what came from the other line stays");
+    }
 }

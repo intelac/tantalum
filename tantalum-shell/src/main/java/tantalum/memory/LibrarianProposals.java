@@ -106,14 +106,15 @@ public final class LibrarianProposals {
             }
             switch (action) {
                 case "add" -> {
-                    if (supported(quote, notes) && pendingClaim(target, body, quote, Map.of())) {
+                    if (supported(quote, notes) && pendingClaim(target, body, quote, Map.of(), sources(cards, quote, null))) {
                         added++;
                         taken++;
                     }
                 }
                 case "fix" -> {
                     Optional<MemoryItem> old = ledger.get(target).filter(item -> item.kind() == MemoryItem.Kind.CLAIM && item.live());
-                    if (old.isPresent() && supported(quote, notes) && pendingClaim(old.get().page(), body, quote, Map.of("supersedes", target))) {
+                    if (old.isPresent() && supported(quote, notes) && pendingClaim(old.get().page(), body, quote, Map.of("supersedes", target),
+                            sources(cards, quote, target))) {
                         fixed++;
                         taken++;
                     }
@@ -138,14 +139,29 @@ public final class LibrarianProposals {
         return wanted.length() >= 2 && Quotes.normalize(notes).contains(wanted);
     }
 
-    private boolean pendingClaim(String page, String body, String quote, Map<String, String> attrs) {
+    /**
+     * 这条提议是从哪来的（记进 {@code derivedFrom}，memory-final-plan 第 10 节）：原话逐字出现在其中的那几张当天卡，改正的还有被改的那条。
+     * 以后那句原话被忘掉，或者出处整条删掉，这条提议跟着去掉。
+     */
+    private static List<String> sources(List<MemoryItem> cards, String quote, String target) {
+        String wanted = Quotes.normalize(quote);
+        List<String> from = new java.util.ArrayList<>(cards.stream().filter(card -> Quotes.normalize(card.text()).contains(wanted))
+                .map(MemoryItem::id).toList());
+        if (target != null) {
+            from.add(target);
+        }
+        return from;
+    }
+
+    private boolean pendingClaim(String page, String body, String quote, Map<String, String> attrs, List<String> from) {
         if (!MemoryFormat.isValidName(page)) {
             return false;
         }
         Map<String, String> all = new LinkedHashMap<>(attrs);
         all.put(PROPOSAL, "librarian");
         MemoryItem claim = MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.ASSISTANT_INFERRED,
-                MemoryItem.Actor.LIBRARIAN, body, ledger.clock().instant()).withQuote(quote).withPendingConfirm(true).withAttrs(all);
+                MemoryItem.Actor.LIBRARIAN, body, ledger.clock().instant()).withQuote(quote).withPendingConfirm(true).withAttrs(all)
+                .withDerivedFrom(from);
         String description = store.read(page).map(MemoryEntry::description).orElse("Notes the librarian proposed");
         String type = store.read(page).map(entry -> entry.type().pageType()).orElse("term");
         return store.addClaim(page, type, description, claim).isPresent();

@@ -47,12 +47,13 @@ public final class WithdrawSteps {
             if (one.isEmpty()) {
                 continue;
             }
+            int found = 0;
             for (int i = 0; i < session.messages().size(); i++) {
-                one.message(session.said(i));
+                found += one.places(session.said(i));
             }
-            if (one.places() > 0) {
+            if (found > 0) {
                 more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size(), context.envelope().seq()));
-                places += one.places();
+                places += found;
             }
         }
         TextSwap swap = new TextSwap(event.swaps());
@@ -62,7 +63,8 @@ public final class WithdrawSteps {
         SessionContext frozen = context(swap, session.context());
         RunState run = session.activeRun() == null ? null : context.state().runs().get(session.activeRun());
         RunState nextRun = run == null ? null : run(swap, run);
-        places += swap.places();
+        places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(session.followUps())
+                + places(swap, session.context()) + (run == null ? 0 : places(swap, run));
         if (places == 0) {
             return Decision.unchanged(context.state());
         }
@@ -75,24 +77,50 @@ public final class WithdrawSteps {
         return out.decision();
     }
 
-    private static SessionContext context(TextSwap swap, SessionContext context) {
+    private static int places(TextSwap swap, SessionContext context) {
         if (context == null) {
-            return null;
+            return 0;
         }
-        int before = swap.places();
+        int places = swap.places(context.system());
+        for (ContextSection section : context.sections()) {
+            places += swap.places(section.body());
+        }
+        if (context.hooks() != null) {
+            for (HookTextBlock hook : context.hooks().texts()) {
+                places += swap.places(hook.text());
+            }
+        }
+        return places;
+    }
+
+    private static int places(TextSwap swap, RunState run) {
+        int places = swap.places(run.pendingSteers());
+        if (run.tools() != null) {
+            for (ToolSlot slot : run.tools().slots()) {
+                places += slot.result() == null ? 0 : swap.places(slot.result());
+            }
+        }
+        return places;
+    }
+
+    private static SessionContext context(TextSwap swap, SessionContext context) {
+        if (context == null || places(swap, context) == 0) {
+            return context;
+        }
         String system = swap.text(context.system());
         List<ContextSection> sections = context.sections().stream()
                 .map(section -> new ContextSection(section.name(), swap.text(section.body()), section.byLine())).toList();
         SessionContext.HookState hooks = context.hooks() == null ? null : new SessionContext.HookState(
                 context.hooks().texts().stream().map(hook -> new HookTextBlock(hook.hook(), swap.text(hook.text()))).toList(),
                 context.hooks().tools(), context.hooks().active());
-        return swap.places() == before ? context : new SessionContext(system, context.tools(), context.compaction(), sections,
+        return new SessionContext(system, context.tools(), context.compaction(), sections,
                 context.initialTools(), context.activeTools(), context.activePlugins(), hooks, context.pluginParams(), context.unlocks());
     }
 
     private static RunState run(TextSwap swap, RunState run) {
-        int before = swap.places();
-        List<Message> steers = swap.messages(run.pendingSteers());
+        if (places(swap, run) == 0) {
+            return run;
+        }
         ToolRound round = run.tools();
         if (round != null) {
             for (int i = 0; i < round.slots().size(); i++) {
@@ -102,6 +130,6 @@ public final class WithdrawSteps {
                 }
             }
         }
-        return swap.places() == before ? run : run.withPendingSteers(steers).withTools(round);
+        return run.withPendingSteers(swap.messages(run.pendingSteers())).withTools(round);
     }
 }

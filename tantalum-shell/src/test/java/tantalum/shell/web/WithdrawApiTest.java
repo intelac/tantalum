@@ -131,4 +131,14 @@ class WithdrawApiTest {
             assertFalse(body(server, "/api/sessions").contains("7Q2KD"), "titles after a second restart");
         }
     }
+
+    /** 插件接口的写请求先看长度：超过上限的不读体（review 2026-11-17），平常大小的照常。 */
+    @Test
+    void anOversizedPluginRequestIsRefusedBeforeItIsRead() throws Exception {
+        try (TestServer server = server()) {
+            String big = "{\"find\":\"" + "a".repeat(tantalum.shell.auth.AuthBodyLimitFilter.MAX_PLUGIN_BODY) + "\"}";
+            assertEquals(413, server.post("alice", "/api/plugin-api/memory/forget", big).statusCode());
+            assertEquals(200, server.post("alice", "/api/plugin-api/memory/forget", "{\"find\":\"my plate\"}").statusCode());
+        }
+    }
 }

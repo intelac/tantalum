@@ -306,6 +306,12 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
                 if (closed || done >= CATCHUP_LIMIT) {
                     break;
                 }
+                // 补记让路（review 2026-11-17）：后台只有一个工人，一个人的补记最多 50 轮、每轮一次模型调用；
+                // 有刚结束的一轮在等（可能是别人的）就先停下，下一次轮到这个人时接着补
+                if (done > 0 && !queue.isEmpty()) {
+                    caughtUp.remove(user);
+                    break;
+                }
                 if (ref.manual() || ref.offRecord() || ref.end() == null || !"COMPLETED".equals(ref.endReason())
                         || ledger.hasMarker(CAPTURED + ref.run().value())) {
                     continue;

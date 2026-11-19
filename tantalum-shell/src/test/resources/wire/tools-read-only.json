@@ -500,7 +500,7 @@
   {
     "name": "memory_delete",
     "deferred": false,
-    "description": "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement itself, in the user's words); this only looks and returns the places in memory that may say it, each with an id, and changes nothing. places: the ids, from that list, of the places that do say it; exactly those lines are removed and the rest of each entry stays. You decide which places are about it: a place that merely shares a word is not. Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. Give name, text or places.",
+    "description": "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement itself, in the user's words); this only looks and returns the places that may say it (in memory, and in past conversations where it was said), each with an id, and changes nothing. places: the ids, from that list, of the places that do say it; exactly those lines are removed from memory or withdrawn from the conversation, and the rest stays. You decide which places are about it: a place that merely shares a word is not. Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. Give name, text or places.",
     "schema": {
       "type": "object",
       "properties": {
