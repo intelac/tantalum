@@ -93,6 +93,10 @@ class EventCodecTest {
                 new tantalum.value.event.TaskEnded("t3-0", tantalum.value.task.TaskOutcome.COMPLETED, "fine"),
                 new tantalum.value.event.TaskEnded("t3-1", tantalum.value.task.TaskOutcome.INTERRUPTED, null),
                 new tantalum.value.event.TaskStopRequested(REQ, null),
+                new tantalum.value.event.TextWithdrawn(REQ, List.of(new tantalum.value.event.TextWithdrawn.Swap("my plate is 7Q2KD", "[withdrawn]")),
+                        tantalum.value.event.TextWithdrawn.By.user()),
+                new tantalum.value.event.TextWithdrawn(REQ, List.of(), new tantalum.value.event.TextWithdrawn.By(
+                        tantalum.value.event.TextWithdrawn.Actor.AGENT, new SessionId("s"), tantalum.value.id.RunId.of(new SessionId("s"), 7), "c1")),
                 SteerSubmittedFixture.of(SUB, REQ, "x"),
                 FollowUpSubmittedFixture.of(SUB, REQ, "x"),
                 new Cancel(REQ),

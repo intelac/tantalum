@@ -108,6 +108,14 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
     }
 
+    /** 换掉历史里的文字（撤下，见 {@link tantalum.value.event.TextWithdrawn}）：条数、顺序、压缩的切分点都不变，只是里面的字变了。 */
+    public SessionState rewritten(List<Message> newMessages, List<Message> newFollowUps, Compaction newCompaction, SessionContext newContext) {
+        if (newMessages.size() != messages.size() || newFollowUps.size() != followUps.size()) {
+            throw new IllegalArgumentException("rewriting must keep the number of messages");
+        }
+        return new SessionState(id, principal, newMessages, activeRun, lastRun, newFollowUps, newContext, newCompaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+    }
+
     public SessionState withAnchor(UsageAnchor newAnchor) {
         return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
     }

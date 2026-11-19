@@ -41,6 +41,9 @@ public final class BuiltinSteps {
         // 改名只是展示用的名字：进账，内核不改状态
         table.register(TransitionTable.ANY_STATE, SessionRenamed.TYPE, context -> Decision.unchanged(context.state()));
 
+        // 撤下文字：只换字，任何状态下都能做，不改运行的走向
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.TextWithdrawn.TYPE, WithdrawSteps::withdrawn);
+
         table.register(ContextSteps.AWAITING_CONTEXT, ContextAssembled.TYPE, ContextSteps::contextAssembled);
         table.register(ModelSteps.AWAITING_MODEL, ModelReplied.TYPE, ModelSteps::modelReplied);
         table.register(ModelSteps.AWAITING_MODEL, ModelFailed.TYPE, RetrySteps::modelFailed);

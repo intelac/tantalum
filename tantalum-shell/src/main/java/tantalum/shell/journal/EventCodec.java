@@ -241,6 +241,7 @@ public final class EventCodec {
         codec.register(tantalum.value.event.TaskAssigned.TYPE, 1, tantalum.value.event.TaskAssigned.class);
         codec.register(tantalum.value.event.TaskEnded.TYPE, 1, tantalum.value.event.TaskEnded.class);
         codec.register(tantalum.value.event.TaskStopRequested.TYPE, 1, tantalum.value.event.TaskStopRequested.class);
+        codec.register(tantalum.value.event.TextWithdrawn.TYPE, 1, tantalum.value.event.TextWithdrawn.class);
         codec.register(tantalum.value.event.TaskCancelled.TYPE, 1, tantalum.value.event.TaskCancelled.class);
         return codec;
     }
