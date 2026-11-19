@@ -167,4 +167,56 @@ class ForgettingTest {
         assertNotNull(ledger.get(first.id()).orElseThrow().lastConfirmed(), "corroborated");
         assertNull(librarian.daily(), "once a day");
     }
+
+    // ---- 按选中的忘：程序只找候选，选中的才动 ----
+
+    /** 候选只是找出来给人看：不选就什么都不动；只对上个别词的短句也在候选里，但不选它就留着。 */
+    @Test
+    void candidatesAreOnlyShownAndNothingChangesUntilSomeAreChosen() {
+        open(Instant.parse("2026-11-16T01:00:00Z"));
+        claim("about-me", "我的车牌号是 京A-7Q2KD。\n我住在朝阳区。");
+        claim("preferences", "车牌号这类信息不要写进文档。");
+        new DailyNotes(ledger).append("2026-11-15", "s-1", "车", "s-1_1", "10:00", "- 用户的车牌号是 京A-7Q2KD\n- 用户周三去物业");
+
+        List<Forgetting.Place> places = Forgetting.candidates(ledger, "我的车牌号是 京A-7Q2KD");
+        List<String> texts = places.stream().map(Forgetting.Place::text).toList();
+        assertTrue(texts.contains("我的车牌号是 京A-7Q2KD。") && texts.contains("- 用户的车牌号是 京A-7Q2KD"), texts.toString());
+        assertTrue(texts.contains("车牌号这类信息不要写进文档。"), "a loosely related line is offered, not decided: " + texts);
+        assertFalse(texts.contains("我住在朝阳区。") || texts.contains("- 用户周三去物业"), texts.toString());
+        assertEquals(3, ledger.items(item -> item.text().contains("车牌")).size(), "nothing changed yet");
+
+        List<String> chosen = places.stream().filter(place -> place.text().contains("7Q2KD")).map(Forgetting.Place::id).toList();
+        Forgetting.Chosen done = Forgetting.forget(ledger, chosen, MemoryItem.Actor.USER);
+        assertEquals(2, done.removed().size(), done.toString());
+        assertTrue(done.stale().isEmpty() && done.kept().isEmpty(), done.toString());
+        assertTrue(ledger.items(item -> item.text().contains("7Q2KD")).isEmpty());
+        assertEquals(1, ledger.items(item -> item.text().contains("我住在朝阳区。")).size(), "the other line of the entry stays");
+        assertEquals(1, ledger.items(item -> item.text().contains("车牌号这类信息不要写进文档")).size(), "the line that was not chosen stays");
+        assertEquals("- 用户周三去物业", new DailyNotes(ledger).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body());
+    }
+
+    /** 选的时候条目已经变了：不动，告诉调用方重找。你认可过的决定，模型选了也不动，你自己选才动。 */
+    @Test
+    void aChangedEntryIsLeftAloneAndAnApprovedDecisionOnlyTheUserCanForget() {
+        open(Instant.parse("2026-11-16T01:00:00Z"));
+        MemoryItem fee = claim("decisions", "加急附加费定为 15。");
+        MemoryItem approved = claim("decisions", "数据库用 PostgreSQL。");
+        ledger.put(ledger.get(approved.id()).orElseThrow().withStatus(MemoryItem.Status.APPROVED), ledger.get(approved.id()).orElseThrow().version());
+
+        String stalePlace = Forgetting.candidates(ledger, "加急附加费定为 15").getFirst().id();
+        ledger.put(ledger.get(fee.id()).orElseThrow().withText("加急附加费定为 18。"), ledger.get(fee.id()).orElseThrow().version());
+        Forgetting.Chosen stale = Forgetting.forget(ledger, List.of(stalePlace, "nonsense"), MemoryItem.Actor.USER);
+        assertEquals(List.of("nonsense", stalePlace), stale.stale());
+        assertTrue(stale.removed().isEmpty());
+        assertEquals(1, ledger.items(item -> item.text().contains("定为 18")).size());
+
+        Forgetting.Place decision = Forgetting.candidates(ledger, "数据库用 PostgreSQL").getFirst();
+        assertTrue(decision.approved());
+        Forgetting.Chosen byAgent = Forgetting.forget(ledger, List.of(decision.id()), MemoryItem.Actor.AGENT);
+        assertEquals(List.of(decision.id()), byAgent.kept());
+        assertEquals(1, ledger.items(item -> item.text().contains("PostgreSQL")).size());
+        Forgetting.Chosen byUser = Forgetting.forget(ledger, List.of(decision.id()), MemoryItem.Actor.USER);
+        assertEquals(List.of("数据库用 PostgreSQL。"), byUser.removed());
+        assertTrue(ledger.items(item -> item.text().contains("PostgreSQL")).isEmpty());
+    }
 }
