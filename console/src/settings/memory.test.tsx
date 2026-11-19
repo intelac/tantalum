@@ -15,7 +15,7 @@ interface Route {
   method?: string;
   path: string;
   status: number;
-  body: string;
+  body: string | (() => string);
 }
 
 /** 按方法和路径回应的假后端；记录每次调用。 */
@@ -26,7 +26,8 @@ function fakeBackend(routes: Route[]) {
     calls.push({ method, path: input, body: init?.body as string | undefined });
     const route = routes.find((candidate) => (candidate.method ?? "GET") === method && candidate.path === input);
     const status = route?.status ?? 404;
-    const body = route?.body ?? '{"error":"no such memory"}';
+    const given = route?.body ?? '{"error":"no such memory"}';
+    const body = typeof given === "string" ? given : given();
     return Promise.resolve({ ok: status >= 200 && status < 300, status, text: () => Promise.resolve(body) });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -148,16 +149,36 @@ describe("MemoryPane", () => {
     expect(screen.getByText(/可能过期/)).toBeTruthy();
   });
 
-  // memory-final-plan 第 10 节①：按一句话忘掉，发到服务器，说忘掉了几条
-  it("forgets by a sentence", async () => {
+  // 按一句话忘掉分两步：先找（什么都不改、一行都不替你勾），你勾了哪几行就只发那几行
+  it("forgets by a sentence only the lines the user ticks", async () => {
+    let step = 0;
     const calls = await openMemoryPane([
       { path: "/api/plugin-api/memory/entries", status: 200, body: JSON.stringify(LIST) },
-      { method: "POST", path: "/api/plugin-api/memory/forget", status: 200, body: '{"forgotten":2}' },
+      {
+        method: "POST",
+        path: "/api/plugin-api/memory/forget",
+        status: 200,
+        body: () =>
+          step++ === 0
+            ? JSON.stringify({
+                places: [
+                  { id: "a@1#0", kind: "CLAIM", page: "car", text: "车牌号是 7Q2KD", approved: false },
+                  { id: "b@2#1", kind: "CARD", text: "办停车证要用车牌 7Q2KD", approved: false },
+                ],
+              })
+            : '{"removed":["车牌号是 7Q2KD"],"stale":[]}',
+      },
     ]);
     await userEvent.type(await screen.findByRole("textbox", { name: /按一句话忘掉/ }), "我的车牌号");
-    await userEvent.click(screen.getByRole("button", { name: "忘掉" }));
-    expect(await screen.findByText("忘掉了 2 条。")).toBeTruthy();
-    const post = calls.find((call) => call.path === "/api/plugin-api/memory/forget");
-    expect(JSON.parse(post?.body ?? "{}")).toEqual({ text: "我的车牌号" });
+    await userEvent.click(screen.getByRole("button", { name: "查找" }));
+    const first = await screen.findByRole("checkbox", { name: /车牌号是 7Q2KD.*条目 car/ });
+    expect(screen.getByRole("checkbox", { name: /办停车证.*每天的笔记/ })).toHaveProperty("checked", false);
+    expect(first).toHaveProperty("checked", false);
+    expect(screen.getByRole("button", { name: "忘掉选中的" })).toHaveProperty("disabled", true);
+    await userEvent.click(first);
+    await userEvent.click(screen.getByRole("button", { name: "忘掉选中的 1 行" }));
+    expect(await screen.findByText("忘掉了 1 行。")).toBeTruthy();
+    const posts = calls.filter((call) => call.path === "/api/plugin-api/memory/forget").map((call) => JSON.parse(call.body ?? "{}"));
+    expect(posts).toEqual([{ find: "我的车牌号" }, { places: ["a@1#0"] }]);
   });
 });

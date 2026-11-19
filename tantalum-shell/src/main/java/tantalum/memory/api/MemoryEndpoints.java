@@ -199,7 +199,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
     /**
      * {@code POST forget {"find": "…"}}：只找，返回可能说这句话的地方 {@code {places: [{id, kind, page, text, approved}]}}，不动账。
      * {@code POST forget {"places": ["…"]}}：只去掉选中的那几行，返回 {@code {removed: [原文], stale: [没动的编号]}}。
-     * {@code POST forget {"text": "…"}}：旧的按一句话忘掉（程序按词重合定），控制台换成先找后选以后去掉。
+     * 哪几行算“说的是它”由调用的人定（控制台里是用户打勾），程序不替他选。
      */
     private PluginResponse forget(PluginRequest request) {
         Json.Obj input = request.body() instanceof Json.Obj given ? given : new Json.Obj(Map.of());
@@ -237,12 +237,7 @@ public final class MemoryEndpoints implements PluginEndpoints {
             view.put("stale", new Json.Arr(done.stale().stream().<Json>map(Json.Str::new).toList()));
             return PluginResponse.ok(new Json.Obj(view));
         }
-        String text = text(input, "text");
-        if (text == null || text.isBlank() || text.length() > 2000) {
-            return PluginResponse.error(400, INVALID, "find, places or text is required; text is at most 2000 characters", Map.of());
-        }
-        int forgotten = tantalum.memory.Forgetting.forget(stores.ledger(request.user()), text, MemoryItem.Actor.USER);
-        return PluginResponse.ok(obj("forgotten", num(forgotten)));
+        return PluginResponse.error(400, INVALID, "find or places is required", Map.of());
     }
 
     // ---- 工作记忆（memory-final-plan 第 5 节） ----

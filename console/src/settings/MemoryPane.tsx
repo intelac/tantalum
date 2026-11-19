@@ -7,7 +7,7 @@ import { relativeTime } from "../text/format";
 import { useText } from "../text";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
-import { useCreateMemory, useDeleteMemory, useForget, useMemories, useMemory } from "./useMemories";
+import { useCreateMemory, useDeleteMemory, useForget, useForgetCandidates, useMemories, useMemory } from "./useMemories";
 import { CaptureStatus, NotesList, NoteView } from "./NotesSection";
 import { NowSection } from "./NowSection";
 import { PendingSection } from "./PendingSection";
@@ -110,41 +110,106 @@ function ListView({ onOpen, onAdd }: { onOpen: (name: string) => void; onAdd: ()
   );
 }
 
-/** 按一句话忘掉（memory-final-plan 第 10 节①）：意思一样的记忆、从它来的、笔记里复述它的都去掉，以后换说法也找不回来。 */
+/**
+ * 按一句话忘掉：先找出记忆里可能说着它的行（只是候选，什么都不改），你勾出要忘的，只去掉勾中的那几行。
+ * 哪些行算“说的是这件事”由你定，程序不替你选，所以一开始一行都不勾。
+ */
 function ForgetForm() {
   const t = useText().memory.forget;
+  const find = useForgetCandidates();
   const forget = useForget();
   const [text, setText] = useState("");
-  function onSubmit(event: FormEvent) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const places = find.data?.places;
+  function onFind(event: FormEvent) {
     event.preventDefault();
     if (text.trim() === "") return;
-    forget.mutate(text.trim(), { onSuccess: () => setText("") });
+    setPicked([]);
+    forget.reset();
+    find.mutate(text.trim());
+  }
+  function onForget() {
+    forget.mutate(picked, {
+      onSuccess: () => {
+        setText("");
+        setPicked([]);
+        find.reset();
+      },
+    });
+  }
+  function toggle(id: string, on: boolean) {
+    setPicked((current) => (on ? [...current, id] : current.filter((each) => each !== id)));
   }
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-1.5 border-t border-line pt-3">
-      <label className="text-xs text-fg-muted" htmlFor="memory-forget">
-        {t.label}
-      </label>
-      <div className="flex gap-2">
-        <input
-          id="memory-forget"
-          className="min-w-0 flex-1 rounded-sm border border-line bg-raised px-2 py-1 text-sm text-fg"
-          value={text}
-          maxLength={2000}
-          placeholder={t.placeholder}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <Button type="submit" size="sm" variant="secondary" disabled={forget.isPending || text.trim() === ""}>
-          {t.submit}
-        </Button>
-      </div>
-      {forget.data !== undefined && <p className="text-xs text-fg-faint">{t.done(forget.data.forgotten)}</p>}
-      {forget.error !== null && (
+    <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+      <form onSubmit={onFind} className="flex flex-col gap-1.5">
+        <label className="text-xs text-fg-muted" htmlFor="memory-forget">
+          {t.label}
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="memory-forget"
+            className="min-w-0 flex-1 rounded-sm border border-line bg-raised px-2 py-1 text-sm text-fg"
+            value={text}
+            maxLength={2000}
+            placeholder={t.placeholder}
+            onChange={(event) => setText(event.target.value)}
+          />
+          <Button type="submit" size="sm" variant="secondary" disabled={find.isPending || text.trim() === ""}>
+            {t.find}
+          </Button>
+        </div>
+      </form>
+      {places !== undefined && places.length === 0 && <p className="text-xs text-fg-faint">{t.none}</p>}
+      {places !== undefined && places.length > 0 && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="pb-1.5 text-xs text-fg-muted">{t.choose}</legend>
+          <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+            {places.map((place) => (
+              <li key={place.id}>
+                <label className="flex cursor-pointer items-start gap-2 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={picked.includes(place.id)}
+                    onChange={(event) => toggle(place.id, event.target.checked)}
+                  />
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="break-words text-sm text-fg">{place.text}</span>
+                    <span className="text-xs text-fg-faint">
+                      {t.where(place.kind, place.page)}
+                      {place.approved && ` · ${t.approved}`}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="danger" disabled={forget.isPending || picked.length === 0} onClick={onForget}>
+              {t.submit(picked.length)}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPicked([]);
+                find.reset();
+              }}
+            >
+              {t.cancel}
+            </Button>
+          </div>
+        </fieldset>
+      )}
+      {forget.data !== undefined && <p className="text-xs text-fg-faint">{t.done(forget.data.removed.length, forget.data.stale.length)}</p>}
+      {(find.error ?? forget.error) !== null && (
         <p role="alert" className="text-xs text-danger">
-          {errorLine(forget.error)}
+          {errorLine(find.error ?? forget.error)}
         </p>
       )}
-    </form>
+    </div>
   );
 }
 

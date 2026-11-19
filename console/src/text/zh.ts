@@ -1127,10 +1127,17 @@ export const zh = {
         ({ tool_web: "来自网页", tool_file: "来自文件", tool_other: "来自工具", assistant_inferred: "模型推断", other_person: "别人说的" })[String(source)] ?? String(source),
     },
     forget: {
-      label: "按一句话忘掉：意思一样的记忆、从它来的、笔记里复述它的都去掉，以后换说法也找不回来。",
+      label: "按一句话忘掉：先找出记忆里可能说着这件事的行，你勾出要忘的，只去掉勾中的那几行。",
       placeholder: "比如：我的车牌号",
-      submit: "忘掉",
-      done: (count: number) => (count === 0 ? "没有找到这样的记忆，笔记里复述它的已去掉。" : `忘掉了 ${count} 条。`),
+      find: "查找",
+      none: "没有找到说这件事的记忆。",
+      choose: "这些行可能说的是它。勾出要忘掉的：",
+      where: (kind: string, page?: string) => (kind === "CLAIM" ? `条目 ${page ?? ""}` : kind === "CARD" ? "每天的笔记" : "工作记忆"),
+      approved: "你认可过的决定",
+      submit: (count: number) => (count === 0 ? "忘掉选中的" : `忘掉选中的 ${count} 行`),
+      cancel: "取消",
+      done: (removed: number, stale: number) =>
+        stale === 0 ? `忘掉了 ${removed} 行。` : `忘掉了 ${removed} 行；有 ${stale} 行在这期间变了，没动，请再找一次。`,
     },
     notes: {
       title: "每天的笔记",

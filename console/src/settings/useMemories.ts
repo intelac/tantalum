@@ -6,7 +6,8 @@ import {
   confirmPending,
   createMemory,
   deleteMemory,
-  forgetMemory,
+  findForgetPlaces,
+  forgetPlaces,
   getMemory,
   getNow,
   getPending,
@@ -91,11 +92,16 @@ export function useUpdateNow() {
   });
 }
 
-/** 按一句话忘掉；做完让记忆、笔记、工作记忆都重新取。 */
+/** 按一句话找出记忆里可能说着它的行；只是找，不改。 */
+export function useForgetCandidates() {
+  return useMutation({ mutationFn: (text: string) => findForgetPlaces(text) });
+}
+
+/** 忘掉选中的行；做完让记忆、笔记、工作记忆都重新取。 */
 export function useForget() {
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) => forgetMemory(text),
+    mutationFn: (places: string[]) => forgetPlaces(places),
     onSuccess: () => {
       void queries.invalidateQueries({ queryKey: MEMORY_KEY });
       void queries.invalidateQueries({ queryKey: NOW_KEY });

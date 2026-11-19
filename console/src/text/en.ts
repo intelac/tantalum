@@ -1106,10 +1106,17 @@ export const en: Text = {
         ({ tool_web: "from a web page", tool_file: "from a file", tool_other: "from a tool", assistant_inferred: "inferred by the model", other_person: "said by someone else" })[String(source)] ?? String(source),
     },
     forget: {
-      label: "Forget by a sentence: memories that say the same, ones derived from them, and notes that restate them are removed and will not come back under other words.",
+      label: "Forget by a sentence: find the lines in memory that may say it, tick the ones to forget, and only those lines are removed.",
       placeholder: "For example: my licence plate",
-      submit: "Forget",
-      done: (count) => (count === 0 ? "No such memory was found; notes restating it were cleaned." : `Forgot ${count}.`),
+      find: "Find",
+      none: "No memory was found that says this.",
+      choose: "These lines may say it. Tick the ones to forget:",
+      where: (kind, page) => (kind === "CLAIM" ? `Entry ${page ?? ""}` : kind === "CARD" ? "Daily notes" : "Working memory"),
+      approved: "a decision you approved",
+      submit: (count) => (count === 0 ? "Forget selected" : `Forget ${count} selected`),
+      cancel: "Cancel",
+      done: (removed, stale) =>
+        stale === 0 ? `Forgot ${removed}.` : `Forgot ${removed}; ${stale} changed in the meantime and were left alone. Please find again.`,
     },
     notes: {
       title: "Daily notes",
