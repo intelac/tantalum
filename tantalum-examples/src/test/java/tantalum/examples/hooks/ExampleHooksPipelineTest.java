@@ -41,7 +41,7 @@ class ExampleHooksPipelineTest {
      * 2026-11-19 memory_delete 改成“先找后选”，说明长了 200 token 左右，窗口加 200。阈值相对固定部分的位置不变。
      */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
-        "--tantalum.claude.context-window=5950", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
+        "--tantalum.claude.context-window=6250", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
         // 这里测的是钩子和压缩，不用抓网页（web-tools，同 CompactApiTest）
         "--tantalum.web.fetch.enabled=false"};
