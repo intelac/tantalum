@@ -31,7 +31,13 @@ public final class Recall {
     /** 一条找回：条目、所在页面的说明（没有为 null）、分数。 */
     public record Hit(MemoryItem item, String pageDescription, double score) {}
 
+    /** 一次找回：给出去的几条，和另外还有几条也对得上但没给（让模型知道没给全，要数数、要列全时再找）。 */
+    public record Found(List<Hit> hits, int more) {}
+
+    /** 回答前自动想起的条数：每一轮都带，要省。 */
     public static final int LIMIT = 6;
+    /** 模型自己用 memory_search 找时给的条数：它是特意来找的，多给一些。 */
+    public static final int SEARCH_LIMIT = 12;
     public static final int WINDOW_LIMIT = 12;
 
     private final Ledger ledger;
@@ -83,6 +89,14 @@ public final class Recall {
      * 向量一路只认范围内、没被取代的条目（和关键词一路同一批候选）。问的是某段时间时照旧只按时间找，不用向量。
      */
     public List<Hit> search(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near) {
+        return find(question, extra, dir, zone, near, LIMIT).hits();
+    }
+
+    /**
+     * 同上，最多给 {@code limit} 条，并说出还有几条没给。一张当天卡的小结里逐字写着已经给出的某条说法时，这张卡不再给
+     * （同一件事不占两个位置；说法带编号，卡是它的出处）。问的是某段时间时不这样去：那时要的就是卡。
+     */
+    public Found find(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near, int limit) {
         LocalDate today = LocalDate.ofInstant(ledger.clock().instant(), zone);
         Optional<TimeWindow> window = TimeWindow.in(question, today);
         Set<String> wanted = new HashSet<>(Terms.of(question));
@@ -119,7 +133,7 @@ public final class Recall {
         if (window.isPresent()) {
             List<Hit> picked = new ArrayList<>(hits.size() > WINDOW_LIMIT ? hits.subList(0, WINDOW_LIMIT) : hits);
             picked.sort(Comparator.comparing(hit -> hit.item().validFrom()));
-            return List.copyOf(picked);
+            return new Found(List.copyOf(picked), hits.size() - picked.size());
         }
         if (!near.isEmpty()) {
             Map<String, Candidate> byId = new HashMap<>();
@@ -141,7 +155,22 @@ public final class Recall {
             }
             hits.sort(Comparator.comparingDouble(Hit::score).reversed().thenComparing(hit -> hit.item().validFrom(), Comparator.reverseOrder()));
         }
-        return hits.size() > LIMIT ? List.copyOf(hits.subList(0, LIMIT)) : List.copyOf(hits);
+        List<Hit> left = new ArrayList<>(hits);
+        while (true) {
+            List<Hit> shown = left.subList(0, Math.min(limit, left.size()));
+            Optional<Hit> repeated = shown.stream().filter(card -> card.item().kind() == MemoryItem.Kind.CARD
+                    && shown.stream().anyMatch(claim -> claim.item().kind() == MemoryItem.Kind.CLAIM && summarizes(card.item(), claim.item()))).findFirst();
+            if (repeated.isEmpty()) {
+                return new Found(List.copyOf(shown), left.size() - shown.size());
+            }
+            left.remove(repeated.get());
+        }
+    }
+
+    /** 这张卡的小结里有一行逐字就是这条说法。 */
+    private static boolean summarizes(MemoryItem card, MemoryItem claim) {
+        String said = claim.text().strip();
+        return card.text().lines().map(String::strip).anyMatch(line -> line.startsWith("- ") && line.substring(2).strip().equals(said));
     }
 
     /** 该有向量的条目：生效的、没被取代的说法和当天卡，不分范围（范围在找的时候再筛）。 */

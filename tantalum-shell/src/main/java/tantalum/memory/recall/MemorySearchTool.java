@@ -58,9 +58,9 @@ public final class MemorySearchTool implements Tool {
             return ToolOutput.error("This conversation is off the record: memory is not read or written.");
         }
         ZoneId zone = zones.apply(context.principal());
-        List<Recall.Hit> hits = new Recall(stores.ledger(context.principal())).search(query, "", context.dir(), zone,
-                semantic.near(context.principal(), query));
-        String text = RecallText.of(hits, zone);
+        Recall.Found found = new Recall(stores.ledger(context.principal())).find(query, "", context.dir(), zone,
+                semantic.near(context.principal(), query), Recall.SEARCH_LIMIT);
+        String text = RecallText.of(found, zone);
         return ToolOutput.ok(text == null ? "Nothing in memory matches \"" + query + "\". Try other words or another language." : text);
     }
 }

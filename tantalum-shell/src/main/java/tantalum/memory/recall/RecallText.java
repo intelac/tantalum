@@ -18,7 +18,8 @@ public final class RecallText {
     private RecallText() {}
 
     /** 没有命中时为 null。 */
-    public static String of(List<Recall.Hit> hits, ZoneId zone) {
+    public static String of(Recall.Found found, ZoneId zone) {
+        List<Recall.Hit> hits = found.hits();
         if (hits.isEmpty()) {
             return null;
         }
@@ -31,6 +32,12 @@ public final class RecallText {
                     // 说法带上编号：模型记一条取代它的新说法时要写明是哪一条（memory_note 的 replaces）
                     .append(item.kind() == MemoryItem.Kind.CLAIM ? " · id " + item.id() : "").append("] ")
                     .append(item.text().replaceAll("\\s+", " ").strip()).append('\n');
+        }
+        // 没给全就照实说：要数数、要列全的问题，只看这几条会少算（LongMemEval 11-19：五件事只给了三件，模型照着数成三）
+        if (found.more() > 0) {
+            text.append("(").append(found.more()).append(found.more() == 1 ? " more note matches" : " more notes match")
+                    .append(" and ").append(found.more() == 1 ? "is" : "are").append(" not shown. This list is not complete: before you count, total "
+                    + "or list everything, use memory_search with other words to see the rest.)\n");
         }
         return text.append("</").append(TAG).append(">").toString();
     }

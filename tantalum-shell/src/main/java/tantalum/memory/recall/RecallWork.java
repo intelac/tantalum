@@ -89,23 +89,23 @@ public final class RecallWork implements WorkType {
         String extra = "";
         // 关键词一路和按意思一路合起来（向量给不出来时 near 是空的，就是原来的关键词找回）
         List<Vectors.Scored> near = semantic.near(context.principal(), question);
-        List<Recall.Hit> hits = recall.search(question, extra, dir, zone, near);
+        Recall.Found found = recall.find(question, extra, dir, zone, near, Recall.LIMIT);
         String rewritten = null;
-        if (recall.worthRewriting(question, hits, DEICTIC.matcher(question).find(), dir)) {
+        if (recall.worthRewriting(question, found.hits(), DEICTIC.matcher(question).find(), dir)) {
             rewritten = rewrite(context.principal(), question, recent);
             if (rewritten != null) {
-                hits = recall.search(question, rewritten, dir, zone, near);
+                found = recall.find(question, rewritten, dir, zone, near, Recall.LIMIT);
             }
         }
         Map<String, Json> result = new java.util.LinkedHashMap<>();
-        result.put("hits", new Json.Arr(hits.stream().map(hit -> (Json) new Json.Str(hit.item().id())).toList()));
+        result.put("hits", new Json.Arr(found.hits().stream().map(hit -> (Json) new Json.Str(hit.item().id())).toList()));
         if (rewritten != null) {
             result.put("rewritten", new Json.Str(rewritten));
         }
         if (!near.isEmpty()) {
             result.put("near", new Json.Num(java.math.BigDecimal.valueOf(near.size())));
         }
-        return new WorkResult(new Json.Obj(result), RecallText.of(hits, zone));
+        return new WorkResult(new Json.Obj(result), RecallText.of(found, zone));
     }
 
     /** 改写一次；超过 {@link #REWRITE_MILLIS} 或失败为 null。 */

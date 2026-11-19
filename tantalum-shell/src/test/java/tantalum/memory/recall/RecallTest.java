@@ -1,6 +1,7 @@
 package tantalum.memory.recall;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -102,7 +103,33 @@ class RecallTest {
         assertTrue(texts.containsAll(List.of("> 把海外那个区的运费费率调一下", "> 算了，刚才调费率那一下撤回去吧")), texts.toString());
         assertTrue(texts.stream().noneMatch(text -> text.startsWith("很久以前")), "only that period");
         assertTrue(texts.indexOf("> 把海外那个区的运费费率调一下") < texts.indexOf("> 算了，刚才调费率那一下撤回去吧"), "earlier first");
-        String shown = RecallText.of(hits, ZoneOffset.UTC);
+        String shown = RecallText.of(new Recall.Found(hits, 0), ZoneOffset.UTC);
         assertTrue(shown.contains("2026-11-16 03:00 · from that conversation: what follows > is what the user said"), shown);
+        assertFalse(shown.contains("not shown"), "nothing was left out, so nothing is said about more");
+    }
+
+    // LongMemEval 11-19：问“厨房里换过修过几样”，五件事都记着，但一次只给 6 条，每件事又占两条（说法和它出自的当天卡），
+    // 模型只看到三件就数成三。一张卡的小结逐字就是已给出的说法时不再给这张卡；没给全要照实说还有几条
+    @Test
+    void aCardThatRepeatsAShownStatementGivesItsPlaceToAnotherAndTheRestIsCounted() {
+        ledger = Ledger.open(dir, Clock.fixed(NOW, ZoneOffset.UTC));
+        page("about-me", "关于用户");
+        tantalum.memory.DailyNotes daily = new tantalum.memory.DailyNotes(ledger);
+        List<String> things = List.of("faucet", "mat", "shelves", "toaster", "kettle", "blender", "fridge", "oven");
+        for (int i = 0; i < things.size(); i++) {
+            String fact = "Replaced the old kitchen " + things.get(i);
+            claim("about-me", fact, 1);
+            daily.append("2026-11-15", "s-" + i, "kitchen", "s-" + i + "_1", "10:0" + i, "> by the way I replaced my kitchen " + things.get(i) + "\n- " + fact);
+        }
+        Recall recall = new Recall(ledger);
+        Recall.Found six = recall.find("Which kitchen things have I replaced?", "", null, ZoneOffset.UTC, List.of(), Recall.LIMIT);
+        assertEquals(Recall.LIMIT, six.hits().size());
+        assertEquals(Recall.LIMIT, six.hits().stream().map(hit -> hit.item().text().lines().reduce((first, last) -> last).orElseThrow()
+                .replaceFirst("^- ", "")).distinct().count(), "six places hold six different things, not three things twice");
+        assertTrue(six.more() >= 2, "the other things are counted as left out: " + six.more());
+        String shown = RecallText.of(six, ZoneOffset.UTC);
+        assertTrue(shown.contains("not shown. This list is not complete"), shown);
+        Recall.Found all = recall.find("Which kitchen things have I replaced?", "", null, ZoneOffset.UTC, List.of(), Recall.SEARCH_LIMIT);
+        assertEquals(things.size(), all.hits().stream().filter(hit -> hit.item().kind() == MemoryItem.Kind.CLAIM).count(), "the search tool's room holds all eight");
     }
 }
