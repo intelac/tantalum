@@ -37,7 +37,7 @@
     "params" : [ ]
   }, {
     "name" : "memory_search",
-    "description" : "Search this user's memory (entries and daily notes) by keywords and, where the server has it, by meaning; results show where each came from. Words like 'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying you do not know.",
+    "description" : "Search this user's memory (entries and daily notes) by keywords and, where the server has it, by meaning; results show where each came from. Words like 'three days ago' or '上周' narrow the dates. If nothing is found, try other words or another language before saying you do not know. When the result says more notes match, pass offset to read on: do that before you count or list everything.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,

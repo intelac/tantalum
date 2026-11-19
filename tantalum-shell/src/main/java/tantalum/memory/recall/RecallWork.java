@@ -96,12 +96,12 @@ public final class RecallWork implements WorkType, tantalum.shell.plugin.Configu
         String extra = "";
         // 关键词一路和按意思一路合起来（向量给不出来时 near 是空的，就是原来的关键词找回）
         List<Vectors.Scored> near = semantic.near(context.principal(), question);
-        Recall.Found found = recall.find(question, extra, dir, zone, near, Recall.LIMIT);
+        Recall.Found found = recall.find(question, extra, dir, zone, near, Recall.BEFORE_TURN);
         String rewritten = null;
         if (recall.worthRewriting(question, found.hits(), DEICTIC.matcher(question).find(), dir)) {
             rewritten = rewrite(context.principal(), question, recent);
             if (rewritten != null) {
-                found = recall.find(question, rewritten, dir, zone, near, Recall.LIMIT);
+                found = recall.find(question, rewritten, dir, zone, near, Recall.BEFORE_TURN);
             }
         }
         Map<String, Json> result = new java.util.LinkedHashMap<>();

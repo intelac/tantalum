@@ -19,6 +19,11 @@ public final class RecallText {
 
     /** 没有命中时为 null。 */
     public static String of(Recall.Found found, ZoneId zone) {
+        return of(found, zone, false);
+    }
+
+    /** {@code pageable}：是 memory_search 的结果，没给全时告诉模型带哪个 offset 接着读。 */
+    public static String of(Recall.Found found, ZoneId zone, boolean pageable) {
         List<Recall.Hit> hits = found.hits();
         if (hits.isEmpty()) {
             return null;
@@ -37,7 +42,8 @@ public final class RecallText {
         if (found.more() > 0) {
             text.append("(").append(found.more()).append(found.more() == 1 ? " more note matches" : " more notes match")
                     .append(" and ").append(found.more() == 1 ? "is" : "are").append(" not shown. This list is not complete: before you count, total "
-                    + "or list everything, use memory_search with other words to see the rest.)\n");
+                    + "or list everything, ").append(pageable ? "call memory_search again with the same query and offset=" + found.next() + " to read on."
+                    : "use memory_search to read the rest.").append(")\n");
         }
         return text.append("</").append(TAG).append(">").toString();
     }

@@ -32,12 +32,30 @@ public final class Recall {
     public record Hit(MemoryItem item, String pageDescription, double score) {}
 
     /** 一次找回：给出去的几条，和另外还有几条也对得上但没给（让模型知道没给全，要数数、要列全时再找）。 */
-    public record Found(List<Hit> hits, int more) {}
+    public record Found(List<Hit> hits, int more, int next) {}
+
+    /**
+     * 一次给多少：最多 {@code items} 条、文字加起来不超过 {@code chars} 个字符（至少给一条），从第 {@code skip} 条之后开始。
+     * 按字数算而不是只按条数：说法短、当天卡长，同样的篇幅能放下的短说法更多；记忆多了以后靠 {@code skip} 接着往下读，不靠把上限调大。
+     */
+    public record Room(int items, int chars, int skip) {
+        public Room {
+            items = Math.max(1, items);
+            chars = Math.max(1, chars);
+            skip = Math.max(0, skip);
+        }
+
+        public Room from(int skipped) {
+            return new Room(items, chars, skipped);
+        }
+    }
 
     /** 回答前自动想起的条数：每一轮都带，要省。 */
     public static final int LIMIT = 6;
-    /** 模型自己用 memory_search 找时给的条数：它是特意来找的，多给一些。 */
-    public static final int SEARCH_LIMIT = 12;
+    /** 回答前自动想起的：每一轮都带，篇幅和原来六张当天卡差不多，短说法可以多放几条。 */
+    public static final Room BEFORE_TURN = new Room(12, 2400, 0);
+    /** 模型自己用 memory_search 找时：它是特意来找的，多给一些；还不够就带 offset 接着读。 */
+    public static final Room SEARCH = new Room(30, 8000, 0);
     public static final int WINDOW_LIMIT = 12;
 
     private final Ledger ledger;
@@ -89,14 +107,14 @@ public final class Recall {
      * 向量一路只认范围内、没被取代的条目（和关键词一路同一批候选）。问的是某段时间时照旧只按时间找，不用向量。
      */
     public List<Hit> search(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near) {
-        return find(question, extra, dir, zone, near, LIMIT).hits();
+        return find(question, extra, dir, zone, near, new Room(LIMIT, Integer.MAX_VALUE, 0)).hits();
     }
 
     /**
-     * 同上，最多给 {@code limit} 条，并说出还有几条没给。一张当天卡的小结里逐字写着已经给出的某条说法时，这张卡不再给
-     * （同一件事不占两个位置；说法带编号，卡是它的出处）。问的是某段时间时不这样去：那时要的就是卡。
+     * 同上，给 {@code room} 放得下的那些，并说出还有几条没给、接着读从第几条起。一张当天卡的小结里逐字写着某条也对得上的说法时，
+     * 这张卡不给（同一件事不占两个位置；说法带编号，卡是它的出处）。问的是某段时间时不这样去：那时要的就是卡。
      */
-    public Found find(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near, int limit) {
+    public Found find(String question, String extra, String dir, ZoneId zone, List<Vectors.Scored> near, Room room) {
         LocalDate today = LocalDate.ofInstant(ledger.clock().instant(), zone);
         Optional<TimeWindow> window = TimeWindow.in(question, today);
         Set<String> wanted = new HashSet<>(Terms.of(question));
@@ -131,9 +149,10 @@ public final class Recall {
         }
         hits.sort(Comparator.comparingDouble(Hit::score).reversed().thenComparing(hit -> hit.item().validFrom(), Comparator.reverseOrder()));
         if (window.isPresent()) {
-            List<Hit> picked = new ArrayList<>(hits.size() > WINDOW_LIMIT ? hits.subList(0, WINDOW_LIMIT) : hits);
+            int from = Math.min(room.skip(), hits.size());
+            List<Hit> picked = new ArrayList<>(hits.subList(from, Math.min(hits.size(), from + WINDOW_LIMIT)));
             picked.sort(Comparator.comparing(hit -> hit.item().validFrom()));
-            return new Found(List.copyOf(picked), hits.size() - picked.size());
+            return new Found(List.copyOf(picked), hits.size() - from - picked.size(), from + picked.size());
         }
         if (!near.isEmpty()) {
             Map<String, Candidate> byId = new HashMap<>();
@@ -155,16 +174,20 @@ public final class Recall {
             }
             hits.sort(Comparator.comparingDouble(Hit::score).reversed().thenComparing(hit -> hit.item().validFrom(), Comparator.reverseOrder()));
         }
-        List<Hit> left = new ArrayList<>(hits);
-        while (true) {
-            List<Hit> shown = left.subList(0, Math.min(limit, left.size()));
-            Optional<Hit> repeated = shown.stream().filter(card -> card.item().kind() == MemoryItem.Kind.CARD
-                    && shown.stream().anyMatch(claim -> claim.item().kind() == MemoryItem.Kind.CLAIM && summarizes(card.item(), claim.item()))).findFirst();
-            if (repeated.isEmpty()) {
-                return new Found(List.copyOf(shown), left.size() - shown.size());
+        List<MemoryItem> claims = hits.stream().map(Hit::item).filter(item -> item.kind() == MemoryItem.Kind.CLAIM).toList();
+        List<Hit> distinct = hits.stream().filter(hit -> hit.item().kind() != MemoryItem.Kind.CARD
+                || claims.stream().noneMatch(claim -> summarizes(hit.item(), claim))).toList();
+        int from = Math.min(room.skip(), distinct.size());
+        List<Hit> shown = new ArrayList<>();
+        int chars = 0;
+        for (Hit hit : distinct.subList(from, distinct.size())) {
+            chars += hit.item().text().length();
+            if (shown.size() >= room.items() || !shown.isEmpty() && chars > room.chars()) {
+                break;
             }
-            left.remove(repeated.get());
+            shown.add(hit);
         }
+        return new Found(List.copyOf(shown), distinct.size() - from - shown.size(), from + shown.size());
     }
 
     /** 这张卡的小结里有一行逐字就是这条说法。 */

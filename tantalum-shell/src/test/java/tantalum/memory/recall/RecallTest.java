@@ -103,7 +103,7 @@ class RecallTest {
         assertTrue(texts.containsAll(List.of("> 把海外那个区的运费费率调一下", "> 算了，刚才调费率那一下撤回去吧")), texts.toString());
         assertTrue(texts.stream().noneMatch(text -> text.startsWith("很久以前")), "only that period");
         assertTrue(texts.indexOf("> 把海外那个区的运费费率调一下") < texts.indexOf("> 算了，刚才调费率那一下撤回去吧"), "earlier first");
-        String shown = RecallText.of(new Recall.Found(hits, 0), ZoneOffset.UTC);
+        String shown = RecallText.of(new Recall.Found(hits, 0, hits.size()), ZoneOffset.UTC);
         assertTrue(shown.contains("2026-11-16 03:00 · from that conversation: what follows > is what the user said"), shown);
         assertFalse(shown.contains("not shown"), "nothing was left out, so nothing is said about more");
     }
@@ -122,14 +122,28 @@ class RecallTest {
             daily.append("2026-11-15", "s-" + i, "kitchen", "s-" + i + "_1", "10:0" + i, "> by the way I replaced my kitchen " + things.get(i) + "\n- " + fact);
         }
         Recall recall = new Recall(ledger);
-        Recall.Found six = recall.find("Which kitchen things have I replaced?", "", null, ZoneOffset.UTC, List.of(), Recall.LIMIT);
-        assertEquals(Recall.LIMIT, six.hits().size());
-        assertEquals(Recall.LIMIT, six.hits().stream().map(hit -> hit.item().text().lines().reduce((first, last) -> last).orElseThrow()
-                .replaceFirst("^- ", "")).distinct().count(), "six places hold six different things, not three things twice");
-        assertTrue(six.more() >= 2, "the other things are counted as left out: " + six.more());
-        String shown = RecallText.of(six, ZoneOffset.UTC);
-        assertTrue(shown.contains("not shown. This list is not complete"), shown);
-        Recall.Found all = recall.find("Which kitchen things have I replaced?", "", null, ZoneOffset.UTC, List.of(), Recall.SEARCH_LIMIT);
-        assertEquals(things.size(), all.hits().stream().filter(hit -> hit.item().kind() == MemoryItem.Kind.CLAIM).count(), "the search tool's room holds all eight");
+        String question = "Which kitchen things have I replaced?";
+        Recall.Found six = recall.find(question, "", null, ZoneOffset.UTC, List.of(), new Recall.Room(6, 10_000, 0));
+        assertEquals(6, six.hits().size());
+        assertTrue(six.hits().stream().allMatch(hit -> hit.item().kind() == MemoryItem.Kind.CLAIM), "six places hold six things, not three things twice");
+        assertEquals(2, six.more(), "the other two are counted as left out; the cards that only repeat a statement are not");
+        assertEquals(6, six.next());
+        assertTrue(RecallText.of(six, ZoneOffset.UTC).contains("2 more notes match and are not shown. This list is not complete"));
+        assertTrue(RecallText.of(six, ZoneOffset.UTC, true).contains("call memory_search again with the same query and offset=6"));
+
+        // 接着读：第二页正好是剩下的两条，和第一页不重复，读完就不再说还有
+        Recall.Found rest = recall.find(question, "", null, ZoneOffset.UTC, List.of(), new Recall.Room(6, 10_000, six.next()));
+        assertEquals(2, rest.hits().size());
+        assertEquals(0, rest.more());
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        six.hits().forEach(hit -> seen.add(hit.item().id()));
+        assertTrue(rest.hits().stream().noneMatch(hit -> seen.contains(hit.item().id())), "no statement comes twice");
+        assertFalse(RecallText.of(rest, ZoneOffset.UTC, true).contains("not shown"));
+
+        // 按篇幅给：放得下几条给几条，至少一条
+        int each = six.hits().getFirst().item().text().length();
+        assertEquals(3, recall.find(question, "", null, ZoneOffset.UTC, List.of(), new Recall.Room(30, each * 3 + 5, 0)).hits().size());
+        assertEquals(1, recall.find(question, "", null, ZoneOffset.UTC, List.of(), new Recall.Room(30, 1, 0)).hits().size());
+        assertEquals(things.size(), recall.find(question, "", null, ZoneOffset.UTC, List.of(), Recall.SEARCH).hits().size(), "the search tool's room holds all eight");
     }
 }
