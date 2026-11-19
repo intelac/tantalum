@@ -16,7 +16,7 @@
     "params" : [ ]
   }, {
     "name" : "memory_delete",
-    "description" : "Forget something. name: delete a whole memory entry. text: forget one thing the user said or no longer wants (give the statement itself, in the user's words); it is removed from every entry, note and working memory and is not brought back later, while the rest of those entries stays. Use text when the user takes back one statement; do not rewrite the entry by hand for that. Give name or text.",
+    "description" : "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement itself, in the user's words); this only looks and returns the places in memory that may say it, each with an id, and changes nothing. places: the ids, from that list, of the places that do say it; exactly those lines are removed and the rest of each entry stays. You decide which places are about it: a place that merely shares a word is not. Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. Give name, text or places.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,

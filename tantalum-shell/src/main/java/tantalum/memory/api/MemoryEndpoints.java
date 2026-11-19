@@ -196,11 +196,50 @@ public final class MemoryEndpoints implements PluginEndpoints {
 
     // ---- 忘掉（memory-final-plan 第 10 节①“不再使用”） ----
 
-    /** {@code POST forget {"text": "…"}}：按一句话忘掉，返回 {@code {forgotten: 条数}}。 */
+    /**
+     * {@code POST forget {"find": "…"}}：只找，返回可能说这句话的地方 {@code {places: [{id, kind, page, text, approved}]}}，不动账。
+     * {@code POST forget {"places": ["…"]}}：只去掉选中的那几行，返回 {@code {removed: [原文], stale: [没动的编号]}}。
+     * {@code POST forget {"text": "…"}}：旧的按一句话忘掉（程序按词重合定），控制台换成先找后选以后去掉。
+     */
     private PluginResponse forget(PluginRequest request) {
-        String text = request.body() instanceof Json.Obj input ? text(input, "text") : null;
+        Json.Obj input = request.body() instanceof Json.Obj given ? given : new Json.Obj(Map.of());
+        String find = text(input, "find");
+        if (find != null) {
+            if (find.isBlank() || find.length() > 2000) {
+                return PluginResponse.error(400, INVALID, "find is required and at most 2000 characters", Map.of());
+            }
+            List<Json> places = new java.util.ArrayList<>();
+            for (tantalum.memory.Forgetting.Place place : tantalum.memory.Forgetting.candidates(stores.ledger(request.user()), find.strip())) {
+                Map<String, Json> view = new java.util.LinkedHashMap<>();
+                view.put("id", new Json.Str(place.id()));
+                view.put("kind", new Json.Str(place.kind().name()));
+                if (place.page() != null) {
+                    view.put("page", new Json.Str(place.page()));
+                }
+                view.put("text", new Json.Str(place.text()));
+                view.put("approved", new Json.Bool(place.approved()));
+                places.add(new Json.Obj(view));
+            }
+            return PluginResponse.ok(obj("places", new Json.Arr(places)));
+        }
+        if (input.fields().get("places") instanceof Json.Arr chosen) {
+            List<String> ids = chosen.items().stream().filter(Json.Str.class::isInstance).map(each -> ((Json.Str) each).value()).toList();
+            if (ids.isEmpty() || ids.size() > 100) {
+                return PluginResponse.error(400, INVALID, "places must hold 1 to 100 ids", Map.of());
+            }
+            tantalum.memory.Forgetting.Chosen done;
+            tantalum.memory.MemoryStore store = stores.of(request.user());
+            synchronized (store) {
+                done = tantalum.memory.Forgetting.forget(store.ledger(), ids, MemoryItem.Actor.USER);
+            }
+            Map<String, Json> view = new java.util.LinkedHashMap<>();
+            view.put("removed", new Json.Arr(done.removed().stream().<Json>map(Json.Str::new).toList()));
+            view.put("stale", new Json.Arr(done.stale().stream().<Json>map(Json.Str::new).toList()));
+            return PluginResponse.ok(new Json.Obj(view));
+        }
+        String text = text(input, "text");
         if (text == null || text.isBlank() || text.length() > 2000) {
-            return PluginResponse.error(400, INVALID, "text is required and at most 2000 characters", Map.of());
+            return PluginResponse.error(400, INVALID, "find, places or text is required; text is at most 2000 characters", Map.of());
         }
         int forgotten = tantalum.memory.Forgetting.forget(stores.ledger(request.user()), text, MemoryItem.Actor.USER);
         return PluginResponse.ok(obj("forgotten", num(forgotten)));
