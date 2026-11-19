@@ -1247,7 +1247,8 @@ export const zh = {
       dirs: (list: string) => `允许的目录：${list}`,
       write: (allowed: boolean) => (allowed ? "可以改文件" : "不能改文件"),
       shell: (allowed: boolean) => (allowed ? "可以跑命令" : "不能跑命令"),
-      expires: (time: string, minutes: number) => `${time} 到期，还有 ${minutes} 分钟`,
+      expires: (time: string, minutes: number) =>
+        `${time} 到期，还有 ${minutes >= 2880 ? `${Math.floor(minutes / 1440)} 天` : minutes >= 120 ? `${Math.floor(minutes / 60)} 小时` : `${minutes} 分钟`}`,
       expired: "已到期，连接马上断开",
       switches: {
         "fs-read": ["读文件", "读、列、找、搜允许目录里的文件：read_file、list_dir、find_files、grep。"],
@@ -1302,7 +1303,7 @@ export const zh = {
       noGit: "这台电脑上没有装 git，Git 查询用不了",
       connect: "连接这台电脑",
       validity: "有效期",
-      validities: { "30m": "半小时", "1h": "1 小时", "4h": "4 小时", "1d": "1 天" } satisfies Record<LocalValidity, string>,
+      validities: { "30m": "半小时", "1h": "1 小时", "4h": "4 小时", "1d": "1 天", "90d": "3 个月" } satisfies Record<LocalValidity, string>,
       issued: (time: string) => `在电脑的终端里运行下面这条命令。令牌只显示这一次，${time} 到期。`,
       commandSteps: "怎么运行",
       commandHint: [

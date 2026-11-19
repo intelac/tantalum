@@ -1219,7 +1219,8 @@ export const ja: Text = {
       dirs: (list) => `許可したディレクトリ：${list}`,
       write: (allowed) => (allowed ? "ファイルを変更できます" : "ファイルを変更できません"),
       shell: (allowed) => (allowed ? "コマンドを実行できます" : "コマンドを実行できません"),
-      expires: (time, minutes) => `${time} に期限切れ（残り ${minutes} 分）`,
+      expires: (time, minutes) =>
+        `${time} に期限切れ（残り ${minutes >= 2880 ? `${Math.floor(minutes / 1440)} 日` : minutes >= 120 ? `${Math.floor(minutes / 60)} 時間` : `${minutes} 分`}）`,
       expired: "期限切れのため、まもなく切断します",
       switches: {
         "fs-read": ["ファイルの読み取り", "許可したディレクトリのファイルを読み、一覧し、探し、検索します：read_file、list_dir、find_files、grep。"],
@@ -1273,7 +1274,7 @@ export const ja: Text = {
       noGit: "このコンピューターに git がインストールされていないため、Git 照会は使えません",
       connect: "このコンピューターを接続",
       validity: "有効期間",
-      validities: { "30m": "30 分", "1h": "1 時間", "4h": "4 時間", "1d": "1 日" },
+      validities: { "30m": "30 分", "1h": "1 時間", "4h": "4 時間", "1d": "1 日", "90d": "3 か月" },
       issued: (time) => `コンピューターのターミナルで次のコマンドを実行してください。トークンが表示されるのは今回だけで、${time} に期限切れになります。`,
       commandSteps: "実行のしかた",
       commandHint: [

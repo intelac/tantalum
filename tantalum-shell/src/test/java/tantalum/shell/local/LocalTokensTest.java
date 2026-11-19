@@ -48,9 +48,9 @@ class LocalTokensTest {
 
     /** 插件页只给四种有效期，接口收到别的值也不能发出令牌。 */
     @Test
-    void onlyTheFourValiditiesAreIssued() throws Exception {
+    void onlyTheFiveValiditiesAreIssued() throws Exception {
         try (LocalTokens tokens = LocalTokens.open(data, clock)) {
-            for (Duration validity : List.of(Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofHours(4), Duration.ofDays(1))) {
+            for (Duration validity : List.of(Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofHours(4), Duration.ofDays(1), Duration.ofDays(90))) {
                 Issued issued = tokens.issue(ALICE, validity);
                 assertEquals(START.plus(validity), issued.expiresAt());
                 assertEquals(START.plus(validity), tokens.verify(issued.token()).expiresAt());

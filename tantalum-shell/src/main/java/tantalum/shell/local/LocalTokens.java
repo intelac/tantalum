@@ -25,13 +25,14 @@ import tantalum.value.id.Principal;
 
 /**
  * 连接这台电脑用的令牌。存在 {@code users.db} 的 {@code local_tokens} 表里，只存 SHA-256，
- * 原始令牌只在 {@link #issue} 的返回值里出现一次。有效期只认四种；到期或撤销后不能再用。到期超过 7 天的行在启动时删掉。
+ * 原始令牌只在 {@link #issue} 的返回值里出现一次。有效期只认五种；到期或撤销后不能再用。到期超过 7 天的行在启动时删掉。
  * 令牌不进日志：这里不写日志，报错也不带令牌。
  */
 public final class LocalTokens implements AutoCloseable {
 
-    /** 插件页能选的有效期：半小时、1 小时、4 小时、1 天（Yi 2026-11-06 定）。 */
-    public static final Set<Duration> VALIDITIES = Set.of(Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofHours(4), Duration.ofDays(1));
+    /** 插件页能选的有效期：半小时、1 小时、4 小时、1 天（Yi 2026-11-06 定），3 个月（90 天，Yi 2026-11-20 加：自己长期用的机器不想天天换）。 */
+    public static final Set<Duration> VALIDITIES = Set.of(Duration.ofMinutes(30), Duration.ofHours(1), Duration.ofHours(4), Duration.ofDays(1),
+            Duration.ofDays(90));
 
     /** 令牌的前缀，连接程序据此认出“像令牌的参数”并拒绝。 */
     public static final String PREFIX = "tc_";
@@ -110,10 +111,10 @@ public final class LocalTokens implements AutoCloseable {
         return tokens;
     }
 
-    /** 发一个新令牌。有效期不是四种之一时抛 {@link IllegalArgumentException}。 */
+    /** 发一个新令牌。有效期不是这五种之一时抛 {@link IllegalArgumentException}。 */
     public synchronized Issued issue(Principal principal, Duration validity) {
         if (!VALIDITIES.contains(validity)) {
-            throw new IllegalArgumentException("validity must be 30 minutes, 1 hour, 4 hours or 1 day: " + validity);
+            throw new IllegalArgumentException("validity must be 30 minutes, 1 hour, 4 hours, 1 day or 90 days: " + validity);
         }
         byte[] bytes = new byte[RANDOM_BYTES];
         random.nextBytes(bytes);

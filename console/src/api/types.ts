@@ -951,7 +951,7 @@ export interface LocalTool {
   enabled: boolean;
 }
 
-export type LocalValidity = "30m" | "1h" | "4h" | "1d";
+export type LocalValidity = "30m" | "1h" | "4h" | "1d" | "90d";
 
 /**
  * 技能目录、wiki 目录现在的情况（skills-wiki）：`off` 开关关着，`unset` 没填目录，`offline` 电脑没连上，`old` 连接程序太旧，

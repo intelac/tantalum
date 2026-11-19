@@ -33,7 +33,7 @@ public class LocalController {
 
     /** 页面上能选的有效期。 */
     static final Map<String, Duration> VALIDITIES = Map.of(
-            "30m", Duration.ofMinutes(30), "1h", Duration.ofHours(1), "4h", Duration.ofHours(4), "1d", Duration.ofDays(1));
+            "30m", Duration.ofMinutes(30), "1h", Duration.ofHours(1), "4h", Duration.ofHours(4), "1d", Duration.ofDays(1), "90d", Duration.ofDays(90));
 
     private final Engine engine;
     private final WebJson json;
@@ -97,7 +97,7 @@ public class LocalController {
     }
 
     /**
-     * 请求体 {@code {"validity": "30m" | "1h" | "4h" | "1d"}}。返回令牌、一行启动命令和到期时间。命令里的地址是浏览器访问的这个服务器；
+     * 请求体 {@code {"validity": "30m" | "1h" | "4h" | "1d" | "90d"}}。返回令牌、一行启动命令和到期时间。命令里的地址是浏览器访问的这个服务器；
      * 令牌放在环境变量里，不放在参数里。
      */
     @PostMapping("/api/local/tokens")
@@ -105,7 +105,7 @@ public class LocalController {
         Optional<JsonNode> parsed = json.read(body);
         String validity = parsed.map(node -> WebJson.text(node, "validity")).orElse(null);
         if (validity == null || !VALIDITIES.containsKey(validity)) {
-            return json.error(ErrorCode.REQUEST_INVALID, "validity must be one of 30m, 1h, 4h, 1d");
+            return json.error(ErrorCode.REQUEST_INVALID, "validity must be one of 30m, 1h, 4h, 1d, 90d");
         }
         LocalTokens.Issued issued = engine.localLinks().tokens().issue(WebJson.currentUser(), VALIDITIES.get(validity));
         Map<String, Object> response = new LinkedHashMap<>();

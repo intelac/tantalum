@@ -1225,7 +1225,8 @@ export const en: Text = {
       dirs: (list) => `Allowed directories: ${list}`,
       write: (allowed) => (allowed ? "Can change files" : "Cannot change files"),
       shell: (allowed) => (allowed ? "Can run commands" : "Cannot run commands"),
-      expires: (time, minutes) => `Expires at ${time}, ${plural(minutes, "minute", "minutes")} left`,
+      expires: (time, minutes) =>
+        `Expires at ${time}, ${minutes >= 2880 ? plural(Math.floor(minutes / 1440), "day", "days") : minutes >= 120 ? plural(Math.floor(minutes / 60), "hour", "hours") : plural(minutes, "minute", "minutes")} left`,
       expired: "Expired; disconnecting now",
       switches: {
         "fs-read": ["Read files", "Read, list, find and search files in allowed directories: read_file, list_dir, find_files, grep."],
@@ -1279,7 +1280,7 @@ export const en: Text = {
       noGit: "git is not installed on this computer, so Git queries are unavailable",
       connect: "Connect this computer",
       validity: "Valid for",
-      validities: { "30m": "30 minutes", "1h": "1 hour", "4h": "4 hours", "1d": "1 day" },
+      validities: { "30m": "30 minutes", "1h": "1 hour", "4h": "4 hours", "1d": "1 day", "90d": "3 months" },
       issued: (time) => `Run this command in the computer's terminal. The token is shown only once and expires at ${time}.`,
       commandSteps: "How to run it",
       commandHint: [

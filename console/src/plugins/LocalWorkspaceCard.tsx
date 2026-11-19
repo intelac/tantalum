@@ -20,7 +20,7 @@ const CHILDREN: LocalSwitch[] = ["fs-read", "git", "file-edit", "shell", "skills
 const SKILL_LISTS = 4;
 /** 从这个协议版本起，连接程序能驱动电脑上的浏览器。 */
 const BROWSER_TOOLS = 5;
-const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d"];
+const VALIDITIES: LocalValidity[] = ["30m", "1h", "4h", "1d", "90d"];
 const NO_SHELL_FLAG = "--allow-shell was not given";
 
 /**
