@@ -6,8 +6,6 @@ import {
   confirmPending,
   createMemory,
   deleteMemory,
-  findForgetPlaces,
-  forgetPlaces,
   getMemory,
   getNow,
   getPending,
@@ -17,7 +15,6 @@ import {
   withdrawPending,
 } from "../api/client";
 import type { WorkingItem } from "../api/types";
-import { NOTES_KEY } from "./useNotes";
 
 export const MEMORY_KEY = ["memory"] as const;
 
@@ -92,20 +89,3 @@ export function useUpdateNow() {
   });
 }
 
-/** 按一句话找出记忆里可能说着它的行；只是找，不改。 */
-export function useForgetCandidates() {
-  return useMutation({ mutationFn: (text: string) => findForgetPlaces(text) });
-}
-
-/** 忘掉选中的行；做完让记忆、笔记、工作记忆都重新取。 */
-export function useForget() {
-  const queries = useQueryClient();
-  return useMutation({
-    mutationFn: (places: string[]) => forgetPlaces(places),
-    onSuccess: () => {
-      void queries.invalidateQueries({ queryKey: MEMORY_KEY });
-      void queries.invalidateQueries({ queryKey: NOW_KEY });
-      void queries.invalidateQueries({ queryKey: NOTES_KEY });
-    },
-  });
-}

@@ -1105,20 +1105,6 @@ export const en: Text = {
       source: (source) =>
         ({ tool_web: "from a web page", tool_file: "from a file", tool_other: "from a tool", assistant_inferred: "inferred by the model", other_person: "said by someone else" })[String(source)] ?? String(source),
     },
-    forget: {
-      label: "Forget by a sentence: find the lines in memory and in past conversations that may say it, tick the ones to forget, and only those lines are removed.",
-      placeholder: "For example: my licence plate",
-      find: "Find",
-      none: "No memory was found that says this.",
-      choose: "These lines may say it. Tick the ones to forget:",
-      where: (kind, page) => 
-        kind === "TALK" ? (page === "user" ? "Said by you in a past conversation" : "Said by the assistant in a past conversation") : kind === "CLAIM" ? `Entry ${page ?? ""}` : kind === "CARD" ? "Daily notes" : "Working memory",
-      approved: "a decision you approved",
-      submit: (count) => (count === 0 ? "Forget selected" : `Forget ${count} selected`),
-      cancel: "Cancel",
-      done: (removed, stale) =>
-        stale === 0 ? `Forgot ${removed}.` : `Forgot ${removed}; ${stale} changed in the meantime and were left alone. Please find again.`,
-    },
     notes: {
       title: "Daily notes",
       hint: "Points noted automatically after each turn, one note per conversation per day. You can edit or delete them; deleted ones are not written back.",

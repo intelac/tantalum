@@ -1099,20 +1099,6 @@ export const ja: Text = {
       source: (source) =>
         ({ tool_web: "Web ページから", tool_file: "ファイルから", tool_other: "ツールから", assistant_inferred: "モデルの推測", other_person: "ほかの人の話" })[String(source)] ?? String(source),
     },
-    forget: {
-      label: "一文で忘れる：記憶と過去の会話からそのことを言っていそうな行を探し、忘れたい行にチェックを入れると、その行だけを消します。",
-      placeholder: "例：私の車のナンバー",
-      find: "探す",
-      none: "そのことを言っている記憶は見つかりませんでした。",
-      choose: "次の行がそれを言っているかもしれません。忘れたい行にチェックを入れてください：",
-      where: (kind, page) => 
-        kind === "TALK" ? (page === "user" ? "過去の会話であなたが言ったこと" : "過去の会話でアシスタントが言ったこと") : kind === "CLAIM" ? `項目 ${page ?? ""}` : kind === "CARD" ? "毎日のノート" : "作業メモ",
-      approved: "あなたが承認した決定",
-      submit: (count) => (count === 0 ? "選んだ行を忘れる" : `選んだ ${count} 行を忘れる`),
-      cancel: "キャンセル",
-      done: (removed, stale) =>
-        stale === 0 ? `${removed} 行忘れました。` : `${removed} 行忘れました。${stale} 行はその間に変わったため、そのままです。もう一度探してください。`,
-    },
     notes: {
       title: "毎日のノート",
       hint: "各ターンの後に自動で記録された要点です。会話ごと、1 日 1 つ。編集も削除もできます。削除したものは書き戻されません。",
