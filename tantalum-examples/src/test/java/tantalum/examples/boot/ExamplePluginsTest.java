@@ -115,8 +115,9 @@ class ExamplePluginsTest {
                     params.put(plugin.get("name").asString() + "." + param.get("key").asString(), param);
                 }
             }
-            // memory.capture 是服务器自带的记忆插件的（memory-plugin）
-            assertEquals(java.util.Set.of("dailyQuota.tokens", "memory.capture", "readOnly.tools", "toolApproval.tools", "truncateOutput.maxChars"),
+            // memory.* 是服务器自带的记忆插件的（memory-plugin）：自动记下，和按意思找回的四项
+            assertEquals(java.util.Set.of("dailyQuota.tokens", "memory.capture", "memory.vectors", "memory.embedding-url", "memory.embedding-model",
+                            "memory.embedding-dimensions", "readOnly.tools", "toolApproval.tools", "truncateOutput.maxChars"),
                     params.keySet(), "the other examples have no params");
             JsonNode tokens = params.get("dailyQuota.tokens");
             assertEquals(777, tokens.get("value").asInt());
