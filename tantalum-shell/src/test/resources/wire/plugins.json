@@ -16,7 +16,7 @@
     "params" : [ ]
   }, {
     "name" : "memory_delete",
-    "description" : "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement itself, in the user's words); this only looks and returns the places that may say it (in memory, and in past conversations where it was said), each with an id, and changes nothing. places: the ids, from that list, of the places that do say it; exactly those lines are removed from memory or withdrawn from the conversation, and the rest stays. You decide which places are about it: a place that merely shares a word is not. Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. Give name, text or places.",
+    "description" : "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement itself, in the user's words); this only looks and returns the places that may say it (in memory, and in past conversations where it was said), each with an id, and changes nothing. places: the ids, from that list, of the places that do say it; exactly those lines are removed from memory or withdrawn from the conversation, and the rest stays. You decide which places are about it: a place that merely shares a word is not. Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. Removing (places or name) waits for the user to confirm: the user is shown the exact lines and decides. Give name, text or places.",
     "enabled" : true,
     "byDefault" : true,
     "changed" : false,
@@ -131,11 +131,11 @@
   }, {
     "name" : "memory",
     "description" : {
-      "en" : "Recall what is relevant from memory before the model answers.",
-      "zh" : "回答前从记忆里想起相关的。",
-      "ja" : "回答の前に、記憶から関係のあることを思い出します。"
+      "en" : "Before the assistant removes anything from your memory or withdraws a line from a past conversation, shows you exactly what would go and waits for you: forget it, or keep it.",
+      "zh" : "助手要从你的记忆里去掉东西、或者撤下过去对话里的话之前，先把要去掉的原文给你看并等你决定：忘掉，或者留着。",
+      "ja" : "アシスタントが記憶から何かを消す前、または過去の会話の発言を取り下げる前に、消える内容をそのまま表示して判断を待ちます。忘れる、残すから選べます。"
     },
-    "points" : [ "beforeModelCall", "work:memory-recall", "runFinished", "endpoints", "context" ],
+    "points" : [ "beforeModelCall", "beforeToolCall", "onAnswer", "work:memory-recall", "runFinished", "endpoints", "context" ],
     "group" : "rule",
     "enabled" : true,
     "byDefault" : true,

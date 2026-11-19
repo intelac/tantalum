@@ -40,6 +40,7 @@ public final class MemoryDeleteTool implements Tool {
                 + "conversations where it was said), each with an id, and changes nothing. places: the ids, from that list, of the places "
                 + "that do say it; exactly those lines are removed from memory or withdrawn from the conversation, and the rest stays. You decide which places are about it: a place that merely shares a word is not. "
                 + "Use text then places when the user takes back one statement; do not rewrite the entry by hand for that. "
+                + "Removing (places or name) waits for the user to confirm: the user is shown the exact lines and decides. "
                 + "Give name, text or places.";
     }
     @Override public Json schema() {

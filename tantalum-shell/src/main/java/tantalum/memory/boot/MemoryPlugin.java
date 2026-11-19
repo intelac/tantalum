@@ -75,6 +75,12 @@ public class MemoryPlugin {
         return new tantalum.memory.recall.RecallHook();
     }
 
+    /** 忘掉之前先问用户（2026-11-20 Yi 定）。 */
+    @Bean
+    tantalum.memory.ForgetApprovalHook memoryForgetApprovalHook() {
+        return new tantalum.memory.ForgetApprovalHook();
+    }
+
     /** 按意思找回的参数的默认值（{@code tantalum.memory-vectors.*}）；参数本身在插件页上。 */
     @Bean
     tantalum.memory.recall.VectorSettings memoryVectorSettings(Environment environment) {

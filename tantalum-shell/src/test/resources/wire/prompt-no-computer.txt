@@ -27,5 +27,6 @@ When the work is in a folder that is not a workspace and the user means to keep 
 <plugin-rules>
 ## Rules set by the user's plugins
 - Each bash or powershell command on the user's computer waits for the user to approve it; the user sees the full command. Run one clear command at a time, and if a command is denied, do not work around it: ask the user instead.
+- memory_delete with places or name waits for the user to confirm; the user sees the exact lines. If the user says keep, do not remove them another way: ask what they want instead.
 - workspace_add waits for the user to confirm the new workspace; the user sees its name and folder. If the user says no, do not add it another way: ask which folder to use instead.
 </plugin-rules>
