@@ -86,6 +86,7 @@ class WithdrawApiTest {
         try (TestServer server = server()) {
             Engine engine = server.context.getBean(Engine.class);
             prompt(engine, first, PLATE + ", please note it");
+            var earlier = engine.state().sessions().get(first).lastRun();
             prompt(engine, second, "in another conversation: " + PLATE);
             assertTrue(body(server, "/api/sessions/s1/messages").contains("7Q2KD"));
             assertTrue(body(server, "/api/sessions").contains("7Q2KD"), "control: it is in the title");
@@ -106,6 +107,10 @@ class WithdrawApiTest {
             assertTrue(prompts.getLast().messages().toString().contains("[withdrawn], please note it"));
             // 之后助手又说了一遍（这里的假模型每次都复述）：那是新的话，不归这次撤下管
             assertTrue(body(server, "/api/sessions/s1/messages").contains("7Q2KD"));
+            // 插件读一轮对话（自动记笔记用的就是它）：撤下之前那一轮读不到原话，之后那一轮新说的照常读得到
+            var platform = server.context.getBean(tantalum.shell.plugin.PluginServices.class);
+            assertFalse(platform.runView(ALICE, first, earlier).toString().contains("7Q2KD"));
+            assertTrue(platform.runView(ALICE, first, engine.state().sessions().get(first).lastRun()).toString().contains("7Q2KD"));
         }
         try (TestServer server = server()) {
             Engine engine = server.context.getBean(Engine.class);

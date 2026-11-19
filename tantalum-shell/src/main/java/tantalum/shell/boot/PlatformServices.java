@@ -227,7 +227,23 @@ public final class PlatformServices implements PluginServices {
         if (bound == null) {
             return List.of();
         }
-        return tantalum.shell.trace.RunText.segments(bound.queries().runs().records(user, session, run), bound::toolPlugin);
+        List<tantalum.shell.plugin.RunSegment> segments =
+                tantalum.shell.trace.RunText.segments(bound.queries().runs().records(user, session, run), bound::toolPlugin);
+        // 撤下过的文字（TextWithdrawn）插件也不该再读到：轨迹记的是当时的原文，这里照会话记着的换掉
+        tantalum.value.state.SessionState state = bound.state().sessions().get(session);
+        if (state == null) {
+            state = bound.queries().session(user, session).map(view -> view.state()).orElse(null);
+        }
+        if (state == null || state.withdrawn().isEmpty() || !state.principal().equals(user)) {
+            return segments;
+        }
+        List<tantalum.value.state.Withdrawal> withdrawn = state.withdrawn();
+        // 只换撤下之前说的：之后又说了一遍的是新的话
+        return segments.stream().map(segment -> {
+            List<tantalum.value.event.TextWithdrawn.Swap> swaps = withdrawn.stream().filter(each -> segment.seq() < each.seq())
+                    .map(tantalum.value.state.Withdrawal::swap).toList();
+            return swaps.isEmpty() ? segment : segment.withText(new tantalum.value.model.TextSwap(swaps).text(segment.text()));
+        }).toList();
     }
 
     @Override

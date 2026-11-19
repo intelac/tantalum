@@ -21,4 +21,22 @@ public record RunSegment(Role role, String tool, String plugin, String text, Str
         java.util.Objects.requireNonNull(role, "role");
         text = text == null ? "" : text;
     }
+
+    /** 同一段，换了文字（撤下的文字被换掉以后）。 */
+    public RunSegment withText(String newText) {
+        return new RunSegment(role, tool, plugin, newText, pos, asked);
+    }
+
+    /** 这一段在账里的序号（{@code pos} 的小数点前面那部分）；没有位置时为 -1。 */
+    public long seq() {
+        if (pos == null) {
+            return -1;
+        }
+        int dot = pos.indexOf('.');
+        try {
+            return Long.parseLong(dot < 0 ? pos : pos.substring(0, dot));
+        } catch (NumberFormatException unknown) {
+            return -1;
+        }
+    }
 }

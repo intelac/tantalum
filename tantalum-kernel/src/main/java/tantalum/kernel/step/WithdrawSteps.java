@@ -51,7 +51,7 @@ public final class WithdrawSteps {
                 one.message(session.said(i));
             }
             if (one.places() > 0) {
-                more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size()));
+                more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size(), context.envelope().seq()));
                 places += one.places();
             }
         }
