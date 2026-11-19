@@ -1,25 +1,16 @@
 package tantalum.kernel.step;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import tantalum.kernel.table.StepContext;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.TextSwapped;
 import tantalum.value.event.TextWithdrawn;
 import tantalum.value.event.TextWithdrawn.Swap;
 import tantalum.value.id.RunRef;
-import tantalum.value.json.Json;
-import tantalum.value.model.AttachedBlock;
-import tantalum.value.model.ContentBlock;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.Message;
-import tantalum.value.model.SkillBlock;
-import tantalum.value.model.TaskResultBlock;
-import tantalum.value.model.TextBlock;
-import tantalum.value.model.ToolCallBlock;
-import tantalum.value.model.ToolResultBlock;
+import tantalum.value.model.TextSwap;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.RunState;
@@ -27,13 +18,16 @@ import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
 import tantalum.value.state.ToolRound;
 import tantalum.value.state.ToolSlot;
+import tantalum.value.state.Withdrawal;
 
 /**
- * 撤下文字（{@link TextWithdrawn}）。任何状态下都能做：只换字，不加不减消息，不动工具调用和结果的配对，不改运行的走向。
- * <p>换的地方：会话的全部历史、压缩后的替换段、排队的提问、冻结的上下文段和钩子的话；正在跑的一轮里还没并进历史的
- * 插话和已经回来的工具结果。只按字面：原文逐字出现在哪里就换哪里。哪些文字该撤下由送事件的一方定，内核不判断。
- * <p>不换的：带签名的思考块（改了提供方会拒绝）、附件、已经发出去还没回来的工具调用的参数（槽位里的那一份，
- * 历史里的那一份照换）、技能的正文（那是技能文件的内容，不是谁说的话）。
+ * 撤下文字（{@link TextWithdrawn}）。任何状态下都能做：不加不减消息，不动工具调用和结果的配对，不改运行的走向。
+ * <p>历史只追加，这里一个字也不改：撤下的文字记进会话的 {@link SessionState#withdrawn()}，带上当时历史有多少条，
+ * {@link SessionState#view()} 给模型看的时候把这之前的消息里逐字出现的原文换掉。撤下以后才说的话不受影响。
+ * <p>不在历史里、本来就是整份替换的东西直接换：压缩后的替换段、排队的提问、冻结的上下文段和钩子的话；正在跑的一轮里
+ * 还没并进历史的插话和已经回来的工具结果（它们并进历史时就已经是换过的）。
+ * <p>只按字面（{@link TextSwap}）。哪些文字该撤下由送事件的一方定，内核不判断。原文哪里都没出现时什么都不改，
+ * 所以重复送来没有害处。
  */
 public final class WithdrawSteps {
 
@@ -45,209 +39,69 @@ public final class WithdrawSteps {
         if (session == null || session.lastRun() == null || !session.principal().equals(context.envelope().principal())) {
             return Decision.unchanged(context.state());
         }
-        Swapper swapper = new Swapper(event.swaps().stream().filter(Swap::usable).toList());
-        if (swapper.swaps.isEmpty()) {
-            return Decision.unchanged(context.state());
+        int places = 0;
+        // 历史：一段一段看，在模型现在看到的样子里还出现的才记（已经撤下过的不再记一遍）
+        List<Withdrawal> more = new ArrayList<>();
+        for (Swap swap : event.swaps()) {
+            TextSwap one = new TextSwap(List.of(swap));
+            if (one.isEmpty()) {
+                continue;
+            }
+            for (int i = 0; i < session.messages().size(); i++) {
+                one.message(session.said(i));
+            }
+            if (one.places() > 0) {
+                more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size()));
+                places += one.places();
+            }
         }
+        TextSwap swap = new TextSwap(event.swaps());
         Compaction compaction = session.compaction() == null ? null
-                : new Compaction(swapper.messages(session.compaction().replacement()), session.compaction().tailFrom());
-        SessionState next = session.rewritten(swapper.messages(session.messages()), swapper.messages(session.followUps()), compaction,
-                swapper.context(session.context()));
+                : new Compaction(swap.messages(session.compaction().replacement()), session.compaction().tailFrom());
+        List<Message> followUps = swap.messages(session.followUps());
+        SessionContext frozen = context(swap, session.context());
         RunState run = session.activeRun() == null ? null : context.state().runs().get(session.activeRun());
-        RunState nextRun = run == null ? null : swapper.run(run);
-        if (swapper.places == 0) {
+        RunState nextRun = run == null ? null : run(swap, run);
+        places += swap.places();
+        if (places == 0) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        out.put(next);
+        out.put(session.withdrawing(more, followUps, compaction, frozen));
         if (nextRun != null) {
             out.put(nextRun);
         }
-        out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), swapper.places)));
+        out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), places)));
         return out.decision();
     }
 
-    /** 一次撤下里的替换；{@code places} 数着换了几处。只活在一次纯函数调用里。 */
-    private static final class Swapper {
-
-        final List<Swap> swaps;
-        int places;
-
-        Swapper(List<Swap> swaps) {
-            this.swaps = swaps;
+    private static SessionContext context(TextSwap swap, SessionContext context) {
+        if (context == null) {
+            return null;
         }
-
-        String text(String text) {
-            if (text == null) {
-                return null;
-            }
-            String current = text;
-            for (Swap swap : swaps) {
-                int at = current.indexOf(swap.original());
-                if (at < 0) {
-                    continue;
-                }
-                StringBuilder swapped = new StringBuilder(current.length());
-                int from = 0;
-                while (at >= 0) {
-                    swapped.append(current, from, at).append(swap.replacement());
-                    from = at + swap.original().length();
-                    at = current.indexOf(swap.original(), from);
-                    places++;
-                }
-                current = swapped.append(current, from, current.length()).toString();
-            }
-            return current;
-        }
-
-        List<Message> messages(List<Message> messages) {
-            List<Message> out = new ArrayList<>(messages.size());
-            for (Message message : messages) {
-                out.add(message(message));
-            }
-            return out;
-        }
-
-        Message message(Message message) {
-            int before = places;
-            List<ContentBlock> content = new ArrayList<>(message.content().size());
-            for (ContentBlock block : message.content()) {
-                content.add(block(block));
-            }
-            return places == before ? message : new Message(message.role(), content, message.interrupted());
-        }
-
-        ContentBlock block(ContentBlock block) {
-            return switch (block) {
-                case TextBlock text -> new TextBlock(text(text.text()));
-                case ToolResultBlock result -> result(result);
-                case HookTextBlock hook -> new HookTextBlock(hook.hook(), text(hook.text()));
-                case AttachedBlock attached -> new AttachedBlock(attached.plugin(), text(attached.text()));
-                case TaskResultBlock task -> new TaskResultBlock(task.task(), task.outcome(), text(task.text()));
-                case ToolCallBlock call -> call(call);
-                case SkillBlock skill -> skill;
-                default -> block;
-            };
-        }
-
-        ToolResultBlock result(ToolResultBlock result) {
-            return new ToolResultBlock(result.toolCallId(), text(result.text()), result.error(), result.code(), result.images());
-        }
-
-        /** 参数里的字符串值照换，键名不动；换过以后原样文字重新写一遍，两份保持一致。参数不是合法 JSON 的，直接在原样文字里换。 */
-        ToolCallBlock call(ToolCallBlock call) {
-            int before = places;
-            if (call.arguments() == null) {
-                String raw = text(call.rawArguments());
-                return places == before ? call : new ToolCallBlock(call.id(), call.name(), raw, null);
-            }
-            Json arguments = json(call.arguments());
-            return places == before ? call : new ToolCallBlock(call.id(), call.name(), write(arguments), arguments);
-        }
-
-        Json json(Json value) {
-            return switch (value) {
-                case Json.Str text -> new Json.Str(text(text.value()));
-                case Json.Arr array -> new Json.Arr(array.items().stream().map(this::json).toList());
-                case Json.Obj object -> {
-                    Map<String, Json> fields = new LinkedHashMap<>();
-                    object.fields().forEach((key, each) -> fields.put(key, json(each)));
-                    yield new Json.Obj(fields);
-                }
-                default -> value;
-            };
-        }
-
-        SessionContext context(SessionContext context) {
-            if (context == null) {
-                return null;
-            }
-            int before = places;
-            String system = text(context.system());
-            List<ContextSection> sections = context.sections().stream()
-                    .map(section -> new ContextSection(section.name(), text(section.body()), section.byLine())).toList();
-            SessionContext.HookState hooks = context.hooks() == null ? null : new SessionContext.HookState(
-                    context.hooks().texts().stream().map(hook -> new HookTextBlock(hook.hook(), text(hook.text()))).toList(),
-                    context.hooks().tools(), context.hooks().active());
-            return places == before ? context : new SessionContext(system, context.tools(), context.compaction(), sections,
-                    context.initialTools(), context.activeTools(), context.activePlugins(), hooks, context.pluginParams(), context.unlocks());
-        }
-
-        RunState run(RunState run) {
-            int before = places;
-            List<Message> steers = messages(run.pendingSteers());
-            ToolRound round = run.tools();
-            if (round != null) {
-                for (int i = 0; i < round.slots().size(); i++) {
-                    ToolSlot slot = round.slots().get(i);
-                    if (slot.result() != null) {
-                        round = round.withSlot(i, new ToolSlot(slot.call(), slot.status(), slot.concurrencySafe(), slot.command(), result(slot.result())));
-                    }
-                }
-            }
-            return places == before ? run : run.withPendingSteers(steers).withTools(round);
-        }
+        int before = swap.places();
+        String system = swap.text(context.system());
+        List<ContextSection> sections = context.sections().stream()
+                .map(section -> new ContextSection(section.name(), swap.text(section.body()), section.byLine())).toList();
+        SessionContext.HookState hooks = context.hooks() == null ? null : new SessionContext.HookState(
+                context.hooks().texts().stream().map(hook -> new HookTextBlock(hook.hook(), swap.text(hook.text()))).toList(),
+                context.hooks().tools(), context.hooks().active());
+        return swap.places() == before ? context : new SessionContext(system, context.tools(), context.compaction(), sections,
+                context.initialTools(), context.activeTools(), context.activePlugins(), hooks, context.pluginParams(), context.unlocks());
     }
 
-    /** 把 JSON 值写成文字。内核不带 JSON 库；这里只在换过参数以后用一次，写法紧凑、键的顺序照原样。 */
-    static String write(Json value) {
-        StringBuilder out = new StringBuilder();
-        write(value, out);
-        return out.toString();
-    }
-
-    private static void write(Json value, StringBuilder out) {
-        switch (value) {
-            case Json.Null nothing -> out.append("null");
-            case Json.Bool bool -> out.append(bool.value());
-            case Json.Num number -> out.append(number.value().toString());
-            case Json.Str text -> quote(text.value(), out);
-            case Json.Arr array -> {
-                out.append('[');
-                for (int i = 0; i < array.items().size(); i++) {
-                    if (i > 0) {
-                        out.append(',');
-                    }
-                    write(array.items().get(i), out);
-                }
-                out.append(']');
-            }
-            case Json.Obj object -> {
-                out.append('{');
-                boolean first = true;
-                for (Map.Entry<String, Json> field : object.fields().entrySet()) {
-                    if (!first) {
-                        out.append(',');
-                    }
-                    first = false;
-                    quote(field.getKey(), out);
-                    out.append(':');
-                    write(field.getValue(), out);
-                }
-                out.append('}');
-            }
-        }
-    }
-
-    private static void quote(String text, StringBuilder out) {
-        out.append('"');
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        out.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        out.append(c);
-                    }
+    private static RunState run(TextSwap swap, RunState run) {
+        int before = swap.places();
+        List<Message> steers = swap.messages(run.pendingSteers());
+        ToolRound round = run.tools();
+        if (round != null) {
+            for (int i = 0; i < round.slots().size(); i++) {
+                ToolSlot slot = round.slots().get(i);
+                if (slot.result() != null) {
+                    round = round.withSlot(i, new ToolSlot(slot.call(), slot.status(), slot.concurrencySafe(), slot.command(), swap.result(slot.result())));
                 }
             }
         }
-        out.append('"');
+        return swap.places() == before ? run : run.withPendingSteers(steers).withTools(round);
     }
 }

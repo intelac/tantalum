@@ -180,6 +180,7 @@ public final class SessionIndex implements AutoCloseable {
             writeUsage(batch);
             writeSubmissions(batch);
             writeTexts(batch);
+            writeSwaps(batch);
             RunTable.write(connection, batch.runs.values());
             connection.commit();
         } catch (SQLException failure) {
@@ -278,6 +279,83 @@ public final class SessionIndex implements AutoCloseable {
                 insert.addBatch();
             }
             insert.executeBatch();
+        }
+    }
+
+    /**
+     * 撤下的文字（{@code TextWithdrawn}）：这个会话在那一步之前存的文字里逐字换掉，之后说的不动（忘掉以后又说了一遍的算新的）。
+     * 工具结果存的时候把空白并成了一个空格，所以原文并过空白的样子也换一遍。自动标题跟着第一句话换。
+     */
+    private void writeSwaps(IndexBatch batch) throws SQLException {
+        try (PreparedStatement swap = connection.prepareStatement(
+                "UPDATE texts SET text = replace(text, ?, ?) WHERE session = ? AND principal = ? AND seq < ? AND instr(text, ?) > 0");
+             PreparedStatement retitle = connection.prepareStatement(
+                     "UPDATE sessions SET title = ? WHERE session = ? AND principal = ? AND title <> ''")) {
+            for (IndexBatch.SwapRow row : batch.swaps) {
+                for (tantalum.value.event.TextWithdrawn.Swap each : row.swaps()) {
+                    java.util.Set<String> forms = new java.util.LinkedHashSet<>(List.of(each.original()));
+                    forms.add(each.original().replaceAll("\\s+", " ").strip());
+                    for (String form : forms) {
+                        if (form.isBlank()) {
+                            continue;
+                        }
+                        swap.setString(1, form);
+                        swap.setString(2, each.replacement());
+                        swap.setString(3, row.session().value());
+                        swap.setString(4, row.principal().value());
+                        swap.setLong(5, row.seq());
+                        swap.setString(6, form);
+                        swap.executeUpdate();
+                    }
+                }
+                if (row.retitle() != null) {
+                    retitle.setString(1, row.retitle());
+                    retitle.setString(2, row.session().value());
+                    retitle.setString(3, row.principal().value());
+                    retitle.executeUpdate();
+                }
+            }
+        }
+    }
+
+    /** 索引里存的一条文字：会话、序号、角色、全文。 */
+    public record TextLine(SessionId session, long seq, String role, String text) {}
+
+    /**
+     * 这个人的会话里逐字含有 {@code words} 的每一条（不分 ASCII 大小写；为任务开的会话不算），新的在前，最多 {@code limit} 条。
+     * {@code tools} 为真时也找工具调用的结果。
+     */
+    public synchronized List<TextLine> lines(Principal principal, String words, boolean tools, int limit) throws SQLException {
+        String pattern = "%" + words.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        List<TextLine> lines = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT t.session, t.seq, t.role, t.text FROM texts t
+                JOIN sessions s ON s.session = t.session AND s.principal = t.principal
+                WHERE t.principal = ? AND s.parent IS NULL AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
+                ORDER BY t.seq DESC LIMIT ?""")) {
+            select.setString(1, principal.value());
+            select.setString(2, pattern);
+            select.setBoolean(3, tools);
+            select.setInt(4, limit);
+            try (ResultSet result = select.executeQuery()) {
+                while (result.next()) {
+                    lines.add(new TextLine(new SessionId(result.getString(1)), result.getLong(2), result.getString(3), result.getString(4)));
+                }
+            }
+        }
+        return lines;
+    }
+
+    /** 这个人某个会话里按序号的一条文字；没有为空。 */
+    public synchronized Optional<TextLine> line(Principal principal, SessionId session, long seq) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT role, text FROM texts WHERE principal = ? AND session = ? AND seq = ?")) {
+            select.setString(1, principal.value());
+            select.setString(2, session.value());
+            select.setLong(3, seq);
+            try (ResultSet result = select.executeQuery()) {
+                return result.next() ? Optional.of(new TextLine(session, seq, result.getString(1), result.getString(2))) : Optional.empty();
+            }
         }
     }
 

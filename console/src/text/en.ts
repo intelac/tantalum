@@ -1106,12 +1106,13 @@ export const en: Text = {
         ({ tool_web: "from a web page", tool_file: "from a file", tool_other: "from a tool", assistant_inferred: "inferred by the model", other_person: "said by someone else" })[String(source)] ?? String(source),
     },
     forget: {
-      label: "Forget by a sentence: find the lines in memory that may say it, tick the ones to forget, and only those lines are removed.",
+      label: "Forget by a sentence: find the lines in memory and in past conversations that may say it, tick the ones to forget, and only those lines are removed.",
       placeholder: "For example: my licence plate",
       find: "Find",
       none: "No memory was found that says this.",
       choose: "These lines may say it. Tick the ones to forget:",
-      where: (kind, page) => (kind === "CLAIM" ? `Entry ${page ?? ""}` : kind === "CARD" ? "Daily notes" : "Working memory"),
+      where: (kind, page) => 
+        kind === "TALK" ? (page === "user" ? "Said by you in a past conversation" : "Said by the assistant in a past conversation") : kind === "CLAIM" ? `Entry ${page ?? ""}` : kind === "CARD" ? "Daily notes" : "Working memory",
       approved: "a decision you approved",
       submit: (count) => (count === 0 ? "Forget selected" : `Forget ${count} selected`),
       cancel: "Cancel",

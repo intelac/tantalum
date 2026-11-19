@@ -117,7 +117,7 @@ class TrustedToolsTest {
         MemoryItem claim = store.ledger().items(item -> item.kind() == MemoryItem.Kind.CLAIM).getFirst();
         store.ledger().put(claim.withStatus(MemoryItem.Status.APPROVED), claim.version());
         store.write("lunch", "user", "午饭", "爱吃面");
-        MemoryDeleteTool delete = new MemoryDeleteTool(stores, trust);
+        MemoryDeleteTool delete = new MemoryDeleteTool(stores, trust, () -> null);
         ToolOutput kept = delete.run(in(false), args("name", "decision-database"));
         assertTrue(kept.error() && kept.text().startsWith("Not deleted: decision-database holds a decision the user approved"), kept.text());
         assertEquals("PostgreSQL 16", store.read("decision-database").orElseThrow().content());
@@ -206,20 +206,21 @@ class TrustedToolsTest {
     }
 
     /**
-     * 一条说法里写着几件事，忘掉其中一件时整条都去掉了：结果里照实写出去掉的全文，模型才知道别的部分也没了
-     * （2026-11-17 真模型：只说“去掉 1 处”，名字和别的习惯跟着丢了，模型不知道）。
+     * 一条说法里写着几件事，忘掉其中一件时整行都去掉（2026-11-17 真模型：名字和别的习惯跟着丢了，模型不知道）：
+     * 找的那一步照实给出整行原文，并告诉模型一处是整行去掉的、别的要留的先另记；执行的结果不再复述原文（它自己也留在会话里）。
      */
     @Test
-    void forgettingSaysInFullWhatWasRemoved() {
+    void lookingShowsTheWholeLineAndTheResultDoesNotRepeatIt() {
         turn = List.of(new RunSegment(RunSegment.Role.USER, null, null, "费用按整数算这条忘掉吧", "9.0"));
         new MemoryNoteTool(stores, trust).run(in(false), args("kind", "preference", "text", "小康负责库存系统；费用一律按整数计算；回复要简短"));
-        MemoryDeleteTool delete = new MemoryDeleteTool(stores, trust);
+        MemoryDeleteTool delete = new MemoryDeleteTool(stores, trust, () -> null);
         ToolOutput looked = delete.run(in(false), args("text", "费用一律按整数计算"));
         assertTrue(looked.text().contains("小康负责库存系统；费用一律按整数计算；回复要简短"), looked.text());
         assertEquals(1, stores.of(ALICE).ledger().items(item -> item.text().contains("按整数")).size(), "looking changes nothing");
         ToolOutput output = delete.run(in(false), places(Forgetting.candidates(stores.of(ALICE).ledger(), "费用一律按整数计算").getFirst().id()));
         assertTrue(output.text().contains("removed 1 line"), output.text());
-        assertTrue(output.text().contains("Removed, in full:\n- 小康负责库存系统；费用一律按整数计算；回复要简短"), output.text());
+        assertTrue(looked.text().contains("note those again first"), looked.text());
+        assertFalse(output.text().contains("整数"), output.text());
         assertTrue(new MemoryNoteTool(stores, trust).description().contains("several things are several notes"));
     }
 

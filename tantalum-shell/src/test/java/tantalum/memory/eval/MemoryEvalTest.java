@@ -150,7 +150,8 @@ class MemoryEvalTest {
     }
 
     private static void mustNotSee(List<Call> calls, String text, String why) {
-        assertFalse(seen(calls, text), why + ": \"" + text + "\" reached the model");
+        assertFalse(seen(calls, text), why + ": \"" + text + "\" reached the model" + calls.stream().map(Call::input).filter(input -> input.contains(text))
+                .map(input -> "\n…" + input.substring(Math.max(0, input.indexOf(text) - 300), Math.min(input.length(), input.indexOf(text) + 80))).findFirst().orElse(""));
     }
 
     /** 一轮里第一次调用模型时调一个工具，之后回一句话。 */
@@ -417,6 +418,7 @@ class MemoryEvalTest {
         mustSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我的车牌号是多少？"), "7Q2KD", "control: before forgetting");
         forget(user, "person-alice");
         forget(user, "errand-parking");
+        tick(user, "我的车牌号是 京A-7Q2KD", "7Q2KD");
         mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我那辆车挂的什么牌照？"), "7Q2KD", "after forgetting");
     }
 
@@ -427,9 +429,42 @@ class MemoryEvalTest {
         }
     }
 
+    /**
+     * 用户在“按一句话忘掉”里勾了每一处写着这段字的（记忆里的行、过去对话里的原话）。哪些算是人定的，这里用“写着这段字”代替；
+     * 撤下对话里的原话是送一条事件，等到再找时对话里已经没有它为止。
+     */
+    private static void tick(String user, String sentence, String saying) {
+        String find = EvalSeed.JSON.writeValueAsString(Map.of("find", sentence));
+        for (int attempt = 0; attempt < 100; attempt++) {
+            List<String> ids = new ArrayList<>();
+            for (JsonNode place : EvalSeed.JSON.readTree(world.send(EvalWorld.PLAIN, user, "POST", "/api/plugin-api/memory/forget", find).body())
+                    .path("places")) {
+                if (place.path("text").asString().contains(saying)) {
+                    ids.add(place.path("id").asString());
+                }
+            }
+            if (ids.isEmpty()) {
+                return;
+            }
+            int status = world.send(EvalWorld.PLAIN, user, "POST", "/api/plugin-api/memory/forget",
+                    EvalSeed.JSON.writeValueAsString(Map.of("places", ids))).statusCode();
+            if (status != 200) {
+                throw new HarnessError("cannot forget the ticked places: " + status);
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        throw new HarnessError("places saying " + saying + " keep coming back");
+    }
+
     private void forgetDerived() {
         String user = world.person(EvalWorld.PLAIN, "alice");
         forget(user, "person-alice");
+        tick(user, "我的车牌号是 京A-7Q2KD", "7Q2KD");
         StringBuilder everything = new StringBuilder(world.get(EvalWorld.PLAIN, user, "/api/plugin-api/memory/notes"));
         for (JsonNode day : world.json(EvalWorld.PLAIN, user, "/api/plugin-api/memory/notes").path("days")) {
             for (JsonNode note : day.path("notes")) {
@@ -450,6 +485,7 @@ class MemoryEvalTest {
         world.model.chat(steps(Step.call("history_search", Map.of("query", "车牌"))));
         mustSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我以前说过车牌吗？"), "7Q2KD", "control: before forgetting");
         forget(user, "person-alice");
+        tick(user, "我的车牌号是 京A-7Q2KD", "7Q2KD");
         world.model.chat(steps(Step.call("history_search", Map.of("query", "车牌"))));
         mustNotSee(world.ask(EvalWorld.PLAIN, user, world.session(), "我以前说过车牌吗？"), "7Q2KD", "history after forgetting");
     }

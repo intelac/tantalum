@@ -37,10 +37,11 @@ class ExampleHooksPipelineTest {
      * 窗口 5750、预留 500：阈值 5250。估算只算发给模型的工具：这里没连电脑，本机工具都是延后的、不算（agent-eval 之前连延后的
      * 一起算，窗口曾一路加到 7500）。第一次调模型在阈值下，第二次越过。2026-11-16 记忆加了 memory_note、now、memory_search、
      * history_search 四个工具和几句指引（合 550 token 左右），窗口跟着加 600。
-     * 同一天又加了“工作区”一段、内置的 workspace_add 和它的说明（合 650 token 左右），再加 700。2026-11-17 日期成了单独的一段。阈值相对固定部分的位置不变。
+     * 同一天又加了“工作区”一段、内置的 workspace_add 和它的说明（合 650 token 左右），再加 700。2026-11-17 日期成了单独的一段。
+     * 2026-11-19 memory_delete 改成“先找后选”，说明长了 200 token 左右，窗口加 200。阈值相对固定部分的位置不变。
      */
     private static final String[] ARGS = {"--tantalum.tool-timeout=1s", "--tantalum.shutdown-wait=1s",
-        "--tantalum.claude.context-window=5750", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
+        "--tantalum.claude.context-window=5950", "--tantalum.claude.max-tokens=500", "--tantalum.claude.bytes-per-token=3",
         "--tantalum.compaction.reserve-tokens=500", "--tantalum.compaction.keep-recent-tokens=600",
         // 这里测的是钩子和压缩，不用抓网页（web-tools，同 CompactApiTest）
         "--tantalum.web.fetch.enabled=false"};

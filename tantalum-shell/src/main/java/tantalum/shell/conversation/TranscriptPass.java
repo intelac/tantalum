@@ -106,6 +106,7 @@ final class TranscriptPass {
                 unlockedTools();
             }
             case ContextAssembled assembled -> toolChanges(assembled);
+            case tantalum.value.event.TextWithdrawn withdrawn -> withdrawn(withdrawn.swaps());
             default -> { }
         }
         for (Command command : decision.commands()) {
@@ -279,6 +280,37 @@ final class TranscriptPass {
             case STEER -> {
                 conversation.queued.remove(id);
                 put(message.started(edited.run().run()));
+            }
+        }
+    }
+
+    /**
+     * 撤下的文字：已经显示过的条目里逐字出现的原文照内核的换法换掉（用户的话和插件附的内容、回复、工具的参数和结果、压缩摘要、
+     * 任务的交代和结果）。思考不换，和模型看到的一致。只有真的变了的条目才算这一步改过的。
+     */
+    private void withdrawn(List<tantalum.value.event.TextWithdrawn.Swap> swaps) {
+        tantalum.value.model.TextSwap swap = new tantalum.value.model.TextSwap(swaps);
+        for (TranscriptItem item : List.copyOf(conversation.items.values())) {
+            TranscriptItem swapped = switch (item) {
+                case UserMessage message -> new UserMessage(message.id(), message.session(), message.run(), message.at(),
+                        swap.text(message.text()), message.attachments(), message.queued(), message.removed(), message.skills(),
+                        message.attached().stream().map(block -> (AttachedBlock) swap.block(block)).toList());
+                case Text text -> new Text(text.id(), text.session(), text.run(), text.at(), swap.text(text.text()),
+                        text.interrupted(), text.truncated());
+                case ToolStep step -> new ToolStep(step.id(), step.session(), step.run(), step.at(),
+                        (ToolCallBlock) swap.block(step.call()), step.status(), step.group(), step.startedAt(), step.endedAt(),
+                        step.result() == null ? null : (ToolResultBlock) swap.block(step.result()));
+                case CompactionMark mark -> new CompactionMark(mark.id(), mark.session(), mark.run(), mark.at(), mark.trigger(),
+                        swap.text(mark.summary()), mark.estimateBefore(), mark.estimateAfter(), mark.usage(), mark.failure());
+                case TranscriptItem.Task task -> new TranscriptItem.Task(task.id(), task.session(), task.run(), task.at(), task.task(),
+                        task.taskSession(), task.agent(), swap.text(task.brief()), swap.text(task.prompt()),
+                        task.outcome(), task.endedAt());
+                case TranscriptItem.TaskResult result -> new TranscriptItem.TaskResult(result.id(), result.session(), result.run(), result.at(),
+                        result.task(), result.outcome(), swap.text(result.text()), result.paused());
+                default -> item;
+            };
+            if (!swapped.equals(item)) {
+                put(swapped);
             }
         }
     }

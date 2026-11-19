@@ -40,12 +40,18 @@ public final class MemoryEndpoints implements PluginEndpoints {
     private final MemoryStores stores;
     private final Predicate<Principal> capturing;
     private final boolean serverCaptures;
+    private final java.util.function.Supplier<tantalum.shell.plugin.PluginServices> platform;
 
-    /** {@code capturing}：这个人此刻会不会自动记下（服务器开着且他的参数开着）；{@code serverCaptures}：服务器开没开。 */
-    public MemoryEndpoints(MemoryStores stores, Predicate<Principal> capturing, boolean serverCaptures) {
+    /**
+     * {@code capturing}：这个人此刻会不会自动记下（服务器开着且他的参数开着）；{@code serverCaptures}：服务器开没开；
+     * {@code platform}：平台的服务（在过去的对话里找候选、撤下选中的），拿不到时给 null，只管记忆账。
+     */
+    public MemoryEndpoints(MemoryStores stores, Predicate<Principal> capturing, boolean serverCaptures,
+                           java.util.function.Supplier<tantalum.shell.plugin.PluginServices> platform) {
         this.stores = stores;
         this.capturing = capturing;
         this.serverCaptures = serverCaptures;
+        this.platform = platform;
     }
 
     @Override
@@ -109,7 +115,17 @@ public final class MemoryEndpoints implements PluginEndpoints {
                 return entry.map(found -> PluginResponse.ok(full(found, store))).orElseGet(MemoryEndpoints::noMemory);
             }
             if (method.equals("DELETE")) {
-                return MemoryFormat.isValidName(name) && store.delete(name) ? PluginResponse.noContent() : noMemory();
+                if (!MemoryFormat.isValidName(name)) {
+                    return noMemory();
+                }
+                List<String> lines = store.read(name).map(entry -> entry.content().lines().map(String::strip).filter(line -> !line.isBlank()).toList())
+                        .orElse(List.of());
+                if (!store.delete(name, MemoryItem.Actor.USER)) {
+                    return noMemory();
+                }
+                // 条目里的行在过去对话里逐字出现的地方跟着撤下；换了说法复述它的，用“按一句话忘掉”自己选
+                tantalum.memory.Talk.follow(platform.get(), request.user(), lines, null);
+                return PluginResponse.noContent();
             }
         }
         return missing();
@@ -198,7 +214,8 @@ public final class MemoryEndpoints implements PluginEndpoints {
 
     /**
      * {@code POST forget {"find": "…"}}：只找，返回可能说这句话的地方 {@code {places: [{id, kind, page, text, approved}]}}，不动账。
-     * {@code POST forget {"places": ["…"]}}：只去掉选中的那几行，返回 {@code {removed: [原文], stale: [没动的编号]}}。
+     * {@code POST forget {"places": ["…"]}}：只去掉选中的那几行，返回 {@code {removed: [原文], withdrawn: 对话里撤下的行数, stale: [没动的编号]}}。
+     * 候选里 {@code kind} 是 {@code TALK} 的是过去对话里的原话（{@code page} 是谁说的）。
      * 哪几行算“说的是它”由调用的人定（控制台里是用户打勾），程序不替他选。
      */
     private PluginResponse forget(PluginRequest request) {
@@ -220,6 +237,16 @@ public final class MemoryEndpoints implements PluginEndpoints {
                 view.put("approved", new Json.Bool(place.approved()));
                 places.add(new Json.Obj(view));
             }
+            // 过去对话里的原话：kind 是 TALK，page 是谁说的（user / assistant）
+            for (tantalum.memory.Talk.Line line : tantalum.memory.Talk.candidates(platform.get(), request.user(), find.strip())) {
+                Map<String, Json> view = new java.util.LinkedHashMap<>();
+                view.put("id", new Json.Str(line.id()));
+                view.put("kind", new Json.Str("TALK"));
+                view.put("page", new Json.Str(line.role()));
+                view.put("text", new Json.Str(line.text()));
+                view.put("approved", new Json.Bool(false));
+                places.add(new Json.Obj(view));
+            }
             return PluginResponse.ok(obj("places", new Json.Arr(places)));
         }
         if (input.fields().get("places") instanceof Json.Arr chosen) {
@@ -227,14 +254,23 @@ public final class MemoryEndpoints implements PluginEndpoints {
             if (ids.isEmpty() || ids.size() > 100) {
                 return PluginResponse.error(400, INVALID, "places must hold 1 to 100 ids", Map.of());
             }
-            tantalum.memory.Forgetting.Chosen done;
-            tantalum.memory.MemoryStore store = stores.of(request.user());
-            synchronized (store) {
-                done = tantalum.memory.Forgetting.forget(store.ledger(), ids, MemoryItem.Actor.USER);
+            // 你自己勾的：对话里的行撤下，记忆账里的行去掉；从账里去掉的行，对话里逐字写着它的地方也撤下
+            tantalum.memory.Talk.Done talk = tantalum.memory.Talk.withdraw(platform.get(), request.user(), ids, null);
+            List<String> lines = ids.stream().filter(id -> !id.startsWith("talk:")).toList();
+            tantalum.memory.Forgetting.Chosen done = new tantalum.memory.Forgetting.Chosen(List.of(), List.of(), List.of());
+            if (!lines.isEmpty()) {
+                tantalum.memory.MemoryStore store = stores.of(request.user());
+                synchronized (store) {
+                    done = tantalum.memory.Forgetting.forget(store.ledger(), lines, MemoryItem.Actor.USER);
+                }
             }
+            int followed = tantalum.memory.Talk.follow(platform.get(), request.user(), done.removed(), null);
+            List<String> stale = new ArrayList<>(done.stale());
+            stale.addAll(talk.stale());
             Map<String, Json> view = new java.util.LinkedHashMap<>();
             view.put("removed", new Json.Arr(done.removed().stream().<Json>map(Json.Str::new).toList()));
-            view.put("stale", new Json.Arr(done.stale().stream().<Json>map(Json.Str::new).toList()));
+            view.put("withdrawn", num(talk.withdrawn() + followed));
+            view.put("stale", new Json.Arr(stale.stream().<Json>map(Json.Str::new).toList()));
             return PluginResponse.ok(new Json.Obj(view));
         }
         return PluginResponse.error(400, INVALID, "find or places is required", Map.of());

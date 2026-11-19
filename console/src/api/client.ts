@@ -330,7 +330,7 @@ export function withdrawPending(id: string): Promise<{ done: boolean }> {
   return call(`/api/plugin-api/memory/items/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: "{}" });
 }
 
-/** 记忆里可能说着某句话的一行：条目里的一行、某天笔记里的一行，或者工作记忆里的一项。 */
+/** 可能说着某句话的一行：条目里的、某天笔记里的、工作记忆里的；kind 是 TALK 时是过去对话里的原话，page 是谁说的。 */
 export interface ForgetPlace {
   id: string;
   kind: string;
@@ -344,8 +344,8 @@ export function findForgetPlaces(find: string): Promise<{ places: ForgetPlace[] 
   return call("/api/plugin-api/memory/forget", { method: "POST", body: JSON.stringify({ find }) });
 }
 
-/** 第二步：只去掉选中的那几行。stale 是这期间变过的，没动。 */
-export function forgetPlaces(places: string[]): Promise<{ removed: string[]; stale: string[] }> {
+/** 第二步：只去掉选中的那几行。withdrawn 是对话里撤下的行数；stale 是这期间变过的，没动。 */
+export function forgetPlaces(places: string[]): Promise<{ removed: string[]; withdrawn: number; stale: string[] }> {
   return call("/api/plugin-api/memory/forget", { method: "POST", body: JSON.stringify({ places }) });
 }
 

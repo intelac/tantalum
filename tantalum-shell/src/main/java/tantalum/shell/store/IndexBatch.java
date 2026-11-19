@@ -49,10 +49,14 @@ final class IndexBatch {
 
     record TextRow(Principal principal, SessionId session, long seq, IndexChange.Text text) {}
 
+    /** 撤下：这个会话在 {@code seq} 之前存的文字里，原文换成替换；{@code retitle} 是换过以后的自动标题（没有为 null）。 */
+    record SwapRow(Principal principal, SessionId session, long seq, List<tantalum.value.event.TextWithdrawn.Swap> swaps, String retitle) {}
+
     final Map<SessionId, Row> sessions = new LinkedHashMap<>();
     final List<UsageRow> usage = new ArrayList<>();
     final List<SubmissionRow> submissions = new ArrayList<>();
     final List<TextRow> texts = new ArrayList<>();
+    final List<SwapRow> swaps = new ArrayList<>();
     /** 同一运行在一批里只留最后一次。 */
     final Map<RunId, RunRow> runs = new LinkedHashMap<>();
     private int events;
@@ -62,10 +66,13 @@ final class IndexBatch {
         if (row.title.isEmpty()) {
             row.title = change.title();
         }
-        if (change.rename() == null) {
-            row.lastActivity = change.at();
-        } else {
+        if (change.rename() != null) {
             row.rename = change.rename();
+        } else if (change.retitle() == null) {
+            row.lastActivity = change.at();
+        }
+        if (!change.swaps().isEmpty()) {
+            swaps.add(new SwapRow(change.principal(), change.session(), change.seq(), change.swaps(), change.retitle()));
         }
         if (change.dir() != null) {
             row.dir = change.dir();

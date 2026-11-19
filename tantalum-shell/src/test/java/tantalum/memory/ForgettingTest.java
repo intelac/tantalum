@@ -44,8 +44,15 @@ class ForgettingTest {
         return new Recall(ledger).search(question, "", null, ZoneOffset.UTC).stream().map(hit -> hit.item().text()).toList();
     }
 
+    /** 模型或用户的选择。测试里用“候选里真的写着这段字的”代替人的判断；程序自己不这么选。 */
+    private static List<String> pick(Ledger ledger, String text, String... saying) {
+        return Forgetting.candidates(ledger, text).stream()
+                .filter(place -> java.util.Arrays.stream(saying).anyMatch(place.text()::contains)).map(Forgetting.Place::id).toList();
+    }
+
+    /** 整条删掉：衍生的跟着去（出处是事实）；笔记和工作记忆里复述它的不自动带走，列成候选，选了才去掉。 */
     @Test
-    void forgettingTakesDerivedItemsRestatedLinesAndWorkingMemoryWithIt() {
+    void deletingAnEntryTakesWhatWasDerivedFromItAndTheRestIsOnlyOffered() {
         open(Instant.parse("2026-11-16T01:00:00Z"));
         MemoryItem plate = claim("person-alice", "我的车牌号是 京A-7Q2KD。");
         MemoryItem derived = MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.ASSISTANT_INFERRED,
@@ -57,13 +64,19 @@ class ForgettingTest {
         assertTrue(recalled("我的车牌号是多少？").stream().anyMatch(text -> text.contains("7Q2KD")));
 
         assertTrue(store.delete("person-alice", MemoryItem.Actor.USER));
+        assertTrue(ledger.tombstoned(derived.id()), "derived from it: goes with it");
+        assertEquals(2, ledger.items(item -> item.text().contains("7Q2KD")).size(), "the note and the task are not guessed away");
+
+        List<String> chosen = pick(ledger, "我的车牌号是 京A-7Q2KD", "7Q2KD");
+        assertEquals(2, chosen.size(), "both are offered");
+        assertEquals(2, Forgetting.forget(ledger, chosen, MemoryItem.Actor.USER).removed().size());
         assertTrue(ledger.items(item -> item.text().contains("7Q2KD")).isEmpty(), "nothing alive mentions the plate");
         assertEquals("- 用户周三去物业", new DailyNotes(ledger).read("2026-11-15", "s-1").orElseThrow().sections().getFirst().body(),
                 "the other line of the card stays");
         assertTrue(recalled("我那辆车挂的什么牌照？").isEmpty());
     }
 
-    /** 对话里说“这条忘掉吧”：只去掉那一句，同一页别的行留着；以后笔记、标题这类原话按它过滤。 */
+    /** 对话里说“这条忘掉吧”：只去掉选中的那一句，同一页别的行留着。 */
     @Test
     void takingBackOneStatementKeepsTheRestOfThePage() {
         tantalum.value.id.Principal user = new tantalum.value.id.Principal("u");
@@ -73,25 +86,21 @@ class ForgettingTest {
         pages.write("preferences", "feedback", "How the user wants things done", "跟用户说话要简短\n所有费用按整数计算，不要小数\n");
         new WorkingMemory(account).add(MemoryItem.Kind.TASK, "总运费会产生小数，不符合费用按整数计算的习惯", Map.of(), MemoryItem.Source.ASSISTANT_INFERRED,
                 MemoryItem.Actor.AGENT, null, null, false, null);
-        MemoryContext context = new MemoryContext(stores);
-        String title = "你好，我有个习惯：凡是费用，我都要按整数算，不要小";
-        assertFalse(context.hides(user, title, Instant.EPOCH), "control: shown before it is taken back");
 
-        assertTrue(Forgetting.statement(pages, "费用都按整数算，不要小数", MemoryItem.Actor.AGENT).gone() >= 1);
+        List<String> chosen = pick(account, "费用都按整数算，不要小数", "整数");
+        assertEquals(2, Forgetting.forget(account, chosen, MemoryItem.Actor.AGENT).removed().size());
         assertEquals("跟用户说话要简短", pages.read("preferences").orElseThrow().content().strip(), "the other line stays");
         assertTrue(account.items(item -> item.text().contains("整数")).isEmpty(), "nothing alive says it: " + account.items(item -> item.text().contains("整数")));
-        assertTrue(Forgetting.forgotten(account).stream().anyMatch(gone -> gone.text().contains("整数")), "and it is remembered as forgotten");
-        assertTrue(context.hides(user, title, Instant.EPOCH), "a conversation title that says it is not shown to the model");
     }
 
-    /** 一句短话不能带走整条多行的条目，也不能盖住整张当天卡：按行比，别的行留着（review 2026-11-17）。 */
+    /** 一句短话不能带走整条多行的条目，也不能带走整张当天卡：只去掉选中的行（review 2026-11-17）。 */
     @Test
     void oneSentenceDoesNotTakeAWholeMultiLineEntryWithIt() {
         open(Instant.parse("2026-11-16T01:00:00Z"));
         MemoryItem page = claim("project-shop", "商城项目用 PostgreSQL 16\n每周三下午发布\n发布前要跑全量回归\n负责人是小王");
         new DailyNotes(ledger).append("2026-11-15", "s-1", "商城", "r-1", "10:00", "- 商城项目每周三下午发布\n- 用户让把订单页的按钮改成蓝色");
 
-        assertEquals(1, Forgetting.forget(ledger, "每周三下午发布", MemoryItem.Actor.USER));
+        assertEquals(2, Forgetting.forget(ledger, pick(ledger, "每周三下午发布", "周三下午发布"), MemoryItem.Actor.USER).removed().size());
         MemoryItem left = ledger.get(page.id()).orElseThrow();
         assertEquals("商城项目用 PostgreSQL 16\n发布前要跑全量回归\n负责人是小王", left.text(), "only the line that says it goes");
         assertTrue(left.live());
@@ -99,9 +108,9 @@ class ForgettingTest {
         assertFalse(recalled("商城项目的负责人是谁？").isEmpty(), "the rest of the entry is still found");
     }
 
-    /** 同一轮、同一句原话记出来的别的条目一起忘掉：模型换了个说法写的同一件事，词对不上，但出处是同一句话。 */
+    /** 同一轮、同一句原话记出来的别的条目会列进候选：模型换了个说法写的同一件事，词对不上，但出处是同一句话。那一轮说的别的事不列。 */
     @Test
-    void itemsNotedFromTheSameWordsGoTogether() {
+    void itemsNotedFromTheSameWordsAreOfferedTogether() {
         open(Instant.parse("2026-11-16T01:00:00Z"));
         MemoryItem.Provenance from = new MemoryItem.Provenance("s-1", "r-9", null, null);
         MemoryItem plate = ledger.put(MemoryItem.create(ledger.newId(), MemoryItem.Kind.CLAIM, MemoryItem.Source.USER_SAID,
@@ -112,13 +121,17 @@ class ForgettingTest {
         MemoryItem other = new WorkingMemory(ledger).add(MemoryItem.Kind.TASK, "周五前交季度报告", Map.of(), MemoryItem.Source.USER_SAID,
                 MemoryItem.Actor.AGENT, "周五前把季度报告交了", from, false, null).orElseThrow();
 
-        assertEquals(1, Forgetting.forget(ledger, "车牌号 京A-7Q2KD", MemoryItem.Actor.USER));
+        List<Forgetting.Place> offered = Forgetting.candidates(ledger, "车牌号 京A-7Q2KD");
+        assertTrue(offered.stream().anyMatch(place -> place.id().startsWith(reworded.id() + "@")), "noted from the same words in the same turn");
+        assertFalse(offered.stream().anyMatch(place -> place.id().startsWith(other.id() + "@")), "another thing said in that turn is not offered");
+
+        Forgetting.forget(ledger, offered.stream().map(Forgetting.Place::id).toList(), MemoryItem.Actor.USER);
         assertTrue(ledger.tombstoned(plate.id()));
-        assertTrue(ledger.tombstoned(reworded.id()), "noted from the same words in the same turn");
-        assertFalse(ledger.tombstoned(other.id()), "another thing said in that turn stays");
+        assertTrue(ledger.tombstoned(reworded.id()));
+        assertFalse(ledger.tombstoned(other.id()));
     }
 
-    /** 模型替你按一句话忘的时候，你认可过的决定不动、也不被这句话盖住；你自己忘才动。 */
+    /** 模型替你忘的时候，你认可过的决定选了也不动；你自己忘才动。 */
     @Test
     void theModelCannotForgetADecisionYouApproved() {
         tantalum.value.id.Principal user = new tantalum.value.id.Principal("u");
@@ -130,14 +143,13 @@ class ForgettingTest {
         account.put(decision.withStatus(MemoryItem.Status.APPROVED), decision.version());
         pages.write("notes", "project", "杂记", "讨论过数据库用 PostgreSQL 16\n周会改到周四");
 
-        Forgetting.Result result = Forgetting.statement(pages, "数据库用 PostgreSQL 16", MemoryItem.Actor.AGENT);
+        Forgetting.Chosen result = Forgetting.forget(account, pick(account, "数据库用 PostgreSQL 16", "PostgreSQL 16"), MemoryItem.Actor.AGENT);
         assertEquals(1, result.kept().size());
         assertEquals("数据库用 PostgreSQL 16", pages.read("decision-database").orElseThrow().content(), "the approved decision stays");
         assertEquals("周会改到周四", pages.read("notes").orElseThrow().content().strip(), "the unapproved copy is gone");
-        MemoryItem approved = account.get(decision.id()).orElseThrow();
-        assertFalse(Forgetting.shadowed(Forgetting.forgotten(account), approved), "and recall still brings it back");
+        assertFalse(new Recall(account).search("数据库用什么？", "", null, ZoneOffset.UTC).isEmpty(), "and recall still brings the decision back");
 
-        assertEquals(1, Forgetting.forget(account, "数据库用 PostgreSQL 16", MemoryItem.Actor.USER), "the user can");
+        assertEquals(1, Forgetting.forget(account, pick(account, "数据库用 PostgreSQL 16", "PostgreSQL 16"), MemoryItem.Actor.USER).removed().size(), "the user can");
         assertTrue(pages.read("decision-database").isEmpty());
     }
 
@@ -145,7 +157,8 @@ class ForgettingTest {
     void whatYouSayAgainAfterForgettingIsNewAndKept() {
         open(Instant.parse("2026-11-16T01:00:00Z"));
         claim("person-alice", "我的车牌号是 京A-7Q2KD。");
-        assertEquals(1, Forgetting.forget(ledger, "车牌号 京A-7Q2KD", MemoryItem.Actor.USER));
+        assertEquals(1, Forgetting.forget(ledger, pick(ledger, "车牌号 京A-7Q2KD", "7Q2KD"), MemoryItem.Actor.USER).removed().size());
+        assertTrue(recalled("我的车牌号是多少？").isEmpty());
         open(Instant.parse("2026-11-16T02:00:00Z"));
         claim("person-alice", "我的车牌号是 京A-7Q2KD，换了车又用回原来的号。");
         assertFalse(recalled("我的车牌号是多少？").isEmpty(), "a statement made after forgetting is new information");

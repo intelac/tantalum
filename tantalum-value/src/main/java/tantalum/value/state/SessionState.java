@@ -30,12 +30,13 @@ import tantalum.value.model.ToolSpec;
  * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它。
  * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），第一次提问时定下，之后不变；没选或本 spec 之前的会话为 null。
  * {@code offRecord} 为真是“不进记忆”的会话（memory-final-plan 第 11 节），第一次提问时定下，之后不变。
- * {@code tasks} 是和任务有关的一块（放出去还没回来的、这个会话是不是为任务开的、无人说话时的计数），没有任务时是 {@link Tasks#NONE}。 */
+ * {@code tasks} 是和任务有关的一块（放出去还没回来的、这个会话是不是为任务开的、无人说话时的计数），没有任务时是 {@link Tasks#NONE}。
+ * {@code withdrawn} 是撤下的文字（{@link Withdrawal}），只增不减：历史照旧只追加、一个字不改，{@link #view()} 给模型看的时候把它们换掉。 */
 public record SessionState(SessionId id, Principal principal, List<Message> messages,
                            RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
                            Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
                            Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels,
-                           String dir, boolean offRecord, Tasks tasks) {
+                           String dir, boolean offRecord, Tasks tasks, List<Withdrawal> withdrawn) {
 
     public SessionState {
         Objects.requireNonNull(id, "id");
@@ -52,6 +53,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         toolsSeen = toolsSeen == null ? List.of() : List.copyOf(toolsSeen);
         notes = notes == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(notes));
         tasks = tasks == null ? Tasks.NONE : tasks;
+        withdrawn = withdrawn == null ? List.of() : List.copyOf(withdrawn);
         if (compaction != null && compaction.tailFrom() > messages.size()) {
             throw new IllegalArgumentException("tailFrom " + compaction.tailFrom() + " beyond " + messages.size() + " messages");
         }
@@ -59,34 +61,57 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
 
     public static SessionState start(SessionId id, Principal principal) {
         return new SessionState(id, principal, List.of(), null, null, List.of(), null, null, null, List.of(), List.of(), Map.of(), null, null,
-                null, false, Tasks.NONE);
+                null, false, Tasks.NONE, List.of());
     }
 
-    /** 模型看到的消息：压缩过就是替换段加上之后追加的，否则就是全部历史。 */
+    /** 模型看到的消息：压缩过就是替换段加上之后追加的，否则就是全部历史；撤下的文字（{@link #withdrawn}）已经换掉。 */
     public List<Message> view() {
-        if (compaction == null) {
+        if (compaction == null && withdrawn.isEmpty()) {
             return messages;
         }
-        List<Message> view = new ArrayList<>(compaction.replacement());
-        view.addAll(messages.subList(compaction.tailFrom(), messages.size()));
+        int from = compaction == null ? 0 : compaction.tailFrom();
+        List<Message> view = new ArrayList<>(compaction == null ? List.of() : compaction.replacement());
+        for (int i = from; i < messages.size(); i++) {
+            view.add(said(i));
+        }
         return List.copyOf(view);
+    }
+
+    /** 历史里的第 {@code index} 条，照模型看到的样子：在它之后撤下的文字已经换掉。没有撤下过时就是原来那条。 */
+    public Message said(int index) {
+        Message message = messages.get(index);
+        if (withdrawn.isEmpty()) {
+            return message;
+        }
+        List<tantalum.value.event.TextWithdrawn.Swap> swaps = withdrawn.stream().filter(each -> index < each.before()).map(Withdrawal::swap).toList();
+        return swaps.isEmpty() ? message : new tantalum.value.model.TextSwap(swaps).message(message);
+    }
+
+    /**
+     * 撤下文字：{@code more} 记进 {@link #withdrawn}（历史不动）；排队的提问、压缩的替换段、冻结的上下文不是只追加的，
+     * 调用方把换过的直接交进来。
+     */
+    public SessionState withdrawing(List<Withdrawal> more, List<Message> newFollowUps, Compaction newCompaction, SessionContext newContext) {
+        List<Withdrawal> all = new ArrayList<>(withdrawn);
+        all.addAll(more);
+        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, newContext, newCompaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, all);
     }
 
     public SessionState append(Message message) {
         List<Message> updated = new ArrayList<>(messages);
         updated.add(message);
-        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 运行开始：同时记为 {@code lastRun}。 */
     public SessionState startRun(RunId run) {
         Objects.requireNonNull(run, "run");
-        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 运行结束：只清 {@code activeRun}，{@code lastRun} 留着判断迟到的结果。 */
     public SessionState endRun() {
-        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 换排队的提问，都不带模型选择（测试）。 */
@@ -96,51 +121,43 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
 
     /** 换排队的提问和它们各自的选择，两者等长。 */
     public SessionState withFollowUps(List<Message> newFollowUps, List<ModelChoice> newFollowUpModels) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     public SessionState withContext(SessionContext newContext) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 压缩成功：换替换段，锚点作废。 */
     public SessionState compacted(Compaction newCompaction) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
-    }
-
-    /** 换掉历史里的文字（撤下，见 {@link tantalum.value.event.TextWithdrawn}）：条数、顺序、压缩的切分点都不变，只是里面的字变了。 */
-    public SessionState rewritten(List<Message> newMessages, List<Message> newFollowUps, Compaction newCompaction, SessionContext newContext) {
-        if (newMessages.size() != messages.size() || newFollowUps.size() != followUps.size()) {
-            throw new IllegalArgumentException("rewriting must keep the number of messages");
-        }
-        return new SessionState(id, principal, newMessages, activeRun, lastRun, newFollowUps, newContext, newCompaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     public SessionState withAnchor(UsageAnchor newAnchor) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     public SessionState withOmittedImages(List<String> newOmittedImages) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     public SessionState withToolsSeen(List<String> newToolsSeen) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 换会话的模型选择。 */
     public SessionState withModel(ModelChoice newModel) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /** 定下工作目录。 */
     public SessionState withDir(String newDir) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, newDir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, newDir, offRecord, tasks, withdrawn);
     }
 
     /** 定成“不进记忆”的会话。 */
     public SessionState withOffRecord() {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, true, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, true, tasks, withdrawn);
     }
 
     /** 这个工作类型记在会话里的东西，没有时是空对象。 */
@@ -165,7 +182,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         } else {
             updated.put(workType, new Json.Obj(Collections.unmodifiableMap(new LinkedHashMap<>(merged))));
         }
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels, dir, offRecord, tasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels, dir, offRecord, tasks, withdrawn);
     }
 
     /**
@@ -194,6 +211,6 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
     }
 
     public SessionState withTasks(Tasks newTasks) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, newTasks);
+        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, newTasks, withdrawn);
     }
 }

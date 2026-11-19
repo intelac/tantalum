@@ -314,4 +314,59 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
     }
+
+    @Override
+    public List<ConversationLine> conversationLines(Principal user, String words, boolean tools, int limit) {
+        Engine bound = engine;
+        if (bound == null || words == null || words.isBlank()) {
+            return List.of();
+        }
+        try {
+            java.util.Set<SessionId> offRecord = new java.util.HashSet<>();
+            bound.queries().sessions(user).stream().filter(tantalum.shell.conversation.SessionSummary::offRecord)
+                    .forEach(summary -> offRecord.add(summary.id()));
+            return bound.stores().storage().index.lines(user, words, tools, limit + offRecord.size() * 4).stream()
+                    .filter(line -> !offRecord.contains(line.session()))
+                    .limit(limit)
+                    .map(line -> new ConversationLine(line.session(), line.seq(), line.role(), line.text()))
+                    .toList();
+        } catch (SQLException failure) {
+            LOG.warn("conversation lookup failed: {}", failure.toString());
+            return List.of();
+        }
+    }
+
+    @Override
+    public java.util.Optional<ConversationLine> conversationLine(Principal user, SessionId session, long seq) {
+        Engine bound = engine;
+        if (bound == null) {
+            return java.util.Optional.empty();
+        }
+        try {
+            boolean offRecord = bound.queries().sessions(user).stream()
+                    .anyMatch(summary -> summary.id().equals(session) && summary.offRecord());
+            return offRecord ? java.util.Optional.empty() : bound.stores().storage().index.line(user, session, seq)
+                    .map(line -> new ConversationLine(line.session(), line.seq(), line.role(), line.text()));
+        } catch (SQLException failure) {
+            LOG.warn("conversation lookup failed: {}", failure.toString());
+            return java.util.Optional.empty();
+        }
+    }
+
+    @Override
+    public boolean withdraw(Principal user, SessionId session, List<String> originals, tantalum.shell.plugin.ToolContext origin) {
+        Engine bound = engine;
+        if (bound == null) {
+            return false;
+        }
+        List<tantalum.value.event.TextWithdrawn.Swap> swaps = originals.stream().filter(text -> text != null && !text.isBlank()).distinct()
+                .map(text -> new tantalum.value.event.TextWithdrawn.Swap(text, WITHDRAWN)).toList();
+        if (swaps.isEmpty()) {
+            return false;
+        }
+        tantalum.value.event.TextWithdrawn.By by = origin == null ? tantalum.value.event.TextWithdrawn.By.user()
+                : new tantalum.value.event.TextWithdrawn.By(tantalum.value.event.TextWithdrawn.Actor.AGENT, origin.session(), origin.run(),
+                        origin.command() == null ? null : origin.command().value());
+        return bound.intake().withdraw(user, session, swaps, by) == 200;
+    }
 }

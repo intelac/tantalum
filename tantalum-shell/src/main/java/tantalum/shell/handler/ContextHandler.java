@@ -181,14 +181,12 @@ public final class ContextHandler implements Handler {
         if (source != null) {
             // 列出来的不含“不进记忆”的会话：它们的标题不该出现在别的会话的上下文里
             // 按行比较：之后变了只把变的那几行告诉模型
-            // 别的会话的标题是用户以前的原话：插件说不给的（记忆插件：忘掉的事）不写标题
+            // 别的会话的标题是用户以前的原话；撤下过的话（TextWithdrawn）索引里的标题已经跟着换了，这里不用再挡
             // 主窗口不列：它的标题是随口说的话，列出来只会把旧话带进每个会话
             SessionId here = command.run().session();
             List<WorkspaceSection.Row> rows = source.sessions(principal).stream()
                     .filter(row -> row.summary().id().equals(here) || !MainWindow.is(row.summary().id()))
-                    .map(row -> hidden(principal, row.summary())
-                    ? new WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(row.summary().id(), "", row.summary().lastActivity(),
-                            row.summary().runStatus(), row.summary().dir(), row.summary().offRecord()), row.tokens()) : row).toList();
+                    .toList();
             // 这个会话自己那一行从第一句话起就在：第一次组装时它可能还没进会话列表，不补上的话第二句话时这一段会平白变一次
             SessionId self = command.run().session();
             if (rows.stream().noneMatch(row -> row.summary().id().equals(self))) {
@@ -291,24 +289,6 @@ public final class ContextHandler implements Handler {
         }
         return new ContextAssembled(command.id(), system.toString(), specs, settings, sections,
                 enabled, gate.enabledPlugins(principal), sources(principal), model, gate.pluginParams(principal), unlocks);
-    }
-
-    private boolean hidden(Principal principal, tantalum.shell.conversation.SessionSummary summary) {
-        String title = summary.title();
-        if (title == null || title.isBlank()) {
-            return false;
-        }
-        for (ContextContributor contributor : contributors) {
-            try {
-                if (contributor.hides(principal, title, summary.lastActivity())) {
-                    return true;
-                }
-            } catch (RuntimeException failure) {
-                // 插件答不上来时宁可不给标题
-                return true;
-            }
-        }
-        return false;
     }
 
     /** system 的最后一行：{@code Today is 2026-11-16 (Monday, time zone Asia/Tokyo).} */

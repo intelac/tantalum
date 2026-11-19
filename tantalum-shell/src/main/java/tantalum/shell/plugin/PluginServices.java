@@ -104,6 +104,34 @@ public interface PluginServices {
         return List.of();
     }
 
+    /** 过去对话里的一条：会话、它在账里的序号、哪一方（{@code user}/{@code assistant}/{@code tool}）、存着的全文。 */
+    record ConversationLine(SessionId session, long seq, String role, String text) {}
+
+    /**
+     * 这个用户过去的对话里逐字含有 {@code words} 的每一条（不是每个会话一条；含当前会话；不进记忆的会话不算），新的在前，
+     * 最多 {@code limit} 条。{@code tools} 为真时也找工具调用的结果。给“撤下”找候选用：找到的只是候选。
+     */
+    default List<ConversationLine> conversationLines(Principal user, String words, boolean tools, int limit) {
+        return List.of();
+    }
+
+    /** 这个用户某个会话里的某一条（按 {@link ConversationLine#seq}）；不是他的、不存在或不进记忆的会话为空。 */
+    default java.util.Optional<ConversationLine> conversationLine(Principal user, SessionId session, long seq) {
+        return java.util.Optional.empty();
+    }
+
+    /** 文字里被撤下的地方换成的字样。 */
+    String WITHDRAWN = "[withdrawn]";
+
+    /**
+     * 把这个用户一个会话里的几段文字撤下：会话里逐字出现 {@code originals} 里某一段的地方都换成 {@value #WITHDRAWN}，模型以后不再看到，
+     * 记录页和搜索也不再给出；原文还在账里，不是删除。哪些文字该撤下由调用的一方定（用户勾的，或者模型选的），平台只照办。
+     * {@code origin} 是模型在哪次工具调用里选的；是用户自己在页面上定的时候为 null。送出去了返回真（换没换到要等内核处理）。
+     */
+    default boolean withdraw(Principal user, SessionId session, List<String> originals, ToolContext origin) {
+        return false;
+    }
+
     /** 在这个用户过去的对话里按文字找（不含 {@code excluding} 这个会话），最相关的在前，最多 {@code limit} 条。 */
     List<ConversationHit> searchConversations(Principal user, String query, SessionId excluding, int limit);
 }

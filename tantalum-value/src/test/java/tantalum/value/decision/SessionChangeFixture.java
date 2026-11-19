@@ -20,14 +20,14 @@ public final class SessionChangeFixture {
     private SessionChangeFixture() {}
 
     public static SessionChange of(SessionId id, Principal principal, boolean created, List<Message> appended, Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps, Changed<SessionContext> context, Changed<Compaction> compaction, Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages) {
-        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null, null, null, null, null, null, null);
+        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, null, null, null, null, null, null, null, null);
     }
 
     public static SessionChange of(SessionId id, Principal principal, boolean created, List<Message> appended, Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps, Changed<SessionContext> context, Changed<Compaction> compaction, Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen, Changed<Map<String, Json.Obj>> notes) {
-        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, null, null, null, null, null);
+        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, null, null, null, null, null, null);
     }
 
     public static SessionChange of(SessionId id, Principal principal, boolean created, List<Message> appended, Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<Message>> followUps, Changed<SessionContext> context, Changed<Compaction> compaction, Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen, Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<List<ModelChoice>> followUpModels) {
-        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, null, null, null);
+        return new SessionChange(id, principal, created, appended, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, null, null, null, null);
     }
 }

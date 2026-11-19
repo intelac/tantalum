@@ -203,7 +203,7 @@ function ForgetForm() {
           </div>
         </fieldset>
       )}
-      {forget.data !== undefined && <p className="text-xs text-fg-faint">{t.done(forget.data.removed.length, forget.data.stale.length)}</p>}
+      {forget.data !== undefined && <p className="text-xs text-fg-faint">{t.done(forget.data.removed.length + forget.data.withdrawn, forget.data.stale.length)}</p>}
       {(find.error ?? forget.error) !== null && (
         <p role="alert" className="text-xs text-danger">
           {errorLine(find.error ?? forget.error)}

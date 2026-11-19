@@ -51,7 +51,7 @@ class SessionDirCodecTest {
     void theSessionChangeCarriesTheDirectory() {
         RecordCodec records = new RecordCodec(codec);
         SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, new SessionChange.Changed<>("/home/alice/app"), null, null);
+                null, null, new SessionChange.Changed<>("/home/alice/app"), null, null, null);
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of());
         String line = records.encode(record, RecordMemo.writer(USER, SESSION));
         assertTrue(line.contains("\"dir\":\"/home/alice/app\""), line);
@@ -63,7 +63,7 @@ class SessionDirCodecTest {
     void theSessionChangeCarriesOffTheRecord() {
         RecordCodec records = new RecordCodec(codec);
         SessionChange change = new SessionChange(SESSION, USER, true, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, null, new SessionChange.Changed<>(true), null);
+                null, null, null, new SessionChange.Changed<>(true), null, null);
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null, List.of(), List.of());
         String line = records.encode(record, RecordMemo.writer(USER, SESSION));
         assertTrue(line.contains("\"offRecord\":true"), line);
@@ -82,7 +82,7 @@ class SessionDirCodecTest {
                         new tantalum.value.id.CommandId("c1"))),
                 new tantalum.value.task.TaskOrigin(new tantalum.value.id.SessionId("parent"), "t9-1", null, "You review code.", List.of("read")), 2, 3);
         SessionChange change = new SessionChange(SESSION, USER, false, List.of(), null, null, null, null, null, null, null, null, null,
-                null, null, null, null, new SessionChange.Changed<>(tasks));
+                null, null, null, null, new SessionChange.Changed<>(tasks), null);
         StepRecord record = new StepRecord(0, change, List.of(), List.of(), null, null,
                 List.of(new tantalum.value.command.StartTask(new tantalum.value.id.CommandId("c2"), run, "t3-0", child, "reviewer", "check module A\nand report", "/home/alice/app", false,
                                 new tantalum.value.model.ModelChoice("claude", "claude-sonnet-5-5", "medium")),

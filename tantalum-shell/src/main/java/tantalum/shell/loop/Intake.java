@@ -262,6 +262,29 @@ public final class Intake {
         return 200;
     }
 
+    /**
+     * 把会话里的几段文字撤下（{@link tantalum.value.event.TextWithdrawn}）。返回 HTTP 状态；会话不存在或不是该用户的 → 404。
+     * 不去重（重复送来内核什么都不改）、不占活跃运行名额；运行中也可以，内核只换字。{@code by} 记着是谁定的。
+     */
+    public int withdraw(Principal principal, SessionId session, List<tantalum.value.event.TextWithdrawn.Swap> swaps,
+                        tantalum.value.event.TextWithdrawn.By by) {
+        if (sessions.find(principal, session).isEmpty()) {
+            return 404;
+        }
+        ExternalGate.Verdict verdict = gate.admit(principal, false);
+        if (verdict != ExternalGate.Verdict.ADMITTED) {
+            return status(verdict);
+        }
+        EventEnvelope withdrawn = envelope(principal, session, null,
+                new tantalum.value.event.TextWithdrawn(new RequestId(UUID.randomUUID().toString()), swaps, by));
+        Probes.event(input.probe(), Stage.INTAKE, withdrawn, null);
+        if (!input.tryPublish(withdrawn)) {
+            gate.release(principal);
+            return 429;
+        }
+        return 200;
+    }
+
     /** 返回 HTTP 状态。取消不去重，也不占活跃运行名额。 */
     public int cancel(Principal principal, RunRef run) {
         ExternalGate.Verdict verdict = gate.admit(principal, false);
@@ -283,6 +306,7 @@ public final class Intake {
             case Submitted submitted -> release(envelope.principal(), submitted.submission());
             case Cancel cancel -> gate.release(envelope.principal());
             case tantalum.value.event.TaskStopRequested stop -> gate.release(envelope.principal());
+            case tantalum.value.event.TextWithdrawn withdrawn -> gate.release(envelope.principal());
             default -> { }
         }
     }

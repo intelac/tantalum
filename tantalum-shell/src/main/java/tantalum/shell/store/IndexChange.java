@@ -9,6 +9,7 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SessionRenamed;
+import tantalum.value.event.TextWithdrawn;
 import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.ToolFinished;
@@ -32,12 +33,13 @@ import tantalum.value.task.OpenTask;
 /**
  * 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。
  * {@code dir} 是会话的工作目录（没有为 null）；{@code rename} 是这一步的改名（没改名为 null，空串表示恢复自动标题），
- * 改名不算会话的活动。
+ * 改名不算会话的活动。{@code swaps} 是这一步撤下的文字（{@link TextWithdrawn}；没有为空）：索引里这个会话在它之前存的文字照样换掉；
+ * {@code retitle} 是撤下之后第一句话的开头（自动标题跟着换；不是撤下为 null）。撤下也不算会话的活动。
  */
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
                           Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord,
-                          String parent, List<OpenTask> tasks) {
+                          String parent, List<OpenTask> tasks, List<TextWithdrawn.Swap> swaps, String retitle) {
 
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
@@ -75,7 +77,25 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
                         ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()),
-                parent(after, envelope.session()), tasks(after, envelope.session()));
+                parent(after, envelope.session()), tasks(after, envelope.session()),
+                envelope.event() instanceof TextWithdrawn withdrawn ? withdrawn.swaps().stream().filter(TextWithdrawn.Swap::usable).toList() : List.of(),
+                envelope.event() instanceof TextWithdrawn ? firstWords(after, envelope.session()) : null);
+    }
+
+    /** 会话第一句用户的话的开头（自动标题的来源）；还没有时为 null。 */
+    private static String firstWords(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        if (found == null) {
+            return null;
+        }
+        for (int i = 0; i < found.messages().size(); i++) {
+            tantalum.value.model.Message message = found.said(i);
+            if (message.role() == tantalum.value.model.Role.USER && !message.content().isEmpty()
+                    && message.content().getFirst() instanceof TextBlock first) {
+                return SessionSummary.titleOf(first.text());
+            }
+        }
+        return null;
     }
 
     /** 一次工具调用的结果：“工具名: 结果”（截短、遮盖密钥）；找不到是哪个工具时只有结果。 */

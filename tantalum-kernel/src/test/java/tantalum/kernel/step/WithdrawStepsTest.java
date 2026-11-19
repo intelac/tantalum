@@ -42,8 +42,8 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
 
 /**
- * 撤下文字（memory-forget-by-choice R2a）：内核只按字面换，哪里逐字出现原文就换哪里；不加不减消息、不发命令、不改运行的走向；
- * 重复送来、没出现的原文、别人的事件都不改任何东西。
+ * 撤下文字（memory-forget-by-choice R2a）：内核只按字面办，哪里逐字出现原文，模型看到的那里就换掉；历史本身一个字不改（只追加），
+ * 不加不减消息、不发命令、不改运行的走向；重复送来、没出现的原文、别人的事件都不改任何东西；撤下以后再说的算新的。
  */
 class WithdrawStepsTest {
 
@@ -60,7 +60,7 @@ class WithdrawStepsTest {
         fields.put("name", new Json.Str("car"));
         fields.put("content", new Json.Str(content));
         Json.Obj arguments = new Json.Obj(fields);
-        return new ToolCallBlock(id, "safe_write", WithdrawSteps.write(arguments), arguments);
+        return new ToolCallBlock(id, "safe_write", tantalum.value.model.TextSwap.write(arguments), arguments);
     }
 
     /** 说了车牌，模型调了两个工具（一个把它写进参数），第一个的结果回来了、第二个还没回来。上下文段里也有它。 */
@@ -77,7 +77,7 @@ class WithdrawStepsTest {
     }
 
     private static String all(SessionState session) {
-        return session.messages() + " " + session.followUps() + " " + session.compaction() + " " + session.context().sections();
+        return session.view() + " " + session.followUps() + " " + session.compaction() + " " + session.context().sections();
     }
 
     @Test
@@ -93,23 +93,25 @@ class WithdrawStepsTest {
         assertEquals(phase, loop.phase());
         assertEquals(count, loop.session().messages().size());
         SessionState session = loop.session();
-        assertEquals(Message.user("note this: " + GONE + ", thanks"), session.messages().getFirst());
+        // 历史照旧，一个字没改；模型看到的是换过的
+        assertEquals(Message.user("note this: " + PLATE + ", thanks"), session.messages().getFirst());
+        assertEquals(Message.user("note this: " + GONE + ", thanks"), session.view().getFirst());
         assertEquals(List.of(Message.user("and again, " + GONE)), session.followUps());
         assertEquals("- car: " + GONE, session.context().sections().getFirst().body());
-        ToolCallBlock call = (ToolCallBlock) session.messages().get(1).content().get(2);
+        ToolCallBlock call = (ToolCallBlock) session.view().get(1).content().get(2);
         assertEquals(new Json.Str("the user's car: " + GONE + "\nsecond line"), ((Json.Obj) call.arguments()).fields().get("content"));
         assertEquals("{\"name\":\"car\",\"content\":\"the user's car: " + GONE + "\\nsecond line\"}", call.rawArguments());
         // 还没并进历史的工具结果也换了；还没回来的那个照旧在等
         assertEquals("Saved: " + GONE, loop.run().tools().slots().getFirst().result().text());
         assertFalse(loop.run().tools().allFinished());
         // 带签名的思考块不动
-        assertEquals(new ReasoningBlock("claude", new Json.Str("the user said " + PLATE)), session.messages().get(1).content().getFirst());
+        assertEquals(new ReasoningBlock("claude", new Json.Str("the user said " + PLATE)), session.view().get(1).content().getFirst());
         // 用户消息 1、参数 1、上下文段 1、排队的提问 1、工具结果 1
         assertEquals(List.of(new TextSwapped(loop.run().ref(), 5)), decision.facts());
 
         // 第二个工具回来，这一轮照常往下走，历史里的结果是换过的
         loop.feed(loop.runId(), ToolFinishedFixture.of(loop.commands.getLast().id(), "t2", "read", false, null));
-        Message results = loop.session().messages().get(2);
+        Message results = loop.session().view().get(2);
         assertEquals(new ToolResultBlock("t1", "Saved: " + GONE, false, null), results.content().getFirst());
         assertFalse(all(loop.session()).replace("the user said " + PLATE, "").contains("7Q2KD"), "only the signed thinking block keeps it");
     }
@@ -126,10 +128,29 @@ class WithdrawStepsTest {
 
         session = loop.session();
         assertEquals(new Compaction(List.of(Message.user("Summary: the user said " + GONE + " twice. " + GONE)), 2), session.compaction());
-        assertEquals(new AttachedBlock("memory", "car: " + GONE), session.messages().getLast().content().getLast());
+        assertEquals(new AttachedBlock("memory", "car: " + GONE), session.view().getLast().content().getLast());
         assertFalse(session.view().toString().contains("7Q2KD"), "the view starts after the summary, so the thinking block is not in it");
         // 用户消息 1、参数 1、上下文段 1、工具结果 1、摘要 2、带回来的记忆 1
         assertEquals(7, ((TextSwapped) decision.facts().getFirst()).places());
+    }
+
+    /** 忘掉以后你又说了一遍的，是新的：撤下只管当时已有的历史。 */
+    @Test
+    void whatIsSaidAgainAfterwardsIsNewAndStays() {
+        LoopFixture loop = midRun();
+        loop.feed(null, withdraw(PLATE, GONE));
+        loop.feed(loop.runId(), ToolFinishedFixture.of(loop.commands.getLast().id(), "t2", "read", false, null));
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("done"), StopReason.END_TURN, "m", null, null, null, null));
+
+        loop.prompt("I changed cars and " + PLATE + " again");
+
+        List<Message> view = loop.session().view();
+        assertEquals(Message.user("note this: " + GONE + ", thanks"), view.getFirst());
+        assertEquals(Message.user("I changed cars and " + PLATE + " again"), view.getLast());
+        // 再撤一次，新说的这句才换
+        loop.feed(null, withdraw(PLATE, GONE));
+        assertEquals(Message.user("I changed cars and " + GONE + " again"), loop.session().view().getLast());
+        assertEquals(2, loop.session().withdrawn().size());
     }
 
     @Test
@@ -186,6 +207,6 @@ class WithdrawStepsTest {
         Map<String, Json> fields = new LinkedHashMap<>();
         fields.put("a \"b\"", new Json.Str("line\nbreak\ttab \\ slash \u0001"));
         fields.put("n", new Json.Arr(List.of(new Json.Num(new java.math.BigDecimal("1.50")), new Json.Bool(true), new Json.Null())));
-        assertEquals("{\"a \\\"b\\\"\":\"line\\nbreak\\ttab \\\\ slash \\u0001\",\"n\":[1.50,true,null]}", WithdrawSteps.write(new Json.Obj(fields)));
+        assertEquals("{\"a \\\"b\\\"\":\"line\\nbreak\\ttab \\\\ slash \\u0001\",\"n\":[1.50,true,null]}", tantalum.value.model.TextSwap.write(new Json.Obj(fields)));
     }
 }

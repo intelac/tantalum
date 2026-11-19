@@ -30,6 +30,7 @@ final class SessionDelta {
 
     private static final TypeReference<List<Message>> MESSAGES = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<List<tantalum.value.state.Withdrawal>> WITHDRAWN = new TypeReference<>() { };
     private static final TypeReference<List<ModelChoice>> MODELS = new TypeReference<>() { };
     private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
 
@@ -82,6 +83,8 @@ final class SessionDelta {
         changed(node, "offRecord", change.offRecord());
         // 任务这一块（放出去还没回来的、是不是为任务开的、无人说话时的计数）：没变的会话不写
         changed(node, "tasks", change.tasks());
+        // 撤下的文字：历史不改，只多记这一份；没撤下过的会话不写，旧账里没有这个字段
+        changed(node, "withdrawn", change.withdrawn());
         return node;
     }
 
@@ -114,7 +117,7 @@ final class SessionDelta {
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
                 changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS),
                 changed(node, "dir", String.class), changed(node, "offRecord", Boolean.class),
-                changed(node, "tasks", tantalum.value.task.Tasks.class));
+                changed(node, "tasks", tantalum.value.task.Tasks.class), changedList(node, "withdrawn", WITHDRAWN));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

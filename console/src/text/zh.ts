@@ -1127,12 +1127,13 @@ export const zh = {
         ({ tool_web: "来自网页", tool_file: "来自文件", tool_other: "来自工具", assistant_inferred: "模型推断", other_person: "别人说的" })[String(source)] ?? String(source),
     },
     forget: {
-      label: "按一句话忘掉：先找出记忆里可能说着这件事的行，你勾出要忘的，只去掉勾中的那几行。",
+      label: "按一句话忘掉：先找出记忆里和过去对话里可能说着这件事的行，你勾出要忘的，只去掉勾中的那几行。",
       placeholder: "比如：我的车牌号",
       find: "查找",
       none: "没有找到说这件事的记忆。",
       choose: "这些行可能说的是它。勾出要忘掉的：",
-      where: (kind: string, page?: string) => (kind === "CLAIM" ? `条目 ${page ?? ""}` : kind === "CARD" ? "每天的笔记" : "工作记忆"),
+      where: (kind: string, page?: string) => 
+        kind === "TALK" ? (page === "user" ? "过去的对话里你说的" : "过去的对话里助手说的") : kind === "CLAIM" ? `条目 ${page ?? ""}` : kind === "CARD" ? "每天的笔记" : "工作记忆",
       approved: "你认可过的决定",
       submit: (count: number) => (count === 0 ? "忘掉选中的" : `忘掉选中的 ${count} 行`),
       cancel: "取消",

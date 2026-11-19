@@ -90,8 +90,7 @@ public class MemoryPlugin {
 
     @Bean
     tantalum.memory.recall.HistorySearchTool historySearchTool(ObjectProvider<PluginServices> services, MemoryStores stores) {
-        return new tantalum.memory.recall.HistorySearchTool(context -> services.getObject(),
-                context -> tantalum.memory.Forgetting.forgotten(stores.ledger(context.principal())), stores.budget());
+        return new tantalum.memory.recall.HistorySearchTool(context -> services.getObject(), stores.budget());
     }
 
     @Bean
@@ -105,8 +104,8 @@ public class MemoryPlugin {
     }
 
     @Bean
-    MemoryDeleteTool memoryDeleteTool(MemoryStores stores, tantalum.memory.ToolTrust trust) {
-        return new MemoryDeleteTool(stores, trust);
+    MemoryDeleteTool memoryDeleteTool(MemoryStores stores, tantalum.memory.ToolTrust trust, ObjectProvider<PluginServices> services) {
+        return new MemoryDeleteTool(stores, trust, services::getObject);
     }
 
     @Bean
@@ -152,7 +151,8 @@ public class MemoryPlugin {
 
     @Bean
     MemoryEndpoints memoryEndpoints(MemoryStores stores, CaptureSettings settings, ObjectProvider<PluginServices> services) {
-        return new MemoryEndpoints(stores, user -> settings.enabled() && wantsNotes(services.getObject(), user), settings.enabled());
+        return new MemoryEndpoints(stores, user -> settings.enabled() && wantsNotes(services.getObject(), user), settings.enabled(),
+                services::getObject);
     }
 
     /** 插件页上“自动记下”这个参数；没设过是开。 */

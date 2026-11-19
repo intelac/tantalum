@@ -166,7 +166,7 @@ describe("MemoryPane", () => {
                   { id: "b@2#1", kind: "CARD", text: "办停车证要用车牌 7Q2KD", approved: false },
                 ],
               })
-            : '{"removed":["车牌号是 7Q2KD"],"stale":[]}',
+            : '{"removed":["车牌号是 7Q2KD"],"withdrawn":0,"stale":[]}',
       },
     ]);
     await userEvent.type(await screen.findByRole("textbox", { name: /按一句话忘掉/ }), "我的车牌号");
