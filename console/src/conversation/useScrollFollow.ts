@@ -30,6 +30,8 @@ export function useScrollFollow(changed: unknown, hasMore: boolean, onLoadOlder:
   /** 正在加载上一页时，加载前的内容高度和滚动位置。 */
   const anchor = useRef<{ height: number; top: number } | null>(null);
   const loading = useRef(false);
+  /** 上一次滚动事件时的位置，用来分辨“读者往上翻了”和“内容变高了”。 */
+  const lastTop = useRef(0);
 
   const loadOlder = useCallback(() => {
     const element = scroller.current;
@@ -57,9 +59,14 @@ export function useScrollFollow(changed: unknown, hasMore: boolean, onLoadOlder:
     const element = scroller.current;
     if (element === null) return;
     const near = element.scrollHeight - (element.scrollTop + element.clientHeight) <= STICK_THRESHOLD;
-    if (near !== stickRef.current) {
-      stickRef.current = near;
-      setStick(near);
+    // 离开底部只认“往上滚了”。内容一下子变高（发出一条长消息）时位置没动、底部却远了：如果这时正好有一个滚动事件
+    // （上一次跟随留下的），不能当成读者离开了，否则后面的跟随就不做了，停在半中间。
+    const up = element.scrollTop < lastTop.current;
+    lastTop.current = element.scrollTop;
+    const next = near ? true : up ? false : stickRef.current;
+    if (next !== stickRef.current) {
+      stickRef.current = next;
+      setStick(next);
     }
     if (element.scrollTop <= LOAD_THRESHOLD) loadOlder();
   }, [loadOlder]);
