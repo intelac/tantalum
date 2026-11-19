@@ -150,7 +150,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                             }
                         }),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
-                        run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()), properties.weights()),
+                        run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
+                        run -> tasksOf(queries.view().current(), run.session()).origin() == null, properties.weights()),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
                         session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),

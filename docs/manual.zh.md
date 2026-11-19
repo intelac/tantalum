@@ -129,7 +129,7 @@ java -jar tantalum-shell/target/tantalum-shell-0.1.0-exec.jar --tantalum.provide
 | 思考参数 | 自动（见下） | `thinking`、`efforts`，见下 |
 | 其他 | `max-tokens`、`concurrency`、`context-window`、`bytes-per-token`、`fallbacks`、超时 | `max-tokens`（16384）、`concurrency`（1）、`context-window`、`bytes-per-token`（1.75）、`vision`、超时；`overrides[模型名].*` 单独写某个模型的 `thinking`、`efforts`、`default-effort`、`vision`、`context-window` |
 
-- Claude 的提示缓存默认 1 小时（`tantalum.claude.cache-ttl=1h`，可改成 `5m`）：等你批准、看回答常常超过 5 分钟，5 分钟的缓存过期后下一轮按全价重读。代价是写缓存的单价是基础价的 2 倍（5 分钟的是 1.25 倍）。
+- Claude 的提示缓存默认 1 小时（`tantalum.claude.cache-ttl=1h`，可改成 `5m`）：等你批准、看回答常常超过 5 分钟，5 分钟的缓存过期后下一轮按全价重读。代价是写缓存的单价是基础价的 2 倍（5 分钟的是 1.25 倍）。为任务开的会话例外：消息上的缓存固定只留 5 分钟（一条工具链里两圈只隔几秒，任务做完没人再接着用），工具和 system 上的仍照这个配置，同一批任务共用。用量里不区分两种写入，折算时都按同一个系数算。
 - 路线名只用小写字母、数字、`-`，最长 32，`claude` 保留。名字不合规、重复、`thinking` 或档位写错、默认路线不存在，启动失败并写明哪一项。
 - **密钥只从环境变量读**，不进配置文件、日志、journal、接口返回和画面；接口也不返回路线地址和变量名。变量没设的路线不启用（启动日志写变量名，不写值）；默认路线的变量没设时启动失败。
 - 模型名里有 `/`、`.` 时 `overrides` 用 Spring 的方括号写法：`--tantalum.openai-routes.kimi.overrides[moonshotai/kimi-k2].thinking=thinking-type`。

@@ -48,6 +48,8 @@ public final class ModelHandler implements Handler {
     private final Clock clock;
     /** 每个运行从谁的附件目录取内容。 */
     private final Function<RunRef, AttachmentMedia> media;
+    /** 这个运行所在的会话以后还会不会有人回来接着说；为任务开的会话不会。只交给客户端省钱用。 */
+    private final java.util.function.Predicate<RunRef> attended;
     private final UsageWeights weights;
     /** 没有选择的 prompt 算哪条路线的系数；只有一个客户端时（测试）为 null。 */
     private final String defaultRoute;
@@ -67,6 +69,7 @@ public final class ModelHandler implements Handler {
         this.listeners = listeners;
         this.clock = clock;
         this.media = media;
+        this.attended = run -> true;
     }
 
     /**
@@ -75,7 +78,7 @@ public final class ModelHandler implements Handler {
      * 超长时只让这一条路线重读列表。回复的用量按 {@code weights} 折算后再记下（qagent-align 需求 3）。
      */
     public ModelHandler(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media,
-                        UsageWeights weights) {
+                        java.util.function.Predicate<RunRef> attended, UsageWeights weights) {
         this.weights = weights;
         this.defaultRoute = routes.defaultRoute();
         Map<String, Lane> byRoute = new HashMap<>();
@@ -88,6 +91,7 @@ public final class ModelHandler implements Handler {
         this.listeners = listeners;
         this.clock = clock;
         this.media = media;
+        this.attended = attended;
     }
 
     @Override
@@ -110,7 +114,7 @@ public final class ModelHandler implements Handler {
                 AtomicReference<Instant> firstToken = new AtomicReference<>();
                 ModelOutcome outcome;
                 try {
-                    outcome = client.call(call.prompt(), media.apply(call.run()), chunks(call.run(), firstToken));
+                    outcome = client.call(call.prompt(), media.apply(call.run()), attended.test(call.run()), chunks(call.run(), firstToken));
                 } catch (AttachmentMedia.Unavailable missing) {
                     // 附件不在了或被改过：这次调用失败，不重试，原因写明附件。别的会话不受影响。
                     LOG.warn("model call {} failed: {}", call.id().value(), missing.getMessage());

@@ -17,6 +17,14 @@ public interface ModelClient {
         return call(prompt, chunks);
     }
 
+    /**
+     * 同上，另外告诉客户端这个会话以后还会不会有人回来接着说（{@code attended}）。为任务开的会话不会：做完就结束，没人隔很久再接着用。
+     * 客户端可以据此少花钱（Claude：消息上的缓存只留 5 分钟），不能因此改变发给模型的内容。默认不看它。
+     */
+    default ModelOutcome call(Prompt prompt, AttachmentMedia media, boolean attended, ChunkListener chunks) {
+        return call(prompt, media, chunks);
+    }
+
     /** 这个 prompt 会发出的请求选项，记进结算事件供轨迹显示。必须是纯函数，不含密钥和地址；默认 null，显示为“未记录”。 */
     default RequestOptions options(Prompt prompt) {
         return null;

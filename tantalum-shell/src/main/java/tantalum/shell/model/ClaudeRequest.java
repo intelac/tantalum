@@ -144,7 +144,12 @@ final class ClaudeRequest {
      * 上一圈的最后一条消息正好是这一圈前缀的末尾。钩子每圈追加不同的 system 文字会让 system 之后的缓存失效，工具段仍命中。
      * 附件内容从 {@code media} 取。
      */
-    MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media) {
+    /**
+     * {@code attended} 为假（为任务开的会话）时，最后一条消息上的缓存只留 5 分钟：一条工具链里相邻两圈只隔几秒，任务做完以后没人再接着用，
+     * 不值得付一小时缓存的写入价。工具和 system 上的照配置，它们是同一批任务共用的前缀；长的在前、短的在后，是接口要求的顺序。
+     */
+    MessageCreateParams params(Prompt prompt, RequestOptions options, AttachmentMedia media, boolean attended) {
+        CacheControlEphemeral onMessages = attended ? cache : FIVE_MINUTES;
         Map<String, Json> extra = ((Json.Obj) options.extra()).fields();
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(options.model())
@@ -187,7 +192,7 @@ final class ClaudeRequest {
                 continue;
             }
             if (i == cachedMessage) {
-                blocks.set(blocks.size() - 1, cached(blocks.getLast()));
+                blocks.set(blocks.size() - 1, cached(blocks.getLast(), onMessages));
             }
             if (message.role() == Role.USER) {
                 params.addMessage(UserMessageParam.builder().contentOfContentBlockParams(blocks).build());
@@ -287,7 +292,7 @@ final class ClaudeRequest {
     }
 
     /** 最后一条消息总是用户消息：文本、工具结果、图片和文档块都可能在最后，都能带缓存标记。 */
-    private ContentBlockParam cached(ContentBlockParam block) {
+    private static ContentBlockParam cached(ContentBlockParam block, CacheControlEphemeral cache) {
         if (block.isText()) {
             return ContentBlockParam.ofText(block.asText().toBuilder().cacheControl(cache).build());
         }

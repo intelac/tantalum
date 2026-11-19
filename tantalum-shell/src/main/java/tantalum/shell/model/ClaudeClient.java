@@ -86,13 +86,18 @@ public final class ClaudeClient implements ModelClient {
 
     @Override
     public ModelOutcome call(Prompt prompt, AttachmentMedia media, ChunkListener chunks) {
+        return call(prompt, media, true, chunks);
+    }
+
+    @Override
+    public ModelOutcome call(Prompt prompt, AttachmentMedia media, boolean attended, ChunkListener chunks) {
         StringBuilder visible = new StringBuilder();
         Map<Long, Pending> blocks = new TreeMap<>();
         Reply reply = new Reply();
         try (StreamWatchdog watchdog = new StreamWatchdog(firstChunk, betweenChunks)) {
             try {
                 StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(
-                        request.params(prompt, options(prompt), media));
+                        request.params(prompt, options(prompt), media, attended));
                 watchdog.watch(stream);
                 try (stream) {
                     stream.stream().forEach(event -> {

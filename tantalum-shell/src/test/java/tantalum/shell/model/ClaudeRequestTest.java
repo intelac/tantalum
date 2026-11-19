@@ -562,6 +562,24 @@ class ClaudeRequestTest {
         assertTrue(sent.contains("\"tool_use\""), sent);
     }
 
+    /** 为任务开的会话：消息上的缓存只留 5 分钟（默认值，不写 ttl），工具和 system 上的还是配置的一小时；有人的会话都是一小时。 */
+    @Test
+    void aTaskSessionKeepsItsMessagesCachedForFiveMinutesOnly() throws Exception {
+        Prompt prompt = new Prompt("sys", List.of(new ToolSpec("read_file", "Read a file.", new Json.Obj(Map.of("type", new Json.Str("object"))))),
+                List.of(Message.user("check module A")));
+
+        client(settings(4096, "low", false, false)).call(prompt, AttachmentMedia.NONE, false, IGNORE);
+        JsonNode task = MAPPER.readTree(server.requests.getLast());
+        assertEquals("1h", task.at("/system/0/cache_control/ttl").asText());
+        assertEquals("1h", task.at("/tools/0/cache_control/ttl").asText());
+        assertEquals("ephemeral", task.at("/messages/0/content/0/cache_control/type").asText());
+        assertTrue(task.at("/messages/0/content/0/cache_control/ttl").isMissingNode(), task.toString());
+
+        client(settings(4096, "low", false, false)).call(prompt, AttachmentMedia.NONE, true, IGNORE);
+        JsonNode person = MAPPER.readTree(server.requests.getLast());
+        assertEquals("1h", person.at("/messages/0/content/0/cache_control/ttl").asText());
+    }
+
     // ---- 用户点名的技能（skills-wiki 任务 17）：claude-skill-requests.txt。技能内容是用户消息里的又一段文字 ----
 
     private static final Path SKILL_EXPECTED = Path.of("src/test/resources/model/claude-skill-requests.txt");

@@ -18,7 +18,7 @@ public final class ModelHandlerFixture {
     private ModelHandlerFixture() {}
 
     public static ModelHandler of(Routes routes, Function<RunRef, ChunkListener> listeners, Clock clock, Function<RunRef, AttachmentMedia> media) {
-        return new ModelHandler(routes, listeners, clock, media, UsageWeights.NONE);
+        return new ModelHandler(routes, listeners, clock, media, run -> true, UsageWeights.NONE);
     }
 
     public static ModelHandler of(ModelClient client, CallLimiter limiter, Duration waitTimeout, Function<RunRef, ChunkListener> listeners, Clock clock) {
