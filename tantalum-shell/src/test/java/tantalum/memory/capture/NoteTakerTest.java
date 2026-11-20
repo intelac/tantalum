@@ -175,4 +175,28 @@ class NoteTakerTest {
         taker.close();
         assertTrue(calls.get() >= 3, "tried three times: " + calls.get());
     }
+
+    /**
+     * 关掉要等手上那一轮做完：模型调用结束时平台还要记一笔用量，服务器停下后再写就写到了已经关掉的库里
+     * （{@code OffRecordApiTest} 偶尔删不掉临时目录就是这个）。
+     */
+    @Test
+    void closeWaitsForTheNoteInHand() throws Exception {
+        java.util.concurrent.CountDownLatch calling = new java.util.concurrent.CountDownLatch(1);
+        AtomicBoolean recorded = new AtomicBoolean();
+        NoteTaker.Writer slow = (user, system, text, maxTokens) -> {
+            calling.countDown();
+            long until = System.nanoTime() + 300_000_000L;
+            while (System.nanoTime() < until) {
+                Thread.onSpinWait();   // 一次不理会中断的模型调用
+            }
+            recorded.set(true);        // 调用结束时记用量
+            return Optional.of(reply);
+        };
+        NoteTaker taker = taker(true, slow, on());
+        taker.runFinished(run("s-1_40", "COMPLETED", false));
+        assertTrue(calling.await(5, java.util.concurrent.TimeUnit.SECONDS), "the worker picked the run up");
+        taker.close();
+        assertTrue(recorded.get(), "close returned while the model call was still running");
+    }
 }

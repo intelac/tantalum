@@ -70,6 +70,8 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
     private static final Logger LOG = LoggerFactory.getLogger(NoteTaker.class);
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     static final long[] BACKOFF_MILLIS = {5_000, 20_000};
+    /** 关掉时等手上那一轮多久。 */
+    static final java.time.Duration CLOSE_WAIT = java.time.Duration.ofSeconds(5);
 
     private final CaptureSettings settings;
     private final Predicate<Principal> userWants;
@@ -365,9 +367,22 @@ public final class NoteTaker implements RunFinishedListener, Configurable, Plugi
         return null;
     }
 
+    /**
+     * 停下：不再接新的，叫醒在等重试的，然后等手上那一轮做完（最多 {@link #CLOSE_WAIT}）。不等的话，模型调用结束时
+     * 平台记用量、这里写记忆账，都会落在服务器已经关掉以后。
+     */
     @Override
     public void close() {
         closed = true;
         workers.forEach(Thread::interrupt);
+        long deadline = System.nanoTime() + CLOSE_WAIT.toNanos();
+        for (Thread worker : workers) {
+            try {
+                worker.join(java.time.Duration.ofNanos(Math.max(1, deadline - System.nanoTime())));
+            } catch (InterruptedException stopping) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 }
