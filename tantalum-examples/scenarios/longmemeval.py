@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """LongMemEval 子集（tier 3，要真模型，不进 CI）：公开的长期记忆考题，和别家比。
 
-三步：
+四步：
   pick   从 longmemeval_s_cleaned.json（HuggingFace xiaowu0162/longmemeval-cleaned，MIT）里按五种能力各挑 N 道（默认 6，共 30），
          固定种子，写成 subset.json（--extend 旧子集：旧题不换，每种补到 N 道）。五种能力：找事实（single-session-user/assistant/preference）、跨会话（multi-session）、
          记住更新（knowledge-update）、按时间推理（temporal-reasoning）、不知道就说不知道（question_id 以 _abs 结尾）。
   build  用真的记笔记代码导入每道题的旧对话（LongMemEvalImport，Claude Haiku 5.5 记笔记），每道题记出一本记忆账。
   ask    起一台真服务器，每道题一个新用户、放进他的账，用题目的 question_date 提问；memory（用记忆）和 none（关掉记忆）两组。
          判分用官方 evaluate_qa.py 的判题提示（按题型分五种），裁判换成 Claude Sonnet 5.5（官方用 GPT-4o）；回答里有 yes 算对。
+  attribute  拿 ask 的结果（.json，里面存着每道题模型从记忆看到的全部文字），把每道错题归到一步：没记下、记下了没找到、找到了没答对。
+         “有没有”由裁判模型判。--all 连这次答对的也列出来（标成波动），用在重跑上次的错题时。
 
 数据很大（277 MB），放在命令行给的目录里，不进仓库。结果写到 scenarios/results/<时间>-longmemeval-<模型>.md 和 .json。
 """
@@ -182,7 +184,8 @@ def ask_all(args):
                     result = {"id": question["question_id"], "ability": ability(question), "type": question["question_type"], "arm": arm,
                               "passed": passed, "verdict": verdict, "problem": problem, "question": question["question"],
                               "expected": str(question["answer"])[:300], "answer": answer[:800], "seconds": round(time.time() - started, 1),
-                              "calls": calls, "tokens": dict(tokens), "cost": round(me.cost(args.model, tokens), 4)}
+                              "calls": calls, "tokens": dict(tokens), "cost": round(me.cost(args.model, tokens), 4),
+                              "seen": me.seen_of(data, name, session)}
                     report["results"].append(result)
                     print(f"{'PASS' if passed else 'FAIL'} {arm:6} {result['ability']:16} {result['id']:22} {result['seconds']:6}s "
                           f"{(problem or answer.replace(chr(10), ' '))[:90]}", flush=True)
@@ -227,6 +230,69 @@ def write_table(report, path, stamp, judge_cost):
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 
+# ---- attribute ----
+
+HAS_IT = ("Below are a question, its correct answer, and some notes. Do the notes contain all the information needed to arrive at the "
+          "correct answer? Judge only whether the information is present, not whether it is easy to find. Answer yes or no on the first "
+          "line, then one short sentence saying what is present or missing.\n\nCurrent date: {}\n\nQuestion: {}\n\nCorrect answer: {}"
+          "\n\nNotes:\n{}")
+STAGES = {"flaky": "这次答对了（波动）", "abstain": "该说不知道却答了", "capture": "没记下", "recall": "记下了没找到", "answer": "找到了没答对"}
+
+
+def live_notes(ledger):
+    """记忆账里现在还在的条目（每条取最新一版，去掉墓碑），一条一行。"""
+    items = {}
+    for line in open(os.path.join(ledger, "ledger.jsonl"), encoding="utf-8"):
+        entry = json.loads(line)
+        if "put" in entry: items[entry["put"]["id"]] = entry["put"]
+        elif "tombstone" in entry: items.pop(entry["tombstone"]["id"], None)
+    return "\n".join(f"- [{item.get('page') or item['kind']} · {item.get('validFrom', '')[:10]}] {item['text']}"
+                     for item in items.values() if item.get("text"))
+
+
+def has_it(grader, model, question, notes, usage):
+    prompt = HAS_IT.format(question["question_date"], question["question"], question["answer"], notes)
+    reply = grader.messages.create(model=model, max_tokens=4000, messages=[{"role": "user", "content": prompt}])
+    usage["input"] += reply.usage.input_tokens; usage["output"] += reply.usage.output_tokens
+    text = "".join(block.text for block in reply.content if block.type == "text").strip()
+    if not text: raise SystemExit(f"judge gave no verdict for {question['question_id']} ({reply.stop_reason})")  # 没结论不能当成“没有”
+    return text.lower().startswith("yes"), " ".join(text.split())[:300]
+
+
+def attribute(args):
+    """每道错题错在哪一步：没记下（账里没有）、记下了没找到（账里有，模型没看到）、找到了没答对（模型看到了）。
+
+    “有没有”让裁判模型看着题目、标准答案和那一堆笔记来判，脚本自己不猜。弃答题答错只有一种错法，不分步。"""
+    questions = {q["question_id"]: q for q in json.load(open(args.subset, encoding="utf-8"))}
+    report = json.load(open(args.results, encoding="utf-8"))
+    import anthropic
+    grader = anthropic.Anthropic(api_key=me.env_file().get("ANTHROPIC_API_KEY"))
+    usage, rows = collections.Counter(), []
+    for result in report["results"]:
+        if result["arm"] != "memory" or (result["passed"] and not args.all): continue
+        question, note = questions[result["id"]], ""
+        if result["passed"]: stage = "flaky"
+        elif ability(question) == "abstention": stage = "abstain"
+        else:
+            recorded, note = has_it(grader, args.judge, question, live_notes(os.path.join(args.ledgers, result["id"])), usage)
+            if not recorded: stage = "capture"
+            else:
+                seen, note = has_it(grader, args.judge, question, result.get("seen", ""), usage)
+                stage = "answer" if seen else "recall"
+        rows.append((result["id"], question["question_type"], stage, note))
+        print(f"{result['id']:22} {question['question_type']:28} {STAGES[stage]}  {note[:100]}", flush=True)
+    price = JUDGE_PRICE.get(args.judge, (0, 0))
+    cost = (usage["input"] * price[0] + usage["output"] * price[1]) / 1e6
+    count = collections.Counter(stage for _, _, stage, _ in rows)
+    lines = [f"# 错题归因 · {os.path.basename(args.results)}", "", f"{len(rows)} 道 · 裁判 {args.judge} · 约 ${cost:.2f}", "",
+             "| 错在哪 | 题数 |", "|---|---|"] + [f"| {STAGES[stage]} | {count[stage]} |" for stage in STAGES if count[stage]]
+    lines += ["", "| 题 | 题型 | 错在哪 | 裁判的话 |", "|---|---|---|---|"]
+    lines += [f"| {qid} | {kind} | {STAGES[stage]} | {note.replace('|', '/')} |" for qid, kind, stage, note in rows]
+    out = args.results[:-5] + "-attribution.md"
+    open(out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    print(open(out, encoding="utf-8").read())
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="step", required=True)
@@ -239,8 +305,11 @@ def main():
     a.add_argument("--judge", default="claude-sonnet-5-5"); a.add_argument("--timeout", type=int, default=300)
     a.add_argument("--only", default=""); a.add_argument("--tag", default=""); a.add_argument("--keep", action="store_true")
     a.add_argument("--port", type=int, default=8096); a.add_argument("--shell-jar", default=""); a.add_argument("--examples-jar", default="")
+    t = sub.add_parser("attribute"); t.add_argument("--subset", required=True); t.add_argument("--ledgers", required=True)
+    t.add_argument("--results", required=True); t.add_argument("--judge", default="claude-sonnet-5-5"); t.add_argument("--all", action="store_true")
     args = parser.parse_args()
     if args.step == "pick": pick(args)
+    elif args.step == "attribute": attribute(args)
     elif args.step == "build": sys.exit(build(args))
     else: ask_all(args)
 

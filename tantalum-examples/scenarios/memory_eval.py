@@ -184,6 +184,21 @@ def answer_of(data, user, session):
     return text, tokens, calls
 
 
+def seen_of(data, user, session):
+    """这个会话里模型从记忆得到的全部文字：系统提示（含档案）、每轮前找回的那一段、每次工具返回（读 journal）。"""
+    path = os.path.join(data, "sessions", user, session + ".jsonl")
+    parts = []
+    if not os.path.exists(path): return ""
+    for line in open(path, encoding="utf-8"):
+        try: entry = json.loads(line)
+        except ValueError: continue
+        payload = entry.get("payload") or {}
+        if entry.get("type") == "ContextAssembled": parts.append(payload.get("system") or "")
+        elif entry.get("type") == "WorkDone": parts.append(payload.get("continueText") or "")
+        elif entry.get("type") == "ToolFinished": parts.append(payload.get("text") or "")
+    return "\n\n".join(part for part in parts if part)
+
+
 def ask(client, session, text, model, timeout):
     status, body = client.call("POST", f"/api/sessions/{session}/submissions",
                                {"requestId": secrets.token_hex(6), "mode": "prompt", "text": text, "model": model})
