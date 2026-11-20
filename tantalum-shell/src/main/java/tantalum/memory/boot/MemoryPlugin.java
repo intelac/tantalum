@@ -142,8 +142,8 @@ public class MemoryPlugin {
     }
 
     @Bean
-    MemoryDeleteTool memoryDeleteTool(MemoryStores stores, tantalum.memory.ToolTrust trust, ObjectProvider<PluginServices> services) {
-        return new MemoryDeleteTool(stores, trust, services::getObject);
+    MemoryDeleteTool memoryDeleteTool(MemoryStores stores, ObjectProvider<PluginServices> services) {
+        return new MemoryDeleteTool(stores, services::getObject);
     }
 
     @Bean

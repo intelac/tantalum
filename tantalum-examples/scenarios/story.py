@@ -92,7 +92,7 @@ class Story:
                     payload = {"choice": (wanted or question["choices"])[0]["id"]}
                 else: payload = {"text": self.reply or "你定就行。"}
                 self.user.call("POST", f"/api/sessions/{row['id']}/questions/{question['id']}", payload)
-                self.cards.append({"session": row["id"], "title": title, "detail": detail, "answered": payload})
+                self.cards.append({"session": row["id"], "id": question["id"], "title": title, "detail": detail, "answered": payload})
 
     def say(self, session, text, checks, note="", folder=None, workspace_choice="add", timeout=600, reply=None, reply_words=()):
         """说一句话，等到所有会话都停下来，再按 checks 判定。"""
@@ -219,6 +219,11 @@ def main():
         ], note="第一天说的习惯要自己用上，我这次没提")
         story.say(day2, "对了，我之前说费用都按整数算，这条你忘掉吧，以后不这么要求了。", [
             ("没有动文件", lambda t: not (EDITING & {name for name, _ in t["calls"]})),
+            ("删之前给我看了要删的原话，我点了“忘掉”", lambda t: any(card["id"].startswith("memory-forget-") and card["answered"].get("choice") == "forget"
+                                                    and "整数" in card["detail"] for card in t["cards"])
+                or f"没有出现忘掉的确认卡片：{[(card['id'], card['detail'][:80]) for card in t['cards']]!r}"),
+            ("只问了我一遍", lambda t: sum(card["id"].startswith("memory-forget-") for card in t["cards"]) == 1
+                or f"忘掉的卡片出了 {sum(card['id'].startswith('memory-forget-') for card in t['cards'])} 张"),
         ], note="让它忘掉一条")
         time.sleep(15)
 

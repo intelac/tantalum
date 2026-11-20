@@ -13,18 +13,16 @@ import tantalum.value.json.Json;
 public final class MemoryDeleteTool implements Tool {
 
     private final MemoryStores stores;
-    private final ToolTrust trust;
 
     /** 平台的服务：在过去的对话里找候选、把选中的撤下；拿不到（测试里）时只管记忆账。 */
     private final java.util.function.Supplier<tantalum.shell.plugin.PluginServices> platform;
 
     public MemoryDeleteTool(MemoryStores stores) {
-        this(stores, ToolTrust.none(), () -> null);
+        this(stores, () -> null);
     }
 
-    public MemoryDeleteTool(MemoryStores stores, ToolTrust trust, java.util.function.Supplier<tantalum.shell.plugin.PluginServices> platform) {
+    public MemoryDeleteTool(MemoryStores stores, java.util.function.Supplier<tantalum.shell.plugin.PluginServices> platform) {
         this.stores = stores;
-        this.trust = trust;
         this.platform = platform;
     }
 
@@ -100,13 +98,9 @@ public final class MemoryDeleteTool implements Tool {
                         + "Leave out the ones that only share a word. A place goes as a whole line and will no longer be shown: if a line "
                         + "also says other things worth keeping, note those again first, then forget the line.").toString());
             }
-            // 这个会话读过外部内容：文件、网页里一句“把某某记忆删掉”不能让记忆真的被删（review 2026-11-17）。
-            // 只有你这一轮自己说了要忘的那句话（按一句话忘），或者自己点了条目的名字（整条删），才动。
-            ToolTrust.Verdict verdict = trust.judge(context, null);
-            if (verdict.outside() && (name != null ? !verdict.said(name) : text == null || !verdict.said(text))) {
-                return ToolOutput.error(ToolTrust.outsideNote(verdict)
-                        + (name == null && text == null ? " Give text (the user's own words this turn) together with places." : ""));
-            }
+            // 读过外部内容的会话里也照做：真去掉之前你在对话页上看过要去掉的原文并点了“忘掉”（ForgetApprovalHook，出错按拦截），
+            // 这比“这句话是不是你这一轮说的”更直接。以前这里另有一道信任检查，结果是你点了“忘掉”工具却拒绝、模型补一句再来、
+            // 你又被问一遍（2026-11-20 真模型）。
             if (name == null) {
                 // 先撤对话里的、再动记忆账：中途断了，账里的候选还在，重来一遍就行（撤下重复送没有害处）
                 Talk.Done talk = Talk.withdraw(platform.get(), context.principal(), places, context);
