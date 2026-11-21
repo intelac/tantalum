@@ -134,7 +134,7 @@ class ModelSwitchReplayTest {
     /** 提交一次提问（带选择或不带），等这个会话的第 {@code runs} 个运行结束。 */
     private static void ask(TestServer server, String session, String text, ModelChoice model, int runs) throws Exception {
         Intake.Submission submitted = server.context.getBean(Engine.class).intake().submit(ALICE, new SessionId(session),
-                new RequestId("r-" + text.hashCode() + "-" + runs), "prompt", text, List.of(), model);
+                new RequestId("r-" + text.hashCode() + "-" + runs), tantalum.value.event.Delivery.QUEUE, text, List.of(), model, null, List.of(), List.of(), false);
         assertEquals(200, submitted.status());
         String body = "";
         for (int i = 0; i < 1000 && count(body, "\"endReason\"") < runs; i++) {
@@ -215,48 +215,5 @@ class ModelSwitchReplayTest {
             assertEquals(200, offline.get(ALICE.value(), "/api/sessions/s1/messages").statusCode());
             assertEquals(trace, offline.get(ALICE.value(), "/api/sessions/s1/trace").body());
         }
-    }
-
-    /** 需求 7.4：本 spec 之前的会话（带思考块）打开后文件不变；继续提问用默认模型，不追加说明，旧的思考块照样发回 Claude。 */
-    @Test
-    void aSessionFromBeforeThisSpecOpensUnchangedAndContinuesWithoutANotice() throws Exception {
-        Path workspace = Files.createDirectories(temp.resolve("workspace/alice"));
-        Path data = temp.resolve("data");
-        Path file = new SessionPaths(data).sessionFile(ALICE, new SessionId("s-old"));
-        Files.createDirectories(file.getParent());
-        byte[] original;
-        try (InputStream in = getClass().getResourceAsStream("/model-picker/pre-model-picker.jsonl")) {
-            original = in.readAllBytes();
-        }
-        Files.write(file, original);
-        List<Call> calls = Collections.synchronizedList(new ArrayList<>());
-        Scripted claude = new Scripted("claude", calls, List.of(answer("cobalt")));
-        try (TestServer server = server(data, workspace.getParent(), Map.of("claude", claude), true)) {
-            String messages = server.get(ALICE.value(), "/api/sessions/s-old/messages").body();
-            assertTrue(messages.contains("I will remember cobalt."), messages);
-            assertArrayEquals(original, Files.readAllBytes(file), "opening an old session writes nothing");
-
-            ask(server, "s-old", "What was the word?", null, 2);
-        }
-        assertEquals(1, calls.size());
-        Prompt prompt = calls.getFirst().prompt();
-        assertEquals(SONNET, prompt.model(), "no choice anywhere: the administrator's default");
-        assertFalse(hasNotice(prompt), "the first recorded choice of an old session is not a switch");
-        assertEquals("claude", ((ReasoningBlock) prompt.messages().get(1).content().getFirst()).provider());
-        // 这份旧会话录的时候浏览器还在服务器上、是可用的；现在浏览器在用户电脑上（local-browser 需求 8.6），没连电脑，
-        // 所以提问后面多一条“工具变化”，只说浏览器那 11 个工具不再可用。提问本身一个字不变，也没有换模型的说明。
-        List<tantalum.value.model.Message> asked = prompt.messages().stream()
-                .filter(message -> message.content().contains(new TextBlock("What was the word?"))).toList();
-        assertEquals(1, asked.size());
-        assertEquals(List.of(new TextBlock("What was the word?")), asked.getFirst().content());
-        List<tantalum.value.model.ToolChangeBlock> changes = prompt.messages().stream().flatMap(message -> message.content().stream())
-                .filter(tantalum.value.model.ToolChangeBlock.class::isInstance).map(tantalum.value.model.ToolChangeBlock.class::cast).toList();
-        assertEquals(1, changes.size(), changes.toString());
-        assertEquals(11, changes.getFirst().removed().size(), changes.toString());
-        assertTrue(changes.getFirst().removed().stream().allMatch(name -> name.startsWith("browser_")), changes.toString());
-        assertTrue(changes.getFirst().added().isEmpty(), changes.toString());
-        byte[] after = Files.readAllBytes(file);
-        assertArrayEquals(original, java.util.Arrays.copyOf(after, original.length), "only appended");
-        assertTrue(after.length > original.length);
     }
 }

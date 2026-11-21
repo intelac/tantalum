@@ -120,7 +120,7 @@ class CrashRestartTest {
             String cookie = loggedIn.headers().firstValue("set-cookie").orElseThrow().split(";")[0];
             HttpRequest submit = HttpRequest.newBuilder(URI.create(base + "/api/sessions/s1/submissions"))
                     .header("Cookie", cookie).header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"read it\"}")).build();
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"read it\"}")).build();
             HttpResponse<String> response = http.send(submit, HttpResponse.BodyHandlers.ofString());
             assertEquals(200, response.statusCode(), () -> "child log at " + temp.resolve("child.log"));
             assertTrue(secondCall.await(30, TimeUnit.SECONDS), "model should be called a second time");
@@ -132,7 +132,7 @@ class CrashRestartTest {
 
             List<EventEnvelope> events;
             events = new SessionStore(data, EventCodec.withBuiltins()).readAll();
-            assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished"),
+            assertEquals(List.of("SessionCreated", "UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished"),
                     events.stream().map(envelope -> envelope.event().type()).toList());
             TransitionTable table = new TransitionTable();
             BuiltinSteps.register(table);

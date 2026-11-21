@@ -1,5 +1,6 @@
 package tantalum.examples;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -42,7 +43,7 @@ class PinnedContextHookTest {
     }
 
     private static KernelState session(Message... messages) {
-        SessionState session = SessionState.start(SESSION, USER);
+        SessionState session = SessionStateFixture.regular(SESSION, USER);
         for (Message message : messages) {
             session = session.append(message);
         }
@@ -90,7 +91,7 @@ class PinnedContextHookTest {
     /** 摘要引用过标记不算钉住，否则压缩过一次之后每次都会被拒。头部取自压缩后的视图。 */
     @Test
     void markerOnlyInASummaryIsAllowed() {
-        SessionState compacted = SessionState.start(SESSION, USER)
+        SessionState compacted = SessionStateFixture.regular(SESSION, USER)
                 .append(Message.user("#pin always use tabs")).append(assistant("ok"))
                 .append(Message.user("next")).append(assistant("done"))
                 .compacted(new Compaction(List.of(SummaryPrompt.summaryMessage("user pinned: #pin always use tabs"), Message.user("next")), 3))

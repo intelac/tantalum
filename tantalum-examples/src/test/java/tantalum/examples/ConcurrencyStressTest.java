@@ -198,7 +198,7 @@ class ConcurrencyStressTest {
                     try {
                         go.await();
                         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                                "{\"requestId\":\"again-" + session + "\",\"mode\":\"prompt\",\"text\":\"Again, please.\"}");
+                                "{\"requestId\":\"again-" + session + "\",\"delivery\":\"queue\",\"text\":\"Again, please.\"}");
                         assertEquals(200, response.statusCode(), response.body());
                     } catch (Throwable failure) {
                         failures.add(failure);
@@ -306,7 +306,7 @@ class ConcurrencyStressTest {
                         try {
                             go.await();
                             HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                                    "{\"requestId\":\"r-" + session + "\",\"mode\":\"prompt\",\"text\":\"I am " + user + " in " + session + ". Find my secret.\"}");
+                                    "{\"requestId\":\"r-" + session + "\",\"delivery\":\"queue\",\"text\":\"I am " + user + " in " + session + ". Find my secret.\"}");
                             assertEquals(200, response.statusCode(), response.body());
                             if (cancelThisOne) {
                                 String runId = null;

@@ -92,7 +92,7 @@ public final class E2eModel implements ModelClient {
                 return summary(prompt);
             }
             // 任务（subagent）：最后一条是任务的结果时，这一轮是它开的（或者它进了这一轮）：把结果说出来
-            tantalum.value.model.TaskResultBlock back = taskResult(prompt);
+            tantalum.value.model.ReportBlock back = taskResult(prompt);
             if (back != null) {
                 return answer(chunks, "任务回来了（" + back.outcome().said() + "）：" + (back.text() == null ? "" : back.text()));
             }
@@ -483,16 +483,16 @@ public final class E2eModel implements ModelClient {
      * 也是用户消息，但不是用户写的，跳过。
      */
     /** 最后一条消息里任务的结果（后面跟着的上下文更新不算）；不是任务的结果时为 null。 */
-    private static tantalum.value.model.TaskResultBlock taskResult(Prompt prompt) {
+    private static tantalum.value.model.ReportBlock taskResult(Prompt prompt) {
         List<Message> messages = prompt.messages();
         int last = messages.size() - 1;
         while (last >= 0 && userText(messages.get(last)).startsWith(tantalum.kernel.projection.ContextUpdate.PREFIX)) {
             last--;
         }
-        tantalum.value.model.TaskResultBlock found = null;
+        tantalum.value.model.ReportBlock found = null;
         if (last >= 0) {
             for (ContentBlock block : messages.get(last).content()) {
-                if (block instanceof tantalum.value.model.TaskResultBlock result) {
+                if (block instanceof tantalum.value.model.ReportBlock result) {
                     found = result;
                 }
             }
@@ -529,6 +529,9 @@ public final class E2eModel implements ModelClient {
         for (ContentBlock block : message.content()) {
             if (block instanceof TextBlock t) {
                 text.append(t.text());
+            } else if (block instanceof tantalum.value.model.AssignmentBlock given) {
+                // 帮手会话里第一条是交代：它自己的内容块，给模型的文字和以前一样
+                text.append(given.text());
             }
         }
         return text.toString();

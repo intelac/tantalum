@@ -26,7 +26,6 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.Message;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.decision.SessionChangeFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -81,7 +80,7 @@ public final class LaneBench {
                     SessionId id = new SessionId("warm" + session);
                     sent.put(request, System.nanoTime());
                     input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
-                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)));
+                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), TEXT)));
                     Thread.sleep(10);
                 }
                 Thread.sleep(2_000);
@@ -100,7 +99,7 @@ public final class LaneBench {
                     SessionId id = new SessionId("s" + session);
                     sent.put(request, System.nanoTime());
                     if (!input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.now(), new Principal("u" + session % USERS), id, null,
-                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), new OwnerRef.OfSession(id), TEXT)))) {
+                            UserPromptFixture.of(new SubmissionId(request), new RequestId(request), TEXT)))) {
                         throw new IllegalStateException("input ring full");
                     }
                 }

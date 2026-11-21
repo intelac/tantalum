@@ -1,5 +1,6 @@
 package tantalum.examples;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -66,7 +67,7 @@ class CitationCheckTest {
 
     /** 读了 src/Order.java 的第 10–12 行（offset 10，三行），grep 命中 src/Pay.java 第 40 行。 */
     private static SessionState session(String answer, String... corrections) {
-        SessionState session = SessionState.start(SESSION, USER)
+        SessionState session = SessionStateFixture.regular(SESSION, USER)
                 .append(Message.user("where is the total computed?"))
                 .append(assistant(call("c1", "read_file", "src/Order.java", 10)))
                 .append(result("c1", "int a;\nint b;\nint total = a + b;", false))
@@ -102,7 +103,7 @@ class CitationCheckTest {
     /** 没读完时以结尾的 “Showing lines a-b” 为准。 */
     @Test
     void aPartialReadCountsOnlyTheLinesShown() {
-        SessionState session = SessionState.start(SESSION, USER)
+        SessionState session = SessionStateFixture.regular(SESSION, USER)
                 .append(Message.user("q"))
                 .append(assistant(call("c1", "read_file", "Big.java", null)))
                 .append(result("c1", "l1\nl2\n\n[Showing lines 1-2000 of 5000. Use offset=2001 to continue.]", false))

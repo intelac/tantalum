@@ -46,7 +46,7 @@ final class SmokeRun {
         Timed timed = new Timed(client);
         try (TestServer server = new TestServer(temp.resolve("data"), workspace, timed)) {
             assertEquals(200, server.post("smoke", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"Use the read_file tool to read note.txt, then tell me the secret word.\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"Use the read_file tool to read note.txt, then tell me the secret word.\"}").statusCode());
             String runs = "";
             for (int i = 0; i < 12_000 && !runs.contains("endReason"); i++) {
                 Thread.sleep(50);

@@ -1,5 +1,6 @@
 package tantalum.examples;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -66,13 +67,18 @@ class ToolApprovalHookTest {
     /** 会话里记着“一直允许”这个工具就不再问；别的工具、别的会话照样问。 */
     @Test
     void aToolAlwaysAllowedInThisSessionIsNotAskedAgain() {
-        SessionState allowed = SessionState.start(SESSION, USER)
+        SessionState allowed = SessionStateFixture.regular(SESSION, USER)
                 .withNote(ToolApprovalHook.NOTE, new Json.Obj(Map.of("write_file", new Json.Bool(true))));
-        assertSame(Allow.PLAIN, beforeTool(KernelState.empty().with(allowed), "write_file"));
+        // 这一轮是你说的话开的：“一直允许”才算数
+        KernelState yours = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN, tantalum.value.state.RunCause.prompt()));
+        assertSame(Allow.PLAIN, beforeTool(yours, "write_file"));
+        KernelState outside = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN,
+                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null)));
+        assertInstanceOf(Ask.class, beforeTool(outside, "write_file"), "a run caused from outside is asked every time");
         ToolApprovalHook two = new ToolApprovalHook(Set.of("write_file", "bash"));
         assertInstanceOf(Ask.class, two.beforeToolCall(KernelState.empty().with(allowed),
                 HookContext.of(RUN, Instant.EPOCH).withCall(new ToolCallBlock("c", "bash", "{}", ARGS))));
-        SessionState other = SessionState.start(new SessionId("other"), USER);
+        SessionState other = SessionStateFixture.regular(new SessionId("other"), USER);
         HookContext otherContext = HookContext.of(new RunRef(USER, other.id(), new RunId("r2")), Instant.EPOCH).withCall(WRITE);
         assertInstanceOf(Ask.class, HOOK.beforeToolCall(KernelState.empty().with(allowed).with(other), otherContext));
     }

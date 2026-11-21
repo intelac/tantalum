@@ -53,14 +53,14 @@ class SecurityEndToEndTest {
         try (TestServer server = new TestServer(data, workspace, (prompt, chunks) ->
                 new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null))) {
             HttpResponse<String> bobs = server.post("bob", "/api/sessions/bob-session/submissions",
-                    "{\"requestId\":\"b1\",\"mode\":\"prompt\",\"text\":\"bob's secret\"}");
+                    "{\"requestId\":\"b1\",\"delivery\":\"queue\",\"text\":\"bob's secret\"}");
             assertEquals(200, bobs.statusCode(), bobs.body());
             Thread.sleep(500);
             List<String> statuses = new ArrayList<>();
             for (String evil : EVIL) {
                 String id = encode(evil);
                 HttpResponse<String> submit = server.post("alice", "/api/sessions/" + id + "/submissions",
-                        "{\"requestId\":\"r-" + statuses.size() + "\",\"mode\":\"prompt\",\"text\":\"hi\"}");
+                        "{\"requestId\":\"r-" + statuses.size() + "\",\"delivery\":\"queue\",\"text\":\"hi\"}");
                 HttpResponse<String> messages = server.get("alice", "/api/sessions/" + id + "/messages");
                 HttpResponse<String> runs = server.get("alice", "/api/sessions/" + id + "/runs");
                 HttpResponse<String> run = server.get("alice", "/api/runs/" + id + "_1");
@@ -91,7 +91,7 @@ class SecurityEndToEndTest {
         try (TestServer server = new TestServer(data, workspace, (prompt, chunks) ->
                 new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null))) {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
             Thread.sleep(500);
             assumeTrue(PrivateFiles.posix(data), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
             List<String> exposed = exposed(data);

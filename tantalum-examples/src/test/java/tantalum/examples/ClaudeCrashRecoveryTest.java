@@ -90,7 +90,7 @@ class ClaudeCrashRecoveryTest {
             String cookie = loggedIn.headers().firstValue("set-cookie").orElseThrow().split(";")[0];
             HttpRequest submit = HttpRequest.newBuilder(URI.create(base + "/api/sessions/s1/submissions"))
                     .header("Cookie", cookie).header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":"
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":"
                             + "\"Before using any tool, reason carefully about the following: a snail climbs 3 m by day and slips 2 m by night "
                             + "up a 25 m wall; on which day does it reach the top, and why do people often get this wrong? "
                             + "Then read note.txt with read_file and report the secret word.\"}")).build();
@@ -131,7 +131,7 @@ class ClaudeCrashRecoveryTest {
             assertEquals("interrupted by restart", view.get("detail").asString(), view.toString());
 
             assertEquals(200, restarted.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"Just read note.txt with read_file and tell me the secret word.\"}").statusCode());
+                    "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"Just read note.txt with read_file and tell me the secret word.\"}").statusCode());
             JsonNode latest = null;
             Instant deadline = Instant.now().plusSeconds(240);
             while (Instant.now().isBefore(deadline)) {
