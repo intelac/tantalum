@@ -464,6 +464,34 @@ class InboxStepsTest {
         assertTrue(loop.session().inbox().isEmpty());
     }
 
+    /** 特意保持不变：你按了取消，没被看到的话和结果都只进历史，不自动再开一轮；压缩那一轮也一样（审查发现过压缩时会再开）。 */
+    @Test
+    void cancellingAManualCompactionStartsNothingForWhatJoinedIt() {
+        LoopFixture loop = CompactStepsTest.start();
+        loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), List.of(task("c1", "one")), StopReason.TOOL_USE, "m",
+                new TokenUsage(100, 10, 0, 0), null, null, null));
+        String id = loop.session().assignments().open().getFirst().id();
+        loop.feed(loop.runId(), new ModelReplied(modelCall(loop), text(CompactStepsTest.block("a1")), StopReason.END_TURN, "m",
+                new TokenUsage(150, 10, 0, 0), null, null, null));
+        loop.prompt(CompactStepsTest.block("q2"));
+        loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), CompactStepsTest.SETTINGS, List.of()));
+        loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, CompactStepsTest.block("a2"), 200));
+        loop.feed(null, CompactStepsTest.compactRequest(null));
+        RunId compaction = loop.runId();
+        loop.join("and one more thing");
+        loop.feed(null, report(id, "one done"));
+
+        Decision cancelled = loop.feed(compaction, new tantalum.value.event.Cancel(new RequestId("c")));
+
+        assertEquals(EndReason.CANCELLED, endOf(loop, compaction));
+        assertNull(loop.session().activeRun());
+        assertTrue(cancelled.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        List<Message> messages = loop.session().messages();
+        assertEquals(Message.user("and one more thing"), messages.get(messages.size() - 2));
+        assertEquals(block(id, "one done"), messages.getLast().content());
+        assertTrue(loop.session().inbox().isEmpty());
+    }
+
     // ---- 追到头是谁引起的 ----
 
     /** 需求 6.1–6.3：一轮吃进什么，{@code root} 就降到其中最低的，不会升回去；它交代出去的事带着这个 root，结果回来不能比交代时高。 */

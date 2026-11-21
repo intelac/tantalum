@@ -143,9 +143,10 @@ public final class InboxSteps {
     /**
      * 一轮要结束了：队里还标着“可并入”的，是这一轮没来得及让模型看到的。
      * <ul>
+     *   <li>你按了取消：都只进历史，不自动再开一轮（压缩那一轮也一样）。</li>
      *   <li>你并进去的话：进历史，下一轮看得到，不为它再开一轮。</li>
-     *   <li>结果：你按了取消，只进历史；失败或被重启打断，留在队里，由 {@link #next} 再开一轮。</li>
-     *   <li>这一轮是手动压缩（它不调模型）：都留在队里，压缩完接着处理。</li>
+     *   <li>结果：不是你按的取消（失败、被停、被重启或中断打断），留在队里，由 {@link #next} 再开一轮：交代的会话必须知道结果回来了。</li>
+     *   <li>这一轮是手动压缩（它不调模型）且不是你取消的：都留在队里，压缩完接着处理。</li>
      * </ul>
      */
     static void unseen(Outcome out, RunState run, EndReason reason, String detail) {
@@ -154,13 +155,13 @@ public final class InboxSteps {
             return;
         }
         boolean compaction = run.cause().startedBy() == RunCause.StartedBy.COMPACTION;
-        boolean byUser = reason == EndReason.CANCELLED && detail == null;
+        boolean byUser = CancelSteps.byUser(reason, detail);
         List<InboxItem> kept = new ArrayList<>();
         SessionState grown = session;
         for (InboxItem item : session.inbox()) {
             if (!item.join()) {
                 kept.add(item);
-            } else if (compaction || item.kind() == Input.Kind.REPORT && !byUser) {
+            } else if (!byUser && (compaction || item.kind() == Input.Kind.REPORT)) {
                 kept.add(item.withJoin(false));
             } else {
                 grown = grown.append(item.message());

@@ -30,6 +30,11 @@ public final class CancelSteps {
         return out.decision();
     }
 
+    /** 这一轮是不是你按取消结束的：只有 {@link #cancel} 以“取消”结束且不带详情（重启、中断打断都带详情）。 */
+    static boolean byUser(EndReason reason, String detail) {
+        return reason == EndReason.CANCELLED && detail == null;
+    }
+
     public static Decision cancel(StepContext context) {
         return end(context, EndReason.CANCELLED, null);
     }
