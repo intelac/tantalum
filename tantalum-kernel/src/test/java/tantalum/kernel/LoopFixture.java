@@ -58,7 +58,7 @@ public final class LoopFixture {
         kernel = new Kernel(table, new HookChain(List.of(hooks)),
                 (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds(), assignments));
         // 会话先建好才收得到话：账里的第一个事件就是它，回放从这里开始
-        create(SESSION, new SessionCreated(SessionKind.REGULAR, null, false, null));
+        create(SESSION, new SessionCreated(SessionKind.REGULAR, null, false, null, null));
     }
 
     /** 建一个会话（别的种类、带目录的、帮手会话）。 */
@@ -150,6 +150,11 @@ public final class LoopFixture {
     }
 
     /** 送达的记账：回执，和 {@code state} 里某条信箱等着的确认定时器。 */
+    /** 运行的起因去掉开轮位置（{@code since}，每一轮都不同），测试按来由、根、欠谁比较。 */
+    public static tantalum.value.state.RunCause plain(tantalum.value.state.RunCause cause) {
+        return new tantalum.value.state.RunCause(cause.startedBy(), cause.root(), cause.owes(), cause.owedTo(), null);
+    }
+
     public static boolean bookkeeping(KernelState state, Command command) {
         return command instanceof tantalum.value.command.Acknowledge
                 || command instanceof tantalum.value.command.StartTimer timer && state.sessions().values().stream()

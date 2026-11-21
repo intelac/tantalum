@@ -97,7 +97,7 @@ class CommandApprovalHookTest {
         Allow allow = assertInstanceOf(Allow.class, answered(CommandApprovalHook.SESSION));
         SessionState allowed = SessionStateFixture.regular(SESSION, USER).withNote(allow.notes().getFirst().key(), allow.notes().getFirst().value());
         KernelState outside = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN,
-                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null)));
+                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null, null, null)));
         assertInstanceOf(Ask.class, before(outside, call("bash", "rm -rf build", null)));
     }
 

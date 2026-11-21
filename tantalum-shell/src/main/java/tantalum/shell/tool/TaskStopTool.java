@@ -38,7 +38,7 @@ public final class TaskStopTool implements Tool {
     @Override public ToolDispatch dispatch() { return DISPATCH; }
 
     /** 只有一层：任务不能再放任务。内核也拦着。 */
-    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR, tantalum.value.state.SessionKind.MAIN); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

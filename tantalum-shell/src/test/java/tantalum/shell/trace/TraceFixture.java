@@ -85,7 +85,7 @@ final class TraceFixture {
     }
 
     TraceFixture(boolean concurrencySafe, List<KernelHook> hooks, Limits limits) {
-        this(concurrencySafe, hooks, limits, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null));
+        this(concurrencySafe, hooks, limits, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null, null));
     }
 
     private TraceFixture(boolean concurrencySafe, List<KernelHook> hooks, Limits limits, tantalum.value.event.SessionCreated created) {

@@ -85,7 +85,7 @@ test.describe("任务", () => {
     await expect(composer(page)).toBeEnabled();
   });
 
-  test("任务里要批准：问题显示在主对话的输入框位置，标明来自哪个任务", async ({ page }) => {
+  test("任务里要批准：问题列在主对话的输入框上方，标明来自哪个任务，输入框照旧能用", async ({ page }) => {
     await openNewSession(page, OTHER_USER);
     await setApproval(page, true);
     try {
@@ -94,7 +94,8 @@ test.describe("任务", () => {
       const approval = page.getByRole("group", { name: "允许调用 write_file 吗？" });
       await expect(approval).toBeVisible({ timeout: 30_000 });
       await expect(approval).toContainText(/来自任务 t\d+-0「approve: t\d+」/);
-      await expect(composer(page)).toBeHidden();
+      // 交代出去的那边来的批准不占输入框（dispatch 需求 4）：还能接着和这个对话说话
+      await expect(composer(page)).toBeVisible();
       await expect(page.getByRole("region", { name: `approve: t${stamp}` })).toContainText("等你回答");
       await approval.getByRole("button").first().click();
       await expect(page.getByRole("region", { name: /任务 t\d+-0 的结果/ })).toContainText(`结果：Created e2e/approve-t${stamp}.txt`, { timeout: 30_000 });

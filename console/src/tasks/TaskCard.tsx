@@ -1,3 +1,4 @@
+import { navigate, sessionPath } from "../app/router";
 import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronRight, CircleHelp, CircleSlash, Clock, Loader2, X } from "lucide-react";
 import { useState } from "react";
@@ -114,6 +115,19 @@ function TaskCardView({ item }: { item: TaskItem }) {
         </button>
         <OutcomeBadge outcome={item.outcome} waiting={waiting} />
         <span className="shrink-0 text-xs tabular-nums text-fg-faint">{formatDuration(elapsed)}</span>
+        {/* 主窗口派活开的是普通会话（dispatch）：能点过去直接说；帮手只看这张卡片 */}
+        {item.taskSession.startsWith("work-") && (
+          <a
+            href={sessionPath(item.taskSession)}
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(sessionPath(item.taskSession));
+            }}
+            className="shrink-0 text-xs text-accent underline-offset-2 hover:underline"
+          >
+            {t.openSession}
+          </a>
+        )}
         {live && !viewing && (
           <Button size="sm" disabled={stop.isPending || stop.isSuccess} onClick={() => stop.mutate()}>
             {t.stop}

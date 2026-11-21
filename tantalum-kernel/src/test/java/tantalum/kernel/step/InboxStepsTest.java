@@ -63,7 +63,7 @@ import tantalum.value.state.SessionState;
  */
 class InboxStepsTest {
 
-    private static final RunCause BY_REPORT = new RunCause(RunCause.StartedBy.REPORT, Root.USER, null);
+    private static final RunCause BY_REPORT = new RunCause(RunCause.StartedBy.REPORT, Root.USER, null, null, null);
 
     private static UserPrompt prompt(String text) {
         return UserPromptFixture.of(new SubmissionId("p" + text), new RequestId("p" + text), text);
@@ -141,7 +141,7 @@ class InboxStepsTest {
         Decision decision = loop.prompt("first");
 
         assertEquals(ContextSteps.AWAITING_CONTEXT, loop.phase());
-        assertEquals(RunCause.prompt(), loop.run().cause());
+        assertEquals(RunCause.prompt(), LoopFixture.plain(loop.run().cause()));
         assertTrue(loop.run().cause().attended());
         assertInstanceOf(AssembleContext.class, only(decision, AssembleContext.class));
         assertEquals(List.of(Message.user("first")), loop.session().messages());
@@ -181,7 +181,7 @@ class InboxStepsTest {
         loop.join("first");
 
         assertEquals(ContextSteps.AWAITING_CONTEXT, loop.phase());
-        assertEquals(RunCause.prompt(), loop.run().cause());
+        assertEquals(RunCause.prompt(), LoopFixture.plain(loop.run().cause()));
         assertEquals(List.of(Message.user("first")), loop.session().messages());
         assertTrue(loop.session().inbox().isEmpty());
     }
@@ -207,7 +207,7 @@ class InboxStepsTest {
     void aSessionThatIsNotAHelperTakesNoAssignment() {
         LoopFixture loop = new LoopFixture();
         SessionId main = new SessionId("main-u");
-        loop.create(main, new SessionCreated(SessionKind.MAIN, null, false, null));
+        loop.create(main, new SessionCreated(SessionKind.MAIN, null, false, null, null));
         KernelState before = loop.state;
 
         for (SessionId session : List.of(LoopFixture.SESSION, main)) {
@@ -257,37 +257,6 @@ class InboxStepsTest {
         }
     }
 
-    /** 主会话在这一步和普通会话收的一样；它放出的帮手编号以 {@code main-} 开头，但那是帮手，不是主会话（清单第七节第一条）。 */
-    @Test
-    void theMainSessionTakesPromptsAndReportsAndItsHelpersAreHelpers() {
-        LoopFixture loop = new LoopFixture();
-        SessionId main = new SessionId("main-u");
-        loop.create(main, new SessionCreated(SessionKind.MAIN, null, false, null));
-
-        Decision asked = loop.feed(main, null, prompt("go"));
-        RunId run = loop.state.sessions().get(main).activeRun();
-        assertEquals(RunCause.prompt(), loop.state.runs().get(run).cause());
-        Decision ready = loop.feed(main, run, ContextAssembledFixture.of(only(asked, AssembleContext.class).id(), "s", List.of(), null, List.of()));
-        Decision called = loop.feed(main, run,
-                new ModelReplied(only(ready, CallModel.class).id(), List.of(task("c1", "one")), StopReason.TOOL_USE, "m", null, null, null, null));
-        Assign start = only(called, Assign.class);
-        assertEquals(SessionIds.helper(main, start.assignment()), start.session());
-        assertTrue(SessionIds.helperShaped(start.session()));
-        assertFalse(SessionIds.mainShaped(start.session()), "a helper of the main session is not a main session");
-        loop.feed(main, run, new ModelReplied(only(called, CallModel.class).id(), text("out"), StopReason.END_TURN, "m", null, null, null, null));
-
-        AssignmentFixture.deliver(loop, start);
-        assertEquals(SessionKind.HELPER, loop.state.sessions().get(start.session()).kind());
-        KernelState before = loop.state;
-        assertSame(before, loop.feed(start.session(), null, prompt("hello?")).newState());
-
-        loop.feed(main, null, new Report(start.assignment(), AssignmentOutcome.COMPLETED, "one done", Root.USER, start.session()));
-        RunId next = loop.state.sessions().get(main).activeRun();
-        assertNotEquals(run, next);
-        assertEquals(BY_REPORT, loop.state.runs().get(next).cause());
-        assertEquals(block(start.assignment(), "one done"), loop.state.sessions().get(main).messages().getLast().content());
-    }
-
     /** 多用户：别人名下来的输入，会话不是他的，什么都不改、什么都不发。 */
     @Test
     void someoneElsesInputIsLeftAlone() {
@@ -319,7 +288,7 @@ class InboxStepsTest {
 
         assertEquals(EndReason.FAILED, endOf(loop, failing));
         assertNotEquals(failing, loop.session().activeRun());
-        assertEquals(BY_REPORT, loop.run().cause());
+        assertEquals(BY_REPORT, LoopFixture.plain(loop.run().cause()));
         assertEquals(ContextSteps.AWAITING_CONTEXT, loop.phase());
         assertInstanceOf(AssembleContext.class, only(failed, AssembleContext.class));
         assertEquals(block(id, "one done"), loop.session().messages().getLast().content());
@@ -337,7 +306,7 @@ class InboxStepsTest {
         loop.feed(interrupted, new RunInterrupted());
 
         assertEquals(EndReason.CANCELLED, endOf(loop, interrupted));
-        assertEquals(BY_REPORT, loop.run().cause());
+        assertEquals(BY_REPORT, LoopFixture.plain(loop.run().cause()));
         assertEquals(block(id, "one done"), loop.session().messages().getLast().content());
         assertTrue(loop.session().inbox().isEmpty());
     }
@@ -384,7 +353,7 @@ class InboxStepsTest {
         Decision failed = fail(loop);
 
         assertEquals(1, AssignmentFixture.commands(failed).stream().filter(AssembleContext.class::isInstance).count());
-        assertEquals(BY_REPORT, loop.run().cause());
+        assertEquals(BY_REPORT, LoopFixture.plain(loop.run().cause()));
         List<Message> messages = loop.session().messages();
         assertEquals(block(ids.get(0), "one done"), messages.get(messages.size() - 2).content());
         assertEquals(block(ids.get(1), "two done"), messages.getLast().content());
@@ -402,7 +371,7 @@ class InboxStepsTest {
 
         fail(loop);
 
-        assertEquals(RunCause.prompt(), loop.run().cause());
+        assertEquals(RunCause.prompt(), LoopFixture.plain(loop.run().cause()));
         assertEquals(Message.user("next question"), loop.session().messages().getLast());
         assertEquals(1, loop.joining().size(), "the report waits for this run's first model call");
         assertEquals(0, loop.session().assignments().unattendedRuns());
@@ -428,7 +397,7 @@ class InboxStepsTest {
 
         assertEquals(EndReason.COMPLETED, endOf(loop, compaction));
         assertNotEquals(compaction, loop.session().activeRun());
-        assertEquals(RunCause.prompt(), loop.run().cause());
+        assertEquals(RunCause.prompt(), LoopFixture.plain(loop.run().cause()));
         assertEquals(ContextSteps.AWAITING_CONTEXT, loop.phase());
         assertEquals(Message.user("and one more thing"), loop.session().messages().getLast());
         assertTrue(loop.session().inbox().isEmpty());
@@ -459,7 +428,7 @@ class InboxStepsTest {
         loop.feed(compaction, new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0), null, null, null));
 
         assertEquals(EndReason.COMPLETED, endOf(loop, compaction));
-        assertEquals(BY_REPORT, loop.run().cause());
+        assertEquals(BY_REPORT, LoopFixture.plain(loop.run().cause()));
         assertEquals(block(id, "one done"), loop.session().messages().getLast().content());
         assertTrue(loop.session().inbox().isEmpty());
     }
@@ -508,7 +477,7 @@ class InboxStepsTest {
         loop.feed(null, AssignmentFixture.report(first.assignment(), AssignmentOutcome.COMPLETED, "one done", Root.OUTSIDE));
         assertEquals(Root.USER, loop.run().cause().root(), "the run has not taken it in yet");
         loop.feed(loop.runId(), ToolFinishedFixture.of(slow.id(), "c2", "ok", false, null));
-        assertEquals(new RunCause(RunCause.StartedBy.PROMPT, Root.OUTSIDE, null), loop.run().cause());
+        assertEquals(new RunCause(RunCause.StartedBy.PROMPT, Root.OUTSIDE, null, null, null), LoopFixture.plain(loop.run().cause()));
 
         // 之后你再并进一句话：不会升回去
         loop.join("carry on");
@@ -520,13 +489,13 @@ class InboxStepsTest {
 
         // 结果自称是你引起的：不算，照交代时的
         loop.feed(null, AssignmentFixture.report(second.assignment(), AssignmentOutcome.COMPLETED, "two done", Root.USER));
-        assertEquals(new RunCause(RunCause.StartedBy.REPORT, Root.OUTSIDE, null), loop.run().cause());
+        assertEquals(new RunCause(RunCause.StartedBy.REPORT, Root.OUTSIDE, null, null, null), LoopFixture.plain(loop.run().cause()));
         assembled(loop);
         done(loop, "noted");
 
         // 你说的话开的下一轮，又是你引起的
         loop.prompt("and now?");
-        assertEquals(RunCause.prompt(), loop.run().cause());
+        assertEquals(RunCause.prompt(), LoopFixture.plain(loop.run().cause()));
     }
 
     // ---- 回放 ----

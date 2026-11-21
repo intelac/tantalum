@@ -164,6 +164,22 @@ public final class ContextHandler implements Handler {
         return text.toString();
     }
 
+    /** 主会话的“开着的事”（dispatch 需求 1.3）：交代出去、结果还没回来的，按开始的先后。 */
+    static final String OPEN_TASKS_TAG = "open-tasks";
+
+    static String openTasks(SessionState main) {
+        StringBuilder text = new StringBuilder("Tasks you handed out that have not come back yet:\n");
+        if (main.assignments().open().isEmpty()) {
+            text.append("- (none)\n");
+        }
+        for (tantalum.value.assignment.OpenAssignment open : main.assignments().open()) {
+            text.append("- task ").append(open.id()).append(" in conversation ").append(open.session().value()).append(": ")
+                    .append(open.brief()).append(" (since ").append(open.started()).append(")\n");
+        }
+        text.append("To add to one or retry it, call task with \"session\" set to its conversation; to stop it, call task_stop.");
+        return text.toString();
+    }
+
     @Override
     public Event handle(Command command) throws IOException, InterruptedException {
         Principal principal = command.run().principal();
@@ -198,8 +214,15 @@ public final class ContextHandler implements Handler {
                         ? java.time.Instant.EPOCH : clock.instant(), tantalum.shell.conversation.SessionSummary.IDLE, dirs.apply(self)),
                         java.util.OptionalLong.empty(), kind));
             }
-            sections.add(new ContextSection(WorkspaceSection.NAME, escape(WorkspaceSection.text(source.list(principal), rows,
-                    command.run().session(), clock == null ? null : clock.instant())), true));
+            String listed = WorkspaceSection.text(source.list(principal), rows, command.run().session(), clock == null ? null : clock.instant());
+            if (kind == SessionKind.MAIN) {
+                // 主会话没有 workspace_add（dispatch）：它点名工作区派活，新的工作区要在普通会话里加
+                listed = listed.substring(0, listed.lastIndexOf("When the work is in a folder")) + WorkspaceSection.MAIN_ENDING;
+            }
+            sections.add(new ContextSection(WorkspaceSection.NAME, escape(listed), true));
+        }
+        if (kind == SessionKind.MAIN && here != null) {
+            sections.add(new ContextSection(OPEN_TASKS_TAG, escape(openTasks(here)), true));
         }
         List<String> notes = gate.modelNotes(principal);
         if (!notes.isEmpty()) {
@@ -264,7 +287,7 @@ public final class ContextHandler implements Handler {
             unlocks.forEach(rule -> later.addAll(rule.add()));
             enabled = enabled.stream().filter(name -> !later.contains(name)).toList();
         }
-        List<tantalum.value.model.ToolSpec> specs = catalog.specs();
+        List<tantalum.value.model.ToolSpec> specs = catalog.specs(kind);
         // 模型不支持会话中途的工具变化（Haiku 等）时也一样：这个人现在没开着的工具不放进工具表。否则它们算“一开始就关着”，
         // 这个会话的第二句话就选不了这个模型了。接着连接程序的 Mac 上 powershell 永远关着，所以每个普通会话都中招
         // （2026-11-17 真模型场景发现）。会话的工具表在第一次组装时定下，这样的会话之后新开的工具要等压缩或新会话。

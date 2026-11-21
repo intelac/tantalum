@@ -138,6 +138,7 @@ class AssignmentInvariantsTest {
                     // 和处理器一样：帮手会话没有（交代没送到过、已经撤掉了）就回“不收”，作为这条命令的结果回到送方
                     case tantalum.value.delivery.StopParcel stop -> loop.state.sessions().get(deliver.to()) == null
                             ? new tantalum.value.event.Refused(stop.id(), "there is no session for that task") : stop.input();
+                    case tantalum.value.delivery.NoticeParcel note -> note.input();
                 };
                 if (what instanceof tantalum.value.event.Refused refused) {
                     loop.feed(session, null, refused);

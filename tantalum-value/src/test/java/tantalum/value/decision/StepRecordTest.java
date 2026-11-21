@@ -96,12 +96,12 @@ class StepRecordTest {
         RunState run = RunState.start(REF, RunCause.prompt())
                 .withPhase(new Awaiting(Set.of(new CommandId("s_0-0")), "AwaitingModel"));
         KernelState before = KernelState.empty().with(session).with(run);
-        KernelState after = before.with(session.enqueue(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null)))
+        KernelState after = before.with(session.enqueue(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null, null)))
                 .with(run.withPhase(new Ended(EndReason.CANCELLED, "interrupted by restart")));
 
         StepRecord record = roundTrip(before, after);
 
-        assertEquals(List.of(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null)), record.session().inbox().value());
+        assertEquals(List.of(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null, null)), record.session().inbox().value());
         assertEquals(1, record.runs().size());
     }
 

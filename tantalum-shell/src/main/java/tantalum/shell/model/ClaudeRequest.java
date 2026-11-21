@@ -415,6 +415,8 @@ final class ClaudeRequest {
             case AttachedBlock attached -> ContentBlockParam.ofText(TextBlockParam.builder().text(attached.wrapped()).build());
             // 交代出去的事的结果：用户消息里的一段文字，开头写明不是用户写的
             case ReportBlock result -> ContentBlockParam.ofText(TextBlockParam.builder().text(result.shown()).build());
+            // 记一笔（dispatch）：用户消息里的一段文字，开头写明来自哪个会话、不是对它的请求
+            case tantalum.value.model.NoticeBlock note -> ContentBlockParam.ofText(TextBlockParam.builder().text(note.shown()).build());
             // 交代给帮手的内容：和以前作为普通文字发出去时逐字节相同
             case AssignmentBlock given -> given.text().isBlank() ? null : ContentBlockParam.ofText(TextBlockParam.builder().text(given.text()).build());
         };

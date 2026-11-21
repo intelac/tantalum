@@ -22,7 +22,9 @@ import tantalum.value.json.Json;
 public record StoreFormat(int storage) {
 
     /** 4：会话有创建事件和种类，输入进同一个收件队列（session-model）。3（一步一行）和更早的会话文件不再读，见 {@link #check}。 */
-    public static final int STORAGE = 4;
+    public static final int STORAGE = 5;
+    /** 读得了、启动时就地升到 {@link #STORAGE} 的旧版本：格式 5 只给记录加了可空的字段（dispatch），格式 4 的行照样读。 */
+    static final int READS_FROM = 4;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);
     private static final String FILE = "format.json";
@@ -44,6 +46,11 @@ public record StoreFormat(int storage) {
         if (found.storage > STORAGE) {
             throw new IllegalStateException(file + " has storage version " + found.storage
                     + " but this program supports up to " + STORAGE + ". Upgrade tantalum.");
+        }
+        if (found.storage >= READS_FROM && found.storage < STORAGE) {
+            LOG.info("upgrading {} from storage version {} to {}: the session files read as they are", dataDir, found.storage, STORAGE);
+            write(dataDir, new StoreFormat(STORAGE));
+            return current;
         }
         if (found.storage < STORAGE) {
             Path sessions = dataDir.resolve("sessions");

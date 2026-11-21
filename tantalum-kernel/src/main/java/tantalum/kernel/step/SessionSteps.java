@@ -19,7 +19,7 @@ public final class SessionSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        out.put(SessionState.start(envelope.session(), envelope.principal(), event.kind(), event.helper(), event.dir(), event.offRecord()));
+        out.put(SessionState.start(envelope.session(), envelope.principal(), event.kind(), event.helper(), event.dir(), event.offRecord(), event.issuer()));
         return out.decision();
     }
 }

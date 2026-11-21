@@ -38,7 +38,7 @@ class SessionStepsTest {
     @Test
     void creationFixesTheKindTheDirectoryAndOffRecord() {
         LoopFixture loop = new LoopFixture();
-        Decision created = loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/app", true, null));
+        Decision created = loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/app", true, null, null));
 
         SessionState session = loop.state.sessions().get(OTHER);
         assertEquals(SessionKind.MAIN, session.kind());
@@ -57,7 +57,7 @@ class SessionStepsTest {
     void aHelperSessionRemembersWhoseHelperItIs() {
         LoopFixture loop = new LoopFixture();
         HelperOf helper = new HelperOf(LoopFixture.SESSION, "t1-0", "reviewer", "You review code.", java.util.List.of("read"));
-        loop.create(OTHER, new SessionCreated(SessionKind.HELPER, "/home/u/app", false, helper));
+        loop.create(OTHER, new SessionCreated(SessionKind.HELPER, "/home/u/app", false, helper, null));
         assertEquals(SessionKind.HELPER, loop.state.sessions().get(OTHER).kind());
         assertEquals(helper, loop.state.sessions().get(OTHER).helper());
     }
@@ -65,9 +65,9 @@ class SessionStepsTest {
     @Test
     void creatingASessionAgainChangesNothing() {
         LoopFixture loop = new LoopFixture();
-        loop.create(OTHER, new SessionCreated(SessionKind.REGULAR, "/home/u/app", false, null));
+        loop.create(OTHER, new SessionCreated(SessionKind.REGULAR, "/home/u/app", false, null, null));
         KernelState before = loop.state;
-        Decision again = loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/other", true, null));
+        Decision again = loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/other", true, null, null));
         assertSame(before, again.newState());
         assertEquals("/home/u/app", loop.state.sessions().get(OTHER).dir());
     }
@@ -85,7 +85,7 @@ class SessionStepsTest {
     @Test
     void whatCreationFixedStaysThroughEverythingThatFollows() {
         LoopFixture loop = new LoopFixture();
-        loop.create(OTHER, new SessionCreated(SessionKind.REGULAR, "/home/u/app", true, null));
+        loop.create(OTHER, new SessionCreated(SessionKind.REGULAR, "/home/u/app", true, null, null));
         loop.feed(OTHER, null, prompt("one"));
         loop.feed(OTHER, null, prompt("two"));
         SessionState session = loop.state.sessions().get(OTHER);
@@ -96,7 +96,7 @@ class SessionStepsTest {
 
     @Test
     void theChangeRecordsTheCreationAndPutsItBack() {
-        SessionState after = SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/app", true);
+        SessionState after = SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/app", true, null);
         SessionChange change = SessionChange.between(null, after);
         assertTrue(change.created());
         assertEquals(SessionKind.MAIN, change.kind());
@@ -112,11 +112,11 @@ class SessionStepsTest {
 
         // 建好不变：种类、目录、不进记忆变了，记不下来；没建就改、建两次，放不回去
         assertThrows(IllegalStateException.class,
-                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.REGULAR, null, "/home/u/app", true)));
+                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.REGULAR, null, "/home/u/app", true, null)));
         assertThrows(IllegalStateException.class,
-                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/other", true)));
+                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/other", true, null)));
         assertThrows(IllegalStateException.class,
-                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/app", false)));
+                () -> SessionChange.between(after, SessionState.start(OTHER, LoopFixture.USER, SessionKind.MAIN, null, "/home/u/app", false, null)));
         assertThrows(IllegalStateException.class, () -> later.applyTo(null));
         assertThrows(IllegalStateException.class, () -> change.applyTo(after));
     }
@@ -124,7 +124,7 @@ class SessionStepsTest {
     @Test
     void replayCreatesTheSameSessions() {
         LoopFixture loop = new LoopFixture();
-        loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/app", true, null));
+        loop.create(OTHER, new SessionCreated(SessionKind.MAIN, "/home/u/app", true, null, null));
         loop.feed(OTHER, null, prompt("one"));
         loop.prompt("two");
         assertEquals(loop.state, Replay.run(loop.kernel, loop.journal).state());

@@ -54,19 +54,19 @@ class StateTreeTest {
         SessionState session = SessionStateFixture.regular(SESSION, USER);
         SessionState changed = session.append(Message.user("a"))
                 .startRun(REF.run())
-                .enqueue(new InboxItem(1, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null));
+                .enqueue(new InboxItem(1, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null, null));
 
         assertEquals(0, session.messages().size());
         assertEquals(1, changed.messages().size());
         assertEquals(REF.run(), changed.activeRun());
-        assertEquals(List.of(new InboxItem(1, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null)), changed.inbox());
+        assertEquals(List.of(new InboxItem(1, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null, null)), changed.inbox());
         assertThrows(NullPointerException.class, () -> SessionStateFixture.regular(null, USER));
         assertThrows(NullPointerException.class, () -> SessionStateFixture.regular(SESSION, null));
-        assertThrows(NullPointerException.class, () -> SessionState.start(SESSION, USER, null, null, null, false));
-        assertThrows(IllegalArgumentException.class, () -> SessionState.start(SESSION, USER, SessionKind.HELPER, null, null, false),
+        assertThrows(NullPointerException.class, () -> SessionState.start(SESSION, USER, null, null, null, false, null));
+        assertThrows(IllegalArgumentException.class, () -> SessionState.start(SESSION, USER, SessionKind.HELPER, null, null, false, null),
                 "a helper says whose helper it is");
         assertThrows(IllegalArgumentException.class,
-                () -> SessionState.start(SESSION, USER, SessionKind.REGULAR, new HelperOf(SESSION, "t1-0", null, null, null), null, false));
+                () -> SessionState.start(SESSION, USER, SessionKind.REGULAR, new HelperOf(SESSION, "t1-0", null, null, null), null, false, null));
     }
 
     @Test

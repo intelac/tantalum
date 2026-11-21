@@ -234,7 +234,7 @@ class MemoryEvalTest {
 
     private void afterWindow() {
         String user = world.person(EvalWorld.MAIN, null);
-        String session = world.mainSession();
+        String session = world.mainSession(user);
         world.model.capture(call -> call.turn().contains("C-1207") ? List.of(note("fact", "用户的工位号是 C-1207", "我的工位号是 C-1207")) : List.of());
         world.ask(EvalWorld.MAIN, user, session, "我的工位号是 C-1207。");
         int early = 0;
@@ -535,7 +535,7 @@ class MemoryEvalTest {
 
     private void thatOne() {
         String user = world.person(EvalWorld.MAIN, null);
-        String session = world.mainSession();
+        String session = world.mainSession(user);
         world.model.chat(call -> call.lastUser().contains("缓存怎么做")
                 ? Step.say("有三种做法：1. 用 Redis；2. 用 Caffeine 本地缓存；3. 不加缓存。") : Step.say("好的。"));
         world.ask(EvalWorld.MAIN, user, session, "缓存怎么做比较好？");
@@ -553,7 +553,7 @@ class MemoryEvalTest {
 
     private void stableSize() {
         String user = world.person(EvalWorld.MAIN, null);
-        String session = world.mainSession();
+        String session = world.mainSession(user);
         int early = 0;
         int last = 0;
         for (int turn = 1; turn <= 20; turn++) {

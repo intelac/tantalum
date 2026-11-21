@@ -100,6 +100,22 @@ public final class AssignmentSteps {
         if (!InputPolicy.mayAssign(session.kind())) {
             return Result.refused("A task cannot start tasks. Do this work yourself.");
         }
+        // 为主会话的交代跑的这一轮欠着一个结果，这一轮一结束就交回：放出的帮手回来时已经没人要（dispatch 审查第 2 条）
+        if (run.cause().owes() != null) {
+            return Result.refused("Not started: you are doing a task from the main conversation, and its result goes back when this turn ends."
+                    + " Do this part yourself; if it should be done elsewhere, say so in your answer.");
+        }
+        boolean main = session.kind() == tantalum.value.state.SessionKind.MAIN;
+        String target = main && fields.get(AssignmentTools.SESSION) instanceof Json.Str given && !given.value().isBlank()
+                ? given.value().strip() : null;
+        String workspace = main && fields.get(AssignmentTools.WORKSPACE) instanceof Json.Str place && !place.value().isBlank()
+                ? place.value().strip() : null;
+        if (target != null && (target.equals(session.id().value()) || SessionIds.helperShaped(new SessionId(target)))) {
+            return Result.refused("\"session\" must be one of your conversations, not this one or a task's.");
+        }
+        if (target != null && workspace != null) {
+            return Result.refused("Give either \"session\" (an existing conversation keeps its folder) or \"workspace\" (for a new one), not both.");
+        }
         if (assignments.open().size() >= out.assignmentLimits.maxOpen()) {
             return Result.refused("Not started: " + assignments.open().size() + " tasks are already running, which is the limit."
                     + " Their results arrive on their own; start this one after one of them has ended, or do the work yourself.");
@@ -109,7 +125,8 @@ public final class AssignmentSteps {
                     + " which is the limit. Tell the user where things stand; the count starts over when they reply.");
         }
         String id = AssignmentTools.id(out.envelope.seq(), index);
-        SessionId helper = SessionIds.helper(session.id(), id);
+        // 主会话：交给点名的普通会话，或者开一个派活的普通会话；普通会话：开帮手
+        SessionId helper = !main ? SessionIds.helper(session.id(), id) : target != null ? new SessionId(target) : SessionIds.work(session.id(), id);
         // 期限默认没有；管理员设了才起定时器
         java.time.Duration limit = out.assignmentLimits.deadline();
         CommandId timer = limit == null ? null : out.nextCommandId();
@@ -122,7 +139,8 @@ public final class AssignmentSteps {
         }
         // 帮手用交代它的这一轮的模型（这一轮还没定下模型时用会话现在的选择）；送达记在信箱里，确认了才划掉（delivery）
         Outbox.send(out, session.id(), helper, new AssignmentParcel(new Assignment(id, session.id(), root, prompt,
-                run.model() != null ? run.model() : session.model()), agent, session.dir(), session.offRecord()));
+                run.model() != null ? run.model() : session.model()), main ? null : agent, main ? null : session.dir(), !main && session.offRecord(),
+                workspace));
         out.report(List.of(new AssignmentStarted(run.ref(), id, helper, agent, brief, call.id())));
         return new Result("Started task " + id + ". It runs on its own while you go on; its result arrives in this conversation"
                 + " when it ends. Do not wait for it or ask about it.", false);
@@ -152,8 +170,10 @@ public final class AssignmentSteps {
         SessionState session = out.session(run.ref());
         String assignment = run.cause().owes();
         AssignmentOutcome outcome = outcomeOf(reason, detail);
-        Outbox.send(out, session.id(), session.helper().issuer(), new ReportParcel(new Report(assignment, outcome,
-                textOf(outcome, session, assignment, detail), run.cause().root(), session.id())));
+        // 交给谁：为交代开的一轮记着（dispatch）；格式 4 的旧行没记，那时只有帮手，就是它的出身
+        SessionId issuer = run.cause().owedTo() != null ? run.cause().owedTo() : session.helper().issuer();
+        Outbox.send(out, session.id(), issuer, new ReportParcel(new Report(assignment, outcome,
+                textOf(outcome, session, assignment, detail, run.cause().since()), run.cause().root(), session.id())));
     }
 
     /**
@@ -201,8 +221,8 @@ public final class AssignmentSteps {
     }
 
     /** 交回的文字：完成时是为这次交代开的那一轮最后的回答，否则是结束的详情。 */
-    public static String textOf(AssignmentOutcome outcome, SessionState session, String assignment, String detail) {
-        return outcome == AssignmentOutcome.COMPLETED ? answers(session, assignment) : detail;
+    public static String textOf(AssignmentOutcome outcome, SessionState session, String assignment, String detail, Integer since) {
+        return outcome == AssignmentOutcome.COMPLETED ? answers(session, assignment, since) : detail;
     }
 
     /**
@@ -211,7 +231,15 @@ public final class AssignmentSteps {
      * 边调工具边说的话是过程，不带回。在模型看得到的内容（{@link SessionState#view()}）里找：压缩过的话，交代那条可能已经在摘要里，
      * 那时从头收（摘要是用户消息，不收），压缩之前说的只在摘要里。
      */
-    static String answers(SessionState session, String assignment) {
+    static String answers(SessionState session, String assignment, Integer since) {
+        // 普通会话里收过很多次交代、你也说过话：只看这一轮的（开轮时记下的位置往后，还在窗口里时），以前的话不混进来（dispatch 审查第 9 条）
+        if (since != null && since >= session.windowStart() && since <= session.historySize()) {
+            List<Message> mine = new java.util.ArrayList<>();
+            for (int i = since; i < session.historySize(); i++) {
+                mine.add(session.said(i));
+            }
+            return collect(mine, 0);
+        }
         List<Message> messages = session.view();
         int from = 0;
         for (int i = messages.size() - 1; i >= 0; i--) {
@@ -220,6 +248,11 @@ public final class AssignmentSteps {
                 break;
             }
         }
+        return collect(messages, from);
+    }
+
+    /** 从 {@code from} 往后、不带工具调用的助手消息里的文字，按先后接起来。 */
+    private static String collect(List<Message> messages, int from) {
         StringBuilder all = new StringBuilder();
         for (Message message : messages.subList(from, messages.size())) {
             if (message.role() != Role.ASSISTANT || message.content().stream().anyMatch(ToolCallBlock.class::isInstance)) {
@@ -314,17 +347,59 @@ public final class AssignmentSteps {
         String delivery = stopOf(event.assignment(), event.from()).id();
         Outcome out = new Outcome(context);
         HelperOf helper = session.helper();
-        if (helper == null || !helper.assignment().equals(event.assignment()) || !helper.issuer().equals(event.from())) {
+        boolean work = session.kind() == tantalum.value.state.SessionKind.REGULAR;
+        if (!work && (helper == null || !helper.assignment().equals(event.assignment()) || !helper.issuer().equals(event.from()))) {
             Outbox.acknowledge(out, session, delivery, event.from(), "task " + event.assignment() + " is not this session's");
             return out.decision();
         }
         RunState run = context.run();
-        if (run != null && !run.isEnded() && event.assignment().equals(run.cause().owes())) {
-            CancelSteps.end(out, run, EndReason.CANCELLED, null);
+        if (run != null && !run.isEnded() && event.assignment().equals(run.cause().owes())
+                && (!work || event.from().equals(run.cause().owedTo()))) {
+            // 不是你按的停：你并进这一轮的话、帮手的结果照常处理（dispatch 审查第 8 条）
+            CancelSteps.end(out, run, EndReason.CANCELLED, STOPPED_BY_ISSUER);
+        } else if (work) {
+            // 普通会话收过很多次交代：这一次还在队里没开始，拿掉，交回“已停止”
+            List<InboxItem> kept = session.inbox().stream().filter(item -> !(event.assignment().equals(item.assignment())
+                    && item.kind() == Input.Kind.ASSIGNMENT && event.from().equals(item.from()))).toList();
+            if (kept.size() != session.inbox().size()) {
+                out.put(session.withInbox(kept));
+                Outbox.send(out, session.id(), event.from(), new ReportParcel(new Report(event.assignment(), AssignmentOutcome.STOPPED, null,
+                        tantalum.value.event.Root.USER, session.id())));
+            }
         }
         Outbox.acknowledge(out, out.state().sessions().get(session.id()), delivery, event.from(), null);
         return out.decision();
     }
+
+    static final int NOTICE_SAID = 200;
+    static final int NOTICE_ANSWER = 400;
+
+    /**
+     * 记一笔给开这个会话的主会话：你说了什么（开头一段）、它答了什么（开头一段）。只取这一轮的（开轮时记下的位置往后）。
+     * 编号用这一轮的运行号：重送时同一笔。
+     */
+    static void noticed(Outcome out, RunState run, SessionState session) {
+        Integer since = run.cause().since();
+        String said = "";
+        if (since != null && since >= session.windowStart() && since < session.historySize()) {
+            for (ContentBlock block : session.said(since).content()) {
+                if (block instanceof TextBlock text) {
+                    said += text.text();
+                }
+            }
+        }
+        String answer = answers(session, null, since);
+        String text = "The user said: " + clip(said.strip(), NOTICE_SAID) + "\nIt answered: " + clip(answer == null ? "(nothing)" : answer, NOTICE_ANSWER);
+        Outbox.send(out, session.id(), session.issuer(), new tantalum.value.delivery.NoticeParcel(new tantalum.value.event.Notice(
+                run.ref().run().value(), session.id(), text)));
+    }
+
+    private static String clip(String text, int most) {
+        return text.length() <= most ? text : text.substring(0, most) + "…";
+    }
+
+    /** 交代它的会话叫停了：结束的说明（不是你按的取消）。 */
+    public static final String STOPPED_BY_ISSUER = "stopped by the conversation that gave the task";
 
     /**
      * 从名单去掉这次交代，把结果交给模型：正在跑一轮就并进这一轮，模型下次被调用时看到；空闲就为它开新的一轮，
@@ -338,10 +413,10 @@ public final class AssignmentSteps {
         RunRef ref;
         boolean paused = false;
         if (InboxSteps.busy(out, session)) {
-            out.put(session.enqueue(new InboxItem(out.envelope.seq(), Input.Kind.REPORT, root, result, null, true, open.id())));
+            out.put(session.enqueue(new InboxItem(out.envelope.seq(), Input.Kind.REPORT, root, result, null, true, open.id(), null)));
             ref = out.state().runs().get(session.activeRun()).ref();
         } else if (session.assignments().unattendedRuns() < out.assignmentLimits.maxUnattendedRuns()) {
-            out.put(session.enqueue(new InboxItem(out.envelope.seq(), Input.Kind.REPORT, root, result, null, false, open.id())));
+            out.put(session.enqueue(new InboxItem(out.envelope.seq(), Input.Kind.REPORT, root, result, null, false, open.id(), null)));
             InboxSteps.next(out, session.id());
             ref = new RunRef(session.principal(), session.id(), out.state().sessions().get(session.id()).activeRun());
         } else {

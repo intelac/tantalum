@@ -87,7 +87,7 @@ class TaskRestartTest {
     private void write(Event... child) throws Exception {
         Files.createDirectories(data());
         List<EventEnvelope> events = new ArrayList<>(List.of(
-                new EventEnvelope(0, AT, ALICE, S1, null, new SessionCreated(SessionKind.REGULAR, null, false, null)),
+                new EventEnvelope(0, AT, ALICE, S1, null, new SessionCreated(SessionKind.REGULAR, null, false, null, null)),
                 new EventEnvelope(1, AT, ALICE, S1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), "look into module A")),
                 new EventEnvelope(2, AT, ALICE, S1, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 new EventEnvelope(3, AT, ALICE, S1, RUN, new ModelReplied(new CommandId("s1_2-0"), List.of(new ToolCallBlock("c1", AssignmentTools.TASK, "{}",
@@ -98,7 +98,7 @@ class TaskRestartTest {
         if (child.length > 0) {
             // 和交代的处理器一样：先建帮手会话
             events.add(new EventEnvelope(5, AT, ALICE, CHILD, null, new SessionCreated(SessionKind.HELPER, null, false,
-                    new HelperOf(S1, TASK, null, null, null))));
+                    new HelperOf(S1, TASK, null, null, null), null)));
         }
         for (Event event : child) {
             events.add(new EventEnvelope(seq, AT, ALICE, CHILD, seq == 6 ? null : CHILD_RUN, event));

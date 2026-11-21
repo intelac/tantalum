@@ -375,6 +375,7 @@ public final class OpenAiClient implements ModelClient {
                 case SkillBlock skill -> append(text, skill.text());
                 case AttachedBlock attached -> append(text, attached.wrapped());
                 case ReportBlock result -> append(text, result.shown());
+                case tantalum.value.model.NoticeBlock note -> append(text, note.shown());
                 // 交代给帮手的内容：和以前作为普通文字发出去时逐字节相同
                 case AssignmentBlock given -> text.append(given.text());
                 case ModelChangeBlock change -> throw new IllegalStateException("model changes are folded into user messages, see Folding");

@@ -42,6 +42,11 @@ public final class ToolCatalog {
         return tools().stream().map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema())).toList();
     }
 
+    /** 同上，参数照这种会话的（{@link Tool#schema(tantalum.value.state.SessionKind)}）。 */
+    public List<ToolSpec> specs(tantalum.value.state.SessionKind kind) {
+        return tools().stream().map(tool -> new ToolSpec(tool.name(), tool.description(), tool.schema(kind))).toList();
+    }
+
     /** 全部工具，按名称排序（同 {@link #specs()}）。 */
     public List<Tool> tools() {
         return tools.values().stream().sorted(Comparator.comparing(Tool::name)).toList();

@@ -124,7 +124,7 @@ public final class CompactSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        RunState run = InboxSteps.newRun(out, session, new RunCause(RunCause.StartedBy.COMPACTION, Root.USER, null));
+        RunState run = InboxSteps.newRun(out, session, new RunCause(RunCause.StartedBy.COMPACTION, Root.USER, null, null, null));
         if (tryStart(out, run, new Compacting.Manual(event.instructions())) == Start.PROCEED) {
             RunEnd.finish(out, run, EndReason.FAILED, NOTHING_TO_COMPACT);
         }

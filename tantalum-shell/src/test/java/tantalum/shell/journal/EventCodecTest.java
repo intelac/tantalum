@@ -85,7 +85,7 @@ class EventCodecTest {
         List<Event> events = List.of(
                 UserPromptFixture.of(SUB, REQ, "hi"),
                 new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.HELPER, "/home/alice/app", true,
-                        new tantalum.value.state.HelperOf(new SessionId("s"), "t3-0", "reviewer", "You review code.", List.of("read"))),
+                        new tantalum.value.state.HelperOf(new SessionId("s"), "t3-0", "reviewer", "You review code.", List.of("read")), null),
                 new tantalum.value.event.Assignment("t3-0", new SessionId("s"), tantalum.value.event.Root.USER, "check module A", null),
                 new tantalum.value.event.Report("t3-0", tantalum.value.assignment.AssignmentOutcome.COMPLETED, "fine", tantalum.value.event.Root.USER, new SessionId("s-t3")),
                 new tantalum.value.event.Report("t3-1", tantalum.value.assignment.AssignmentOutcome.INTERRUPTED, null, tantalum.value.event.Root.OUTSIDE, new SessionId("s-t3")),

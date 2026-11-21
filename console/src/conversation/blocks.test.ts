@@ -45,6 +45,16 @@ describe("groupBlocks", () => {
     ]);
   });
 
+  it("puts a note from another conversation in its own block, not as your words", () => {
+    const withNote = { ...shapes, "9.0": { kind: "note" as const } } as Record<string, { kind: "note" | "user" | "run" | "text"; run?: string }>;
+    const blocks = groupBlocks(["0.0", "run:run-0", "4.1", "9.0"], (id) => withNote[id] as never);
+    expect(blocks).toEqual([
+      { kind: "user", id: "0.0" },
+      { kind: "run", run: "run-0", process: [], reply: ["4.1"] },
+      { kind: "note", id: "9.0" },
+    ]);
+  });
+
   it("puts a tool change at the top of its run, not in the process", () => {
     const withChange: typeof shapes = { ...shapes, "1.0": { kind: "toolChange", run: "run-0" } };
     const blocks = groupBlocks(["0.0", "run:run-0", "1.0", "2.0", "4.1"], (id) => withChange[id]);

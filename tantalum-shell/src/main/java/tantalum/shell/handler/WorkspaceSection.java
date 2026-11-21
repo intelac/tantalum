@@ -23,6 +23,9 @@ public final class WorkspaceSection {
 
     public static final String NAME = "workspaces";
     static final int MAX_WORKSPACES = 12;
+    /** 主会话那一段的结尾（dispatch）：它点名工作区派活，不加工作区。 */
+    static final String MAIN_ENDING = "To have a job done in a workspace, call task with \"workspace\" set to its name. A new workspace is added "
+            + "from a regular conversation (the user is asked to confirm).";
     static final int MAX_SESSIONS = 5;
     /** 上下文超过这么多 token 的会话标出来。 */
     static final long LARGE = 100_000;

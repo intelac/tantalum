@@ -78,7 +78,7 @@ class AssignmentsTest {
     @Test
     void aHelperSessionKeepsWhoseHelperItIsAndNoOtherKindHasOne() {
         HelperOf helper = new HelperOf(SESSION, "t1-0", "reviewer", "You review code.", List.of("read"));
-        SessionState session = SessionState.start(new SessionId("s-t1-0"), USER, SessionKind.HELPER, helper, "/home/u/app", true);
+        SessionState session = SessionState.start(new SessionId("s-t1-0"), USER, SessionKind.HELPER, helper, "/home/u/app", true, null);
         assertEquals(SessionKind.HELPER, session.kind());
         assertEquals(helper, session.append(Message.user("x")).startRun(RUN.run()).endRun().helper());
         assertEquals("/home/u/app", session.dir());
@@ -88,11 +88,11 @@ class AssignmentsTest {
         assertNull(SessionStateFixture.regular(SESSION, USER).helper());
         assertEquals(SessionKind.MAIN, SessionStateFixture.main(SESSION, USER).kind());
 
-        assertEquals("SessionCreated", new SessionCreated(SessionKind.REGULAR, null, false, null).type());
-        assertEquals(1, new SessionCreated(SessionKind.HELPER, null, false, helper).version());
-        assertThrows(IllegalArgumentException.class, () -> new SessionCreated(SessionKind.HELPER, null, false, null));
-        assertThrows(IllegalArgumentException.class, () -> new SessionCreated(SessionKind.MAIN, null, false, helper));
-        assertThrows(NullPointerException.class, () -> new SessionCreated(null, null, false, null));
+        assertEquals("SessionCreated", new SessionCreated(SessionKind.REGULAR, null, false, null, null).type());
+        assertEquals(1, new SessionCreated(SessionKind.HELPER, null, false, helper, null).version());
+        assertThrows(IllegalArgumentException.class, () -> new SessionCreated(SessionKind.HELPER, null, false, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new SessionCreated(SessionKind.MAIN, null, false, helper, null));
+        assertThrows(NullPointerException.class, () -> new SessionCreated(null, null, false, null, null));
     }
 
     @Test
@@ -175,21 +175,21 @@ class AssignmentsTest {
         assertEquals(RunCause.StartedBy.PROMPT, lowered.startedBy());
         assertSame(lowered, lowered.absorbing(Root.USER), "once outside, a user input does not raise it back");
 
-        RunCause assigned = new RunCause(RunCause.StartedBy.ASSIGNMENT, Root.OUTSIDE, "t1-0");
+        RunCause assigned = new RunCause(RunCause.StartedBy.ASSIGNMENT, Root.OUTSIDE, "t1-0", null, null);
         assertFalse(assigned.attended());
         assertEquals("t1-0", assigned.absorbing(Root.USER).owes());
-        assertFalse(new RunCause(RunCause.StartedBy.REPORT, Root.USER, null).attended(), "nobody is waiting for a run a result started");
+        assertFalse(new RunCause(RunCause.StartedBy.REPORT, Root.USER, null, null, null).attended(), "nobody is waiting for a run a result started");
     }
 
     @Test
     void anInboxItemNamesItsAssignmentExactlyWhenItIsOneOrAnswersOne() {
-        InboxItem prompt = new InboxItem(7, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null);
+        InboxItem prompt = new InboxItem(7, Input.Kind.PROMPT, Root.USER, Message.user("next"), null, false, null, null);
         assertEquals(7, prompt.id());
         assertTrue(prompt.withJoin(true).join());
         assertEquals(Message.user("edited"), prompt.withMessage(Message.user("edited")).message());
-        assertEquals("t1-0", new InboxItem(8, Input.Kind.REPORT, Root.USER, Message.user("r"), null, true, "t1-0").assignment());
-        assertThrows(IllegalArgumentException.class, () -> new InboxItem(9, Input.Kind.PROMPT, Root.USER, Message.user("x"), null, false, "t1-0"));
-        assertThrows(IllegalArgumentException.class, () -> new InboxItem(9, Input.Kind.ASSIGNMENT, Root.USER, Message.user("x"), null, false, null));
+        assertEquals("t1-0", new InboxItem(8, Input.Kind.REPORT, Root.USER, Message.user("r"), null, true, "t1-0", null).assignment());
+        assertThrows(IllegalArgumentException.class, () -> new InboxItem(9, Input.Kind.PROMPT, Root.USER, Message.user("x"), null, false, "t1-0", null));
+        assertThrows(IllegalArgumentException.class, () -> new InboxItem(9, Input.Kind.ASSIGNMENT, Root.USER, Message.user("x"), null, false, null, null));
     }
 
     @Test
@@ -220,10 +220,10 @@ class AssignmentsTest {
         CommandId id = new CommandId("c");
         // delivery：送的东西的编号由种类和交代号得出，收方不用新字段也能算出同一个
         Assignment given = new Assignment("t", SESSION, Root.USER, "go", null);
-        assertEquals("assign:t", new tantalum.value.delivery.AssignmentParcel(given, null, null, false).id());
+        assertEquals("assign:t", new tantalum.value.delivery.AssignmentParcel(given, null, null, false, null).id());
         assertEquals("report:t", new tantalum.value.delivery.ReportParcel(new Report("t", AssignmentOutcome.FAILED, "boom", Root.USER, SESSION)).id());
         assertEquals("stop:t", new tantalum.value.delivery.StopParcel(new tantalum.value.event.AssignmentCancelled("t", SESSION)).id());
-        assertEquals(SESSION, new tantalum.value.command.Deliver(id, RUN, SESSION, new tantalum.value.delivery.AssignmentParcel(given, null, null, false)).to());
+        assertEquals(SESSION, new tantalum.value.command.Deliver(id, RUN, SESSION, new tantalum.value.delivery.AssignmentParcel(given, null, null, false, null)).to());
         assertEquals("Delivered", new tantalum.value.event.Delivered("assign:t").type());
         assertEquals("Refused", new tantalum.value.event.Refused("assign:t", "no").type());
         assertEquals("Redeliver", new tantalum.value.event.Redeliver().type());

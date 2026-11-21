@@ -73,10 +73,10 @@ class SessionCodecTest {
 
     @Test
     void everyNewEventReadsBack() {
-        readsBack(new SessionCreated(SessionKind.MAIN, "C:\\APPL\\Quattro", true, null));
+        readsBack(new SessionCreated(SessionKind.MAIN, "C:\\APPL\\Quattro", true, null, null));
         readsBack(new SessionCreated(SessionKind.HELPER, "/home/alice/app", false,
-                new HelperOf(SESSION, "t3-0", "reviewer", "You review code.", List.of("read"))));
-        readsBack(new SessionCreated(SessionKind.REGULAR, null, false, null));
+                new HelperOf(SESSION, "t3-0", "reviewer", "You review code.", List.of("read")), null));
+        readsBack(new SessionCreated(SessionKind.REGULAR, null, false, null, null));
         readsBack(UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), "hi", List.of(), SONNET));
         readsBack(UserPromptFixture.join(new SubmissionId("s"), new RequestId("r"), "and this"));
         readsBack(new Assignment("t3-0", SESSION, Root.USER, "Check module A.", SONNET));
@@ -102,7 +102,7 @@ class SessionCodecTest {
     void theCreatingLineCarriesWhatIsFixedThen() {
         HelperOf helper = new HelperOf(SESSION, "t3-0", "reviewer", "You review code.", List.of("read"));
         SessionChange created = new SessionChange(HELPER, USER, true, SessionKind.HELPER, helper, "/home/alice/app", true,
-                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         String line = records.encode(new StepRecord(0, created, List.of(), List.of(), null, null, List.of(), List.of()), RecordMemo.writer(USER, HELPER));
         assertTrue(line.contains("\"kind\":\"HELPER\"") && line.contains("\"dir\":\"/home/alice/app\"") && line.contains("\"offRecord\":true"), line);
         assertTrue(line.contains("\"kind\":\"assignment\""), "the assignment is its own block: " + line);
@@ -124,10 +124,10 @@ class SessionCodecTest {
     @Test
     void theInboxReadsBack() {
         List<InboxItem> inbox = List.of(
-                new InboxItem(4, Input.Kind.PROMPT, Root.USER, Message.user("later"), SONNET, false, null),
-                new InboxItem(5, Input.Kind.PROMPT, Root.USER, Message.user("and this"), null, true, null),
+                new InboxItem(4, Input.Kind.PROMPT, Root.USER, Message.user("later"), SONNET, false, null, null),
+                new InboxItem(5, Input.Kind.PROMPT, Root.USER, Message.user("and this"), null, true, null, null),
                 new InboxItem(6, Input.Kind.REPORT, Root.OUTSIDE,
-                        new Message(Role.USER, List.of(new ReportBlock("t3-0", AssignmentOutcome.COMPLETED, "fine")), false), null, true, "t3-0"));
+                        new Message(Role.USER, List.of(new ReportBlock("t3-0", AssignmentOutcome.COMPLETED, "fine")), false), null, true, "t3-0", null));
         readsBack(new StepRecord(0, SessionChangeFixture.of(SESSION, USER, false, List.of(), null, null, new SessionChange.Changed<>(inbox),
                 null, null, null, null), List.of(), List.of(), null, null, List.of(), List.of()));
     }
@@ -137,12 +137,12 @@ class SessionCodecTest {
     void theAssignmentsTheirCommandsAndFactsReadBack() {
         RunRef run = new RunRef(USER, SESSION, RunId.of(SESSION, 1));
         Assignments open = new Assignments(List.of(new OpenAssignment("t3-0", HELPER, "reviewer", "check module A", AT, AT.plusSeconds(1800),
-                new CommandId("c1"), Root.OUTSIDE)), 2, 3);
+                new CommandId("c1"), Root.OUTSIDE)), 2, 3, List.of("assign:t1-0", "notice:work-alice-1-0_5"));
         SessionChange change = new SessionChange(SESSION, USER, false, null, null, null, false, List.of(), null, null, null, null, null, null, null,
-                null, null, null, null, new SessionChange.Changed<>(open), null, null);
+                null, null, null, null, new SessionChange.Changed<>(open), null, null, null);
         StepRecord record = readsBack(new StepRecord(0, change, List.of(), List.of(), null, null,
                 List.of(new tantalum.value.command.Deliver(new CommandId("c2"), run, HELPER, new tantalum.value.delivery.AssignmentParcel(
-                                new Assignment("t3-0", SESSION, Root.USER, "check module A\nand report", SONNET), "reviewer", "/home/alice/app", false)),
+                                new Assignment("t3-0", SESSION, Root.USER, "check module A\nand report", SONNET), "reviewer", "/home/alice/app", false, null)),
                         new tantalum.value.command.Deliver(new CommandId("c3"), run, SESSION, new tantalum.value.delivery.ReportParcel(
                                 new Report("t3-0", AssignmentOutcome.COMPLETED, "fine", Root.USER, HELPER))),
                         new tantalum.value.command.Deliver(new CommandId("c4"), run, HELPER, new tantalum.value.delivery.StopParcel(

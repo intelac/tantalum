@@ -7,6 +7,8 @@ export type Block =
   | { kind: "compaction"; id: string }
   /** 自动继续到了上限时回来的任务结果：没有开运行，单独一块。 */
   | { kind: "taskResult"; id: string }
+  /** 记一笔（dispatch）：别的会话里你直接说了话，单独一块。 */
+  | { kind: "note"; id: string }
   | {
       kind: "run";
       run: string;
@@ -36,6 +38,10 @@ export function groupBlocks(order: readonly string[], shapeOf: (id: string) => S
     if (shape === undefined) continue;
     if (shape.kind === "compaction") {
       blocks.push({ kind: "compaction", id });
+      continue;
+    }
+    if (shape.kind === "note") {
+      blocks.push({ kind: "note", id });
       continue;
     }
     if (shape.kind === "taskResult" && shape.paused === true) {

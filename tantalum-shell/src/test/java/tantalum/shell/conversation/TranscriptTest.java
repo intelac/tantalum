@@ -211,6 +211,7 @@ class TranscriptTest {
             case TranscriptItem.Question q -> "question";
             case TranscriptItem.Task k -> "task:" + k.task();
             case TranscriptItem.TaskResult r -> "taskResult:" + r.task();
+            case TranscriptItem.Note n -> "note";
         }).toList();
         assertEquals(List.of("user:hi", "run", "think:plan", "tool:read_file", "think:check", "tool:grep",
                 "think:wrap up", "text:done"), kinds);

@@ -64,7 +64,7 @@ public record Message(Role role, List<ContentBlock> content, boolean interrupted
             return false;
         }
         for (ContentBlock block : content) {
-            if (block instanceof AssignmentBlock || block instanceof ReportBlock) {
+            if (block instanceof AssignmentBlock || block instanceof ReportBlock || block instanceof NoticeBlock) {
                 return false;
             }
             if (block instanceof TextBlock text && SystemUpdates.isContextUpdate(text.text())) {

@@ -46,9 +46,18 @@ class InputPolicyTest {
         assertEquals(REFUSED, InputPolicy.of(SessionKind.MAIN, Input.Kind.ASSIGNMENT, false));
     }
 
+    /** dispatch：主会话派活，普通会话收交代、为它开一轮（只收这个人的主会话的，由收件步骤看来处）。 */
     @Test
-    void aRegularSessionRefusesAnAssignment() {
-        assertEquals(REFUSED, InputPolicy.of(SessionKind.REGULAR, Input.Kind.ASSIGNMENT, false));
+    void aRegularSessionTakesAnAssignmentAndStartsARunForIt() {
+        assertEquals(START, InputPolicy.of(SessionKind.REGULAR, Input.Kind.ASSIGNMENT, false));
+    }
+
+    /** dispatch：记一笔只有主会话收，只记。 */
+    @Test
+    void onlyTheMainSessionTakesANoticeAndOnlyRecordsIt() {
+        assertEquals(new InputPolicy.Rule(true, InputPolicy.Handling.RECORD), InputPolicy.of(SessionKind.MAIN, Input.Kind.NOTICE, false));
+        assertEquals(REFUSED, InputPolicy.of(SessionKind.REGULAR, Input.Kind.NOTICE, false));
+        assertEquals(REFUSED, InputPolicy.of(SessionKind.HELPER, Input.Kind.NOTICE, false));
     }
 
     @Test

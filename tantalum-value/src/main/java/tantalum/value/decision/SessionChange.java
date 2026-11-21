@@ -22,7 +22,8 @@ import tantalum.value.state.UsageAnchor;
 /**
  * 一步里一个会话的变化。{@code messages} 只追加，所以只记新增的；{@code windowStart} 变了表示这一步压缩完成、去掉了它之前的消息
  * （只能去掉这一步开始时就有的）；其余字段为 null 表示没变，
- * {@link Changed} 里的值可以是 null（变成 null）。{@code created} 时这一步新建了它：种类、帮手的出身、目录、是不是不进记忆都在这一行里。
+ * {@link Changed} 里的值可以是 null（变成 null）。{@code created} 时这一步新建了它：种类、帮手的出身、目录、是不是不进记忆、
+ * 开它的主会话（{@code issuer}，dispatch）都在这一行里。
  */
 public record SessionChange(SessionId id, Principal principal, boolean created, SessionKind kind, HelperOf helper, String dir,
                             boolean offRecord, List<Message> appended, Changed<Integer> windowStart,
@@ -31,7 +32,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                             Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
                             Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<Assignments> assignments,
                             Changed<List<tantalum.value.state.Withdrawal>> withdrawn,
-                            Changed<List<tantalum.value.delivery.Outgoing>> outbox) {
+                            Changed<List<tantalum.value.delivery.Outgoing>> outbox, SessionId issuer) {
 
     /** 一个变了的字段的新值。 */
     public record Changed<T>(T value) {}
@@ -51,12 +52,13 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
      */
     public static SessionChange between(SessionState before, SessionState after) {
         SessionState base = before == null
-                ? SessionState.start(after.id(), after.principal(), after.kind(), after.helper(), after.dir(), after.offRecord()) : before;
+                ? SessionState.start(after.id(), after.principal(), after.kind(), after.helper(), after.dir(), after.offRecord(), after.issuer())
+                : before;
         if (!base.principal().equals(after.principal())) {
             throw new IllegalStateException("session " + after.id().value() + " changed its principal");
         }
         if (base.kind() != after.kind() || !Objects.equals(base.helper(), after.helper()) || !Objects.equals(base.dir(), after.dir())
-                || base.offRecord() != after.offRecord()) {
+                || base.offRecord() != after.offRecord() || !Objects.equals(base.issuer(), after.issuer())) {
             throw new IllegalStateException("session " + after.id().value() + " changed what is fixed when it is created");
         }
         // 去掉的只能是这一步开始时就有的那一段的开头；之后的消息照旧只追加
@@ -80,7 +82,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 changed(base.omittedImages(), after.omittedImages()), changed(base.toolsSeen(), after.toolsSeen()),
                 changed(base.notes(), after.notes()), changed(base.model(), after.model()),
                 changed(base.assignments(), after.assignments()), changed(base.withdrawn(), after.withdrawn()),
-                changed(base.outbox(), after.outbox()));
+                changed(base.outbox(), after.outbox()), created ? after.issuer() : null);
     }
 
     /** 套到处理前的状态上。这一步新建会话时 {@code before} 为 null。 */
@@ -88,7 +90,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         if (created != (before == null)) {
             throw new IllegalStateException("session " + id.value() + (created ? " is created twice" : " changes before it is created"));
         }
-        SessionState base = before == null ? SessionState.start(id, principal, kind, helper, dir, offRecord) : before;
+        SessionState base = before == null ? SessionState.start(id, principal, kind, helper, dir, offRecord, issuer) : before;
         List<Message> messages = base.messages();
         int start = base.windowStart();
         if (windowStart != null) {
@@ -110,7 +112,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
                 pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()),
                 pick(model, base.model()), base.dir(), base.offRecord(), pick(assignments, base.assignments()),
-                pick(withdrawn, base.withdrawn()), pick(outbox, base.outbox()));
+                pick(withdrawn, base.withdrawn()), pick(outbox, base.outbox()), base.issuer());
     }
 
     /** 没有任何变化：可以不写。 */

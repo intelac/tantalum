@@ -233,7 +233,7 @@ class AssignmentStepsTest {
         assertEquals(LoopFixture.SESSION, child.helper().issuer());
         assertEquals(start.assignment(), child.helper().assignment());
         // 为这次交代开的那一轮欠着它的结果；追到头是你引起的
-        assertEquals(new RunCause(RunCause.StartedBy.ASSIGNMENT, Root.USER, start.assignment()), loop.state.runs().get(run).cause());
+        assertEquals(new RunCause(RunCause.StartedBy.ASSIGNMENT, Root.USER, start.assignment(), null, null), LoopFixture.plain(loop.state.runs().get(run).cause()));
         assertEquals(ModelSteps.AWAITING_MODEL, loop.state.runs().get(run).phase().name());
         // 交代进历史时是它自己的内容块，不是一条普通的用户消息（session-model 需求 4.1）
         assertEquals(List.of(Message.assignment(start.assignment(), "Check module A.")), child.messages());
@@ -324,7 +324,7 @@ class AssignmentStepsTest {
         assertTrue(loop.session().assignments().open().isEmpty());
         assertFalse(loop.session().activeRun().equals(before));
         assertEquals(ContextSteps.AWAITING_CONTEXT, loop.phase());
-        assertEquals(new RunCause(RunCause.StartedBy.REPORT, Root.USER, null), loop.run().cause());
+        assertEquals(new RunCause(RunCause.StartedBy.REPORT, Root.USER, null, null, null), LoopFixture.plain(loop.run().cause()));
         assertFalse(loop.run().cause().attended(), "nobody is waiting for this run");
         Message last = loop.session().messages().getLast();
         assertEquals(Role.USER, last.role());

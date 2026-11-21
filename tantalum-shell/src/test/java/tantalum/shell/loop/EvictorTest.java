@@ -122,7 +122,7 @@ class EvictorTest {
     void aSessionWithAnActiveRunOrQueuedSubmissionStays() {
         Evictor evictor = evictor(NONE, 1000);
         KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).enqueue(new tantalum.value.state.InboxItem(2, tantalum.value.event.Input.Kind.PROMPT,
-                tantalum.value.event.Root.USER, Message.user("next"), null, false, null)));
+                tantalum.value.event.Root.USER, Message.user("next"), null, false, null, null)));
         touch(evictor, A);
         touch(evictor, B);
         KernelState after = evictor.sweep(state);

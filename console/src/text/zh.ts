@@ -134,6 +134,8 @@ export const zh = {
     show: "展开任务",
     hide: "收起任务",
     result: (id: string) => `任务 ${id} 的结果`,
+    note: "记一笔：你在那件事的会话里说了话",
+    openSession: "打开那个会话",
     noText: "没有带回文字",
     count: (count: number) => `${count} 个任务进行中`,
     paused: (count: number) => `已经自动继续到上限，先停在这里。上面 ${count} 个结果还没处理，说一句话就接着做。`,

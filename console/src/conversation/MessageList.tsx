@@ -4,6 +4,7 @@ import { CompactionMark } from "./CompactionMark";
 import { JumpToBottom } from "./JumpToBottom";
 import { RunBlock } from "./RunBlock";
 import { TaskResultNote } from "../tasks/TaskResultNote";
+import { NoteCard } from "../tasks/NoteCard";
 import { TurnRail } from "./TurnRail";
 import { UserBubble } from "./UserBubble";
 import { useScrollFollow } from "./useScrollFollow";
@@ -31,6 +32,8 @@ export function MessageList({ store, blocks, hasMore, onLoadOlder }: Props) {
               <CompactionMark key={block.id} store={store} id={block.id} />
             ) : block.kind === "taskResult" ? (
               <TaskResultNote key={block.id} store={store} id={block.id} />
+            ) : block.kind === "note" ? (
+              <NoteCard key={block.id} store={store} id={block.id} />
             ) : (
               <RunBlock
                 key={block.run}

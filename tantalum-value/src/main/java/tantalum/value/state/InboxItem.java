@@ -1,5 +1,7 @@
 package tantalum.value.state;
 
+import tantalum.value.id.SessionId;
+
 import java.util.Objects;
 import tantalum.value.event.Input;
 import tantalum.value.event.Root;
@@ -12,22 +14,26 @@ import tantalum.value.model.ModelChoice;
  * {@code join} 为真表示它可以并进正在跑的这一轮：下一次调模型前并进历史，而且那一轮要为它再调一次模型。
  * {@code assignment} 只有交代和结果有：交代是它自己的编号，结果是它回答的那次交代的编号。
  */
-public record InboxItem(long id, Input.Kind kind, Root root, Message message, ModelChoice model, boolean join, String assignment) {
+public record InboxItem(long id, Input.Kind kind, Root root, Message message, ModelChoice model, boolean join, String assignment,
+                        SessionId from) {
 
     public InboxItem {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(message, "message");
-        if ((kind == Input.Kind.PROMPT) != (assignment == null)) {
+        if ((kind == Input.Kind.PROMPT || kind == Input.Kind.NOTICE) != (assignment == null)) {
             throw new IllegalArgumentException("exactly an assignment or a report names its assignment");
+        }
+        if (kind == Input.Kind.NOTICE && join) {
+            throw new IllegalArgumentException("a notice is carried along, it never forces another model call");
         }
     }
 
     public InboxItem withMessage(Message newMessage) {
-        return new InboxItem(id, kind, root, newMessage, model, join, assignment);
+        return new InboxItem(id, kind, root, newMessage, model, join, assignment, from);
     }
 
     public InboxItem withJoin(boolean newJoin) {
-        return new InboxItem(id, kind, root, message, model, newJoin, assignment);
+        return new InboxItem(id, kind, root, message, model, newJoin, assignment, from);
     }
 }

@@ -19,6 +19,7 @@ import tantalum.value.model.Role;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.RunState;
+import tantalum.value.state.RunCause;
 import tantalum.value.state.SessionState;
 
 /** 运行的结束路径：结束前的钩子、工具配对、取下一条 {@code follow-up}。 */
@@ -91,6 +92,9 @@ public final class RunEnd {
         older.forEach(out::remove);
         if (run.cause().owes() != null) {
             AssignmentSteps.returned(out, run, reason, detail);
+        } else if (session.issuer() != null && !session.offRecord() && run.cause().startedBy() == RunCause.StartedBy.PROMPT) {
+            // 主会话开的普通会话里，你直接说的这一轮：给主会话记一笔，只记、不调模型（dispatch 需求 3）
+            AssignmentSteps.noticed(out, run, session);
         }
         InboxSteps.next(out, session.id());
     }

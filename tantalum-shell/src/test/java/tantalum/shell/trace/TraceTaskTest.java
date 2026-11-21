@@ -139,7 +139,7 @@ class TraceTaskTest {
     @Test
     void inTheTasksOwnSessionTheBriefStartsTheRun() {
         TraceFixture fx = new TraceFixture(new SessionCreated(SessionKind.HELPER, null, false,
-                new HelperOf(new SessionId("parent"), "t7-0", "reviewer", null, null)));
+                new HelperOf(new SessionId("parent"), "t7-0", "reviewer", null, null), null));
         fx.feed(null, new Assignment("t7-0", new SessionId("parent"), Root.USER, "Check module A.", null));
 
         RunHead head = fx.records(RunHead.class).getFirst();

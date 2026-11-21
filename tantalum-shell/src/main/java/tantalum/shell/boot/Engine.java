@@ -136,7 +136,13 @@ public final class Engine implements AutoCloseable {
                         return true;
                     }
                 }, () -> toolbox.gate().personalPlugins());
-        stores.storage().onRunEnded(runListeners::offer);
+        // 只有你说的话开的那一轮才通知（dispatch 审查第 10 条）：交代、结果开的那一轮里说话的是另一个会话，不是这个人
+        stores.storage().onRunEnded(row -> {
+            if (row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.PROMPT
+                    || row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.FOLLOW_UP) {
+                runListeners.offer(row);
+            }
+        });
         int interrupted;
         try {
             pipeline.output().start();

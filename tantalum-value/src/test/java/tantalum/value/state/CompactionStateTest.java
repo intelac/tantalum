@@ -99,7 +99,7 @@ class CompactionStateTest {
     void sessionUpdatesKeepCompactionAndAnchor() {
         Compaction compaction = new Compaction(List.of(Message.user("s")), 0);
         SessionState session = SessionStateFixture.regular(SESSION, USER).compacted(compaction).withAnchor(new UsageAnchor(5, 0));
-        SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).enqueue(new InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("f"), null, false, null))
+        SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).enqueue(new InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("f"), null, false, null, null))
                 .withContext(SessionContextFixture.of("sys", List.of(), SETTINGS, List.of()));
         assertEquals(compaction, changed.compaction());
         assertEquals(new UsageAnchor(5, 0), changed.anchor());

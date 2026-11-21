@@ -35,11 +35,29 @@ public final class TaskTool implements Tool {
         properties.put(AssignmentTools.PROMPT, property("Everything the task needs: what to do, where, what you already know, what to report back."));
         properties.put(AssignmentTools.AGENT, property("The name of one of the user's skills (the ones listed for you), to have the task follow that skill "
                 + "as its instructions. Leave out for a general task."));
+
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));
         schema.put("properties", new Json.Obj(properties));
         schema.put("required", new Json.Arr(List.of(new Json.Str(AssignmentTools.PROMPT))));
         schema.put("additionalProperties", new Json.Bool(false));
+        return new Json.Obj(schema);
+    }
+
+    /** 主会话的 task（dispatch）：多两个参数，交给哪个会话、新会话在哪个工作区；普通会话的参数一个字不变。 */
+    @Override public Json schema(tantalum.value.state.SessionKind kind) {
+        if (kind != tantalum.value.state.SessionKind.MAIN) {
+            return schema();
+        }
+        Json.Obj base = (Json.Obj) schema();
+        Map<String, Json> properties = new LinkedHashMap<>(((Json.Obj) base.fields().get("properties")).fields());
+        properties.remove(AssignmentTools.AGENT);
+        properties.put(AssignmentTools.SESSION, property("The id of one of the user's conversations to hand this to (to add to or retry a job). "
+                + "Leave out to open a new conversation for it."));
+        properties.put(AssignmentTools.WORKSPACE, property("For a new conversation: the name of the workspace it works in. Leave out for a "
+                + "conversation without a folder."));
+        Map<String, Json> schema = new LinkedHashMap<>(base.fields());
+        schema.put("properties", new Json.Obj(properties));
         return new Json.Obj(schema);
     }
 
@@ -58,7 +76,7 @@ public final class TaskTool implements Tool {
     @Override public ToolDispatch dispatch() { return DISPATCH; }
 
     /** 只有一层：任务不能再放任务。内核也拦着。 */
-    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR, tantalum.value.state.SessionKind.MAIN); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

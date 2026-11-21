@@ -19,9 +19,9 @@ class SessionProfileTest {
     private static final CompactionSettings BASE = new CompactionSettings(200_000, 16_000, 20_000, 32_768, 4096, 8192, 150_000, 3);
 
     @Test
-    void theMainSessionIsAnOrdinarySessionThatKeepsOnlyARecentWindow() {
+    void theMainSessionHandsOutWorkAndKeepsOnlyARecentWindow() {
         SessionProfile main = SessionProfile.of(SessionKind.MAIN);
-        assertEquals(SessionKind.REGULAR, main.toolsOf(), "in this step the main session has the tools of an ordinary one");
+        assertEquals(SessionKind.MAIN, main.toolsOf(), "the main session has its own tools: task and task_stop (dispatch)");
         assertEquals(SessionProfile.MAIN_NOTE, main.note());
         assertEquals(SessionProfile.Compaction.RECENT_WINDOW, main.compaction());
         assertEquals(EnumSet.allOf(Action.class), main.actions());

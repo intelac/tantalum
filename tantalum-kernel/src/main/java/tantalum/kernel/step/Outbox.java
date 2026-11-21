@@ -114,7 +114,7 @@ public final class Outbox {
         Outgoing done = find(session, event.id()).get();
         Set<String> gone = new java.util.HashSet<>(Set.of(done.id()));
         if (done.what() instanceof AssignmentParcel given) {
-            session.outbox().stream().filter(each -> each.what().assignment().equals(given.assignment())).forEach(each -> gone.add(each.id()));
+            session.outbox().stream().filter(each -> given.assignment().equals(each.what().assignment())).forEach(each -> gone.add(each.id()));
         }
         remove(out, session, done, gone);
         if (done.what() instanceof AssignmentParcel given) {

@@ -28,7 +28,7 @@ class EventsTest {
         List<Event> events = List.of(
                 UserPromptFixture.of(SUB, REQ, "hi"),
                 UserPromptFixture.join(SUB, REQ, "hi"),
-                new SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null),
+                new SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null, null),
                 new Assignment("t1-0", SESSION, Root.USER, "do it", null),
                 new Report("t1-0", tantalum.value.assignment.AssignmentOutcome.COMPLETED, "done", Root.USER, SESSION),
                 new Cancel(REQ),

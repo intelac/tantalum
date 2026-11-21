@@ -144,14 +144,10 @@ describe("viewing another person's sessions", () => {
     render(wrap(<Sidebar {...props} />));
     // 平时：能新建、有插件和设置、行上有菜单、新会话有一行占位
     expect(screen.getByRole("button", { name: "新会话" })).toBeTruthy();
-    // 主窗口（memory-final-plan 第 11 节）：每人每天一个，编号 main-年-月-日-用户名（会话编号全服务器唯一，不带用户名会撞）
+    // 主窗口（dispatch 需求 1）：每人一个、永不结束，编号 main-用户名
     fireEvent.click(screen.getByRole("button", { name: "主窗口" }));
-    expect(props.onSelectSession).toHaveBeenCalledWith(mainWindowId("root"));
-    expect(mainWindowId("root", new Date(2026, 10, 6))).toBe("main-2026-11-06-root");
-    expect(mainWindowId("alice", new Date(2026, 10, 6))).not.toBe(mainWindowId("root", new Date(2026, 10, 6)));
-    // 以前不带用户名的那个今天已经是这个人的：接着用
-    const legacy = { id: "main-2026-11-06", title: "", lastActivity: "2026-11-06T00:00:00Z", runStatus: "idle" as const };
-    expect(mainWindowId("root", new Date(2026, 10, 6), [legacy])).toBe("main-2026-11-06");
+    expect(props.onSelectSession).toHaveBeenCalledWith("main-root");
+    expect(mainWindowId("alice")).toBe("main-alice");
     expect(screen.getByRole("button", { name: "插件" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "设置" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "添加" })).toBeTruthy();

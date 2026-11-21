@@ -203,7 +203,8 @@ public final class SessionQueries {
         }
         for (SessionState session : state.sessions().values()) {
             // 照表：帮手会话不列，它跟着交代它的会话看
-            if (session.principal().equals(principal) && tantalum.shell.profile.SessionProfile.of(session.kind()).listed()) {
+            if (session.principal().equals(principal) && tantalum.shell.profile.SessionProfile.of(session.kind()).listed()
+                    && !session.id().equals(tantalum.value.id.SessionIds.main(principal))) {
                 // 在内存的会话：状态和最近活动取当前的；改过的名字只记在索引里（内核不存标题）
                 SessionSummary live = SessionSummary.of(session.id(),
                         session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.view(session.id()));

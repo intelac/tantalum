@@ -8,6 +8,34 @@ package tantalum.value.id;
 public interface SessionIds {
     String MAIN_PREFIX = "main-";
 
+    /** 派活开的普通会话的编号前缀（dispatch）。 */
+    String WORK_PREFIX = "work-";
+
+    /** 这个人的主会话：每人一个、永不结束，编号由人算出（dispatch 需求 1）。入口只按相等认它，不按样子。 */
+    static SessionId main(Principal principal) {
+        return new SessionId(MAIN_PREFIX + principal.value());
+    }
+
+    /**
+     * 主会话为一次交代开的普通会话：{@code work-} 接主会话编号去掉 {@code main-}、再接交代号去掉开头的 {@code t}
+     * （{@code work-alice-3-0}）。不是帮手的样子，也不是主会话的样子；留给派活，人不能用它新开会话。
+     */
+    static SessionId work(SessionId issuer, String assignment) {
+        String owner = issuer.value().startsWith(MAIN_PREFIX) ? issuer.value().substring(MAIN_PREFIX.length()) : issuer.value();
+        String number = assignment.startsWith("t") ? assignment.substring(1) : assignment;
+        return new SessionId(WORK_PREFIX + owner + "-" + number);
+    }
+
+    /** 编号是不是派活会话的样子（{@code work-…-数字-数字}）。 */
+    static boolean workShaped(SessionId session) {
+        String value = session.value();
+        if (!value.startsWith(WORK_PREFIX)) {
+            return false;
+        }
+        String[] parts = value.split("-", -1);
+        return parts.length >= 4 && digits(parts[parts.length - 1]) && digits(parts[parts.length - 2]);
+    }
+
     /** 为一次交代开的帮手会话的编号。 */
     static SessionId helper(SessionId issuer, String assignment) {
         return new SessionId(issuer.value() + "-" + assignment);

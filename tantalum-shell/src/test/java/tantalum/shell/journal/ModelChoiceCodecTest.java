@@ -77,7 +77,7 @@ class ModelChoiceCodecTest {
         RunState run = RunState.start(RUN, tantalum.value.state.RunCause.prompt()).withModel(QWEN, SONNET);
         StepRecord record = new StepRecord(0, SessionChangeFixture.of(SESSION, USER, true, List.of(change, reply), null, null,
                 new SessionChange.Changed<>(List.of(new tantalum.value.state.InboxItem(3, tantalum.value.event.Input.Kind.PROMPT,
-                        tantalum.value.event.Root.USER, Message.user("next"), SONNET, false, null))), null, null,
+                        tantalum.value.event.Root.USER, Message.user("next"), SONNET, false, null, null))), null, null,
                 null, null, null, null, new SessionChange.Changed<>(QWEN)),
                 List.of(run), List.of(), null, null,
                 List.of(new AssembleContext(new CommandId("c-0"), RUN, QWEN, SONNET),

@@ -8,15 +8,11 @@ import { SessionRow } from "./SessionRow";
 import { useViewedUser } from "../api/viewing";
 
 /**
- * 今天的主窗口（memory-final-plan 第 11 节）：编号 {@code main-年-月-日-用户名}，按本机日子每人每天一个。服务器按编号前缀认出主窗口，
- * 只留最近一段原话，更早的分小批移出、换成一块对话状态，移出去的靠记忆找回。
- * 编号里带用户名：会话编号全服务器唯一、谁先用归谁，不带的话同一台服务器上每天只有第一个人能有主窗口。
- * 以前的编号没有用户名：今天那个已经是这个人的（在他的会话列表里）就接着用它。
+ * 主窗口（dispatch 需求 1）：每人一个、永不结束，编号 {@code main-用户名}，服务器按相等认出它。只留最近一段原话，
+ * 更早的分小批移出、换成一块对话状态，移出去的靠记忆找回。以前按天的主窗口照旧在会话列表里。
  */
-export function mainWindowId(username: string, now: Date = new Date(), sessions: readonly SessionSummary[] = []): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const day = `main-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  return sessions.some((session) => session.id === day) ? day : `${day}-${username}`;
+export function mainWindowId(username: string): string {
+  return `main-${username}`;
 }
 
 interface Props {
@@ -118,9 +114,9 @@ export function Sidebar({
           <Button
             variant="ghost"
             className="mt-1 w-full justify-start"
-            aria-current={currentSession === mainWindowId(username, new Date(), sessions) ? "page" : undefined}
+            aria-current={currentSession === mainWindowId(username) ? "page" : undefined}
             title={t.sidebar.mainWindowHint}
-            onClick={() => onSelectSession(mainWindowId(username, new Date(), sessions))}
+            onClick={() => onSelectSession(mainWindowId(username))}
           >
             <House size={16} />
             {t.sidebar.mainWindow}

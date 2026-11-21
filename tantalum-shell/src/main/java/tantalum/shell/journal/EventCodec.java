@@ -85,7 +85,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = SkillBlock.class, name = "skill"),
         @JsonSubTypes.Type(value = AttachedBlock.class, name = "attached"),
         @JsonSubTypes.Type(value = AssignmentBlock.class, name = "assignment"),
-        @JsonSubTypes.Type(value = ReportBlock.class, name = "report")
+        @JsonSubTypes.Type(value = ReportBlock.class, name = "report"),
+        @JsonSubTypes.Type(value = tantalum.value.model.NoticeBlock.class, name = "notice")
     })
     private interface ContentBlockMixin {}
 
@@ -94,7 +95,8 @@ public final class EventCodec {
     @JsonSubTypes({
         @JsonSubTypes.Type(value = tantalum.value.delivery.AssignmentParcel.class, name = "assignment"),
         @JsonSubTypes.Type(value = tantalum.value.delivery.ReportParcel.class, name = "report"),
-        @JsonSubTypes.Type(value = tantalum.value.delivery.StopParcel.class, name = "stop")
+        @JsonSubTypes.Type(value = tantalum.value.delivery.StopParcel.class, name = "stop"),
+        @JsonSubTypes.Type(value = tantalum.value.delivery.NoticeParcel.class, name = "notice")
     })
     private interface ParcelMixin {}
 
@@ -248,6 +250,7 @@ public final class EventCodec {
         codec.register(tantalum.value.event.Delivered.TYPE, 1, tantalum.value.event.Delivered.class);
         codec.register(tantalum.value.event.Refused.TYPE, 1, tantalum.value.event.Refused.class);
         codec.register(tantalum.value.event.Redeliver.TYPE, 1, tantalum.value.event.Redeliver.class);
+        codec.register(tantalum.value.event.Notice.TYPE, 1, tantalum.value.event.Notice.class);
         codec.register(TextWithdrawn.TYPE, 1, TextWithdrawn.class);
         return codec;
     }

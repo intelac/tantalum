@@ -19,6 +19,11 @@ public interface Tool {
     /** 参数的 JSON Schema。 */
     Json schema();
 
+    /** 在这种会话里给模型看的参数；默认和 {@link #schema()} 一样（主会话的 task 多两个参数，dispatch）。 */
+    default Json schema(SessionKind kind) {
+        return schema();
+    }
+
     /**
      * 属于哪个插件（memory-plugin）：有的话，插件对这个用户关着时这个工具不给模型，开着时再看工具自己的开关。默认不属于插件。
      */

@@ -73,7 +73,7 @@ class ToolApprovalHookTest {
         KernelState yours = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN, tantalum.value.state.RunCause.prompt()));
         assertSame(Allow.PLAIN, beforeTool(yours, "write_file"));
         KernelState outside = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN,
-                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null)));
+                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null, null, null)));
         assertInstanceOf(Ask.class, beforeTool(outside, "write_file"), "a run caused from outside is asked every time");
         ToolApprovalHook two = new ToolApprovalHook(Set.of("write_file", "bash"));
         assertInstanceOf(Ask.class, two.beforeToolCall(KernelState.empty().with(allowed),

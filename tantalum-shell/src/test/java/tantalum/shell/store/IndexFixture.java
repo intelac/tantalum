@@ -95,7 +95,7 @@ final class IndexFixture {
         String request = "req-" + requests++;
         // 会话还不存在：和入口一样先发它的创建事件，目录在这时定下
         if (state.sessions().get(session) == null) {
-            send(principal, session, null, at, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, dir, false, null));
+            send(principal, session, null, at, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, dir, false, null, null));
         }
         Decision submitted = send(principal, session, null, at,
                 UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), text));

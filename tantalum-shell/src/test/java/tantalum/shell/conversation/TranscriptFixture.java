@@ -77,7 +77,7 @@ final class TranscriptFixture {
         kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, Limits.DEFAULT);
         // 会话先建好才收得到话。建会话这一条用一个不占编号的序号（之后的照旧从 0 起），这样条目编号和时间和以前一样，
         // 给网页的样本只显出真正的变化
-        feedAt(CREATED_SEQ, now.minusSeconds(1), null, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null));
+        feedAt(CREATED_SEQ, now.minusSeconds(1), null, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null, null));
     }
 
     /** 建会话那一条的序号：比所有别的都小，不占 0 起的编号。 */
@@ -125,7 +125,7 @@ final class TranscriptFixture {
             all.addAll(now.from(earlier.historySize()));
             result = result.with(new tantalum.value.state.SessionState(now.id(), now.principal(), now.kind(), now.helper(), all, 0,
                     now.activeRun(), now.lastRun(), now.inbox(), now.context(), now.compaction(), now.anchor(), now.omittedImages(),
-                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn(), now.outbox()));
+                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn(), now.outbox(), now.issuer()));
         }
         return result;
     }

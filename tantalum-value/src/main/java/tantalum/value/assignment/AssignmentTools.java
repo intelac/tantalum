@@ -7,6 +7,10 @@ public interface AssignmentTools {
     /** {@code task} 的参数名。 */
     String PROMPT = "prompt";
     String AGENT = "agent";
+    /** 主会话的 task：交给哪个已有的普通会话（追加、重试），不给就开一个新的（dispatch）。 */
+    String SESSION = "session";
+    /** 主会话的 task：新开的会话在哪个工作区（填工作区的名字），不给就没有工作目录。 */
+    String WORKSPACE = "workspace";
     /** {@code task_stop} 的参数名。 */
     String ID = "id";
 

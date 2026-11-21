@@ -109,6 +109,7 @@ public record TokenEstimate(double bytesPerToken) {
             case AttachedBlock attached -> ofText(attached.wrapped());
             case ReportBlock result -> ofText(result.shown());
             case AssignmentBlock given -> ofText(given.text());
+            case tantalum.value.model.NoticeBlock note -> ofText(note.shown());
         };
     }
 

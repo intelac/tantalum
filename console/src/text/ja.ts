@@ -118,6 +118,8 @@ export const ja: Text = {
     show: "タスクを開く",
     hide: "タスクを閉じる",
     result: (id) => `タスク ${id} の結果`,
+    note: "メモ：その仕事の会話で直接話しました",
+    openSession: "その会話を開く",
     noText: "テキストは返されませんでした",
     count: (count) => `${count} 件のタスクが実行中`,
     paused: (count) => `自動での続行が上限に達したため、ここで止めています。上の ${count} 件の結果は未処理です。何か入力すると続きます。`,

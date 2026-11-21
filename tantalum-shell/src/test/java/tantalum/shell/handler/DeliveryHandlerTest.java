@@ -55,6 +55,9 @@ class DeliveryHandlerTest {
     private final List<Sent> sent = new ArrayList<>();
     /** 入口接下来几次的回答；空了就是 200。 */
     private final Deque<Integer> statuses = new ArrayDeque<>();
+    /** 这个人登记的工作区（主会话派活时按名字找目录）。 */
+    private final List<tantalum.shell.project.Project> workspaces = List.of(new tantalum.shell.project.Project("p1", "app", "/home/alice/app",
+            java.time.Instant.parse("2026-11-21T00:00:00Z")));
     /** 已经有了的会话（重送时帮手已经建好）。 */
     private final java.util.Set<SessionId> existing = new java.util.HashSet<>();
     private final Agents agents = (user, dir) -> List.of(
@@ -79,12 +82,12 @@ class DeliveryHandlerTest {
             public boolean exists(Principal principal, SessionId session) {
                 return existing.contains(session);
             }
-        }, agents);
+        }, agents, user -> workspaces);
     }
 
     private static Deliver start(String agent) {
         return new Deliver(new CommandId("c1"), RUN, HELPER, new AssignmentParcel(new Assignment("t3-0", ISSUER, Root.USER, "Check module A.", SONNET),
-                agent, "/home/alice/app", true));
+                agent, "/home/alice/app", true, null));
     }
 
     private Sent only() {
@@ -99,7 +102,7 @@ class DeliveryHandlerTest {
 
         Sent delivered = only();
         assertEquals(HELPER, delivered.session());
-        assertEquals(new SessionCreated(SessionKind.HELPER, "/home/alice/app", true, new HelperOf(ISSUER, "t3-0", null, null, null)),
+        assertEquals(new SessionCreated(SessionKind.HELPER, "/home/alice/app", true, new HelperOf(ISSUER, "t3-0", null, null, null), null),
                 delivered.create());
         assertEquals(new Assignment("t3-0", ISSUER, Root.USER, "Check module A.", SONNET), delivered.event());
     }
@@ -181,6 +184,27 @@ class DeliveryHandlerTest {
         Sent resent = only();
         assertNull(resent.create());
         assertEquals(new Assignment("t3-0", ISSUER, Root.USER, "Check module A.", SONNET), resent.event());
+    }
+
+    /** 主会话派活（dispatch）：派活编号的会话还没有，就照工作区的名字查目录建一个普通会话，记着是哪个主会话开的。 */
+    @Test
+    void aJobFromTheMainSessionOpensARegularSessionInTheNamedWorkspace() throws Exception {
+        SessionId main = new SessionId("main-alice");
+        SessionId work = new SessionId("work-alice-3-0");
+        Assignment job = new Assignment("t3-0", main, Root.USER, "Check module A.", SONNET);
+        assertNull(handler().handle(new Deliver(new CommandId("w1"), new RunRef(ALICE, main, RunId.of(main, 1)), work,
+                new AssignmentParcel(job, null, null, false, "App"))));
+        assertEquals(new Sent(ALICE, work, new SessionCreated(SessionKind.REGULAR, "/home/alice/app", false, null, main), job), only());
+
+        sent.clear();
+        Refused unknown = (Refused) handler().handle(new Deliver(new CommandId("w2"), new RunRef(ALICE, main, RunId.of(main, 1)), work,
+                new AssignmentParcel(job, null, null, false, "nope")));
+        assertTrue(unknown.reason().contains("\"nope\"") && unknown.reason().contains("app"), unknown.reason());
+        assertTrue(sent.isEmpty());
+
+        Refused missing = (Refused) handler().handle(new Deliver(new CommandId("w3"), new RunRef(ALICE, main, RunId.of(main, 1)),
+                new SessionId("s-gone"), new AssignmentParcel(job, null, null, false, null)));
+        assertTrue(missing.reason().contains("s-gone"), missing.reason());
     }
 
     @Test

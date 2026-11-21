@@ -123,6 +123,8 @@ export const en: Text = {
     show: "Show the task",
     hide: "Hide the task",
     result: (id) => `Result of task ${id}`,
+    note: "Note: you talked in that job's conversation",
+    openSession: "Open that conversation",
     noText: "It brought back no text",
     count: (count) => (count === 1 ? "1 task running" : `${count} tasks running`),
     paused: (count) =>

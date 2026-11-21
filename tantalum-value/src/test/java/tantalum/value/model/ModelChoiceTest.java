@@ -61,7 +61,7 @@ class ModelChoiceTest {
     void theSessionsChoiceIsPartOfItsRecordedChanges() {
         SessionState before = tantalum.value.state.SessionStateFixture.regular(SESSION, USER);
         SessionState after = before.withModel(SONNET).enqueue(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"),
-                new ModelChoice("local", "qwen", "on"), false, null));
+                new ModelChoice("local", "qwen", "on"), false, null, null));
         SessionChange change = SessionChange.between(before, after);
         assertFalse(change.isEmpty());
         assertEquals(SONNET, change.model().value());

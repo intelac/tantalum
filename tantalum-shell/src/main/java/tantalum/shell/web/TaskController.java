@@ -17,6 +17,7 @@ import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
+import tantalum.value.id.SessionIds;
 import tantalum.value.assignment.OpenAssignment;
 import tools.jackson.databind.JsonNode;
 
@@ -47,18 +48,33 @@ public class TaskController {
         if (found.isEmpty()) {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
-        Map<String, OpenAssignment> open = new LinkedHashMap<>();
-        found.get().state().assignments().open().forEach(task -> open.put(task.session().value(), task));
+        // 按交代号对应（dispatch 审查第 13 条）：一个派活会话会先后收几次交代，主会话也能交给你自己开的会话
+        List<OpenAssignment> open = new ArrayList<>(found.get().state().assignments().open());
         List<Map<String, Object>> tasks = new ArrayList<>();
         String prefix = id.get().value() + "-";
         for (SessionSummary child : engine.queries().tasksOf(user, id.get())) {
-            OpenAssignment task = open.remove(child.id().value());
-            tasks.add(view(child.id().value().substring(prefix.length()), child.id(), child.runStatus(), task));
+            List<OpenAssignment> here = open.stream().filter(task -> task.session().equals(child.id())).toList();
+            open.removeAll(here);
+            if (!here.isEmpty()) {
+                here.forEach(task -> tasks.add(view(task.id(), child.id(), child.runStatus(), task)));
+            } else {
+                tasks.add(view(taskOf(child.id(), prefix), child.id(), child.runStatus(), null));
+            }
         }
-        // 刚放出、任务的会话还没写过事件的
-        open.values().forEach(task -> tasks.add(view(task.id(), task.session(), SessionSummary.IDLE, task)));
+        // 刚放出、对方会话还没写过事件的，和交给你自己开的会话的
+        open.forEach(task -> tasks.add(view(task.id(), task.session(), SessionSummary.IDLE, task)));
         return json.json(200, Map.of("tasks", tasks));
     }
+
+    /** 已经回来的那件事的交代号：帮手是编号的后半；派活会话是开它的那一次（{@code work-用户-3-0} 是 {@code t3-0}）。 */
+    private static String taskOf(SessionId child, String prefix) {
+        if (SessionIds.workShaped(child)) {
+            String[] parts = child.value().split("-");
+            return "t" + parts[parts.length - 2] + "-" + parts[parts.length - 1];
+        }
+        return child.value().startsWith(prefix) ? child.value().substring(prefix.length()) : child.value();
+    }
+
 
     private static Map<String, Object> view(String id, SessionId session, String runStatus, OpenAssignment open) {
         Map<String, Object> view = new LinkedHashMap<>();

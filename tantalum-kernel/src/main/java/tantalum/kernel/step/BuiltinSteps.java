@@ -34,6 +34,7 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, InboxSteps::arrived);
         table.register(TransitionTable.ANY_STATE, Assignment.TYPE, InboxSteps::arrived);
         table.register(TransitionTable.ANY_STATE, Report.TYPE, InboxSteps::arrived);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Notice.TYPE, InboxSteps::arrived);
         table.register(TransitionTable.ANY_STATE, QueueChanged.TYPE, QueueSteps::changed);
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
         table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, Outbox::commandDropped);

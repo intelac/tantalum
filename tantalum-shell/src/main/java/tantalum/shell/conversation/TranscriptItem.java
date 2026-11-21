@@ -39,7 +39,8 @@ import tantalum.value.state.RunState;
     @JsonSubTypes.Type(value = TranscriptItem.ModelChange.class, name = "modelChange"),
     @JsonSubTypes.Type(value = TranscriptItem.Question.class, name = "question"),
     @JsonSubTypes.Type(value = TranscriptItem.Task.class, name = "task"),
-    @JsonSubTypes.Type(value = TranscriptItem.TaskResult.class, name = "taskResult")
+    @JsonSubTypes.Type(value = TranscriptItem.TaskResult.class, name = "taskResult"),
+    @JsonSubTypes.Type(value = TranscriptItem.Note.class, name = "note")
 })
 public sealed interface TranscriptItem {
 
@@ -378,6 +379,21 @@ public sealed interface TranscriptItem {
      * {@code paused} 为真时自动开的轮数到了上限：结果只记在这里，没有开运行，等人说话。{@code text} 可以为空。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    /**
+     * 记一笔（dispatch 需求 3）：主会话开的那个会话里你直接说了话，主会话记下的那一笔。不属于哪一轮（{@code run} 为 null）。
+     * {@code from} 是那个会话，网页能点过去。
+     */
+    record Note(String id, SessionId session, RunId run, Instant at, String from, String text) implements TranscriptItem {
+
+        public Note {
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(session, "session");
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(from, "from");
+            Objects.requireNonNull(text, "text");
+        }
+    }
+
     record TaskResult(String id, SessionId session, RunId run, Instant at, String task, String outcome, String text, boolean paused)
             implements TranscriptItem {
 

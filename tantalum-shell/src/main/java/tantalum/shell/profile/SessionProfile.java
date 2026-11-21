@@ -65,11 +65,14 @@ public record SessionProfile(SessionKind toolsOf, String note, Compaction compac
 
     public static final String MAIN_NOTE = """
             ## Main window
-            This is the user's main window for everyday talk. Only the latest part of the \
-            conversation stays here; older turns move out in small batches. When you are asked to summarize, write it as the \
-            conversation state: what is being discussed, decisions and open questions, every option or list you gave (with its \
-            numbers), and what words like "that one" or "the second" refer to. Older facts come back through memory, so search \
-            it when the user refers to something no longer here.""";
+            This is the user's main window, one conversation that never ends. You do not do the work here: you decide whether \
+            something needs doing, hand each job to a conversation of its own with task (it opens a new one, or give "session" to \
+            add to or retry one that exists, and "workspace" to pick its folder), follow up, and tell the user how things stand. \
+            Answer simple questions yourself. Results come back here on their own; notes tell you what the user did directly in \
+            those conversations. Only the latest part of this conversation stays here; older turns move out in small batches. \
+            When you are asked to summarize, write it as the conversation state: what is being discussed, decisions and open \
+            questions, every option or list you gave (with its numbers), the jobs that are out and where, and what words like \
+            "that one" or "the second" refer to. Older facts come back through memory on their own.""";
 
     /** 给帮手会话的固定说明：它只做这一件事，交回去的只有最后一条回答。 */
     public static final String HELPER_NOTE = """
@@ -78,7 +81,8 @@ public record SessionProfile(SessionKind toolsOf, String note, Compaction compac
 
     private static final Set<Action> EVERYTHING = EnumSet.allOf(Action.class);
 
-    private static final SessionProfile MAIN = new SessionProfile(SessionKind.REGULAR, MAIN_NOTE, Compaction.RECENT_WINDOW, EVERYTHING,
+    // 主会话的工具档是它自己的（只有 task、task_stop，dispatch）；侧栏列表里不列它自己那一个（按编号滤，旧的按天的主窗口照旧列出）
+    private static final SessionProfile MAIN = new SessionProfile(SessionKind.MAIN, MAIN_NOTE, Compaction.RECENT_WINDOW, EVERYTHING,
             true, false, true, true);
     private static final SessionProfile REGULAR = new SessionProfile(SessionKind.REGULAR, null, Compaction.STANDARD, EVERYTHING,
             true, true, true, true);

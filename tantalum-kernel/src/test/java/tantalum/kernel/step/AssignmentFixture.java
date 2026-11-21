@@ -48,6 +48,7 @@ final class AssignmentFixture {
             case tantalum.value.delivery.ReportParcel back -> new AssignmentViews.ReturnReport(deliver.id(), deliver.run(), deliver.to(),
                     back.assignment(), back.input().outcome(), back.input().text(), back.input().root());
             case tantalum.value.delivery.StopParcel stop -> new AssignmentViews.StopAssignment(deliver.id(), deliver.run(), stop.assignment(), deliver.to());
+            case tantalum.value.delivery.NoticeParcel note -> deliver;
         };
     }
 
@@ -75,7 +76,7 @@ final class AssignmentFixture {
     /** 建帮手会话的那个事件：出身照 {@code Assign} 命令。 */
     static SessionCreated helperFor(Assign start) {
         return new SessionCreated(SessionKind.HELPER, start.dir(), start.offRecord(),
-                new HelperOf(start.run().session(), start.assignment(), start.agent(), null, null));
+                new HelperOf(start.run().session(), start.assignment(), start.agent(), null, null), null);
     }
 
     /** 放进帮手会话的那条交代。 */

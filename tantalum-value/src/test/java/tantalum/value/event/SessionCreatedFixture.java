@@ -8,6 +8,6 @@ public final class SessionCreatedFixture {
     private SessionCreatedFixture() {}
 
     public static SessionCreated regular() {
-        return new SessionCreated(SessionKind.REGULAR, null, false, null);
+        return new SessionCreated(SessionKind.REGULAR, null, false, null, null);
     }
 }

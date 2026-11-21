@@ -118,6 +118,7 @@ public record TextSwap(List<Swap> swaps) {
             case HookTextBlock hook -> new HookTextBlock(hook.hook(), text(hook.text(), places));
             case AttachedBlock attached -> new AttachedBlock(attached.plugin(), text(attached.text(), places));
             case ReportBlock report -> new ReportBlock(report.assignment(), report.outcome(), text(report.text(), places));
+            case NoticeBlock note -> new NoticeBlock(note.from(), text(note.text(), places));
             case AssignmentBlock assigned -> new AssignmentBlock(assigned.assignment(), text(assigned.text(), places));
             case ToolCallBlock call -> call(call, places);
             default -> block;

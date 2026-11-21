@@ -29,8 +29,8 @@ class PhaseTest {
     @Test
     void aRunStartedByAnAssignmentOwesAReportAndNoOtherDoes() {
         assertEquals(new Deciding(), new Deciding());
-        assertNotEquals(RunCause.prompt(), new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, "t1-0"));
-        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, null));
-        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.PROMPT, tantalum.value.event.Root.USER, "t1-0"));
+        assertNotEquals(RunCause.prompt(), new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, "t1-0", null, null));
+        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.PROMPT, tantalum.value.event.Root.USER, "t1-0", null, null));
     }
 }

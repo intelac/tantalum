@@ -511,15 +511,13 @@ class ContextHandlerTest {
         }
     }
 
-    /** 主窗口只是保留的原话少（memory-final-plan 第 11 节）：工具和平常的会话一样，改文件、命令、Git、浏览器都照给。 */
+    /** 主窗口只派活（dispatch 需求 1.2）：工具只有交代和叫停，不改文件、不跑命令、不用 Git 和浏览器；普通会话照旧。 */
     @Test
-    void theMainWindowHasTheSameToolsAsAnyConversation() throws Exception {
+    void theMainWindowOnlyHandsOutWork() throws Exception {
         ContextAssembled everyday = browserContext(SONNET);
         ContextAssembled main = browserContext(SONNET, new SessionId("main-2026-11-16"));
-        assertEquals(everyday.enabledTools(), main.enabledTools());
-        assertEquals(everyday.tools().stream().map(tantalum.value.model.ToolSpec::name).toList(),
-                main.tools().stream().map(tantalum.value.model.ToolSpec::name).toList());
-        assertEquals(everyday.unlocks(), main.unlocks());
+        assertFalse(everyday.tools().isEmpty());
+        assertTrue(main.tools().stream().allMatch(spec -> spec.name().equals("task") || spec.name().equals("task_stop")), main.tools().toString());
         assertTrue(main.system().contains("## Main window"));
         assertFalse(everyday.system().contains("## Main window"));
     }

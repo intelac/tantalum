@@ -152,10 +152,13 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         return found == null ? SessionKind.REGULAR : found.kind();
     }
 
-    /** 帮手会话：把事交代给它的会话；不是为 null。 */
+    /** 帮手会话：把事交代给它的会话；派活开的普通会话：开它的主会话（dispatch）；别的为 null。 */
     private static String issuer(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
-        return found == null || found.helper() == null ? null : found.helper().issuer().value();
+        if (found == null) {
+            return null;
+        }
+        return found.helper() != null ? found.helper().issuer().value() : found.issuer() == null ? null : found.issuer().value();
     }
 
     /** 这个会话交代出去还没回来的：启动时据此核对、重新起期限的定时器。 */

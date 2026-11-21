@@ -124,6 +124,9 @@ public final class Intake {
             return 404;
         }
         Known known = known(principal, session);
+        if (known.kind() == null && reserved(principal, session)) {
+            return 404;
+        }
         if (known.foreign()) {
             return 404;
         }
@@ -164,11 +167,16 @@ public final class Intake {
                 return Submission.rejected(409);
             }
         } else {
+            // 新会话：派活的编号留给主会话派活；主会话只有这个人自己的那一个（按相等认，不按样子：别人不能先占，dispatch）
+            if (reserved(principal, session)) {
+                return Submission.rejected(409);
+            }
             int owner = claims.claim(principal, session);
             if (owner != 200) {
                 return Submission.rejected(owner);
             }
-            created = new SessionCreated(SessionIds.mainShaped(session) ? SessionKind.MAIN : SessionKind.REGULAR, dir, offRecord, null);
+            created = new SessionCreated(session.equals(SessionIds.main(principal)) ? SessionKind.MAIN : SessionKind.REGULAR, dir, offRecord, null,
+                    null);
         }
         boolean needsNewRun = known.resident() == null || known.resident().activeRun() == null;
         ModelChoice chosen = delivery == Delivery.JOIN ? null : model;
@@ -210,6 +218,11 @@ public final class Intake {
      * 会话之间送的不是输入的那几样（delivery）：叫停（{@code AssignmentCancelled}）、“送到了”“不收”、启动时的重送。
      * 只查会话是这个人的、已经有了；不过输入表、不占名额（内核按自己的状态处理）。返回 200 放进了环，404 会话不是这个人的或还没有，429 环满。
      */
+    /** 人不能用来新开会话的编号：派活的（由主会话开），和别人的主会话样子的（只有自己的那一个算主会话）。 */
+    private static boolean reserved(Principal principal, SessionId session) {
+        return SessionIds.workShaped(session) || SessionIds.mainShaped(session) && !session.equals(SessionIds.main(principal));
+    }
+
     /** 这个人的这个会话已经有了（在内存，或索引里写过事件）。 */
     public boolean exists(Principal principal, SessionId session) {
         Known known = known(principal, session);

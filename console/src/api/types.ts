@@ -410,6 +410,13 @@ export interface TaskResultItem extends ItemBase {
   paused: boolean;
 }
 
+/** 记一笔（dispatch）：主会话开的那个会话里你直接说了话，主会话记下的那一笔。不属于哪一轮。 */
+export interface NoteItem extends ItemBase {
+  kind: "note";
+  from: string;
+  text: string;
+}
+
 export type Item =
   | UserItem
   | TextItem
@@ -421,7 +428,8 @@ export type Item =
   | ModelChangeItem
   | QuestionItem
   | TaskItem
-  | TaskResultItem;
+  | TaskResultItem
+  | NoteItem;
 
 export interface Messages {
   /** 快照截至的事件序号；没有该会话时为 -1。 */

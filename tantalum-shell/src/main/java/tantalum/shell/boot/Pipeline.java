@@ -102,7 +102,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         return intakeSlot[0].exists(principal, session);
                     }
                 },
-                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()));
+                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()),
+                user -> stores.projects().list(user));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),

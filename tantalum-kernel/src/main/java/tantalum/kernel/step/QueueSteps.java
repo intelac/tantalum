@@ -52,7 +52,7 @@ public final class QueueSteps {
                 case JOIN -> {
                     // 并进去的不带模型选择，排到队尾：并入的先后照“改成并入”的先后，和直接选了并入的一样
                     inbox.remove(at);
-                    inbox.add(new InboxItem(item.id(), item.kind(), item.root(), item.message(), null, true, null));
+                    inbox.add(new InboxItem(item.id(), item.kind(), item.root(), item.message(), null, true, null, item.from()));
                 }
             }
             out.put(session.withInbox(inbox));

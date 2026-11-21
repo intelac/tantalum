@@ -105,6 +105,7 @@ final class TranscriptPass {
             }
             case ContextAssembled assembled -> toolChanges(assembled);
             case tantalum.value.event.TextWithdrawn withdrawn -> withdrawn(withdrawn.swaps());
+            case tantalum.value.event.Notice notice -> noted(notice);
             default -> { }
         }
         for (Command command : decision.commands()) {
@@ -320,6 +321,15 @@ final class TranscriptPass {
             };
     }
 
+    /** 主会话记下了一笔（重复送来的状态不变，不再出条目）。 */
+    private void noted(tantalum.value.event.Notice notice) {
+        if (before != null && state.sessions().get(session) instanceof SessionState now && before.sessions().get(session) instanceof SessionState was
+                && !was.assignments().hasTaken(new tantalum.value.delivery.NoticeParcel(notice).id())
+                && now.assignments().hasTaken(new tantalum.value.delivery.NoticeParcel(notice).id())) {
+            put(new TranscriptItem.Note(TranscriptItem.id(envelope.seq(), 0), session, null, at, notice.from().value(), notice.text()));
+        }
+    }
+
     private void put(TranscriptItem item) {
         conversation.items.put(item.id(), item);
         changed.put(item.id(), item);
@@ -372,6 +382,7 @@ final class TranscriptPass {
                 case AttachedBlock ignored -> { } // 插件附的内容也只在用户消息里
                 case ReportBlock ignored -> { } // 交代出去的事的结果也只在用户角色的消息里
                 case AssignmentBlock ignored -> { } // 交代的内容也只在用户角色的消息里
+                case tantalum.value.model.NoticeBlock ignored -> { } // 记一笔也只在用户角色的消息里
             }
         }
         // 摘要调用在上面已经返回：它的用量在压缩标记上，不算进这次运行。放在内容之后，状态条目仍是这一步里最后变的

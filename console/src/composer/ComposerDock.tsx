@@ -67,9 +67,13 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
   const tasksOut = useMemo(() => openTasks(items), [items]);
   const pausedOnes = useMemo(() => pausedResults(items), [items]);
   const taskItems = useOpenTaskSessions(tasksOut);
+  // 再下一层（dispatch 需求 4）：主窗口派活开的会话自己放出的帮手，里面等着批准的也列在这里
+  const nested = tasksOut.flatMap((task) => openTasks(taskItems(task.taskSession) ?? []));
+  const nestedItems = useOpenTaskSessions(nested);
   const queries = useQueryClient();
-  // 这个对话自己的批准在先；没有时轮到任务里的，一次一个
-  const fromTask = own === null ? firstApproval(tasksOut, taskItems) : null;
+  // 这个对话自己的批准在先；没有时轮到交代出去的（先第一层，再第二层），一次一个
+  const fromTask =
+    own === null ? firstApproval([...tasksOut, ...nested], (taskSession) => taskItems(taskSession) ?? nestedItems(taskSession)) : null;
   const pending = own ?? fromTask?.pending ?? null;
   // 排队的消息就是对话里 queued 的用户条目，顺序和内核的队列相同
   const queued = useMemo(() => items.filter((item): item is UserItem => item?.kind === "user" && item.queued), [items]);
@@ -113,7 +117,8 @@ export function ComposerDock({ store, session, config, onOpenPlugins, onAddProje
           onAnswered={fromTask == null ? undefined : () => void queries.invalidateQueries({ queryKey: taskSessionKey(fromTask.task.taskSession) })}
         />
       )}
-      <div hidden={pending !== null}>
+      {/* 别的会话（交代出去的）来的批准列在上面，不占输入框：还能接着和这个对话说话（dispatch 需求 4） */}
+      <div hidden={own !== null}>
         <Composer
           session={session}
           activeRun={running ? run : null}

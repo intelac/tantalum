@@ -573,8 +573,11 @@ public final class SessionIndex implements AutoCloseable {
     /** 一个用户写过事件、列进侧栏的会话；只认领还没写过的不算，帮手会话也不算（它们跟着交代它们的会话看）。 */
     public synchronized List<Session> sessions(Principal principal) throws SQLException {
         List<Session> sessions = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND last_activity IS NOT NULL AND kind IN " + LISTED)) {
+        // 这个人的主会话不列（只从主窗口按钮打开，dispatch）；旧的按天的主窗口照旧列出
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND last_activity IS NOT NULL AND kind IN " + LISTED
+                + " AND session <> ?")) {
             select.setString(1, principal.value());
+            select.setString(2, tantalum.value.id.SessionIds.main(principal).value());
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
                     sessions.add(session(result));

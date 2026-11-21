@@ -53,7 +53,7 @@ final class SessionDelta {
             node.set("id", mapper.valueToTree(change.id()));
             node.set("principal", mapper.valueToTree(change.principal()));
         }
-        // 这一步新建了它：建好不变的四样写在这一行里，之后的行不再写
+        // 这一步新建了它：建好不变的几样写在这一行里，之后的行不再写
         if (change.created()) {
             node.put("created", true);
             node.put("kind", change.kind().name());
@@ -65,6 +65,9 @@ final class SessionDelta {
             }
             if (change.offRecord()) {
                 node.put("offRecord", true);
+            }
+            if (change.issuer() != null) {
+                node.put("issuer", change.issuer().value());
             }
         }
         if (!change.appended().isEmpty()) {
@@ -135,7 +138,8 @@ final class SessionDelta {
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
                 changed(node, "model", ModelChoice.class), changed(node, "assignments", Assignments.class),
-                changedList(node, "withdrawn", WITHDRAWN), changedList(node, "outbox", OUTBOX));
+                changedList(node, "withdrawn", WITHDRAWN), changedList(node, "outbox", OUTBOX),
+                created && node.has("issuer") ? new SessionId(node.get("issuer").asString()) : null);
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

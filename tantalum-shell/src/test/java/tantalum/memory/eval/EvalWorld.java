@@ -127,9 +127,9 @@ final class EvalWorld implements AutoCloseable {
         return "e-" + (++counter);
     }
 
-    /** 一个主窗口会话（编号以 {@code main-} 开头）。 */
-    String mainSession() {
-        return "main-e-" + (++counter);
+    /** 这个人的主窗口（dispatch：每人一个，编号 {@code main-用户名}；每个题目用新的人，所以互不干扰）。 */
+    String mainSession(String user) {
+        return tantalum.value.id.SessionIds.main(new tantalum.value.id.Principal(user)).value();
     }
 
     HttpResponse<String> send(String config, String user, String method, String path, String body) {
