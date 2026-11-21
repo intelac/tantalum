@@ -111,7 +111,7 @@ describe("Composer attachments", () => {
       finishers[0]?.(uploaded);
     });
     expect(submit).toHaveBeenCalledTimes(1);
-    expect(submit.mock.calls[0]?.slice(0, 3)).toEqual(["s1", "prompt", "read this"]);
+    expect(submit.mock.calls[0]?.slice(0, 3)).toEqual(["s1", "queue", "read this"]);
     expect(submit.mock.calls[0]?.[4]).toEqual([uploaded]);
     expect(screen.queryByRole("list", { name: "待发送附件" })).toBeNull();
   });

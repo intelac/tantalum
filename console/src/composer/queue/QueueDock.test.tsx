@@ -58,7 +58,7 @@ describe("QueueDock", () => {
     await userEvent.click(screen.getByRole("button", { name: /^插话/ }));
     expect(changeQueue.mock.calls).toEqual([
       ["s1", "5.0", "remove"],
-      ["s1", "5.0", "steer"],
+      ["s1", "5.0", "join"],
     ]);
   });
 
@@ -160,9 +160,9 @@ describe("steerAll", () => {
     await userEvent.click(screen.getByRole("button", { name: "all" }));
     await waitFor(() => expect(changeQueue).toHaveBeenCalledTimes(3));
     expect(changeQueue.mock.calls.map((call) => call.slice(1))).toEqual([
-      ["5.0", "steer"],
-      ["6.0", "steer"],
-      ["7.0", "steer"],
+      ["5.0", "join"],
+      ["6.0", "join"],
+      ["7.0", "join"],
     ]);
     expect(screen.queryByRole("alert")).toBeNull();
   });

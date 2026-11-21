@@ -70,7 +70,7 @@ describe("viewing another person's sessions", () => {
     vi.stubGlobal("fetch", fetchMock);
     setViewedUser("alice");
     await expect(renameSession("s1", "mine now")).rejects.toMatchObject({ status: 403, code: "view/read-only" });
-    await expect(submit("s1", "prompt", "hi", "r")).rejects.toBeInstanceOf(ApiError);
+    await expect(submit("s1", "queue", "hi", "r")).rejects.toBeInstanceOf(ApiError);
     expect(fetchMock).not.toHaveBeenCalled();
     await logout();
     expect(fetchMock).toHaveBeenCalledTimes(1);

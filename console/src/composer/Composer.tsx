@@ -201,12 +201,13 @@ export function Composer({
         return;
       }
       // 内容（文字加附件）改过再发要换 requestId，否则服务端按重复提交丢掉改过的内容。
-      const mode = !running ? "prompt" : steer ? "steer" : "follow-up";
-      const signature = JSON.stringify([mode, content, attachments.map((ref) => ref.id)]);
+      // 在跑的时候按了插话就并进这一轮，其余排队（空闲时服务器直接开一轮）
+      const delivery = running && steer ? "join" : "queue";
+      const signature = JSON.stringify([delivery, content, attachments.map((ref) => ref.id)]);
       if (requestId.current === null || failedContent.current !== signature) requestId.current = crypto.randomUUID();
       try {
-        // 插话并进当前运行，不换模型
-        await submit(session, mode, content, requestId.current, attachments, mode === "steer" ? null : choice, project, offRecord);
+        // 并进当前运行的不换模型
+        await submit(session, delivery, content, requestId.current, attachments, delivery === "join" ? null : choice, project, offRecord);
       } catch (failure) {
         failedContent.current = signature;
         setError(failure);
@@ -214,7 +215,7 @@ export function Composer({
       }
       requestId.current = null;
       failedContent.current = null;
-      if (mode !== "steer") onSubmitted?.(choice);
+      if (delivery !== "join") onSubmitted?.(choice);
       setText("");
       clearDraft(session);
       queue.clear();

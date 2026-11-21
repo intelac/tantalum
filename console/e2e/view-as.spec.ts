@@ -63,7 +63,7 @@ test.describe("只读查看别人的会话", () => {
 
     // 绕过页面直接发请求：写的一律拒，不在允许范围里的读也拒
     const write = await admin.request.post(`/api/sessions/${session}/submissions?viewAs=${OTHER_USER}`, {
-      data: { requestId: `x${stamp}`, mode: "prompt", text: "as someone else" },
+      data: { requestId: `x${stamp}`, delivery: "queue", text: "as someone else" },
     });
     expect(write.status()).toBe(403);
     expect((await write.json()).code).toBe("view/read-only");

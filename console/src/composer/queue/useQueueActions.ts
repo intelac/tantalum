@@ -43,13 +43,13 @@ export function useQueueActions(session: string): QueueActions {
 
   const edit = useCallback((item: string, text: string) => run(async () => void (await changeQueue(session, item, "edit", text))), [run, session]);
   const remove = useCallback((item: string) => run(async () => void (await changeQueue(session, item, "remove"))), [run, session]);
-  const steer = useCallback((item: string) => run(async () => void (await changeQueue(session, item, "steer"))), [run, session]);
+  const steer = useCallback((item: string) => run(async () => void (await changeQueue(session, item, "join"))), [run, session]);
   const steerAll = useCallback(
     async (items: readonly UserItem[]) => {
       await run(async () => {
         for (const item of items) {
           try {
-            await changeQueue(session, item.id, "steer");
+            await changeQueue(session, item.id, "join");
           } catch (failure) {
             // 这一条刚好轮到了：它已经在发了，不算失败
             if (!gone(failure)) throw failure;

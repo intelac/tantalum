@@ -52,7 +52,7 @@ test.describe("运维", () => {
     await page.waitForTimeout(2500);
     const other = `s-${Date.now().toString(16).slice(-8)}`;
     const nudged = await page.request.post(`/api/sessions/${other}/submissions`, {
-      data: { requestId: `nudge-${Date.now()}`, mode: "prompt", text: "hello 别的会话" },
+      data: { requestId: `nudge-${Date.now()}`, delivery: "queue", text: "hello 别的会话" },
       headers: { origin: "http://localhost:5174" },
     });
     expect(nudged.ok(), await nudged.text()).toBeTruthy();
