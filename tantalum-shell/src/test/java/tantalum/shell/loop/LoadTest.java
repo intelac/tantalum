@@ -36,7 +36,7 @@ class LoadTest {
 
     private InputRing start(LoopFixtures.Load loader) {
         LaneDispatcher[] holder = new LaneDispatcher[1];
-        holder[0] = new LaneDispatcher(256, 256, sequence, (principal, session, events) -> { }, (envelope, usage, load) -> {
+        holder[0] = new LaneDispatcher(256, 256, sequence, (principal, session, events, snapshot) -> { }, (envelope, usage, load) -> {
             reached.add(new Reached(envelope, load));
             holder[0].released(envelope);
             return true;

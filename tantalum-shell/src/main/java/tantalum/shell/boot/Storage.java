@@ -52,6 +52,8 @@ final class Storage implements AutoCloseable {
     final SessionFiles files;
     final AttachmentStore attachments;
     final RecordReplay records;
+    /** 快照和切片的互转：净室写快照、载入读快照用同一个。 */
+    final tantalum.shell.loop.Snapshots snapshots;
     /** 运行表的实时写入（run-tree 需求 3）：净室放出的轨迹记录攒成运行的行，交给索引写入线程。 */
     final RunCollector runs;
     final RunRebuild runRebuild;
@@ -76,7 +78,8 @@ final class Storage implements AutoCloseable {
         files = new SessionFiles(paths, codec, MAX_OPEN_FILES, indexWriter::onDurable);
         opened.push(files);
         attachments = new AttachmentStore(dataDir, attachmentLimits, new ImageNormalizer(attachmentLimits));
-        records = new RecordReplay(paths, reader);
+        snapshots = new tantalum.shell.loop.Snapshots(codec.mapper());
+        records = new RecordReplay(paths, reader, snapshots);
         // 运行结束时还交给“结束了的运行”的听众（自动记笔记，memory-capture）；启动补齐走自己的收集器，不经这里
         java.util.function.Consumer<tantalum.shell.trace.RunRow> emit = row -> {
             indexWriter.onRun(row);
@@ -125,7 +128,7 @@ final class Storage implements AutoCloseable {
             @Override
             public Optional<CleanroomRing.Loaded> load(Principal principal, SessionId session, long beforeSeq) throws Exception {
                 Optional<RecordReplay.Loaded> folded = records.load(principal, session, beforeSeq);
-                folded.ifPresent(loaded -> files.adopt(principal, session, loaded.memo()));
+                folded.ifPresent(loaded -> files.adopt(principal, session, loaded.memo(), loaded.from(), loaded.snapshotBytes()));
                 return folded.map(loaded -> new CleanroomRing.Loaded(loaded.slice()));
             }
 

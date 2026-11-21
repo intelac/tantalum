@@ -175,6 +175,20 @@ public final class RecordCodec {
         return decode(object, seq, memo);
     }
 
+    /** 账里编码状态用的严格 mapper（快照和结果行共用）。 */
+    JsonMapper mapper() {
+        return mapper;
+    }
+
+    /** 运行在账里的样子（平的一层，见 {@link RunDelta}）。 */
+    ObjectNode run(RunState run) {
+        return runs.encode(run);
+    }
+
+    RunState run(ObjectNode flat) {
+        return runs.decode(flat);
+    }
+
     /** 解析一行会话文件用的 mapper：浮点数按 {@code BigDecimal} 读，事件和结果读出来都和文本逐字节相同。 */
     public JsonNode parse(String line) {
         return mapper.readTree(line);

@@ -125,7 +125,8 @@ class PluginParamsReplayTest {
     }
 
     private RecordReplay.Loaded restored() throws Exception {
-        return new RecordReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()))
+        return new RecordReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
+                new tantalum.shell.loop.Snapshots(EventCodec.withBuiltins().mapper()))
                 .load(ALICE, SESSION, Long.MAX_VALUE).orElseThrow();
     }
 
@@ -194,7 +195,7 @@ class PluginParamsReplayTest {
         List<KernelState> states = new ArrayList<>(List.of(KernelState.empty().withResident(loaded.slice().session(), loaded.slice().runs())));
         long[] seq = {loaded.slice().seq()};
         try (SessionFiles files = new SessionFiles(scenario.paths, EventCodec.withBuiltins(), 4, (p, s, n, offset) -> { })) {
-            files.adopt(ALICE, SESSION, loaded.memo());
+            files.adopt(ALICE, SESSION, loaded.memo(), 0, 0);
             Sender sender = (run, event) -> {
                 EventEnvelope envelope = new EventEnvelope(++seq[0], ReplayScenario.AT, ALICE, SESSION, run, event);
                 KernelState before = states.getLast();

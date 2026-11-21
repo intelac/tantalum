@@ -48,56 +48,167 @@ public final class SessionFileReader {
         forEachLine(file, line -> consumer.accept(line.envelope()));
     }
 
+    /** 读的人看到的两种行：一步，和一份快照（{@code offset} 是快照行在文件里的位置）。 */
+    public interface Visitor {
+        void step(Line line);
+
+        default void snapshot(Snapshot snapshot, long offset) {
+        }
+    }
+
     /**
-     * 按文件顺序读每一行，返回读完后的 memo（读取方，{@link RecordMemo#toWriter} 后交给写入方接着用）。
-     * 每行只解析一次，序号必须递增。
+     * 按文件顺序读每一步，返回读完后的 memo（读取方，{@link RecordMemo#toWriter} 后交给写入方接着用）。
+     * 每行只解析一次，序号必须递增。快照行不交给 {@code consumer}，只在那里换 memo。
      */
     public RecordMemo forEachLine(Path file, Consumer<Line> consumer) throws IOException {
+        return forEachEntry(file, 0, consumer::accept);
+    }
+
+    /**
+     * 同上，从 {@code from} 读起：0 是文件头之后；不是 0 时那里必须是一行快照的开头（{@link #lastSnapshot} 找到的、索引记着的），
+     * 用它起头，之后的行只引用它和它之后的内容。快照行也交给访问者。
+     */
+    public RecordMemo forEachEntry(Path file, long from, Visitor visitor) throws IOException {
         RecordMemo memo = RecordMemo.reader();
         if (!Files.exists(file)) {
             return memo;
         }
-        try (Lines in = new Lines(Files.newInputStream(file), MAX_LINE_BYTES)) {
-            byte[] current = in.next();
-            if (current == null) {
+        Identity identity;
+        long headerBytes;
+        try (Lines in = new Lines(Files.newInputStream(file), MAX_LINE_BYTES, 0)) {
+            byte[] header = in.next();
+            if (header == null) {
                 return memo;
             }
-            byte[] next = in.next();
-            Identity identity = parseHeader(file, current, next == null);
+            identity = parseHeader(file, header, in.next() == null);
             if (identity == null) {
                 return memo;
             }
-            memo = RecordMemo.reader(identity.principal(), identity.session());
-            long lineNumber = 2;
+            headerBytes = header.length + 1L;
+        }
+        memo = RecordMemo.reader(identity.principal(), identity.session());
+        long start = from == 0 ? headerBytes : from;
+        InputStream stream = Files.newInputStream(file);
+        stream.skipNBytes(start);
+        try (Lines in = new Lines(stream, MAX_LINE_BYTES, start)) {
             long lastSeq = Long.MIN_VALUE;
-            current = next;
+            boolean first = true;
+            // 从头读时知道第几行（文件头是第 1 行）；从中间读起时只知道位置
+            long lineNumber = from == 0 ? 2 : -1;
+            byte[] current = in.next();
+            long currentAt = in.lastStart();
             while (current != null) {
-                next = in.next();
+                byte[] next = in.next();
+                long nextAt = in.lastStart();
                 String text = text(current);
                 JsonNode tree = text == null ? null : parseOrNull(text);
                 if (tree == null || !tree.isObject()) {
                     if (next == null) {
-                        LOG.warn("ignoring incomplete last line {} of {}", lineNumber, file);
+                        LOG.warn("ignoring incomplete last line at offset {} of {}", currentAt, file);
                         return memo;
                     }
-                    throw corrupt(file, lineNumber, "not a JSON object", null);
+                    throw corruptAt(file, lineNumber, currentAt, "not a JSON object", null);
                 }
-                Line line;
-                try {
-                    line = lines.decode(tree, identity.principal(), identity.session(), memo);
-                } catch (IllegalArgumentException | ArithmeticException failure) {
-                    throw corrupt(file, lineNumber, failure.getMessage(), failure);
+                if (lines.isSnapshot(tree)) {
+                    Snapshot snapshot;
+                    try {
+                        snapshot = lines.decodeSnapshot(tree);
+                    } catch (IllegalArgumentException failure) {
+                        throw corruptAt(file, lineNumber, currentAt, failure.getMessage(), failure);
+                    }
+                    if (!first && snapshot.seq() != lastSeq) {
+                        throw corruptAt(file, lineNumber, currentAt, "snapshot of seq " + snapshot.seq() + " follows seq " + lastSeq, null);
+                    }
+                    lastSeq = snapshot.seq();
+                    memo = RecordMemo.afterSnapshot(true, identity.principal(), identity.session(), snapshot);
+                    visitor.snapshot(snapshot, currentAt);
+                } else {
+                    if (first && from != 0) {
+                        throw corruptAt(file, lineNumber, currentAt, "reading from here needs a snapshot line", null);
+                    }
+                    Line line;
+                    try {
+                        line = lines.decode(tree, identity.principal(), identity.session(), memo);
+                    } catch (IllegalArgumentException | ArithmeticException failure) {
+                        throw corruptAt(file, lineNumber, currentAt, failure.getMessage(), failure);
+                    }
+                    if (line.seq() <= lastSeq) {
+                        throw corruptAt(file, lineNumber, currentAt, "seq " + line.seq() + " is not after " + lastSeq, null);
+                    }
+                    lastSeq = line.seq();
+                    visitor.step(line);
                 }
-                if (line.seq() <= lastSeq) {
-                    throw corrupt(file, lineNumber, "seq " + line.seq() + " is not after " + lastSeq, null);
-                }
-                lastSeq = line.seq();
-                consumer.accept(line);
+                first = false;
                 current = next;
-                lineNumber++;
+                currentAt = nextAt;
+                if (lineNumber > 0) {
+                    lineNumber++;
+                }
             }
         }
         return memo;
+    }
+
+    /**
+     * 最后一份快照行在文件里的位置；没有时为 -1。从尾部往前找，只看每行的开头，不解析。尾部残缺的行不算。
+     */
+    public static long lastSnapshot(Path file) throws IOException {
+        return lastSnapshot(file, 0);
+    }
+
+    /** 同上，只往回找到 {@code notBefore} 为止（那里已知是一份快照时，找到的不会比它早）。 */
+    public static long lastSnapshot(Path file, long notBefore) throws IOException {
+        if (!Files.exists(file)) {
+            return -1;
+        }
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            long end = channel.size();
+            if (end > 0 && byteAt(channel, end - 1) != '\n') {
+                end = lineStart(channel, end);
+            }
+            while (end > notBefore) {
+                long start = lineStart(channel, end - 1);
+                if (isSnapshotAt(channel, start, end - 1)) {
+                    return start;
+                }
+                end = start;
+            }
+            return notBefore > 0 ? notBefore : -1;
+        }
+    }
+
+    /** 从 {@code offset} 开始的那一行有多长（含换行符）。 */
+    public static long lineLength(Path file, long offset) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            in.skipNBytes(offset);
+            long length = 0;
+            byte[] chunk = new byte[64 * 1024];
+            int read;
+            while ((read = in.read(chunk)) > 0) {
+                for (int i = 0; i < read; i++) {
+                    if (chunk[i] == '\n') {
+                        return length + i + 1;
+                    }
+                }
+                length += read;
+            }
+            return length;
+        }
+    }
+
+    /** {@code offset} 是不是一行快照的开头（索引记着的位置用之前核对一下）。 */
+    public static boolean isSnapshotAt(Path file, long offset) throws IOException {
+        if (offset <= 0 || !Files.exists(file)) {
+            return false;
+        }
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            return offset < channel.size() && byteAt(channel, offset - 1) == '\n' && isSnapshotAt(channel, offset, channel.size());
+        }
+    }
+
+    private static boolean isSnapshotAt(FileChannel channel, long start, long end) throws IOException {
+        long length = Math.min(end - start, SnapshotCodec.PREFIX.length);
+        return length == SnapshotCodec.PREFIX.length && SnapshotCodec.isSnapshot(bytes(channel, start, start + length));
     }
 
     private JsonNode parseOrNull(String text) {
@@ -120,10 +231,20 @@ public final class SessionFileReader {
         private boolean eof;
 
         private final int maxLine;
+        /** 下一行开头在文件里的位置，和刚交出去的那一行开头的位置。 */
+        private long position;
+        private long lastStart;
 
-        Lines(InputStream in, int maxLine) {
+        Lines(InputStream in, int maxLine, long position) {
             this.in = in;
             this.maxLine = maxLine;
+            this.position = position;
+            this.lastStart = position;
+        }
+
+        /** 最近一次 {@link #next} 交出的那一行开头在文件里的位置。 */
+        long lastStart() {
+            return lastStart;
         }
 
         /** 下一行，不含换行符；没有完整的行时为 null。 */
@@ -137,6 +258,8 @@ public final class SessionFileReader {
                         }
                         byte[] line = java.util.Arrays.copyOfRange(buffer, start, i);
                         start = i + 1;
+                        lastStart = position;
+                        position += line.length + 1;
                         return line;
                     }
                 }
@@ -192,6 +315,11 @@ public final class SessionFileReader {
             throw corrupt(file, 1, "format " + format.value() + " is older than this program reads (" + SessionFile.FORMAT + ")", null);
         }
         return new Identity(new Principal(principal.value()), new SessionId(session.value()));
+    }
+
+    private static SessionCorruptException corruptAt(Path file, long lineNumber, long offset, String detail, Throwable cause) {
+        return new SessionCorruptException("session file " + file + (lineNumber > 0 ? " line " + lineNumber + " (offset " + offset + ")"
+                : " at offset " + offset) + ": " + detail, cause);
     }
 
     private static SessionCorruptException corrupt(Path file, long lineNumber, String detail, Throwable cause) {
@@ -257,7 +385,7 @@ public final class SessionFileReader {
             }
             while (end > 0) {
                 long start = lineStart(channel, end - 1);
-                if (parse(bytes(channel, start, end - 1)) instanceof Json.Obj record
+                if (!isSnapshotAt(channel, start, end - 1) && parse(bytes(channel, start, end - 1)) instanceof Json.Obj record
                         && record.fields().get("seq") instanceof Json.Num seq) {
                     return seq.value().longValueExact();
                 }

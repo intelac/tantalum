@@ -91,7 +91,7 @@ class LinesTest {
         long before = Files.size(file());
         Line again = new Line(prompt(1, "again"), appended(1, LONG));
         try (SessionFiles files = files()) {
-            files.adopt(USER, SESSION, memo);
+            files.adopt(USER, SESSION, memo, 0, 0);
             files.append(USER, SESSION, List.of(again));
         }
         String added = Files.readString(file()).substring((int) before);

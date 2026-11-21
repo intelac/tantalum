@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,7 +40,7 @@ class RecordReplayTest {
         scenario = new ReplayScenario(dir);
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
         replay = SessionReplayFixture.of(scenario.paths, reader, new UsageLedger(scenario.index, scenario.writer), scenario.kernel);
-        records = new RecordReplay(scenario.paths, reader);
+        records = new RecordReplay(scenario.paths, reader, new Snapshots(EventCodec.withBuiltins().mapper()));
         scenario.run();
         scenario.writer.flush();
     }

@@ -37,7 +37,7 @@ class LaneIsolationTest {
         ConcurrentHashMap<Principal, AtomicLong> counters = new ConcurrentHashMap<>();
         Sequence sequence = principal -> counters.computeIfAbsent(principal, ignored -> new AtomicLong()).getAndIncrement();
         LaneDispatcher[] holder = new LaneDispatcher[1];
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(256, sequence, (principal, session, events) -> {
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(256, sequence, (principal, session, events, snapshot) -> {
             if (principal.value().equals("slow")) {
                 try {
                     unstick.await();
@@ -47,7 +47,7 @@ class LaneIsolationTest {
             }
         }, envelope -> {
             // 像 cleanroom 一样：处理完交回通道写成一行，落盘后才算放行
-            holder[0].release(envelope, new StepRecord(envelope.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+            holder[0].release(envelope, new StepRecord(envelope.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()), null,
                     () -> reached.add(envelope), () -> holder[0].released(envelope));
             return true;
         });

@@ -206,7 +206,7 @@ class SessionFileTest {
     @Test
     void anOverlongLineIsCorruptNotAnOutOfMemory() throws Exception {
         byte[] bytes = "{\"format\":3}\n0123456789012345678901234567890123456789\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        try (SessionFileReader.Lines lines = new SessionFileReader.Lines(new java.io.ByteArrayInputStream(bytes), 16)) {
+        try (SessionFileReader.Lines lines = new SessionFileReader.Lines(new java.io.ByteArrayInputStream(bytes), 16, 0)) {
             assertEquals("{\"format\":3}", new String(lines.next(), java.nio.charset.StandardCharsets.UTF_8));
             assertThrows(SessionCorruptException.class, lines::next);
         }

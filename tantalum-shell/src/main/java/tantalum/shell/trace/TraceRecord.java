@@ -158,6 +158,13 @@ public sealed interface TraceRecord {
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsAdded,
                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> toolsRemoved) implements TraceRecord {
 
+        /** 没写出的空列表读回来是空列表，不是 null：写进快照再读回来和原来相等。 */
+        public ContextChange {
+            sections = sections == null ? List.of() : List.copyOf(sections);
+            toolsAdded = toolsAdded == null ? List.of() : List.copyOf(toolsAdded);
+            toolsRemoved = toolsRemoved == null ? List.of() : List.copyOf(toolsRemoved);
+        }
+
         @Override
         public ContextChange withHead(Head newHead) {
             return new ContextChange(newHead, sections, toolsAdded, toolsRemoved);

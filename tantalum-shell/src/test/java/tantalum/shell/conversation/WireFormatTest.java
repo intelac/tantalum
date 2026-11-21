@@ -1,5 +1,6 @@
 package tantalum.shell.conversation;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tantalum.shell.conversation.TranscriptFixture.call;
@@ -286,7 +287,7 @@ class WireFormatTest {
                 journal.write(envelope);
             }
         }
-        return use.apply(new RecordReplay(paths, new SessionFileReader(codec)), paths);
+        return use.apply(new RecordReplay(paths, new SessionFileReader(codec), new Snapshots(EventCodec.withBuiltins().mapper())), paths);
     }
 
     @FunctionalInterface

@@ -50,6 +50,16 @@ public final class Projections {
         return new Output(items, records);
     }
 
+    /** 这个会话截至现在的两个投影状态，加上内核里它的状态和运行，就是它在内存里的全部（快照用）。 */
+    public SessionSlice export(tantalum.value.state.KernelState state, tantalum.value.id.SessionId session, long seq) {
+        if (!(transcript instanceof tantalum.shell.conversation.Transcript conversation)) {
+            throw new IllegalStateException("only the real transcript can be exported");
+        }
+        return new SessionSlice(state.sessions().get(session),
+                state.runs().values().stream().filter(run -> run.ref().session().equals(session)).toList(),
+                conversation.export(session), trace.export(session), seq);
+    }
+
     /** 冷载入的会话并入时恢复两个投影的状态。 */
     public void restore(SessionId session, SessionSlice slice) {
         transcript.restore(session, slice.transcript());

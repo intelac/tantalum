@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -106,7 +107,7 @@ class PerSessionQueryTest {
         paths = new SessionPaths(dir);
         fixture = new IndexFixture(paths, writer::onDurable, writer::onStep, kernel);
         SessionReplay replay = SessionReplayFixture.of(paths, new SessionFileReader(EventCodec.withBuiltins()), new UsageLedger(index, writer), kernel);
-        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins())), EventCodec.withBuiltins().mapper());
+        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new Snapshots(EventCodec.withBuiltins().mapper())), EventCodec.withBuiltins().mapper());
     }
 
     @AfterEach

@@ -24,11 +24,28 @@ public final class LineCodec {
     private final EventCodec events;
     private final RecordCodec records;
     private final MatchedCodec matched;
+    private final SnapshotCodec snapshots;
 
     public LineCodec(EventCodec events) {
         this.events = events;
         this.records = new RecordCodec(events);
         this.matched = new MatchedCodec(events.mapper());
+        this.snapshots = new SnapshotCodec(records);
+    }
+
+    /** 编码一行快照（不含换行符）。写完之后写入方要换成 {@link RecordMemo#afterSnapshot}。 */
+    public String encode(Snapshot snapshot) {
+        return snapshots.encode(snapshot);
+    }
+
+    /** 这棵树是不是快照行。 */
+    public boolean isSnapshot(JsonNode tree) {
+        return SnapshotCodec.isSnapshot(tree);
+    }
+
+    /** 解一行快照。坏行抛 {@link IllegalArgumentException}。 */
+    public Snapshot decodeSnapshot(JsonNode tree) {
+        return snapshots.decode(tree);
     }
 
     /** 编码一行（不含换行符），并把这一行写过的内容记进 {@code memo}。 */

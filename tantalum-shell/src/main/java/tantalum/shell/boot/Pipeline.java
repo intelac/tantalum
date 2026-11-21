@@ -31,6 +31,7 @@ import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.Receipts;
 import tantalum.shell.loop.Release;
+import tantalum.shell.loop.Snapshotting;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.SubmissionLedger;
@@ -171,7 +172,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         OutputRing output = new OutputRing(loop.outputRingSize(), handlers);
         Evictor evictor = new Evictor(properties.residency(), residency, queries.projections(), clock, storage.files::forget);
         // 处理完的一步由用户通道写成一行、落盘后才放行命令和推送，提交的回执也在这时完成；那之后才归还外部名额和放行名额
-        Release saved = (envelope, record, afterDurable, done) -> lanes.release(envelope, record, () -> {
+        Release saved = (envelope, record, snapshot, afterDurable, done) -> lanes.release(envelope, record, snapshot, () -> {
             afterDurable.run();
             receipts.durable(envelope);
         }, done);
@@ -187,7 +188,17 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
             }
         });
         Cleanroom cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, queries.projections(), facts, queries.view(), results,
-                storage.indexWriter::onStep, evictor, saved, envelope -> processed(envelope, receipts, intakeSlot[0], lanes));
+                storage.indexWriter::onStep, evictor, saved, new Snapshotting() {
+                    @Override
+                    public boolean wanted(Principal principal, SessionId session) {
+                        return storage.files.takeWanted(principal, session);
+                    }
+
+                    @Override
+                    public tantalum.shell.journal.Snapshot of(tantalum.shell.loop.SessionSlice slice) {
+                        return storage.snapshots.of(slice);
+                    }
+                }, envelope -> processed(envelope, receipts, intakeSlot[0], lanes));
         // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> closing.getAsBoolean() || lanes.halted() || cleanroom.broken() || input.broken()
                 || cleanroomRing.broken() || output.broken();

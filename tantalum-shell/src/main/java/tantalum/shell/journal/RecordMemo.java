@@ -114,6 +114,21 @@ public final class RecordMemo {
         return session;
     }
 
+    /**
+     * 快照之后重新起头（写入方 {@code reading} 为假，读取方为真）：从这里读起的人只有快照，所以之后的行只能引用快照本身和快照之后写的。
+     * 历史用快照里会话的消息起头（请求照旧写成下标），运行和上下文的差异底用快照里的；长字符串、内容块、上一次的请求和组装都清空。
+     * 两边按同一个规则起头，所以从快照读起和从头读起解出来一样。
+     */
+    public static RecordMemo afterSnapshot(boolean reading, Principal principal, SessionId session, Snapshot snapshot) {
+        RecordMemo memo = new RecordMemo(reading, true).owner(principal, session);
+        for (Message message : snapshot.session().messages()) {
+            memo.appended(message);
+        }
+        snapshot.runs().forEach(run -> memo.runs.put(run.ref().run(), run));
+        memo.context = snapshot.session().context();
+        return memo;
+    }
+
     /** 读完一个文件后交给写入方接着用。 */
     public RecordMemo toWriter() {
         RecordMemo writer = new RecordMemo(false, complete).owner(principal, session);

@@ -13,6 +13,6 @@ public final class CleanroomFixture {
     private CleanroomFixture() {}
 
     public static Cleanroom of(Kernel kernel, BooleanSupplier halted, Predicate<Command> output, Projections projections, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor) {
-        return new Cleanroom(kernel, halted, output, projections, facts, view, results, steps, evictor, Release.IMMEDIATE, envelope -> { });
+        return new Cleanroom(kernel, halted, output, projections, facts, view, results, steps, evictor, Release.IMMEDIATE, Snapshotting.NEVER, envelope -> { });
     }
 }

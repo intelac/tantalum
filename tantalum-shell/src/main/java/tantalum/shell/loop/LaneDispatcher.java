@@ -100,8 +100,8 @@ public final class LaneDispatcher implements EventHandler<InputRing.Slot>, UserL
 
     /** 处理完的一步交给这个用户的通道：和他的事件同一个写入者，结果行落盘后放行。 */
     @Override
-    public void release(EventEnvelope envelope, StepRecord record, Runnable afterDurable, Runnable done) {
-        lane(envelope.principal()).offer(new UserLane.Released(envelope, record, afterDurable, done));
+    public void release(EventEnvelope envelope, StepRecord record, tantalum.shell.journal.Snapshot snapshot, Runnable afterDurable, Runnable done) {
+        lane(envelope.principal()).offer(new UserLane.Released(envelope, record, snapshot, afterDurable, done));
     }
 
     /** 一个事件走完全程（cleanroom 处理完，结果落盘、命令放行）后调用：归还放行名额和这个用户的名额。 */

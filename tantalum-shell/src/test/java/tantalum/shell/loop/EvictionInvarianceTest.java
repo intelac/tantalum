@@ -152,7 +152,7 @@ class EvictionInvarianceTest {
             files = new SessionFiles(paths, codec, 16, writer::onDurable);
             SessionReplay replay = SessionReplayFixture.of(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
             this.replay = replay;
-            this.records = new RecordReplay(paths, new SessionFileReader(codec));
+            this.records = new RecordReplay(paths, new SessionFileReader(codec), new Snapshots(EventCodec.withBuiltins().mapper()));
             Residency residency = new Residency();
             transcript = new Transcript();
             Projections projections = new Projections(transcript, trace);
@@ -184,7 +184,7 @@ class EvictionInvarianceTest {
                 pending.add(command);
                 return true;
             }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor,
-                    dispatcher, envelope -> dispatcher.released(envelope));
+                    dispatcher, Snapshotting.NEVER, envelope -> dispatcher.released(envelope));
             input.connect(dispatcher);
             ring.connect(cleanroom);
             ring.start();

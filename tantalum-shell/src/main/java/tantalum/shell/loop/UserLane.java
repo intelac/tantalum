@@ -39,14 +39,14 @@ public final class UserLane {
 
     private static final Logger LOG = LoggerFactory.getLogger(UserLane.class);
 
-    /** 把一个会话处理完的几步按顺序写到它的文件，返回时已落盘。 */
+    /** 把一个会话处理完的几步按顺序写到它的文件，返回时已落盘。{@code snapshot} 不为空时紧跟在最后一步后面写。 */
     @FunctionalInterface
     public interface Writer {
-        void append(Principal principal, SessionId session, List<Line> lines) throws IOException;
+        void append(Principal principal, SessionId session, List<Line> lines, tantalum.shell.journal.Snapshot snapshot) throws IOException;
     }
 
     /** cleanroom 处理完的一步，见 {@link Release}。 */
-    record Released(EventEnvelope envelope, StepRecord record, Runnable afterDurable, Runnable done) {}
+    record Released(EventEnvelope envelope, StepRecord record, tantalum.shell.journal.Snapshot snapshot, Runnable afterDurable, Runnable done) {}
 
     /** 读一个冷会话里序号小于 {@code beforeSeq} 的步骤。没有这样的步骤（全新会话）时为空。 */
     public interface Loader {
@@ -303,24 +303,44 @@ public final class UserLane {
         }
     }
 
+    /** 一个会话这一批里连着写的几步，和跟在最后一步后面的快照（没有为 null）。 */
+    private record Chunk(List<Line> lines, tantalum.shell.journal.Snapshot snapshot) {}
+
     private void write(List<Released> released) throws IOException, InterruptedException, ExecutionException {
-        Map<SessionId, List<Line>> bySession = new LinkedHashMap<>();
+        // 按会话分；带快照的那一步结束一段：快照写在它自己那一步的后面，不在后一步后面
+        Map<SessionId, List<Chunk>> bySession = new LinkedHashMap<>();
+        Map<SessionId, List<Line>> open = new LinkedHashMap<>();
         for (Released step : released) {
-            bySession.computeIfAbsent(step.envelope().session(), ignored -> new ArrayList<>()).add(new Line(step.envelope(), step.record()));
+            SessionId session = step.envelope().session();
+            List<Line> lines = open.computeIfAbsent(session, ignored -> new ArrayList<>());
+            lines.add(new Line(step.envelope(), step.record()));
+            if (step.snapshot() != null) {
+                bySession.computeIfAbsent(session, ignored -> new ArrayList<>()).add(new Chunk(List.copyOf(lines), step.snapshot()));
+                lines.clear();
+            }
         }
+        open.forEach((session, lines) -> {
+            if (!lines.isEmpty()) {
+                bySession.computeIfAbsent(session, ignored -> new ArrayList<>()).add(new Chunk(List.copyOf(lines), null));
+            }
+        });
         if (bySession.isEmpty()) {
             return;
         }
         if (bySession.size() == 1) {
             var only = bySession.entrySet().iterator().next();
-            writer.append(principal, only.getKey(), only.getValue());
+            for (Chunk chunk : only.getValue()) {
+                writer.append(principal, only.getKey(), chunk.lines(), chunk.snapshot());
+            }
             return;
         }
-        // close 等全部写完，所以失败时也不会有写入还在进行。
+        // close 等全部写完，所以失败时也不会有写入还在进行。同一个会话的几段在同一个线程上按顺序写
         try (ExecutorService writers = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> running = new ArrayList<>();
-            bySession.forEach((session, lines) -> running.add(writers.submit(() -> {
-                writer.append(principal, session, lines);
+            bySession.forEach((session, chunks) -> running.add(writers.submit(() -> {
+                for (Chunk chunk : chunks) {
+                    writer.append(principal, session, chunk.lines(), chunk.snapshot());
+                }
                 return null;
             })));
             for (Future<?> write : running) {

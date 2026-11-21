@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ class LoadTimingProbe {
         SessionId session = new SessionId(System.getProperty("probe.session"));
         SessionReplay replay = new SessionReplay(paths, reader,
                 (principal, seq) -> new UsageLedger.Cursor(PrincipalState.start(principal), java.util.List.of()), IndexFixture.kernel());
-        RecordReplay records = new RecordReplay(paths, reader);
+        RecordReplay records = new RecordReplay(paths, reader, new Snapshots(EventCodec.withBuiltins().mapper()));
         for (int i = 0; i < 6; i++) {
             long a = System.nanoTime();
             replay.load(user, session, Long.MAX_VALUE).orElseThrow();

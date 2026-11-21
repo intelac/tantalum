@@ -165,7 +165,8 @@ class RunIndexTest {
                 assertEquals(List.of(pending.run()), rebuilt);
                 fixture.files.close();
                 RunRow row = RunRebuild.replayRun(new SessionPaths(dir).sessionFile(YI, S1),
-                        new RecordReplay(new SessionPaths(dir), new SessionFileReader(EventCodec.withBuiltins())), YI, pending.run());
+                        new RecordReplay(new SessionPaths(dir), new SessionFileReader(EventCodec.withBuiltins()),
+                new tantalum.shell.loop.Snapshots(EventCodec.withBuiltins().mapper())), YI, pending.run());
                 assertNotNull(row);
                 assertEquals("across a restart", row.prompt());
                 assertEquals(new TokenUsage(70, 7, 0, 0), row.tally().tokens());

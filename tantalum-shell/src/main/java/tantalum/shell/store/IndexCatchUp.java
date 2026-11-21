@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tantalum.shell.journal.EventCodec;
 import tantalum.kernel.Kernel;
 import tantalum.shell.journal.SessionCorruptException;
 import tantalum.shell.journal.SessionFileReader;
@@ -39,7 +40,7 @@ public final class IndexCatchUp {
         for (SessionIndex.Session session : index.sessions()) {
             known.put(paths.sessionFile(session.principal(), session.session()), session);
         }
-        RecordReplay records = new RecordReplay(paths, reader);
+        RecordReplay records = new RecordReplay(paths, reader, new tantalum.shell.loop.Snapshots(EventCodec.withBuiltins().mapper()));
         int caughtUp = 0;
         for (Path dir : paths.users()) {
             for (Path file : paths.sessionFiles(dir)) {

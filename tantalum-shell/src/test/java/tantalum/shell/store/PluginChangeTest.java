@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -90,7 +91,7 @@ class PluginChangeTest {
         UsageLedger usage = new UsageLedger(scenario.index, scenario.writer);
         Kernel narrower = kernel(scope(Set.of()));
 
-        SessionSlice restored = new RecordReplay(scenario.paths, reader).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
+        SessionSlice restored = new RecordReplay(scenario.paths, reader, new Snapshots(EventCodec.withBuiltins().mapper())).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
                 .orElseThrow().slice();
         SessionSlice withOldRule = SessionReplayFixture.of(scenario.paths, reader, usage, scenario.kernel)
                 .load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE).orElseThrow();
@@ -106,7 +107,7 @@ class PluginChangeTest {
     @Test
     void theNewRuleAppliesToTheNextStepOnly() throws Exception {
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
-        SessionSlice restored = new RecordReplay(scenario.paths, reader).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
+        SessionSlice restored = new RecordReplay(scenario.paths, reader, new Snapshots(EventCodec.withBuiltins().mapper())).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
                 .orElseThrow().slice();
         KernelState state = KernelState.empty().withResident(restored.session(), restored.runs());
 

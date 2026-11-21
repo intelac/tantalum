@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,7 +70,7 @@ class TurnQueryTest {
         writer = new IndexWriter(index, 100, java.time.Duration.ofHours(1));
         SessionPaths paths = new SessionPaths(dir);
         journal = new ResultWriter(paths, EventCodec.withBuiltins(), kernel);
-        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins())), EventCodec.withBuiltins().mapper());
+        query = new TurnQuery(paths, new RecordReplay(paths, new SessionFileReader(EventCodec.withBuiltins()), new Snapshots(EventCodec.withBuiltins().mapper())), EventCodec.withBuiltins().mapper());
         // 会话先建好。建会话这一条用不占编号的序号，下面写死的命令编号、条目编号照旧从 0 起
         journal.write(new EventEnvelope(-2, Instant.EPOCH, USER, SESSION, null, tantalum.value.event.SessionCreatedFixture.regular()));
     }
