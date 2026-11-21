@@ -77,11 +77,12 @@ public final class CitationCheckHook implements KernelHook, PluginInfo {
         if (session == null) {
             return Allow.PLAIN;
         }
-        List<String> wrong = unsupported(lastAnswer(session.messages()), Evidence.of(session.messages()));
+        // 在模型看得到的内容里找（压缩过的话是替换段加之后的原话）
+        List<String> wrong = unsupported(lastAnswer(session.view()), Evidence.of(session.view()));
         if (wrong.isEmpty()) {
             return Allow.PLAIN;
         }
-        if (corrections(session.messages()) >= MAX_CORRECTIONS) {
+        if (corrections(session.view()) >= MAX_CORRECTIONS) {
             return new Stop("citations still not backed by what was read after " + MAX_CORRECTIONS + " corrections: "
                     + String.join(", ", wrong));
         }

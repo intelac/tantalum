@@ -60,7 +60,7 @@ public record Message(Role role, List<ContentBlock> content, boolean interrupted
      * 找回记忆时“哪些不是你写的”，都问这一个方法。
      */
     public boolean fromUser() {
-        if (role != Role.USER) {
+        if (role != Role.USER || Summaries.isSummary(this)) {
             return false;
         }
         for (ContentBlock block : content) {

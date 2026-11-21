@@ -296,7 +296,9 @@ public final class SessionIndex implements AutoCloseable {
         try (PreparedStatement swap = connection.prepareStatement(
                 "UPDATE texts SET text = replace(text, ?, ?) WHERE session = ? AND principal = ? AND seq < ? AND instr(text, ?) > 0");
              PreparedStatement retitle = connection.prepareStatement(
-                     "UPDATE sessions SET title = ? WHERE session = ? AND principal = ? AND title <> ''")) {
+                     "UPDATE sessions SET title = ? WHERE session = ? AND principal = ? AND title <> ''");
+             PreparedStatement swapTitle = connection.prepareStatement(
+                     "UPDATE sessions SET title = replace(title, ?, ?) WHERE session = ? AND principal = ? AND instr(title, ?) > 0")) {
             for (IndexBatch.SwapRow row : batch.swaps) {
                 for (tantalum.value.event.TextWithdrawn.Swap each : row.swaps()) {
                     java.util.Set<String> forms = new java.util.LinkedHashSet<>(List.of(each.original()));
@@ -319,6 +321,19 @@ public final class SessionIndex implements AutoCloseable {
                     retitle.setString(2, row.session().value());
                     retitle.setString(3, row.principal().value());
                     retitle.executeUpdate();
+                } else {
+                    // 第一句话已经不在内存里（压缩掉了）：对现有的标题做同样的替换
+                    for (tantalum.value.event.TextWithdrawn.Swap each : row.swaps()) {
+                        if (each.original().isBlank()) {
+                            continue;
+                        }
+                        swapTitle.setString(1, each.original());
+                        swapTitle.setString(2, each.replacement());
+                        swapTitle.setString(3, row.session().value());
+                        swapTitle.setString(4, row.principal().value());
+                        swapTitle.setString(5, each.original());
+                        swapTitle.executeUpdate();
+                    }
                 }
             }
         }

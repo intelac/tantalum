@@ -314,8 +314,7 @@ final class TracePass {
             return List.of();
         }
         SessionState earlier = before.sessions().get(session);
-        int from = earlier == null ? 0 : earlier.messages().size();
-        return after.messages().subList(Math.min(from, after.messages().size()), after.messages().size());
+        return after.from(earlier == null ? 0 : earlier.historySize());
     }
 
     // ---- 用户 ----

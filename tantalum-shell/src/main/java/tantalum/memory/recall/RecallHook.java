@@ -43,7 +43,9 @@ public final class RecallHook implements KernelHook {
         }
         RunState run = state.runs().get(context.run().run());
         SessionState session = state.sessions().get(context.run().session());
-        if (run == null || session == null || session.offRecord() || run.tools() != null || run.retries() > 0 || session.messages().isEmpty()) {
+        // 找的是模型看得到的内容（压缩过的话是替换段加之后的原话），不是窗口：压缩之后窗口可能是空的，最近的问题在替换段里
+        List<Message> messages = session == null ? List.of() : session.view();
+        if (run == null || session == null || session.offRecord() || run.tools() != null || run.retries() > 0 || messages.isEmpty()) {
             return Allow.PLAIN;
         }
         // 这个人没有记忆就不找（不读记忆账：看这一轮组装上下文时记下的记忆段，回放一样）；免得每一轮都多一步工作
@@ -55,7 +57,6 @@ public final class RecallHook implements KernelHook {
         }
         // 问题后面可能跟着内核写的说明（上下文某一段变了、工具变了、换了模型）：那些不是用户说的，跳过去找问题本身。
         // 不跳的话，拿去找记忆的就是那条说明，这一轮什么也想不起来
-        List<Message> messages = session.messages();
         int at = messages.size() - 1;
         while (at >= 0 && written(messages.get(at))) {
             at--;

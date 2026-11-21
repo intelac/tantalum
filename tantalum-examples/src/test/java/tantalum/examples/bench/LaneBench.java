@@ -61,7 +61,7 @@ public final class LaneBench {
                 StepRecord record = new StepRecord(envelope.seq(), SessionChangeFixture.of(envelope.session(), envelope.principal(), false,
                         List.of(Message.user(prompt.text())), null, null, null, null, null, null, null), List.of(), List.of(), null, null,
                         List.of(), List.of());
-                holder[0].release(envelope, record, () -> {
+                holder[0].release(envelope, record, null, () -> {
                     long now = System.nanoTime();
                     Long start = sent.remove(request);
                     latencies.add(TimeUnit.NANOSECONDS.toMicros(now - start));

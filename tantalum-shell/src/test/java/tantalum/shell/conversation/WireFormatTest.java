@@ -98,13 +98,13 @@ class WireFormatTest {
             new DefaultPrettyPrinter().withObjectIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE.withLinefeed("\n"));
 
     private static final Path EXPECTED = Path.of("src/test/resources/wire");
-    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
+    static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
     private static final JsonMapper SORTED = JsonMapper.builder().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
 
     private final EventCodec codec = EventCodec.withBuiltins();
     private final TranscriptFixture fx = new TranscriptFixture();
 
-    private static String block(String tag) {
+    static String block(String tag) {
         return (tag + " ").repeat(45).substring(0, 90);
     }
 
@@ -190,7 +190,9 @@ class WireFormatTest {
     private static final KernelHook CITE = new KernelHook() {
         @Override public String name() { return "cite"; }
         @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-            boolean cited = state.sessions().get(context.run().session()).messages().contains(Message.user("cited"));
+            // 只在会话第一次调模型之前要：压缩之后状态里只剩窗口（history-window），看不到早先那条，所以也看窗口有没有挪过
+            tantalum.value.state.SessionState session = state.sessions().get(context.run().session());
+            boolean cited = session.windowStart() > 0 || session.messages().contains(Message.user("cited"));
             return cited ? Allow.PLAIN : new NeedWork("lookup", new Json.Str("q1"));
         }
     };
@@ -206,18 +208,18 @@ class WireFormatTest {
     /** 在重试等待里插话之后的那一步：实时投影在这里被回收、再从会话文件冷载入。 */
     private int coldLoadAt;
 
-    private static ContextSection memory(String body) {
+    static ContextSection memory(String body) {
         return new ContextSection("memory", body, true);
     }
 
-    private static RunId prompt(TranscriptFixture fx, String text, String system, List<ContextSection> sections) {
+    static RunId prompt(TranscriptFixture fx, String text, String system, List<ContextSection> sections) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembled(fx, run, system, sections);
         return run;
     }
 
-    private static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
+    static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
         fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), system, List.of(READ), SETTINGS, sections));
     }
 
@@ -231,7 +233,15 @@ class WireFormatTest {
      * 自动压缩后 system 更新、手动压缩（轮次之间），最后一轮工具运行时重启。
      */
     private TranscriptFixture traceScenario() {
-        TranscriptFixture fx = new TranscriptFixture(true, List.of(STYLE, CITE, GUARD));
+        return traceScenario(new TranscriptFixture(true, List.of(STYLE, CITE, GUARD)));
+    }
+
+    /** 同样的钩子：history-window 的等价测试用它在“不去掉历史”的夹具上再跑一遍。 */
+    static TranscriptFixture fixture() {
+        return new TranscriptFixture(true, List.of(STYLE, CITE, GUARD));
+    }
+
+    TranscriptFixture traceScenario(TranscriptFixture fx) {
         RunId first = prompt(fx, block("q1"), "sys", List.of(memory("a")));
         DoWork work = (DoWork) fx.lastCommands().getFirst();
         fx.feed(first, new WorkDone(work.id(), work.workType(), new Json.Str("source: a.md"), false, "cited", fx.now().minusMillis(800)));

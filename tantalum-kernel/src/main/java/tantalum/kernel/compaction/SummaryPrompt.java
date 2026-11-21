@@ -13,7 +13,7 @@ import tantalum.value.todo.TodoList;
 public final class SummaryPrompt {
 
     /** 摘要消息的开头，模型和下一次压缩都靠它认出这是摘要。 */
-    public static final String SUMMARY_PREFIX = "[Summary of the earlier conversation, not written by the user. Continue the task directly from it; do not acknowledge it.]\n\n";
+    public static final String SUMMARY_PREFIX = tantalum.value.model.Summaries.PREFIX;
 
     private static final String INSTRUCTION = """
             The conversation above is about to be replaced by a summary so that work can continue in a smaller context. \
@@ -129,8 +129,7 @@ public final class SummaryPrompt {
     }
 
     public static boolean isSummary(Message message) {
-        return message.content().size() == 1 && message.content().getFirst() instanceof TextBlock text
-                && text.text().startsWith(SUMMARY_PREFIX);
+        return tantalum.value.model.Summaries.isSummary(message);
     }
 
     /**

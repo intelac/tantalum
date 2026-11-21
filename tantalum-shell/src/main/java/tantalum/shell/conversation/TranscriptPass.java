@@ -144,7 +144,7 @@ final class TranscriptPass {
             return;
         }
         List<String> offered = assembled.tools().stream().map(ToolSpec::name).toList();
-        List<Message> appended = now.messages().subList(earlier.messages().size(), now.messages().size());
+        List<Message> appended = now.from(earlier.historySize());
         int index = 0;
         // 换了模型的那一轮上面一行；只换档位也写，告诉用户这轮用的档位
         ModelChoice was = earlier.model();
@@ -175,11 +175,11 @@ final class TranscriptPass {
         SessionState earlier = before == null ? null : before.sessions().get(session);
         SessionState now = state.sessions().get(session);
         RunId run = envelope.run();
-        if (earlier == null || now == null || run == null || now.messages().size() < earlier.messages().size()) {
+        if (earlier == null || now == null || run == null) {
             return;
         }
         int index = 1;
-        for (Message message : now.messages().subList(earlier.messages().size(), now.messages().size())) {
+        for (Message message : now.from(earlier.historySize())) {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolChangeBlock change && !change.added().isEmpty()) {
                     put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(), List.of(), List.of(),
@@ -468,9 +468,9 @@ final class TranscriptPass {
         if (current == null) {
             return;
         }
-        List<Message> messages = current.messages();
-        for (int i = conversation.seenMessages; i < messages.size(); i++) {
-            Message message = messages.get(i);
+        // 看到第几条从头数；压缩去掉的那些早就看过了
+        List<Message> messages = current.from(conversation.seenMessages);
+        for (Message message : messages) {
             if (message.role() != Role.USER) {
                 continue;
             }
@@ -483,7 +483,7 @@ final class TranscriptPass {
                 }
             }
         }
-        conversation.seenMessages = messages.size();
+        conversation.seenMessages = current.historySize();
     }
 
     private TranscriptItem step(String callId) {

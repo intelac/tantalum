@@ -82,7 +82,10 @@ public final class WithdrawSteps {
         if (nextRun != null) {
             out.put(nextRun);
         }
-        out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), places)));
+        // 只在压缩去掉的部分里有（内存里一处也没换到）时不报，和以前“一处都没换到不报”一样
+        if (places > 0) {
+            out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), places)));
+        }
         return out.decision();
     }
 

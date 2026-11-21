@@ -94,6 +94,15 @@ public record SessionState(SessionId id, Principal principal, SessionKind kind, 
         return messages.get(index - windowStart);
     }
 
+    /**
+     * 从头数第 {@code index} 条起直到最后，原样。已经去掉的部分不在了，从窗口起点算：投影问“这一步之后多了哪些”时用（这一步开始时的
+     * {@link #historySize()} 作 {@code index}；同一步里压缩只去掉这一步开始前就有的，所以这一步追加的都在）。
+     */
+    public List<Message> from(int index) {
+        int start = Math.min(Math.max(index, windowStart), historySize()) - windowStart;
+        return messages.subList(start, messages.size());
+    }
+
     /** 压缩完成时去掉从头数第 {@code index} 条之前的消息：模型看到的在替换段里，原话在账里。只能往后移。 */
     public SessionState dropBefore(int index) {
         if (index < windowStart || index > historySize()) {

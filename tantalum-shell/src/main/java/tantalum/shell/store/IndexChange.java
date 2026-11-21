@@ -82,7 +82,8 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
     /** 会话第一句用户的话的开头（自动标题的来源）；还没有时为 null。 */
     private static String firstWords(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
-        if (found == null) {
+        // 第一句话已经压缩掉了（history-window）：不知道，由索引对现有的标题做同样的替换
+        if (found == null || found.windowStart() > 0) {
             return null;
         }
         for (int i = 0; i < found.messages().size(); i++) {
@@ -100,12 +101,18 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         String name = null;
         SessionState state = before.sessions().get(session);
         if (state != null) {
+            // 先在窗口里找；调用那条已经压缩掉的（迟到的结果），看这一轮的工具轮
             for (int i = state.messages().size() - 1; i >= 0 && name == null; i--) {
                 for (ContentBlock block : state.messages().get(i).content()) {
                     if (block instanceof tantalum.value.model.ToolCallBlock call && call.id().equals(finished.toolCallId())) {
                         name = call.name();
                     }
                 }
+            }
+            if (name == null && state.activeRun() != null && before.runs().get(state.activeRun()) instanceof tantalum.value.state.RunState run
+                    && run.tools() != null) {
+                name = run.tools().slots().stream().filter(slot -> slot.call().id().equals(finished.toolCallId())).map(slot -> slot.call().name())
+                        .findFirst().orElse(null);
             }
         }
         String body = finished.text() == null ? "" : tantalum.shell.mask.SecretMask.mask(finished.text()).replaceAll("\\s+", " ").strip();

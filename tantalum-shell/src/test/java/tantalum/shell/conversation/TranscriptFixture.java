@@ -60,6 +60,8 @@ final class TranscriptFixture {
 
     private final Kernel kernel;
     private KernelState state = KernelState.empty();
+    /** 压缩时不去掉历史（history-window 之前的样子），等价测试用。 */
+    private boolean wholeHistory;
     private long seq;
     private Instant now = T0;
     private int submissions;
@@ -91,6 +93,9 @@ final class TranscriptFixture {
         befores.add(state);
         KernelState before = state;
         Decision decision = kernel.step(state, envelope);
+        if (wholeHistory) {
+            decision = new Decision(whole(before, decision.newState()), decision.commands(), decision.facts());
+        }
         state = decision.newState();
         envelopes.add(envelope);
         decisions.add(decision);
@@ -99,6 +104,29 @@ final class TranscriptFixture {
             changes.add(new Change(envelope.seq(), index++, item));
         }
         return decision;
+    }
+
+    /** 从现在起压缩不去掉历史：每一步之后把去掉的接回去，内核下一步看到的是整份历史（history-window 之前的样子）。 */
+    TranscriptFixture keepingWholeHistory() {
+        wholeHistory = true;
+        return this;
+    }
+
+    private static KernelState whole(KernelState before, KernelState after) {
+        KernelState result = after;
+        for (tantalum.value.state.SessionState now : after.sessions().values()) {
+            if (now.windowStart() == 0) {
+                continue;
+            }
+            tantalum.value.state.SessionState earlier = before.sessions().get(now.id());
+            // 上一步之后接回过，earlier 是整份；这一步只能去掉这一步开始前就有的，所以追加的都在窗口里
+            List<tantalum.value.model.Message> all = new ArrayList<>(earlier.messages());
+            all.addAll(now.from(earlier.historySize()));
+            result = result.with(new tantalum.value.state.SessionState(now.id(), now.principal(), now.kind(), now.helper(), all, 0,
+                    now.activeRun(), now.lastRun(), now.inbox(), now.context(), now.compaction(), now.anchor(), now.omittedImages(),
+                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn()));
+        }
+        return result;
     }
 
     void tick(Duration delta) {
