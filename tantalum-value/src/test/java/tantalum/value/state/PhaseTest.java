@@ -8,7 +8,6 @@ import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import tantalum.value.id.CommandId;
-import tantalum.value.id.SessionId;
 
 class PhaseTest {
 
@@ -28,8 +27,10 @@ class PhaseTest {
     }
 
     @Test
-    void ownersAreDistinct() {
+    void aRunStartedByAnAssignmentOwesAReportAndNoOtherDoes() {
         assertEquals(new Deciding(), new Deciding());
-        assertNotEquals(new OwnerRef.OfSession(new SessionId("a")), new OwnerRef.OfTask(new SessionId("a"), "t1-0"));
+        assertNotEquals(RunCause.prompt(), new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, "t1-0"));
+        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.ASSIGNMENT, tantalum.value.event.Root.USER, null));
+        assertThrows(IllegalArgumentException.class, () -> new RunCause(RunCause.StartedBy.PROMPT, tantalum.value.event.Root.USER, "t1-0"));
     }
 }

@@ -67,7 +67,7 @@ class CompactionStateTest {
 
     @Test
     void viewIsTheHistoryUntilCompacted() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("a")).append(Message.user("b"));
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("a")).append(Message.user("b"));
         assertSame(session.messages(), session.view());
         assertNull(session.compaction());
         assertNull(session.anchor());
@@ -75,7 +75,7 @@ class CompactionStateTest {
 
     @Test
     void viewIsReplacementPlusMessagesAppendedAfterwards() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("a")).append(Message.user("b"))
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("a")).append(Message.user("b"))
                 .withAnchor(new UsageAnchor(100, 2));
         Message summary = Message.user("[Summary] a and b");
         SessionState compacted = session.compacted(new Compaction(List.of(summary), 2));
@@ -90,7 +90,7 @@ class CompactionStateTest {
 
     @Test
     void tailBeyondHistoryIsRejected() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("a"));
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("a"));
         assertThrows(IllegalArgumentException.class, () -> session.compacted(new Compaction(List.of(), 2)));
         assertThrows(IllegalArgumentException.class, () -> new Compaction(List.of(), -1));
     }
@@ -98,8 +98,8 @@ class CompactionStateTest {
     @Test
     void sessionUpdatesKeepCompactionAndAnchor() {
         Compaction compaction = new Compaction(List.of(Message.user("s")), 0);
-        SessionState session = SessionState.start(SESSION, USER).compacted(compaction).withAnchor(new UsageAnchor(5, 0));
-        SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).withFollowUps(List.of(Message.user("f")))
+        SessionState session = SessionStateFixture.regular(SESSION, USER).compacted(compaction).withAnchor(new UsageAnchor(5, 0));
+        SessionState changed = session.append(Message.user("x")).startRun(new RunId("r")).enqueue(new InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("f"), null, false, null))
                 .withContext(SessionContextFixture.of("sys", List.of(), SETTINGS, List.of()));
         assertEquals(compaction, changed.compaction());
         assertEquals(new UsageAnchor(5, 0), changed.anchor());
@@ -113,7 +113,7 @@ class CompactionStateTest {
         RunRef ref = new RunRef(USER, SESSION, new RunId("r"));
         Plan plan = new Plan(3, 2, 1, 900, null);
         Compacting compacting = new Compacting(new Compacting.Overflow("prompt is too long"), plan, PromptPatch.NONE);
-        RunState run = RunState.start(ref, new OwnerRef.OfSession(SESSION))
+        RunState run = RunState.start(ref, RunCause.prompt())
                 .withCompacting(compacting).withAutoCompactionFailed(true).withOverflowRecovered(true);
         assertEquals(compacting, run.compacting());
         assertTrue(run.autoCompactionFailed());

@@ -49,4 +49,28 @@ public record Message(Role role, List<ContentBlock> content, boolean interrupted
         content.addAll(skills);
         return new Message(Role.USER, content, false);
     }
+
+    /** 另一个会话交代的内容。 */
+    public static Message assignment(String assignment, String text) {
+        return new Message(Role.USER, List.of(new AssignmentBlock(assignment, text)), false);
+    }
+
+    /**
+     * 这条是不是你说的：角色是用户，不是交代、不是交代的结果，也不是内核写的上下文更新。记笔记、标题和搜索、轨迹里的“用户输入”、
+     * 找回记忆时“哪些不是你写的”，都问这一个方法。
+     */
+    public boolean fromUser() {
+        if (role != Role.USER) {
+            return false;
+        }
+        for (ContentBlock block : content) {
+            if (block instanceof AssignmentBlock || block instanceof ReportBlock) {
+                return false;
+            }
+            if (block instanceof TextBlock text && SystemUpdates.isContextUpdate(text.text())) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

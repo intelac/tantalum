@@ -25,7 +25,8 @@ import tantalum.value.state.Compaction;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
+import tantalum.value.state.RunCause;
+import tantalum.value.state.SessionStateFixture;
 import tantalum.value.state.PrincipalState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -51,8 +52,8 @@ class StepRecordTest {
 
     @Test
     void aNewSessionWithItsFirstRun() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("hi")).startRun(REF.run());
-        RunState run = RunState.start(REF, new OwnerRef.OfSession(SESSION));
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("hi")).startRun(REF.run());
+        RunState run = RunState.start(REF, RunCause.prompt());
         KernelState after = KernelState.empty().with(session).with(run);
 
         StepRecord record = roundTrip(KernelState.empty(), after);
@@ -64,7 +65,7 @@ class StepRecordTest {
 
     @Test
     void onlyAppendedMessagesAndChangedFieldsAreRecorded() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("a")).append(Message.user("b"))
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("a")).append(Message.user("b"))
                 .startRun(REF.run());
         KernelState before = KernelState.empty().with(session);
         SessionState later = session.append(Message.user("c")).withAnchor(new UsageAnchor(900, 3));
@@ -74,12 +75,12 @@ class StepRecordTest {
         assertEquals(List.of(Message.user("c")), record.session().appended());
         assertEquals(new UsageAnchor(900, 3), record.session().anchor().value());
         assertNull(record.session().activeRun());
-        assertNull(record.session().followUps());
+        assertNull(record.session().inbox());
     }
 
     @Test
     void fieldsThatBecomeNullAreRecorded() {
-        SessionState running = SessionState.start(SESSION, USER).startRun(REF.run()).withAnchor(new UsageAnchor(1, 1));
+        SessionState running = SessionStateFixture.regular(SESSION, USER).startRun(REF.run()).withAnchor(new UsageAnchor(1, 1));
         KernelState before = KernelState.empty().with(running);
 
         StepRecord record = roundTrip(before, before.with(running.endRun().compacted(
@@ -91,16 +92,16 @@ class StepRecordTest {
 
     @Test
     void queuedMessagesAndEndedRuns() {
-        SessionState session = SessionState.start(SESSION, USER).startRun(REF.run());
-        RunState run = RunState.start(REF, new OwnerRef.OfSession(SESSION))
+        SessionState session = SessionStateFixture.regular(SESSION, USER).startRun(REF.run());
+        RunState run = RunState.start(REF, RunCause.prompt())
                 .withPhase(new Awaiting(Set.of(new CommandId("s_0-0")), "AwaitingModel"));
         KernelState before = KernelState.empty().with(session).with(run);
-        KernelState after = before.with(session.withFollowUps(List.of(Message.user("next"))))
+        KernelState after = before.with(session.enqueue(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null)))
                 .with(run.withPhase(new Ended(EndReason.CANCELLED, "interrupted by restart")));
 
         StepRecord record = roundTrip(before, after);
 
-        assertEquals(List.of(Message.user("next")), record.session().followUps().value());
+        assertEquals(List.of(new tantalum.value.state.InboxItem(1, tantalum.value.event.Input.Kind.PROMPT, tantalum.value.event.Root.USER, Message.user("next"), null, false, null)), record.session().inbox().value());
         assertEquals(1, record.runs().size());
     }
 
@@ -125,7 +126,7 @@ class StepRecordTest {
 
     @Test
     void anUnchangedStepRecordsNothing() {
-        KernelState state = KernelState.empty().with(SessionState.start(SESSION, USER));
+        KernelState state = KernelState.empty().with(SessionStateFixture.regular(SESSION, USER));
 
         StepRecord record = roundTrip(state, state);
 
@@ -136,9 +137,9 @@ class StepRecordTest {
 
     @Test
     void rewritingHistoryIsRefused() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("a"));
+        SessionState session = SessionStateFixture.regular(SESSION, USER).append(Message.user("a"));
         KernelState before = KernelState.empty().with(session);
-        SessionState rewritten = SessionState.start(SESSION, USER).append(Message.user("b"));
+        SessionState rewritten = SessionStateFixture.regular(SESSION, USER).append(Message.user("b"));
 
         assertThrows(IllegalStateException.class,
                 () -> StepRecord.of(EVENT, before, new Decision(before.with(rewritten), List.of(), List.of())));
@@ -147,7 +148,7 @@ class StepRecordTest {
     @Test
     void touchingAnotherSessionIsRefused() {
         KernelState before = KernelState.empty();
-        KernelState after = before.with(SessionState.start(OTHER, USER));
+        KernelState after = before.with(SessionStateFixture.regular(OTHER, USER));
 
         assertThrows(IllegalStateException.class,
                 () -> StepRecord.of(EVENT, before, new Decision(after, List.of(), List.of())));
