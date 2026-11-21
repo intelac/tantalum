@@ -101,7 +101,7 @@ class Story:
         before_cards = len(self.cards)
         known = {row["id"] for row in with_tasks(self.user, all_sessions(self.user))}
         for each in known: self.seen.setdefault(each, len(entries(each)))
-        body = {"requestId": secrets.token_hex(6), "mode": "prompt", "text": text.replace("{root}", run.ROOT).replace("{outside}", run.OUTSIDE),
+        body = {"requestId": secrets.token_hex(6), "delivery": "queue", "text": text.replace("{root}", run.ROOT).replace("{outside}", run.OUTSIDE),
                 "model": self.model}
         if folder: body["dir"] = folder
         status, reply = self.user.call("POST", f"/api/sessions/{session}/submissions", body)
@@ -273,7 +273,7 @@ def main():
 
         # ---------------- 第六天：几件互不相干的活，可以分出去同时做 ----------------
         day6 = "main-" + secrets.token_hex(4)
-        user_turns = lambda session: sum(1 for entry in entries(session) if entry.get("type") in ("UserPrompt", "FollowUpSubmitted", "SteerSubmitted"))
+        user_turns = lambda session: sum(1 for entry in entries(session) if entry.get("type") == "UserPrompt")
         runs_of = lambda session: (user.call("GET", f"/api/sessions/{session}/runs")[1] or {}).get("runs", [])
         review = story.say(day6, "库存系统里 orders.py、reports.py、cli.py 这三个文件，各帮我仔细过一遍，看有没有明显的毛病，每个文件单独给个结论。"
                                  "三个互不相干，可以同时看。趁它们在看，先告诉我加急附加费现在是多少。", [

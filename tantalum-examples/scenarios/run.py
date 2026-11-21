@@ -195,7 +195,7 @@ def ask(user, session, text, model, timeout, answers, max_calls, posted=None, ap
     # 同一会话里的后几轮：等的是这一次提问新开的那一轮，不是上一轮
     status, runs = user.call("GET", f"/api/sessions/{session}/runs")
     before = len((runs or {}).get("runs", [])) if status == 200 else 0
-    status, body = user.call("POST", f"/api/sessions/{session}/submissions", {"requestId": request, "mode": "prompt", "text": text, "model": model})
+    status, body = user.call("POST", f"/api/sessions/{session}/submissions", {"requestId": request, "delivery": "queue", "text": text, "model": model})
     if status != 200: return f"submit {status}: {body}"
     start, answered = time.time(), set()
     while True:
