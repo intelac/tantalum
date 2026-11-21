@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -35,7 +36,7 @@ class LoadTest {
 
     private InputRing start(LoopFixtures.Load loader) {
         LaneDispatcher[] holder = new LaneDispatcher[1];
-        holder[0] = new LaneDispatcher(256, 256, sequence, (principal, session, events) -> { }, (envelope, usage, load) -> {
+        holder[0] = new LaneDispatcher(256, 256, sequence, (principal, session, events, snapshot) -> { }, (envelope, usage, load) -> {
             reached.add(new Reached(envelope, load));
             holder[0].released(envelope);
             return true;
@@ -57,7 +58,7 @@ class LoadTest {
     }
 
     private static CleanroomRing.Loaded slice(SessionId session, Principal principal) {
-        return new CleanroomRing.Loaded(new SessionSlice(SessionState.start(session, principal), List.of(), null, null, 1));
+        return new CleanroomRing.Loaded(new SessionSlice(SessionStateFixture.regular(session, principal), List.of(), null, null, 1));
     }
 
     @Test

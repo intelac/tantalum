@@ -49,6 +49,13 @@ public record KernelState(Map<Principal, PrincipalState> principals,
         return new KernelState(principals, keptSessions, keptRuns);
     }
 
+    /** 去掉一个运行（内核在一轮结束时去掉同会话更早结束的，live-views）。 */
+    public KernelState without(RunId run) {
+        Map<RunId, RunState> keptRuns = new HashMap<>(runs);
+        keptRuns.remove(run);
+        return new KernelState(principals, sessions, keptRuns);
+    }
+
     /** 去掉一个会话和它的运行。只由外壳在回收时调用，不是事件。 */
     public KernelState without(SessionId session) {
         Map<SessionId, SessionState> keptSessions = new HashMap<>(sessions);

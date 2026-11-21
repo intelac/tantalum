@@ -1,7 +1,7 @@
 // 控制台只通过公开接口访问后端。身份来自 Cookie 会话；任何接口返回 401 都统一交给登录流程。
 
 import { reportHalted } from "./connection";
-import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, PluginUsageList, Plugins, Project, RunListPage, RunNode, RunsSummary, SavedParams, SessionSummary, SubmitMode, TodayUsageView, TraceCall, TracePage, User, UserList, UserSettingsView, WorkingItem } from "./types";
+import type { Account, AssignedParams, AttachmentRef, CaptureState, Config, ContentHit, ContextUsage, ErrorParam, FolderListing, Language, LocalSkills, LocalStatus, LocalToken, LocalValidity, LocalWiki, MemoryEntry, MemoryList, MemoryType, MenuSkill, Messages, ModelChoice, ModelsResponse, NoteDay, NoteDetail, PanelInfo, ParamValue, PendingItem, PluginDefault, PluginDefaultChange, PluginKind, PluginUsageList, Plugins, Project, RunListPage, RunNode, RunsSummary, SavedParams, SessionSummary, Delivery, TodayUsageView, TraceCall, TracePage, User, UserList, UserSettingsView, WorkingItem } from "./types";
 import { asViewed, setViewedUser, viewedUser } from "./viewing";
 
 /**
@@ -180,7 +180,7 @@ export async function listMessages(session: string, before?: number): Promise<Me
 /** `requestId` 由调用方保存，重试时用同一个，后端据此去重。附件只传 ID 和名字，尺寸和大小以服务器的为准。 */
 export function submit(
   session: string,
-  mode: SubmitMode,
+  delivery: Delivery,
   text: string,
   requestId: string,
   attachments: readonly AttachmentRef[] = [],
@@ -188,14 +188,13 @@ export function submit(
   project: string | null = null,
   offRecord = false,
 ): Promise<{ submissionId: string; duplicate: boolean }> {
-  const body: Record<string, unknown> = { requestId, mode, text };
+  const body: Record<string, unknown> = { requestId, delivery, text };
   if (attachments.length > 0) body.attachments = attachments.map(({ id, name }) => ({ id, name }));
-  // 选择随开始新运行的提交发出（model-picker M6）；插话不换模型，不带
-  if (model !== null && mode !== "steer") body.model = model;
-  // 工作区只跟着提问走，服务器只在会话的第一次提问时用它（workspaces W3）
-  if (project !== null && mode === "prompt") body.project = project;
-  // 不进记忆也只在会话的第一次提问时算数（memory-final-plan 第 11 节）
-  if (offRecord && mode === "prompt") body.offRecord = true;
+  // 选择随开始新运行的提交发出（model-picker M6）；并进当前运行的不换模型，不带
+  if (model !== null && delivery !== "join") body.model = model;
+  // 工作区和不进记忆：服务器只在这一次建会话时用（workspaces W3、memory-final-plan 第 11 节）
+  if (project !== null) body.project = project;
+  if (offRecord) body.offRecord = true;
   return call(`/api/sessions/${encodeURIComponent(session)}/submissions`, { method: "POST", body: JSON.stringify(body) });
 }
 
@@ -463,10 +462,10 @@ export function getMenuSkills(): Promise<{ skills: MenuSkill[] }> {
   return call("/api/skills");
 }
 
-export type QueueAction = "edit" | "remove" | "steer";
+export type QueueAction = "edit" | "remove" | "join";
 
 /**
- * 改排队的提问（input-area 需求 1）：换文字、移除、转成当前运行的插话。`item` 是对话里那条排队消息的 id。
+ * 改排队的提问（input-area 需求 1）：换文字、移除、改成并进当前运行。`item` 是对话里那条排队消息的 id。
  * 404 `queue/gone` 表示它已经不在排队了（轮到了、被别的页面移除了）。
  */
 export function changeQueue(session: string, item: string, action: QueueAction, text?: string): Promise<{ submissionId: string }> {

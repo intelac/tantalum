@@ -201,7 +201,7 @@ def seen_of(data, user, session):
 
 def ask(client, session, text, model, timeout):
     status, body = client.call("POST", f"/api/sessions/{session}/submissions",
-                               {"requestId": secrets.token_hex(6), "mode": "prompt", "text": text, "model": model})
+                               {"requestId": secrets.token_hex(6), "delivery": "queue", "text": text, "model": model})
     if status != 200: return f"submit {status}: {body}"
     started = time.time()
     while time.time() - started < timeout:

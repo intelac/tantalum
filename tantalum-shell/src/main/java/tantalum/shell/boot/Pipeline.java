@@ -31,6 +31,7 @@ import tantalum.shell.loop.LaneDispatcher;
 import tantalum.shell.loop.OutputRing;
 import tantalum.shell.loop.Receipts;
 import tantalum.shell.loop.Release;
+import tantalum.shell.loop.Snapshotting;
 import tantalum.shell.loop.Residency;
 import tantalum.shell.loop.ResultPublisher;
 import tantalum.shell.loop.SubmissionLedger;
@@ -43,10 +44,7 @@ import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
-import tantalum.value.command.ReturnTask;
-import tantalum.value.command.StartTask;
 import tantalum.value.command.StartTimer;
-import tantalum.value.command.StopTask;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -84,18 +82,34 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         opened.add(deadlines);
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
-        // 任务的三条命令都是往别的会话放事件，同一个处理器
-        Handler tasks = new tantalum.shell.handler.TaskHandler(clock, input::tryPublish,
-                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()),
-                (user, session) -> queries.queries().session(user, session).map(found -> found.state().activeRun() != null).orElse(false),
-                (user, session) -> storage.claim(user, session) == 200);
+        // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取。交代的处理器也经它送
+        Intake[] intakeSlot = new Intake[1];
+        // 会话之间的送达和回执（delivery）：往别的会话放事件，同一个处理器，经入口送
+        Handler deliveries = new tantalum.shell.handler.DeliveryHandler(new tantalum.shell.handler.DeliveryHandler.Deliveries() {
+                    @Override
+                    public int deliver(Principal principal, SessionId session, tantalum.value.event.SessionCreated create,
+                                       tantalum.value.event.Input delivered) {
+                        return intakeSlot[0].deliver(principal, session, create, delivered);
+                    }
+
+                    @Override
+                    public int handOver(Principal principal, SessionId session, tantalum.value.event.Event event) {
+                        return intakeSlot[0].handOver(principal, session, event);
+                    }
+
+                    @Override
+                    public boolean exists(Principal principal, SessionId session) {
+                        return intakeSlot[0].exists(principal, session);
+                    }
+                },
+                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
                         session -> dirOf(queries.view().current(), session), toolbox.skillCatalog())
                         .offRecord(session -> offRecordOf(queries.view().current(), session))
-                        .tasks(session -> tasksOf(queries.view().current(), session))
+                        .sessions(session -> queries.view().current().sessions().get(session))
                         .mainWindowTokens(properties.mainWindowTokens())
                         .clock(clock)
                         .workspaces(new ContextHandler.Workspaces() {
@@ -141,7 +155,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                                             .filter(row -> !row.offRecord() && !archived.contains(row.session()))
                                             .map(row -> new tantalum.shell.handler.WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(
                                                     row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir(), false),
-                                                    tokensOf(state, row.session()))).toList();
+                                                    tokensOf(state, row.session()), row.kind())).toList();
                                     recent.put(user, new Listed(now, rows));
                                     return rows;
                                 } catch (java.sql.SQLException unreadable) {
@@ -151,22 +165,20 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         }),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
-                        run -> tasksOf(queries.view().current(), run.session()).origin() == null, properties.weights()),
+                        run -> attended(queries.view().current(), run), properties.weights()),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
                         session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
                 StartTimer.class, new TimerHandler(),
-                StartTask.class, tasks, ReturnTask.class, tasks, StopTask.class, tasks);
+                tantalum.value.command.Deliver.class, deliveries, tantalum.value.command.Acknowledge.class, deliveries);
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);
         OutputRing output = new OutputRing(loop.outputRingSize(), handlers);
         Evictor evictor = new Evictor(properties.residency(), residency, queries.projections(), clock, storage.files::forget);
         // 处理完的一步由用户通道写成一行、落盘后才放行命令和推送，提交的回执也在这时完成；那之后才归还外部名额和放行名额
-        Release saved = (envelope, record, afterDurable, done) -> lanes.release(envelope, record, () -> {
+        Release saved = (envelope, record, snapshot, afterDurable, done) -> lanes.release(envelope, record, snapshot, () -> {
             afterDurable.run();
             receipts.durable(envelope);
         }, done);
-        // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取
-        Intake[] intakeSlot = new Intake[1];
         // 推送之外，运行表也收轨迹记录（run-tree 需求 3）
         FactListener facts = FactListener.both(queries.hub(), new FactListener() {
             @Override
@@ -179,7 +191,17 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
             }
         });
         Cleanroom cleanroom = new Cleanroom(kernel, lanes::halted, output::tryPublish, queries.projections(), facts, queries.view(), results,
-                storage.indexWriter::onStep, evictor, saved, envelope -> processed(envelope, receipts, intakeSlot[0], lanes));
+                storage.indexWriter::onStep, evictor, saved, new Snapshotting() {
+                    @Override
+                    public boolean wanted(Principal principal, SessionId session) {
+                        return storage.files.takeWanted(principal, session);
+                    }
+
+                    @Override
+                    public tantalum.shell.journal.Snapshot of(tantalum.shell.loop.SessionSlice slice) {
+                        return storage.snapshots.of(slice);
+                    }
+                }, envelope -> processed(envelope, receipts, intakeSlot[0], lanes));
         // 文件写不进去、内核之外抛出、任一环的消费者出错，入口都返回 503，而不是让提交静默消失。
         BooleanSupplier halted = () -> closing.getAsBoolean() || lanes.halted() || cleanroom.broken() || input.broken()
                 || cleanroomRing.broken() || output.broken();
@@ -187,7 +209,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                 () -> (int) queries.view().current().activeRunCount(), halted);
         SubmissionLedger ledger = new SubmissionLedger(storage::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
         Intake intake = new Intake(input, gate, ledger, queries.view(), residency, storage::claim,
-                (principal, session) -> queries.queries().session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
+                (principal, session) -> queries.queries().session(principal, session).map(SessionQueries.SessionView::state), storage::kind,
+                clock, receipts);
         intakeSlot[0] = intake;
         input.watch(probe);
         lanes.watch(probe);
@@ -200,18 +223,19 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         return new Pipeline(residency, cleanroomRing, lanes, inFlight, input, deadlines, handlers, output, cleanroom, intake);
     }
 
-    /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
-    /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
-    static tantalum.value.task.Tasks tasksOf(KernelState state, SessionId session) {
-        SessionState found = state.sessions().get(session);
-        return found == null ? tantalum.value.task.Tasks.NONE : found.tasks();
+    /** 有没有人在等这一轮：只有你说的话开的那一轮算（缓存留多久看它）。运行不在内存时当作有人在等。 */
+    static boolean attended(KernelState state, tantalum.value.id.RunRef run) {
+        tantalum.value.state.RunState found = state.runs().get(run.run());
+        return found == null || found.cause().attended();
     }
 
+    /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
     static boolean offRecordOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found != null && found.offRecord();
     }
 
+    /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
     static String dirOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found == null ? null : found.dir();

@@ -296,7 +296,7 @@ class PluginParamsApiTest {
     /** 任务 24：用户列表带每人今天的用量，合计和每日额度插件算的一样（读入的含缓存，加输出的）。 */
     @Test
     void theUserListCarriesTodaysUsage() throws Exception {
-        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}")
+        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}")
                 .statusCode());
         JsonNode alice = null;
         Instant deadline = Instant.now().plusSeconds(20);
@@ -330,7 +330,7 @@ class PluginParamsApiTest {
         assertEquals(500, ok(send("alice", "GET", "/api/usage/today", null)).get("limit").asLong());
         assertFalse(ok(send("bob", "GET", "/api/usage/today", null)).has("limit"));
 
-        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}")
+        assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}")
                 .statusCode());
         JsonNode today = null;
         Instant deadline = Instant.now().plusSeconds(20);
@@ -361,7 +361,7 @@ class PluginParamsApiTest {
 
     private void ask(String user, String session, String request) throws Exception {
         assertEquals(200, send(user, "POST", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
         for (int i = 0; i < 1000; i++) {
             JsonNode runs = JSON.readTree(send(user, "GET", "/api/sessions/" + session + "/runs", null).body()).get("runs");
             if (runs != null && runs.size() > 0 && runs.get(runs.size() - 1).has("endReason")) {
@@ -436,7 +436,7 @@ class PluginParamsApiTest {
         server.users().add("root", TestServer.PASSWORD, true);
         try {
             assertEquals(200, send("alice", "POST", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
             int running = 0;
             for (int i = 0; i < 500 && running == 0; i++) {
                 Thread.sleep(10);

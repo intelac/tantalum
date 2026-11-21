@@ -1,5 +1,6 @@
 package tantalum.kernel.step;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -21,7 +22,6 @@ import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
@@ -41,7 +41,6 @@ import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ToolFinishedFixture;
 
 /** 需求 2.1a、H9：每个等待状态下收尾后都能接着用这段历史，且不重新执行任何东西。 */
@@ -145,7 +144,7 @@ class RunInterruptedTest {
     @Test
     void unreadSteerIsKeptForTheNextRun() {
         LoopFixture loop = atModel();
-        loop.feed(loop.runId(), SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(loop.runId(), UserPromptFixture.join(new SubmissionId("s"), new RequestId("r"), "also this"));
         assertClosed(loop);
         Message last = loop.session().messages().getLast();
         assertEquals(Role.USER, last.role());

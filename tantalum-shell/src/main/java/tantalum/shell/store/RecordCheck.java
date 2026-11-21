@@ -39,7 +39,7 @@ public final class RecordCheck {
     public static Report run(Path dataDir, Kernel kernel) throws IOException {
         SessionPaths paths = new SessionPaths(dataDir);
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
-        RecordReplay records = new RecordReplay(paths, reader);
+        RecordReplay records = new RecordReplay(paths, reader, new tantalum.shell.loop.Snapshots(EventCodec.withBuiltins().mapper()));
         int sessions = 0;
         List<String> problems = new ArrayList<>();
         for (Path dir : paths.users()) {
@@ -71,6 +71,9 @@ public final class RecordCheck {
                             file, Long.MAX_VALUE, replay, records);
                     difference.ifPresent(found -> problems.add(first.principal().value() + "/" + first.session().value()
                             + ": seq " + found.seq() + " " + found.field()));
+                    // 快照也是账的一部分：每份都要和它前面的步折叠出来的一样
+                    records.firstWrongSnapshot(first.principal(), first.session()).ifPresent(seq -> problems.add(first.principal().value()
+                            + "/" + first.session().value() + ": the snapshot after seq " + seq + " does not match the steps before it"));
                 } catch (Exception failure) {
                     problems.add(file + ": cannot be read: " + failure.getMessage());
                 }

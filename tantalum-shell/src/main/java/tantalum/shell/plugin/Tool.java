@@ -1,5 +1,8 @@
 package tantalum.shell.plugin;
 
+import java.util.EnumSet;
+import java.util.Set;
+import tantalum.value.state.SessionKind;
 import java.time.Duration;
 import tantalum.value.json.Json;
 
@@ -48,11 +51,12 @@ public interface Tool {
     }
 
     /**
-     * 为任务开的会话里有没有这个工具（任务：一个会话放给另一个 agent 去做的一件事）。默认有。
-     * 只该由人在场的对话来做的事返回 false：记进这个人的记忆、登记工作区、再放出任务。
+     * 哪几种会话里有这个工具。默认是普通会话和帮手会话（帮手：一个会话把一件事交代给另一个 agent 去做，为它开的会话）。
+     * 只该由人在场的对话来做的事不给帮手：记进这个人的记忆、登记工作区、再把事交代出去。
+     * 一个会话照哪种会话拿工具由 {@code SessionProfile.toolsOf} 定（主会话这一步照普通会话）。
      */
-    default boolean inTasks() {
-        return true;
+    default Set<SessionKind> kinds() {
+        return EnumSet.of(SessionKind.REGULAR, SessionKind.HELPER);
     }
 
     /** 在虚拟线程上执行，要响应中断。抛异常等同于错误结果。 */

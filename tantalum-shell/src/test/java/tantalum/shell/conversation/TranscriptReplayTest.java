@@ -1,5 +1,6 @@
 package tantalum.shell.conversation;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static tantalum.shell.conversation.TranscriptFixture.SESSION;
@@ -17,12 +18,10 @@ import tantalum.kernel.step.BuiltinSteps;
 import tantalum.kernel.table.TransitionTable;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
-import tantalum.value.event.FollowUpSubmittedFixture;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.state.CompactionSettingsFixture;
 
@@ -41,16 +40,19 @@ class TranscriptReplayTest {
         RunId run = live.start("hi");
         live.feed(run, live.reply(claudeThinking("plan"), call("c1", "write"), call("c2", "write"), badCall("c3", "write")));
         live.feed(run, live.finished(run, "c1", "ok", false));
-        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
+        live.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
+        long later = live.lastSeq();
         // input-area 需求 1.11：改排队的提问也是事件，重放得到同样的条目
-        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "dropped"));
-        live.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f3"), new RequestId("rf3"), "steered"));
+        live.feed(null, UserPromptFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "dropped"));
+        long dropped = live.lastSeq();
+        live.feed(null, UserPromptFixture.of(new SubmissionId("f3"), new RequestId("rf3"), "steered"));
+        long steered = live.lastSeq();
         live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q1"), new RequestId("rq1"),
-                tantalum.value.event.QueueChanged.Action.EDIT, 0, "later", List.of(), "later, edited"));
+                tantalum.value.event.QueueChanged.Action.EDIT, later, "later, edited"));
         live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q2"), new RequestId("rq2"),
-                tantalum.value.event.QueueChanged.Action.REMOVE, 1, "dropped", List.of(), null));
+                tantalum.value.event.QueueChanged.Action.REMOVE, dropped, null));
         live.feed(null, new tantalum.value.event.QueueChanged(new SubmissionId("q3"), new RequestId("rq3"),
-                tantalum.value.event.QueueChanged.Action.STEER, 2, "steered", List.of(), null));
+                tantalum.value.event.QueueChanged.Action.JOIN, steered, null));
         live.feed(run, new Cancel(new RequestId("x")));
         live.feed(null, live.prompt("third"));
 

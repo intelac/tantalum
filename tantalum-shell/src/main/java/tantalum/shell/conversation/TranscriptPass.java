@@ -32,13 +32,11 @@ import tantalum.value.decision.QueueEdited;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.SkillUse;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.RunId;
@@ -53,7 +51,8 @@ import tantalum.value.model.ModelChoice;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
-import tantalum.value.model.TaskResultBlock;
+import tantalum.value.model.AssignmentBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
@@ -95,9 +94,8 @@ final class TranscriptPass {
     void run() {
         Event event = envelope.event();
         switch (event) {
-            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), false);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(), false);
-            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), true);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(),
+                    prompt.delivery() == tantalum.value.event.Delivery.JOIN);
             case ModelReplied reply -> reply(reply);
             case ModelInterrupted interrupted -> interrupted(interrupted);
             case ModelFailed failed -> failed(failed);
@@ -124,8 +122,8 @@ final class TranscriptPass {
                         askedAbout(asked.run().run())));
                 case QuestionSettled settled -> questionSettled(settled);
                 case QueueEdited edited -> queueEdited(edited);
-                case tantalum.value.decision.TaskStarted started -> taskStarted(started);
-                case tantalum.value.decision.TaskSettled settled -> taskSettled(settled);
+                case tantalum.value.decision.AssignmentStarted started -> taskStarted(started);
+                case tantalum.value.decision.ReportSettled settled -> taskSettled(settled);
                 default -> { }
             }
         }
@@ -146,7 +144,7 @@ final class TranscriptPass {
             return;
         }
         List<String> offered = assembled.tools().stream().map(ToolSpec::name).toList();
-        List<Message> appended = now.messages().subList(earlier.messages().size(), now.messages().size());
+        List<Message> appended = now.from(earlier.historySize());
         int index = 0;
         // 换了模型的那一轮上面一行；只换档位也写，告诉用户这轮用的档位
         ModelChoice was = earlier.model();
@@ -177,11 +175,11 @@ final class TranscriptPass {
         SessionState earlier = before == null ? null : before.sessions().get(session);
         SessionState now = state.sessions().get(session);
         RunId run = envelope.run();
-        if (earlier == null || now == null || run == null || now.messages().size() < earlier.messages().size()) {
+        if (earlier == null || now == null || run == null) {
             return;
         }
         int index = 1;
-        for (Message message : now.messages().subList(earlier.messages().size(), now.messages().size())) {
+        for (Message message : now.from(earlier.historySize())) {
             for (ContentBlock block : message.content()) {
                 if (block instanceof ToolChangeBlock change && !change.added().isEmpty()) {
                     put(new ToolChange(TranscriptItem.id(envelope.seq(), index++), session, run, at, change.added(), List.of(), List.of(),
@@ -231,40 +229,39 @@ final class TranscriptPass {
         put(question.settled(status, settled.answer(), at));
     }
 
-    /**
-     * 排队的提问被改了：{@code conversation.queued} 和内核的队列一一对应，内核说动的是第几条，这里就动第几条。
-     * 移除的条目留着占位、标成已移除；转成插话的归到当前运行，和直接插话的一样。
-     */
     /** 放出了任务：那次 task 调用的步骤换成任务的卡片，位置不变（同一个 id）。 */
-    private void taskStarted(tantalum.value.decision.TaskStarted started) {
+    private void taskStarted(tantalum.value.decision.AssignmentStarted started) {
         if (!(step(started.toolCallId()) instanceof ToolStep step)) {
             return;
         }
         String prompt = step.call().arguments() instanceof tantalum.value.json.Json.Obj arguments
-                && arguments.fields().get(tantalum.value.task.TaskTools.PROMPT) instanceof tantalum.value.json.Json.Str text ? text.value().strip() : null;
-        put(new Task(step.id(), session, step.run(), step.at(), started.task(), started.session().value(), started.agent(), started.brief(),
+                && arguments.fields().get(tantalum.value.assignment.AssignmentTools.PROMPT) instanceof tantalum.value.json.Json.Str text ? text.value().strip() : null;
+        put(new Task(step.id(), session, step.run(), step.at(), started.assignment(), started.session().value(), started.agent(), started.brief(),
                 prompt, null, null));
     }
 
     /** 任务有了结果：卡片记下结局，另出一个“任务结果”条目（不是用户说的话）。 */
-    private void taskSettled(tantalum.value.decision.TaskSettled settled) {
+    private void taskSettled(tantalum.value.decision.ReportSettled settled) {
         String outcome = settled.outcome().name();
         for (TranscriptItem item : List.copyOf(conversation.items.values())) {
-            if (item instanceof Task card && card.task().equals(settled.task()) && card.outcome() == null) {
+            if (item instanceof Task card && card.task().equals(settled.assignment()) && card.outcome() == null) {
                 put(card.ended(outcome, at));
             }
         }
-        String text = envelope.event() instanceof tantalum.value.event.TaskEnded ended ? ended.text() : null;
-        put(new TaskResult(TranscriptItem.id(envelope.seq(), 0), session, settled.run().run(), at, settled.task(), outcome, text, settled.paused()));
+        String text = settled.text();
+        put(new TaskResult(TranscriptItem.id(envelope.seq(), 0), session, settled.run().run(), at, settled.assignment(), outcome, text, settled.paused()));
     }
 
+    /**
+     * 你排的一条被改了：内核说动的是哪个编号，这里就动那一条（它的条目编号由同一个事件序号来）。
+     * 移除的条目留着占位、标成已移除；改成并进这一轮的归到当前运行，和直接选了并入的一样。
+     */
     private void queueEdited(QueueEdited edited) {
-        if (edited.index() < 0 || edited.index() >= conversation.queued.size()) {
+        if (edited.item() < 0) {
             return;
         }
-        List<String> ids = new java.util.ArrayList<>(conversation.queued);
-        String id = ids.get(edited.index());
-        if (!(get(id) instanceof UserMessage message)) {
+        String id = TranscriptItem.id(edited.item(), 0);
+        if (!conversation.queued.contains(id) || !(get(id) instanceof UserMessage message)) {
             return;
         }
         switch (edited.action()) {
@@ -277,7 +274,7 @@ final class TranscriptPass {
                 conversation.queued.remove(id);
                 put(message.removedFromQueue());
             }
-            case STEER -> {
+            case JOIN -> {
                 conversation.queued.remove(id);
                 put(message.started(edited.run().run()));
             }
@@ -291,7 +288,19 @@ final class TranscriptPass {
     private void withdrawn(List<tantalum.value.event.TextWithdrawn.Swap> swaps) {
         tantalum.value.model.TextSwap swap = new tantalum.value.model.TextSwap(swaps);
         for (TranscriptItem item : List.copyOf(conversation.items.values())) {
-            TranscriptItem swapped = switch (item) {
+            TranscriptItem swapped = swapped(swap, item);
+            if (!swapped.equals(item)) {
+                put(swapped);
+            }
+        }
+        // 第一条提问已经不在尾巴里（live-views）：标题用的那份也换
+        if (conversation.firstUser != null && !conversation.items.containsKey(conversation.firstUser.id())) {
+            conversation.firstUser = (UserMessage) swapped(swap, conversation.firstUser);
+        }
+    }
+
+    private static TranscriptItem swapped(tantalum.value.model.TextSwap swap, TranscriptItem item) {
+        return switch (item) {
                 case UserMessage message -> new UserMessage(message.id(), message.session(), message.run(), message.at(),
                         swap.text(message.text()), message.attachments(), message.queued(), message.removed(), message.skills(),
                         message.attached().stream().map(block -> (AttachedBlock) swap.block(block)).toList());
@@ -309,10 +318,6 @@ final class TranscriptPass {
                         result.task(), result.outcome(), swap.text(result.text()), result.paused());
                 default -> item;
             };
-            if (!swapped.equals(item)) {
-                put(swapped);
-            }
-        }
     }
 
     private void put(TranscriptItem item) {
@@ -324,9 +329,9 @@ final class TranscriptPass {
         return conversation.items.get(id);
     }
 
-    /** 用户提交：直接开始运行、插进当前运行，或排队。 */
+    /** 你说的一句话：直接开始运行、并进当前运行，或排队。条目编号由事件序号来，和收件队列里那一条的编号对得上。 */
     private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, List<AttachedBlock> attached,
-                            boolean steer) {
+                            boolean join) {
         List<SkillNote> skills = SkillNote.of(named);
         String id = TranscriptItem.id(envelope.seq(), 0);
         RunId fresh = RunId.of(session, envelope.seq());
@@ -334,7 +339,7 @@ final class TranscriptPass {
         if (state.runs().containsKey(fresh)) {
             startedBySubmission = fresh;
             put(new UserMessage(id, session, fresh, at, text, attachments, false, false, skills, attached));
-        } else if (steer) {
+        } else if (join) {
             put(new UserMessage(id, session, current == null ? null : current.activeRun(), at, text, attachments, false, false, skills, attached));
         } else {
             put(new UserMessage(id, session, null, at, text, attachments, true, false, skills, attached));
@@ -365,7 +370,8 @@ final class TranscriptPass {
                 case HookTextBlock ignored -> { } // 钩子的说明也只在系统消息里
                 case SkillBlock ignored -> { } // 点名的技能内容只在用户消息里
                 case AttachedBlock ignored -> { } // 插件附的内容也只在用户消息里
-                case TaskResultBlock ignored -> { } // 任务的结果也只在用户角色的消息里
+                case ReportBlock ignored -> { } // 交代出去的事的结果也只在用户角色的消息里
+                case AssignmentBlock ignored -> { } // 交代的内容也只在用户角色的消息里
             }
         }
         // 摘要调用在上面已经返回：它的用量在压缩标记上，不算进这次运行。放在内容之后，状态条目仍是这一步里最后变的
@@ -416,9 +422,8 @@ final class TranscriptPass {
     private void phaseChanged(RunId run, String phase) {
         RunStatus existing = get(RunStatus.idOf(run)) instanceof RunStatus found ? found : null;
         RunStatus status = existing != null ? existing : RunStatus.started(session, run, at, phase);
-        if (existing == null && !run.equals(startedBySubmission) && !conversation.queued.isEmpty()) {
-            UserMessage queued = (UserMessage) get(conversation.queued.pollFirst());
-            put(queued.started(run));
+        if (existing == null && !run.equals(startedBySubmission)) {
+            startedFromQueue(run);
         }
         // 同一步里开始又结束的运行（如被拒绝的手动压缩）也要带上结束原因，否则控制台一直显示运行中。
         if (state.runs().get(run) instanceof RunState current && current.phase() instanceof Ended ended) {
@@ -427,6 +432,34 @@ final class TranscriptPass {
             status = status.inPhase(phase, at);
         }
         put(status);
+    }
+
+    /**
+     * 一轮不是由这一步的提交直接开的：它要是从你排的话开的，那条就是这一步离开收件队列的、你排着的那一条（按编号认，
+     * 不按先后猜：队里还可能有结果）。
+     */
+    private void startedFromQueue(RunId run) {
+        SessionState earlier = before == null ? null : before.sessions().get(session);
+        SessionState now = state.sessions().get(session);
+        if (earlier == null || now == null || !(state.runs().get(run) instanceof RunState started)
+                || started.cause().startedBy() != tantalum.value.state.RunCause.StartedBy.PROMPT) {
+            return;
+        }
+        java.util.Set<Long> still = new java.util.HashSet<>();
+        now.inbox().forEach(item -> still.add(item.id()));
+        for (tantalum.value.state.InboxItem item : earlier.inbox()) {
+            String id = TranscriptItem.id(item.id(), 0);
+            if (item.kind() == tantalum.value.event.Input.Kind.PROMPT && !item.join() && !still.contains(item.id())
+                    && conversation.queued.remove(id) && get(id) instanceof UserMessage queued) {
+                put(queued.started(run));
+            }
+        }
+        // 手动压缩里选了并入、压缩完开了这一轮的那条：从压缩那一轮挪到这一轮
+        for (tantalum.value.state.InboxItem item : CompactionJoins.started(before, state, session)) {
+            if (get(TranscriptItem.id(item.id(), 0)) instanceof UserMessage joined) {
+                put(joined.started(run));
+            }
+        }
     }
 
     /** 被钩子拦截或参数无效的调用在工具轮里直接带着结果，没有自己的事件。 */
@@ -449,9 +482,9 @@ final class TranscriptPass {
         if (current == null) {
             return;
         }
-        List<Message> messages = current.messages();
-        for (int i = conversation.seenMessages; i < messages.size(); i++) {
-            Message message = messages.get(i);
+        // 看到第几条从头数；压缩去掉的那些早就看过了
+        List<Message> messages = current.from(conversation.seenMessages);
+        for (Message message : messages) {
             if (message.role() != Role.USER) {
                 continue;
             }
@@ -459,12 +492,12 @@ final class TranscriptPass {
                 if (block instanceof ToolResultBlock result && step(result.toolCallId()) instanceof ToolStep step
                         && !step.isFinished()) {
                     // task、task_stop 由内核当场给结果，没有自己的事件：它们是执行过了，不是被拦下
-                    boolean answered = result.code() != null || tantalum.value.task.TaskTools.handles(step.call().name());
+                    boolean answered = result.code() != null || tantalum.value.assignment.AssignmentTools.handles(step.call().name());
                     put(answered ? step.finished(result, at) : step.blocked(result, at));
                 }
             }
         }
-        conversation.seenMessages = messages.size();
+        conversation.seenMessages = current.historySize();
     }
 
     private TranscriptItem step(String callId) {

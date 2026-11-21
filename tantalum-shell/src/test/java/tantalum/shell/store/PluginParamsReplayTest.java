@@ -46,7 +46,6 @@ import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.SessionState;
 import tantalum.value.event.UserPromptFixture;
 
@@ -77,6 +76,8 @@ class PluginParamsReplayTest {
     @BeforeEach
     void start() throws Exception {
         scenario = new ReplayScenario(dir, List.of(QUOTA));
+        // 会话先建好：这里直接往内核送提问，不经过入口
+        scenario.fixture.send(ALICE, SESSION, null, ReplayScenario.AT, tantalum.value.event.SessionCreatedFixture.regular());
     }
 
     @AfterEach
@@ -102,8 +103,7 @@ class PluginParamsReplayTest {
     /** 问一次：提交、组装（带这次的参数）、模型放行了就回答。返回组装那一步的决定。 */
     private Decision ask(Sender sender, Json.Obj params) throws Exception {
         String request = "req-" + requests++;
-        Decision submitted = sender.send(null, UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request),
-                new OwnerRef.OfSession(SESSION), "question " + request));
+        Decision submitted = sender.send(null, UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), "question " + request));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
         Decision assembled = sender.send(run, new ContextAssembled(assemble.id(), "system", List.of(), null, List.of(), null,
@@ -125,7 +125,8 @@ class PluginParamsReplayTest {
     }
 
     private RecordReplay.Loaded restored() throws Exception {
-        return new RecordReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()))
+        return new RecordReplay(scenario.paths, new SessionFileReader(EventCodec.withBuiltins()),
+                new tantalum.shell.loop.Snapshots(EventCodec.withBuiltins().mapper()))
                 .load(ALICE, SESSION, Long.MAX_VALUE).orElseThrow();
     }
 
@@ -194,7 +195,7 @@ class PluginParamsReplayTest {
         List<KernelState> states = new ArrayList<>(List.of(KernelState.empty().withResident(loaded.slice().session(), loaded.slice().runs())));
         long[] seq = {loaded.slice().seq()};
         try (SessionFiles files = new SessionFiles(scenario.paths, EventCodec.withBuiltins(), 4, (p, s, n, offset) -> { })) {
-            files.adopt(ALICE, SESSION, loaded.memo());
+            files.adopt(ALICE, SESSION, loaded.memo(), 0, 0);
             Sender sender = (run, event) -> {
                 EventEnvelope envelope = new EventEnvelope(++seq[0], ReplayScenario.AT, ALICE, SESSION, run, event);
                 KernelState before = states.getLast();

@@ -7,61 +7,67 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import tantalum.value.assignment.Assignments;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
-import tantalum.value.task.Tasks;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolSpec;
 
-/** 一个会话。{@code messages} 是完整历史，只追加；模型看到的是 {@link #view()}。{@code activeRun} 没有运行时为空；
+/** 一个会话。{@code kind} 是它的种类，{@code helper} 只有帮手会话有；两样和 {@code dir}、{@code offRecord} 一样建会话时定下，之后不变。
+ * {@code messages} 是历史里还留在内存的那一段（窗口），只追加；{@code windowStart} 是它的第一条从头数是第几条。压缩完成时
+ * 边界之前的去掉（{@link #dropBefore}），模型看到的（{@link #view()}：替换段加边界之后的）都还在，原话在账里。
+ * 凡是“第几条消息”都从头数（{@link #historySize()}、{@link #said(int)}、{@code Compaction.tailFrom}、{@code Withdrawal.before}）。{@code activeRun} 没有运行时为空；
  * {@code lastRun} 是最近一次开始的运行，运行结束后仍保留，用来判断迟到的结果是否还能进历史。
- * {@code followUps} 是排队的用户消息（文字和附件），运行结束后依次开新运行。
+ * {@code inbox} 是收件队列：到了、还没被模型看到的输入，按到的先后。一轮怎么结束它们都还在。
  * {@code compaction} 是最近一次压缩的替换段，{@code anchor} 是上次回复的实测用量，两者都可为空。
  * {@code omittedImages} 是因超出请求的图片预算而省略过的附件 ID，只增不减，之后的请求里一直省略。
  * {@code toolsSeen} 是这个会话里开着过的工具名，按第一次出现的顺序，只增不减，压缩也不清空：压缩后据此告诉模型哪些工具
  * 已经不能用了。
  * {@code notes} 是插件工作记在会话里的东西，按工作类型分，每份是一个对象（{@link tantalum.value.event.WorkDone#note()} 按字段并进来），
  * 只来自事件，钩子读它就和读历史一样是纯的；压缩不清空。例如工具审批的“这个会话里一直允许”。
- * {@code model} 是会话现在的模型选择，每次提问组装上下文时换成这次用的，压缩不清空；本 spec 之前的会话为 null。
- * {@code followUpModels} 和 {@code followUps} 等长，每条排队的提问各自带的选择（没带的为 null），开始运行时交给它。
- * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），第一次提问时定下，之后不变；没选或本 spec 之前的会话为 null。
- * {@code offRecord} 为真是“不进记忆”的会话（memory-final-plan 第 11 节），第一次提问时定下，之后不变。
- * {@code tasks} 是和任务有关的一块（放出去还没回来的、这个会话是不是为任务开的、无人说话时的计数），没有任务时是 {@link Tasks#NONE}。
- * {@code withdrawn} 是撤下的文字（{@link Withdrawal}），只增不减：历史照旧只追加、一个字不改，{@link #view()} 给模型看的时候把它们换掉。 */
-public record SessionState(SessionId id, Principal principal, List<Message> messages,
-                           RunId activeRun, RunId lastRun, List<Message> followUps, SessionContext context,
+ * {@code model} 是会话现在的模型选择，每次提问组装上下文时换成这次用的，压缩不清空。
+ * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），没选为 null。{@code offRecord} 为真是“不进记忆”的会话。
+ * {@code assignments} 是和交代有关的一块（交代出去还没回来的、无人说话时的计数），没有时是 {@link Assignments#NONE}。
+ * {@code withdrawn} 是撤下的文字（{@link Withdrawal}），只增不减：历史照旧只追加、一个字不改，{@link #view()} 给模型看的时候把它们换掉。
+ * {@code outbox} 是送方信箱（delivery）：送给别的会话、对方还没确认收到的，按记下的先后。 */
+public record SessionState(SessionId id, Principal principal, SessionKind kind, HelperOf helper, List<Message> messages,
+                           int windowStart, RunId activeRun, RunId lastRun, List<InboxItem> inbox, SessionContext context,
                            Compaction compaction, UsageAnchor anchor, List<String> omittedImages, List<String> toolsSeen,
-                           Map<String, Json.Obj> notes, ModelChoice model, List<ModelChoice> followUpModels,
-                           String dir, boolean offRecord, Tasks tasks, List<Withdrawal> withdrawn) {
+                           Map<String, Json.Obj> notes, ModelChoice model, String dir, boolean offRecord, Assignments assignments,
+                           List<Withdrawal> withdrawn, List<tantalum.value.delivery.Outgoing> outbox) {
 
     public SessionState {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(principal, "principal");
-        messages = List.copyOf(messages);
-        followUps = List.copyOf(followUps);
-        // 元素可为 null（没带选择），所以不用 List.copyOf；没给时按“都没带”
-        followUpModels = followUpModels == null ? Collections.nCopies(followUps.size(), null)
-                : Collections.unmodifiableList(new ArrayList<>(followUpModels));
-        if (followUpModels.size() != followUps.size()) {
-            throw new IllegalArgumentException("followUpModels has " + followUpModels.size() + " entries for " + followUps.size() + " follow-ups");
+        Objects.requireNonNull(kind, "kind");
+        if ((kind == SessionKind.HELPER) != (helper != null)) {
+            throw new IllegalArgumentException("exactly a helper session says whose helper it is");
         }
+        messages = List.copyOf(messages);
+        inbox = inbox == null ? List.of() : List.copyOf(inbox);
         omittedImages = omittedImages == null ? List.of() : List.copyOf(omittedImages);
         toolsSeen = toolsSeen == null ? List.of() : List.copyOf(toolsSeen);
         notes = notes == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(notes));
-        tasks = tasks == null ? Tasks.NONE : tasks;
+        assignments = assignments == null ? Assignments.NONE : assignments;
         withdrawn = withdrawn == null ? List.of() : List.copyOf(withdrawn);
-        if (compaction != null && compaction.tailFrom() > messages.size()) {
-            throw new IllegalArgumentException("tailFrom " + compaction.tailFrom() + " beyond " + messages.size() + " messages");
+        outbox = outbox == null ? List.of() : List.copyOf(outbox);
+        if (windowStart < 0) {
+            throw new IllegalArgumentException("windowStart " + windowStart + " is negative");
+        }
+        if (compaction != null && (compaction.tailFrom() < windowStart || compaction.tailFrom() > windowStart + messages.size())) {
+            throw new IllegalArgumentException("tailFrom " + compaction.tailFrom() + " outside messages " + windowStart + ".."
+                    + (windowStart + messages.size()));
         }
     }
 
-    public static SessionState start(SessionId id, Principal principal) {
-        return new SessionState(id, principal, List.of(), null, null, List.of(), null, null, null, List.of(), List.of(), Map.of(), null, null,
-                null, false, Tasks.NONE, List.of());
+    /** 一个刚建好的会话。帮手会话的 {@code helper} 不能为 null，别的种类必须为 null。 */
+    public static SessionState start(SessionId id, Principal principal, SessionKind kind, HelperOf helper, String dir, boolean offRecord) {
+        return new SessionState(id, principal, kind, helper, List.of(), 0, null, null, List.of(), null, null, null, List.of(), List.of(), Map.of(),
+                null, dir, offRecord, Assignments.NONE, List.of(), List.of());
     }
 
     /** 模型看到的消息：压缩过就是替换段加上之后追加的，否则就是全部历史；撤下的文字（{@link #withdrawn}）已经换掉。 */
@@ -69,95 +75,124 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         if (compaction == null && withdrawn.isEmpty()) {
             return messages;
         }
-        int from = compaction == null ? 0 : compaction.tailFrom();
+        int from = compaction == null ? windowStart : compaction.tailFrom();
+        // 撤下只作用于记下它之前的消息：记在看得到的这一段之前的（比如压缩以后撤下、原文只在去掉的那部分里）不用逐条去试
+        List<Withdrawal> live = withdrawn.stream().filter(each -> each.before() > from).toList();
         List<Message> view = new ArrayList<>(compaction == null ? List.of() : compaction.replacement());
-        for (int i = from; i < messages.size(); i++) {
-            view.add(said(i));
+        for (int i = from; i < historySize(); i++) {
+            view.add(said(i, live));
         }
         return List.copyOf(view);
     }
 
-    /** 历史里的第 {@code index} 条，照模型看到的样子：在它之后撤下的文字已经换掉。没有撤下过时就是原来那条。 */
+    /** 历史从头数一共多少条（含已经去掉的）。 */
+    public int historySize() {
+        return windowStart + messages.size();
+    }
+
+    /** 从头数第 {@code index} 条，原样。在窗口之前（已经去掉）的抛 {@link IllegalArgumentException}。 */
+    public Message message(int index) {
+        if (index < windowStart || index >= historySize()) {
+            throw new IllegalArgumentException("message " + index + " is outside " + windowStart + ".." + historySize());
+        }
+        return messages.get(index - windowStart);
+    }
+
+    /**
+     * 从头数第 {@code index} 条起直到最后，原样。已经去掉的部分不在了，从窗口起点算：投影问“这一步之后多了哪些”时用（这一步开始时的
+     * {@link #historySize()} 作 {@code index}；同一步里压缩只去掉这一步开始前就有的，所以这一步追加的都在）。
+     */
+    public List<Message> from(int index) {
+        int start = Math.min(Math.max(index, windowStart), historySize()) - windowStart;
+        return messages.subList(start, messages.size());
+    }
+
+    /** 压缩完成时去掉从头数第 {@code index} 条之前的消息：模型看到的在替换段里，原话在账里。只能往后移。 */
+    public SessionState dropBefore(int index) {
+        if (index < windowStart || index > historySize()) {
+            throw new IllegalArgumentException("cannot drop before " + index + " with messages " + windowStart + ".." + historySize());
+        }
+        return new SessionState(id, principal, kind, helper, messages.subList(index - windowStart, messages.size()), index, activeRun, lastRun,
+                inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
+    }
+
+    /** 从头数第 {@code index} 条，照模型看到的样子：在它之后撤下的文字已经换掉。没有撤下过时就是原来那条。窗口之前的抛错。 */
     public Message said(int index) {
-        Message message = messages.get(index);
-        if (withdrawn.isEmpty()) {
+        return said(index, withdrawn);
+    }
+
+    private Message said(int index, List<Withdrawal> candidates) {
+        Message message = message(index);
+        if (candidates.isEmpty()) {
             return message;
         }
-        List<tantalum.value.event.TextWithdrawn.Swap> swaps = withdrawn.stream().filter(each -> index < each.before()).map(Withdrawal::swap).toList();
+        List<tantalum.value.event.TextWithdrawn.Swap> swaps = candidates.stream().filter(each -> index < each.before()).map(Withdrawal::swap).toList();
         return swaps.isEmpty() ? message : new tantalum.value.model.TextSwap(swaps).message(message);
     }
 
     /**
-     * 撤下文字：{@code more} 记进 {@link #withdrawn}（历史不动）；排队的提问、压缩的替换段、冻结的上下文不是只追加的，
+     * 撤下文字：{@code more} 记进 {@link #withdrawn}（历史不动）；收件队列、压缩的替换段、冻结的上下文不是只追加的，
      * 调用方把换过的直接交进来。
      */
-    public SessionState withdrawing(List<Withdrawal> more, List<Message> newFollowUps, Compaction newCompaction, SessionContext newContext) {
+    public SessionState withdrawing(List<Withdrawal> more, List<InboxItem> newInbox, Compaction newCompaction, SessionContext newContext) {
         List<Withdrawal> all = new ArrayList<>(withdrawn);
         all.addAll(more);
-        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, newContext, newCompaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, all);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, newInbox, newContext, newCompaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, all, outbox);
     }
 
     public SessionState append(Message message) {
         List<Message> updated = new ArrayList<>(messages);
         updated.add(message);
-        return new SessionState(id, principal, updated, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, updated, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /** 运行开始：同时记为 {@code lastRun}。 */
     public SessionState startRun(RunId run) {
         Objects.requireNonNull(run, "run");
-        return new SessionState(id, principal, messages, run, run, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, run, run, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /** 运行结束：只清 {@code activeRun}，{@code lastRun} 留着判断迟到的结果。 */
     public SessionState endRun() {
-        return new SessionState(id, principal, messages, null, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, null, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
-    /** 换排队的提问，都不带模型选择（测试）。 */
-    public SessionState withFollowUps(List<Message> newFollowUps) {
-        return withFollowUps(newFollowUps, null);
+    /** 换整条收件队列。 */
+    public SessionState withInbox(List<InboxItem> newInbox) {
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, newInbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
-    /** 换排队的提问和它们各自的选择，两者等长。 */
-    public SessionState withFollowUps(List<Message> newFollowUps, List<ModelChoice> newFollowUpModels) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, newFollowUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, newFollowUpModels, dir, offRecord, tasks, withdrawn);
+    /** 队尾加一条。 */
+    public SessionState enqueue(InboxItem item) {
+        List<InboxItem> grown = new ArrayList<>(inbox);
+        grown.add(item);
+        return withInbox(grown);
     }
 
     public SessionState withContext(SessionContext newContext) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, newContext, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /** 压缩成功：换替换段，锚点作废。 */
     public SessionState compacted(Compaction newCompaction) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, newCompaction, null, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, newCompaction, null, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     public SessionState withAnchor(UsageAnchor newAnchor) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, newAnchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     public SessionState withOmittedImages(List<String> newOmittedImages) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, newOmittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     public SessionState withToolsSeen(List<String> newToolsSeen) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, newToolsSeen, notes, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /** 换会话的模型选择。 */
     public SessionState withModel(ModelChoice newModel) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, followUpModels, dir, offRecord, tasks, withdrawn);
-    }
-
-    /** 定下工作目录。 */
-    public SessionState withDir(String newDir) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, newDir, offRecord, tasks, withdrawn);
-    }
-
-    /** 定成“不进记忆”的会话。 */
-    public SessionState withOffRecord() {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, true, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, newModel, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /** 这个工作类型记在会话里的东西，没有时是空对象。 */
@@ -182,7 +217,7 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         } else {
             updated.put(workType, new Json.Obj(Collections.unmodifiableMap(new LinkedHashMap<>(merged))));
         }
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, updated, model, followUpModels, dir, offRecord, tasks, withdrawn);
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, updated, model, dir, offRecord, assignments, withdrawn, outbox);
     }
 
     /**
@@ -210,7 +245,12 @@ public record SessionState(SessionId id, Principal principal, List<Message> mess
         return context() == null && compaction() != null;
     }
 
-    public SessionState withTasks(Tasks newTasks) {
-        return new SessionState(id, principal, messages, activeRun, lastRun, followUps, context, compaction, anchor, omittedImages, toolsSeen, notes, model, followUpModels, dir, offRecord, newTasks, withdrawn);
+    /** 信箱换成 {@code newOutbox}（delivery）。 */
+    public SessionState withOutbox(List<tantalum.value.delivery.Outgoing> newOutbox) {
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, assignments, withdrawn, newOutbox);
+    }
+
+    public SessionState withAssignments(Assignments newAssignments) {
+        return new SessionState(id, principal, kind, helper, messages, windowStart, activeRun, lastRun, inbox, context, compaction, anchor, omittedImages, toolsSeen, notes, model, dir, offRecord, newAssignments, withdrawn, outbox);
     }
 }

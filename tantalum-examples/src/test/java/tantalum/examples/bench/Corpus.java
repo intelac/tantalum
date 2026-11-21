@@ -52,7 +52,6 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
@@ -171,7 +170,7 @@ public final class Corpus {
 
     private final java.util.Map<SessionId, SessionPlan> running = new java.util.HashMap<>();
 
-    private void fill(int targetEvents) {
+    private void fill(int targetEvents) throws IOException {
         while (active < ACTIVE_SESSIONS && !waiting.isEmpty() && (seq < targetEvents || waiting.peek().prompts == LONG_PROMPTS)) {
             SessionPlan plan = waiting.poll();
             running.put(plan.session, plan);
@@ -180,7 +179,7 @@ public final class Corpus {
         }
     }
 
-    private void finishedTurn(SessionId session, SessionPlan longPlan, SessionPlan quietPlan, int targetEvents) {
+    private void finishedTurn(SessionId session, SessionPlan longPlan, SessionPlan quietPlan, int targetEvents) throws IOException {
         SessionPlan plan = running.get(session);
         RunId last = state.runs().values().stream()
                 .filter(run -> run.ref().session().equals(session))
@@ -204,11 +203,18 @@ public final class Corpus {
         }
     }
 
-    private void startPrompt(SessionPlan plan) {
+    /** 已经发过创建事件的会话：第一句话之前先建，和入口一样。 */
+    private final java.util.Set<SessionId> created = new java.util.HashSet<>();
+
+    private void startPrompt(SessionPlan plan) throws IOException {
         plan.prompts--;
+        if (created.add(plan.session)) {
+            // 当场建，不进打乱顺序的待发列表：它必须在这个会话的第一句话之前
+            feed(new Pending(plan.session, plan.principal, null, tantalum.value.event.SessionCreatedFixture.regular()));
+        }
         long id = ids++;
         pending.add(new Pending(plan.session, plan.principal, null, UserPromptFixture.of(new SubmissionId("sub-" + id),
-                new RequestId("req-" + id), new OwnerRef.OfSession(plan.session), words(40 + random.nextInt(400)))));
+                new RequestId("req-" + id), words(40 + random.nextInt(400)))));
     }
 
     /** 攒一批再写：每事件 fsync 时，生成几十万事件要几十分钟。 */

@@ -23,11 +23,11 @@ import tantalum.shell.model.ModelOutcome;
 import tantalum.value.json.Json;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
-import tantalum.value.model.TaskResultBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
-import tantalum.value.task.TaskTools;
+import tantalum.value.assignment.AssignmentTools;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -52,9 +52,17 @@ class TaskIsolationTest {
         return prompt.messages().stream().flatMap(message -> message.content().stream()).filter(type::isInstance).map(type::cast).toList();
     }
 
+    /** 第一条消息的文字：普通会话里是你说的话，帮手会话里是交代（它自己的内容块，给模型的文字一样）。 */
     private static String firstText(Prompt prompt) {
-        return prompt.messages().getFirst().content().stream().filter(TextBlock.class::isInstance).map(TextBlock.class::cast)
-                .map(TextBlock::text).findFirst().orElse("");
+        for (tantalum.value.model.ContentBlock block : prompt.messages().getFirst().content()) {
+            if (block instanceof TextBlock text) {
+                return text.text();
+            }
+            if (block instanceof tantalum.value.model.AssignmentBlock given) {
+                return given.text();
+            }
+        }
+        return "";
     }
 
     private static ModelOutcome text(String text) {
@@ -75,12 +83,12 @@ class TaskIsolationTest {
             }
             return text("answer for " + who);
         }
-        List<TaskResultBlock> back = blocks(prompt, TaskResultBlock.class);
+        List<ReportBlock> back = blocks(prompt, ReportBlock.class);
         if (!back.isEmpty()) {
             return text("got: " + back.getLast().text());
         }
         if (blocks(prompt, ToolResultBlock.class).isEmpty() && firstText(prompt).startsWith("delegate ")) {
-            return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", TaskTools.TASK, "{}", new Json.Obj(Map.of(TaskTools.PROMPT,
+            return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", AssignmentTools.TASK, "{}", new Json.Obj(Map.of(AssignmentTools.PROMPT,
                     new Json.Str("secret of " + firstText(prompt).substring("delegate ".length())))))), StopReason.TOOL_USE, "m", null);
         }
         return text("ok");
@@ -121,7 +129,7 @@ class TaskIsolationTest {
     /** 这个人在这个会话里说 “delegate 名字”，等任务停在等回答；返回任务自己的会话编号。 */
     private String delegate(String user, String session) throws Exception {
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"r-" + session + "\",\"mode\":\"prompt\",\"text\":\"delegate " + user + "\"}").statusCode());
+                "{\"requestId\":\"r-" + session + "\",\"delivery\":\"queue\",\"text\":\"delegate " + user + "\"}").statusCode());
         waitForRuns(user, session, 1);
         JsonNode tasks = null;
         for (int i = 0; i < 1500; i++) {
@@ -159,7 +167,7 @@ class TaskIsolationTest {
         assertEquals(404, server.post("bob", "/api/runs/" + childRun + "/cancel", "{}").statusCode());
         // 也不能往里说话
         assertTrue(List.of(404, 409).contains(server.post("bob", "/api/sessions/" + child + "/submissions",
-                "{\"requestId\":\"x1\",\"mode\":\"prompt\",\"text\":\"hello\"}").statusCode()));
+                "{\"requestId\":\"x1\",\"delivery\":\"queue\",\"text\":\"hello\"}").statusCode()));
         // bob 的清单和搜索里没有 alice 的东西
         String listed = server.get("bob", "/api/sessions").body();
         assertFalse(listed.contains("a1") || listed.contains(child), listed);
@@ -216,9 +224,9 @@ class TaskIsolationTest {
     void aSessionIdShapedLikeATasksCannotBeTakenByAPerson() throws Exception {
         for (String squatted : List.of("a1-t3-0", "a1-t4-0", "anything-t0-0")) {
             assertEquals(409, server.post("bob", "/api/sessions/" + squatted + "/submissions",
-                    "{\"requestId\":\"s-" + squatted + "\",\"mode\":\"prompt\",\"text\":\"mine now\"}").statusCode(), squatted);
+                    "{\"requestId\":\"s-" + squatted + "\",\"delivery\":\"queue\",\"text\":\"mine now\"}").statusCode(), squatted);
             assertEquals(409, server.post("alice", "/api/sessions/" + squatted + "/submissions",
-                    "{\"requestId\":\"t-" + squatted + "\",\"mode\":\"prompt\",\"text\":\"mine now\"}").statusCode(), squatted);
+                    "{\"requestId\":\"t-" + squatted + "\",\"delivery\":\"queue\",\"text\":\"mine now\"}").statusCode(), squatted);
         }
         // 上传附件也会认领新会话的编号：这条路同样占不了
         for (String squatted : List.of("a1-t3-0", "a1-t5-0")) {

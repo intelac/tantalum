@@ -111,7 +111,7 @@ class SecretLeakTest {
             assertTrue(saved.contains("\"set\":true"), saved);
 
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"search it\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"search it\"}").statusCode());
             Instant deadline = Instant.now().plusSeconds(20);
             while (!server.get("alice", "/api/sessions/s1/runs").body().contains("COMPLETED")) {
                 assertTrue(Instant.now().isBefore(deadline), "the run did not finish");

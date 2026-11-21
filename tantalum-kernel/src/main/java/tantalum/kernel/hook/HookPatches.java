@@ -79,7 +79,8 @@ public final class HookPatches {
         if (blocks.isEmpty()) {
             return new Applied(next.equals(state) ? session : session.withContext(context.withHooks(next)), List.of());
         }
-        if (!session.messages().isEmpty() && session.messages().getLast().role() == Role.ASSISTANT) {
+        List<tantalum.value.model.Message> seen = session.view();
+        if (!seen.isEmpty() && seen.getLast().role() == Role.ASSISTANT) {
             // 模型调用前最后一条总是用户消息或已有的 system 更新；万一不是，system 消息放在这里会被拒绝，宁可不加
             return new Applied(session, List.of(new HookReported(run, "hook-patch",
                     "patch skipped: the last message is from the assistant")));

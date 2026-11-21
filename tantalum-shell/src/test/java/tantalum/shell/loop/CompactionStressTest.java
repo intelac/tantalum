@@ -124,7 +124,7 @@ class CompactionStressTest {
 
     private static void converse(TestServer server, String user, String session, int turns) throws Exception {
         for (int n = 1; n <= turns; n++) {
-            String body = JSON.writeValueAsString(java.util.Map.of("requestId", "r-" + session + "-" + n, "mode", "prompt",
+            String body = JSON.writeValueAsString(java.util.Map.of("requestId", "r-" + session + "-" + n, "delivery", "queue",
                     "text", text(user, n)));
             assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions", body).statusCode());
             waitForRuns(server, user, session, n);

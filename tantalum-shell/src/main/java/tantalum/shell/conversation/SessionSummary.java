@@ -1,9 +1,6 @@
 package tantalum.shell.conversation;
 
 import java.time.Instant;
-import java.util.List;
-import tantalum.shell.conversation.TranscriptItem.RunStatus;
-import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.RunState;
 
@@ -21,18 +18,10 @@ public record SessionSummary(SessionId id, String title, Instant lastActivity, S
     public static final String IDLE = "idle";
     static final int TITLE_LENGTH = 40;
 
-    public static SessionSummary of(SessionId id, RunState activeRun, List<TranscriptItem> items) {
-        String title = "";
-        Instant last = Instant.EPOCH;
-        for (TranscriptItem item : items) {
-            if (title.isEmpty() && item instanceof UserMessage message) {
-                title = titleOf(message.text());
-            }
-            Instant at = item instanceof RunStatus status ? status.updatedAt() : item.at();
-            if (at.isAfter(last)) {
-                last = at;
-            }
-        }
+    public static SessionSummary of(SessionId id, RunState activeRun, Transcript.View view) {
+        // 第一条提问和最大时间由对话视图随每一步记下（内存只留尾巴，live-views）
+        String title = view.firstUser() == null ? "" : titleOf(view.firstUser().text());
+        Instant last = view.latest();
         String status = activeRun == null ? IDLE : activeRun.phase().name();
         return new SessionSummary(id, title, last, status, null);
     }

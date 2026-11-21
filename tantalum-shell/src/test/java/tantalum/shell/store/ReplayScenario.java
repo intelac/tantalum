@@ -44,7 +44,6 @@ import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
@@ -118,10 +117,16 @@ final class ReplayScenario implements AutoCloseable {
         decision.commands().forEach(command -> pending.add(new Pending(principal, session, command)));
     }
 
+    /** 建过的会话：第一次对它说话前先发它的创建事件，和入口一样。 */
+    private final java.util.Set<SessionId> created = new java.util.HashSet<>();
+
     void prompt(Principal principal, SessionId session, String text) throws Exception {
         String request = "req-" + requests++;
+        if (created.add(session)) {
+            track(principal, session, fixture.send(principal, session, null, AT, tantalum.value.event.SessionCreatedFixture.regular()));
+        }
         track(principal, session, fixture.send(principal, session, null, AT,
-                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text)));
+                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), text)));
     }
 
     private static ToolCallBlock call(String id) {

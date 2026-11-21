@@ -1,5 +1,6 @@
 package tantalum.kernel.hook;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -39,7 +40,7 @@ class HookPatchesTest {
     private static final ToolSpec LOOKUP = new ToolSpec("lookup", "look up", new Json.Null());
 
     private static SessionState session() {
-        return SessionState.start(SESSION, USER)
+        return SessionStateFixture.regular(SESSION, USER)
                 .withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()))
                 .append(Message.user("hi"));
     }
@@ -171,7 +172,7 @@ class HookPatchesTest {
 
     @Test
     void withoutAFrozenContextNothingHappens() {
-        SessionState bare = SessionState.start(SESSION, USER).append(Message.user("hi"));
+        SessionState bare = SessionStateFixture.regular(SESSION, USER).append(Message.user("hi"));
         assertSame(bare, HookPatches.apply(bare, List.of(patch("a", 5)), new PromptPatch("brief", List.of()), RUN).session());
     }
 

@@ -186,8 +186,8 @@ class ModelSwitchScenario {
             for (int i = 0; i < steps.length; i++) {
                 String[] step = steps[i];
                 int before = calls.size();
-                assertEquals(200, engine.intake().submit(YI, new SessionId("s1"), new RequestId("r" + i), "prompt", step[3], List.of(),
-                        new ModelChoice(step[0], step[1], step[2])).status());
+                assertEquals(200, engine.intake().submit(YI, new SessionId("s1"), new RequestId("r" + i), tantalum.value.event.Delivery.QUEUE, step[3], List.of(),
+                        new ModelChoice(step[0], step[1], step[2]), null, List.of(), List.of(), false).status());
                 awaitRuns(server, i + 1);
                 List<Call> made = calls.subList(before, calls.size());
                 long input = 0, output = 0, read = 0, write = 0, millis = 0;

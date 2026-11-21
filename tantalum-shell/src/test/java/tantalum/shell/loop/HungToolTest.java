@@ -54,13 +54,13 @@ class HungToolTest {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("workspace")), model,
                 context -> context.registerBean("stuck", Tool.class, () -> stuck), "--tantalum.tool-timeout=120s")) {
             assertEquals(200, server.post("alice", "/api/sessions/hung/submissions",
-                    "{\"requestId\":\"a\",\"mode\":\"prompt\",\"text\":\"use the stuck tool\"}").statusCode());
+                    "{\"requestId\":\"a\",\"delivery\":\"queue\",\"text\":\"use the stuck tool\"}").statusCode());
             assertTrue(running.await(10, TimeUnit.SECONDS));
 
             long start = System.nanoTime();
             for (int i = 0; i < 5; i++) {
                 assertEquals(200, server.post("bob", "/api/sessions/s" + i + "/submissions",
-                        "{\"requestId\":\"b" + i + "\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                        "{\"requestId\":\"b" + i + "\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
             }
             for (int i = 0; i < 5; i++) {
                 String body = "";

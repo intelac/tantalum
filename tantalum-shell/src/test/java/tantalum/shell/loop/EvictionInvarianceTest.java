@@ -70,7 +70,6 @@ import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 import tantalum.shell.store.SessionReplayFixture;
@@ -153,7 +152,7 @@ class EvictionInvarianceTest {
             files = new SessionFiles(paths, codec, 16, writer::onDurable);
             SessionReplay replay = SessionReplayFixture.of(paths, new SessionFileReader(codec), new UsageLedger(index, writer), kernel);
             this.replay = replay;
-            this.records = new RecordReplay(paths, new SessionFileReader(codec));
+            this.records = new RecordReplay(paths, new SessionFileReader(codec), new Snapshots(EventCodec.withBuiltins().mapper()));
             Residency residency = new Residency();
             transcript = new Transcript();
             Projections projections = new Projections(transcript, trace);
@@ -185,7 +184,7 @@ class EvictionInvarianceTest {
                 pending.add(command);
                 return true;
             }, projections, facts, view, new ResultPublisher(input, new InFlightCommands(), Clock.systemUTC(), 8), writer::onStep, evictor,
-                    dispatcher, envelope -> dispatcher.released(envelope));
+                    dispatcher, Snapshotting.NEVER, envelope -> dispatcher.released(envelope));
             input.connect(dispatcher);
             ring.connect(cleanroom);
             ring.start();
@@ -264,10 +263,16 @@ class EvictionInvarianceTest {
             this.pipeline = pipeline;
         }
 
+        /** 建过的会话：第一次对它说话前先发它的创建事件，和入口一样。 */
+        private final java.util.Set<SessionId> created = new java.util.HashSet<>();
+
         void prompt(Principal principal, SessionId session, String text) throws Exception {
             String request = "req-" + requests++;
+            if (created.add(session)) {
+                pipeline.send(principal, session, null, tantalum.value.event.SessionCreatedFixture.regular());
+            }
             pipeline.send(principal, session, null,
-                    UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
+                    UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), text));
         }
 
         private static ToolCallBlock call(String id) {

@@ -43,18 +43,23 @@ public final class Kernel {
     }
 
     public Decision step(KernelState state, EventEnvelope envelope) {
+        // 隔离在这里一次挡住：会话是别人的，这个事件什么都不改、什么都不发，不管它是哪种事件（服务器多用户，入口之外的第二道）
+        SessionState owner = state.sessions().get(envelope.session());
+        if (owner != null && !owner.principal().equals(envelope.principal())) {
+            return Decision.unchanged(state);
+        }
         RunState run = findRun(state, envelope);
         Optional<StepFunction> step = findStep(run, envelope.event());
         if (step.isEmpty()) {
             return Decision.unchanged(state);
         }
         StepContext context = new StepContext(state, envelope, run, hooks, toolSafety,
-                limits.maxParallelTools(), limits.maxWorkRounds(), limits.tasks());
+                limits.maxParallelTools(), limits.maxWorkRounds(), limits.assignments());
         try {
             return step.get().apply(context);
         } catch (RuntimeException failure) {
-            if (run == null) {
-                // 没有运行可以结束：留一条事实，不无痕返回
+            if (run == null || run.isEnded()) {
+                // 没有运行可以结束（已经结束的不再收一次尾：那会再交一次结果、清掉别的运行）：留一条事实，不无痕返回
                 RunRef where = new RunRef(envelope.principal(), envelope.session(), RunId.of(envelope.session(), envelope.seq()));
                 return new Decision(state, List.of(), List.of(new StepFailed(where, envelope.event().type(), failure.getClass().getSimpleName())));
             }
@@ -68,7 +73,9 @@ public final class Kernel {
             SessionState session = state.sessions().get(envelope.session());
             id = session == null ? null : session.activeRun();
         }
-        return id == null ? null : state.runs().get(id);
+        RunState found = id == null ? null : state.runs().get(id);
+        // 信封里点名的运行必须是这个会话的：别的会话的运行编号不能拿来用
+        return found == null || !found.ref().session().equals(envelope.session()) ? null : found;
     }
 
     private Optional<StepFunction> findStep(RunState run, Event event) {

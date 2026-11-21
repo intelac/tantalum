@@ -18,9 +18,7 @@ import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.RequestId;
@@ -37,10 +35,7 @@ import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -60,8 +55,7 @@ class ModelChoiceStepsTest {
     private static final CompactionSettings SMALL = new CompactionSettings(1000, 200, 70, 60, 30, 500, 800, 3);
 
     private static UserPrompt prompt(LoopFixture loop, String text, ModelChoice model) {
-        return UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId("req-" + text), new OwnerRef.OfSession(LoopFixture.SESSION),
-                text, List.of(), model);
+        return UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId("req-" + text), text, List.of(), model);
     }
 
     /** shell 组装上下文：这次用 {@code model}。 */
@@ -163,7 +157,7 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(loop.runId(), SteerSubmittedFixture.of(new SubmissionId("s1"), new RequestId("rs1"), "also this"));
+        loop.feed(loop.runId(), UserPromptFixture.join(new SubmissionId("s1"), new RequestId("rs1"), "also this"));
         loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         CallModel call = call(loop);
         assertEquals(SONNET, call.prompt().model());
@@ -178,8 +172,8 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "next", List.of(), QWEN));
-        assertEquals(List.of(QWEN), loop.session().followUpModels());
+        loop.feed(null, UserPromptFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "next", List.of(), QWEN));
+        assertEquals(List.of(QWEN), loop.queuedModels());
         loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         assertEquals(SONNET, call(loop).prompt().model(), "the running run is not affected");
 
@@ -187,7 +181,7 @@ class ModelChoiceStepsTest {
         AssembleContext assemble = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
         assertEquals(QWEN, assemble.requested());
         assertEquals(SONNET, assemble.current());
-        assertTrue(loop.session().followUpModels().isEmpty(), "handed to the run that took it");
+        assertTrue(loop.queuedModels().isEmpty(), "handed to the run that took it");
     }
 
     /** review-fixes 需求 5.5：排队两条、各带各的选择（或不带），开始时各用各的。 */
@@ -198,14 +192,14 @@ class ModelChoiceStepsTest {
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), reply(loop, thinkingAndCall("t1"), StopReason.TOOL_USE, new TokenUsage(100, 10, 0, 0)));
         var tool = loop.onlyCommandId();
-        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "a", List.of(), null));
-        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "b", List.of(), QWEN));
-        assertEquals(java.util.Arrays.asList(null, QWEN), loop.session().followUpModels());
+        loop.feed(null, UserPromptFixture.of(new SubmissionId("f1"), new RequestId("rf1"), "a", List.of(), null));
+        loop.feed(null, UserPromptFixture.of(new SubmissionId("f2"), new RequestId("rf2"), "b", List.of(), QWEN));
+        assertEquals(java.util.Arrays.asList(null, QWEN), loop.queuedModels());
         loop.feed(loop.runId(), ToolFinishedFixture.of(tool, "t1", block("r1"), false, null));
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a1", 100));
         AssembleContext first = assertInstanceOf(AssembleContext.class, loop.onlyCommand());
         assertNull(first.requested(), "the first queued prompt carried no choice");
-        assertEquals(List.of(QWEN), loop.session().followUpModels());
+        assertEquals(List.of(QWEN), loop.queuedModels());
         assembled(loop, SONNET, BIG);
         loop.feed(loop.runId(), CompactStepsTest.endTurn(loop, "a2", 100));
         AssembleContext second = assertInstanceOf(AssembleContext.class, loop.onlyCommand());

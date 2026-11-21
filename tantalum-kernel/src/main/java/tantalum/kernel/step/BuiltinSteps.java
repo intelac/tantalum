@@ -2,22 +2,22 @@ package tantalum.kernel.step;
 
 import tantalum.kernel.table.TransitionTable;
 import tantalum.value.decision.Decision;
+import tantalum.value.event.Assignment;
+import tantalum.value.event.AssignmentCancelled;
+import tantalum.value.event.Report;
+import tantalum.value.event.SessionCreated;
+import tantalum.value.event.StopRequested;
 import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.SessionRenamed;
-import tantalum.value.event.SteerSubmitted;
-import tantalum.value.event.TaskAssigned;
-import tantalum.value.event.TaskEnded;
-import tantalum.value.event.TaskStopRequested;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -29,12 +29,18 @@ public final class BuiltinSteps {
     private BuiltinSteps() {}
 
     public static void register(TransitionTable table) {
-        table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, SubmitSteps::userPrompt);
-        table.register(TransitionTable.ANY_STATE, FollowUpSubmitted.TYPE, SubmitSteps::followUp);
-        table.register(TransitionTable.ANY_STATE, SteerSubmitted.TYPE, SubmitSteps::steer);
+        table.register(TransitionTable.ANY_STATE, SessionCreated.TYPE, SessionSteps::created);
+        // 对会话说的话：每种是自己的事件类型，都走同一个处理函数，怎么办由 InputPolicy 那张表定
+        table.register(TransitionTable.ANY_STATE, UserPrompt.TYPE, InboxSteps::arrived);
+        table.register(TransitionTable.ANY_STATE, Assignment.TYPE, InboxSteps::arrived);
+        table.register(TransitionTable.ANY_STATE, Report.TYPE, InboxSteps::arrived);
         table.register(TransitionTable.ANY_STATE, QueueChanged.TYPE, QueueSteps::changed);
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
-        table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, CancelSteps::commandDropped);
+        table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, Outbox::commandDropped);
+        // 送达（delivery）：确认、不收、启动时重送；哪个阶段都收
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Delivered.TYPE, Outbox::delivered);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Refused.TYPE, Outbox::refused);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Redeliver.TYPE, Outbox::redeliver);
         table.register(TransitionTable.ANY_STATE, RunInterrupted.TYPE, CancelSteps::interrupted);
         table.register(TransitionTable.ANY_STATE, ModelInterrupted.TYPE, ModelSteps::modelInterrupted);
         table.register(TransitionTable.ANY_STATE, CompactRequested.TYPE, CompactSteps::requested);
@@ -57,12 +63,9 @@ public final class BuiltinSteps {
         table.register(AnswerSteps.AWAITING_ANSWER, Answered.TYPE, AnswerSteps::answered);
         table.register(AnswerSteps.AWAITING_ANSWER, TimerFired.TYPE, AnswerSteps::expired);
         table.register(TransitionTable.ANY_STATE, Answered.TYPE, AnswerSteps::ignored);
-        // 任务：到了为它开的会话；结果回到放出它的会话；用户要停；期限到（没人等的定时器都走这一行，不是任务的不动）
-        table.register(TransitionTable.ANY_STATE, TaskAssigned.TYPE, TaskSteps::assigned);
-        table.register(TransitionTable.ANY_STATE, TaskEnded.TYPE, TaskSteps::ended);
-        table.register(TransitionTable.ANY_STATE, TaskStopRequested.TYPE, TaskSteps::stopRequested);
-        // 放出任务的一方要它停：任务那一轮和被撤销一样结束
-        table.register(TransitionTable.ANY_STATE, tantalum.value.event.TaskCancelled.TYPE, CancelSteps::cancel);
-        table.register(TransitionTable.ANY_STATE, TimerFired.TYPE, TaskSteps::timerFired);
+        // 交代：用户要停；交代的一方不要它了；期限到（没人等的定时器都走这一行，不是交代的不动）
+        table.register(TransitionTable.ANY_STATE, StopRequested.TYPE, AssignmentSteps::stopRequested);
+        table.register(TransitionTable.ANY_STATE, AssignmentCancelled.TYPE, AssignmentSteps::cancelled);
+        table.register(TransitionTable.ANY_STATE, TimerFired.TYPE, AssignmentSteps::timerFired);
     }
 }

@@ -13,6 +13,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.TextSwap;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.ContextSection;
+import tantalum.value.state.InboxItem;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
@@ -24,8 +25,8 @@ import tantalum.value.state.Withdrawal;
  * 撤下文字（{@link TextWithdrawn}）。任何状态下都能做：不加不减消息，不动工具调用和结果的配对，不改运行的走向。
  * <p>历史只追加，这里一个字也不改：撤下的文字记进会话的 {@link SessionState#withdrawn()}，带上当时历史有多少条，
  * {@link SessionState#view()} 给模型看的时候把这之前的消息里逐字出现的原文换掉。撤下以后才说的话不受影响。
- * <p>不在历史里、本来就是整份替换的东西直接换：压缩后的替换段、排队的提问、冻结的上下文段和钩子的话；正在跑的一轮里
- * 还没并进历史的插话和已经回来的工具结果（它们并进历史时就已经是换过的）。
+ * <p>不在历史里、本来就是整份替换的东西直接换：压缩后的替换段、收件队列里的每一条（排着的、等着并进这一轮的）、
+ * 冻结的上下文段和钩子的话；正在跑的一轮里已经回来的工具结果（它们并进历史时就已经是换过的）。
  * <p>只按字面（{@link TextSwap}）。哪些文字该撤下由送事件的一方定，内核不判断。原文哪里都没出现时什么都不改，
  * 所以重复送来没有害处。
  */
@@ -40,7 +41,8 @@ public final class WithdrawSteps {
             return Decision.unchanged(context.state());
         }
         int places = 0;
-        // 历史：一段一段看，在模型现在看到的样子里还出现的才记（已经撤下过的不再记一遍）
+        // 历史：一段一段看，在模型现在看到的样子里还出现的才记（已经撤下过的不再记一遍）。压缩去掉过前面的历史时，原文可能只在
+        // 去掉的那部分里（账里还有，插件读账时按这份撤下记录换掉），所以那时只要以前没记过同样的一段就记
         List<Withdrawal> more = new ArrayList<>();
         for (Swap swap : event.swaps()) {
             TextSwap one = new TextSwap(List.of(swap));
@@ -48,32 +50,42 @@ public final class WithdrawSteps {
                 continue;
             }
             int found = 0;
-            for (int i = 0; i < session.messages().size(); i++) {
+            for (int i = session.windowStart(); i < session.historySize(); i++) {
                 found += one.places(session.said(i));
             }
-            if (found > 0) {
-                more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size(), context.envelope().seq()));
+            boolean maybeDropped = session.windowStart() > 0 && session.withdrawn().stream()
+                    .noneMatch(each -> each.original().equals(swap.original()) && each.replacement().equals(swap.replacement()));
+            if (found > 0 || maybeDropped) {
+                more.add(new Withdrawal(swap.original(), swap.replacement(), session.historySize(), context.envelope().seq()));
                 places += found;
             }
         }
         TextSwap swap = new TextSwap(event.swaps());
         Compaction compaction = session.compaction() == null ? null
                 : new Compaction(swap.messages(session.compaction().replacement()), session.compaction().tailFrom());
-        List<Message> followUps = swap.messages(session.followUps());
+        List<Message> queued = session.inbox().stream().map(InboxItem::message).toList();
+        List<Message> swapped = swap.messages(queued);
+        List<InboxItem> inbox = new ArrayList<>(session.inbox().size());
+        for (int i = 0; i < swapped.size(); i++) {
+            inbox.add(session.inbox().get(i).withMessage(swapped.get(i)));
+        }
         SessionContext frozen = context(swap, session.context());
         RunState run = session.activeRun() == null ? null : context.state().runs().get(session.activeRun());
         RunState nextRun = run == null ? null : run(swap, run);
-        places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(session.followUps())
+        places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(queued)
                 + places(swap, session.context()) + (run == null ? 0 : places(swap, run));
-        if (places == 0) {
+        if (places == 0 && more.isEmpty()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        out.put(session.withdrawing(more, followUps, compaction, frozen));
+        out.put(session.withdrawing(more, inbox, compaction, frozen));
         if (nextRun != null) {
             out.put(nextRun);
         }
-        out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), places)));
+        // 只在压缩去掉的部分里有（内存里一处也没换到）时不报，和以前“一处都没换到不报”一样
+        if (places > 0) {
+            out.report(List.of(new TextSwapped(new RunRef(session.principal(), session.id(), session.lastRun()), places)));
+        }
         return out.decision();
     }
 
@@ -94,7 +106,7 @@ public final class WithdrawSteps {
     }
 
     private static int places(TextSwap swap, RunState run) {
-        int places = swap.places(run.pendingSteers());
+        int places = 0;
         if (run.tools() != null) {
             for (ToolSlot slot : run.tools().slots()) {
                 places += slot.result() == null ? 0 : swap.places(slot.result());
@@ -130,6 +142,6 @@ public final class WithdrawSteps {
                 }
             }
         }
-        return run.withPendingSteers(swap.messages(run.pendingSteers())).withTools(round);
+        return run.withTools(round);
     }
 }

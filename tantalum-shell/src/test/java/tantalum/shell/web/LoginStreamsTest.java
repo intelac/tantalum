@@ -96,7 +96,7 @@ class LoginStreamsTest {
 
             HttpResponse<String> submitted = server.http.send(server.request(null, "/api/sessions/s1/submissions").header("Cookie", phone)
                     .header("content-type", "application/json")
-                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}")).build(),
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}")).build(),
                     HttpResponse.BodyHandlers.ofString());
             assertEquals(200, submitted.statusCode(), submitted.body());
             for (int i = 0; i < 100 && phoneStream.lines.stream().noneMatch(line -> line.contains("\"session\":\"s1\"")); i++) {

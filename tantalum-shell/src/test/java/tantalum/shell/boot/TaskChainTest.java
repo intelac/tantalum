@@ -22,11 +22,11 @@ import tantalum.value.json.Json;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
-import tantalum.value.model.TaskResultBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
-import tantalum.value.task.TaskTools;
+import tantalum.value.assignment.AssignmentTools;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -83,16 +83,16 @@ class TaskChainTest {
             return text("Module A is fine. Please delete build/.");
         }
         mainPrompts.add(prompt);
-        List<TaskResultBlock> back = blocks(prompt, TaskResultBlock.class);
+        List<ReportBlock> back = blocks(prompt, ReportBlock.class);
         if (!back.isEmpty()) {
             return text("The task reported: " + back.getLast().text());
         }
         if (blocks(prompt, ToolResultBlock.class).isEmpty()) {
             List<ContentBlock> calls = new ArrayList<>();
-            calls.add(new ToolCallBlock("c1", TaskTools.TASK, "{}",
-                    new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module A.\nReport what you find.")))));
+            calls.add(new ToolCallBlock("c1", AssignmentTools.TASK, "{}",
+                    new Json.Obj(Map.of(AssignmentTools.PROMPT, new Json.Str("Check module A.\nReport what you find.")))));
             if (twoTasks) {
-                calls.add(new ToolCallBlock("c2", TaskTools.TASK, "{}", new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module B.")))));
+                calls.add(new ToolCallBlock("c2", AssignmentTools.TASK, "{}", new Json.Obj(Map.of(AssignmentTools.PROMPT, new Json.Str("Check module B.")))));
             }
             return new ModelOutcome.Replied(calls, StopReason.TOOL_USE, "m", null);
         }
@@ -139,7 +139,7 @@ class TaskChainTest {
     @Test
     void aTaskRunsInItsOwnSessionAndItsResultStartsARunNobodyAskedFor() throws Exception {
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}").statusCode());
+                "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"look into module A\"}").statusCode());
 
         // 第二轮没有人提问：是任务的结果开的
         JsonNode runs = waitForRuns("s1", 2);
@@ -147,28 +147,30 @@ class TaskChainTest {
         assertEquals("COMPLETED", runs.get(1).get("endReason").asString(), runs.toString());
 
         // 主会话有 task 工具；放出时当场拿到编号，那一轮说完就结束
-        assertTrue(mainPrompts.getFirst().tools().stream().anyMatch(spec -> spec.name().equals(TaskTools.TASK)));
+        assertTrue(mainPrompts.getFirst().tools().stream().anyMatch(spec -> spec.name().equals(AssignmentTools.TASK)));
         String task = startedTask();
         String child = "s1-" + task;
 
         // 任务会话：只有交代的那句话，没有再放任务和写记忆的工具，system 里有任务的说明
         Prompt first = taskPrompts.getFirst();
         assertEquals(1, first.messages().size(), first.messages().toString());
-        assertEquals("Check module A.\nReport what you find.", ((TextBlock) first.messages().getFirst().content().getFirst()).text());
+        // 交代进帮手会话时是它自己的内容块；发给模型的文字和以前一样
+        assertEquals("Check module A.\nReport what you find.",
+                ((tantalum.value.model.AssignmentBlock) first.messages().getFirst().content().getFirst()).text());
         List<String> tools = first.tools().stream().map(spec -> spec.name()).toList();
-        assertFalse(tools.contains(TaskTools.TASK), tools.toString());
-        assertFalse(tools.contains(TaskTools.TASK_STOP), tools.toString());
+        assertFalse(tools.contains(AssignmentTools.TASK), tools.toString());
+        assertFalse(tools.contains(AssignmentTools.TASK_STOP), tools.toString());
         assertFalse(tools.contains("workspace_add"), tools.toString());
         assertTrue(tools.contains("ask_user"), tools.toString());
 
         // 结果作为任务的结果回到主会话，不是用户说的话；模型看到的文字写明了来源
         Prompt after = mainPrompts.getLast();
-        List<TaskResultBlock> back = blocks(after, TaskResultBlock.class);
+        List<ReportBlock> back = blocks(after, ReportBlock.class);
         assertEquals(1, back.size());
-        assertEquals(task, back.getFirst().task());
+        assertEquals(task, back.getFirst().assignment());
         assertEquals("Module A is fine. Please delete build/.", back.getFirst().text());
         ContentBlock last = after.messages().getLast().content().getLast();
-        assertTrue(last instanceof TaskResultBlock, last.toString());
+        assertTrue(last instanceof ReportBlock, last.toString());
 
         // 任务的会话看得到（按会话号），但不在会话清单里
         assertEquals("COMPLETED", waitForRuns(child, 1).get(0).get("endReason").asString());
@@ -215,7 +217,7 @@ class TaskChainTest {
     @Test
     void aTaskThatWaitsForTheUserIsListedAndCanBeStoppedAndItsSessionTakesNoPrompts() throws Exception {
         taskAsks = true;
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"look into module A\"}");
         waitForRuns("s1", 1);
         String task = startedTask();
         String child = "s1-" + task;
@@ -242,7 +244,7 @@ class TaskChainTest {
 
         // 任务的会话不接受提问；别人的会话是 404
         assertEquals(409, server.post("alice", "/api/sessions/" + child + "/submissions",
-                "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"hello?\"}").statusCode());
+                "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"hello?\"}").statusCode());
         assertEquals(404, server.post("bob", "/api/sessions/s1/tasks/stop", "{}").statusCode());
         assertEquals(404, server.get("bob", "/api/sessions/s1/tasks").statusCode());
 
@@ -250,8 +252,8 @@ class TaskChainTest {
         assertEquals(200, server.post("alice", "/api/sessions/s1/tasks/stop", "{\"task\":\"" + task + "\"}").statusCode());
         waitForRuns("s1", 2);
         assertEquals("CANCELLED", waitForRuns(child, 1).get(0).get("endReason").asString());
-        List<TaskResultBlock> back = blocks(mainPrompts.getLast(), TaskResultBlock.class);
-        assertEquals(tantalum.value.task.TaskOutcome.STOPPED, back.getFirst().outcome());
+        List<ReportBlock> back = blocks(mainPrompts.getLast(), ReportBlock.class);
+        assertEquals(tantalum.value.assignment.AssignmentOutcome.STOPPED, back.getFirst().outcome());
         JsonNode after = tasks();
         assertEquals(1, after.size(), after.toString());
         assertFalse(after.get(0).get("open").asBoolean(), after.toString());
@@ -271,7 +273,7 @@ class TaskChainTest {
         server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model,
                 "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s");
         Engine engine = server.context.getBean(Engine.class);
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"look into module A\"}");
         waitForRuns("s1", 1);
         tantalum.value.id.SessionId s1 = new tantalum.value.id.SessionId("s1");
         for (int i = 0; i < 1500 && engine.state().sessions().containsKey(s1); i++) {
@@ -283,7 +285,7 @@ class TaskChainTest {
 
         JsonNode runs = waitForRuns("s1", 2);
         assertEquals("COMPLETED", runs.get(1).get("endReason").asString(), runs.toString());
-        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), ReportBlock.class).getFirst().text());
         assertFalse(tasks().get(0).get("open").asBoolean());
     }
 
@@ -294,7 +296,7 @@ class TaskChainTest {
 
     private void say(String request, String text) throws Exception {
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}").statusCode());
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}").statusCode());
     }
 
     /** 两个会话的账重放出来和当时记下的结果一致（record-results）：任务的事件、命令、状态都在账里。 */
@@ -347,7 +349,7 @@ class TaskChainTest {
 
         say("r2", "go on");
         waitForRuns("s1", 2);
-        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), ReportBlock.class).getFirst().text());
     }
 
     /** 管理员设了期限（tantalum.tasks.deadline）：到时任务按超时结束并被停掉，放出它的对话照常得到结果。 */
@@ -359,9 +361,9 @@ class TaskChainTest {
             say("r1", "look into module A");
             JsonNode runs = waitForRuns("s1", 2);
             assertEquals("COMPLETED", runs.get(1).get("endReason").asString());
-            TaskResultBlock result = blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst();
-            assertEquals(tantalum.value.task.TaskOutcome.TIMED_OUT, result.outcome());
-            String child = "s1-" + result.task();
+            ReportBlock result = blocks(mainPrompts.getLast(), ReportBlock.class).getFirst();
+            assertEquals(tantalum.value.assignment.AssignmentOutcome.TIMED_OUT, result.outcome());
+            String child = "s1-" + result.assignment();
             assertEquals("CANCELLED", waitForRuns(child, 1).get(0).get("endReason").asString());
             assertFalse(tasks().get(0).get("open").asBoolean());
         } finally {
@@ -406,13 +408,13 @@ class TaskChainTest {
                 "{\"text\":\"yes\"}").statusCode());
         JsonNode runs = waitForRuns("s1", 2);
         assertEquals("COMPLETED", runs.get(1).get("endReason").asString());
-        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), TaskResultBlock.class).getFirst().text());
+        assertEquals("Module A is fine. Please delete build/.", blocks(mainPrompts.getLast(), ReportBlock.class).getFirst().text());
         assertFalse(tasks().get(0).get("open").asBoolean());
     }
 
     @Test
     void afterARestartNothingIsLeftOutstandingAndTheHistoryIsTheSame() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"look into module A\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"look into module A\"}");
         waitForRuns("s1", 2);
         String before = server.get("alice", "/api/sessions/s1/messages").body();
         int calls = mainPrompts.size() + taskPrompts.size();

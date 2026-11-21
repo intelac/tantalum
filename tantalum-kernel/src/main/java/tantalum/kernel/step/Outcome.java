@@ -22,7 +22,7 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
-import tantalum.value.task.TaskLimits;
+import tantalum.value.assignment.AssignmentLimits;
 
 /** 一次 step 内累积的结果。只活在一次纯函数调用里，不会逃逸到外面。 */
 final class Outcome {
@@ -32,20 +32,30 @@ final class Outcome {
     final ToolSafety toolSafety;
     final int maxParallelTools;
     final int maxWorkRounds;
-    final TaskLimits taskLimits;
+    final AssignmentLimits assignmentLimits;
     private KernelState state;
     private final List<Command> commands = new ArrayList<>();
     private final List<Fact> facts = new ArrayList<>();
     private int nextCommand;
 
+    /** 这个会话在这一步开始时从头数有多少条消息（这一步才建的为 0）。 */
+    int historyAtStart(tantalum.value.id.SessionId session) {
+        tantalum.value.state.SessionState at = started.sessions().get(session);
+        return at == null ? 0 : at.historySize();
+    }
+
+    /** 这一步开始时的状态：压缩时只能去掉这一步开始前就有的消息。 */
+    private final KernelState started;
+
     Outcome(StepContext context) {
         this.state = context.state();
+        this.started = context.state();
         this.envelope = context.envelope();
         this.hooks = context.hooks();
         this.toolSafety = context.toolSafety();
         this.maxParallelTools = context.maxParallelTools();
         this.maxWorkRounds = context.maxWorkRounds();
-        this.taskLimits = context.tasks();
+        this.assignmentLimits = context.assignments();
     }
 
     KernelState state() {
@@ -70,6 +80,16 @@ final class Outcome {
 
     void put(SessionState session) {
         state = state.with(session);
+    }
+
+    /** 这一步之后状态里不再有这个运行（记进结果的 removedRuns）。 */
+    void remove(tantalum.value.id.RunId run) {
+        state = state.without(run);
+    }
+
+    /** 这一步进行到现在的全部运行。 */
+    java.util.Collection<RunState> runs() {
+        return state.runs().values();
     }
 
     /** 用户状态只有用量累计这一种写法，日期取事件时间。 */

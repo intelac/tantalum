@@ -18,7 +18,7 @@ test.describe("连接", () => {
 
     // 断线期间由另一个客户端在同一个会话里提问，浏览器收不到推送。
     const submitted = await request.post(`/api/sessions/${session}/submissions`, {
-      data: { requestId: `offline-${Date.now()}`, mode: "prompt", text: "hello 断线中" },
+      data: { requestId: `offline-${Date.now()}`, delivery: "queue", text: "hello 断线中" },
       headers: origin,
     });
     expect(submitted.ok(), await submitted.text()).toBeTruthy();

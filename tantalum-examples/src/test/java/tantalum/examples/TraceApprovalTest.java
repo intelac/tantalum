@@ -93,7 +93,7 @@ class TraceApprovalTest {
         try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model,
                 context -> context.registerBean("toolApproval", KernelHook.class, () -> new ToolApprovalHook(Set.of("memory_write"))))) {
             assertEquals(200, send(server, "PUT", "/api/plugins/plugin/toolApproval", "{\"enabled\":true}").statusCode());
-            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"save it\"}").statusCode());
+            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"save it\"}").statusCode());
             JsonNode asked = awaitQuestion(server);
             String write = toolRecord(server, "c2");
 
@@ -123,7 +123,7 @@ class TraceApprovalTest {
                         "choices", new Json.Arr(List.of(new Json.Str("delete"), new Json.Str("keep")))))), StopReason.TOOL_USE, "m", null)
                 : new ModelOutcome.Replied(List.of(new TextBlock("ok")), StopReason.END_TURN, "m", null);
         try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model)) {
-            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"clean up\"}").statusCode());
+            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"clean up\"}").statusCode());
             JsonNode asked = awaitQuestion(server);
             String own = toolRecord(server, "a1");
             assertEquals(own, records(server, "question").get(0).get("tool").asString());
@@ -139,7 +139,7 @@ class TraceApprovalTest {
         ModelClient model = (prompt, chunks) -> new ModelOutcome.Replied(List.of(new TextBlock("done")), StopReason.END_TURN, "m", null);
         try (TestServer server = new TestServer(temp.resolve("data"), temp.resolve("ws"), model,
                 context -> context.registerBean("askFirst", KernelHook.class, AskFirst::new))) {
-            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hello\"}").statusCode());
+            assertEquals(200, send(server, "POST", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hello\"}").statusCode());
             JsonNode asked = awaitQuestion(server);
             assertEquals(200, send(server, "POST", "/api/sessions/s1/questions/" + asked.get("id").asString(), "{\"choice\":\"go\"}").statusCode());
             awaitEnd(server);

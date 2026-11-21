@@ -75,6 +75,18 @@ public final class LoopFixtures {
         return CleanroomFixture.of(kernel, halted, output, projections, facts, view, results, NO_STEPS, never(projections));
     }
 
+    /** 建一个普通会话的那一格：比所有提问都早（序号 -2，不占 0 起的编号）。 */
+    public static CleanroomRing.Slot created(Principal principal, SessionId session) {
+        CleanroomRing.Slot slot = new CleanroomRing.Slot();
+        slot.envelope = new EventEnvelope(-2, java.time.Instant.EPOCH, principal, session, null, tantalum.value.event.SessionCreatedFixture.regular());
+        return slot;
+    }
+
+    /** 建一个普通会话的事件，序号由写入方分配：放进输入环时用。 */
+    public static EventEnvelope creating(Principal principal, SessionId session) {
+        return new EventEnvelope(EventEnvelope.UNASSIGNED, java.time.Instant.EPOCH, principal, session, null, tantalum.value.event.SessionCreatedFixture.regular());
+    }
+
     /** 不载入冷会话的分发器，下游只看事件。 */
     public static LaneDispatcher dispatcher(int capacity, Sequence sequence, UserLane.Writer writer, Predicate<EventEnvelope> cleanroom) {
         return dispatcher(capacity, capacity, sequence, writer, cleanroom);

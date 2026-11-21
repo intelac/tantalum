@@ -60,7 +60,7 @@ public final class RecordCodec {
 
     private static final TypeReference<List<RunId>> RUN_IDS = new TypeReference<>() { };
     private static final Set<String> FACTS = Set.of("PhaseChanged", "ContextCompacted", "CompactionFailed", "HookDecided",
-            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled", "QueueEdited", "TaskStarted", "TaskSettled");
+            "HookReported", "ImagesOmitted", "QuestionAsked", "QuestionSettled", "QueueEdited", "AssignmentStarted", "ReportSettled");
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
     @JsonSubTypes({
@@ -69,9 +69,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = DoWork.class, name = "DoWork"),
         @JsonSubTypes.Type(value = StartTimer.class, name = "StartTimer"),
         @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands"),
-        @JsonSubTypes.Type(value = tantalum.value.command.StartTask.class, name = "StartTask"),
-        @JsonSubTypes.Type(value = tantalum.value.command.ReturnTask.class, name = "ReturnTask"),
-        @JsonSubTypes.Type(value = tantalum.value.command.StopTask.class, name = "StopTask")
+        @JsonSubTypes.Type(value = tantalum.value.command.Deliver.class, name = "Deliver"),
+        @JsonSubTypes.Type(value = tantalum.value.command.Acknowledge.class, name = "Acknowledge")
     })
     private interface CommandMixin {}
 
@@ -86,8 +85,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = QuestionAsked.class, name = "QuestionAsked"),
         @JsonSubTypes.Type(value = QuestionSettled.class, name = "QuestionSettled"),
         @JsonSubTypes.Type(value = QueueEdited.class, name = "QueueEdited"),
-        @JsonSubTypes.Type(value = tantalum.value.decision.TaskStarted.class, name = "TaskStarted"),
-        @JsonSubTypes.Type(value = tantalum.value.decision.TaskSettled.class, name = "TaskSettled"),
+        @JsonSubTypes.Type(value = tantalum.value.decision.AssignmentStarted.class, name = "AssignmentStarted"),
+        @JsonSubTypes.Type(value = tantalum.value.decision.ReportSettled.class, name = "ReportSettled"),
         @JsonSubTypes.Type(value = StepFailed.class, name = "StepFailed")
     })
     private interface FactMixin {}
@@ -175,6 +174,20 @@ public final class RecordCodec {
         return decode(object, seq, memo);
     }
 
+    /** 账里编码状态用的严格 mapper（快照和结果行共用）。 */
+    JsonMapper mapper() {
+        return mapper;
+    }
+
+    /** 运行在账里的样子（平的一层，见 {@link RunDelta}）。 */
+    ObjectNode run(RunState run) {
+        return runs.encode(run);
+    }
+
+    RunState run(ObjectNode flat) {
+        return runs.decode(flat);
+    }
+
     /** 解析一行会话文件用的 mapper：浮点数按 {@code BigDecimal} 读，事件和结果读出来都和文本逐字节相同。 */
     public JsonNode parse(String line) {
         return mapper.readTree(line);
@@ -191,7 +204,7 @@ public final class RecordCodec {
             for (RunState run : record.runs()) {
                 RunState last = memo.complete() ? memo.runs().get(run.ref().run()) : null;
                 memo.runs().put(run.ref().run(), run);
-                written.add(last == null ? mapper.valueToTree(run) : runs.encode(run, last));
+                written.add(last == null ? runs.encode(run) : runs.encode(run, last));
             }
         }
         if (!record.removedRuns().isEmpty()) {
@@ -234,7 +247,7 @@ public final class RecordCodec {
             for (JsonNode node : root.path("runs")) {
                 RunState run = node.path("delta").asBoolean(false)
                         ? runs.merge((ObjectNode) node, memo.runs().get(mapper.treeToValue(node.required("ref"), RunRef.class).run()))
-                        : mapper.treeToValue(node, RunState.class);
+                        : runs.decode((ObjectNode) node);
                 memo.runs().put(run.ref().run(), run);
                 decodedRuns.add(run);
             }

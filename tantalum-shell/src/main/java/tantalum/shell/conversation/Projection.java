@@ -19,6 +19,16 @@ public interface Projection {
         return apply(envelope, decision);
     }
 
+    /**
+     * 信封点名的运行这一步前后都不在状态里：内核一轮结束时去掉了更早结束的（live-views），这是它的迟到事件，内核没收。
+     * 内核也什么都没改时，两个投影都不为它出条目、不改条目。
+     */
+    static boolean forgotten(EventEnvelope envelope, KernelState before, Decision decision) {
+        // 内核还改了状态的（比如挂在一轮旧运行上的“不收”回执把交代记成失败，delivery）照常投影
+        return envelope.run() != null && before != null && !before.runs().containsKey(envelope.run())
+                && !decision.newState().runs().containsKey(envelope.run()) && decision.newState().equals(before);
+    }
+
     default void restore(SessionId session, Transcript.Saved saved) {
     }
 

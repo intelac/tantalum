@@ -15,7 +15,6 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.StopReason;
-import tantalum.value.state.OwnerRef;
 
 class EventsTest {
 
@@ -27,9 +26,11 @@ class EventsTest {
     @Test
     void everyEventNamesItsTypeAndVersion() {
         List<Event> events = List.of(
-                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(SESSION), "hi"),
-                SteerSubmittedFixture.of(SUB, REQ, "hi"),
-                FollowUpSubmittedFixture.of(SUB, REQ, "hi"),
+                UserPromptFixture.of(SUB, REQ, "hi"),
+                UserPromptFixture.join(SUB, REQ, "hi"),
+                new SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null),
+                new Assignment("t1-0", SESSION, Root.USER, "do it", null),
+                new Report("t1-0", tantalum.value.assignment.AssignmentOutcome.COMPLETED, "done", Root.USER, SESSION),
                 new Cancel(REQ),
                 ContextAssembledFixture.of(CMD, "system", List.of(), null, List.of()),
                 new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null, null, null, null),

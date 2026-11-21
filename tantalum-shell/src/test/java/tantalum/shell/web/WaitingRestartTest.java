@@ -38,7 +38,6 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -86,7 +85,9 @@ class WaitingRestartTest {
             arguments.put("timeout_seconds", new Json.Num(BigDecimal.valueOf(timeoutSeconds)));
         }
         ResultWriter.write(new SessionPaths(data()), List.of(
-                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "clean up")),
+                // 账里的第一条：建会话
+                event(0, null, tantalum.value.event.SessionCreatedFixture.regular()),
+                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), "clean up")),
                 event(2, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 event(3, RUN, new ModelReplied(new CommandId("s1_2-0"),
                         List.of(new ToolCallBlock("a1", "ask_user", "{}", new Json.Obj(arguments))), StopReason.TOOL_USE, "m", null, null, null, null))));

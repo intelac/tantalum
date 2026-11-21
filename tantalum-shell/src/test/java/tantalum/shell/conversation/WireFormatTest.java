@@ -1,5 +1,6 @@
 package tantalum.shell.conversation;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tantalum.shell.conversation.TranscriptFixture.call;
@@ -40,9 +41,7 @@ import tantalum.shell.trace.TraceJson;
 import tantalum.shell.trace.RunTree;
 import tantalum.shell.trace.Tally;
 import tantalum.shell.trace.TraceRecord;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPrompt;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.command.DoWork;
@@ -54,7 +53,6 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.WorkDone;
@@ -85,8 +83,6 @@ import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import tantalum.value.attachment.ImageRefFixture;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.hook.AllowFixture;
@@ -102,13 +98,13 @@ class WireFormatTest {
             new DefaultPrettyPrinter().withObjectIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE.withLinefeed("\n"));
 
     private static final Path EXPECTED = Path.of("src/test/resources/wire");
-    private static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
+    static final CompactionSettings SETTINGS = CompactionSettingsFixture.of(1000, 200, 70, 60, 30, 500);
     private static final JsonMapper SORTED = JsonMapper.builder().enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
 
     private final EventCodec codec = EventCodec.withBuiltins();
     private final TranscriptFixture fx = new TranscriptFixture();
 
-    private static String block(String tag) {
+    static String block(String tag) {
         return (tag + " ").repeat(45).substring(0, 90);
     }
 
@@ -194,7 +190,9 @@ class WireFormatTest {
     private static final KernelHook CITE = new KernelHook() {
         @Override public String name() { return "cite"; }
         @Override public HookResult beforeModelCall(KernelState state, HookContext context) {
-            boolean cited = state.sessions().get(context.run().session()).messages().contains(Message.user("cited"));
+            // 只在会话第一次调模型之前要：压缩之后状态里只剩窗口（history-window），看不到早先那条，所以也看窗口有没有挪过
+            tantalum.value.state.SessionState session = state.sessions().get(context.run().session());
+            boolean cited = session.windowStart() > 0 || session.messages().contains(Message.user("cited"));
             return cited ? Allow.PLAIN : new NeedWork("lookup", new Json.Str("q1"));
         }
     };
@@ -210,18 +208,18 @@ class WireFormatTest {
     /** 在重试等待里插话之后的那一步：实时投影在这里被回收、再从会话文件冷载入。 */
     private int coldLoadAt;
 
-    private static ContextSection memory(String body) {
+    static ContextSection memory(String body) {
         return new ContextSection("memory", body, true);
     }
 
-    private static RunId prompt(TranscriptFixture fx, String text, String system, List<ContextSection> sections) {
+    static RunId prompt(TranscriptFixture fx, String text, String system, List<ContextSection> sections) {
         fx.feed(null, fx.prompt(text));
         RunId run = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembled(fx, run, system, sections);
         return run;
     }
 
-    private static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
+    static void assembled(TranscriptFixture fx, RunId run, String system, List<ContextSection> sections) {
         fx.feed(run, ContextAssembledFixture.of(fx.lastCommands().getFirst().id(), system, List.of(READ), SETTINGS, sections));
     }
 
@@ -235,14 +233,22 @@ class WireFormatTest {
      * 自动压缩后 system 更新、手动压缩（轮次之间），最后一轮工具运行时重启。
      */
     private TranscriptFixture traceScenario() {
-        TranscriptFixture fx = new TranscriptFixture(true, List.of(STYLE, CITE, GUARD));
+        return traceScenario(new TranscriptFixture(true, List.of(STYLE, CITE, GUARD)));
+    }
+
+    /** 同样的钩子：history-window 的等价测试用它在“不去掉历史”的夹具上再跑一遍。 */
+    static TranscriptFixture fixture() {
+        return new TranscriptFixture(true, List.of(STYLE, CITE, GUARD));
+    }
+
+    TranscriptFixture traceScenario(TranscriptFixture fx) {
         RunId first = prompt(fx, block("q1"), "sys", List.of(memory("a")));
         DoWork work = (DoWork) fx.lastCommands().getFirst();
         fx.feed(first, new WorkDone(work.id(), work.workType(), new Json.Str("source: a.md"), false, "cited", fx.now().minusMillis(800)));
         fx.feed(first, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, Duration.ofSeconds(2), "", "HTTP 429: slow down",
                 fx.now().minusMillis(900), null, OPTIONS));
         CommandId timer = fx.lastCommands().getFirst().id();
-        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
+        fx.feed(first, UserPromptFixture.join(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
         coldLoadAt = fx.envelopes.size();
         fx.feed(first, new TimerFired(timer));
         fx.feed(first, new ModelReplied(fx.callModel(), List.of(claudeThinking("plan"), call("c1", "read_file"),
@@ -291,7 +297,7 @@ class WireFormatTest {
                 journal.write(envelope);
             }
         }
-        return use.apply(new RecordReplay(paths, new SessionFileReader(codec)), paths);
+        return use.apply(new RecordReplay(paths, new SessionFileReader(codec), new Snapshots(EventCodec.withBuiltins().mapper())), paths);
     }
 
     @FunctionalInterface
@@ -480,12 +486,11 @@ class WireFormatTest {
     /** 提问带图片和 PDF；运行中插话带文件；排队的提交只有图片、没有文字，运行结束后开下一轮。 */
     private TranscriptFixture attachmentScenario() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());
-        fx.feed(null, UserPromptFixture.of(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
-                "what is this?", List.of(PHOTO, REPORT)));
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("p"), new RequestId("p"), "what is this?", List.of(PHOTO, REPORT)));
         RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, first);
-        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
-        fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
+        fx.feed(first, UserPromptFixture.join(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
         fx.feed(first, fx.reply(text("a photo and a report")));
         fx.feed(first, fx.reply(text("and the notes"))); // 插话让运行多调一次模型，这次才结束
         RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
@@ -548,11 +553,12 @@ class WireFormatTest {
 
     private TranscriptFixture skillScenario() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());
-        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
-                "/pdf-tools and /slow please", List.of(), null, null, List.of(PDF_SKILL, SLOW_SKILL)));
+        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), "/pdf-tools and /slow please", List.of(), null,
+                List.of(PDF_SKILL, SLOW_SKILL), List.of(), tantalum.value.event.Delivery.QUEUE));
         RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, first);
-        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "/pdf-tools again", List.of(), null, List.of(PDF_SKILL)));
+        fx.feed(null, new UserPrompt(new SubmissionId("f"), new RequestId("f"), "/pdf-tools again", List.of(), null, List.of(PDF_SKILL), List.of(),
+                tantalum.value.event.Delivery.QUEUE));
         fx.feed(first, fx.reply(text("converted")));
         RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, second);

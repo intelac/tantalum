@@ -231,7 +231,7 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
                              int maxSummarizedToolResultBytes, long summaryMaxTokens, boolean windowFromModel, long mainWindowTokens) {
 
         public Compaction {
-            mainWindowTokens = mainWindowTokens > 0 ? mainWindowTokens : tantalum.shell.handler.MainWindow.DEFAULT_TOKENS;
+            mainWindowTokens = mainWindowTokens > 0 ? mainWindowTokens : tantalum.shell.profile.SessionProfile.DEFAULT_RECENT_TOKENS;
             requirePositive("reserveTokens", reserveTokens);
             requirePositive("keepRecentTokens", keepRecentTokens);
             requirePositive("maxKeptToolResultBytes", maxKeptToolResultBytes);
@@ -442,22 +442,22 @@ public record TantalumProperties(Path dataDir, Path workspace, String workspaceM
      */
     public record Tasks(Integer maxOpen, Integer maxUnattendedRuns, Integer maxUnattendedTasks, Duration deadline) {
 
-        public tantalum.value.task.TaskLimits limits() {
-            tantalum.value.task.TaskLimits standard = tantalum.value.task.TaskLimits.DEFAULT;
-            return new tantalum.value.task.TaskLimits(maxOpen == null ? standard.maxOpen() : maxOpen,
+        public tantalum.value.assignment.AssignmentLimits limits() {
+            tantalum.value.assignment.AssignmentLimits standard = tantalum.value.assignment.AssignmentLimits.DEFAULT;
+            return new tantalum.value.assignment.AssignmentLimits(maxOpen == null ? standard.maxOpen() : maxOpen,
                     maxUnattendedRuns == null ? standard.maxUnattendedRuns() : maxUnattendedRuns,
-                    maxUnattendedTasks == null ? standard.maxUnattendedTasks() : maxUnattendedTasks, deadline);
+                    maxUnattendedTasks == null ? standard.maxUnattendedAssignments() : maxUnattendedTasks, deadline);
         }
     }
 
-    /** 任务的上限；没有这一节时全是默认值。 */
-    public tantalum.value.task.TaskLimits taskLimits() {
-        return tasks == null ? tantalum.value.task.TaskLimits.DEFAULT : tasks.limits();
+    /** 任务（交代）的上限；没有这一节时全是默认值。配置名照旧是 {@code tantalum.tasks.*}：给人看的说法是“任务”。 */
+    public tantalum.value.assignment.AssignmentLimits assignmentLimits() {
+        return tasks == null ? tantalum.value.assignment.AssignmentLimits.DEFAULT : tasks.limits();
     }
 
     /** 主窗口保留多少最近的原话（token，{@code tantalum.compaction.main-window-tokens}，memory-final-plan 第 11 节）。 */
     public long mainWindowTokens() {
-        return compaction == null ? tantalum.shell.handler.MainWindow.DEFAULT_TOKENS : compaction.mainWindowTokens();
+        return compaction == null ? tantalum.shell.profile.SessionProfile.DEFAULT_RECENT_TOKENS : compaction.mainWindowTokens();
     }
 
     /** 向模型读窗口吗；没有压缩配置段时读。 */

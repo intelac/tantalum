@@ -1,25 +1,22 @@
 package tantalum.value.event;
 
 import java.util.List;
+import java.util.Objects;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.ModelChoice;
-import tantalum.value.state.OwnerRef;
 
 /**
- * 用户提问，也是运行的创建事件。{@code attachments} 按上传顺序，旧行读出来是空列表。
- * {@code model} 是提交里带的选择（“要用什么”），没带或旧行为 null。
- * {@code dir} 是会话的工作目录（用户电脑上的绝对路径），只有会话的第一次提问带它才算数；没选或旧行为 null。
- * {@code skills} 是用户在文字里点名的技能（{@code /name}），按出现顺序；没有或旧行是空列表。
- * {@code attached} 是插件在提交时附的内容（memory-plugin），按插件的顺序；没有或旧行是空列表。
- * {@code offRecord} 为 true 时这是“不进记忆”的会话（memory-final-plan 第 11 节），只有会话的第一次提问带它才算数；
- * 没带、旧行为 null（只写 true，旧行逐字节不变）。
+ * 你说的一句话。{@code attachments} 按上传顺序。{@code model} 是提交里带的选择（“要用什么”），没带为 null；
+ * 并进正在跑的那一轮时不用它，那一轮的模型不变。{@code skills} 是文字里点名的技能（{@code /name}），按出现顺序，提交的那一刻读好。
+ * {@code attached} 是插件在提交时附的内容，按插件的顺序。{@code delivery} 是会话正忙时怎么送。
+ * 会话的目录、是不是“不进记忆”不在这里，在 {@link SessionCreated}。
  */
-public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text,
-                         List<AttachmentRef> attachments, ModelChoice model, String dir, List<SkillUse> skills,
-                         List<AttachedBlock> attached, Boolean offRecord) implements Submitted {
+public record UserPrompt(SubmissionId submission, RequestId request, String text, List<AttachmentRef> attachments,
+                         ModelChoice model, List<SkillUse> skills, List<AttachedBlock> attached, Delivery delivery)
+        implements Submitted, Input {
 
     public static final String TYPE = "UserPrompt";
 
@@ -27,17 +24,17 @@ public record UserPrompt(SubmissionId submission, RequestId request, OwnerRef ow
         attachments = attachments == null ? List.of() : List.copyOf(attachments);
         skills = skills == null ? List.of() : List.copyOf(skills);
         attached = attached == null ? List.of() : List.copyOf(attached);
-        offRecord = Boolean.TRUE.equals(offRecord) ? Boolean.TRUE : null;
+        Objects.requireNonNull(delivery, "delivery");
     }
 
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,
-                      ModelChoice model, String dir, List<SkillUse> skills, List<AttachedBlock> attached) {
-        this(submission, request, owner, text, attachments, model, dir, skills, attached, null);
+    @Override
+    public Kind kind() {
+        return Kind.PROMPT;
     }
 
-    public UserPrompt(SubmissionId submission, RequestId request, OwnerRef owner, String text, List<AttachmentRef> attachments,
-                      ModelChoice model, String dir, List<SkillUse> skills) {
-        this(submission, request, owner, text, attachments, model, dir, skills, List.of());
+    @Override
+    public Root root() {
+        return Root.USER;
     }
 
     @Override

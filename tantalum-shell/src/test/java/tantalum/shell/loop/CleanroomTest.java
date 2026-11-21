@@ -43,7 +43,6 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPromptFixture;
 
 class CleanroomTest {
@@ -64,7 +63,7 @@ class CleanroomTest {
         SessionId session = new SessionId("s");
         CleanroomRing.Slot slot = new CleanroomRing.Slot();
         slot.envelope = new EventEnvelope(seq, Instant.EPOCH, new Principal("u"), session, null,
-                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(session), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), "hi"));
         return slot;
     }
 
@@ -76,8 +75,11 @@ class CleanroomTest {
         captureRing.start();
         ring = captureRing;
         ResultPublisher publisher = new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0);
-        return LoopFixtures.cleanroom(kernel(), () -> halted,
+        Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> halted,
                 command -> accept && commands.add(command), LoopFixtures.NO_PROJECTION, (seq, index, fact) -> facts.add(fact), view, publisher);
+        // 会话 s 先建好：建会话这一步没有命令和事实，下面的测试只看提问之后
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
+        return cleanroom;
     }
 
     @Test
@@ -92,9 +94,10 @@ class CleanroomTest {
     @Test
     void stateAdvancesAcrossEvents() throws Exception {
         Cleanroom cleanroom = cleanroom();
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
         cleanroom.onEvent(prompt(0), 0, false);
         cleanroom.onEvent(prompt(1), 1, true);
-        assertEquals(1, view.current().sessions().get(new SessionId("s")).followUps().size());
+        assertEquals(1, view.current().sessions().get(new SessionId("s")).inbox().size());
         ring.shutdown(Duration.ZERO);
     }
 
@@ -127,6 +130,7 @@ class CleanroomTest {
         Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, commands::add, LoopFixtures.NO_PROJECTION,
                 (seq, index, fact) -> { throw new IllegalStateException("subscriber gone"); }, view,
                 new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(1, view.current().runs().size());
         ring.shutdown(Duration.ZERO);
@@ -151,6 +155,7 @@ class CleanroomTest {
         };
         Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, commands::add, new Transcript(),
                 listener, view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(List.of("0.0:PhaseChanged", "0.1:u:UserMessage", "0.2:u:RunStatus"), notified);
         ring.shutdown(Duration.ZERO);
@@ -179,6 +184,7 @@ class CleanroomTest {
         };
         Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, commands::add, transcript,
                 listener, view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
         cleanroom.onEvent(prompt(0), 0, true);
         return notified;
     }
@@ -230,6 +236,7 @@ class CleanroomTest {
         Projection broken = (envelope, decision) -> { throw new IllegalStateException("projection bug"); };
         Cleanroom cleanroom = LoopFixtures.cleanroom(kernel(), () -> false, commands::add, broken,
                 (seq, index, fact) -> facts.add(fact), view, new ResultPublisher(captureRing, new InFlightCommands(), Clock.systemUTC(), 0));
+        cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s")), -1, true);
         cleanroom.onEvent(prompt(0), 0, true);
         assertEquals(1, view.current().runs().size());
         assertEquals(1, facts.size());

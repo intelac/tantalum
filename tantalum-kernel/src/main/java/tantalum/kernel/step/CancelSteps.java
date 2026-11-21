@@ -30,6 +30,11 @@ public final class CancelSteps {
         return out.decision();
     }
 
+    /** 这一轮是不是你按取消结束的：只有 {@link #cancel} 以“取消”结束且不带详情（重启、中断打断都带详情）。 */
+    static boolean byUser(EndReason reason, String detail) {
+        return reason == EndReason.CANCELLED && detail == null;
+    }
+
     public static Decision cancel(StepContext context) {
         return end(context, EndReason.CANCELLED, null);
     }
@@ -51,12 +56,17 @@ public final class CancelSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
+        end(out, run, reason, detail);
+        return out.decision();
+    }
+
+    /** 同上，在别的步骤已经开始的结果里结束一个还没结束的运行（帮手收到叫停时，delivery）。 */
+    static void end(Outcome out, RunState run, EndReason reason, String detail) {
         if (run.phase() instanceof Awaiting awaiting && !awaiting.commands().isEmpty()) {
             out.emit(new AbortCommands(out.nextCommandId(), run.ref(), awaiting.commands()));
         } else if (run.phase() instanceof AwaitingAnswer waiting) {
             AnswerSteps.cancelled(out, run, waiting);
         }
         RunEnd.finish(out, run, reason, detail);
-        return out.decision();
     }
 }

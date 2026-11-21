@@ -52,12 +52,12 @@ class QueueApiTest {
     @BeforeEach
     void start() throws Exception {
         server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("workspace")), held);
-        submit("prompt", "first");
+        submit("queue", "first");
         for (int i = 0; i < 500 && calls.get() < 1; i++) {
             Thread.sleep(10);
         }
-        submit("follow-up", "a");
-        submit("follow-up", "b");
+        submit("queue", "a");
+        submit("queue", "b");
         await(items -> items.stream().filter(item -> item.path("queued").asBoolean()).count() == 2);
     }
 
@@ -69,7 +69,7 @@ class QueueApiTest {
 
     private void submit(String mode, String text) throws Exception {
         HttpResponse<String> response = server.post("alice", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"r" + requests++ + "\",\"mode\":\"" + mode + "\",\"text\":\"" + text + "\"}");
+                "{\"requestId\":\"r" + requests++ + "\",\"delivery\":\"" + mode + "\",\"text\":\"" + text + "\"}");
         assertEquals(200, response.statusCode(), response.body());
     }
 
@@ -127,7 +127,7 @@ class QueueApiTest {
         assertEquals(404, again.statusCode(), again.body());
         assertTrue(again.body().contains("queue/gone"), again.body());
 
-        assertEquals(200, change("alice", b, body("q4", "steer", null)).statusCode());
+        assertEquals(200, change("alice", b, body("q4", "join", null)).statusCode());
         List<JsonNode> afterSteer = await(items -> items.stream().noneMatch(item -> item.path("queued").asBoolean()));
         JsonNode steered = afterSteer.stream().filter(item -> item.path("id").asString().equals(b)).findFirst().orElseThrow();
         assertEquals(byText("first").get("run").asString(), steered.get("run").asString(), "joined the running run");

@@ -501,7 +501,10 @@ class ContextHandlerTest {
         LocalTool.all(links, null, Duration.ofSeconds(60)).forEach(catalog::register);
         ContextHandler handler = ContextHandlerFixture.of(local, "Base.", catalog,
                 new PluginGate(catalog, switches, List.of(local), List.of(), List.of(), List.of(), java.util.Set.of()),
-                memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), TWO_MODELS, NOBODY);
+                memories(Workspaces.shared(dir)), KnowledgeBase.none(), "", noCompaction(), TWO_MODELS, NOBODY)
+                // 会话是哪一种由它的状态说（这里照编号的样子造一个），不再按编号猜
+                .sessions(id -> tantalum.value.id.SessionIds.mainShaped(id) ? tantalum.value.state.SessionStateFixture.main(id, ALICE)
+                        : tantalum.value.state.SessionStateFixture.regular(id, ALICE));
         try (TestComputer ignored = TestComputer.connectEverything(links, ALICE, Instant.now().plus(Duration.ofHours(1)), mac)) {
             return assertInstanceOf(ContextAssembled.class, handler.handle(new AssembleContext(new CommandId("c"),
                     new RunRef(ALICE, session, new RunId("r")), model, null)));

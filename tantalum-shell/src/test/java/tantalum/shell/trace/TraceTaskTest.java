@@ -15,17 +15,21 @@ import tantalum.shell.trace.TraceRecord.TaskNote;
 import tantalum.shell.trace.TraceRecord.ToolCall;
 import tantalum.shell.trace.TraceRecord.ToolCall.Status;
 import tantalum.shell.trace.TraceRecord.UserInput;
-import tantalum.value.event.TaskAssigned;
-import tantalum.value.event.TaskEnded;
+import tantalum.value.event.Assignment;
+import tantalum.value.event.Report;
+import tantalum.value.event.Root;
+import tantalum.value.event.SessionCreated;
+import tantalum.value.state.HelperOf;
+import tantalum.value.state.SessionKind;
 import tantalum.value.event.TimerFired;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.task.OpenTask;
-import tantalum.value.task.TaskLimits;
-import tantalum.value.task.TaskOutcome;
-import tantalum.value.task.TaskTools;
+import tantalum.value.assignment.OpenAssignment;
+import tantalum.value.assignment.AssignmentLimits;
+import tantalum.value.assignment.AssignmentOutcome;
+import tantalum.value.assignment.AssignmentTools;
 
 /**
  * 任务在轨迹里（subagent 需求 10.5）：放任务的调用是一次完成的工具调用，带着任务和它的会话；任务的结果回来是一条“任务”记录，
@@ -34,8 +38,8 @@ import tantalum.value.task.TaskTools;
 class TraceTaskTest {
 
     private static ToolCallBlock task(String callId, String prompt) {
-        return new ToolCallBlock(callId, TaskTools.TASK, "{}",
-                prompt == null ? new Json.Obj(Map.of()) : new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str(prompt))));
+        return new ToolCallBlock(callId, AssignmentTools.TASK, "{}",
+                prompt == null ? new Json.Obj(Map.of()) : new Json.Obj(Map.of(AssignmentTools.PROMPT, new Json.Str(prompt))));
     }
 
     private static ToolCall tool(TraceFixture fx, String callId) {
@@ -43,10 +47,10 @@ class TraceTaskTest {
     }
 
     /** 放出一个任务并让这一轮说完。 */
-    private static OpenTask startOne(TraceFixture fx) {
+    private static OpenAssignment startOne(TraceFixture fx) {
         RunId run = fx.start("check the three modules");
         fx.feed(run, fx.reply(task("c1", "Check module A.")));
-        OpenTask open = fx.state().sessions().get(TraceFixture.SESSION).tasks().open().getFirst();
+        OpenAssignment open = fx.state().sessions().get(TraceFixture.SESSION).assignments().open().getFirst();
         fx.feed(run, fx.reply(TraceFixture.text("started")));
         return open;
     }
@@ -54,7 +58,7 @@ class TraceTaskTest {
     @Test
     void startingATaskIsAFinishedToolCallThatNamesTheTaskAndItsSession() {
         TraceFixture fx = new TraceFixture();
-        OpenTask open = startOne(fx);
+        OpenAssignment open = startOne(fx);
 
         ToolCall call = tool(fx, "c1");
         assertEquals(Status.DONE, call.status());
@@ -79,9 +83,9 @@ class TraceTaskTest {
     @Test
     void aResultThatArrivesWhileIdleStartsARunMarkedAsNotStartedByAPerson() {
         TraceFixture fx = new TraceFixture();
-        OpenTask open = startOne(fx);
+        OpenAssignment open = startOne(fx);
 
-        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.COMPLETED, "Module A is fine."));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER, open.session()));
 
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
         RunHead head = fx.records(RunHead.class).stream().filter(run -> run.head().run().equals(fresh)).findFirst().orElseThrow();
@@ -91,7 +95,7 @@ class TraceTaskTest {
         assertEquals(fresh, note.head().run());
         assertEquals(open.id(), note.task());
         assertEquals(open.session().value(), note.session());
-        assertEquals(TaskOutcome.COMPLETED, note.outcome());
+        assertEquals(AssignmentOutcome.COMPLETED, note.outcome());
         assertEquals("Module A is fine.", note.text());
         // 不是用户输入：这一轮没有多出用户输入的记录
         assertEquals(1, fx.records(UserInput.class).size());
@@ -100,31 +104,31 @@ class TraceTaskTest {
     @Test
     void aResultThatArrivesDuringARunBelongsToThatRunAndARepeatAddsNothing() {
         TraceFixture fx = new TraceFixture();
-        OpenTask open = startOne(fx);
+        OpenAssignment open = startOne(fx);
         RunId second = fx.start("anything else?");
 
-        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.FAILED, "could not read it"));
-        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.COMPLETED, "late"));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.FAILED, "could not read it", Root.USER, open.session()));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "late", Root.USER, open.session()));
 
         List<TaskNote> notes = fx.records(TaskNote.class);
         assertEquals(1, notes.size());
         assertEquals(second, notes.getFirst().head().run());
-        assertEquals(TaskOutcome.FAILED, notes.getFirst().outcome());
+        assertEquals(AssignmentOutcome.FAILED, notes.getFirst().outcome());
     }
 
     /** 期限到了也是任务的结果：事件是定时器，不是任务交回来的；之后任务那边交回的“已停止”来晚了，什么都不加。 */
     @Test
     void aTaskThatRunsOutOfTimeLeavesATimedOutRecordAndTheLateStopAddsNothing() {
-        TraceFixture fx = new TraceFixture(true, List.of(), new Limits(10, 8, new TaskLimits(4, 10, 10, Duration.ofSeconds(10))));
-        OpenTask open = startOne(fx);
+        TraceFixture fx = new TraceFixture(true, List.of(), new Limits(10, 8, new AssignmentLimits(4, 10, 10, Duration.ofSeconds(10))));
+        OpenAssignment open = startOne(fx);
 
         fx.feed(null, new TimerFired(open.timer()));
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
-        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.STOPPED, null));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER, open.session()));
 
         List<TaskNote> notes = fx.records(TaskNote.class);
         assertEquals(1, notes.size());
-        assertEquals(TaskOutcome.TIMED_OUT, notes.getFirst().outcome());
+        assertEquals(AssignmentOutcome.TIMED_OUT, notes.getFirst().outcome());
         assertEquals(fresh, notes.getFirst().head().run());
         assertEquals(open.session().value(), notes.getFirst().session());
         assertNull(notes.getFirst().text());
@@ -134,8 +138,9 @@ class TraceTaskTest {
 
     @Test
     void inTheTasksOwnSessionTheBriefStartsTheRun() {
-        TraceFixture fx = new TraceFixture();
-        fx.feed(null, new TaskAssigned("t7-0", new SessionId("parent"), "Check module A.", "reviewer", null, null, null, null, false));
+        TraceFixture fx = new TraceFixture(new SessionCreated(SessionKind.HELPER, null, false,
+                new HelperOf(new SessionId("parent"), "t7-0", "reviewer", null, null)));
+        fx.feed(null, new Assignment("t7-0", new SessionId("parent"), Root.USER, "Check module A.", null));
 
         RunHead head = fx.records(RunHead.class).getFirst();
         assertEquals(Trigger.TASK, head.trigger());
@@ -150,8 +155,8 @@ class TraceTaskTest {
     @Test
     void theRunTreeShowsATaskNodeAndAStoppedTaskAsCancelled() {
         TraceFixture fx = new TraceFixture();
-        OpenTask open = startOne(fx);
-        fx.feed(null, new TaskEnded(open.id(), TaskOutcome.STOPPED, null));
+        OpenAssignment open = startOne(fx);
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER, open.session()));
 
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
         List<TraceRecord> records = fx.records().stream().filter(record -> record.head().run().equals(fresh)).toList();

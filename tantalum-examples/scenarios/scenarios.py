@@ -152,18 +152,18 @@ def attend_tasks(answer=None, stop_after=None, side=None, wait=900):
     return between
 
 def task_ends(ctx):
-    """每个任务生效的那个结局：任务号 -> (结局, 带回的文字)。看内核报的事实（TaskSettled），不看事件：期限到了的结局是定时器那一步定的，
+    """每个任务生效的那个结局：任务号 -> (结局, 带回的文字)。看内核报的事实（ReportSettled），不看事件：期限到了的结局是定时器那一步定的，
     任务那边随后交回的“已停止”来晚了、不算。文字取任务交回的那一条。"""
     ends, texts = {}, {}
     for line in ctx.journal.splitlines():
-        if '"TaskSettled"' not in line and '"type":"TaskEnded"' not in line: continue
+        if '"ReportSettled"' not in line and '"type":"Report"' not in line: continue
         try: entry = json.loads(line)
         except ValueError: continue
-        if entry.get("type") == "TaskEnded":
+        if entry.get("type") == "Report":
             payload = entry.get("payload") or {}
-            texts.setdefault((payload.get("task"), payload.get("outcome")), payload.get("text") or "")
+            texts.setdefault((payload.get("assignment"), payload.get("outcome")), payload.get("text") or "")
         for fact in (entry.get("result") or {}).get("facts", []):
-            if fact.get("type") == "TaskSettled": ends.setdefault(fact.get("task"), fact.get("outcome"))
+            if fact.get("type") == "ReportSettled": ends.setdefault(fact.get("assignment"), fact.get("outcome"))
     return {task: (outcome, texts.get((task, outcome), "")) for task, outcome in ends.items()}
 
 def task_briefs(ctx):
@@ -172,11 +172,16 @@ def task_briefs(ctx):
     for task in tasks_of(ctx):
         path = os.path.join(ctx.sessions_dir, task["session"] + ".jsonl")
         if not os.path.exists(path): continue
+        agent = None
         for line in open(path, encoding="utf-8"):
-            if '"type":"TaskAssigned"' not in line: continue
-            payload = json.loads(line).get("payload") or {}
-            briefs[task["id"]] = (payload.get("agent"), payload.get("prompt") or "")
-            break
+            # 帮手会话的第一条是建会话（出身里有 agent），第二条是交代
+            entry = json.loads(line)
+            payload = entry.get("payload") or {}
+            if entry.get("type") == "SessionCreated":
+                agent = (payload.get("helper") or {}).get("agent")
+            elif entry.get("type") == "Assignment":
+                briefs[task["id"]] = (agent, payload.get("prompt") or "")
+                break
     return briefs
 
 def c_tasks_common(ctx, people=1):
@@ -189,12 +194,12 @@ def c_tasks_common(ctx, people=1):
         # 结果回来时主对话还在忙，就进那一轮；空闲就另开一轮。两种都对，要的是结果回来以后模型看到了它
         seen_after, pending = False, False
         for line in ctx.journal.splitlines():
-            if '"TaskSettled"' in line: pending = True
+            if '"ReportSettled"' in line: pending = True
             elif '"type":"ModelReplied"' in line and pending: seen_after, pending = True, False
         if not seen_after or pending: failed.append(f"放了 {len(tasks)} 个任务（主对话 {len(runs)} 轮），最后一个结果回来以后模型没有再被调用")
         nested = [task["id"] for task in tasks if (ctx.user.call("GET", f"/api/sessions/{task['session']}/tasks")[1] or {}).get("tasks")]
         if nested: failed.append(f"任务里又放了任务：{nested}")
-    said = sum(1 for line in ctx.journal.splitlines() if '"type":"UserPrompt"' in line or '"type":"FollowUpSubmitted"' in line)
+    said = sum(1 for line in ctx.journal.splitlines() if '"type":"UserPrompt"' in line)
     if said != people: failed.append(f"账里有 {said} 条人说的话，应该只有 {people} 条")
     return failed
 

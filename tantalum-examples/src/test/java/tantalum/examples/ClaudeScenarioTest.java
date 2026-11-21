@@ -120,7 +120,7 @@ class ClaudeScenarioTest {
 
     private static String submit(TestServer server, String user, String session, String text) throws Exception {
         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text) + "}");
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"delivery\":\"queue\",\"text\":" + JSON.writeValueAsString(text) + "}");
         assertEquals(200, response.statusCode(), response.body());
         return response.body();
     }
@@ -1092,7 +1092,7 @@ class ClaudeScenarioTest {
         String refs = "[{\"id\":" + JSON.writeValueAsString(attachment.get("id").asString()) + ",\"name\":"
                 + JSON.writeValueAsString(attachment.get("name").asString()) + "}]";
         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text)
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"delivery\":\"queue\",\"text\":" + JSON.writeValueAsString(text)
                         + ",\"attachments\":" + refs + "}");
         assertEquals(200, response.statusCode(), response.body());
     }

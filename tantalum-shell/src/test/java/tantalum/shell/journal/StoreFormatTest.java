@@ -25,7 +25,7 @@ class StoreFormatTest {
     @Test
     void newDirectoryGetsCurrentVersions() throws Exception {
         assertEquals(new StoreFormat(StoreFormat.STORAGE), StoreFormat.check(dir));
-        assertEquals("{\"storage\":3}\n", Files.readString(file()));
+        assertEquals("{\"storage\":" + StoreFormat.STORAGE + "}\n", Files.readString(file()));
         assertEquals(1, Files.list(dir).count());
         assumeTrue(PrivateFiles.posix(dir), "Windows 上权限靠继承的 ACL，见 WindowsFilesTest");
         assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
@@ -52,9 +52,9 @@ class StoreFormatTest {
     /** 以前的 {@code semantics} 字段读到也忽略，文件不改。 */
     @Test
     void anOldSemanticsFieldIsIgnored() throws Exception {
-        Files.writeString(file(), "{\"storage\":3,\"semantics\":0}\n");
+        Files.writeString(file(), "{\"storage\":" + StoreFormat.STORAGE + ",\"semantics\":0}\n");
         assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
-        assertEquals("{\"storage\":3,\"semantics\":0}\n", Files.readString(file()));
+        assertEquals("{\"storage\":" + StoreFormat.STORAGE + ",\"semantics\":0}\n", Files.readString(file()));
     }
 
     /** one-line-journal 需求 8.2：旧格式的会话文件不迁移，拒绝启动，什么都不改。 */
@@ -83,7 +83,7 @@ class StoreFormatTest {
 
         assertEquals(StoreFormat.STORAGE, StoreFormat.check(dir).storage());
 
-        assertEquals("{\"storage\":3}\n", Files.readString(file()));
+        assertEquals("{\"storage\":" + StoreFormat.STORAGE + "}\n", Files.readString(file()));
         assertEquals("users", Files.readString(dir.resolve("users.db")));
     }
 

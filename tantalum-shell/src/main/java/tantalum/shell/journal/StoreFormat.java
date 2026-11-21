@@ -21,8 +21,8 @@ import tantalum.value.json.Json;
  */
 public record StoreFormat(int storage) {
 
-    /** 3：会话文件一步一行。更早的会话文件不再读，见 {@link #check}。 */
-    public static final int STORAGE = 3;
+    /** 4：会话有创建事件和种类，输入进同一个收件队列（session-model）。3（一步一行）和更早的会话文件不再读，见 {@link #check}。 */
+    public static final int STORAGE = 4;
 
     private static final Logger LOG = LoggerFactory.getLogger(StoreFormat.class);
     private static final String FILE = "format.json";

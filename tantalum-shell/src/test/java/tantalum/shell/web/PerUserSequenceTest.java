@@ -44,7 +44,7 @@ class PerUserSequenceTest {
 
     private static void submit(TestServer server, String user, String session, String request) throws Exception {
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"secret of " + user + "\"}").statusCode());
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"secret of " + user + "\"}").statusCode());
     }
 
     @Test

@@ -82,7 +82,7 @@ class MemoryNotesApiTest {
 
     @Test
     void aFinishedTurnIsNotedAndOnlyItsOwnerCanChangeIt() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"把记忆往前提\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"把记忆往前提\"}");
         JsonNode days = waitForNotes("alice", 1);
         String day = LocalDate.now(ZoneId.systemDefault()).toString();
         assertEquals(day, days.get(0).get("day").asString());
@@ -119,7 +119,7 @@ class MemoryNotesApiTest {
         assertEquals(404, send("alice", "PUT", "/api/plugin-api/memory/capture", "{\"enabled\":true}").statusCode(), "the switch moved");
         assertFalse(get("alice", "/api/plugin-api/memory/capture").get("enabled").asBoolean());
 
-        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"不要记\"}");
+        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"不要记\"}");
         String body = "";
         for (int i = 0; i < 500 && !body.contains("COMPLETED"); i++) {
             Thread.sleep(10);

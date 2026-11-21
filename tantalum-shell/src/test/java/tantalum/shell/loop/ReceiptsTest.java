@@ -16,7 +16,6 @@ import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPromptFixture;
 
 /** one-line-journal 需求 2.1、2.4：提交的回执在那一步落盘后完成，没写进去时失败。 */
@@ -29,7 +28,7 @@ class ReceiptsTest {
 
     private static EventEnvelope submitted() {
         return new EventEnvelope(0, Instant.EPOCH, new Principal("alice"), SESSION, null,
-                UserPromptFixture.of(SUBMISSION, new RequestId("r-1"), new OwnerRef.OfSession(SESSION), "hi"));
+                UserPromptFixture.of(SUBMISSION, new RequestId("r-1"), "hi"));
     }
 
     @Test

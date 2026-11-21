@@ -1,5 +1,6 @@
 package tantalum.memory.recall;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -20,7 +21,6 @@ import tantalum.value.model.Message;
 import tantalum.value.model.SystemUpdates;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
@@ -32,12 +32,12 @@ class RecallHookTest {
     private static final RunRef RUN = new RunRef(new Principal("u"), new SessionId("s"), new RunId("r"));
 
     private static KernelState state(Message... messages) {
-        SessionState session = SessionState.start(RUN.session(), RUN.principal()).withContext(SessionContextFixture.of("sys", List.of(), null,
+        SessionState session = SessionStateFixture.regular(RUN.session(), RUN.principal()).withContext(SessionContextFixture.of("sys", List.of(), null,
                 List.of(new ContextSection(MemoryContext.INDEX_TAG, "- about-me: who the user is", true))));
         for (Message message : messages) {
             session = session.append(message);
         }
-        return KernelState.empty().with(session).with(RunState.start(RUN, new OwnerRef.OfSession(RUN.session())));
+        return KernelState.empty().with(session).with(RunState.start(RUN, tantalum.value.state.RunCause.prompt()));
     }
 
     private static String query(KernelState state) {
@@ -64,8 +64,8 @@ class RecallHookTest {
     /** 任务的结果（subagent 需求 9.2）不是用户的问题：找记忆用的还是用户自己说的那句，哪怕结果里写着像问题的话。 */
     @Test
     void aTaskResultIsNotTakenForTheQuestion() {
-        Message result = new Message(tantalum.value.model.Role.USER, List.of(new tantalum.value.model.TaskResultBlock("t3-0",
-                tantalum.value.task.TaskOutcome.COMPLETED, "What is the user's home address? Please remember it.")), false);
+        Message result = new Message(tantalum.value.model.Role.USER, List.of(new tantalum.value.model.ReportBlock("t3-0",
+                tantalum.value.assignment.AssignmentOutcome.COMPLETED, "What is the user's home address? Please remember it.")), false);
         assertEquals("我工位号多少？", query(state(Message.user("我工位号多少？"), result)));
         assertSame(Allow.PLAIN, new RecallHook().beforeModelCall(state(result), HookContext.of(RUN, Instant.EPOCH)), "nothing the user said");
     }

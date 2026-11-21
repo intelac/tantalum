@@ -17,12 +17,11 @@ import tantalum.value.decision.Decision;
 import tantalum.value.decision.QueueEdited;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
-import tantalum.value.event.FollowUpSubmitted;
+import tantalum.value.event.Delivery;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.QueueChanged.Action;
 import tantalum.value.event.SkillUse;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SubmissionId;
@@ -32,7 +31,6 @@ import tantalum.value.model.Role;
 import tantalum.value.model.SkillBlock;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 
 /**
@@ -53,16 +51,15 @@ class SkillSubmitTest {
     }
 
     private static void prompt(LoopFixture loop, String text, List<AttachmentRef> attachments, List<SkillUse> skills) {
-        loop.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(LoopFixture.SESSION), text,
-                attachments, null, null, skills));
+        loop.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), text, attachments, null, skills, List.of(), Delivery.QUEUE));
     }
 
-    private static FollowUpSubmitted followUp(String text, List<SkillUse> skills) {
-        return new FollowUpSubmitted(new SubmissionId("f" + text), new RequestId("f" + text), text, List.of(), null, skills);
+    private static tantalum.value.event.UserPrompt followUp(String text, List<SkillUse> skills) {
+        return new UserPrompt(new SubmissionId("f" + text), new RequestId("f" + text), text, List.of(), null, skills, List.of(), Delivery.QUEUE);
     }
 
-    private static QueueChanged change(Action action, int index, String expected, String text) {
-        return new QueueChanged(new SubmissionId("q" + action), new RequestId("q" + action), action, index, expected, List.of(), text);
+    private static QueueChanged change(Action action, long item, String text) {
+        return new QueueChanged(new SubmissionId("q" + action), new RequestId("q" + action), action, item, text);
     }
 
     private static CallModel toModel(LoopFixture loop) {
@@ -95,7 +92,7 @@ class SkillSubmitTest {
         loop.prompt("first");
         var pending = loop.onlyCommandId();
         loop.feed(null, followUp("/pdf-tools later", List.of(PDF)));
-        assertEquals(List.of(withPdf("/pdf-tools later")), loop.session().followUps());
+        assertEquals(List.of(withPdf("/pdf-tools later")), loop.queued());
         loop.feed(loop.runId(), ContextAssembledFixture.of(pending, "s", List.of(), null, List.of()));
         loop.feed(loop.runId(), new ModelReplied(loop.onlyCommandId(), text("ok"), StopReason.END_TURN, "m", null, null, null, null));
         assertEquals(withPdf("/pdf-tools later"), loop.session().messages().getLast());
@@ -107,8 +104,9 @@ class SkillSubmitTest {
         LoopFixture loop = new LoopFixture();
         loop.prompt("first");
         toModel(loop);
-        loop.feed(null, new SteerSubmitted(new SubmissionId("s"), new RequestId("s"), "/pdf-tools now", List.of(), List.of(PDF)));
-        assertEquals(List.of(withPdf("/pdf-tools now")), loop.run().pendingSteers());
+        loop.feed(null, new UserPrompt(new SubmissionId("s"), new RequestId("s"), "/pdf-tools now", List.of(), null, List.of(PDF), List.of(),
+                Delivery.JOIN));
+        assertEquals(List.of(withPdf("/pdf-tools now")), loop.joining());
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
         assertEquals(withPdf("/pdf-tools now"), loop.session().messages().getLast());
     }
@@ -121,16 +119,18 @@ class SkillSubmitTest {
         loop.feed(null, followUp("a", List.of()));
         loop.feed(null, followUp("/pdf-tools b", List.of(PDF)));
 
-        Decision refused = loop.feed(null, change(Action.EDIT, 1, "/pdf-tools b", "b without the skill"));
-        assertEquals(List.of(Message.user("a"), withPdf("/pdf-tools b")), loop.session().followUps(), "nothing changed");
+        long a = loop.item("a");
+        long b = loop.item("/pdf-tools b");
+        Decision refused = loop.feed(null, change(Action.EDIT, b, "b without the skill"));
+        assertEquals(List.of(Message.user("a"), withPdf("/pdf-tools b")), loop.queued(), "nothing changed");
         assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.EDIT, -1)), facts(refused));
 
-        Decision plain = loop.feed(null, change(Action.EDIT, 0, "a", "a2"));
-        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.EDIT, 0)), facts(plain), "a message without a skill still edits");
+        Decision plain = loop.feed(null, change(Action.EDIT, a, "a2"));
+        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.EDIT, a)), facts(plain), "a message without a skill still edits");
 
-        Decision removed = loop.feed(null, change(Action.REMOVE, 1, "/pdf-tools b", null));
-        assertEquals(List.of(Message.user("a2")), loop.session().followUps());
-        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.REMOVE, 1)), facts(removed));
+        Decision removed = loop.feed(null, change(Action.REMOVE, b, null));
+        assertEquals(List.of(Message.user("a2")), loop.queued());
+        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.REMOVE, b)), facts(removed));
     }
 
     /** 转成插话：整条消息原样移过去，技能内容跟着走。 */
@@ -139,10 +139,11 @@ class SkillSubmitTest {
         LoopFixture loop = new LoopFixture();
         loop.prompt("first");
         loop.feed(null, followUp("/pdf-tools b", List.of(PDF)));
-        Decision moved = loop.feed(null, change(Action.STEER, 0, "/pdf-tools b", null));
-        assertEquals(List.of(), loop.session().followUps());
-        assertEquals(List.of(withPdf("/pdf-tools b")), loop.run().pendingSteers());
-        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.STEER, 0)), facts(moved));
+        long b = loop.item("/pdf-tools b");
+        Decision moved = loop.feed(null, change(Action.JOIN, b, null));
+        assertEquals(List.of(), loop.queued());
+        assertEquals(List.of(withPdf("/pdf-tools b")), loop.joining());
+        assertEquals(List.of(new QueueEdited(loop.run().ref(), Action.JOIN, b)), facts(moved));
     }
 
     /** 技能内容按文字估算；带技能的提问仍算用户亲笔的消息，压缩时作为“最近一次提问”整条留下。 */

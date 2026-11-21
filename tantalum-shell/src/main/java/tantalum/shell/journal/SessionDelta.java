@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import tantalum.value.assignment.Assignments;
 import tantalum.value.decision.SessionChange;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RunId;
@@ -14,7 +15,10 @@ import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Role;
 import tantalum.value.state.Compaction;
+import tantalum.value.state.HelperOf;
+import tantalum.value.state.InboxItem;
 import tantalum.value.state.SessionContext;
+import tantalum.value.state.SessionKind;
 import tantalum.value.state.UsageAnchor;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
@@ -28,10 +32,10 @@ import tools.jackson.databind.node.ObjectNode;
  */
 final class SessionDelta {
 
-    private static final TypeReference<List<Message>> MESSAGES = new TypeReference<>() { };
+    private static final TypeReference<List<InboxItem>> INBOX = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
     private static final TypeReference<List<tantalum.value.state.Withdrawal>> WITHDRAWN = new TypeReference<>() { };
-    private static final TypeReference<List<ModelChoice>> MODELS = new TypeReference<>() { };
+    private static final TypeReference<List<tantalum.value.delivery.Outgoing>> OUTBOX = new TypeReference<>() { };
     private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
 
     private final JsonMapper mapper;
@@ -49,8 +53,19 @@ final class SessionDelta {
             node.set("id", mapper.valueToTree(change.id()));
             node.set("principal", mapper.valueToTree(change.principal()));
         }
+        // 这一步新建了它：建好不变的四样写在这一行里，之后的行不再写
         if (change.created()) {
             node.put("created", true);
+            node.put("kind", change.kind().name());
+            if (change.helper() != null) {
+                node.set("helper", mapper.valueToTree(change.helper()));
+            }
+            if (change.dir() != null) {
+                node.put("dir", change.dir());
+            }
+            if (change.offRecord()) {
+                node.put("offRecord", true);
+            }
         }
         if (!change.appended().isEmpty()) {
             List<ContentBlock> reply = memo.reply(seq);
@@ -65,9 +80,12 @@ final class SessionDelta {
                 memo.appended(message);
             }
         }
+        // 压缩完成时去掉了窗口之前的消息：记下新的起点（之前的原话照旧在这个文件的前面）
+        changed(node, "windowStart", change.windowStart());
         changed(node, "activeRun", change.activeRun());
         changed(node, "lastRun", change.lastRun());
-        changed(node, "followUps", change.followUps());
+        // 收件队列：到了、还没被模型看到的输入。变了就写整条队列，通常只有零到几条
+        changed(node, "inbox", change.inbox());
         if (change.context() != null) {
             node.set("context", context(change.context().value(), memo));
         }
@@ -77,14 +95,11 @@ final class SessionDelta {
         changed(node, "toolsSeen", change.toolsSeen());
         changed(node, "notes", change.notes());
         changed(node, "model", change.model());
-        changed(node, "followUpModels", change.followUpModels());
-        changed(node, "dir", change.dir());
-        // “不进记忆”也是会话状态：不写的话重启、回收再载入后就丢了
-        changed(node, "offRecord", change.offRecord());
-        // 任务这一块（放出去还没回来的、是不是为任务开的、无人说话时的计数）：没变的会话不写
-        changed(node, "tasks", change.tasks());
-        // 撤下的文字：历史不改，只多记这一份；没撤下过的会话不写，旧账里没有这个字段
+        // 交代这一块（放出去还没回来的、没人说话时的两个计数）：没变的会话不写
+        changed(node, "assignments", change.assignments());
+        // 撤下的文字：历史不改，只多记这一份；没撤下过的会话不写
         changed(node, "withdrawn", change.withdrawn());
+        changed(node, "outbox", change.outbox());
         return node;
     }
 
@@ -107,17 +122,20 @@ final class SessionDelta {
         if (!node.has("id") && memo.session() == null) {
             throw new IllegalArgumentException("a session change without its id needs the file's session");
         }
+        boolean created = node.path("created").asBoolean(false);
         return new SessionChange(node.has("id") ? mapper.treeToValue(node.get("id"), SessionId.class) : memo.session(),
                 node.has("principal") ? mapper.treeToValue(node.get("principal"), Principal.class) : memo.principal(),
-                node.path("created").asBoolean(false), appended,
+                created, created ? SessionKind.valueOf(node.required("kind").asString()) : null,
+                created && node.has("helper") ? mapper.treeToValue(node.get("helper"), HelperOf.class) : null,
+                created && node.has("dir") ? node.get("dir").asString() : null, created && node.path("offRecord").asBoolean(false), appended,
+                changed(node, "windowStart", Integer.class),
                 changed(node, "activeRun", RunId.class), changed(node, "lastRun", RunId.class),
-                changedList(node, "followUps", MESSAGES),
+                changedList(node, "inbox", INBOX),
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
-                changed(node, "model", ModelChoice.class), changedList(node, "followUpModels", MODELS),
-                changed(node, "dir", String.class), changed(node, "offRecord", Boolean.class),
-                changed(node, "tasks", tantalum.value.task.Tasks.class), changedList(node, "withdrawn", WITHDRAWN));
+                changed(node, "model", ModelChoice.class), changed(node, "assignments", Assignments.class),
+                changedList(node, "withdrawn", WITHDRAWN), changedList(node, "outbox", OUTBOX));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

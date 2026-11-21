@@ -26,7 +26,7 @@ import tantalum.value.json.Json;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.SessionState;
 import tantalum.value.state.Withdrawal;
-import tantalum.value.task.TaskOutcome;
+import tantalum.value.assignment.AssignmentOutcome;
 
 /**
  * 撤下文字的换法和会话的视图（memory-forget-by-choice R2a）：只按字面换；历史不改，视图按记下的撤下去换，
@@ -65,7 +65,8 @@ class TextSwapTest {
         assertEquals(new ToolResultBlock("c1", "saved [withdrawn]", false, null), swap.block(new ToolResultBlock("c1", "saved " + PLATE, false, null)));
         assertEquals(new HookTextBlock("h", "[withdrawn]"), swap.block(new HookTextBlock("h", PLATE)));
         assertEquals(new AttachedBlock("memory", "[withdrawn]"), swap.block(new AttachedBlock("memory", PLATE)));
-        assertEquals(new TaskResultBlock("t1", TaskOutcome.COMPLETED, "[withdrawn]"), swap.block(new TaskResultBlock("t1", TaskOutcome.COMPLETED, PLATE)));
+        assertEquals(new ReportBlock("t1", AssignmentOutcome.COMPLETED, "[withdrawn]"), swap.block(new ReportBlock("t1", AssignmentOutcome.COMPLETED, PLATE)));
+        assertEquals(new AssignmentBlock("t1", "[withdrawn]"), swap.block(new AssignmentBlock("t1", PLATE)));
         SkillBlock skill = new SkillBlock("deploy", PLATE);
         assertSame(skill, swap.block(skill), "a skill's text is the skill file, not something said");
         ReasoningBlock thinking = new ReasoningBlock("claude", new Json.Str(PLATE));
@@ -85,10 +86,10 @@ class TextSwapTest {
 
     @Test
     void theViewSwapsOnlyWhatWasSaidBeforeTheWithdrawalAndHistoryStaysAsItWas() {
-        SessionState session = SessionState.start(SESSION, USER).append(Message.user("first: " + PLATE)).append(Message.user("second"));
+        SessionState session = tantalum.value.state.SessionStateFixture.regular(SESSION, USER).append(Message.user("first: " + PLATE)).append(Message.user("second"));
         assertSame(session.messages(), session.view(), "nothing withdrawn: the view is the history");
 
-        SessionState withdrawn = session.withdrawing(List.of(new Withdrawal(PLATE, "[withdrawn]", 2, 9)), session.followUps(), null, null)
+        SessionState withdrawn = session.withdrawing(List.of(new Withdrawal(PLATE, "[withdrawn]", 2, 9)), session.inbox(), null, null)
                 .append(Message.user("again: " + PLATE));
         assertEquals(List.of(Message.user("first: [withdrawn]"), Message.user("second"), Message.user("again: " + PLATE)), withdrawn.view());
         assertEquals(Message.user("first: " + PLATE), withdrawn.messages().getFirst(), "history is not rewritten");
@@ -102,8 +103,8 @@ class TextSwapTest {
 
     @Test
     void theRecordOfAStepCarriesTheWithdrawalsAndPutsThemBack() {
-        SessionState before = SessionState.start(SESSION, USER).append(Message.user(PLATE));
-        SessionState after = before.withdrawing(List.of(new Withdrawal(PLATE, "[withdrawn]", 1, 4)), before.followUps(), null, null);
+        SessionState before = tantalum.value.state.SessionStateFixture.regular(SESSION, USER).append(Message.user(PLATE));
+        SessionState after = before.withdrawing(List.of(new Withdrawal(PLATE, "[withdrawn]", 1, 4)), before.inbox(), null, null);
         SessionChange change = SessionChange.between(before, after);
         assertFalse(change.isEmpty());
         assertTrue(change.appended().isEmpty(), "history did not change");

@@ -41,8 +41,8 @@ import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolSpec;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
+import tantalum.value.event.SessionCreatedFixture;
 import tantalum.value.event.UserPromptFixture;
 
 /**
@@ -257,21 +257,25 @@ public final class E2eServer {
         // plugin-settings：第二个账号的电脑上一个 400 字符的文件，截断的用例读它
         Files.writeString(Files.createDirectories(workspace.resolve(OTHER_USER)).resolve(LONG_FILE), "big-e2e-head " + "x".repeat(387));
         // 上次进程在这个运行刚开始时被杀：会话文件停在用户提问之后。启动时它要收尾为“因重启中断”。
-        ResultWriter.write(new SessionPaths(data), List.of(new EventEnvelope(0, Instant.parse("2026-11-01T09:00:00Z"), new Principal(USER),
-                new SessionId(CRASHED_SESSION), null, UserPromptFixture.of(new SubmissionId("crashed-submission"), new RequestId("crashed-request"),
-                        new OwnerRef.OfSession(new SessionId(CRASHED_SESSION)), "hello 崩溃前"))));
+        // 账里第一条是建会话，和入口一样
+        Instant crashedAt = Instant.parse("2026-11-01T09:00:00Z");
+        ResultWriter.write(new SessionPaths(data), List.of(
+                new EventEnvelope(0, crashedAt, new Principal(USER), new SessionId(CRASHED_SESSION), null, SessionCreatedFixture.regular()),
+                new EventEnvelope(1, crashedAt, new Principal(USER), new SessionId(CRASHED_SESSION), null,
+                        UserPromptFixture.of(new SubmissionId("crashed-submission"), new RequestId("crashed-request"), "hello 崩溃前"))));
         // 上次进程在执行工具时被杀：模型要读一个文件，命令已经发出，结果没有回来。
         Principal user = new Principal(USER);
         SessionId tool = new SessionId(CRASHED_TOOL_SESSION);
-        RunId run = RunId.of(tool, 1);
+        RunId run = RunId.of(tool, 3);
         Instant at = Instant.parse("2026-11-01T09:05:00Z");
         ToolSpec readFile = new ToolSpec("read_file", "Read a file.", new Json.Obj(java.util.Map.of("type", new Json.Str("object"))), false);
         ResultWriter.write(new SessionPaths(data), List.of(
-                new EventEnvelope(1, at, user, tool, null, UserPromptFixture.of(new SubmissionId("crashed-tool-submission"),
-                        new RequestId("crashed-tool-request"), new OwnerRef.OfSession(tool), "读一下 notes/hello.md")),
-                new EventEnvelope(2, at, user, tool, run, ContextAssembledFixture.of(new CommandId(CRASHED_TOOL_SESSION + "_1-0"), "system",
+                new EventEnvelope(2, at, user, tool, null, SessionCreatedFixture.regular()),
+                new EventEnvelope(3, at, user, tool, null, UserPromptFixture.of(new SubmissionId("crashed-tool-submission"),
+                        new RequestId("crashed-tool-request"), "读一下 notes/hello.md")),
+                new EventEnvelope(4, at, user, tool, run, ContextAssembledFixture.of(new CommandId(CRASHED_TOOL_SESSION + "_3-0"), "system",
                         List.of(readFile), null, List.of())),
-                new EventEnvelope(3, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_2-0"),
+                new EventEnvelope(5, at, user, tool, run, new ModelReplied(new CommandId(CRASHED_TOOL_SESSION + "_4-0"),
                         List.of(new ToolCallBlock("crashed-call", "read_file", "{\"path\":\"notes/hello.md\"}",
                                 new Json.Obj(java.util.Map.of("path", new Json.Str("notes/hello.md"))))),
                         StopReason.TOOL_USE, E2eModel.MODEL, null, null, null, null))));

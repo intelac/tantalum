@@ -18,6 +18,20 @@ class ExternalGateTest {
         return new ExternalGate(new ExternalGate.Limits(maxActive, perUser, total), () -> active, () -> halted);
     }
 
+    /** 入口自己放进环的内部事件只占全部的在途数，不占人的名额；满了一样拒，归还以后又能进（审查：环只给“结果 + 外部名额”留了位置）。 */
+    @Test
+    void sharedEventsCountAgainstTheTotalButNotThePerson() {
+        ExternalGate gate = gate(4, 1, 2);
+        assertEquals(Verdict.ADMITTED, gate.admitShared());
+        assertEquals(Verdict.ADMITTED, gate.admit(ALICE, false), "the person's own slot is untouched");
+        assertEquals(Verdict.OVER_LIMIT, gate.admitShared(), "the total is full");
+        assertEquals(Verdict.OVER_LIMIT, gate.admit(BOB, false));
+        gate.releaseShared();
+        assertEquals(Verdict.ADMITTED, gate.admit(BOB, false));
+        halted = true;
+        assertEquals(Verdict.HALTED, gate.admitShared());
+    }
+
     @Test
     void admitsUnderTheLimits() {
         assertEquals(Verdict.ADMITTED, gate(4, 2, 8).admit(ALICE, false));

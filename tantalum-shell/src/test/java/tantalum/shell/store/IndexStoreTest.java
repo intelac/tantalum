@@ -66,14 +66,14 @@ class IndexStoreTest {
     @Test
     void writesOnlyWhenEnoughEventsOrARunEnded() throws Exception {
         List<Integer> batches = new CopyOnWriteArrayList<>();
-        try (IndexWriter writer = new IndexWriter(new Recording(batches), 3, LONG, 100)) {
+        try (IndexWriter writer = new IndexWriter(new Recording(batches), 4, LONG, 100)) {
             IndexFixture fixture = new IndexFixture(paths(), writer::onDurable, writer::onStep);
             IndexFixture.Pending pending = fixture.prompt(ALICE, S1, DAY1, "hello");
             Thread.sleep(100);
-            assertEquals(List.of(), batches, "two events: below the threshold, no run ended");
+            assertEquals(List.of(), batches, "three events (the session's creation, the prompt, the context): below the threshold, no run ended");
             fixture.reply(pending, DAY1, tokens(5));
             waitFor(() -> batches.size() == 1);
-            assertEquals(List.of(3), batches, "the third event reaches the threshold and ends the run");
+            assertEquals(List.of(4), batches, "the fourth event reaches the threshold and ends the run");
 
             IndexFixture.Pending second = fixture.prompt(ALICE, S1, DAY1, "again");
             fixture.send(ALICE, S1, second.run(), DAY1, new tantalum.value.event.Cancel(new RequestId("c")));
@@ -89,7 +89,7 @@ class IndexStoreTest {
             IndexFixture fixture = new IndexFixture(paths(), writer::onDurable, writer::onStep);
             fixture.reply(fixture.prompt(ALICE, S1, DAY1, "hello"), DAY1, tokens(5));
             waitFor(() -> batches.size() == 1);
-            assertEquals(List.of(3), batches);
+            assertEquals(List.of(4), batches, "the session's creation, the prompt, the context, the reply");
             fixture.files.close();
         }
     }
@@ -101,7 +101,7 @@ class IndexStoreTest {
             IndexFixture fixture = new IndexFixture(paths(), writer::onDurable, writer::onStep);
             fixture.prompt(ALICE, S1, DAY1, "hello");
             waitFor(() -> batches.size() == 1);
-            assertEquals(List.of(2), batches);
+            assertEquals(List.of(3), batches, "the session's creation, the prompt, the context");
             fixture.files.close();
         }
     }
@@ -123,7 +123,7 @@ class IndexStoreTest {
             assertEquals(List.of(), batches);
             failing.set(false);
             writer.flush();
-            assertEquals(3, batches.stream().mapToInt(Integer::intValue).sum());
+            assertEquals(4, batches.stream().mapToInt(Integer::intValue).sum());
             fixture.files.close();
         }
     }

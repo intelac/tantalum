@@ -1,5 +1,6 @@
 package tantalum.kernel.step;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -17,7 +18,6 @@ import tantalum.value.decision.Decision;
 import tantalum.value.decision.TextSwapped;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmittedFixture;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.TextWithdrawn;
 import tantalum.value.event.TextWithdrawn.By;
@@ -77,13 +77,14 @@ class WithdrawStepsTest {
     }
 
     private static String all(SessionState session) {
-        return session.view() + " " + session.followUps() + " " + session.compaction() + " " + session.context().sections();
+        return session.view() + " " + session.inbox() + " " + session.compaction() + " " + session.context().sections();
     }
 
     @Test
     void theTextIsSwappedWhereverItAppearsVerbatimAndTheRunGoesOnAsBefore() {
         LoopFixture loop = midRun();
-        loop.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f1"), new RequestId("fr1"), "and again, " + PLATE));
+        loop.feed(null, UserPromptFixture.of(new SubmissionId("f1"), new RequestId("fr1"), "and again, " + PLATE));
+        loop.join("is " + PLATE + " saved?");
         String phase = loop.phase();
         int count = loop.session().messages().size();
 
@@ -96,7 +97,9 @@ class WithdrawStepsTest {
         // 历史照旧，一个字没改；模型看到的是换过的
         assertEquals(Message.user("note this: " + PLATE + ", thanks"), session.messages().getFirst());
         assertEquals(Message.user("note this: " + GONE + ", thanks"), session.view().getFirst());
-        assertEquals(List.of(Message.user("and again, " + GONE)), session.followUps());
+        // 收件队列里的两条都换了：排着的那条，和等着并进这一轮的那条
+        assertEquals(List.of(Message.user("and again, " + GONE)), loop.queued());
+        assertEquals(List.of(Message.user("is " + GONE + " saved?")), loop.joining());
         assertEquals("- car: " + GONE, session.context().sections().getFirst().body());
         ToolCallBlock call = (ToolCallBlock) session.view().get(1).content().get(2);
         assertEquals(new Json.Str("the user's car: " + GONE + "\nsecond line"), ((Json.Obj) call.arguments()).fields().get("content"));
@@ -106,8 +109,8 @@ class WithdrawStepsTest {
         assertFalse(loop.run().tools().allFinished());
         // 带签名的思考块不动
         assertEquals(new ReasoningBlock("claude", new Json.Str("the user said " + PLATE)), session.view().get(1).content().getFirst());
-        // 用户消息 1、参数 1、上下文段 1、排队的提问 1、工具结果 1
-        assertEquals(List.of(new TextSwapped(loop.run().ref(), 5)), decision.facts());
+        // 用户消息 1、参数 1、上下文段 1、收件队列 2、工具结果 1
+        assertEquals(List.of(new TextSwapped(loop.run().ref(), 6)), decision.facts());
 
         // 第二个工具回来，这一轮照常往下走，历史里的结果是换过的
         loop.feed(loop.runId(), ToolFinishedFixture.of(loop.commands.getLast().id(), "t2", "read", false, null));
@@ -187,8 +190,9 @@ class WithdrawStepsTest {
         assertSame(before, loop.kernel.step(before, foreign).newState());
 
         LoopFixture empty = new LoopFixture();
+        KernelState created = empty.state;
         empty.feed(null, withdraw(PLATE, GONE));
-        assertEquals(KernelState.empty(), empty.state);
+        assertEquals(created, empty.state);
     }
 
     @Test

@@ -36,7 +36,7 @@ describe("Composer", () => {
     await userEvent.type(box, "你好{Enter}");
     expect(submit).toHaveBeenCalledTimes(1);
     const [session, mode, text, requestId] = submit.mock.calls[0] as [string, string, string, string];
-    expect([session, mode, text]).toEqual(["s1", "prompt", "你好"]);
+    expect([session, mode, text]).toEqual(["s1", "queue", "你好"]);
     expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
     expect((box as HTMLTextAreaElement).value).toBe("");
   });
@@ -77,7 +77,7 @@ describe("Composer", () => {
     mount("run-3");
     expect(screen.queryByRole("button", { name: "插话" })).toBeNull();
     await userEvent.type(screen.getByRole("textbox"), "然后呢{Enter}");
-    expect(submit.mock.calls[0]?.[1]).toBe("follow-up");
+    expect(submit.mock.calls[0]?.[1]).toBe("queue");
 
     await userEvent.click(screen.getByRole("button", { name: "停止" }));
     expect(cancelRun).toHaveBeenCalledWith("run-3");
@@ -110,7 +110,7 @@ describe("Composer", () => {
     expect(onSubmitted).toHaveBeenCalledWith(choice);
     view.rerender(<Composer session="s1" activeRun="run-1" modelName="qwen" cloud={false} choice={choice} onSubmitted={onSubmitted} />);
     await userEvent.type(screen.getByRole("textbox"), "再问{Enter}");
-    expect(submit.mock.calls[1]?.[1]).toBe("follow-up");
+    expect(submit.mock.calls[1]?.[1]).toBe("queue");
     expect(submit.mock.calls[1]?.[5]).toEqual(choice);
   });
 
@@ -132,9 +132,9 @@ describe("Composer", () => {
       await userEvent.type(box, "插话{Control>}{Enter}{/Control}");
       await userEvent.type(box, "再插{Meta>}{Enter}{/Meta}");
       expect(submit.mock.calls.map((call) => [call[1], call[2], call[5]])).toEqual([
-        ["follow-up", "排队", null],
-        ["steer", "插话", null],
-        ["steer", "再插", null],
+        ["queue", "排队", null],
+        ["join", "插话", null],
+        ["join", "再插", null],
       ]);
     });
 
@@ -149,7 +149,7 @@ describe("Composer", () => {
 
       await userEvent.type(box, "有字{Control>}{Enter}{/Control}");
       expect(onSteerQueue).toHaveBeenCalledTimes(1);
-      expect(submit.mock.calls.map((call) => [call[1], call[2]])).toEqual([["steer", "有字"]]);
+      expect(submit.mock.calls.map((call) => [call[1], call[2]])).toEqual([["join", "有字"]]);
     });
 
     it("leaves Ctrl+Enter alone when nothing runs", async () => {
@@ -159,7 +159,7 @@ describe("Composer", () => {
       expect(box.placeholder).not.toContain("Ctrl");
       await userEvent.type(box, "你好{Control>}{Enter}{/Control}");
       expect(onSteerQueue).not.toHaveBeenCalled();
-      expect(submit.mock.calls.map((call) => call[1])).toEqual(["prompt"]);
+      expect(submit.mock.calls.map((call) => call[1])).toEqual(["queue"]);
     });
   });
 });

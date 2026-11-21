@@ -53,7 +53,7 @@ class SubmitApiTest {
 
     private HttpResponse<String> submit(String principal, String session, String requestId, String mode, String text) throws Exception {
         return server.post(principal, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + requestId + "\",\"mode\":\"" + mode + "\",\"text\":\"" + text + "\"}");
+                "{\"requestId\":\"" + requestId + "\",\"delivery\":\"" + mode + "\",\"text\":\"" + text + "\"}");
     }
 
     private void waitForModelCall(int count) throws Exception {
@@ -66,7 +66,7 @@ class SubmitApiTest {
     @Test
     void submitReturnsWithoutWaitingForTheModel() throws Exception {
         long start = System.nanoTime();
-        HttpResponse<String> response = submit("alice", "s1", "r1", "prompt", "hi");
+        HttpResponse<String> response = submit("alice", "s1", "r1", "queue", "hi");
         assertEquals(200, response.statusCode(), response.body());
         assertTrue(response.body().contains("submissionId"));
         assertTrue(TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start) < 5);
@@ -75,9 +75,9 @@ class SubmitApiTest {
 
     @Test
     void repeatedRequestIdDoesNotStartAnotherRun() throws Exception {
-        String first = submit("alice", "s1", "r1", "prompt", "hi").body();
+        String first = submit("alice", "s1", "r1", "queue", "hi").body();
         waitForModelCall(1);
-        HttpResponse<String> second = submit("alice", "s1", "r1", "prompt", "hi");
+        HttpResponse<String> second = submit("alice", "s1", "r1", "queue", "hi");
         assertEquals(200, second.statusCode());
         assertTrue(second.body().contains("\"duplicate\":true"), second.body());
         assertTrue(first.contains("\"duplicate\":false"), first);
@@ -88,32 +88,32 @@ class SubmitApiTest {
 
     @Test
     void missingRequestIdIsRejected() throws Exception {
-        HttpResponse<String> response = server.post("alice", "/api/sessions/s1/submissions", "{\"mode\":\"prompt\",\"text\":\"hi\"}");
+        HttpResponse<String> response = server.post("alice", "/api/sessions/s1/submissions", "{\"delivery\":\"queue\",\"text\":\"hi\"}");
         assertEquals(400, response.statusCode());
     }
 
     @Test
     void badInputIsRejected() throws Exception {
         assertEquals(400, submit("alice", "s1", "r", "nonsense", "hi").statusCode());
-        assertEquals(400, submit("alice", "s1", "r2", "prompt", "").statusCode());
+        assertEquals(400, submit("alice", "s1", "r2", "queue", "").statusCode());
         assertEquals(400, server.post("alice", "/api/sessions/s1/submissions", "{oops").statusCode());
     }
 
     @Test
     void notLoggedInIsRejected() throws Exception {
-        assertEquals(401, submit(null, "s1", "r1", "prompt", "hi").statusCode());
+        assertEquals(401, submit(null, "s1", "r1", "queue", "hi").statusCode());
     }
 
     @Test
     void anotherUsersSessionIsNotFound() throws Exception {
-        submit("alice", "s1", "r1", "prompt", "hi");
+        submit("alice", "s1", "r1", "queue", "hi");
         waitForModelCall(1);
-        assertEquals(404, submit("bob", "s1", "r2", "prompt", "hi").statusCode());
+        assertEquals(404, submit("bob", "s1", "r2", "queue", "hi").statusCode());
     }
 
     @Test
     void cancelEndsTheRunAndInterruptsTheModel() throws Exception {
-        submit("alice", "s1", "r1", "prompt", "hi");
+        submit("alice", "s1", "r1", "queue", "hi");
         waitForModelCall(1);
         String run = runOf("alice", "s1");
 
@@ -131,10 +131,10 @@ class SubmitApiTest {
 
     @Test
     void steerAndFollowUpAreAccepted() throws Exception {
-        submit("alice", "s1", "r1", "prompt", "hi");
+        submit("alice", "s1", "r1", "queue", "hi");
         waitForModelCall(1);
-        assertEquals(200, submit("alice", "s1", "r2", "steer", "also").statusCode());
-        assertEquals(200, submit("alice", "s1", "r3", "follow-up", "later").statusCode());
+        assertEquals(200, submit("alice", "s1", "r2", "join", "also").statusCode());
+        assertEquals(200, submit("alice", "s1", "r3", "queue", "later").statusCode());
         String runs = "";
         for (int i = 0; i < 200 && !runs.contains("followUps\":1"); i++) {
             Thread.sleep(10);
@@ -156,9 +156,9 @@ class SubmitApiTest {
     /** review-fixes 需求 11.13：requestId 只收字母、数字和 . _ : -；运行 ID 格式不对按“没有这个运行”。 */
     @Test
     void requestIdsAndRunIdsAreValidated() throws Exception {
-        assertEquals(400, submit("alice", "s1", "bad id", "prompt", "hi").statusCode());
-        assertEquals(400, submit("alice", "s1", "x".repeat(129), "prompt", "hi").statusCode());
-        assertEquals(200, submit("alice", "s1", "ok.id:1_2-3", "prompt", "hi").statusCode());
+        assertEquals(400, submit("alice", "s1", "bad id", "queue", "hi").statusCode());
+        assertEquals(400, submit("alice", "s1", "x".repeat(129), "queue", "hi").statusCode());
+        assertEquals(200, submit("alice", "s1", "ok.id:1_2-3", "queue", "hi").statusCode());
         assertEquals(404, server.post("alice", "/api/runs/not-a-run-id/cancel", "").statusCode());
         assertEquals(404, server.get("alice", "/api/runs/s1_x/turns").statusCode());
     }

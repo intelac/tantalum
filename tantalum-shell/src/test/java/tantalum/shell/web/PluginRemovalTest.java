@@ -85,7 +85,7 @@ class PluginRemovalTest {
     }
 
     private static void ask(TestServer server, String request, String text, int runs) throws Exception {
-        String body = "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}";
+        String body = "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}";
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", body).statusCode());
         Instant deadline = Instant.now().plusSeconds(20);
         while (Instant.now().isBefore(deadline)) {

@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.shell.loop.Snapshots;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,7 +42,6 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -91,7 +91,7 @@ class PluginChangeTest {
         UsageLedger usage = new UsageLedger(scenario.index, scenario.writer);
         Kernel narrower = kernel(scope(Set.of()));
 
-        SessionSlice restored = new RecordReplay(scenario.paths, reader).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
+        SessionSlice restored = new RecordReplay(scenario.paths, reader, new Snapshots(EventCodec.withBuiltins().mapper())).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
                 .orElseThrow().slice();
         SessionSlice withOldRule = SessionReplayFixture.of(scenario.paths, reader, usage, scenario.kernel)
                 .load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE).orElseThrow();
@@ -107,7 +107,7 @@ class PluginChangeTest {
     @Test
     void theNewRuleAppliesToTheNextStepOnly() throws Exception {
         SessionFileReader reader = new SessionFileReader(EventCodec.withBuiltins());
-        SessionSlice restored = new RecordReplay(scenario.paths, reader).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
+        SessionSlice restored = new RecordReplay(scenario.paths, reader, new Snapshots(EventCodec.withBuiltins().mapper())).load(ReplayScenario.ALICE, ReplayScenario.TOOLS, Long.MAX_VALUE)
                 .orElseThrow().slice();
         KernelState state = KernelState.empty().withResident(restored.session(), restored.runs());
 
@@ -120,7 +120,7 @@ class PluginChangeTest {
     private static Decision nextToolCall(Kernel kernel, KernelState state, long lastSeq) {
         long seq = lastSeq + 1;
         Decision decision = kernel.step(state, envelope(seq++, null, UserPromptFixture.of(new SubmissionId("sub-next"),
-                new RequestId("req-next"), new OwnerRef.OfSession(ReplayScenario.TOOLS), "one more file")));
+                new RequestId("req-next"), "one more file")));
         while (true) {
             var command = decision.commands().getFirst();
             var run = command.run().run();

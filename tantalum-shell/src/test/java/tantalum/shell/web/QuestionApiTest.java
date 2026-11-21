@@ -70,7 +70,7 @@ class QuestionApiTest {
     void onlyTheAskedUserSeesAndAnswersTheQuestion() throws Exception {
         server.get("bob", "/api/sessions");
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"clean up\"}").statusCode());
+                "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"clean up\"}").statusCode());
         JsonNode questions = awaitQuestion("alice");
         assertEquals(1, questions.size(), questions.toString());
         JsonNode question = questions.get(0);

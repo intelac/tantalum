@@ -38,7 +38,6 @@ import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.event.ContextAssembledFixture;
@@ -53,7 +52,8 @@ final class TranscriptFixture {
     record Change(long seq, int index, TranscriptItem item) {}
 
     final List<Change> changes = new ArrayList<>();
-    final Transcript transcript = new Transcript();
+    /** 全留：老的测试看全部条目；只留尾巴的由 HistoryWindowEquivalenceTest 另起一个对照（live-views）。 */
+    final Transcript transcript = new Transcript().keepingEverything();
     final List<EventEnvelope> envelopes = new ArrayList<>();
     final List<Decision> decisions = new ArrayList<>();
     /** 每个事件处理前的内核状态，轨迹投影要用。 */
@@ -61,6 +61,8 @@ final class TranscriptFixture {
 
     private final Kernel kernel;
     private KernelState state = KernelState.empty();
+    /** 压缩时不去掉历史（history-window 之前的样子），等价测试用。 */
+    private boolean wholeHistory;
     private long seq;
     private Instant now = T0;
     private int submissions;
@@ -73,14 +75,28 @@ final class TranscriptFixture {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, Limits.DEFAULT);
+        // 会话先建好才收得到话。建会话这一条用一个不占编号的序号（之后的照旧从 0 起），这样条目编号和时间和以前一样，
+        // 给网页的样本只显出真正的变化
+        feedAt(CREATED_SEQ, now.minusSeconds(1), null, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null));
     }
 
+    /** 建会话那一条的序号：比所有别的都小，不占 0 起的编号。 */
+    static final long CREATED_SEQ = -2;
+
     Decision feed(RunId run, Event event) {
-        EventEnvelope envelope = new EventEnvelope(seq++, now, USER, SESSION, run, event);
+        Decision decision = feedAt(seq++, now, run, event);
         now = now.plusSeconds(1);
+        return decision;
+    }
+
+    private Decision feedAt(long at, Instant when, RunId run, Event event) {
+        EventEnvelope envelope = new EventEnvelope(at, when, USER, SESSION, run, event);
         befores.add(state);
         KernelState before = state;
         Decision decision = kernel.step(state, envelope);
+        if (wholeHistory) {
+            decision = new Decision(whole(before, decision.newState()), decision.commands(), decision.facts());
+        }
         state = decision.newState();
         envelopes.add(envelope);
         decisions.add(decision);
@@ -89,6 +105,29 @@ final class TranscriptFixture {
             changes.add(new Change(envelope.seq(), index++, item));
         }
         return decision;
+    }
+
+    /** 从现在起压缩不去掉历史：每一步之后把去掉的接回去，内核下一步看到的是整份历史（history-window 之前的样子）。 */
+    TranscriptFixture keepingWholeHistory() {
+        wholeHistory = true;
+        return this;
+    }
+
+    private static KernelState whole(KernelState before, KernelState after) {
+        KernelState result = after;
+        for (tantalum.value.state.SessionState now : after.sessions().values()) {
+            if (now.windowStart() == 0) {
+                continue;
+            }
+            tantalum.value.state.SessionState earlier = before.sessions().get(now.id());
+            // 上一步之后接回过，earlier 是整份；这一步只能去掉这一步开始前就有的，所以追加的都在窗口里
+            List<tantalum.value.model.Message> all = new ArrayList<>(earlier.messages());
+            all.addAll(now.from(earlier.historySize()));
+            result = result.with(new tantalum.value.state.SessionState(now.id(), now.principal(), now.kind(), now.helper(), all, 0,
+                    now.activeRun(), now.lastRun(), now.inbox(), now.context(), now.compaction(), now.anchor(), now.omittedImages(),
+                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn(), now.outbox()));
+        }
+        return result;
     }
 
     void tick(Duration delta) {
@@ -152,7 +191,7 @@ final class TranscriptFixture {
 
     UserPrompt prompt(String text) {
         int n = submissions++;
-        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
     List<Command> lastCommands() {

@@ -31,7 +31,7 @@ public final class MemoryDeleteTool implements Tool {
     @Override public String name() { return NAME; }
 
     /** 忘掉记忆只在人在场的对话里做。 */
-    @Override public boolean inTasks() { return false; }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
     @Override public String description() {
         return "Forget something. name: delete a whole memory entry. text: one thing the user said or no longer wants (the statement "
                 + "itself, in the user's words); this only looks and returns the places that may say it (in memory, and in past "

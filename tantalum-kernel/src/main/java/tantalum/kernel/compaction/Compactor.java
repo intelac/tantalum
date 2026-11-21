@@ -75,7 +75,7 @@ public final class Compactor {
         int headMessages = units.get(firstKept).from();
         List<Message> head = view.subList(0, headMessages);
         // 规则 5：当前请求是视图里最新的用户亲笔消息；保留段里已有更新的，头部的旧消息就只进摘要。
-        boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isUserText);
+        boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isRequest);
         return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, estimate.ofMessages(head),
                 requestKept ? null : request(head)));
     }
@@ -114,8 +114,9 @@ public final class Compactor {
         CompactionSettings settings = session.context() == null ? null : session.context().compaction();
         TokenEstimate estimate = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
         if (session.anchor() != null) {
+            // 锚点从头数；每次压缩都清掉锚点，窗口只在压缩时移动，所以锚点总在窗口里
             List<Message> messages = session.messages();
-            int from = Math.min(session.anchor().messageCount(), messages.size());
+            int from = Math.min(Math.max(session.anchor().messageCount(), session.windowStart()), session.historySize()) - session.windowStart();
             return session.anchor().tokens()
                     + estimate.ofMessages(ImageBudget.omit(messages.subList(from, messages.size()), session.omittedImages()));
         }
@@ -142,7 +143,7 @@ public final class Compactor {
             return base;
         }
         List<Message> view = session.view();
-        int after = Math.max(0, session.messages().size() - Math.min(anchor.messageCount(), session.messages().size()));
+        int after = Math.max(0, session.historySize() - Math.min(anchor.messageCount(), session.historySize()));
         List<Message> atAnchor = view.subList(0, Math.max(0, view.size() - after));
         long estimated = base.ofText(system) + base.ofTools(tools)
                 + base.ofMessages(ImageBudget.omit(atAnchor, session.omittedImages()));
@@ -270,11 +271,20 @@ public final class Compactor {
     static Message request(List<Message> head) {
         for (int i = head.size() - 1; i >= 0; i--) {
             Message message = head.get(i);
-            if (isUserText(message)) {
+            if (isRequest(message)) {
                 return message;
             }
         }
         return null;
+    }
+
+    /**
+     * 规则 5 原样留下的“最近一次请求”：你亲笔的话，或者帮手收到的那条交代（它要做的全部内容都在里面，只留摘要会丢掉，delivery 审查发现）。
+     * 交代不是你说的话，所以不算 {@link #isUserText}。
+     */
+    static boolean isRequest(Message message) {
+        return isUserText(message) || message.role() == Role.USER && message.content().size() == 1
+                && message.content().getFirst() instanceof tantalum.value.model.AssignmentBlock;
     }
 
     /**

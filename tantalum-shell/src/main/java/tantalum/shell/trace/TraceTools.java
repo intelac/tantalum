@@ -4,8 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import tantalum.kernel.step.CancelSteps;
 import tantalum.kernel.tool.ToolPairing;
-import tantalum.value.decision.TaskStarted;
-import tantalum.value.task.TaskTools;
+import tantalum.value.decision.AssignmentStarted;
+import tantalum.value.assignment.AssignmentTools;
 import tantalum.shell.trace.TracePass.Place;
 import tantalum.shell.trace.TraceRecord.ModelRequest;
 import tantalum.shell.trace.TraceRecord.ToolCall;
@@ -129,7 +129,7 @@ final class TraceTools {
                 } else if (ToolPairing.ABORTED_BEFORE_DISPATCH.equals(result.code())) {
                     String why = end == null ? null : end.reason() + (end.detail() == null ? "" : ": " + end.detail());
                     settle(tool, Status.NOT_SENT, result, why);
-                } else if (TaskTools.handles(tool.name()) && tool.arguments() != null && !stoppedByHook(tool)) {
+                } else if (AssignmentTools.handles(tool.name()) && tool.arguments() != null && !stoppedByHook(tool)) {
                     task(tool, result);
                 } else if (result.code() == null) {
                     block(tool, result);
@@ -176,8 +176,8 @@ final class TraceTools {
         String task = null;
         String session = null;
         for (Fact fact : pass.decision.facts()) {
-            if (fact instanceof TaskStarted started && tool.call().equals(started.toolCallId())) {
-                task = started.task();
+            if (fact instanceof AssignmentStarted started && tool.call().equals(started.toolCallId())) {
+                task = started.assignment();
                 session = started.session().value();
             }
         }

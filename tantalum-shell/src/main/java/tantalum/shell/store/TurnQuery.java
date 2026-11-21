@@ -94,6 +94,20 @@ public final class TurnQuery {
     }
 
     /**
+     * 一个会话从第一个起的全部条目（往前翻页翻过内存里尾巴的切点时，live-views）：从头重放账，用全留的对话投影，撤下照样生效。
+     * 文件不存在时为空。
+     */
+    public List<TranscriptItem> everyItem(Principal principal, tantalum.value.id.SessionId session) {
+        Path file = paths.sessionFile(principal, session);
+        if (!java.nio.file.Files.exists(file)) {
+            return List.of();
+        }
+        Transcript transcript = new Transcript().keepingEverything();
+        each(principal, file, (envelope, before, decision) -> transcript.apply(envelope, before, decision));
+        return transcript.items(session);
+    }
+
+    /**
      * SSE 补读：某用户在某位置之后的事实、条目和轨迹记录的变化，编号规则与 {@code Cleanroom} 相同：每个事件先事实，再条目，再轨迹记录。
      * 只完整重放末尾序号不早于位置的文件，其余文件只读末尾一行；不依赖可能落后的索引。
      */

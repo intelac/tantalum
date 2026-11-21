@@ -51,7 +51,7 @@ class ContextEndpointTest {
 
     private static void prompt(TestServer server, String session, String id) throws Exception {
         assertEquals(200, server.post("alice", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + id + "\",\"mode\":\"prompt\",\"text\":\"tell me about " + SECRET_TEXT + "\"}").statusCode());
+                "{\"requestId\":\"" + id + "\",\"delivery\":\"queue\",\"text\":\"tell me about " + SECRET_TEXT + "\"}").statusCode());
     }
 
     private static void settle(TestServer server, String session, int count) throws Exception {

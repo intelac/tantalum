@@ -1,5 +1,6 @@
 package tantalum.shell.store;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,8 +30,8 @@ class ColdReadsTest {
     private ColdReads cold() {
         return new ColdReads(new SessionPaths(dir), (principal, session) -> {
             reads.incrementAndGet();
-            return Optional.of(new SessionSlice(SessionState.start(session, principal), List.of(),
-                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get()), null, reads.get()));
+            return Optional.of(new SessionSlice(SessionStateFixture.regular(session, principal), List.of(),
+                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get(), 0, null, null), null, reads.get()));
         });
     }
 

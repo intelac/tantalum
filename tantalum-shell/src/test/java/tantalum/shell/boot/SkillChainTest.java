@@ -121,7 +121,7 @@ class SkillChainTest {
     }
 
     private void ask(String text, int run) throws Exception {
-        String body = "{\"requestId\":\"r" + run + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}";
+        String body = "{\"requestId\":\"r" + run + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}";
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", body).statusCode());
         for (int i = 0; i < 1000; i++) {
             JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/s1/runs").body()).get("runs");
@@ -342,9 +342,9 @@ class SkillChainTest {
         hold = release;
         try (TestComputer ignored = server.connectComputer("alice", mac, false)) {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"first\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"first\"}").statusCode());
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r2\",\"mode\":\"follow-up\",\"text\":\"/pdf-tools later\"}").statusCode());
+                    "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"/pdf-tools later\"}").statusCode());
             JsonNode queued = null;
             for (int i = 0; i < 500 && queued == null; i++) {
                 for (JsonNode item : items()) {

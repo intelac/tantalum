@@ -82,7 +82,7 @@ class TwoComputersApiTest {
     private String say(String user, String session, String text) throws Exception {
         String request = session + "-" + Integer.toHexString(text.hashCode());
         int status = server.post(user, "/api/sessions/" + session + "/submissions", "{\"requestId\":\"" + request
-                + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text) + "}").statusCode();
+                + "\",\"delivery\":\"queue\",\"text\":" + JSON.writeValueAsString(text) + "}").statusCode();
         if (status != 200) {
             return "status " + status;
         }

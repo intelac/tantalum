@@ -55,7 +55,7 @@ class SessionApiTest {
 
     private void completed(String user, String session, String text) throws Exception {
         server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + session + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}");
+                "{\"requestId\":\"" + session + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}");
         String body = "";
         for (int i = 0; i < 500 && !body.contains("COMPLETED"); i++) {
             Thread.sleep(10);
@@ -69,7 +69,7 @@ class SessionApiTest {
         completed("alice", "s1", "first question about interest\\nsecond line");
         Thread.sleep(5);
         completed("alice", "s2", "second");
-        server.post("alice", "/api/sessions/s3/submissions", "{\"requestId\":\"s3\",\"mode\":\"prompt\",\"text\":\"slow\"}");
+        server.post("alice", "/api/sessions/s3/submissions", "{\"requestId\":\"s3\",\"delivery\":\"queue\",\"text\":\"slow\"}");
         completed("bob", "b1", "bob's own");
 
         HttpResponse<String> response = server.get("alice", "/api/sessions");

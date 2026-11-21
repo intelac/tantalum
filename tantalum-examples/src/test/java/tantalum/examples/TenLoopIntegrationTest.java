@@ -96,7 +96,7 @@ class TenLoopIntegrationTest {
             });
 
             HttpResponse<String> submitted = server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"where is the interest calculated?\"}");
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"where is the interest calculated?\"}");
             assertEquals(200, submitted.statusCode(), submitted.body());
 
             String runs = "";
@@ -123,7 +123,7 @@ class TenLoopIntegrationTest {
 
         List<EventEnvelope> journal;
         journal = new SessionStore(data, EventCodec.withBuiltins()).readAll();
-        assertEquals(List.of("UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished", "ModelReplied",
+        assertEquals(List.of("SessionCreated", "UserPrompt", "ContextAssembled", "ModelReplied", "ToolFinished", "ModelReplied",
                 "ToolFinished", "ModelReplied", "ToolFinished", "ModelReplied", "WorkDone", "ModelReplied"),
                 journal.stream().map(envelope -> envelope.event().type()).toList());
 

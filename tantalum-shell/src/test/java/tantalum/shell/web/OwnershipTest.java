@@ -39,7 +39,7 @@ class OwnershipTest {
     }
 
     private static String body(String request) {
-        return "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+        return "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"hi\"}";
     }
 
     @Test

@@ -17,7 +17,7 @@ async function evict(page: Page, session: string): Promise<void> {
   await page.waitForTimeout(2500);
   const other = `s-${Date.now().toString(16).slice(-8)}`;
   const nudged = await page.request.post(`/api/sessions/${other}/submissions`, {
-    data: { requestId: `nudge-${Date.now()}`, mode: "prompt", text: "hello 别的会话" },
+    data: { requestId: `nudge-${Date.now()}`, delivery: "queue", text: "hello 别的会话" },
     headers: ORIGIN,
   });
   expect(nudged.ok(), await nudged.text()).toBeTruthy();

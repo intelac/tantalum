@@ -158,12 +158,15 @@ class TracePassTest {
         TraceFixture fx = new TraceFixture();
         RunId first = fx.start("one");
         fx.feed(first, fx.followUp("a"));
+        long a = fx.lastSeq();
         fx.feed(first, fx.followUp("b"));
+        long b = fx.lastSeq();
         fx.feed(first, fx.followUp("c"));
-        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, 0, "a", null));
-        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.EDIT, 0, "b", "b2"));
-        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.STEER, 1, "c", null));
-        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, 0, "gone", null));
+        long c = fx.lastSeq();
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, a, null));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.EDIT, b, "b2"));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.JOIN, c, null));
+        fx.feed(first, fx.queue(tantalum.value.event.QueueChanged.Action.REMOVE, a, null));
 
         UserInput steer = fx.records(UserInput.class).stream().filter(user -> user.mode() == UserInput.Mode.STEER).findFirst().orElseThrow();
         assertEquals("c", steer.text());

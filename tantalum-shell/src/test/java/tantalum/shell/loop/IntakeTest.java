@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -38,21 +39,21 @@ class IntakeTest {
         ExternalGate gate = new ExternalGate(new ExternalGate.Limits(4, 1, 4), () -> 0, () -> false);
         SubmissionLedger ledger = new SubmissionLedger(history, SubmissionLedger.DEFAULT_CAPACITY);
         return new Intake(input, gate, ledger, new StateView(), new Residency(), (principal, session) -> 200,
-                sessions, Clock.systemUTC(), receipts);
+                sessions, (principal, session) -> null, Clock.systemUTC(), receipts);
     }
 
     /** 环没有消费者：第一条进去，第二条 429。被拒的那条没有在途回执，再试一次是新的认领而不是“重复”。 */
     @Test
     void aRejectedSubmissionLeavesNoReceiptAndCanBeRetried() {
         Intake intake = intake((principal, request) -> Optional.empty(), 1);
-        Intake.Submission first = intake.submit(ALICE, SESSION, new RequestId("r-1"), "prompt", "hi");
+        Intake.Submission first = intake.submit(ALICE, SESSION, new RequestId("r-1"), tantalum.value.event.Delivery.QUEUE, "hi");
         assertEquals(200, first.status());
         assertFalse(first.saved().isDone(), "waits for the step to be durable");
-        Intake.Submission second = intake.submit(ALICE, SESSION, new RequestId("r-2"), "prompt", "again");
+        Intake.Submission second = intake.submit(ALICE, SESSION, new RequestId("r-2"), tantalum.value.event.Delivery.QUEUE, "again");
         assertEquals(429, second.status());
         assertNull(second.saved());
         assertEquals(1, receipts.size(), "only the accepted submission has a receipt in flight");
-        Intake.Submission retried = intake.submit(ALICE, SESSION, new RequestId("r-2"), "prompt", "again");
+        Intake.Submission retried = intake.submit(ALICE, SESSION, new RequestId("r-2"), tantalum.value.event.Delivery.QUEUE, "again");
         assertEquals(429, retried.status(), "a fresh attempt that reaches the full ring again, not a 503 from a leaked permit");
         assertFalse(retried.duplicate(), "the rejected claim was released, so the retry is a fresh attempt");
     }
@@ -67,11 +68,11 @@ class IntakeTest {
             }
             return Optional.empty();
         }, 4);
-        Intake.Submission refused = intake.submit(ALICE, SESSION, new RequestId("r-1"), "prompt", "hi");
+        Intake.Submission refused = intake.submit(ALICE, SESSION, new RequestId("r-1"), tantalum.value.event.Delivery.QUEUE, "hi");
         assertEquals(503, refused.status());
         assertEquals(0, receipts.size());
         locked[0] = false;
-        Intake.Submission accepted = intake.submit(ALICE, SESSION, new RequestId("r-1"), "prompt", "hi");
+        Intake.Submission accepted = intake.submit(ALICE, SESSION, new RequestId("r-1"), tantalum.value.event.Delivery.QUEUE, "hi");
         assertEquals(200, accepted.status());
         assertFalse(accepted.duplicate(), "the refused attempt was not recorded as a submission");
     }
@@ -80,8 +81,8 @@ class IntakeTest {
     @Test
     void aDuplicateSharesTheOriginalReceipt() {
         Intake intake = intake((principal, request) -> Optional.empty(), 4);
-        Intake.Submission first = intake.submit(ALICE, SESSION, new RequestId("r-1"), "prompt", "hi");
-        Intake.Submission again = intake.submit(ALICE, SESSION, new RequestId("r-1"), "prompt", "hi");
+        Intake.Submission first = intake.submit(ALICE, SESSION, new RequestId("r-1"), tantalum.value.event.Delivery.QUEUE, "hi");
+        Intake.Submission again = intake.submit(ALICE, SESSION, new RequestId("r-1"), tantalum.value.event.Delivery.QUEUE, "hi");
         assertTrue(again.duplicate());
         assertEquals(first.submission(), again.submission());
         assertTrue(first.saved() == again.saved() || !again.saved().isDone(), "the duplicate waits like the original");
@@ -94,7 +95,7 @@ class IntakeTest {
         List<EventEnvelope> published = new CopyOnWriteArrayList<>();
         InputRing input = LoopFixtures.inputRing(4, (slot, seq, end) -> published.add(slot.envelope));
         input.start();
-        SessionState mine = SessionState.start(SESSION, ALICE);
+        SessionState mine = SessionStateFixture.regular(SESSION, ALICE);
         Intake intake = intake((principal, request) -> Optional.empty(), input,
                 (principal, session) -> principal.equals(ALICE) && session.equals(SESSION) ? Optional.of(mine) : Optional.empty());
 

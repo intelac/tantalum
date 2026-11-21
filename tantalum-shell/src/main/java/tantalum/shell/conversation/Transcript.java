@@ -30,32 +30,62 @@ public final class Transcript implements Projection {
         int seenMessages;
         /** 这个会话最后投影过的事件序号；快照带上它，客户端据此和 SSE 推送合并。 */
         long lastSeq = -1;
+        /** 去掉了前面几个条目：{@code items} 里第一个的位置（live-views）。 */
+        int offset;
+        /** 第一条提问（撤下时跟着换），会话标题用它；去掉了也还在这里。 */
+        TranscriptItem.UserMessage firstUser;
+        /** 全部条目里最大的时间（运行状态按更新时间），会话列表的最近活动。 */
+        java.time.Instant latest = java.time.Instant.EPOCH;
     }
 
-    /** 一个会话的全部条目和它们截至的事件序号：序号更大的 SSE 推送比快照新，反之快照更新。 */
-    public record View(long seq, List<TranscriptItem> items) {}
+    /**
+     * 一个会话留在内存的条目（从位置 {@code offset} 起的连续一段）和它们截至的事件序号：序号更大的 SSE 推送比快照新，反之快照更新。
+     * {@code firstUser}、{@code latest} 是全部条目的（标题、最近活动）。
+     */
+    public record View(long seq, int offset, List<TranscriptItem> items, TranscriptItem.UserMessage firstUser, java.time.Instant latest) {
+
+        public View {
+            items = List.copyOf(items);
+            latest = latest == null ? java.time.Instant.EPOCH : latest;
+        }
+    }
 
     /** 一个会话的完整内部状态，重放会话文件得到，恢复后接着处理事件和没中断时相同。 */
-    public record Saved(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq) {
+    public record Saved(List<TranscriptItem> items, List<String> queued, Map<String, String> stepByCall, int seenMessages, long lastSeq,
+                        int offset, TranscriptItem.UserMessage firstUser, java.time.Instant latest) {
+
+        /** 只读查询用的样子。 */
+        public View view() {
+            return new View(lastSeq, offset, items, firstUser, latest);
+        }
 
         public Saved {
             items = List.copyOf(items);
+            latest = latest == null ? java.time.Instant.EPOCH : latest;
             queued = List.copyOf(queued);
             stepByCall = Map.copyOf(stepByCall);
         }
     }
 
     private final Map<SessionId, Conversation> sessions = new ConcurrentHashMap<>();
+    /** 全留（不去掉前面的条目）：往前翻过切点时重放账、等价测试用。 */
+    private boolean everything;
+
+    /** 从现在起全部条目都留在内存，不按切点去掉（live-views 之前的样子）。 */
+    public Transcript keepingEverything() {
+        everything = true;
+        return this;
+    }
 
     /** 没有该会话时返回空的状态。 */
     public Saved export(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {
-            return new Saved(List.of(), List.of(), Map.of(), 0, -1);
+            return new Saved(List.of(), List.of(), Map.of(), 0, -1, 0, null, null);
         }
         synchronized (conversation) {
             return new Saved(List.copyOf(conversation.items.values()), List.copyOf(conversation.queued), conversation.stepByCall,
-                    conversation.seenMessages, conversation.lastSeq);
+                    conversation.seenMessages, conversation.lastSeq, conversation.offset, conversation.firstUser, conversation.latest);
         }
     }
 
@@ -67,6 +97,9 @@ public final class Transcript implements Projection {
         conversation.stepByCall.putAll(saved.stepByCall());
         conversation.seenMessages = saved.seenMessages();
         conversation.lastSeq = saved.lastSeq();
+        conversation.offset = saved.offset();
+        conversation.firstUser = saved.firstUser();
+        conversation.latest = saved.latest();
         sessions.put(session, conversation);
     }
 
@@ -84,10 +117,11 @@ public final class Transcript implements Projection {
     public View view(SessionId session) {
         Conversation conversation = sessions.get(session);
         if (conversation == null) {
-            return new View(-1, List.of());
+            return new View(-1, 0, List.of(), null, null);
         }
         synchronized (conversation) {
-            return new View(conversation.lastSeq, List.copyOf(conversation.items.values()));
+            return new View(conversation.lastSeq, conversation.offset, List.copyOf(conversation.items.values()), conversation.firstUser,
+                    conversation.latest);
         }
     }
 
@@ -107,8 +141,22 @@ public final class Transcript implements Projection {
         Conversation conversation = sessions.computeIfAbsent(envelope.session(), key -> new Conversation());
         Map<String, TranscriptItem> changed = new LinkedHashMap<>();
         synchronized (conversation) {
-            new TranscriptPass(conversation, envelope, before, decision, changed).run();
+            if (!Projection.forgotten(envelope, before, decision)) {
+                new TranscriptPass(conversation, envelope, before, decision, changed).run();
+            }
             conversation.lastSeq = envelope.seq();
+            for (TranscriptItem item : changed.values()) {
+                if (item instanceof TranscriptItem.UserMessage message && (conversation.firstUser == null || conversation.firstUser.id().equals(message.id()))) {
+                    conversation.firstUser = message;
+                }
+                java.time.Instant at = item instanceof TranscriptItem.RunStatus status ? status.updatedAt() : item.at();
+                if (at.isAfter(conversation.latest)) {
+                    conversation.latest = at;
+                }
+            }
+            if (!everything) {
+                Tail.trim(conversation, decision.newState().sessions().get(envelope.session()));
+            }
         }
         return List.copyOf(changed.values());
     }

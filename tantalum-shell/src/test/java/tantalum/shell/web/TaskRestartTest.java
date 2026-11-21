@@ -21,7 +21,11 @@ import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelReplied;
-import tantalum.value.event.TaskAssigned;
+import tantalum.value.event.Assignment;
+import tantalum.value.event.Root;
+import tantalum.value.event.SessionCreated;
+import tantalum.value.state.HelperOf;
+import tantalum.value.state.SessionKind;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
@@ -32,18 +36,17 @@ import tantalum.value.id.SubmissionId;
 import tantalum.value.json.Json;
 import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
-import tantalum.value.model.TaskResultBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.state.OwnerRef;
-import tantalum.value.task.TaskOutcome;
-import tantalum.value.task.TaskTools;
+import tantalum.value.assignment.AssignmentOutcome;
+import tantalum.value.assignment.AssignmentTools;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 进程死在任务的各个时间点（subagent 需求 4.1–4.3）：用一份“死在那一刻”的账启动真服务器，放出任务的会话都恰好得到一个结果，
- * 任务不重新执行，再重启一次什么都不多。
+ * 进程死在任务的各个时间点（subagent 需求 4.1–4.3，delivery 需求 4）：用一份“死在那一刻”的账启动真服务器，放出任务的会话都恰好
+ * 得到一个结果；没送到的交代重送后做一次，送到了的不重新执行；再重启一次什么都不多。
  */
 class TaskRestartTest {
 
@@ -54,7 +57,8 @@ class TaskRestartTest {
     /** 第 3 个事件里第 0 个工具调用放出的任务，和它的会话。 */
     private static final String TASK = "t3-0";
     private static final SessionId CHILD = new SessionId("s1-" + TASK);
-    private static final RunId CHILD_RUN = RunId.of(CHILD, 5);
+    /** 第 5 个事件建帮手会话，第 6 个是交代：它开的那一轮。 */
+    private static final RunId CHILD_RUN = RunId.of(CHILD, 6);
     private static final Instant AT = Instant.parse("2026-11-17T00:00:00Z");
 
     @TempDir
@@ -83,30 +87,41 @@ class TaskRestartTest {
     private void write(Event... child) throws Exception {
         Files.createDirectories(data());
         List<EventEnvelope> events = new ArrayList<>(List.of(
-                new EventEnvelope(1, AT, ALICE, S1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "look into module A")),
+                new EventEnvelope(0, AT, ALICE, S1, null, new SessionCreated(SessionKind.REGULAR, null, false, null)),
+                new EventEnvelope(1, AT, ALICE, S1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), "look into module A")),
                 new EventEnvelope(2, AT, ALICE, S1, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
-                new EventEnvelope(3, AT, ALICE, S1, RUN, new ModelReplied(new CommandId("s1_2-0"), List.of(new ToolCallBlock("c1", TaskTools.TASK, "{}",
-                        new Json.Obj(Map.of(TaskTools.PROMPT, new Json.Str("Check module A."))))), StopReason.TOOL_USE, "m", null, null, null, null)),
-                // 第 3 步发出的命令：0 是 StartTask，1 是接着调模型
-                new EventEnvelope(4, AT, ALICE, S1, RUN, said("s1_3-1", "started"))));
-        long seq = 5;
+                new EventEnvelope(3, AT, ALICE, S1, RUN, new ModelReplied(new CommandId("s1_2-0"), List.of(new ToolCallBlock("c1", AssignmentTools.TASK, "{}",
+                        new Json.Obj(Map.of(AssignmentTools.PROMPT, new Json.Str("Check module A."))))), StopReason.TOOL_USE, "m", null, null, null, null)),
+                // 第 3 步发出的命令：0 是确认定时器，1 是送达（delivery），2 是接着调模型
+                new EventEnvelope(4, AT, ALICE, S1, RUN, said("s1_3-2", "started"))));
+        long seq = 6;
+        if (child.length > 0) {
+            // 和交代的处理器一样：先建帮手会话
+            events.add(new EventEnvelope(5, AT, ALICE, CHILD, null, new SessionCreated(SessionKind.HELPER, null, false,
+                    new HelperOf(S1, TASK, null, null, null))));
+        }
         for (Event event : child) {
-            events.add(new EventEnvelope(seq, AT, ALICE, CHILD, seq == 5 ? null : CHILD_RUN, event));
+            events.add(new EventEnvelope(seq, AT, ALICE, CHILD, seq == 6 ? null : CHILD_RUN, event));
             seq++;
         }
         ResultWriter.write(new SessionPaths(data()), events);
     }
 
-    private static TaskAssigned assigned() {
-        return new TaskAssigned(TASK, S1, "Check module A.", null, null, null, null, null, false);
+    private static Assignment assigned() {
+        return new Assignment(TASK, S1, Root.USER, "Check module A.", null);
     }
 
     private static JsonNode runs(TestServer server, SessionId session) throws Exception {
         return JSON.readTree(server.get("alice", "/api/sessions/" + session.value() + "/runs").body()).get("runs");
     }
 
-    /** 等主会话的第二轮（任务的结果开的）结束，返回它看到的任务结果。 */
-    private TaskResultBlock resultSeen(TestServer server) throws Exception {
+    /** 等主会话的第二轮（任务的结果开的）结束，返回它看到的任务结果。任务没有重新执行：只有主会话那一轮调了模型。 */
+    private ReportBlock resultSeen(TestServer server) throws Exception {
+        return resultSeen(server, 1);
+    }
+
+    /** 同上，{@code calls} 是重启以后调模型的次数（交代被重送、帮手照常做完时是 2）。 */
+    private ReportBlock resultSeen(TestServer server, int calls) throws Exception {
         for (int i = 0; i < 1500; i++) {
             JsonNode runs = runs(server, S1);
             if (runs.size() == 2 && runs.get(1).has("endReason")) {
@@ -115,9 +130,9 @@ class TaskRestartTest {
             Thread.sleep(10);
         }
         assertEquals(2, runs(server, S1).size(), runs(server, S1).toString());
-        assertEquals(1, prompts.size(), "the result started exactly one run, and the task was not run again");
-        List<TaskResultBlock> results = prompts.getFirst().messages().stream().flatMap(message -> message.content().stream())
-                .filter(TaskResultBlock.class::isInstance).map(TaskResultBlock.class::cast).toList();
+        assertEquals(calls, prompts.size(), "the result started exactly one run, and the task ran " + (calls - 1) + " time(s)");
+        List<ReportBlock> results = prompts.getLast().messages().stream().flatMap(message -> message.content().stream())
+                .filter(ReportBlock.class::isInstance).map(ReportBlock.class::cast).toList();
         assertEquals(1, results.size(), results.toString());
         JsonNode tasks = JSON.readTree(server.get("alice", "/api/sessions/s1/tasks").body()).get("tasks");
         for (JsonNode task : tasks) {
@@ -126,33 +141,34 @@ class TaskRestartTest {
         return results.getFirst();
     }
 
-    /** 再重启一次：没有任务在外面了，什么都不多发生。 */
+    /** 再重启一次：没有任务在外面了、信箱都空了，什么都不多发生。 */
     private void nothingMoreAfterAnotherRestart() throws Exception {
+        int before = prompts.size();
         try (TestServer server = server()) {
             Thread.sleep(300);
             assertEquals(2, runs(server, S1).size());
-            assertEquals(1, prompts.size());
+            assertEquals(before, prompts.size());
         }
     }
 
+    /** 交代记了账、还没送到：它根本没开始过，重启后照原编号重送，帮手照常做完（delivery 需求 4.1，有意改变：以前回“被打断”）。 */
     @Test
     void diedAfterStartingTheTaskBeforeItArrived() throws Exception {
         write();
         try (TestServer server = server()) {
-            assertEquals(new TaskResultBlock(TASK, TaskOutcome.INTERRUPTED, null), resultSeen(server));
-            // 任务的会话从来没有过
-            assertTrue(runs(server, CHILD) == null || runs(server, CHILD).isEmpty());
+            assertEquals(new ReportBlock(TASK, AssignmentOutcome.COMPLETED, "noted"), resultSeen(server, 2));
+            assertEquals("COMPLETED", runs(server, CHILD).get(0).get("endReason").asString());
         }
         nothingMoreAfterAnotherRestart();
     }
 
     @Test
     void diedWhileTheTaskWasRunning() throws Exception {
-        write(assigned(), ContextAssembledFixture.of(new CommandId("s1-t3-0_5-0"), "s", List.of(), null, List.of()));
+        write(assigned(), ContextAssembledFixture.of(new CommandId("s1-t3-0_6-0"), "s", List.of(), null, List.of()));
         try (TestServer server = server()) {
-            TaskResultBlock result = resultSeen(server);
-            assertEquals(TASK, result.task());
-            assertEquals(TaskOutcome.INTERRUPTED, result.outcome());
+            ReportBlock result = resultSeen(server);
+            assertEquals(TASK, result.assignment());
+            assertEquals(AssignmentOutcome.INTERRUPTED, result.outcome());
             assertEquals("CANCELLED", runs(server, CHILD).get(0).get("endReason").asString());
         }
         nothingMoreAfterAnotherRestart();
@@ -160,10 +176,10 @@ class TaskRestartTest {
 
     @Test
     void diedAfterTheTaskEndedBeforeItsResultWasHandedBack() throws Exception {
-        write(assigned(), ContextAssembledFixture.of(new CommandId("s1-t3-0_5-0"), "s", List.of(), null, List.of()),
-                said("s1-t3-0_6-0", "Module A is fine."));
+        write(assigned(), ContextAssembledFixture.of(new CommandId("s1-t3-0_6-0"), "s", List.of(), null, List.of()),
+                said("s1-t3-0_7-0", "Module A is fine."));
         try (TestServer server = server()) {
-            assertEquals(new TaskResultBlock(TASK, TaskOutcome.COMPLETED, "Module A is fine."), resultSeen(server));
+            assertEquals(new ReportBlock(TASK, AssignmentOutcome.COMPLETED, "Module A is fine."), resultSeen(server));
             assertEquals("COMPLETED", runs(server, CHILD).get(0).get("endReason").asString());
         }
         nothingMoreAfterAnotherRestart();

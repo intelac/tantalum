@@ -1,5 +1,7 @@
 package tantalum.kernel;
 
+import tantalum.value.state.RunCause;
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
@@ -20,7 +22,6 @@ import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.state.Awaiting;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
@@ -44,12 +45,12 @@ class KernelStepBenchmarkTest {
         for (int i = 0; i < 64; i++) {
             SessionId session = new SessionId("s" + i);
             RunRef ref = new RunRef(user, session, new RunId("r" + i));
-            SessionState history = SessionState.start(session, user);
+            SessionState history = SessionStateFixture.regular(session, user);
             for (int m = 0; m < 500; m++) {
                 history = history.append(Message.user("message " + m));
             }
             state = state.with(history.startRun(ref.run()).withContext(SessionContextFixture.of("system", List.of(), null, List.of())))
-                    .with(RunState.start(ref, new OwnerRef.OfSession(session))
+                    .with(RunState.start(ref, RunCause.prompt())
                             .withPhase(new Awaiting(Set.of(waiting), "AwaitingModel")));
         }
 

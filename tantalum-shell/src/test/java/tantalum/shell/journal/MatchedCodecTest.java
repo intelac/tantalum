@@ -159,7 +159,7 @@ class MatchedCodecTest {
         RecordMemo memo = new SessionFileReader(codec).forEachLine(file, line -> { }).toWriter();
         Line next = line(assembled(SYSTEM, List.of(GREP, WRITE), null, List.of()), false);
         try (SessionFiles files = new SessionFiles(new SessionPaths(dir), codec, 4, (p, s, last, offset) -> { })) {
-            files.adopt(USER, SESSION, memo);
+            files.adopt(USER, SESSION, memo, 0, 0);
             files.append(USER, SESSION, List.of(next));
         }
         List<String> lines = Files.readAllLines(file);

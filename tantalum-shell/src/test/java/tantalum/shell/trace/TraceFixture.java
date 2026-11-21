@@ -21,11 +21,9 @@ import tantalum.value.decision.Decision;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -47,10 +45,7 @@ import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.ContextSection;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ToolFinishedFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.state.CompactionSettingsFixture;
@@ -84,19 +79,42 @@ final class TraceFixture {
         this(true, List.of(), Limits.DEFAULT);
     }
 
+    /** 会话照 {@code created} 建（比如帮手会话）。 */
+    TraceFixture(tantalum.value.event.SessionCreated created) {
+        this(true, List.of(), Limits.DEFAULT, created);
+    }
+
     TraceFixture(boolean concurrencySafe, List<KernelHook> hooks, Limits limits) {
+        this(concurrencySafe, hooks, limits, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null));
+    }
+
+    private TraceFixture(boolean concurrencySafe, List<KernelHook> hooks, Limits limits, tantalum.value.event.SessionCreated created) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, limits);
+        // 会话先建好才收得到话。建会话这一条用一个不占编号的序号（之后的照旧从 0 起），这样条目编号和时间和以前一样，
+        // 给网页的样本只显出真正的变化
+        feedAt(CREATED_SEQ, now.minusSeconds(1), null, created, false);
     }
 
+    /** 建会话那一条的序号：比所有别的都小，不占 0 起的编号。 */
+    static final long CREATED_SEQ = -2;
+
     Decision feed(RunId run, Event event) {
-        EventEnvelope envelope = new EventEnvelope(seq++, now, USER, SESSION, run, event);
+        Decision decision = feedAt(seq++, now, run, event, true);
         now = now.plusSeconds(1);
+        return decision;
+    }
+
+    /** {@code recorded} 为假时不进 {@link #steps}：建会话那一步不占步骤的下标，测试照旧按 0 起数。 */
+    private Decision feedAt(long at, Instant when, RunId run, Event event, boolean recorded) {
+        EventEnvelope envelope = new EventEnvelope(at, when, USER, SESSION, run, event);
         KernelState before = state;
         Decision decision = kernel.step(before, envelope);
         state = decision.newState();
-        steps.add(new Step(envelope, before, decision));
+        if (recorded) {
+            steps.add(new Step(envelope, before, decision));
+        }
         for (TraceRecord record : trace.apply(envelope, before, decision)) {
             pushes.add(new Push(envelope.seq(), record));
             latest.put(record.id(), record);
@@ -160,22 +178,23 @@ final class TraceFixture {
 
     UserPrompt prompt(String text) {
         int n = submissions++;
-        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
-    SteerSubmitted steer(String text) {
+    UserPrompt steer(String text) {
         int n = submissions++;
-        return SteerSubmittedFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
+        return UserPromptFixture.join(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
-    FollowUpSubmitted followUp(String text) {
+    UserPrompt followUp(String text) {
         int n = submissions++;
-        return FollowUpSubmittedFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
-    QueueChanged queue(QueueChanged.Action action, int index, String expected, String text) {
+    /** 改收件队列里编号为 {@code item} 的那一条（编号是放它进队的那个事件的序号）。 */
+    QueueChanged queue(QueueChanged.Action action, long item, String text) {
         int n = submissions++;
-        return new QueueChanged(new SubmissionId("sub-" + n), new RequestId("req-" + n), action, index, expected, List.of(), text);
+        return new QueueChanged(new SubmissionId("sub-" + n), new RequestId("req-" + n), action, item, text);
     }
 
     /** 最近一次某类命令，不一定在最后一个决定里。 */

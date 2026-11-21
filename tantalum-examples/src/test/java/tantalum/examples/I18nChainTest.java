@@ -71,7 +71,7 @@ class I18nChainTest {
     }
 
     private void ask(String user, String session, String text) throws Exception {
-        String body = "{\"requestId\":\"r-" + user + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}";
+        String body = "{\"requestId\":\"r-" + user + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}";
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions", body).statusCode());
         Instant deadline = Instant.now().plusSeconds(20);
         while (Instant.now().isBefore(deadline)) {

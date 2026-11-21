@@ -39,7 +39,7 @@ import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.RunInterrupted;
+import tantalum.shell.profile.SessionProfile;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 
@@ -127,11 +127,11 @@ public final class Engine implements AutoCloseable {
                     }
                 }, tool -> toolbox.catalog().find(tool).map(Tool::plugin).orElse(null),
                 // 不进记忆的会话（memory-final-plan 第 11 节）：会话可能已经移出内存，按查询读；读不到时当作不进记忆，宁可少记。
-                // 为任务开的会话也不通知个人插件（subagent 需求 9.1）：那里面说话的是另一个 agent，不是这个人
+                // 通不通知个人插件照表（帮手会话不通知，subagent 需求 9.1：那里面说话的是另一个 agent，不是这个人）
                 (user, session) -> {
                     try {
                         return queries.queries().session(user, session)
-                                .map(view -> view.state().offRecord() || view.state().tasks().origin() != null).orElse(true);
+                                .map(view -> view.state().offRecord() || !SessionProfile.of(view.state().kind()).notifiesPlugins()).orElse(true);
                     } catch (RuntimeException unreadable) {
                         return true;
                     }
@@ -148,7 +148,7 @@ public final class Engine implements AutoCloseable {
             } catch (SQLException failure) {
                 throw new IllegalStateException("cannot read the answer deadlines left by the previous process", failure);
             }
-            recoverTasks();
+            redeliver();
         } catch (RuntimeException failure) {
             // 环已经起来了：按正常关机的顺序关，线程、文件锁、数据库都放掉
             try {
@@ -334,10 +334,9 @@ public final class Engine implements AutoCloseable {
         try {
             long deadline = System.nanoTime() + DRAIN.toNanos();
             for (SessionIndex.Session session : unfinished) {
-                EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(),
-                        session.session(), session.activeRun(), new RunInterrupted());
-                // 环满了等一会儿再试，但有上限；环坏了或等太久不能一直转下去
-                while (!pipeline.input().tryPublish(envelope)) {
+                tantalum.value.id.RunRef run = new tantalum.value.id.RunRef(session.principal(), session.session(), session.activeRun());
+                // 经入口送；环满了等一会儿再试，但有上限；环坏了或等太久不能一直转下去
+                while (pipeline.intake().interrupt(session.principal(), run) == 429) {
                     if (pipeline.input().broken()) {
                         throw new IllegalStateException("the input ring is broken; the runs left unfinished by the previous process cannot be closed");
                     }
@@ -361,36 +360,31 @@ public final class Engine implements AutoCloseable {
     }
 
     /**
-     * 放出去还没回来的任务在开门前核对一遍（{@link tantalum.shell.loop.TaskRecovery}）：没送到的、结束了没送回的补发结果，
-     * 还在跑的重新起期限的定时器。在收尾没结束的运行之后做，那时任务自己的那一轮已经是结束的了。
+     * 开门前的通用一趟（delivery 需求 4）：在收尾没结束的运行之后做（那时帮手被打断的那一轮已经交回“被打断”，记在它的信箱里）。
+     * 设了期限的交代重新起期限定时器；信箱不空的会话各送一条 {@code Redeliver}，照原编号再发（原来的确认定时器随进程没了）。
+     * 索引在开门前已经从会话文件补齐，所以不会漏掉信箱不空的会话。
      */
-    private void recoverTasks() {
+    private void redeliver() {
         try {
-            List<tantalum.shell.loop.TaskRecovery.Outstanding> outstanding = stores.storage().index.outstandingTasks();
-            if (outstanding.isEmpty()) {
-                return;
-            }
-            tantalum.shell.loop.TaskRecovery.Plan plan = tantalum.shell.loop.TaskRecovery.plan(outstanding,
-                    (user, child) -> queries.queries().session(user, child)
-                            .map(view -> new tantalum.shell.loop.TaskRecovery.Child(view.state(), view.runs())).orElse(null),
-                    clock.instant());
+            pipeline.deadlines().arm(stores.storage().index.assignmentDeadlines());
+            List<tantalum.shell.store.SessionIndex.Session> waiting = stores.storage().index.withOutbox();
             long deadline = System.nanoTime() + DRAIN.toNanos();
-            for (EventEnvelope envelope : plan.settle()) {
-                while (!pipeline.input().tryPublish(envelope)) {
+            for (tantalum.shell.store.SessionIndex.Session session : waiting) {
+                while (pipeline.intake().handOver(session.principal(), session.session(), new tantalum.value.event.Redeliver()) == 429) {
                     if (pipeline.input().broken() || System.nanoTime() - deadline > 0) {
-                        throw new IllegalStateException("the input ring did not accept the results of the tasks left by the previous process");
+                        throw new IllegalStateException("the input ring did not accept the redeliveries left by the previous process");
                     }
                     Thread.sleep(INTERRUPT_RETRY.toMillis());
                 }
             }
-            pipeline.deadlines().arm(plan.rearm());
-            LOG.info("{} task(s) left by the previous process: {} given a result, {} still running", outstanding.size(),
-                    plan.settle().size(), plan.rearm().size());
+            if (!waiting.isEmpty()) {
+                LOG.info("{} session(s) had unconfirmed deliveries; sending them again", waiting.size());
+            }
         } catch (SQLException failure) {
-            throw new IllegalStateException("cannot read the tasks left by the previous process", failure);
+            throw new IllegalStateException("cannot read the deliveries left by the previous process", failure);
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while settling the tasks left by the previous process", stopping);
+            throw new IllegalStateException("interrupted while sending the deliveries left by the previous process", stopping);
         }
     }
 

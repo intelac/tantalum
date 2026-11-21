@@ -1,16 +1,14 @@
 package tantalum.value.model;
 
+import tantalum.value.event.Delivery;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.RequestId;
-import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
-import tantalum.value.state.OwnerRef;
 
 /** memory-plugin 需求 1.2：插件附加的内容块、用户消息里的位置、提交事件的默认值。 */
 class AttachedBlockTest {
@@ -34,15 +32,11 @@ class AttachedBlockTest {
 
     @Test
     void submissionsWithoutAttachedTextsHaveAnEmptyList() {
-        UserPrompt prompt = new UserPrompt(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(new SessionId("s1")), "hi",
-                List.of(), null, null, List.of());
+        UserPrompt prompt = new UserPrompt(new SubmissionId("s"), new RequestId("r"), "hi", List.of(), null, List.of(), List.of(), Delivery.QUEUE);
         assertEquals(List.of(), prompt.attached());
-        assertEquals(List.of(), new UserPrompt(prompt.submission(), prompt.request(), prompt.owner(), "hi", null, null, null, null, null)
-                .attached());
-        FollowUpSubmitted followUp = new FollowUpSubmitted(new SubmissionId("s"), new RequestId("r"), "hi", List.of(), null, List.of());
-        assertEquals(List.of(), followUp.attached());
+        assertEquals(List.of(), new UserPrompt(prompt.submission(), prompt.request(), "hi", null, null, null, null, Delivery.JOIN).attached());
         assertEquals(List.of(new AttachedBlock("memory", "x")),
-                new FollowUpSubmitted(followUp.submission(), followUp.request(), "hi", null, null, null, List.of(new AttachedBlock("memory", "x")))
+                new UserPrompt(prompt.submission(), prompt.request(), "hi", null, null, null, List.of(new AttachedBlock("memory", "x")), Delivery.QUEUE)
                         .attached());
     }
 }

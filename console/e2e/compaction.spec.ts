@@ -64,7 +64,7 @@ test.describe("上下文压缩", () => {
     const session = `s-${Date.now().toString(16).slice(-8)}`;
     for (let n = 1; n <= 250; n++) {
       const response = await request.post(`/api/sessions/${session}/submissions`, {
-        data: { requestId: `r-${session}-${n}`, mode: "prompt", text: `第 ${n} 条 ${"填充 ".repeat(40)}` },
+        data: { requestId: `r-${session}-${n}`, delivery: "queue", text: `第 ${n} 条 ${"填充 ".repeat(40)}` },
         headers: { origin },
       });
       expect(response.ok(), await response.text()).toBeTruthy();

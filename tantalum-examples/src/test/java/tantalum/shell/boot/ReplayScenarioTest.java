@@ -137,7 +137,7 @@ class ReplayScenarioTest {
         try (TestServer server = new TestServer(data, temp.resolve("ws"), model, extra.toArray(String[]::new));
              TestComputer ignored = TestComputer.connectForReplay(server.context.getBean(Engine.class).localLinks(), new Principal("alice"),
                      Instant.now().plus(Duration.ofDays(1)), root, scenario.get("write").asBoolean(), shell)) {
-            String body = JSON.writeValueAsString(Map.of("requestId", "r1", "mode", "prompt", "text", scenario.get("prompt").asString()));
+            String body = JSON.writeValueAsString(Map.of("requestId", "r1", "delivery", "queue", "text", scenario.get("prompt").asString()));
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", body).statusCode());
             Deque<JsonNode> answers = new ArrayDeque<>();
             scenario.path("answers").forEach(answers::add);
@@ -146,7 +146,7 @@ class ReplayScenarioTest {
             int turn = 1;
             for (JsonNode follow : scenario.path("turns")) {
                 turn++;
-                String more = JSON.writeValueAsString(Map.of("requestId", "r" + turn, "mode", "prompt", "text", follow.asString()));
+                String more = JSON.writeValueAsString(Map.of("requestId", "r" + turn, "delivery", "queue", "text", follow.asString()));
                 assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", more).statusCode());
                 waitForEnd(server, answers, turn);
             }

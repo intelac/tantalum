@@ -66,7 +66,7 @@ class WorkspacesApiTest {
     private HttpResponse<String> ask(String user, String session, String text, String project) throws Exception {
         String extra = project == null ? "" : ",\"project\":\"" + project + "\"";
         return server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + session + "-" + text.hashCode() + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"" + extra + "}");
+                "{\"requestId\":\"" + session + "-" + text.hashCode() + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"" + extra + "}");
     }
 
     private JsonNode session(String user, String session) throws Exception {

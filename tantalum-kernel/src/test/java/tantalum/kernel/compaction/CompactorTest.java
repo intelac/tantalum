@@ -1,5 +1,6 @@
 package tantalum.kernel.compaction;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -44,7 +45,7 @@ class CompactorTest {
     }
 
     private static SessionState session(CompactionSettings settings, Message... messages) {
-        SessionState session = SessionState.start(new SessionId("s"), new Principal("u"))
+        SessionState session = SessionStateFixture.regular(new SessionId("s"), new Principal("u"))
                 .withContext(SessionContextFixture.of("sys", NO_TOOLS, settings, List.of()));
         for (Message message : messages) {
             session = session.append(message);

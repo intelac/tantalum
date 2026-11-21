@@ -13,17 +13,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tantalum.value.event.Delivery;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -46,11 +45,8 @@ import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.attachment.ImageRefFixture;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.state.CompactionSettingsFixture;
@@ -87,18 +83,20 @@ class EventCodecTest {
                 new ToolCallBlock("bad", "grep", "{oops", null),
                 new ToolResultBlock("c", "out", true, "TOOL_OUTCOME_UNKNOWN"));
         List<Event> events = List.of(
-                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi"),
-                UserPromptFixture.of(SUB, REQ, new OwnerRef.OfTask(new SessionId("s"), "t3-0"), "child"),
-                new tantalum.value.event.TaskAssigned("t3-0", new SessionId("s"), "check module A", "reviewer", "You review code.", List.of("read"), null, "/home/alice/app", true),
-                new tantalum.value.event.TaskEnded("t3-0", tantalum.value.task.TaskOutcome.COMPLETED, "fine"),
-                new tantalum.value.event.TaskEnded("t3-1", tantalum.value.task.TaskOutcome.INTERRUPTED, null),
-                new tantalum.value.event.TaskStopRequested(REQ, null),
+                UserPromptFixture.of(SUB, REQ, "hi"),
+                new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.HELPER, "/home/alice/app", true,
+                        new tantalum.value.state.HelperOf(new SessionId("s"), "t3-0", "reviewer", "You review code.", List.of("read"))),
+                new tantalum.value.event.Assignment("t3-0", new SessionId("s"), tantalum.value.event.Root.USER, "check module A", null),
+                new tantalum.value.event.Report("t3-0", tantalum.value.assignment.AssignmentOutcome.COMPLETED, "fine", tantalum.value.event.Root.USER, new SessionId("s-t3")),
+                new tantalum.value.event.Report("t3-1", tantalum.value.assignment.AssignmentOutcome.INTERRUPTED, null, tantalum.value.event.Root.OUTSIDE, new SessionId("s-t3")),
+                new tantalum.value.event.StopRequested(REQ, null),
+                new tantalum.value.event.AssignmentCancelled("t3-0", new SessionId("s")),
                 new tantalum.value.event.TextWithdrawn(REQ, List.of(new tantalum.value.event.TextWithdrawn.Swap("my plate is 7Q2KD", "[withdrawn]")),
                         tantalum.value.event.TextWithdrawn.By.user()),
                 new tantalum.value.event.TextWithdrawn(REQ, List.of(), new tantalum.value.event.TextWithdrawn.By(
                         tantalum.value.event.TextWithdrawn.Actor.AGENT, new SessionId("s"), tantalum.value.id.RunId.of(new SessionId("s"), 7), "c1")),
-                SteerSubmittedFixture.of(SUB, REQ, "x"),
-                FollowUpSubmittedFixture.of(SUB, REQ, "x"),
+                UserPromptFixture.join(SUB, REQ, "x"),
+                UserPromptFixture.of(SUB, REQ, "x"),
                 new Cancel(REQ),
                 new tantalum.value.event.Answered(SUB, REQ, "approval-c1", tantalum.value.question.Answer.of("once")),
                 new tantalum.value.event.Answered(SUB, REQ, "ask-a1", new tantalum.value.question.Answer("keep", "归档到 old/")),
@@ -251,14 +249,6 @@ class EventCodecTest {
                 .contains("\"point\":500000,\"bytesPerToken\":1.5"));
     }
 
-    /** 第 1 版的组装上下文（one-line-journal 第 1 步写的）照样能读，工具来源是空表。 */
-    @Test
-    void aFirstVersionContextReadsWithoutToolSources() {
-        ContextAssembled decoded = (ContextAssembled) codec.decode(ContextAssembled.TYPE, 1, OLD_ASSEMBLED);
-        assertEquals(Map.of(), decoded.toolSources());
-        assertEquals("sys", decoded.system());
-    }
-
     @Test
     void anEmptyEnabledListIsNotTheSameAsNoList() {
         String none = codec.encode(ContextAssembledFixture.of(CMD, "sys", List.of(), null, List.of(), List.of(), List.of()));
@@ -276,9 +266,9 @@ class EventCodecTest {
     @Test
     void attachmentsSurviveARoundTrip() {
         List<AttachmentRef> refs = List.of(IMAGE, PDF, TEXT);
-        assertRoundTrip(UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "", refs));
-        assertRoundTrip(SteerSubmittedFixture.of(SUB, REQ, "look", refs));
-        assertRoundTrip(FollowUpSubmittedFixture.of(SUB, REQ, "later", refs));
+        assertRoundTrip(UserPromptFixture.of(SUB, REQ, "", refs));
+        assertRoundTrip(UserPromptFixture.join(SUB, REQ, "look", refs));
+        assertRoundTrip(UserPromptFixture.of(SUB, REQ, "later", refs));
         assertRoundTrip(new ToolFinished(CMD, "c", "Image ...", false, null, List.of(IMAGE)));
         assertRoundTrip(new ModelReplied(CMD, List.of(new TextBlock("x"), new AttachmentBlock(IMAGE), new AttachmentBlock(PDF),
                 new ToolResultBlock("c", "out", false, null, List.of(IMAGE))), StopReason.END_TURN, "m", null, null, null, null));
@@ -287,32 +277,24 @@ class EventCodecTest {
     /** {@code kind} 在前，没有值的字段不写：没缩小过的图片没有 source*，不是 PDF 的文件没有 pages。 */
     @Test
     void attachmentRefsHaveKindFirstAndOmitEmptyFields() {
-        String line = codec.encode(SteerSubmittedFixture.of(SUB, REQ, "x", List.of(ImageRefFixture.of(IMAGE.id(), "a.png", "image/png", 1, 2, 3), TEXT)));
+        String line = codec.encode(UserPromptFixture.join(SUB, REQ, "x", List.of(ImageRefFixture.of(IMAGE.id(), "a.png", "image/png", 1, 2, 3), TEXT)));
         assertTrue(line.contains("\"attachments\":[{\"kind\":\"image\",\"id\":\"sha256:" + HASH + "\",\"name\":\"a.png\","
                 + "\"mediaType\":\"image/png\",\"bytes\":1,\"width\":2,\"height\":3},{\"kind\":\"file\","), line);
-        assertTrue(line.endsWith("\"mediaType\":\"text/plain\",\"bytes\":5}]}"), line);
+        assertTrue(line.endsWith("\"mediaType\":\"text/plain\",\"bytes\":5}],\"delivery\":\"JOIN\"}"), line);
     }
 
-    /** 没有附件时写出的行和加字段之前逐字节相同；旧行读出来是空列表。 */
+    /**
+     * 模型回复和工具结果的写法一个字节都不变：39 份录音（{@code ReplayScenarioTest}）直接读这两种行。提问的写法见
+     * {@link #anEmptyPromptWritesOnlyWhatItHas}。
+     */
     @Test
-    void noAttachmentsWriteTheSameBytesAsBefore() {
-        String prompt = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"owner\":{\"kind\":\"session\","
-                + "\"session\":{\"value\":\"s\"}},\"text\":\"hi\"}";
-        String steer = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\"}";
+    void modelRepliesAndToolResultsWriteTheSameBytesAsBefore() {
         String replied = "{\"command\":{\"value\":\"1-0\"},\"content\":[{\"kind\":\"toolResult\",\"toolCallId\":\"c\","
                 + "\"text\":\"out\",\"error\":false}],\"stop\":\"END_TURN\",\"actualModel\":\"m\"}";
-        UserPrompt userPrompt = UserPromptFixture.of(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi");
         ModelReplied reply = new ModelReplied(CMD, List.of(new ToolResultBlock("c", "out", false, null)), StopReason.END_TURN, "m",
                 null, null, null, null);
-        assertEquals(prompt, codec.encode(userPrompt));
-        assertEquals(steer, codec.encode(SteerSubmittedFixture.of(SUB, REQ, "x")));
-        assertEquals(steer, codec.encode(FollowUpSubmittedFixture.of(SUB, REQ, "x")));
         assertEquals(OLD_TOOL, codec.encode(ToolFinishedFixture.of(CMD, "c", "out", true, null)));
         assertEquals(replied, codec.encode(reply));
-
-        assertEquals(List.of(), ((UserPrompt) codec.decode(UserPrompt.TYPE, 1, prompt)).attachments());
-        assertEquals(List.of(), ((SteerSubmitted) codec.decode(SteerSubmitted.TYPE, 1, steer)).attachments());
-        assertEquals(List.of(), ((FollowUpSubmitted) codec.decode(FollowUpSubmitted.TYPE, 1, steer)).attachments());
         assertEquals(List.of(), ((ToolFinished) codec.decode(ToolFinished.TYPE, 1, OLD_TOOL)).images());
         assertEquals(reply, codec.decode(ModelReplied.TYPE, 1, replied));
     }
@@ -396,9 +378,8 @@ class EventCodecTest {
     @Test
     void namedSkillsSurviveARoundTrip() {
         List<tantalum.value.event.SkillUse> skills = List.of(READ, FAILED);
-        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "/pdf-tools go", List.of(), null, null, skills));
-        assertRoundTrip(new SteerSubmitted(SUB, REQ, "/pdf-tools now", List.of(), skills));
-        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "/pdf-tools later", List.of(), null, skills));
+        assertRoundTrip(new UserPrompt(SUB, REQ, "/pdf-tools go", List.of(), null, skills, List.of(), Delivery.QUEUE));
+        assertRoundTrip(new UserPrompt(SUB, REQ, "/pdf-tools now", List.of(), null, skills, List.of(), Delivery.JOIN));
         assertRoundTrip(new ModelReplied(CMD, List.of(new TextBlock("x"), new tantalum.value.model.SkillBlock("pdf-tools", READ.content())),
                 StopReason.END_TURN, "m", null, null, null, null));
     }
@@ -407,10 +388,9 @@ class EventCodecTest {
     @Test
     void attachedTextsSurviveARoundTrip() {
         List<tantalum.value.model.AttachedBlock> attached = List.of(new tantalum.value.model.AttachedBlock("memory", "- 用户在做 Tantalum"));
-        assertRoundTrip(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi", List.of(), null, null, List.of(), attached));
-        assertRoundTrip(new FollowUpSubmitted(SUB, REQ, "later", List.of(), null, List.of(), attached));
-        String line = codec.encode(new FollowUpSubmitted(SUB, REQ, "later", List.of(), null, List.of(), attached));
-        assertTrue(line.endsWith("\"attached\":[{\"kind\":\"attached\",\"plugin\":\"memory\",\"text\":\"- 用户在做 Tantalum\"}]}"), line);
+        assertRoundTrip(new UserPrompt(SUB, REQ, "hi", List.of(), null, List.of(), attached, Delivery.QUEUE));
+        String line = codec.encode(new UserPrompt(SUB, REQ, "later", List.of(), null, List.of(), attached, Delivery.QUEUE));
+        assertTrue(line.contains("\"attached\":[{\"kind\":\"attached\",\"plugin\":\"memory\",\"text\":\"- 用户在做 Tantalum\"}]"), line);
         String block = codec.encode(new ModelReplied(CMD, List.of(attached.getFirst()), StopReason.END_TURN, "m", null, null, null, null));
         assertTrue(block.contains("{\"kind\":\"attached\",\"plugin\":\"memory\""), block);
     }
@@ -418,26 +398,24 @@ class EventCodecTest {
     /** 读到的只有 content，没读到的只有 error；skills 在行的最后。 */
     @Test
     void aNamedSkillWritesItsContentOrItsError() {
-        String line = codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(), List.of(READ, FAILED)));
-        assertTrue(line.endsWith("\"text\":\"x\",\"skills\":[{\"name\":\"pdf-tools\",\"content\":\"<skill_content name=\\\"pdf-tools\\\">x"
-                + "</skill_content>\"},{\"name\":\"slow\",\"error\":\"timeout\"}]}"), line);
+        String line = codec.encode(new UserPrompt(SUB, REQ, "x", List.of(), null, List.of(READ, FAILED), List.of(), Delivery.JOIN));
+        assertTrue(line.contains("\"text\":\"x\",\"skills\":[{\"name\":\"pdf-tools\",\"content\":\"<skill_content name=\\\"pdf-tools\\\">x"
+                + "</skill_content>\"},{\"name\":\"slow\",\"error\":\"timeout\"}]"), line);
         String block = codec.encode(new ModelReplied(CMD, List.of(new tantalum.value.model.SkillBlock("pdf-tools", "body")),
                 StopReason.END_TURN, "m", null, null, null, null));
         assertTrue(block.contains("\"content\":[{\"kind\":\"skill\",\"name\":\"pdf-tools\",\"text\":\"body\"}]"), block);
     }
 
-    /** 没点名时三种提交写出的行和加字段之前逐字节相同；旧行读出来是空列表。 */
+    /** 没有附件、技能、插件附的内容时一个字不多写，读出来是空列表；怎么送总是写着。 */
     @Test
-    void withoutNamedSkillsTheBytesAreAsBefore() {
-        String prompt = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"owner\":{\"kind\":\"session\","
-                + "\"session\":{\"value\":\"s\"}},\"text\":\"hi\"}";
-        String steer = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\"}";
-        assertEquals(prompt, codec.encode(new UserPrompt(SUB, REQ, new OwnerRef.OfSession(new SessionId("s")), "hi", List.of(), null, null,
-                List.of())));
-        assertEquals(steer, codec.encode(new SteerSubmitted(SUB, REQ, "x", List.of(), List.of())));
-        assertEquals(steer, codec.encode(new FollowUpSubmitted(SUB, REQ, "x", List.of(), null, List.of())));
-        assertEquals(List.of(), ((UserPrompt) codec.decode(UserPrompt.TYPE, 1, prompt)).skills());
-        assertEquals(List.of(), ((SteerSubmitted) codec.decode(SteerSubmitted.TYPE, 1, steer)).skills());
-        assertEquals(List.of(), ((FollowUpSubmitted) codec.decode(FollowUpSubmitted.TYPE, 1, steer)).skills());
+    void anEmptyPromptWritesOnlyWhatItHas() {
+        String queued = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"hi\",\"delivery\":\"QUEUE\"}";
+        String joined = "{\"submission\":{\"value\":\"s\"},\"request\":{\"value\":\"r\"},\"text\":\"x\",\"delivery\":\"JOIN\"}";
+        assertEquals(queued, codec.encode(UserPromptFixture.of(SUB, REQ, "hi")));
+        assertEquals(joined, codec.encode(UserPromptFixture.join(SUB, REQ, "x")));
+        UserPrompt read = (UserPrompt) codec.decode(UserPrompt.TYPE, 1, queued);
+        assertEquals(List.of(), read.skills());
+        assertEquals(List.of(), read.attachments());
+        assertEquals(List.of(), read.attached());
     }
 }

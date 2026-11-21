@@ -45,7 +45,7 @@ class EventPollTest {
 
     private static void submit(TestServer server, String user, String session, String request) throws Exception {
         HttpResponse<String> submitted = server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hi\"}");
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"hi\"}");
         assertEquals(200, submitted.statusCode(), submitted.body());
     }
 

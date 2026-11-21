@@ -36,7 +36,7 @@ test.describe("实时监视面板", () => {
     // E2eModel 的 tasks: 剧本放出一个任务，这一轮没有调别的工具
     await send(page, "tasks: subtask: billing 模块");
     const lit = () => frame.locator("g.node.done, g.node.cur").allTextContents();
-    await expect.poll(lit, { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringContaining("TaskHandler")]));
+    await expect.poll(lit, { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringContaining("DeliveryHandler")]));
     expect((await lit()).some((text) => text.includes("ToolHandler"))).toBe(false);
   });
 });

@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import tantalum.shell.loop.Snapshots;
+import tantalum.shell.journal.Snapshot;
 import tantalum.shell.conversation.Transcript;
 import tantalum.shell.journal.Line;
 import tantalum.shell.journal.RecordMemo;
@@ -34,16 +36,21 @@ public final class RecordReplay {
         void accept(EventEnvelope envelope, KernelState before, Decision decision, Map<CommandId, String> fingerprints);
     }
 
-    /** 冷载入的结果，附带读完整个文件后的 memo，交给写入方接着写结果行。 */
-    public record Loaded(SessionSlice slice, RecordMemo memo) {}
+    /**
+     * 冷载入的结果，附带读完文件后的 memo，交给写入方接着写结果行。{@code from} 是读起的位置（最后一份快照，没用快照为 0），
+     * {@code snapshotBytes} 是那份快照行的大小：写入方从这里量什么时候要下一份。
+     */
+    public record Loaded(SessionSlice slice, RecordMemo memo, long from, long snapshotBytes) {}
 
 
     private final SessionPaths paths;
     private final SessionFileReader reader;
+    private final Snapshots snapshots;
 
-    public RecordReplay(SessionPaths paths, SessionFileReader reader) {
+    public RecordReplay(SessionPaths paths, SessionFileReader reader, Snapshots snapshots) {
         this.paths = paths;
         this.reader = reader;
+        this.snapshots = snapshots;
     }
 
     /** 冷载入：折叠序号小于 {@code beforeSeq} 的步骤；没有这样的事件时为空。memo 总是读完整个文件。 */
@@ -56,21 +63,97 @@ public final class RecordReplay {
         return fold(principal, session, Long.MAX_VALUE).map(Loaded::slice);
     }
 
+    /**
+     * 从最后一份快照读起（它在 {@code beforeSeq} 之前时）：用快照起头，再套上它后面的步。没有可用的快照就从头读。
+     * 从快照读起和从头读起结果一样（快照之后的行只引用快照和它之后的内容）。
+     */
     private Optional<Loaded> fold(Principal principal, SessionId session, long beforeSeq) throws IOException {
         Path file = paths.sessionFile(principal, session);
         if (!Files.exists(file)) {
             return Optional.empty();
         }
+        // 从文件尾往前找：只读最后一份快照之后写的那些字节（写快照的门槛把它们限在几 MiB）
+        long from = Math.max(0, SessionFileReader.lastSnapshot(file));
+        Optional<Loaded> loaded = fold(principal, session, file, from, beforeSeq);
+        // 快照在 beforeSeq 之后（很少：载入的是排在它前面的那一步之前的样子）：从头读
+        return loaded.isEmpty() && from > 0 ? fold(principal, session, file, 0, beforeSeq) : loaded;
+    }
+
+    private Optional<Loaded> fold(Principal principal, SessionId session, Path file, long from, long beforeSeq) throws IOException {
         Transcript transcript = new Transcript();
         Trace trace = new Trace();
         Projections projections = new Projections(transcript, trace);
         Fold fold = new Fold(beforeSeq, (envelope, before, decision, fingerprints) -> projections.apply(envelope, before, decision));
-        RecordMemo memo = reader.forEachLine(file, fold::accept).toWriter();
-        if (fold.seq < 0 || fold.state.sessions().get(session) == null) {
+        long[] started = {0, 0};
+        boolean[] tooLate = {false};
+        RecordMemo memo = reader.forEachEntry(file, from, new SessionFileReader.Visitor() {
+            @Override
+            public void step(Line line) {
+                fold.accept(line);
+            }
+
+            @Override
+            public void snapshot(Snapshot snapshot, long offset) {
+                if (offset != from) {
+                    return;
+                }
+                if (snapshot.seq() >= beforeSeq) {
+                    tooLate[0] = true;
+                    return;
+                }
+                SessionSlice slice = snapshots.slice(snapshot);
+                fold.state = KernelState.empty().withResident(slice.session(), slice.runs());
+                fold.seq = snapshot.seq();
+                projections.restore(session, slice);
+                started[0] = offset;
+            }
+        }).toWriter();
+        if (tooLate[0] || fold.seq < 0 || fold.state.sessions().get(session) == null) {
             return Optional.empty();
         }
+        if (from > 0) {
+            started[1] = snapshotBytes(file, from);
+        }
         return Optional.of(new Loaded(new SessionSlice(fold.state.sessions().get(session), List.copyOf(fold.state.runs().values()),
-                transcript.export(session), trace.export(session), fold.seq), memo));
+                transcript.export(session), trace.export(session), fold.seq), memo, started[0], started[1]));
+    }
+
+    private static long snapshotBytes(Path file, long offset) throws IOException {
+        return SessionFileReader.lineLength(file, offset);
+    }
+
+    /**
+     * 从头读，核对每份快照和前面折叠出来的这个会话（状态、运行、两个投影）一样。返回第一份不一样的快照跟着的那一步的序号；
+     * 都一样（或者没有快照）为空。复核用。
+     */
+    public java.util.OptionalLong firstWrongSnapshot(Principal principal, SessionId session) throws IOException {
+        Path file = paths.sessionFile(principal, session);
+        Transcript transcript = new Transcript();
+        Trace trace = new Trace();
+        Projections projections = new Projections(transcript, trace);
+        Fold fold = new Fold(Long.MAX_VALUE, (envelope, before, decision, fingerprints) -> projections.apply(envelope, before, decision));
+        java.util.OptionalLong[] wrong = {java.util.OptionalLong.empty()};
+        reader.forEachEntry(file, 0, new SessionFileReader.Visitor() {
+            @Override
+            public void step(Line line) {
+                fold.accept(line);
+            }
+
+            @Override
+            public void snapshot(Snapshot snapshot, long offset) {
+                if (wrong[0].isPresent()) {
+                    return;
+                }
+                SessionSlice folded = projections.export(fold.state, session, fold.seq);
+                SessionSlice written = snapshots.slice(snapshot);
+                if (snapshot.seq() != fold.seq || !folded.session().equals(written.session())
+                        || !java.util.Set.copyOf(folded.runs()).equals(java.util.Set.copyOf(written.runs()))
+                        || !folded.transcript().equals(written.transcript()) || !folded.trace().equals(written.trace())) {
+                    wrong[0] = java.util.OptionalLong.of(snapshot.seq());
+                }
+            }
+        });
+        return wrong[0];
     }
 
     /** 按序折叠全部步骤，每一步回调一次（{@code /turns}、{@code /trace}、SSE 补读）。文件不存在时什么也不做。 */
@@ -105,29 +188,10 @@ public final class RecordReplay {
                 return;
             }
             KernelState before = state;
-            Decision decision = offRecord(line).apply(line.envelope(), before);
+            Decision decision = line.record().apply(line.envelope(), before);
             step.accept(line.envelope(), before, decision, line.fingerprints());
             state = decision.newState();
             seq = line.seq();
         }
-    }
-
-    /**
-     * 2026-11-16 当天写的行没有把“不进记忆”写进结果（{@code SessionDelta} 漏了这一项）：第一次提问带了它、这一步新建了会话时，
-     * 读的时候补上。之后写的行自己带着，不走这里。
-     */
-    static tantalum.value.decision.StepRecord offRecord(Line line) {
-        tantalum.value.decision.StepRecord record = line.record();
-        tantalum.value.decision.SessionChange change = record.session();
-        if (change == null || change.offRecord() != null || !change.created()
-                || !(line.envelope().event() instanceof tantalum.value.event.UserPrompt prompt) || !Boolean.TRUE.equals(prompt.offRecord())) {
-            return record;
-        }
-        tantalum.value.decision.SessionChange fixed = new tantalum.value.decision.SessionChange(change.id(), change.principal(),
-                change.created(), change.appended(), change.activeRun(), change.lastRun(), change.followUps(), change.context(),
-                change.compaction(), change.anchor(), change.omittedImages(), change.toolsSeen(), change.notes(), change.model(),
-                change.followUpModels(), change.dir(), new tantalum.value.decision.SessionChange.Changed<>(true), change.tasks(), change.withdrawn());
-        return new tantalum.value.decision.StepRecord(record.seq(), fixed, record.runs(), record.removedRuns(), record.usageDay(),
-                record.usage(), record.commands(), record.facts());
     }
 }

@@ -125,7 +125,7 @@ final class CompactionScenario {
 
     static Verdict run(TestServer server, String user, String session, Path data, String label) throws Exception {
         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(prompt()) + "}");
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"delivery\":\"queue\",\"text\":" + JSON.writeValueAsString(prompt()) + "}");
         assertEquals(200, response.statusCode(), response.body());
         JsonNode run = waitForLatestRun(server, user, session, Duration.ofMinutes(25));
 
@@ -256,7 +256,7 @@ final class CompactionScenario {
     static String ask(TestServer server, String user, String session, String text) throws Exception {
         int before = runs(server, user, session).size();
         HttpResponse<String> response = server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"mode\":\"prompt\",\"text\":" + JSON.writeValueAsString(text) + "}");
+                "{\"requestId\":\"" + java.util.UUID.randomUUID() + "\",\"delivery\":\"queue\",\"text\":" + JSON.writeValueAsString(text) + "}");
         assertEquals(200, response.statusCode(), response.body());
         JsonNode runBefore = runs(server, user, session);
         Instant deadline = Instant.now().plus(Duration.ofMinutes(25));

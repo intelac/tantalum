@@ -51,7 +51,7 @@ class OffRecordApiTest {
     }
 
     private void ask(String session, String text, boolean offRecord) throws Exception {
-        String body = "{\"requestId\":\"" + text.hashCode() + session + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\""
+        String body = "{\"requestId\":\"" + text.hashCode() + session + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\""
                 + (offRecord ? ",\"offRecord\":true" : "") + "}";
         HttpResponse<String> sent = server.http.send(server.request("alice", "/api/sessions/" + session + "/submissions")
                 .header("content-type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(),

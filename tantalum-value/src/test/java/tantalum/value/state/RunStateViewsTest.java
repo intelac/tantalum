@@ -15,7 +15,7 @@ import tantalum.value.id.SessionId;
 import tantalum.value.model.Message;
 import tantalum.value.model.ModelChoice;
 
-/** review-fixes 需求 13.3：运行状态按阶段分成三组视图，整组替换不动别的组；记录本身不变，journal 形状不变。 */
+/** session-model 需求 8.3：运行状态按阶段分成三组来存，整组替换不动别的组；单个 withX 说的是同一份字段。 */
 class RunStateViewsTest {
 
     private static final SessionId SESSION = new SessionId("s");
@@ -23,8 +23,8 @@ class RunStateViewsTest {
 
     @Test
     void theThreeViewsCoverEveryFieldAndReplaceOnlyTheirOwnGroup() {
-        RunState run = RunState.start(REF, new OwnerRef.OfSession(SESSION));
-        assertEquals(new RunState.Flow(new Deciding(), null, List.of(), 0, null, 0, 0), run.flow());
+        RunState run = RunState.start(REF, RunCause.prompt());
+        assertEquals(new RunState.Flow(new Deciding(), null, 0, null, 0, 0), run.flow());
         assertEquals(new RunState.Recovery(null, false, false), run.recovery());
         assertEquals(new RunState.Models(null, null), run.models());
 
@@ -42,7 +42,7 @@ class RunStateViewsTest {
         assertEquals(recovering.recovery(), chosen.recovery());
 
         RunState.Flow flow = new RunState.Flow(new Ended(tantalum.value.state.EndReason.COMPLETED, null), null,
-                List.of(Message.user("steer")), 2, HookPoint.BEFORE_RUN_END, 1, 3);
+                2, HookPoint.BEFORE_RUN_END, 1, 3);
         RunState flowed = chosen.withFlow(flow);
         assertEquals(flow, flowed.flow());
         assertTrue(flowed.isEnded());
@@ -50,5 +50,6 @@ class RunStateViewsTest {
         assertEquals(chosen.models(), flowed.models());
         // 分组和单个 withX 说的是同一份字段
         assertEquals(flowed.withRetries(5).flow().retries(), 5);
+        assertEquals(RunCause.prompt(), flowed.cause(), "the cause never changes with the groups");
     }
 }

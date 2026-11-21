@@ -46,7 +46,6 @@ import tantalum.value.model.TextBlock;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
@@ -93,7 +92,7 @@ class RingIntegrationTest {
             List<String> writtenEarly = java.util.Collections.synchronizedList(new ArrayList<>());
             Projections projections = new Projections(LoopFixtures.NO_PROJECTION, new tantalum.shell.trace.Trace());
             Cleanroom cleanroom = new Cleanroom(kernel, journal::halted, output::tryPublish, projections, (seq, index, fact) -> { },
-                    view, publisher, LoopFixtures.NO_STEPS, LoopFixtures.never(projections), journal, envelope -> journal.released(envelope));
+                    view, publisher, LoopFixtures.NO_STEPS, LoopFixtures.never(projections), journal, Snapshotting.NEVER, envelope -> journal.released(envelope));
             ring.connect((slot, seq, end) -> {
                 EventEnvelope envelope = slot.envelope;
                 if (reader.readAll(paths.sessionFile(envelope.principal(), envelope.session())).stream().anyMatch(envelope::equals)) {
@@ -108,9 +107,10 @@ class RingIntegrationTest {
 
             for (int i = 0; i < sessions; i++) {
                 SessionId session = new SessionId("s" + i);
+                assertTrue(input.tryPublish(LoopFixtures.creating(new Principal("u" + (i % 3)), session)));
                 assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.EPOCH,
                         new Principal("u" + (i % 3)), session, null, UserPromptFixture.of(new SubmissionId("sub" + i),
-                                new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"))));
+                                new RequestId("req" + i), "hi"))));
             }
 
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
@@ -130,7 +130,8 @@ class RingIntegrationTest {
 
             assertEquals(List.of(), writtenEarly, "a step is written after the kernel processed it, not before (one-line-journal 1.3)");
             List<EventEnvelope> events = new SessionStore(dir, EventCodec.withBuiltins()).readAll();
-            assertEquals(sessions * 3, events.size());
+            // 每个会话：建会话、提问、上下文、回复
+            assertEquals(sessions * 4, events.size());
             assertEquals(view.current().runs(), Replay.run(kernel, events).state().runs());
             assertEquals(view.current().sessions(), Replay.run(kernel, events).state().sessions());
         }

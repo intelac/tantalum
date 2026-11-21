@@ -230,7 +230,7 @@ class PluginApiTest {
     }
 
     private void ask(String user, String session) throws Exception {
-        String body = "{\"requestId\":\"r-" + session + "\",\"mode\":\"prompt\",\"text\":\"hello from " + user + "\"}";
+        String body = "{\"requestId\":\"r-" + session + "\",\"delivery\":\"queue\",\"text\":\"hello from " + user + "\"}";
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions", body).statusCode());
         Instant deadline = Instant.now().plusSeconds(20);
         while (Instant.now().isBefore(deadline)) {

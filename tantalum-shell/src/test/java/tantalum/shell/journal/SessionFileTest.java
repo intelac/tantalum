@@ -30,7 +30,6 @@ import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPromptFixture;
 
 class SessionFileTest {
@@ -45,7 +44,7 @@ class SessionFileTest {
     static EventEnvelope event(Principal principal, SessionId session, long seq, String text) {
         return new EventEnvelope(seq, Instant.parse("2026-11-02T00:00:00.123456Z"), principal, session,
                 seq % 2 == 0 ? null : new RunId(session.value() + "_" + seq),
-                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(session), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), text));
     }
 
     private SessionFiles files(SessionPaths paths) {
@@ -77,7 +76,7 @@ class SessionFileTest {
         write(paths, event(ALICE, S1, 1, "a\nb"));
         List<String> lines = Files.readAllLines(paths.sessionFile(ALICE, S1));
         assertEquals(2, lines.size());
-        assertEquals("{\"format\":3,\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
+        assertEquals("{\"format\":" + SessionFile.FORMAT + ",\"session\":\"s-1\",\"principal\":\"alice\"}", lines.get(0));
         assertTrue(lines.get(1).startsWith("{\"seq\":1,\"at\":\"2026-11-02T00:00:00.123456Z\",\"type\":\"UserPrompt\",\"version\":1,\"run\":\"s-1_1\",\"payload\":{"), lines.get(1));
     }
 
@@ -207,7 +206,7 @@ class SessionFileTest {
     @Test
     void anOverlongLineIsCorruptNotAnOutOfMemory() throws Exception {
         byte[] bytes = "{\"format\":3}\n0123456789012345678901234567890123456789\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        try (SessionFileReader.Lines lines = new SessionFileReader.Lines(new java.io.ByteArrayInputStream(bytes), 16)) {
+        try (SessionFileReader.Lines lines = new SessionFileReader.Lines(new java.io.ByteArrayInputStream(bytes), 16, 0)) {
             assertEquals("{\"format\":3}", new String(lines.next(), java.nio.charset.StandardCharsets.UTF_8));
             assertThrows(SessionCorruptException.class, lines::next);
         }

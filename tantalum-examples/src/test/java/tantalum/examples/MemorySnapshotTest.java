@@ -68,13 +68,13 @@ class MemorySnapshotTest {
 
         try (TestServer server = new TestServer(data, workspace, model)) {
             server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"remember: always Java 25\"}");
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"remember: always Java 25\"}");
             awaitCompleted(server, "s1");
             // 记忆账在数据目录下插件的私有目录里（memory-final-plan M1），不在工作区里
             assertTrue(Files.isRegularFile(data.resolve("plugins/memory/alice/ledger.jsonl")), "the tool wrote the ledger");
 
             server.post("alice", "/api/sessions/s2/submissions",
-                    "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"which Java version?\"}");
+                    "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"which Java version?\"}");
             awaitCompleted(server, "s2");
         }
 

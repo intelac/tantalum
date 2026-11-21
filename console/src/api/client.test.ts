@@ -41,21 +41,21 @@ describe("client", () => {
   // 文字在显示时才由 text/errors.ts 按语言说（console-i18n I9），这里查错误里带着状态码，说出来还是原来那两句。
   it("maps 429 and 503 to fixed messages", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(503, "")));
-    const halted = await submit("s", "prompt", "hi", "r1").catch((failure: unknown) => failure);
+    const halted = await submit("s", "queue", "hi", "r1").catch((failure: unknown) => failure);
     expect(halted).toMatchObject({ status: 503, code: null });
     expect(errorText(halted).message).toMatch(/503/);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(429, "")));
-    const busy = await submit("s", "prompt", "hi", "r1").catch((failure: unknown) => failure);
+    const busy = await submit("s", "queue", "hi", "r1").catch((failure: unknown) => failure);
     expect(errorText(busy).message).toMatch(/429/);
   });
 
   it("submits with the caller's requestId so retries are idempotent", async () => {
     const fetchMock = vi.fn().mockResolvedValue(reply(200, '{"submissionId":"x","duplicate":false}'));
     vi.stubGlobal("fetch", fetchMock);
-    await submit("s 1", "steer", "hi", "req-7");
+    await submit("s 1", "join", "hi", "req-7");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/sessions/s%201/submissions");
-    expect(JSON.parse(init.body as string)).toEqual({ requestId: "req-7", mode: "steer", text: "hi" });
+    expect(JSON.parse(init.body as string)).toEqual({ requestId: "req-7", delivery: "join", text: "hi" });
   });
 
   it("memory functions hit the per-user endpoints and surface the 400 reason", async () => {
@@ -84,13 +84,13 @@ describe("client", () => {
   it("submits attachments as id and name only; the server knows the rest", async () => {
     const fetchMock = vi.fn().mockResolvedValue(reply(200, '{"submissionId":"x","duplicate":false}'));
     vi.stubGlobal("fetch", fetchMock);
-    await submit("s", "prompt", "", "r1", [
+    await submit("s", "queue", "", "r1", [
       { kind: "image", id: "sha256:a", name: "cat.png", mediaType: "image/png", bytes: 9, width: 4, height: 3 },
     ]);
-    await submit("s", "prompt", "hi", "r2");
+    await submit("s", "queue", "hi", "r2");
     const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string) as Record<string, unknown>);
-    expect(bodies[0]).toEqual({ requestId: "r1", mode: "prompt", text: "", attachments: [{ id: "sha256:a", name: "cat.png" }] });
-    expect(bodies[1]).toEqual({ requestId: "r2", mode: "prompt", text: "hi" });
+    expect(bodies[0]).toEqual({ requestId: "r1", delivery: "queue", text: "", attachments: [{ id: "sha256:a", name: "cat.png" }] });
+    expect(bodies[1]).toEqual({ requestId: "r2", delivery: "queue", text: "hi" });
   });
 
   it("builds attachment addresses with the download name", () => {

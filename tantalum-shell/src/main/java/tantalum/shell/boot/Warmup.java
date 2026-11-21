@@ -62,7 +62,7 @@ public final class Warmup {
             Path file = paths.sessionFile(principal, session);
             Files.createDirectories(file.getParent());
             Files.write(file, content);
-            RecordReplay replay = new RecordReplay(paths, new SessionFileReader(codec));
+            RecordReplay replay = new RecordReplay(paths, new SessionFileReader(codec), new tantalum.shell.loop.Snapshots(codec.mapper()));
             int items = 0;
             for (int i = 0; i < ROUNDS; i++) {
                 RecordReplay.Loaded loaded = replay.load(principal, session, Long.MAX_VALUE)

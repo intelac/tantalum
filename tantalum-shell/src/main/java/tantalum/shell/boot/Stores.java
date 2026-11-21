@@ -26,10 +26,13 @@ record Stores(Storage storage, Workspaces workspaces, LocalTokens localTokens, P
               UserSettings userSettings, Projects projects, SessionMarks marks) {
 
     private static final Logger LOG = LoggerFactory.getLogger(Stores.class);
+    static final String SNAPSHOT_BYTES = "tantalum.journal.snapshot-bytes";
 
     static Stores open(TantalumProperties properties, EventCodec codec, Clock clock, List<AutoCloseable> opened) throws IOException {
         Storage storage = Storage.open(properties.dataDir(), codec, properties.index(), properties.attachmentLimits());
         opened.add(storage);
+        // 写多少字节以后在账里写一份快照（journal-snapshots）：JVM 参数 -Dtantalum.journal.snapshot-bytes，默认 8 MiB
+        storage.files.snapshotBytes(Long.getLong(SNAPSHOT_BYTES, tantalum.shell.journal.SessionFiles.DEFAULT_SNAPSHOT_BYTES));
         Workspaces workspaces = KernelFactory.workspaces(properties);
         if (workspaces.isShared()) {
             LOG.warn("tantalum.workspace-mode=shared: all users share {} and can read each other's files.", properties.workspace());

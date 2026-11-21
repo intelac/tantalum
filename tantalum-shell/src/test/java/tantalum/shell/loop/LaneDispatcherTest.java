@@ -65,7 +65,7 @@ class LaneDispatcherTest {
     void withoutPermitsTheInputRingFillsUpAndNothingIsLost() throws Exception {
         int permits = 4;
         int ringSize = 8;
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(permits, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(permits, sequence, (p, s, events, snapshot) -> { }, envelope -> reached.add(envelope));
         InputRing input = LoopFixtures.inputRing(ringSize, dispatcher);
         input.start();
         int accepted = 0;
@@ -85,7 +85,7 @@ class LaneDispatcherTest {
 
     @Test
     void awaitIdleWaitsForEveryEventToBeReleased() throws Exception {
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events, snapshot) -> { }, envelope -> reached.add(envelope));
         feed(dispatcher, event("u", 0));
         awaitReached(1);
         assertFalse(dispatcher.awaitIdle(Duration.ofMillis(20)));
@@ -96,7 +96,7 @@ class LaneDispatcherTest {
     /** ops-hardening-2 需求 4.1、4.3：A 到上限后 A 的下一个事件停住、不占总名额，B 的照常通过；A 归还一个，停住的那个按顺序进去。 */
     @Test
     void aUserAtTheirLimitWaitsWhileOthersPass() throws Exception {
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 2, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 2, sequence, (p, s, events, snapshot) -> { }, envelope -> reached.add(envelope));
         feed(dispatcher, event("a", 1));
         feed(dispatcher, event("a", 2));
         feed(dispatcher, event("a", 3));
@@ -122,7 +122,7 @@ class LaneDispatcherTest {
     /** 需求 4.4：定时器不计入上限、直接通过；但 A 有事件停住时，它排在后面，保持顺序。 */
     @Test
     void timersIgnoreTheLimitButKeepTheUsersOrder() throws Exception {
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 2, sequence, (p, s, events) -> { }, envelope -> reached.add(envelope));
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 2, sequence, (p, s, events, snapshot) -> { }, envelope -> reached.add(envelope));
         feed(dispatcher, event("a", 1));
         feed(dispatcher, event("a", 2));
         feed(dispatcher, timer("a", 1));
@@ -139,14 +139,14 @@ class LaneDispatcherTest {
 
     @Test
     void writeFailureHaltsAndReturnsThePermits() throws Exception {
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events) -> {
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(4, sequence, (p, s, events, snapshot) -> {
             throw new IOException("disk full");
         }, envelope -> reached.add(envelope));
         feed(dispatcher, event("u", 0));
         awaitReached(1);
         EventEnvelope processed = reached.getFirst();
         List<String> log = new java.util.concurrent.CopyOnWriteArrayList<>();
-        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()), null,
                 () -> log.add("released"), () -> {
                     log.add("done");
                     dispatcher.released(processed);
@@ -166,7 +166,7 @@ class LaneDispatcherTest {
     /** review-fixes 需求 2.6：停机后停在用户上限外的事件被丢弃、名额归还，awaitIdle 不再空转到超时。 */
     @Test
     void haltDiscardsTheEventsParkedAtTheUserLimit() throws Exception {
-        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 1, sequence, (p, s, events) -> {
+        LaneDispatcher dispatcher = LoopFixtures.dispatcher(8, 1, sequence, (p, s, events, snapshot) -> {
             throw new IOException("disk full");
         }, envelope -> reached.add(envelope));
         feed(dispatcher, event("u", 0));
@@ -174,7 +174,7 @@ class LaneDispatcherTest {
         feed(dispatcher, event("u", 2));
         awaitReached(1);
         EventEnvelope processed = reached.getFirst();
-        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()),
+        dispatcher.release(processed, new StepRecord(processed.seq(), null, List.of(), List.of(), null, null, List.of(), List.of()), null,
                 () -> { }, () -> dispatcher.released(processed));
         for (int i = 0; i < 1000 && !dispatcher.halted(); i++) {
             Thread.sleep(5);

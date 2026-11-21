@@ -44,6 +44,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     private final StepListener steps;
     private final Evictor evictor;
     private final Release release;
+    private final Snapshotting snapshotting;
     private final Consumer<EventEnvelope> processed;
     private volatile Probe probe = Probe.NONE;
     private KernelState state;
@@ -53,8 +54,9 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
     /** {@code processed} 在一个事件走完全程（结果落盘、命令放行，或者根本没交给内核）后调用。 */
     public Cleanroom(Kernel kernel, BooleanSupplier halted, Predicate<Command> output,
                      Projections projections, FactListener facts, StateView view, ResultPublisher results, StepListener steps, Evictor evictor,
-                     Release release, Consumer<EventEnvelope> processed) {
+                     Release release, Snapshotting snapshotting, Consumer<EventEnvelope> processed) {
         this.release = release;
+        this.snapshotting = snapshotting;
         this.processed = processed;
         this.steps = steps;
         this.evictor = evictor;
@@ -164,7 +166,7 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
         KernelState after = state;
         Projections.Output projected = projections.apply(envelope, before, decision);
         evictor.used(envelope.session());
-        release.release(envelope, record, () -> {
+        release.release(envelope, record, snapshot(envelope, after), () -> {
             // 索引也等落盘之后：事件只写了没 fsync，崩溃会丢，索引不能比文件超前（比如提交去重）
             notifyListener(envelope, before, after);
             for (Command command : decision.commands()) {
@@ -195,6 +197,22 @@ public final class Cleanroom implements EventHandler<CleanroomRing.Slot> {
                     () -> projected.items().size() + " items, " + projected.records().size() + " records");
         }, () -> processed.accept(envelope));
         return true;
+    }
+
+    /**
+     * 存储要了快照，就在这里把这一步之后的样子（内核状态里这个会话和它的运行、两个投影）导出来。导出是不可变的副本，
+     * 在这条线程上做，不和读的人抢。导出失败只记日志，这一步照常。
+     */
+    private tantalum.shell.journal.Snapshot snapshot(EventEnvelope envelope, KernelState after) {
+        if (after.sessions().get(envelope.session()) == null || !snapshotting.wanted(envelope.principal(), envelope.session())) {
+            return null;
+        }
+        try {
+            return snapshotting.of(projections.export(after, envelope.session(), envelope.seq()));
+        } catch (RuntimeException failure) {
+            LOG.error("could not take a snapshot of {} after seq {}", envelope.session().value(), envelope.seq(), failure);
+            return null;
+        }
     }
 
     private void notifyListener(EventEnvelope envelope, KernelState before, KernelState after) {

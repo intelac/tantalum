@@ -1,6 +1,7 @@
 // 后端接口的类型。条目格式由 shell 的 ItemJson 决定，内容块与 journal 一致。
 
-export type SubmitMode = "prompt" | "steer" | "follow-up";
+/** 你说的一句话怎么送：排队（空闲就开一轮）或并进正在跑的这一轮。 */
+export type Delivery = "queue" | "join";
 
 /** 控制台的语言（console-i18n I1）。 */
 export type Language = "zh" | "en" | "ja";

@@ -22,7 +22,7 @@ class WorkspaceSectionTest {
 
     private static WorkspaceSection.Row row(String id, String title, Duration ago, String status, String dir, Long tokens) {
         return new WorkspaceSection.Row(new SessionSummary(new SessionId(id), title, NOW.minus(ago), status, dir),
-                tokens == null ? OptionalLong.empty() : OptionalLong.of(tokens));
+                tokens == null ? OptionalLong.empty() : OptionalLong.of(tokens), tantalum.value.state.SessionKind.REGULAR);
     }
 
     @Test

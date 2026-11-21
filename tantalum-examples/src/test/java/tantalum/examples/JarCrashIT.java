@@ -282,7 +282,7 @@ class JarCrashIT {
         JsonNode submit(String session, String request, String text) throws Exception {
             HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(base + "/api/sessions/" + session + "/submissions"))
                     .header("Cookie", cookie).header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}"))
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}"))
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(200, response.statusCode(), response.body());
             return JSON.readTree(response.body());

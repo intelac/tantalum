@@ -253,10 +253,11 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
         java.util.Set<ToolUse> used = new java.util.LinkedHashSet<>();
-        bound.queries().session(user, session).ifPresent(view -> view.runs().forEach(run -> tantalum.shell.trace.RunText
+        // 每一轮（内存里只留最近的，live-views）
+        bound.queries().everyRun(user, session).forEach(run -> tantalum.shell.trace.RunText
                 .segments(bound.queries().runs().records(user, session, run.ref().run()), bound::toolPlugin).stream()
                 .filter(segment -> segment.role() == tantalum.shell.plugin.RunSegment.Role.TOOL)
-                .forEach(segment -> used.add(new ToolUse(segment.tool(), segment.plugin())))));
+                .forEach(segment -> used.add(new ToolUse(segment.tool(), segment.plugin()))));
         return List.copyOf(used);
     }
 
@@ -267,10 +268,10 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
         List<FinishedRef> found = new java.util.ArrayList<>();
-        java.util.Set<SessionId> offRecord = new java.util.HashSet<>();
+        // 哪些不该记：和实时那条路同一个判断（不进记忆的，和照表不通知个人插件的，比如帮手会话）。读索引，不读会话文件
+        java.util.Set<SessionId> notable;
         try {
-            bound.queries().sessions(user).stream().filter(tantalum.shell.conversation.SessionSummary::offRecord)
-                    .forEach(summary -> offRecord.add(summary.id()));
+            notable = bound.queries().notable(user);
         } catch (java.sql.SQLException unreadable) {
             LOG.warn("cannot list the sessions of {}: {}", user.value(), unreadable.toString());
             return List.of();
@@ -284,7 +285,7 @@ public final class PlatformServices implements PluginServices {
                 tantalum.shell.trace.RunRow row = listed.row();
                 found.add(new FinishedRef(row.session(), row.run(), row.turn(), row.start(), row.end(),
                         row.endReason() == null ? null : row.endReason().name(),
-                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, offRecord.contains(row.session())));
+                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, !notable.contains(row.session())));
             }
             after = page.next();
         } while (after != null && found.size() < limit);

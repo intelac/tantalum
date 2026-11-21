@@ -57,6 +57,25 @@ public final class ExternalGate {
         return Verdict.ADMITTED;
     }
 
+    /**
+     * 入口自己放进环的内部事件（建会话、会话之间的送达和回执）：只占全部的在途数（环的大小按它留位置），不占这个人的名额，
+     * 所以新会话的提交（建会话加提问两个事件）在每人只许一个在途时也进得去。
+     */
+    public synchronized Verdict admitShared() {
+        if (halted.getAsBoolean()) {
+            return Verdict.HALTED;
+        }
+        if (total >= limits.maxExternalInFlight()) {
+            return Verdict.OVER_LIMIT;
+        }
+        total++;
+        return Verdict.ADMITTED;
+    }
+
+    public synchronized void releaseShared() {
+        total = Math.max(0, total - 1);
+    }
+
     /** 事件被内核处理后调用；它产生的运行此后计入 {@code activeRuns}。多余的释放不会让计数变负。 */
     public synchronized void release(Principal principal) {
         Integer user = perUser.get(principal);

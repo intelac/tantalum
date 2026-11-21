@@ -1,5 +1,6 @@
 package tantalum.shell.local;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -81,19 +82,29 @@ class CommandApprovalHookTest {
     void allowAllInThisSession() {
         Allow allow = assertInstanceOf(Allow.class, answered(CommandApprovalHook.SESSION));
         assertEquals(1, allow.notes().size());
-        SessionState allowed = SessionState.start(SESSION, USER).withNote(allow.notes().getFirst().key(), allow.notes().getFirst().value());
-        KernelState state = KernelState.empty().with(allowed);
+        SessionState allowed = SessionStateFixture.regular(SESSION, USER).withNote(allow.notes().getFirst().key(), allow.notes().getFirst().value());
+        KernelState state = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN, tantalum.value.state.RunCause.prompt()));
         assertSame(Allow.PLAIN, before(state, call("bash", "rm -rf build", null)));
         assertSame(Allow.PLAIN, before(state, call("powershell", "dir", null)));
-        SessionState other = SessionState.start(new SessionId("other"), USER);
+        SessionState other = SessionStateFixture.regular(new SessionId("other"), USER);
         HookContext elsewhere = HookContext.of(new RunRef(USER, other.id(), new RunId("r2")), Instant.EPOCH).withCall(call("bash", "ls", null));
         assertInstanceOf(Ask.class, HOOK.beforeToolCall(state.with(other), elsewhere));
+    }
+
+    /** session-model 需求 6.6：“这个会话都允许”只在追到头是你引起的那一轮里认；外面的事引起的那一轮照样问。 */
+    @Test
+    void allowAllInThisSessionDoesNotCoverARunCausedFromOutside() {
+        Allow allow = assertInstanceOf(Allow.class, answered(CommandApprovalHook.SESSION));
+        SessionState allowed = SessionStateFixture.regular(SESSION, USER).withNote(allow.notes().getFirst().key(), allow.notes().getFirst().value());
+        KernelState outside = KernelState.empty().with(allowed).with(tantalum.value.state.RunState.start(RUN,
+                new tantalum.value.state.RunCause(tantalum.value.state.RunCause.StartedBy.REPORT, tantalum.value.event.Root.OUTSIDE, null)));
+        assertInstanceOf(Ask.class, before(outside, call("bash", "rm -rf build", null)));
     }
 
     /** 和例子插件的审批共用 {@code approval} 记录：合并，不互相覆盖。 */
     @Test
     void sharesTheApprovalNoteWithoutOverwriting() {
-        SessionState both = SessionState.start(SESSION, USER)
+        SessionState both = SessionStateFixture.regular(SESSION, USER)
                 .withNote(CommandApprovalHook.NOTE, new Json.Obj(Map.of("write_file", new Json.Bool(true))))
                 .withNote(CommandApprovalHook.NOTE, new Json.Obj(Map.of(CommandApprovalHook.SHELL, new Json.Bool(true))));
         assertEquals(2, both.note(CommandApprovalHook.NOTE).fields().size());

@@ -138,7 +138,7 @@ final class MatrixFixture implements AutoCloseable {
     /** 提交一条 prompt。文字里带上 {@code cell=<会话>}，模型据此认出会话。 */
     void submit(String session, String text) throws Exception {
         sessions.add(session);
-        String body = "{\"requestId\":\"r" + requests.incrementAndGet() + "\",\"mode\":\"prompt\",\"text\":"
+        String body = "{\"requestId\":\"r" + requests.incrementAndGet() + "\",\"delivery\":\"queue\",\"text\":"
                 + JSON.writeValueAsString("cell=" + session + " " + text) + "}";
         HttpResponse<String> response = server.post(USER, "/api/sessions/" + session + "/submissions", body);
         assertEquals(200, response.statusCode(), response.body());
@@ -217,8 +217,13 @@ final class MatrixFixture implements AutoCloseable {
     }
 
     /** journal 事件的类型序列；工作、失败和工具结果带上关键内容。 */
+    /**
+     * 会话账里建会话之后的事件。每个会话的第一条都是建会话（入口发的）：这里先核对它在，再去掉，各个格子只写钩子那一段。
+     */
     List<String> events(String session) {
-        return journal(session).stream().map(envelope -> event(envelope)).toList();
+        List<String> all = journal(session).stream().map(envelope -> event(envelope)).toList();
+        org.junit.jupiter.api.Assertions.assertEquals("SessionCreated", all.isEmpty() ? null : all.getFirst(), "the first line of " + session);
+        return all.subList(1, all.size());
     }
 
     private static String event(EventEnvelope envelope) {

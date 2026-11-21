@@ -46,7 +46,7 @@ class WeightedUsageTest {
     }
 
     private static void ask(TestServer server, String session, int run) throws Exception {
-        String body = "{\"requestId\":\"" + session + "-" + run + "\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+        String body = "{\"requestId\":\"" + session + "-" + run + "\",\"delivery\":\"queue\",\"text\":\"hi\"}";
         assertEquals(200, server.post("alice", "/api/sessions/" + session + "/submissions", body).statusCode());
         for (int i = 0; i < 1000; i++) {
             JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/" + session + "/runs").body()).get("runs");

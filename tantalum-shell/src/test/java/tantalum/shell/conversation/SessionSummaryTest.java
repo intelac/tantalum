@@ -25,14 +25,14 @@ class SessionSummaryTest {
     void summaryTakesTitleLatestTimeAndRunStatus() {
         TranscriptFixture fx = new TranscriptFixture();
         RunId run = fx.start("where is the interest calculated?\nmore");
-        SessionSummary running = SessionSummary.of(SESSION, fx.state().runs().get(run), fx.items());
+        SessionSummary running = SessionSummary.of(SESSION, fx.state().runs().get(run), fx.transcript.view(SESSION));
         assertEquals("where is the interest calculated?", running.title());
         assertEquals("AwaitingModel", running.runStatus());
         assertEquals(T0.plusSeconds(1), running.lastActivity());
 
         fx.tick(Duration.ofSeconds(30));
         fx.feed(run, fx.reply(text("done")));
-        SessionSummary idle = SessionSummary.of(SESSION, null, fx.items());
+        SessionSummary idle = SessionSummary.of(SESSION, null, fx.transcript.view(SESSION));
         assertEquals(SessionSummary.IDLE, idle.runStatus());
         assertEquals(T0.plusSeconds(32), idle.lastActivity());
     }

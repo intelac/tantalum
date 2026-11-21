@@ -79,7 +79,7 @@ class UserLaneTest {
 
     @Test
     void eventsArePublishedInArrivalOrderWithIncreasingSeqAcrossSessions() throws Exception {
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events, snapshot) -> {
             try {
                 Thread.sleep(s.value().equals("a") ? 3 : 0);
             } catch (InterruptedException stop) {
@@ -105,7 +105,7 @@ class UserLaneTest {
         CountDownLatch writing = new CountDownLatch(2);
         CountDownLatch hold = new CountDownLatch(1);
         // 先用一步占住通道，让后两步进同一批。
-        UserLane held = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane held = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             if (s.value().equals("first")) {
                 await(hold);
                 return;
@@ -135,7 +135,7 @@ class UserLaneTest {
     void writeFailureHaltsAndNothingOfTheBatchGoesOn() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch hold = new CountDownLatch(1);
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             if (s.value().equals("first")) {
                 await(hold);
                 return;
@@ -161,7 +161,7 @@ class UserLaneTest {
     void failureInOneOfSeveralSessionsStillFailsTheBatch() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch hold = new CountDownLatch(1);
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             if (s.value().equals("first")) {
                 await(hold);
             } else if (s.value().equals("bad")) {
@@ -193,7 +193,7 @@ class UserLaneTest {
         List<EventEnvelope> written = Collections.synchronizedList(new ArrayList<>());
         UserLane lane = new UserLane(ALICE, principal -> {
             throw new IllegalStateException("exceeded");
-        }, (p, s, lines) -> lines.forEach(line -> written.add(line.envelope())), exit, LoopFixtures.NO_LOADER, new Residency());
+        }, (p, s, lines, snapshot) -> lines.forEach(line -> written.add(line.envelope())), exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -203,7 +203,7 @@ class UserLaneTest {
     @Test
     void refusedPublishHaltsAndReleasesTheRest() throws Exception {
         exit.accept = false;
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events, snapshot) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
         lane.offer(event("a", "r0"));
         exit.await(1);
         assertTrue(exit.halted);
@@ -213,7 +213,7 @@ class UserLaneTest {
     /** 线程退出和新事件到达竞争时不能丢事件：每发一个就等它走完，让线程反复退出。 */
     @Test
     void laneExitRacingWithNewEventsLosesNothing() throws Exception {
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events, snapshot) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
         int total = 5_000;
         for (int i = 0; i < total; i++) {
             lane.offer(event("a", "r" + i));
@@ -230,7 +230,7 @@ class UserLaneTest {
     private static UserLane.Released step(String session, long seq, List<String> log) {
         EventEnvelope envelope = event(session, "r" + seq).withSeq(seq);
         StepRecord record = new StepRecord(seq, null, List.of(), List.of(), null, null, List.of(), List.of());
-        return new UserLane.Released(envelope, record, () -> log.add("released " + seq), () -> log.add("done " + seq));
+        return new UserLane.Released(envelope, record, null, () -> log.add("released " + seq), () -> log.add("done " + seq));
     }
 
     /** one-line-journal 需求 1.2：这一行落盘之前不放行命令和推送。 */
@@ -239,7 +239,7 @@ class UserLaneTest {
         List<String> log = new CopyOnWriteArrayList<>();
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch durable = new CountDownLatch(1);
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             log.add("write " + lines.stream().map(Line::seq).toList());
             writing.countDown();
             try {
@@ -265,7 +265,7 @@ class UserLaneTest {
     @Test
     void aFailedWriteReleasesNothing() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             throw new IOException("disk full");
         }, exit, LoopFixtures.NO_LOADER, new Residency());
 
@@ -283,7 +283,7 @@ class UserLaneTest {
         List<String> log = new CopyOnWriteArrayList<>();
         List<Long> written = new CopyOnWriteArrayList<>();
         CountDownLatch hold = new CountDownLatch(1);
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> {
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> {
             if (s.value().equals("first")) {
                 await(hold);
                 return;
@@ -331,7 +331,7 @@ class UserLaneTest {
             @Override public void failed(Throwable failure) { throw new AssertionError(failure); }
             @Override public void discarded(List<EventEnvelope> events) { throw new AssertionError("discarded " + events.size()); }
         };
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, capturing, loader, new Residency(clock, Duration.ofMinutes(1)));
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events, snapshot) -> { }, capturing, loader, new Residency(clock, Duration.ofMinutes(1)));
         lane.offer(event("x", "r1"));
         awaitSize(seen, 1);
         now[0] = 30_000;
@@ -365,7 +365,7 @@ class UserLaneTest {
             @Override public void failed(Throwable failure) { exit.failed(failure); }
             @Override public void discarded(List<EventEnvelope> events) { exit.discarded(events); }
         };
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, events) -> { }, throwing, LoopFixtures.NO_LOADER, residency);
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, events, snapshot) -> { }, throwing, LoopFixtures.NO_LOADER, residency);
         lane.offer(event("a", "r0"));
         lane.offer(event("a", "r1"));
         exit.await(2);
@@ -378,10 +378,10 @@ class UserLaneTest {
     @Test
     void anErrorInOneReleaseDoesNotStopTheOtherSteps() throws Exception {
         List<String> log = new CopyOnWriteArrayList<>();
-        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
+        UserLane lane = new UserLane(ALICE, sequence, (p, s, lines, snapshot) -> { }, exit, LoopFixtures.NO_LOADER, new Residency());
         EventEnvelope first = event("a", "r7").withSeq(7);
         StepRecord record = new StepRecord(7, null, List.of(), List.of(), null, null, List.of(), List.of());
-        lane.offer(new UserLane.Released(first, record, () -> { throw new AssertionError("release 7 blew up"); }, () -> log.add("done 7")));
+        lane.offer(new UserLane.Released(first, record, null, () -> { throw new AssertionError("release 7 blew up"); }, () -> log.add("done 7")));
         lane.offer(step("a", 8, log));
         for (int i = 0; i < 1000 && log.size() < 3; i++) {
             Thread.sleep(5);
