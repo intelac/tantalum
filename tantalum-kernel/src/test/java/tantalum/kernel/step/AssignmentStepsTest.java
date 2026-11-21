@@ -438,25 +438,29 @@ class AssignmentStepsTest {
         calls(loop, task("c1", "one"), task("c2", "two"));
         List<OpenAssignment> open = loop.session().assignments().open();
 
+        done(loop, "two are out");
+        // 第二个已经送到（帮手确认了）；第一个还没确认
+        loop.feed(null, new tantalum.value.event.Delivered("assign:" + open.get(1).id()));
+        ask(loop, "stop them");
         Decision byModel = calls(loop, stop("c3", open.get(0).id()), stop("c4", "nope"));
-        // 叫停排在交代后面（delivery）：交代还没确认收到，叫停先在信箱里等，不会比交代先到
-        assertTrue(AssignmentFixture.commands(byModel).stream().noneMatch(StopAssignment.class::isInstance));
-        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.get(0).id()) && each.ackTimer() == null));
         assertTrue(resultOf(loop, "c3").startsWith("Stop requested for task " + open.get(0).id()));
         assertEquals("ERROR No running task \"nope\".", resultOf(loop, "c4"));
-        // 名单不动：等它自己交回“已停止”
-        assertEquals(2, loop.session().assignments().open().size());
+        // 没确认送到的（delivery 审查）：撤掉、当场记成“已停止”，叫停照样送出（送到了只是确认丢了的，帮手会停下）
+        assertTrue(loop.session().outbox().stream().noneMatch(each -> each.id().equals("assign:" + open.get(0).id())));
+        assertEquals(open.get(0).session(), only(byModel, StopAssignment.class).session());
+        assertEquals(List.of(open.get(1).id()), loop.session().assignments().open().stream().map(OpenAssignment::id).toList());
 
         done(loop, "stopping one");
-        loop.feed(null, new tantalum.value.event.Delivered("assign:" + open.get(0).id()));
-        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.get(0).id()) && each.ackTimer() != null),
-                "sent once the task has arrived");
         loop.feed(null, new StopRequested(new RequestId("r"), null));
-        // 每个交代各一条叫停，排在各自对方的信箱里
-        assertEquals(2, loop.session().outbox().stream().filter(each -> each.id().startsWith("stop:")).count());
-
-        loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        // 送到了的那个：名单不动，叫停送过去，等它自己交回“已停止”
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.get(1).id()) && each.ackTimer() != null));
         assertEquals(1, loop.session().assignments().open().size());
+        loop.feed(null, AssignmentFixture.report(open.get(1).id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        assertTrue(loop.session().assignments().open().isEmpty());
+        // 第一个的帮手要是其实收到了（只是确认丢了），它交回的“已停止”按名单去重，什么都不改
+        tantalum.value.state.KernelState before = loop.state;
+        loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        assertSame(before, loop.state);
     }
 
     @Test

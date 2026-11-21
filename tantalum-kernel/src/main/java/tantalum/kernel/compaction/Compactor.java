@@ -75,7 +75,7 @@ public final class Compactor {
         int headMessages = units.get(firstKept).from();
         List<Message> head = view.subList(0, headMessages);
         // 规则 5：当前请求是视图里最新的用户亲笔消息；保留段里已有更新的，头部的旧消息就只进摘要。
-        boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isUserText);
+        boolean requestKept = view.subList(headMessages, view.size()).stream().anyMatch(Compactor::isRequest);
         return Optional.of(new Plan(headMessages, firstKept, units.size() - firstKept, estimate.ofMessages(head),
                 requestKept ? null : request(head)));
     }
@@ -271,11 +271,20 @@ public final class Compactor {
     static Message request(List<Message> head) {
         for (int i = head.size() - 1; i >= 0; i--) {
             Message message = head.get(i);
-            if (isUserText(message)) {
+            if (isRequest(message)) {
                 return message;
             }
         }
         return null;
+    }
+
+    /**
+     * 规则 5 原样留下的“最近一次请求”：你亲笔的话，或者帮手收到的那条交代（它要做的全部内容都在里面，只留摘要会丢掉，delivery 审查发现）。
+     * 交代不是你说的话，所以不算 {@link #isUserText}。
+     */
+    static boolean isRequest(Message message) {
+        return isUserText(message) || message.role() == Role.USER && message.content().size() == 1
+                && message.content().getFirst() instanceof tantalum.value.model.AssignmentBlock;
     }
 
     /**

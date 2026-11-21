@@ -33,6 +33,9 @@ public final class DeliveryHandler implements Handler {
         int deliver(Principal principal, SessionId session, SessionCreated create, Input input);
 
         int handOver(Principal principal, SessionId session, Event event);
+
+        /** 这个人的这个会话已经有了。 */
+        boolean exists(Principal principal, SessionId session);
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(DeliveryHandler.class);
@@ -65,6 +68,10 @@ public final class DeliveryHandler implements Handler {
             case ReportParcel back -> deliveries.deliver(user, deliver.to(), null, back.input()) == 409
                     ? new Refused(back.id(), "that session does not take results") : null;
             case StopParcel stop -> {
+                // 帮手会话没有：交代没送到过（送方已经撤掉了它），没有可停的
+                if (!deliveries.exists(user, deliver.to())) {
+                    yield new Refused(stop.id(), "there is no session for that task");
+                }
                 deliveries.handOver(user, deliver.to(), stop.input());
                 yield null;
             }
@@ -75,6 +82,11 @@ public final class DeliveryHandler implements Handler {
     private Event assign(Principal user, Deliver deliver, AssignmentParcel given) throws InterruptedException {
         SessionId issuer = deliver.run().session();
         Assignment input = given.input();
+        // 重送（“送到了”丢了）：帮手已经建好，出身早定下了，不再读 agent（本机一时连不上不能变成“不收”），直接送，帮手认出重复只回确认
+        if (deliveries.exists(user, deliver.to())) {
+            deliveries.deliver(user, deliver.to(), null, input);
+            return null;
+        }
         Agents.Found found = agents.find(user, deliver.to(), given.agent(), given.dir());
         if (found.agent() == null && given.agent() != null) {
             return new Refused(given.id(), found.problem());

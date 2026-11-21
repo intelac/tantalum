@@ -55,6 +55,8 @@ class DeliveryHandlerTest {
     private final List<Sent> sent = new ArrayList<>();
     /** 入口接下来几次的回答；空了就是 200。 */
     private final Deque<Integer> statuses = new ArrayDeque<>();
+    /** 已经有了的会话（重送时帮手已经建好）。 */
+    private final java.util.Set<SessionId> existing = new java.util.HashSet<>();
     private final Agents agents = (user, dir) -> List.of(
             new Agents.Agent("reviewer", "Reviews code.", "You review code.", List.of("read_file", "grep"), null),
             new Agents.Agent("quick", "Fast checks.", "Be quick.", null, HAIKU));
@@ -71,6 +73,11 @@ class DeliveryHandlerTest {
             public int handOver(Principal principal, SessionId session, Event event) {
                 sent.add(new Sent(principal, session, null, event));
                 return statuses.isEmpty() ? 200 : statuses.poll();
+            }
+
+            @Override
+            public boolean exists(Principal principal, SessionId session) {
+                return existing.contains(session);
             }
         }, agents);
     }
@@ -141,6 +148,7 @@ class DeliveryHandlerTest {
         assertEquals(new Sent(ALICE, ISSUER, null, report), only());
 
         sent.clear();
+        existing.add(HELPER);
         AssignmentCancelled stop = new AssignmentCancelled("t3-0", ISSUER);
         assertNull(handler().handle(new Deliver(new CommandId("c3"), RUN, HELPER, new StopParcel(stop))));
         assertEquals(new Sent(ALICE, HELPER, null, stop), only());
@@ -163,6 +171,16 @@ class DeliveryHandlerTest {
         statuses.add(429);
         assertNull(handler().handle(new Acknowledge(new CommandId("c7"), HELPER_RUN, "stop:t3-0", ISSUER, "not this session's")));
         assertEquals(new Sent(ALICE, ISSUER, null, new Refused("stop:t3-0", "not this session's")), only(), "tried once; lost ones are re-sent by the sender");
+    }
+
+    /** 重送：帮手已经建好了，不再读 agent（连接程序一时断开不能把一次已经送到的交代变成“不收”），直接送，帮手认出重复。 */
+    @Test
+    void aResentAssignmentToAnExistingHelperDoesNotLookTheAgentUpAgain() throws Exception {
+        existing.add(HELPER);
+        assertNull(handler().handle(start("nope")), "not refused although the agent cannot be found now");
+        Sent resent = only();
+        assertNull(resent.create());
+        assertEquals(new Assignment("t3-0", ISSUER, Root.USER, "Check module A.", SONNET), resent.event());
     }
 
     @Test

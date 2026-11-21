@@ -77,15 +77,13 @@ class DeliveryStepsTest {
     }
 
     @Test
-    void aRefusedTaskIsAFailedResultAndTheStopQueuedBehindItGoes() {
+    void aRefusedTaskIsAFailedResult() {
         LoopFixture loop = new LoopFixture();
         callTask(loop, "c1");
         String id = loop.session().assignments().open().getFirst().id();
-        loop.feed(null, new tantalum.value.event.StopRequested(new tantalum.value.id.RequestId("r"), null));
-        assertEquals(2, loop.session().outbox().size(), "the stop waits behind its task");
 
         loop.feed(null, new Refused("assign:" + id, "unknown agent \"x\""));
-        assertTrue(loop.session().outbox().isEmpty(), "the queued stop of the refused task goes with it");
+        assertTrue(loop.session().outbox().isEmpty());
         assertTrue(loop.session().assignments().open().isEmpty());
         boolean shown = false;
         // 会话正忙：结果在收件队列里，下次调模型前并进历史
@@ -103,18 +101,31 @@ class DeliveryStepsTest {
         assertTrue(shown, "the refusal is the task's result");
     }
 
+    /** 叫停（审查后）：交代没确认送到就撤掉它、当场记成“已停止”，叫停照样发出；确认了的，叫停直接发出，等它交回结果。 */
     @Test
-    void theNextDeliveryToTheSameSessionWaitsForTheFirst() {
+    void aStopWithdrawsAnUnconfirmedTaskAndIsSentForAConfirmedOne() {
         LoopFixture loop = new LoopFixture();
         callTask(loop, "c1");
         String id = loop.session().assignments().open().getFirst().id();
         Decision stopped = loop.feed(null, new tantalum.value.event.StopRequested(new tantalum.value.id.RequestId("r"), null));
-        assertTrue(delivers(stopped).isEmpty(), "nothing goes out while the task is unconfirmed");
+        assertEquals(List.of("stop:" + id), delivers(stopped).stream().map(deliver -> deliver.what().id()).toList());
+        assertTrue(loop.session().assignments().open().isEmpty(), "settled as stopped at once");
+        assertEquals(List.of("stop:" + id), loop.session().outbox().stream().map(Outgoing::id).toList());
+    }
 
-        Decision confirmed = loop.feed(null, new Delivered("assign:" + id));
-        List<Deliver> next = delivers(confirmed);
-        assertEquals(1, next.size());
-        assertEquals("stop:" + id, next.getFirst().what().id(), "the stop goes once the task has arrived");
+    @Test
+    void theWaitForAConfirmationDoublesUpToTenMinutes() {
+        assertEquals(java.time.Duration.ofSeconds(10), Outbox.ackAfter(0));
+        assertEquals(java.time.Duration.ofSeconds(20), Outbox.ackAfter(1));
+        assertEquals(java.time.Duration.ofSeconds(320), Outbox.ackAfter(5));
+        assertEquals(java.time.Duration.ofMinutes(10), Outbox.ackAfter(6));
+        assertEquals(java.time.Duration.ofMinutes(10), Outbox.ackAfter(40));
+        LoopFixture loop = new LoopFixture();
+        callTask(loop, "c1");
+        Outgoing first = only(loop);
+        Decision again = loop.feed(null, new TimerFired(first.ackTimer()));
+        assertTrue(again.commands().stream().anyMatch(c -> c instanceof StartTimer t && t.delay().equals(java.time.Duration.ofSeconds(20))),
+                "the second wait is longer");
     }
 
     /** 收的一方：重复的交代只回“送到了”；不是给它的不收。 */

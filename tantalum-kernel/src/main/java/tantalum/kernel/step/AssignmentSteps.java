@@ -135,8 +135,7 @@ public final class AssignmentSteps {
         if (open.isEmpty()) {
             return Result.refused("No running task \"" + id + "\".");
         }
-        // 叫停排在交代后面送（同一个对方前一条确认了才发下一条），不会先到
-        Outbox.send(out, run.ref().session(), open.get().session(), stopOf(id, run.ref().session()));
+        stopping(out, out.session(run.ref()), open.get());
         return new Result("Stop requested for task " + id + ". Its result arrives when it has stopped.", false);
     }
 
@@ -155,6 +154,23 @@ public final class AssignmentSteps {
         AssignmentOutcome outcome = outcomeOf(reason, detail);
         Outbox.send(out, session.id(), session.helper().issuer(), new ReportParcel(new Report(assignment, outcome,
                 textOf(outcome, session, assignment, detail), run.cause().root(), session.id())));
+    }
+
+    /**
+     * 叫停一次交代（模型、你、期限到）。交代还没确认送到：从信箱撤掉，当场记成“已停止”（送到了只是确认丢了的，帮手交回的结果按名单
+     * 去重）；然后照样送一条叫停，排在同一个对方的前一条后面，不会比交代先到。
+     */
+    private static void stopping(Outcome out, SessionState session, OpenAssignment open) {
+        if (Outbox.withdraw(out, session.id(), open.id())) {
+            SessionState now = out.state().sessions().get(session.id());
+            if (now.assignments().find(open.id()).isPresent()) {
+                RunRef ref = settle(out, now, open, AssignmentOutcome.STOPPED, null, open.root());
+                if (open.timer() != null) {
+                    out.emit(new AbortCommands(out.nextCommandId(), ref, Set.of(open.timer())));
+                }
+            }
+        }
+        Outbox.send(out, session.id(), open.session(), stopOf(open.id(), session.id()));
     }
 
     private static StopParcel stopOf(String assignment, SessionId from) {
@@ -260,7 +276,7 @@ public final class AssignmentSteps {
         Outcome out = new Outcome(context);
         if (open.isPresent()) {
             settle(out, session, open.get(), AssignmentOutcome.TIMED_OUT, null, open.get().root());
-            Outbox.send(out, session.id(), open.get().session(), stopOf(open.get().id(), session.id()));
+            stopping(out, out.state().sessions().get(session.id()), open.get());
             return out.decision();
         }
         return Outbox.resend(out, session, event.command()) ? out.decision() : Decision.unchanged(context.state());
@@ -280,14 +296,14 @@ public final class AssignmentSteps {
         }
         Outcome out = new Outcome(context);
         for (OpenAssignment each : stopping) {
-            Outbox.send(out, session.id(), each.session(), stopOf(each.id(), session.id()));
+            stopping(out, out.state().sessions().get(session.id()), each);
         }
         return out.decision();
     }
 
     /**
      * 交代的一方不要它了（帮手这边，delivery 需求 3.2）。正在为它跑：像被撤销一样结束这一轮，结果照常交回（已停止）。
-     * 还在队里没开始：从队里拿掉，交回“已停止”。已经交回过：什么都不做。三种都回“送到了”；不是给这个帮手的：不收。
+     * 已经交回过：什么都不做。都回“送到了”；不是给这个帮手的：不收。（交代一到当场就开一轮，所以没有“还在队里”的时候。）
      */
     public static Decision cancelled(StepContext context) {
         AssignmentCancelled event = (AssignmentCancelled) context.envelope().event();
@@ -305,11 +321,6 @@ public final class AssignmentSteps {
         RunState run = context.run();
         if (run != null && !run.isEnded() && event.assignment().equals(run.cause().owes())) {
             CancelSteps.end(out, run, EndReason.CANCELLED, null);
-        } else if (session.lastRun() == null && session.inbox().stream().anyMatch(item -> event.assignment().equals(item.assignment()))) {
-            SessionState emptied = session.withInbox(session.inbox().stream().filter(item -> !event.assignment().equals(item.assignment())).toList());
-            out.put(emptied);
-            Outbox.send(out, session.id(), helper.issuer(), new ReportParcel(new Report(event.assignment(), AssignmentOutcome.STOPPED, null,
-                    tantalum.value.event.Root.USER, session.id())));
         }
         Outbox.acknowledge(out, out.state().sessions().get(session.id()), delivery, event.from(), null);
         return out.decision();

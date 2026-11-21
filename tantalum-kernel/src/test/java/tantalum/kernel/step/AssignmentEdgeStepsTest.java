@@ -209,9 +209,10 @@ class AssignmentEdgeStepsTest {
                 new Json.Obj(Map.of(AssignmentTools.ID, new Json.Str(id)))));
 
         assertEquals(1, AssignmentFixture.commands(decision).stream().filter(Assign.class::isInstance).count());
-        // 叫停排在它的交代后面（delivery）：交代还没确认，叫停在信箱里等
-        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + id) && each.ackTimer() == null));
-        assertEquals(2, loop.session().assignments().open().size());
+        // 交代还没确认送到（delivery 审查）：撤掉它、当场记成“已停止”，叫停照样送出（送到了只是确认丢了的，帮手会停下）
+        assertTrue(loop.session().outbox().stream().noneMatch(each -> each.id().equals("assign:" + id)));
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + id) && each.ackTimer() != null));
+        assertEquals(1, loop.session().assignments().open().size());
     }
 
     // ---- 结果到的时候这一轮正停在别处 ----

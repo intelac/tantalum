@@ -29,10 +29,6 @@ public final class SessionFiles implements AutoCloseable {
     @FunctionalInterface
     public interface DurableListener {
         void onDurable(Principal principal, SessionId session, long seq, long offset);
-
-        /** 一份快照落盘了，快照行从 {@code offset} 开始（索引记下它，载入从这里读起）。 */
-        default void onSnapshot(Principal principal, SessionId session, long offset) {
-        }
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionFiles.class);
@@ -168,7 +164,7 @@ public final class SessionFiles implements AutoCloseable {
     }
 
     /**
-     * 紧跟在刚落盘的步后面写快照行。成功：换成从快照起头的 memo，记下距离，告诉监听器。失败：文件截回写之前的长度
+     * 紧跟在刚落盘的步后面写快照行。成功：换成从快照起头的 memo，记下距离。失败：文件截回写之前的长度
      * （{@link SessionFile#appendLines} 失败时会截），句柄作废、下次重开；memo 不换，步已经落盘不受影响。返回文件现在的长度。
      */
     private long writeSnapshot(Key key, Handle handle, Snapshot snapshot, long before, Distance distance) throws IOException {
@@ -177,7 +173,6 @@ public final class SessionFiles implements AutoCloseable {
             memos.put(key, RecordMemo.afterSnapshot(false, key.principal(), key.session(), snapshot));
             distance.since = after;
             distance.snapshotBytes = after - before;
-            listener.onSnapshot(key.principal(), key.session(), before);
             return after;
         } catch (IOException | RuntimeException failure) {
             LOG.warn("could not write a snapshot of {}/{}; the steps are safe, will try again later: {}", key.principal().value(),

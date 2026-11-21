@@ -6,9 +6,9 @@ import tantalum.value.id.SessionId;
 
 /**
  * 送方信箱里的一条（delivery 需求 1）：送给同一个人的会话 {@code to}，对方确认收到才划掉。{@code ackTimer} 非空表示已经发出、在等确认，
- * 到时没确认就照原编号重送；同一个 {@code to} 前一条确认了才发下一条。
+ * 到时没确认就照原编号重送；同一个 {@code to} 前一条确认了才发下一条。{@code attempts} 是发过几次，等确认的时间随它加长。
  */
-public record Outgoing(SessionId to, Parcel what, CommandId ackTimer) {
+public record Outgoing(SessionId to, Parcel what, CommandId ackTimer, int attempts) {
 
     public Outgoing {
         Objects.requireNonNull(to, "to");
@@ -20,6 +20,6 @@ public record Outgoing(SessionId to, Parcel what, CommandId ackTimer) {
     }
 
     public Outgoing sent(CommandId timer) {
-        return new Outgoing(to, what, timer);
+        return new Outgoing(to, what, timer, attempts + 1);
     }
 }

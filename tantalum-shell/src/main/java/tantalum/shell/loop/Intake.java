@@ -203,23 +203,25 @@ public final class Intake {
         if (creating && !publishCreation(principal, session, create)) {
             return 429;
         }
-        EventEnvelope envelope = envelope(principal, session, null, delivered);
-        Probes.event(input.probe(), Stage.INTAKE, envelope, null);
-        return input.tryPublish(envelope) ? 200 : 429;
+        return publishGated(principal, envelope(principal, session, null, delivered));
     }
 
     /**
      * 会话之间送的不是输入的那几样（delivery）：叫停（{@code AssignmentCancelled}）、“送到了”“不收”、启动时的重送。
      * 只查会话是这个人的、已经有了；不过输入表、不占名额（内核按自己的状态处理）。返回 200 放进了环，404 会话不是这个人的或还没有，429 环满。
      */
+    /** 这个人的这个会话已经有了（在内存，或索引里写过事件）。 */
+    public boolean exists(Principal principal, SessionId session) {
+        Known known = known(principal, session);
+        return !known.foreign() && known.kind() != null;
+    }
+
     public int handOver(Principal principal, SessionId session, tantalum.value.event.Event event) {
         Known known = known(principal, session);
         if (known.foreign() || known.kind() == null) {
             return 404;
         }
-        EventEnvelope envelope = envelope(principal, session, null, event);
-        Probes.event(input.probe(), Stage.INTAKE, envelope, null);
-        return input.tryPublish(envelope) ? 200 : 429;
+        return publishGated(principal, envelope(principal, session, null, event));
     }
 
     /** 一个会话在入口看来的样子：{@code resident} 是在内存的状态（不在为 null）；{@code kind} 为 null 表示还没建。 */
@@ -378,8 +380,34 @@ public final class Intake {
         return 200;
     }
 
-    /** 事件走完管线后调用：外部事件归还名额。 */
+    /**
+     * 入口自己放进环、占了名额的内部事件（建会话、会话之间的送达和回执）：走完管线时归还。按对象认，不按种类：同一种事件也可能作为
+     * 命令的结果进来（比如处理器回的“不收”），那些没占名额。环的大小只给“运行的结果 + 外部名额”留了位置，这些不占名额会挤掉结果。
+     */
+    private final java.util.Set<Event> gated = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+
+    /** 占一个名额放进环：名额满或环满回 429（调用方或送方到时重送），停机中 503。 */
+    private int publishGated(Principal principal, EventEnvelope envelope) {
+        ExternalGate.Verdict verdict = gate.admitShared();
+        if (verdict != ExternalGate.Verdict.ADMITTED) {
+            return status(verdict);
+        }
+        gated.add(envelope.event());
+        Probes.event(input.probe(), Stage.INTAKE, envelope, null);
+        if (!input.tryPublish(envelope)) {
+            gated.remove(envelope.event());
+            gate.releaseShared();
+            return 429;
+        }
+        return 200;
+    }
+
+    /** 事件走完管线后调用：外部事件和入口放进去的内部事件归还名额。 */
     public void processed(EventEnvelope envelope) {
+        if (gated.remove(envelope.event())) {
+            gate.releaseShared();
+            return;
+        }
         switch (envelope.event()) {
             case Submitted submitted -> release(envelope.principal(), submitted.submission());
             case Cancel cancel -> gate.release(envelope.principal());
@@ -453,11 +481,9 @@ public final class Intake {
         }
     }
 
-    /** 建会话的事件和别的一样经过入口：监视里看得到它。 */
+    /** 建会话的事件和别的一样经过入口（监视里看得到它），也占一个名额：新会话的提交在环里是两个事件。 */
     private boolean publishCreation(Principal principal, SessionId session, SessionCreated created) {
-        EventEnvelope creation = envelope(principal, session, null, created);
-        Probes.event(input.probe(), Stage.INTAKE, creation, null);
-        return input.tryPublish(creation);
+        return publishGated(principal, envelope(principal, session, null, created)) == 200;
     }
 
     private EventEnvelope envelope(Principal principal, SessionId session, RunId run, Event event) {

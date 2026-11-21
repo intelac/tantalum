@@ -96,6 +96,11 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                     public int handOver(Principal principal, SessionId session, tantalum.value.event.Event event) {
                         return intakeSlot[0].handOver(principal, session, event);
                     }
+
+                    @Override
+                    public boolean exists(Principal principal, SessionId session) {
+                        return intakeSlot[0].exists(principal, session);
+                    }
                 },
                 new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(

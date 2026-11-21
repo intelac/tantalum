@@ -454,6 +454,12 @@ final class TranscriptPass {
                 put(queued.started(run));
             }
         }
+        // 手动压缩里选了并入、压缩完开了这一轮的那条：从压缩那一轮挪到这一轮
+        for (tantalum.value.state.InboxItem item : CompactionJoins.started(before, state, session)) {
+            if (get(TranscriptItem.id(item.id(), 0)) instanceof UserMessage joined) {
+                put(joined.started(run));
+            }
+        }
     }
 
     /** 被钩子拦截或参数无效的调用在工具轮里直接带着结果，没有自己的事件。 */

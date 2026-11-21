@@ -76,9 +76,11 @@ public record SessionState(SessionId id, Principal principal, SessionKind kind, 
             return messages;
         }
         int from = compaction == null ? windowStart : compaction.tailFrom();
+        // 撤下只作用于记下它之前的消息：记在看得到的这一段之前的（比如压缩以后撤下、原文只在去掉的那部分里）不用逐条去试
+        List<Withdrawal> live = withdrawn.stream().filter(each -> each.before() > from).toList();
         List<Message> view = new ArrayList<>(compaction == null ? List.of() : compaction.replacement());
         for (int i = from; i < historySize(); i++) {
-            view.add(said(i));
+            view.add(said(i, live));
         }
         return List.copyOf(view);
     }
@@ -116,11 +118,15 @@ public record SessionState(SessionId id, Principal principal, SessionKind kind, 
 
     /** 从头数第 {@code index} 条，照模型看到的样子：在它之后撤下的文字已经换掉。没有撤下过时就是原来那条。窗口之前的抛错。 */
     public Message said(int index) {
+        return said(index, withdrawn);
+    }
+
+    private Message said(int index, List<Withdrawal> candidates) {
         Message message = message(index);
-        if (withdrawn.isEmpty()) {
+        if (candidates.isEmpty()) {
             return message;
         }
-        List<tantalum.value.event.TextWithdrawn.Swap> swaps = withdrawn.stream().filter(each -> index < each.before()).map(Withdrawal::swap).toList();
+        List<tantalum.value.event.TextWithdrawn.Swap> swaps = candidates.stream().filter(each -> index < each.before()).map(Withdrawal::swap).toList();
         return swaps.isEmpty() ? message : new tantalum.value.model.TextSwap(swaps).message(message);
     }
 

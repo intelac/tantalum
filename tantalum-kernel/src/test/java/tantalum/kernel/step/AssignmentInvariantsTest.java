@@ -135,8 +135,14 @@ class AssignmentInvariantsTest {
                         yield AssignmentFixture.assignmentOf(start);
                     }
                     case tantalum.value.delivery.ReportParcel back -> back.input();
-                    case tantalum.value.delivery.StopParcel stop -> stop.input();
+                    // 和处理器一样：帮手会话没有（交代没送到过、已经撤掉了）就回“不收”，作为这条命令的结果回到送方
+                    case tantalum.value.delivery.StopParcel stop -> loop.state.sessions().get(deliver.to()) == null
+                            ? new tantalum.value.event.Refused(stop.id(), "there is no session for that task") : stop.input();
                 };
+                if (what instanceof tantalum.value.event.Refused refused) {
+                    loop.feed(session, null, refused);
+                    return;
+                }
                 loop.feed(deliver.to(), null, what);
                 if (random.nextInt(5) == 0) {
                     again(loop, deliver.to(), what);

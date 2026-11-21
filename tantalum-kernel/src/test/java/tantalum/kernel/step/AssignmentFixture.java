@@ -30,7 +30,7 @@ final class AssignmentFixture {
     static java.util.List<Object> commands(Decision decision) {
         java.util.List<Object> all = new java.util.ArrayList<>();
         for (tantalum.value.command.Command command : decision.commands()) {
-            if (!LoopFixture.bookkeeping(command)) {
+            if (!LoopFixture.bookkeeping(decision.newState(), command)) {
                 all.add(command instanceof tantalum.value.command.Deliver deliver ? view(deliver) : command);
             }
         }

@@ -189,6 +189,10 @@ class LocalEndpointTest {
         assertEquals(new Bye(Bye.Reason.EXPIRED), client.next(Duration.ofSeconds(5)));
         assertEquals(Wire.CLOSE_EXPIRED, client.closeCode());
         assertTrue(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(3));
+        // 关掉以后状态是异步清的：等一会儿（全量跑时偶尔比断言慢一步）
+        for (int i = 0; i < 200 && links.status(new Principal("eve")).isPresent(); i++) {
+            Thread.sleep(10);
+        }
         assertEquals(Optional.empty(), links.status(new Principal("eve")));
     }
 

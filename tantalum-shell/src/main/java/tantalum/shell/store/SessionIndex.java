@@ -485,14 +485,14 @@ public final class SessionIndex implements AutoCloseable {
 
     /** 信箱不空的会话（delivery）：启动时各发一条重送。 */
     public synchronized List<SessionIndex.Session> withOutbox() throws SQLException {
-        java.util.Set<String> waiting = new java.util.HashSet<>();
-        try (PreparedStatement select = connection.prepareStatement("SELECT session FROM sessions WHERE outbox > 0");
-             ResultSet result = select.executeQuery()) {
+        List<Session> sessions = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE outbox > 0 ORDER BY session");
+                ResultSet result = select.executeQuery()) {
             while (result.next()) {
-                waiting.add(result.getString(1));
+                sessions.add(session(result));
             }
         }
-        return sessions().stream().filter(session -> waiting.contains(session.session().value())).toList();
+        return sessions;
     }
 
     /** 放出去还没回来、设了期限的交代：启动时重新起期限定时器（和等用户回答的期限一样，到点按超时结算）。 */

@@ -29,8 +29,28 @@ import tantalum.kernel.table.StepContext;
  */
 public final class Outbox {
 
-    /** 发出后等这么久没确认就重送。 */
+    /** 第一次发出后等这么久没确认就重送；之后每次翻倍，最长 {@link #ACK_AT_MOST}。不放弃：放弃就是丢了这次交代或结果。 */
     public static final Duration ACK_AFTER = Duration.ofSeconds(10);
+    public static final Duration ACK_AT_MOST = Duration.ofMinutes(10);
+
+    /** 发过 {@code attempts} 次以后，下一次等多久。 */
+    public static Duration ackAfter(int attempts) {
+        Duration wait = ACK_AFTER;
+        for (int i = 0; i < attempts && wait.compareTo(ACK_AT_MOST) < 0; i++) {
+            wait = wait.multipliedBy(2);
+        }
+        return wait.compareTo(ACK_AT_MOST) < 0 ? wait : ACK_AT_MOST;
+    }
+
+    /** 确认定时器的时长都是这几个之一（测试据此认出它们）。 */
+    public static boolean isAckDelay(Duration delay) {
+        for (int i = 0; i < 16; i++) {
+            if (ackAfter(i).equals(delay)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private Outbox() {}
 
@@ -48,7 +68,7 @@ public final class Outbox {
         }
         List<Outgoing> box = new ArrayList<>(session.outbox());
         boolean queued = box.stream().anyMatch(each -> each.to().equals(to));
-        Outgoing entry = new Outgoing(to, what, null);
+        Outgoing entry = new Outgoing(to, what, null, 0);
         box.add(queued ? entry : dispatch(out, session, entry));
         out.put(session.withOutbox(box));
     }
@@ -58,7 +78,7 @@ public final class Outbox {
         RunRef ref = ref(out, session);
         CommandId timer = out.nextCommandId();
         out.emit(new Deliver(out.nextCommandId(), ref, entry.to(), entry.what()));
-        out.emit(new StartTimer(timer, ref, ACK_AFTER));
+        out.emit(new StartTimer(timer, ref, ackAfter(entry.attempts())));
         return entry.sent(timer);
     }
 
@@ -142,6 +162,21 @@ public final class Outbox {
             return out.decision();
         }
         return CancelSteps.commandDropped(context);
+    }
+
+    /**
+     * 交代还在信箱里（对方没确认收到）就撤掉它，停掉它的定时器；返回撤没撤。叫停、期限到时用：没送到的就别送过去了，
+     * 帮手不会先开始再被停（送到了只是确认丢了的，随后的叫停会让它停下）。同一个对方后面没发的照常接着发。
+     */
+    static boolean withdraw(Outcome out, SessionId from, String assignment) {
+        SessionState session = out.state().sessions().get(from);
+        String id = "assign:" + assignment;
+        Optional<Outgoing> found = find(session, id);
+        if (found.isEmpty()) {
+            return false;
+        }
+        remove(out, session, found.get(), Set.of(id));
+        return true;
     }
 
     private static Optional<Outgoing> find(SessionState session, String id) {

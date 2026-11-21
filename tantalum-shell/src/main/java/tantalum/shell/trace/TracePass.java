@@ -222,6 +222,11 @@ final class TracePass {
         Place place = track.manual ? compaction(run) : new Place(track.turn, null, null, false);
         add(new RunHead(head(runHeadId(run), run, place, at), trigger, phaseOf(run), null, null), place, true);
         Queued queued = trigger == Trigger.FOLLOW_UP ? startedFromQueue() : null;
+        if (queued == null && trigger == Trigger.FOLLOW_UP) {
+            // 手动压缩里选了并入、压缩完开了这一轮的那条：记录编号不变，从压缩那一轮挪到这一轮（审查）
+            queued = tantalum.shell.conversation.CompactionJoins.started(before, state, session).stream().findFirst()
+                    .map(item -> new Queued(item.id(), at, textOf(item.message()), Mode.FOLLOW_UP, List.of(), List.of(), List.of())).orElse(null);
+        }
         if (queued != null) {
             Place first = pending(run);
             add(new UserInput(head("u:" + queued.seq(), run, first, queued.at()).ended(queued.at()), queued.mode(), queued.text(),
@@ -430,5 +435,15 @@ final class TracePass {
     /** 运行标题的 ID，和对话页运行状态条目的 ID 相同。 */
     static String runHeadId(RunId run) {
         return "run:" + run.value();
+    }
+
+    private static String textOf(tantalum.value.model.Message message) {
+        StringBuilder text = new StringBuilder();
+        for (tantalum.value.model.ContentBlock block : message.content()) {
+            if (block instanceof tantalum.value.model.TextBlock part) {
+                text.append(part.text());
+            }
+        }
+        return text.toString();
     }
 }

@@ -150,14 +150,10 @@ public final class SessionFileReader {
     }
 
     /**
-     * 最后一份快照行在文件里的位置；没有时为 -1。从尾部往前找，只看每行的开头，不解析。尾部残缺的行不算。
+     * 最后一份快照行在文件里的位置；没有时为 -1。从尾部往前一块一块读（每块读一次），看块里每个换行符之后那一行的开头，不解析。
+     * 尾部残缺的行不算。快照行的开头在块尾附近、被切开时，按位置再读那几个字节。
      */
     public static long lastSnapshot(Path file) throws IOException {
-        return lastSnapshot(file, 0);
-    }
-
-    /** 同上，只往回找到 {@code notBefore} 为止（那里已知是一份快照时，找到的不会比它早）。 */
-    public static long lastSnapshot(Path file, long notBefore) throws IOException {
         if (!Files.exists(file)) {
             return -1;
         }
@@ -166,14 +162,25 @@ public final class SessionFileReader {
             if (end > 0 && byteAt(channel, end - 1) != '\n') {
                 end = lineStart(channel, end);
             }
-            while (end > notBefore) {
-                long start = lineStart(channel, end - 1);
-                if (isSnapshotAt(channel, start, end - 1)) {
-                    return start;
+            // [0, end) 是完整的行；行的开头是 0 和每个换行符的下一个字节（最后一个换行符之后是 end，不是行）
+            long chunkEnd = end - 1;
+            while (chunkEnd > 0) {
+                long begin = Math.max(0, chunkEnd - TAIL_CHUNK);
+                byte[] chunk = bytes(channel, begin, chunkEnd);
+                for (int i = chunk.length - 1; i >= 0; i--) {
+                    if (chunk[i] != '\n') {
+                        continue;
+                    }
+                    long start = begin + i + 1;
+                    boolean whole = i + 1 + SnapshotCodec.PREFIX.length <= chunk.length;
+                    if (whole ? SnapshotCodec.isSnapshot(java.util.Arrays.copyOfRange(chunk, i + 1, i + 1 + SnapshotCodec.PREFIX.length))
+                            : isSnapshotAt(channel, start, end)) {
+                        return start;
+                    }
                 }
-                end = start;
+                chunkEnd = begin;
             }
-            return notBefore > 0 ? notBefore : -1;
+            return end > 0 && isSnapshotAt(channel, 0, end) ? 0 : -1;
         }
     }
 
@@ -193,16 +200,6 @@ public final class SessionFileReader {
                 length += read;
             }
             return length;
-        }
-    }
-
-    /** {@code offset} 是不是一行快照的开头（索引记着的位置用之前核对一下）。 */
-    public static boolean isSnapshotAt(Path file, long offset) throws IOException {
-        if (offset <= 0 || !Files.exists(file)) {
-            return false;
-        }
-        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
-            return offset < channel.size() && byteAt(channel, offset - 1) == '\n' && isSnapshotAt(channel, offset, channel.size());
         }
     }
 
