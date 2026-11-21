@@ -34,7 +34,7 @@ public final class MemoryNoteTool implements Tool {
     @Override public String name() { return NAME; }
 
     /** 记进这个人的记忆只在人在场的对话里做：任务里说的话不是用户说的。 */
-    @Override public boolean inTasks() { return false; }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
     @Override public String description() {
         return "Note one thing worth remembering for this user; several things are several notes, so each can be changed or forgotten "
                 + "on its own. kind: preference | fact | decision | noticed; text: one sentence; "

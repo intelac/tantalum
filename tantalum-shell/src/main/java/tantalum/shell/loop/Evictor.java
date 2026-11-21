@@ -114,7 +114,7 @@ public final class Evictor {
         if (session == null) {
             return true;
         }
-        if (!session.followUps().isEmpty()) {
+        if (!session.inbox().isEmpty()) {
             return false;
         }
         if (session.activeRun() == null) {

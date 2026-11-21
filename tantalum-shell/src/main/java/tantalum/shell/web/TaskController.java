@@ -17,7 +17,7 @@ import tantalum.shell.conversation.SessionSummary;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
-import tantalum.value.task.OpenTask;
+import tantalum.value.assignment.OpenAssignment;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -47,12 +47,12 @@ public class TaskController {
         if (found.isEmpty()) {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
-        Map<String, OpenTask> open = new LinkedHashMap<>();
-        found.get().state().tasks().open().forEach(task -> open.put(task.session().value(), task));
+        Map<String, OpenAssignment> open = new LinkedHashMap<>();
+        found.get().state().assignments().open().forEach(task -> open.put(task.session().value(), task));
         List<Map<String, Object>> tasks = new ArrayList<>();
         String prefix = id.get().value() + "-";
         for (SessionSummary child : engine.queries().tasksOf(user, id.get())) {
-            OpenTask task = open.remove(child.id().value());
+            OpenAssignment task = open.remove(child.id().value());
             tasks.add(view(child.id().value().substring(prefix.length()), child.id(), child.runStatus(), task));
         }
         // 刚放出、任务的会话还没写过事件的
@@ -60,7 +60,7 @@ public class TaskController {
         return json.json(200, Map.of("tasks", tasks));
     }
 
-    private static Map<String, Object> view(String id, SessionId session, String runStatus, OpenTask open) {
+    private static Map<String, Object> view(String id, SessionId session, String runStatus, OpenAssignment open) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", id);
         view.put("session", session.value());
@@ -92,7 +92,7 @@ public class TaskController {
             }
             task = parsed.has("task") ? parsed.get("task").asString() : null;
         }
-        int status = engine.intake().stopTasks(user, id.get(), task);
+        int status = engine.intake().stopAssignments(user, id.get(), task);
         return switch (status) {
             case 200 -> json.json(200, Map.of("stopping", true));
             case 404 -> json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");

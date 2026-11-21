@@ -13,40 +13,44 @@ import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.event.Answered;
+import tantalum.value.event.Assignment;
+import tantalum.value.event.AssignmentCancelled;
 import tantalum.value.event.Cancel;
 import tantalum.value.event.CommandDropped;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
+import tantalum.value.event.Report;
 import tantalum.value.event.RunInterrupted;
+import tantalum.value.event.SessionCreated;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.SkillUse;
-import tantalum.value.event.SteerSubmitted;
+import tantalum.value.event.StopRequested;
+import tantalum.value.event.TextWithdrawn;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.event.WorkDone;
 import tantalum.value.json.Json;
 import tantalum.value.model.AttachedBlock;
+import tantalum.value.model.AssignmentBlock;
 import tantalum.value.model.AttachmentBlock;
 import tantalum.value.model.ContentBlock;
 import tantalum.value.model.HookTextBlock;
 import tantalum.value.model.ModelChangeBlock;
 import tantalum.value.model.ReasoningBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.SkillBlock;
-import tantalum.value.model.TaskResultBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolChangeBlock;
 import tantalum.value.model.ToolResultBlock;
 import tantalum.value.model.ToolSpec;
 import tantalum.value.state.CompactionSettings;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.text.Language;
 import tantalum.value.text.LocalText;
 import tools.jackson.core.JacksonException;
@@ -80,7 +84,8 @@ public final class EventCodec {
         @JsonSubTypes.Type(value = HookTextBlock.class, name = "hookText"),
         @JsonSubTypes.Type(value = SkillBlock.class, name = "skill"),
         @JsonSubTypes.Type(value = AttachedBlock.class, name = "attached"),
-        @JsonSubTypes.Type(value = TaskResultBlock.class, name = "taskResult")
+        @JsonSubTypes.Type(value = AssignmentBlock.class, name = "assignment"),
+        @JsonSubTypes.Type(value = ReportBlock.class, name = "report")
     })
     private interface ContentBlockMixin {}
 
@@ -138,13 +143,6 @@ public final class EventCodec {
         Map<String, String> toolSources();
     }
 
-    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
-    @JsonSubTypes({
-        @JsonSubTypes.Type(value = OwnerRef.OfSession.class, name = "session"),
-        @JsonSubTypes.Type(value = OwnerRef.OfTask.class, name = "task")
-    })
-    private interface OwnerRefMixin {}
-
     /** 点名的技能：读到的只写 content，没读到的只写 error；{@code loaded} 是算出来的，不写。 */
     private interface SkillUseMixin {
         @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -195,12 +193,9 @@ public final class EventCodec {
         mapper = JsonMapper.builder()
                 .addModule(module)
                 .addMixIn(ContentBlock.class, ContentBlockMixin.class)
-                .addMixIn(OwnerRef.class, OwnerRefMixin.class)
                 .addMixIn(AttachmentRef.class, AttachmentRefMixin.class)
                 .addMixIn(SkillUse.class, SkillUseMixin.class)
                 .addMixIn(UserPrompt.class, AttachmentsMixin.class)
-                .addMixIn(SteerSubmitted.class, AttachmentsMixin.class)
-                .addMixIn(FollowUpSubmitted.class, AttachmentsMixin.class)
                 .addMixIn(ToolFinished.class, ImagesMixin.class)
                 .addMixIn(ToolResultBlock.class, ImagesMixin.class)
                 .addMixIn(ToolSpec.class, ToolSpecMixin.class)
@@ -219,13 +214,13 @@ public final class EventCodec {
 
     public static EventCodec withBuiltins() {
         EventCodec codec = new EventCodec();
+        codec.register(SessionCreated.TYPE, 1, SessionCreated.class);
+        // 对会话说的话：你说的、另一个会话的交代、交代出去的事的结果
         codec.register(UserPrompt.TYPE, 1, UserPrompt.class);
-        codec.register(SteerSubmitted.TYPE, 1, SteerSubmitted.class);
-        codec.register(FollowUpSubmitted.TYPE, 1, FollowUpSubmitted.class);
+        codec.register(Assignment.TYPE, 1, Assignment.class);
+        codec.register(Report.TYPE, 1, Report.class);
         codec.register(Cancel.TYPE, 1, Cancel.class);
         codec.register(Answered.TYPE, 1, Answered.class);
-        // 第 1 版没有工具来源，读出来是空表：早期版本写的会话还要能读
-        codec.register(ContextAssembled.TYPE, 1, ContextAssembled.class);
         codec.register(ContextAssembled.TYPE, 2, ContextAssembled.class);
         codec.register(ModelReplied.TYPE, 1, ModelReplied.class);
         codec.register(ModelFailed.TYPE, 1, ModelFailed.class);
@@ -238,11 +233,9 @@ public final class EventCodec {
         codec.register(SessionRenamed.TYPE, 1, SessionRenamed.class);
         codec.register(QueueChanged.TYPE, 1, QueueChanged.class);
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
-        codec.register(tantalum.value.event.TaskAssigned.TYPE, 1, tantalum.value.event.TaskAssigned.class);
-        codec.register(tantalum.value.event.TaskEnded.TYPE, 1, tantalum.value.event.TaskEnded.class);
-        codec.register(tantalum.value.event.TaskStopRequested.TYPE, 1, tantalum.value.event.TaskStopRequested.class);
-        codec.register(tantalum.value.event.TextWithdrawn.TYPE, 1, tantalum.value.event.TextWithdrawn.class);
-        codec.register(tantalum.value.event.TaskCancelled.TYPE, 1, tantalum.value.event.TaskCancelled.class);
+        codec.register(StopRequested.TYPE, 1, StopRequested.class);
+        codec.register(AssignmentCancelled.TYPE, 1, AssignmentCancelled.class);
+        codec.register(TextWithdrawn.TYPE, 1, TextWithdrawn.class);
         return codec;
     }
 

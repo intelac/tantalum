@@ -39,6 +39,7 @@ import tantalum.shell.route.ModelInfo;
 import tantalum.shell.route.Route;
 import tantalum.shell.route.RouteSettings;
 import tantalum.shell.store.SessionQueries;
+import tantalum.value.event.Delivery;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.event.SkillUse;
@@ -62,7 +63,13 @@ public class ApiController {
     /** 提交最多等多久落盘。冷会话载入、磁盘慢时会接近它。 */
     static final Duration SAVE_WAIT = Duration.ofSeconds(10);
 
-    private static final Set<String> MODES = Set.of("prompt", "steer", "follow-up");
+    /** 你说的一句话怎么送：排队（空闲就开一轮）或并进正在跑的这一轮。 */
+    private static final Map<String, Delivery> DELIVERIES = Map.of("queue", Delivery.QUEUE, "join", Delivery.JOIN);
+
+    /** 收件队列里你排着的（不并进这一轮的）有几条：给网页的字段名照旧叫 followUps。 */
+    private static int queued(SessionState state) {
+        return (int) state.inbox().stream().filter(item -> item.kind() == tantalum.value.event.Input.Kind.PROMPT && !item.join()).count();
+    }
     private static final Pattern SESSION_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
     /** 运行 ID 是会话 ID 加下划线加序号（{@code RunId}）。 */
     private static final Pattern RUN_ID = Pattern.compile("[A-Za-z0-9_-]{1,128}_[0-9]{1,18}");
@@ -123,7 +130,7 @@ public class ApiController {
         response.put("items", items);
         response.put("start", page.start());
         response.put("hasMore", page.hasMore());
-        response.put("followUps", found.get().state().followUps().size());
+        response.put("followUps", queued(found.get().state()));
         // 这个会话现在的选择（本 spec 之前的会话为 null）和有没有工具变化（不支持的 Claude 模型灰掉）
         SessionState state = found.get().state();
         response.put("model", state == null ? null : ModelJson.view(state.model()));
@@ -190,7 +197,7 @@ public class ApiController {
             return json.error(ErrorCode.REQUEST_INVALID, "body is not valid JSON");
         }
         String requestId = WebJson.text(request.get(), "requestId");
-        String mode = WebJson.text(request.get(), "mode");
+        String deliveryName = WebJson.text(request.get(), "delivery");
         String content = WebJson.text(request.get(), "text");
         if (WebJson.blank(requestId)) {
             return json.error(ErrorCode.REQUEST_INVALID, "missing requestId");
@@ -198,8 +205,9 @@ public class ApiController {
         if (!REQUEST_ID.matcher(requestId).matches()) {
             return json.error(ErrorCode.REQUEST_INVALID, "requestId may only contain letters, digits, . _ : - and be at most 128 characters");
         }
-        if (mode == null || !MODES.contains(mode)) {
-            return json.error(ErrorCode.REQUEST_INVALID, "mode must be one of " + MODES);
+        Delivery delivery = deliveryName == null ? null : DELIVERIES.get(deliveryName);
+        if (delivery == null) {
+            return json.error(ErrorCode.REQUEST_INVALID, "delivery must be one of " + new java.util.TreeSet<>(DELIVERIES.keySet()));
         }
         Principal user = WebJson.currentUser();
         try {
@@ -210,10 +218,10 @@ public class ApiController {
             LOG.warn("archive lookup failed: {}", failure.toString());
             return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
         }
-        // 工作区只跟着提问走：查本人登记的路径作为会话目录，内核只在第一次提问时用它
+        // 工作区：查本人登记的路径作为会话目录，只在会话还不存在、这一次建它时用
         String dir = null;
         String project = WebJson.text(request.get(), "project");
-        if (project != null && mode.equals("prompt")) {
+        if (project != null) {
             try {
                 Optional<Project> found = engine.projects().find(user, project);
                 if (found.isEmpty()) {
@@ -239,10 +247,10 @@ public class ApiController {
         if (WebJson.blank(content) && attachments.isEmpty()) {
             return json.error(ErrorCode.REQUEST_INVALID, "missing text");
         }
-        // 插话并进当前运行，不换模型：带了也不用
+        // 并进当前运行的不换模型：带了也不用
         ModelChoice model;
         try {
-            model = mode.equals("steer") ? null : ModelJson.read(request.get().get("model"));
+            model = delivery == Delivery.JOIN ? null : ModelJson.read(request.get().get("model"));
         } catch (IllegalArgumentException invalid) {
             return json.error(ErrorCode.REQUEST_INVALID, invalid.getMessage());
         }
@@ -263,13 +271,13 @@ public class ApiController {
             Thread.currentThread().interrupt();
             return json.error(ErrorCode.SERVER_BUSY, "the server is busy; send again");
         }
-        // 插件在提交时附的内容（memory-plugin）：插话不问
-        List<AttachedBlock> attached = mode.equals("steer") || content == null || content.isBlank() ? List.of()
+        // 插件在提交时附的内容（memory-plugin）：并进当前运行的不问
+        List<AttachedBlock> attached = delivery == Delivery.JOIN || content == null || content.isBlank() ? List.of()
                 : engine.attachers().collect(user, id.get(), content,
                         engine.queries().session(user, id.get()).map(view -> view.state().view()).orElse(List.of()));
-        // 不进记忆（memory-final-plan 第 11 节）：只有第一次提问带才算数，内核按会话有没有消息判断
+        // 不进记忆（memory-final-plan 第 11 节）：只在这一次建会话时算数
         boolean offRecord = request.get().path("offRecord").asBoolean(false);
-        Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), mode,
+        Intake.Submission result = engine.intake().submit(user, id.get(), new RequestId(requestId), delivery,
                 content == null ? "" : content, attachments, model, dir, skills, attached, offRecord);
         return result.status() == 200 ? accepted(result, SAVE_WAIT) : json.error(result.status(), ErrorCode.SUBMISSION_REJECTED, "submission rejected");
     }
@@ -382,7 +390,7 @@ public class ApiController {
                 .map(ApiController::describe).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("runs", runs);
-        response.put("followUps", found.get().state().followUps().size());
+        response.put("followUps", queued(found.get().state()));
         return json.json(200, response);
     }
 

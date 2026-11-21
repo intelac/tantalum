@@ -13,24 +13,24 @@ import tantalum.shell.boot.Engine;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.shell.loop.Intake;
 import tantalum.shell.store.SessionQueries;
+import tantalum.value.event.Input;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.id.Principal;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.SessionId;
 import tantalum.value.model.Message;
-import tantalum.value.state.Queue;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 改排队的提问：换文字、移除、转成插话。页面用对话条目的 ID 指那一条；内核的队列没有编号，这里把它换成“位置加原文”
- * （第几条排队的、当时的文字和附件），由内核再确认一次还在不在。别人的会话和不存在的一样是 404。
+ * 改收件队列里你排的一条：换文字、移除、改成并进这一轮。页面用对话条目的 ID 指那一条；条目 ID 是 {@code 序号.0}，
+ * 序号就是收件队列里那一条的编号。内核再确认一次还在不在。别人的会话和不存在的一样是 404。
  */
 @RestController
 public class QueueController {
 
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Map<String, QueueChanged.Action> ACTIONS = Map.of("edit", QueueChanged.Action.EDIT,
-            "remove", QueueChanged.Action.REMOVE, "steer", QueueChanged.Action.STEER);
+            "remove", QueueChanged.Action.REMOVE, "join", QueueChanged.Action.JOIN);
 
     private final Engine engine;
     private final WebJson json;
@@ -40,7 +40,7 @@ public class QueueController {
         this.json = json;
     }
 
-    /** body：{@code {"requestId": "...", "action": "edit|remove|steer", "text": "..."}}，{@code text} 只在 edit 时要。 */
+    /** body：{@code {"requestId": "...", "action": "edit|remove|join", "text": "..."}}，{@code text} 只在 edit 时要。 */
     @PostMapping("/api/sessions/{session}/queue/{item}")
     ResponseEntity<String> change(@PathVariable String session, @PathVariable String item, @RequestBody String body) {
         Optional<SessionId> id = ApiController.sessionId(session);
@@ -54,7 +54,7 @@ public class QueueController {
         }
         QueueChanged.Action action = ACTIONS.get(String.valueOf(WebJson.text(input.get(), "action")));
         if (action == null) {
-            return json.error(ErrorCode.REQUEST_INVALID, "action must be edit, remove or steer");
+            return json.error(ErrorCode.REQUEST_INVALID, "action must be edit, remove or join");
         }
         String text = action == QueueChanged.Action.EDIT ? WebJson.text(input.get(), "text") : null;
         if (action == QueueChanged.Action.EDIT && WebJson.blank(text)) {
@@ -65,30 +65,24 @@ public class QueueController {
         if (view.isEmpty()) {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
-        // 排队的条目和内核的队列顺序相同：它是第几条排队的，就在队列的第几个
-        List<UserMessage> queued = view.get().transcript().items().stream()
-                .filter(UserMessage.class::isInstance).map(UserMessage.class::cast).filter(UserMessage::queued).toList();
-        int index = -1;
-        for (int i = 0; i < queued.size(); i++) {
-            if (queued.get(i).id().equals(item)) {
-                index = i;
-            }
-        }
-        if (index < 0) {
+        // 条目 ID 的序号就是收件队列里那一条的编号；只认你排着的、还没并进哪一轮的
+        Optional<UserMessage> found = view.get().transcript().items().stream()
+                .filter(UserMessage.class::isInstance).map(UserMessage.class::cast).filter(UserMessage::queued)
+                .filter(queued -> queued.id().equals(item)).findFirst();
+        long number = found.map(queued -> number(queued.id())).orElse(-1L);
+        boolean inInbox = view.get().state().inbox().stream()
+                .anyMatch(entry -> entry.id() == number && entry.kind() == Input.Kind.PROMPT && !entry.join());
+        if (found.isEmpty() || !inInbox) {
             return json.error(ErrorCode.QUEUE_GONE, "the message is no longer queued");
         }
-        UserMessage message = queued.get(index);
-        if (Queue.locate(view.get().state().followUps(), index, Message.user(message.text(), message.attachments())) < 0) {
-            return json.error(ErrorCode.QUEUE_GONE, "the message is no longer queued");
-        }
+        UserMessage message = found.get();
         if (action == QueueChanged.Action.EDIT && !message.attachments().isEmpty()) {
             return json.error(ErrorCode.QUEUE_ATTACHMENTS, "a queued message with attachments cannot be edited");
         }
         if (action == QueueChanged.Action.EDIT && !message.skills().isEmpty()) {
             return json.error(ErrorCode.QUEUE_SKILLS, "a queued message that names a skill cannot be edited");
         }
-        Intake.Submission result = engine.intake().changeQueue(user, id.get(), new RequestId(requestId), action, index,
-                message.text(), message.attachments(), text);
+        Intake.Submission result = engine.intake().changeQueue(user, id.get(), new RequestId(requestId), action, number, text);
         if (result.status() == 404) {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
@@ -101,5 +95,15 @@ public class QueueController {
                     "the change was not saved; send again");
         }
         return json.json(200, Map.of("submissionId", result.submission().value()));
+    }
+
+    /** 条目 ID {@code 序号.0} 里的序号；不是这个样子为 -1。 */
+    private static long number(String item) {
+        int dot = item.indexOf('.');
+        try {
+            return dot < 0 ? -1 : Long.parseLong(item.substring(0, dot));
+        } catch (NumberFormatException notOurs) {
+            return -1;
+        }
     }
 }

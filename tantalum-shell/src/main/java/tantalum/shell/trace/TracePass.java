@@ -17,6 +17,9 @@ import tantalum.shell.trace.TraceRecord.Source;
 import tantalum.shell.trace.TraceRecord.TaskNote;
 import tantalum.shell.trace.TraceRecord.UserInput.Mode;
 import tantalum.shell.trace.TraceRecord.UserInput;
+import tantalum.value.assignment.AssignmentOutcome;
+import tantalum.value.assignment.OpenAssignment;
+import tantalum.value.decision.ReportSettled;
 import tantalum.value.attachment.AttachmentRef;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
@@ -33,21 +36,15 @@ import tantalum.value.decision.PhaseChanged;
 import tantalum.value.decision.QuestionAsked;
 import tantalum.value.decision.QuestionSettled;
 import tantalum.value.decision.QueueEdited;
-import tantalum.value.decision.TaskSettled;
 import tantalum.value.event.CompactRequested;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.QueueChanged;
 import tantalum.value.event.ResultEvent;
 import tantalum.value.event.SkillUse;
-import tantalum.value.event.SteerSubmitted;
-import tantalum.value.event.TaskAssigned;
-import tantalum.value.event.TaskEnded;
-import tantalum.value.event.Submitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.event.WorkDone;
@@ -60,8 +57,6 @@ import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
-import tantalum.value.task.OpenTask;
-import tantalum.value.task.TaskOutcome;
 
 /**
  * 一次事件的轨迹投影。顺序固定：先处理事件本身（提交、结果），再按内核的事实（钩子、压缩、状态变化），
@@ -103,17 +98,14 @@ final class TracePass {
 
     void run() {
         switch (envelope.event()) {
-            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached(), Mode.PROMPT);
-            case FollowUpSubmitted followUp -> submission(followUp.text(), followUp.attachments(), followUp.skills(), followUp.attached(),
-                    Mode.FOLLOW_UP);
-            case SteerSubmitted steer -> submission(steer.text(), steer.attachments(), steer.skills(), List.of(), Mode.STEER);
+            case UserPrompt prompt -> submission(prompt.text(), prompt.attachments(), prompt.skills(), prompt.attached());
             case ContextAssembled assembled -> system.contextAssembled(assembled);
             case ModelReplied reply -> requests.replied(reply);
             case ModelFailed failure -> requests.failed(failure);
             case ModelInterrupted interrupted -> requests.interrupted(interrupted);
             case ToolFinished finished -> tools.finished(finished);
             case WorkDone done -> hooks.workDone(done);
-            case TaskAssigned assigned -> taskAssigned(assigned);
+            case tantalum.value.event.Assignment assigned -> assigned(assigned);
             default -> { }
         }
         List<Fact> facts = decision.facts();
@@ -226,19 +218,49 @@ final class TracePass {
         track.manual = envelope.event() instanceof CompactRequested;
         track.turn = track.manual ? null : ++book.turns;
         book.runs.put(run, track);
-        Trigger trigger = track.manual ? Trigger.MANUAL_COMPACTION
-                : envelope.event() instanceof TaskAssigned ? Trigger.TASK
-                : settlesATask() ? Trigger.TASK_RESULT
-                : envelope.event() instanceof Submitted ? Trigger.PROMPT : Trigger.FOLLOW_UP;
+        Trigger trigger = trigger(run, track.manual);
         Place place = track.manual ? compaction(run) : new Place(track.turn, null, null, false);
         add(new RunHead(head(runHeadId(run), run, place, at), trigger, phaseOf(run), null, null), place, true);
-        if (trigger == Trigger.FOLLOW_UP && !book.queued.isEmpty()) {
-            Queued queued = book.queued.pollFirst();
+        Queued queued = trigger == Trigger.FOLLOW_UP ? startedFromQueue() : null;
+        if (queued != null) {
             Place first = pending(run);
             add(new UserInput(head("u:" + queued.seq(), run, first, queued.at()).ended(queued.at()), queued.mode(), queued.text(),
                     Source.USER, queued.attachments(), queued.skills(), queued.attached()), first, false);
         }
         return track;
+    }
+
+    /**
+     * 这一轮的起因，读运行上记的（{@code RunCause}），不倒推：你说的话开的，是这一步的提交直接开的就是提问，否则是排着的那一条；
+     * 交代开的、结果开的、手动压缩各是各的。
+     */
+    private Trigger trigger(RunId run, boolean manual) {
+        RunState started = state.runs().get(run);
+        if (manual || started == null) {
+            return manual ? Trigger.MANUAL_COMPACTION : Trigger.PROMPT;
+        }
+        return switch (started.cause().startedBy()) {
+            case COMPACTION -> Trigger.MANUAL_COMPACTION;
+            case ASSIGNMENT -> Trigger.TASK;
+            case REPORT -> Trigger.TASK_RESULT;
+            case PROMPT -> envelope.event() instanceof UserPrompt && RunId.of(session, seq).equals(run) ? Trigger.PROMPT : Trigger.FOLLOW_UP;
+        };
+    }
+
+    /** 开这一轮的那条排着的话：这一步离开收件队列的、你排着的那一条（按编号认，不按先后猜）。 */
+    private Queued startedFromQueue() {
+        SessionState now = state.sessions().get(session);
+        java.util.Set<Long> still = new java.util.HashSet<>();
+        if (now != null) {
+            now.inbox().forEach(item -> still.add(item.id()));
+        }
+        for (Queued queued : List.copyOf(book.queued)) {
+            if (!still.contains(queued.seq())) {
+                book.queued.remove(queued);
+                return queued;
+            }
+        }
+        return null;
     }
 
     /** 新运行开始后，已结束运行留着等迟到结果的记录不再等（内核也不再把迟到的文字放进历史）。 */
@@ -298,43 +320,52 @@ final class TracePass {
 
     // ---- 用户 ----
 
-    /** 用户提交：直接开始运行、插进当前运行，或排队到运行开始时再记。 */
-    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, List<AttachedBlock> attached, Mode mode) {
+    /**
+     * 你说的一句话：直接开了一轮记成提问；并进正在跑的这一轮记成插话；排着的到它那一轮开始时再记（排着的那条在收件队列里的编号就是这个序号）。
+     */
+    private void submission(String text, List<AttachmentRef> attachments, List<SkillUse> named, List<AttachedBlock> attached) {
         List<SkillNote> skills = SkillNote.of(named);
         RunId fresh = RunId.of(session, seq);
-        SessionState earlier = before.sessions().get(session);
         SessionState after = state.sessions().get(session);
+        tantalum.value.state.InboxItem waiting = after == null ? null
+                : after.inbox().stream().filter(item -> item.id() == seq).findFirst().orElse(null);
         if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
             track(fresh);
-            user(fresh, mode, text, Source.USER, attachments, skills, attached);
-        } else if (mode == Mode.STEER && activeRun() != null) {
-            user(activeRun(), mode, text, Source.USER, attachments, skills);
-        } else if (after != null && after.followUps().size() > (earlier == null ? 0 : earlier.followUps().size())) {
-            book.queued.addLast(new Queued(seq, at, text, mode, attachments, skills, attached));
+            user(fresh, Mode.PROMPT, text, Source.USER, attachments, skills, attached);
+        } else if (waiting != null && waiting.join() && activeRun() != null) {
+            user(activeRun(), Mode.STEER, text, Source.USER, attachments, skills);
+        } else if (waiting != null) {
+            book.queued.addLast(new Queued(seq, at, text, Mode.FOLLOW_UP, attachments, skills, attached));
         }
     }
 
     /**
-     * 排队的提问被改了。排队的提问到运行开始时才记进 trace，所以改文字和移除只改这里记着的队列；
-     * 转成插话的当场记成当前运行的一条插话。
+     * 你排的一条被改了（按编号）。排着的到运行开始时才记进 trace，所以改文字和移除只改这里记着的队列；
+     * 改成并进这一轮的当场记成当前运行的一条插话。
      */
     private void queueEdited(QueueEdited edited) {
-        if (edited.index() < 0 || edited.index() >= book.queued.size()) {
+        List<Queued> queue = new ArrayList<>(book.queued);
+        int index = -1;
+        for (int i = 0; i < queue.size(); i++) {
+            if (queue.get(i).seq() == edited.item()) {
+                index = i;
+            }
+        }
+        if (index < 0) {
             return;
         }
-        List<Queued> queue = new ArrayList<>(book.queued);
-        Queued queued = queue.remove(edited.index());
+        Queued queued = queue.remove(index);
         switch (edited.action()) {
             case EDIT -> {
                 if (envelope.event() instanceof QueueChanged changed) {
-                    queue.add(edited.index(), new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments(), queued.skills(),
+                    queue.add(index, new Queued(queued.seq(), queued.at(), changed.text(), queued.mode(), queued.attachments(), queued.skills(),
                             queued.attached()));
                 } else {
-                    queue.add(edited.index(), queued);
+                    queue.add(index, queued);
                 }
             }
             case REMOVE -> { }
-            case STEER -> user(edited.run().run(), Mode.STEER, queued.text(), Source.USER, queued.attachments(), queued.skills());
+            case JOIN -> user(edited.run().run(), Mode.STEER, queued.text(), Source.USER, queued.attachments(), queued.skills());
         }
         book.queued.clear();
         book.queued.addAll(queue);
@@ -356,12 +387,14 @@ final class TracePass {
 
     // ---- 任务 ----
 
-    /** 任务到了为它开的会话：开它那一轮，交代的内容是这一轮的起因。重复送达的不开运行，不记。 */
-    private void taskAssigned(TaskAssigned assigned) {
+    /** 交代到了帮手会话：开它那一轮，交代的内容是这一轮的起因。重复送达的不开运行，不记。 */
+    private void assigned(tantalum.value.event.Assignment assigned) {
         RunId fresh = RunId.of(session, seq);
+        SessionState helper = state.sessions().get(session);
         if (state.runs().containsKey(fresh) && !before.runs().containsKey(fresh)) {
             track(fresh);
-            task(fresh, TaskNote.Side.ASSIGNED, assigned.task(), assigned.parent(), assigned.agent(), null, assigned.prompt());
+            task(fresh, TaskNote.Side.ASSIGNED, assigned.id(), assigned.issuer(), helper == null || helper.helper() == null ? null
+                    : helper.helper().agent(), null, assigned.prompt());
         }
     }
 
@@ -372,32 +405,27 @@ final class TracePass {
      */
     private void tasksSettled(List<Fact> facts) {
         for (Fact fact : facts) {
-            if (!(fact instanceof TaskSettled settled) || settled.paused() || !settled.run().session().equals(session)) {
+            if (!(fact instanceof ReportSettled settled) || settled.paused() || !settled.run().session().equals(session)) {
                 continue;
             }
-            OpenTask open = openTask(before, settled.task());
+            OpenAssignment open = openTask(before, settled.assignment());
             if (open == null) {
                 continue;
             }
             RunId run = settled.run().run();
             track(run);
-            String text = envelope.event() instanceof TaskEnded ended && ended.task().equals(settled.task()) ? ended.text() : null;
-            task(run, TaskNote.Side.RESULT, settled.task(), open.session(), open.agent(), settled.outcome(), text);
+            String text = envelope.event() instanceof tantalum.value.event.Report report && report.assignment().equals(settled.assignment())
+                    ? report.text() : null;
+            task(run, TaskNote.Side.RESULT, settled.assignment(), open.session(), open.agent(), settled.outcome(), text);
         }
     }
 
-    /** 这一步有没有任务的结果生效并且有运行看到它：它开的那一轮不是人发起的。 */
-    private boolean settlesATask() {
-        return decision.facts().stream().anyMatch(fact -> fact instanceof TaskSettled settled && !settled.paused()
-                && settled.run().session().equals(session));
-    }
-
-    private OpenTask openTask(KernelState in, String task) {
+    private OpenAssignment openTask(KernelState in, String task) {
         SessionState state = in.sessions().get(session);
-        return state == null ? null : state.tasks().open().stream().filter(open -> open.id().equals(task)).findFirst().orElse(null);
+        return state == null ? null : state.assignments().open().stream().filter(open -> open.id().equals(task)).findFirst().orElse(null);
     }
 
-    private void task(RunId run, TaskNote.Side side, String task, SessionId other, String agent, TaskOutcome outcome, String text) {
+    private void task(RunId run, TaskNote.Side side, String task, SessionId other, String agent, AssignmentOutcome outcome, String text) {
         Place place = pending(run);
         add(new TaskNote(head("k:" + seq, run, place, at).ended(at), side, task, other.value(), agent, outcome, text), place, false);
     }

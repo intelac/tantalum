@@ -189,7 +189,7 @@ public final class SessionFileReader {
             throw corrupt(file, 1, "format " + format.value() + " is newer than this program supports", null);
         }
         if (format.value().intValue() < SessionFile.FORMAT) {
-            throw corrupt(file, 1, "format " + format.value() + " is from before one line per step; this program no longer reads it", null);
+            throw corrupt(file, 1, "format " + format.value() + " is older than this program reads (" + SessionFile.FORMAT + ")", null);
         }
         return new Identity(new Principal(principal.value()), new SessionId(session.value()));
     }

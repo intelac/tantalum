@@ -43,10 +43,7 @@ import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.RunTool;
-import tantalum.value.command.ReturnTask;
-import tantalum.value.command.StartTask;
 import tantalum.value.command.StartTimer;
-import tantalum.value.command.StopTask;
 import tantalum.value.decision.Fact;
 import tantalum.value.event.EventEnvelope;
 import tantalum.value.id.Principal;
@@ -84,18 +81,30 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         opened.add(deadlines);
         ResultPublisher results = new ResultPublisher(input, inFlight, clock, loop.internalReserve());
         RequestImages requestImages = new RequestImages(storage.attachments);
-        // 任务的三条命令都是往别的会话放事件，同一个处理器
-        Handler tasks = new tantalum.shell.handler.TaskHandler(clock, input::tryPublish,
+        // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取。交代的处理器也经它送
+        Intake[] intakeSlot = new Intake[1];
+        // 交代的三条命令都是往别的会话放输入，同一个处理器，经入口送
+        Handler assignments = new tantalum.shell.handler.AssignmentHandler(new tantalum.shell.handler.AssignmentHandler.Deliveries() {
+                    @Override
+                    public int deliver(Principal principal, SessionId session, tantalum.value.event.SessionCreated create,
+                                       tantalum.value.event.Input delivered) {
+                        return intakeSlot[0].deliver(principal, session, create, delivered);
+                    }
+
+                    @Override
+                    public int cancel(Principal principal, SessionId session, String assignment) {
+                        return intakeSlot[0].cancel(principal, session, assignment);
+                    }
+                },
                 new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()),
-                (user, session) -> queries.queries().session(user, session).map(found -> found.state().activeRun() != null).orElse(false),
-                (user, session) -> storage.claim(user, session) == 200);
+                (user, session) -> queries.queries().session(user, session).map(found -> found.state().activeRun() != null).orElse(false));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
                         toolbox.fixedNote(), toolbox.compaction(), toolbox.routes(), stores.userSettings(),
                         session -> dirOf(queries.view().current(), session), toolbox.skillCatalog())
                         .offRecord(session -> offRecordOf(queries.view().current(), session))
-                        .tasks(session -> tasksOf(queries.view().current(), session))
+                        .sessions(session -> queries.view().current().sessions().get(session))
                         .mainWindowTokens(properties.mainWindowTokens())
                         .clock(clock)
                         .workspaces(new ContextHandler.Workspaces() {
@@ -141,7 +150,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                                             .filter(row -> !row.offRecord() && !archived.contains(row.session()))
                                             .map(row -> new tantalum.shell.handler.WorkspaceSection.Row(new tantalum.shell.conversation.SessionSummary(
                                                     row.session(), row.shownTitle(), row.lastActivity(), row.runStatus(), row.dir(), false),
-                                                    tokensOf(state, row.session()))).toList();
+                                                    tokensOf(state, row.session()), row.kind())).toList();
                                     recent.put(user, new Listed(now, rows));
                                     return rows;
                                 } catch (java.sql.SQLException unreadable) {
@@ -151,12 +160,13 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         }),
                 CallModel.class, new ModelHandler(toolbox.routes(), queries.hub()::chunks, clock,
                         run -> new StoredMedia(storage.attachments, requestImages, run.principal(), run.session()),
-                        run -> tasksOf(queries.view().current(), run.session()).origin() == null, properties.weights()),
+                        run -> attended(queries.view().current(), run), properties.weights()),
                 RunTool.class, new ToolHandler(toolbox.catalog(), stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock,
                         session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
                 StartTimer.class, new TimerHandler(),
-                StartTask.class, tasks, ReturnTask.class, tasks, StopTask.class, tasks);
+                tantalum.value.command.Assign.class, assignments, tantalum.value.command.ReturnReport.class, assignments,
+                tantalum.value.command.StopAssignment.class, assignments);
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);
         OutputRing output = new OutputRing(loop.outputRingSize(), handlers);
         Evictor evictor = new Evictor(properties.residency(), residency, queries.projections(), clock, storage.files::forget);
@@ -165,8 +175,6 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
             afterDurable.run();
             receipts.durable(envelope);
         }, done);
-        // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取
-        Intake[] intakeSlot = new Intake[1];
         // 推送之外，运行表也收轨迹记录（run-tree 需求 3）
         FactListener facts = FactListener.both(queries.hub(), new FactListener() {
             @Override
@@ -200,18 +208,19 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         return new Pipeline(residency, cleanroomRing, lanes, inFlight, input, deadlines, handlers, output, cleanroom, intake);
     }
 
-    /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
-    /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
-    static tantalum.value.task.Tasks tasksOf(KernelState state, SessionId session) {
-        SessionState found = state.sessions().get(session);
-        return found == null ? tantalum.value.task.Tasks.NONE : found.tasks();
+    /** 有没有人在等这一轮：只有你说的话开的那一轮算（缓存留多久看它）。运行不在内存时当作有人在等。 */
+    static boolean attended(KernelState state, tantalum.value.id.RunRef run) {
+        tantalum.value.state.RunState found = state.runs().get(run.run());
+        return found == null || found.cause().attended();
     }
 
+    /** 会话是不是“不进记忆”的（memory-final-plan 第 11 节）。 */
     static boolean offRecordOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found != null && found.offRecord();
     }
 
+    /** 会话的工作目录；会话不在内存（不会有它的命令在跑）或没有目录时为 null。 */
     static String dirOf(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found == null ? null : found.dir();

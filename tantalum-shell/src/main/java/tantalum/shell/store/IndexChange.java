@@ -6,11 +6,9 @@ import java.util.List;
 import java.time.ZoneOffset;
 import tantalum.shell.conversation.SessionSummary;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.SessionRenamed;
 import tantalum.value.event.TextWithdrawn;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.Submitted;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.UserPrompt;
@@ -28,7 +26,8 @@ import tantalum.value.state.KernelState;
 import tantalum.value.state.PrincipalState;
 import tantalum.value.state.RunPhase;
 import tantalum.value.state.SessionState;
-import tantalum.value.task.OpenTask;
+import tantalum.value.assignment.OpenAssignment;
+import tantalum.value.state.SessionKind;
 
 /**
  * 一个事件带给索引库的变化。比较内核处理前后的状态得到，不做 I/O；实时和重建用同一份逻辑。
@@ -39,7 +38,7 @@ import tantalum.value.task.OpenTask;
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
                           Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord,
-                          String parent, List<OpenTask> tasks, List<TextWithdrawn.Swap> swaps, String retitle) {
+                          SessionKind kind, String issuer, List<OpenAssignment> assignments, List<TextWithdrawn.Swap> swaps, String retitle) {
 
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
@@ -58,8 +57,6 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
     public static IndexChange of(EventEnvelope envelope, KernelState before, KernelState after) {
         String text = switch (envelope.event()) {
             case UserPrompt prompt -> prompt.text();
-            case SteerSubmitted steer -> steer.text();
-            case FollowUpSubmitted followUp -> followUp.text();
             default -> null;
         };
         Submission submission = envelope.event() instanceof Submitted submitted
@@ -77,7 +74,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 dir(after, envelope.session()), envelope.event() instanceof SessionRenamed renamed ? renamed.title() : null,
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
                         ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()),
-                parent(after, envelope.session()), tasks(after, envelope.session()),
+                kind(after, envelope.session()), issuer(after, envelope.session()), assignments(after, envelope.session()),
                 envelope.event() instanceof TextWithdrawn withdrawn ? withdrawn.swaps().stream().filter(TextWithdrawn.Swap::usable).toList() : List.of(),
                 envelope.event() instanceof TextWithdrawn ? firstWords(after, envelope.session()) : null);
     }
@@ -141,16 +138,22 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
         return found != null && found.offRecord();
     }
 
-    /** 为任务开的会话：放出它的会话；不是为 null。侧栏和会话清单据此不列它。 */
-    private static String parent(KernelState state, SessionId session) {
+    /** 会话的种类；这一步之后会话还不存在（没建就来的事件）时当作普通会话，这样的行不会被写进索引。 */
+    private static SessionKind kind(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
-        return found == null || found.tasks().origin() == null ? null : found.tasks().origin().parent().value();
+        return found == null ? SessionKind.REGULAR : found.kind();
     }
 
-    /** 这个会话放出去还没回来的任务：启动时据此核对、重新起期限的定时器。 */
-    private static List<OpenTask> tasks(KernelState state, SessionId session) {
+    /** 帮手会话：把事交代给它的会话；不是为 null。 */
+    private static String issuer(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
-        return found == null ? List.of() : found.tasks().open();
+        return found == null || found.helper() == null ? null : found.helper().issuer().value();
+    }
+
+    /** 这个会话交代出去还没回来的：启动时据此核对、重新起期限的定时器。 */
+    private static List<OpenAssignment> assignments(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? List.of() : found.assignments().open();
     }
 
     private static String dir(KernelState state, SessionId session) {

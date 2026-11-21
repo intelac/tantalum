@@ -105,29 +105,10 @@ public final class RecordReplay {
                 return;
             }
             KernelState before = state;
-            Decision decision = offRecord(line).apply(line.envelope(), before);
+            Decision decision = line.record().apply(line.envelope(), before);
             step.accept(line.envelope(), before, decision, line.fingerprints());
             state = decision.newState();
             seq = line.seq();
         }
-    }
-
-    /**
-     * 2026-11-16 当天写的行没有把“不进记忆”写进结果（{@code SessionDelta} 漏了这一项）：第一次提问带了它、这一步新建了会话时，
-     * 读的时候补上。之后写的行自己带着，不走这里。
-     */
-    static tantalum.value.decision.StepRecord offRecord(Line line) {
-        tantalum.value.decision.StepRecord record = line.record();
-        tantalum.value.decision.SessionChange change = record.session();
-        if (change == null || change.offRecord() != null || !change.created()
-                || !(line.envelope().event() instanceof tantalum.value.event.UserPrompt prompt) || !Boolean.TRUE.equals(prompt.offRecord())) {
-            return record;
-        }
-        tantalum.value.decision.SessionChange fixed = new tantalum.value.decision.SessionChange(change.id(), change.principal(),
-                change.created(), change.appended(), change.activeRun(), change.lastRun(), change.followUps(), change.context(),
-                change.compaction(), change.anchor(), change.omittedImages(), change.toolsSeen(), change.notes(), change.model(),
-                change.followUpModels(), change.dir(), new tantalum.value.decision.SessionChange.Changed<>(true), change.tasks(), change.withdrawn());
-        return new tantalum.value.decision.StepRecord(record.seq(), fixed, record.runs(), record.removedRuns(), record.usageDay(),
-                record.usage(), record.commands(), record.facts());
     }
 }

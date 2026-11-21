@@ -1,5 +1,8 @@
 package tantalum.shell.store;
 
+import tantalum.shell.profile.SessionProfile;
+import tantalum.value.assignment.OpenAssignment;
+import tantalum.value.state.SessionKind;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,16 +39,16 @@ public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
     /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。7：运行表（run-tree 需求 3）。13：运行表里的起因多了任务的两种，旧的要重算（subagent 需求 10.5）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 14;
+    static final int VERSION = 15;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
      * 一个会话的元数据。只被认领、还没写过事件时 {@code lastActivity} 为 null；没有未结束的运行时 {@code activeRun} 为 null。
      * {@code title} 是第一句的开头；{@code renamed} 是用户改的名字，没改为 null。{@code dir} 是工作目录，没有为 null。
-     * {@code parent} 只有为任务开的会话有：放出它的会话。这样的会话不列进侧栏和会话清单。
+     * {@code kind} 是会话的种类；列不列进侧栏、搜不搜得到照 {@code SessionProfile}。{@code issuer} 只有帮手会话有：把事交代给它的会话。
      */
     public record Session(SessionId session, Principal principal, String title, Instant lastActivity, String runStatus,
-                          RunId activeRun, long fileOffset, String dir, String renamed, boolean offRecord, SessionId parent) {
+                          RunId activeRun, long fileOffset, String dir, String renamed, boolean offRecord, SessionKind kind, SessionId issuer) {
 
         /** 侧栏显示的名字：改过的优先。 */
         public String shownTitle() {
@@ -123,8 +126,9 @@ public final class SessionIndex implements AutoCloseable {
                   dir             TEXT,
                   renamed         TEXT,
                   off_record      INTEGER NOT NULL DEFAULT 0,
-                  parent          TEXT,
-                  tasks           TEXT NOT NULL DEFAULT ''
+                  kind            TEXT NOT NULL DEFAULT 'REGULAR',
+                  issuer          TEXT,
+                  assignments     TEXT NOT NULL DEFAULT ''
                 )""");
         statement.execute("""
                 CREATE TABLE IF NOT EXISTS submissions (
@@ -194,15 +198,16 @@ public final class SessionIndex implements AutoCloseable {
     private void writeSessions(IndexBatch batch) throws SQLException {
         try (PreparedStatement upsert = connection.prepareStatement("""
                 INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset, answer_deadline, answer_timer,
-                                      dir, renamed, off_record, parent, tasks)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?13, ?14, ?15)
+                                      dir, renamed, off_record, kind, issuer, assignments)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?13, ?14, ?15, ?16)
                 ON CONFLICT (session) DO UPDATE SET
                   title = CASE WHEN title = '' THEN excluded.title ELSE title END,
                   last_activity = COALESCE(excluded.last_activity, last_activity),
                   dir = COALESCE(dir, excluded.dir),
                   off_record = max(off_record, excluded.off_record),
-                  parent = COALESCE(parent, excluded.parent),
-                  tasks = excluded.tasks,
+                  kind = excluded.kind,
+                  issuer = COALESCE(issuer, excluded.issuer),
+                  assignments = excluded.assignments,
                   renamed = CASE WHEN ?12 IS NULL THEN renamed ELSE excluded.renamed END,
                   run_status = excluded.run_status,
                   active_run = excluded.active_run,
@@ -225,8 +230,9 @@ public final class SessionIndex implements AutoCloseable {
                 // 改名为空串（恢复自动标题）要清掉旧名字，没改名要留着：所以另传一次“这一批有没有改名”
                 upsert.setString(12, row.rename);
                 upsert.setInt(13, row.offRecord ? 1 : 0);
-                upsert.setString(14, row.parent);
-                upsert.setString(15, row.tasks);
+                upsert.setString(14, row.kind.name());
+                upsert.setString(15, row.issuer);
+                upsert.setString(16, row.assignments);
                 upsert.addBatch();
             }
             upsert.executeBatch();
@@ -331,7 +337,8 @@ public final class SessionIndex implements AutoCloseable {
         try (PreparedStatement select = connection.prepareStatement("""
                 SELECT t.session, t.seq, t.role, t.text FROM texts t
                 JOIN sessions s ON s.session = t.session AND s.principal = t.principal
-                WHERE t.principal = ? AND s.parent IS NULL AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
+                WHERE t.principal = ? AND s.kind IN """ + SEARCHABLE + """
+                 AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
                 ORDER BY t.seq DESC LIMIT ?""")) {
             select.setString(1, principal.value());
             select.setString(2, pattern);
@@ -377,7 +384,8 @@ public final class SessionIndex implements AutoCloseable {
         try (PreparedStatement select = connection.prepareStatement("""
                 SELECT t.session, t.role, t.text, max(t.seq) FROM texts t
                 JOIN sessions s ON s.session = t.session AND s.principal = t.principal
-                WHERE t.principal = ? AND s.parent IS NULL AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
+                WHERE t.principal = ? AND s.kind IN """ + SEARCHABLE + """
+                 AND t.text LIKE ? ESCAPE '\\' AND (? OR t.role <> 'tool')
                 GROUP BY t.session ORDER BY s.last_activity DESC, t.session LIMIT ?""")) {
             select.setString(1, principal.value());
             select.setString(2, pattern);
@@ -432,10 +440,10 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
-    /** 写进索引的样子：一行一个任务，四段用制表符隔开（编号、会话、期限、定时器；没设期限时后两段是空的）。四样都不含制表符和换行。 */
-    static String encode(List<tantalum.value.task.OpenTask> tasks) {
+    /** 写进索引的样子：一行一次交代，四段用制表符隔开（编号、会话、期限、定时器；没设期限时后两段是空的）。四样都不含制表符和换行。 */
+    static String encode(List<OpenAssignment> tasks) {
         StringBuilder text = new StringBuilder();
-        for (tantalum.value.task.OpenTask task : tasks) {
+        for (OpenAssignment task : tasks) {
             text.append(task.id()).append('\t').append(task.session().value()).append('\t')
                     .append(task.deadline() == null ? "" : task.deadline().toString()).append('\t')
                     .append(task.timer() == null ? "" : task.timer().value()).append('\n');
@@ -446,7 +454,7 @@ public final class SessionIndex implements AutoCloseable {
     /** 这个人的各个会话放出去还没回来的任务数；没有的不在里面。 */
     public synchronized Map<SessionId, Integer> openTaskCounts(Principal principal) throws SQLException {
         Map<SessionId, Integer> counts = new HashMap<>();
-        try (PreparedStatement select = connection.prepareStatement("SELECT session, tasks FROM sessions WHERE principal = ? AND tasks <> ''")) {
+        try (PreparedStatement select = connection.prepareStatement("SELECT session, assignments FROM sessions WHERE principal = ? AND assignments <> ''")) {
             select.setString(1, principal.value());
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
@@ -460,7 +468,7 @@ public final class SessionIndex implements AutoCloseable {
     /** 所有放出去还没回来的任务，按会话排。 */
     public synchronized List<tantalum.shell.loop.TaskRecovery.Outstanding> outstandingTasks() throws SQLException {
         List<tantalum.shell.loop.TaskRecovery.Outstanding> found = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement("SELECT session, principal, tasks FROM sessions WHERE tasks <> '' ORDER BY session");
+        try (PreparedStatement select = connection.prepareStatement("SELECT session, principal, assignments FROM sessions WHERE assignments <> '' ORDER BY session");
                 ResultSet result = select.executeQuery()) {
             while (result.next()) {
                 SessionId session = new SessionId(result.getString(1));
@@ -506,7 +514,7 @@ public final class SessionIndex implements AutoCloseable {
     /** 一个会话放出过的任务各自的会话（含已经结束的），按会话号排。 */
     public synchronized List<Session> tasksOf(Principal principal, SessionId parent) throws SQLException {
         List<Session> sessions = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND parent = ? ORDER BY session")) {
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND issuer = ? ORDER BY session")) {
             select.setString(1, principal.value());
             select.setString(2, parent.value());
             try (ResultSet result = select.executeQuery()) {
@@ -518,10 +526,10 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
-    /** 一个用户写过事件的会话；只认领还没写过的不算，为任务开的会话也不算（它们跟着放出它们的会话看）。 */
+    /** 一个用户写过事件、列进侧栏的会话；只认领还没写过的不算，帮手会话也不算（它们跟着交代它们的会话看）。 */
     public synchronized List<Session> sessions(Principal principal) throws SQLException {
         List<Session> sessions = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND last_activity IS NOT NULL AND parent IS NULL")) {
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ? AND last_activity IS NOT NULL AND kind IN " + LISTED)) {
             select.setString(1, principal.value());
             try (ResultSet result = select.executeQuery()) {
                 while (result.next()) {
@@ -533,15 +541,18 @@ public final class SessionIndex implements AutoCloseable {
     }
 
     private static final String SELECT_SESSION =
-            "SELECT session, principal, title, last_activity, run_status, active_run, file_offset, dir, renamed, off_record, parent FROM sessions";
+            "SELECT session, principal, title, last_activity, run_status, active_run, file_offset, dir, renamed, off_record, kind, issuer FROM sessions";
+    /** 照表：列进侧栏的、搜得到的是哪几种。 */
+    private static final String LISTED = SessionProfile.kindsWhere(SessionProfile::listed);
+    private static final String SEARCHABLE = SessionProfile.kindsWhere(SessionProfile::searchable);
 
     private static Session session(ResultSet result) throws SQLException {
         String at = result.getString(4);
         String run = result.getString(6);
         return new Session(new SessionId(result.getString(1)), new Principal(result.getString(2)), result.getString(3),
                 at == null ? null : Instant.parse(at), result.getString(5), run == null ? null : new RunId(run), result.getLong(7),
-                result.getString(8), result.getString(9), result.getInt(10) != 0,
-                result.getString(11) == null ? null : new SessionId(result.getString(11)));
+                result.getString(8), result.getString(9), result.getInt(10) != 0, SessionKind.valueOf(result.getString(11)),
+                result.getString(12) == null ? null : new SessionId(result.getString(12)));
     }
 
     public synchronized Optional<SubmissionId> submission(Principal principal, RequestId request) throws SQLException {

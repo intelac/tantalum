@@ -28,8 +28,8 @@ public final class WorkspaceSection {
     static final long LARGE = 100_000;
     private static final long STEP = 10_000;
 
-    /** 一个会话在这段里的样子；{@code tokens} 是它上下文现在大约多少 token（不知道为空：会话没载入）。 */
-    public record Row(SessionSummary summary, OptionalLong tokens) {}
+    /** 一个会话在这段里的样子；{@code tokens} 是它上下文现在大约多少 token（不知道为空：会话没载入）。{@code kind} 定它列不列（照 {@code SessionProfile}）。 */
+    public record Row(SessionSummary summary, OptionalLong tokens, tantalum.value.state.SessionKind kind) {}
 
     private WorkspaceSection() {}
 

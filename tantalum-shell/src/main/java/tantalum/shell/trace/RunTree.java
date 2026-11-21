@@ -224,7 +224,7 @@ public record RunTree(Node root) {
                     case STOPPED -> State.CANCELLED;
                     case FAILED, TIMED_OUT, INTERRUPTED -> State.ERROR;
                 };
-                detail = note.outcome() == null || note.outcome() == tantalum.value.task.TaskOutcome.COMPLETED ? null : note.outcome().name();
+                detail = note.outcome() == null || note.outcome() == tantalum.value.assignment.AssignmentOutcome.COMPLETED ? null : note.outcome().name();
             }
             case RunHead ignored -> throw new IllegalArgumentException("a run head is the root, not a leaf");
         }

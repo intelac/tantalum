@@ -83,9 +83,14 @@ public final class CommandApprovalHook implements KernelHook, PluginInfo {
         return new Ask(question(call));
     }
 
+    /**
+     * “这个会话都允许”只在追到头是你引起的那一轮里认（session-model 需求 6.6）：外面的事引起的那一轮，每条命令照样问。
+     */
     private static boolean allowedInSession(KernelState state, HookContext context) {
         SessionState session = state.sessions().get(context.run().session());
-        return session != null && session.note(NOTE).fields().get(SHELL) instanceof Json.Bool allowed && allowed.value();
+        tantalum.value.state.RunState run = state.runs().get(context.run().run());
+        boolean yours = run != null && run.cause().root() == tantalum.value.event.Root.USER;
+        return yours && session != null && session.note(NOTE).fields().get(SHELL) instanceof Json.Bool allowed && allowed.value();
     }
 
     /** 同一个调用再问就是同一个问题。正文是命令全文（太长截断），有 {@code workdir} 时另起一行写目录。 */

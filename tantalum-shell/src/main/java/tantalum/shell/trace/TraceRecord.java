@@ -13,7 +13,7 @@ import tantalum.value.decision.HookDecided;
 import tantalum.value.hook.HookPoint;
 import tantalum.value.id.RunId;
 import tantalum.value.json.Json;
-import tantalum.value.task.TaskOutcome;
+import tantalum.value.assignment.AssignmentOutcome;
 import tantalum.value.model.AttachedBlock;
 import tantalum.value.model.FailureReason;
 import tantalum.value.model.RequestOptions;
@@ -140,7 +140,7 @@ public sealed interface TraceRecord {
      * 任务的一头。{@code ASSIGNED}：为任务开的会话里，交代的内容到了（{@code session} 是放出它的会话）。{@code RESULT}：放出任务的会话里，
      * 结果回来了（{@code session} 是任务的会话，{@code outcome} 是结局）。它不是用户输入：单独一种记录，摘要和记忆不会把它当成人说的话。
      */
-    record TaskNote(Head head, Side side, String task, String session, String agent, TaskOutcome outcome, String text)
+    record TaskNote(Head head, Side side, String task, String session, String agent, AssignmentOutcome outcome, String text)
             implements TraceRecord {
         public enum Side { ASSIGNED, RESULT }
 

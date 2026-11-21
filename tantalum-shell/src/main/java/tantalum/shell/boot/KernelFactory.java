@@ -30,7 +30,7 @@ final class KernelFactory {
         BuiltinSteps.register(table);
         return new Kernel(table, new HookChain(failClosed(hooks, Set.copyOf(properties.hooks().required()))), safety,
                 new Limits(properties.loop().maxParallelTools(), properties.hooks().maxWorkRounds(),
-                        properties.taskLimits()));
+                        properties.assignmentLimits()));
     }
 
     /**

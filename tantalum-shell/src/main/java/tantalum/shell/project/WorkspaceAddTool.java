@@ -40,7 +40,7 @@ public final class WorkspaceAddTool implements Tool {
     @Override public String name() { return NAME; }
 
     /** 登记工作区要问用户，只在人在场的对话里做。 */
-    @Override public boolean inTasks() { return false; }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
 
     @Override public String description() {
         return "Add a folder on the user's computer as a workspace, so conversations can be opened to work in it. "

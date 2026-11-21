@@ -86,13 +86,12 @@ public final class RecallHook implements KernelHook {
     }
 
     /**
-     * 不是用户说的话：系统消息（工具变化、钩子说明、换模型）、上下文更新（用户角色的消息，固定开头）、
-     * 任务的结果（用户角色的消息，按内容块的类型认）。拿来找记忆的只能是用户自己的问题。
+     * 不拿来找记忆的：系统消息（工具变化、钩子说明、换模型），和不是你说的用户角色消息（{@link Message#fromUser()}：上下文更新、交代出去的事的结果）。
+     * 交代例外：帮手会话里拿交代的内容去找（手册“记忆 · 回答前想起”，这一步行为不变）。
      */
     private static boolean written(Message message) {
-        return message.role() == Role.SYSTEM
-                || message.role() == Role.USER && (tantalum.value.model.SystemUpdates.isContextUpdate(textOf(message))
-                        || message.content().stream().anyMatch(tantalum.value.model.TaskResultBlock.class::isInstance));
+        boolean assignment = message.content().stream().anyMatch(tantalum.value.model.AssignmentBlock.class::isInstance);
+        return message.role() == Role.SYSTEM || message.role() == Role.USER && !message.fromUser() && !assignment;
     }
 
     private static String textOf(Message message) {

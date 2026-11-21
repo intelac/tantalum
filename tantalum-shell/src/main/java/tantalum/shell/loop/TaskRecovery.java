@@ -1,23 +1,23 @@
 package tantalum.shell.loop;
 
+import tantalum.kernel.step.AssignmentSteps;
+import tantalum.value.assignment.AssignmentOutcome;
+import tantalum.value.event.Report;
+import tantalum.value.event.Root;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
-import tantalum.kernel.step.TaskSteps;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.TaskEnded;
 import tantalum.value.id.Principal;
 import tantalum.value.id.SessionId;
 import tantalum.value.state.Ended;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
-import tantalum.value.task.TaskOutcome;
 
 /**
- * 启动时核对放出去还没回来的任务（subagent 需求 4.2、4.3）。上一个进程可能死在“放出了、还没送到”或“结束了、还没送回”之间，
+ * 启动时核对交代出去还没回来的（给模型和人的说法是“任务”）（subagent 需求 4.2、4.3）。上一个进程可能死在“放出了、还没送到”或“结束了、还没送回”之间，
  * 这时放出任务的会话名单里还有它，却不会再有人给结果。逐个看任务自己的会话：
  *
  * <ul>
@@ -47,7 +47,7 @@ public final class TaskRecovery {
         List<AnswerDeadline> rearm = new ArrayList<>();
         for (Outstanding task : outstanding) {
             Child child = children.apply(task.principal(), task.child());
-            Optional<TaskEnded> ended = ended(task, child);
+            Optional<Report> ended = ended(task, child);
             if (ended.isPresent()) {
                 settle.add(new EventEnvelope(EventEnvelope.UNASSIGNED, now, task.principal(), task.session(), null, ended.get()));
             } else if (task.deadline() != null) {
@@ -58,21 +58,27 @@ public final class TaskRecovery {
         return new Plan(settle, rearm);
     }
 
-    private static Optional<TaskEnded> ended(Outstanding task, Child child) {
+    private static Optional<Report> ended(Outstanding task, Child child) {
         if (child == null || child.session() == null) {
-            return Optional.of(new TaskEnded(task.task(), TaskOutcome.INTERRUPTED, null));
+            return Optional.of(interrupted(task));
         }
         for (RunState run : child.runs()) {
-            if (!(run.owner() instanceof OwnerRef.OfTask)) {
+            if (!task.task().equals(run.cause().owes())) {
                 continue;
             }
             if (run.phase() instanceof Ended end) {
-                TaskOutcome outcome = TaskSteps.outcomeOf(end.reason(), end.detail());
-                return Optional.of(new TaskEnded(task.task(), outcome, TaskSteps.textOf(outcome, child.session(), end.detail())));
+                AssignmentOutcome outcome = AssignmentSteps.outcomeOf(end.reason(), end.detail());
+                return Optional.of(new Report(task.task(), outcome, AssignmentSteps.textOf(outcome, child.session(), task.task(), end.detail()),
+                        run.cause().root()));
             }
             return Optional.empty();
         }
-        // 会话在，但没有为任务开的那一轮：TaskAssigned 没有生效过
-        return Optional.of(new TaskEnded(task.task(), TaskOutcome.INTERRUPTED, null));
+        // 会话在，但没有为这次交代开的那一轮：交代没有生效过
+        return Optional.of(interrupted(task));
+    }
+
+    /** 内核取交代时的和这里的两者里低的，所以写“你”不会把它抬高。 */
+    private static Report interrupted(Outstanding task) {
+        return new Report(task.task(), AssignmentOutcome.INTERRUPTED, null, Root.USER);
     }
 }

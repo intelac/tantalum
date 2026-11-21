@@ -102,8 +102,11 @@ public final class ToolApprovalHook implements KernelHook, PluginInfo, Configura
 
     /** 这个会话里用户选过“一直允许”的工具。 */
     private static boolean allowedInSession(KernelState state, HookContext context, String tool) {
+        // “这个会话都允许”只在追到头是你引起的那一轮里认（外面的事引起的照样问）
         SessionState session = state.sessions().get(context.run().session());
-        return session != null && session.note(NOTE).fields().get(tool) instanceof Json.Bool allowed && allowed.value();
+        tantalum.value.state.RunState run = state.runs().get(context.run().run());
+        boolean yours = run != null && run.cause().root() == tantalum.value.event.Root.USER;
+        return yours && session != null && session.note(NOTE).fields().get(tool) instanceof Json.Bool allowed && allowed.value();
     }
 
     /** 同一个调用再问就是同一个问题；说明是参数的 JSON 原文，太长截断。 */

@@ -25,8 +25,8 @@ import tantalum.value.id.SessionId;
  */
 public final class SessionFile implements AutoCloseable {
 
-    /** 3：一步一行。2（事件行之间夹着结果行）和 1（只有事件）不再读。 */
-    public static final int FORMAT = 3;
+    /** 4：会话有创建事件和种类，输入进同一个收件队列。3（一步一行）和更早的不再读。 */
+    public static final int FORMAT = 4;
 
     private final Principal principal;
     private final SessionId session;

@@ -8,7 +8,7 @@ import tantalum.shell.plugin.ToolContext;
 import tantalum.shell.plugin.ToolDispatch;
 import tantalum.shell.plugin.ToolOutput;
 import tantalum.value.json.Json;
-import tantalum.value.task.TaskTools;
+import tantalum.value.assignment.AssignmentTools;
 
 /**
  * 内置工具 {@code task}：只有给模型的定义。调用由内核截下，当场有结果（任务的编号），这一轮不为它停；
@@ -16,7 +16,7 @@ import tantalum.value.task.TaskTools;
  */
 public final class TaskTool implements Tool {
 
-    @Override public String name() { return TaskTools.TASK; }
+    @Override public String name() { return AssignmentTools.TASK; }
 
     @Override public String description() {
         return "Hand a piece of work to a separate agent and go on with something else. Use it for work that can be done on its own "
@@ -32,13 +32,13 @@ public final class TaskTool implements Tool {
 
     @Override public Json schema() {
         Map<String, Json> properties = new LinkedHashMap<>();
-        properties.put(TaskTools.PROMPT, property("Everything the task needs: what to do, where, what you already know, what to report back."));
-        properties.put(TaskTools.AGENT, property("The name of one of the user's skills (the ones listed for you), to have the task follow that skill "
+        properties.put(AssignmentTools.PROMPT, property("Everything the task needs: what to do, where, what you already know, what to report back."));
+        properties.put(AssignmentTools.AGENT, property("The name of one of the user's skills (the ones listed for you), to have the task follow that skill "
                 + "as its instructions. Leave out for a general task."));
         Map<String, Json> schema = new LinkedHashMap<>();
         schema.put("type", new Json.Str("object"));
         schema.put("properties", new Json.Obj(properties));
-        schema.put("required", new Json.Arr(List.of(new Json.Str(TaskTools.PROMPT))));
+        schema.put("required", new Json.Arr(List.of(new Json.Str(AssignmentTools.PROMPT))));
         schema.put("additionalProperties", new Json.Bool(false));
         return new Json.Obj(schema);
     }
@@ -51,14 +51,14 @@ public final class TaskTool implements Tool {
     }
 
     /** 由内核处理，不真的执行；几个 task 可以在同一次回复里一起放出。 */
-    static final ToolDispatch DISPATCH = ToolDispatch.parallel(TaskTools.TASK, "tasks", 1);
+    static final ToolDispatch DISPATCH = ToolDispatch.parallel(AssignmentTools.TASK, "tasks", 1);
 
     @Override public String server() { return DISPATCH.server(); }
 
     @Override public ToolDispatch dispatch() { return DISPATCH; }
 
     /** 只有一层：任务不能再放任务。内核也拦着。 */
-    @Override public boolean inTasks() { return false; }
+    @Override public java.util.Set<tantalum.value.state.SessionKind> kinds() { return java.util.Set.of(tantalum.value.state.SessionKind.REGULAR); }
 
     @Override
     public ToolOutput run(ToolContext context, Json arguments) {

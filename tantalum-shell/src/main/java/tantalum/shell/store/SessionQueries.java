@@ -125,10 +125,10 @@ public final class SessionQueries {
         Map<SessionId, Integer> counts = new HashMap<>(index.openTaskCounts(principal));
         for (SessionState session : view.current().sessions().values()) {
             if (session.principal().equals(principal)) {
-                if (session.tasks().open().isEmpty()) {
+                if (session.assignments().open().isEmpty()) {
                     counts.remove(session.id());
                 } else {
-                    counts.put(session.id(), session.tasks().open().size());
+                    counts.put(session.id(), session.assignments().open().size());
                 }
             }
         }
@@ -161,8 +161,8 @@ public final class SessionQueries {
             }
         }
         for (SessionState session : state.sessions().values()) {
-            // 为任务开的会话不列：它跟着放出它的会话看
-            if (session.principal().equals(principal) && session.tasks().origin() == null) {
+            // 照表：帮手会话不列，它跟着交代它的会话看
+            if (session.principal().equals(principal) && tantalum.shell.profile.SessionProfile.of(session.kind()).listed()) {
                 // 在内存的会话：状态和最近活动取当前的；改过的名字只记在索引里（内核不存标题）
                 SessionSummary live = SessionSummary.of(session.id(),
                         session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id()));

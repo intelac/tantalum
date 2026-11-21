@@ -39,7 +39,7 @@ import tantalum.shell.sse.SseHub;
 import tantalum.shell.store.SessionIndex;
 import tantalum.shell.store.SessionQueries;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.RunInterrupted;
+import tantalum.shell.profile.SessionProfile;
 import tantalum.value.state.AwaitingAnswer;
 import tantalum.value.state.KernelState;
 
@@ -127,11 +127,11 @@ public final class Engine implements AutoCloseable {
                     }
                 }, tool -> toolbox.catalog().find(tool).map(Tool::plugin).orElse(null),
                 // 不进记忆的会话（memory-final-plan 第 11 节）：会话可能已经移出内存，按查询读；读不到时当作不进记忆，宁可少记。
-                // 为任务开的会话也不通知个人插件（subagent 需求 9.1）：那里面说话的是另一个 agent，不是这个人
+                // 通不通知个人插件照表（帮手会话不通知，subagent 需求 9.1：那里面说话的是另一个 agent，不是这个人）
                 (user, session) -> {
                     try {
                         return queries.queries().session(user, session)
-                                .map(view -> view.state().offRecord() || view.state().tasks().origin() != null).orElse(true);
+                                .map(view -> view.state().offRecord() || !SessionProfile.of(view.state().kind()).notifiesPlugins()).orElse(true);
                     } catch (RuntimeException unreadable) {
                         return true;
                     }
@@ -334,10 +334,9 @@ public final class Engine implements AutoCloseable {
         try {
             long deadline = System.nanoTime() + DRAIN.toNanos();
             for (SessionIndex.Session session : unfinished) {
-                EventEnvelope envelope = new EventEnvelope(EventEnvelope.UNASSIGNED, clock.instant(), session.principal(),
-                        session.session(), session.activeRun(), new RunInterrupted());
-                // 环满了等一会儿再试，但有上限；环坏了或等太久不能一直转下去
-                while (!pipeline.input().tryPublish(envelope)) {
+                tantalum.value.id.RunRef run = new tantalum.value.id.RunRef(session.principal(), session.session(), session.activeRun());
+                // 经入口送；环满了等一会儿再试，但有上限；环坏了或等太久不能一直转下去
+                while (pipeline.intake().interrupt(session.principal(), run) == 429) {
                     if (pipeline.input().broken()) {
                         throw new IllegalStateException("the input ring is broken; the runs left unfinished by the previous process cannot be closed");
                     }
@@ -376,7 +375,9 @@ public final class Engine implements AutoCloseable {
                     clock.instant());
             long deadline = System.nanoTime() + DRAIN.toNanos();
             for (EventEnvelope envelope : plan.settle()) {
-                while (!pipeline.input().tryPublish(envelope)) {
+                // 补发的结果和平时的一样经入口送
+                while (pipeline.intake().deliver(envelope.principal(), envelope.session(), null,
+                        (tantalum.value.event.Input) envelope.event()) == 429) {
                     if (pipeline.input().broken() || System.nanoTime() - deadline > 0) {
                         throw new IllegalStateException("the input ring did not accept the results of the tasks left by the previous process");
                     }
