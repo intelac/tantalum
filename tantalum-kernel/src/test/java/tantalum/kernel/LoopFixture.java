@@ -75,7 +75,13 @@ public final class LoopFixture {
         EventEnvelope envelope = new EventEnvelope(seq++, AT,
                 USER, session, run, event);
         journal.add(envelope);
+        KernelState before = state;
         last = kernel.step(state, envelope);
+        // 每一步都要能写成账里的一行再套回来：去掉开头的消息和追加的消息都记得下（history-window），别的字段也一样
+        tantalum.value.decision.StepRecord record = tantalum.value.decision.StepRecord.of(envelope, before, last);
+        if (!record.apply(envelope, before).newState().equals(last.newState())) {
+            throw new AssertionError("the step at seq " + envelope.seq() + " does not survive its journal record");
+        }
         state = last.newState();
         commands.addAll(last.commands());
         return last;

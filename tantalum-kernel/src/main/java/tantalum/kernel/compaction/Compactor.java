@@ -114,8 +114,9 @@ public final class Compactor {
         CompactionSettings settings = session.context() == null ? null : session.context().compaction();
         TokenEstimate estimate = settings == null ? TokenEstimate.LEGACY : TokenEstimate.of(settings);
         if (session.anchor() != null) {
+            // 锚点从头数；每次压缩都清掉锚点，窗口只在压缩时移动，所以锚点总在窗口里
             List<Message> messages = session.messages();
-            int from = Math.min(session.anchor().messageCount(), messages.size());
+            int from = Math.min(Math.max(session.anchor().messageCount(), session.windowStart()), session.historySize()) - session.windowStart();
             return session.anchor().tokens()
                     + estimate.ofMessages(ImageBudget.omit(messages.subList(from, messages.size()), session.omittedImages()));
         }
@@ -142,7 +143,7 @@ public final class Compactor {
             return base;
         }
         List<Message> view = session.view();
-        int after = Math.max(0, session.messages().size() - Math.min(anchor.messageCount(), session.messages().size()));
+        int after = Math.max(0, session.historySize() - Math.min(anchor.messageCount(), session.historySize()));
         List<Message> atAnchor = view.subList(0, Math.max(0, view.size() - after));
         long estimated = base.ofText(system) + base.ofTools(tools)
                 + base.ofMessages(ImageBudget.omit(atAnchor, session.omittedImages()));

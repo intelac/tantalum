@@ -160,7 +160,11 @@ public final class CompactSteps {
         SessionState session = out.session(run.ref());
         TokenEstimate estimate = TokenEstimate.of(session.context().compaction());
         long before = estimate.ofMessages(session.view());
-        out.put(session.compacted(new Compaction(replacement, session.messages().size())).withContext(null));
+        int tailFrom = session.historySize();
+        // 边界之前的原话模型不再看（替换段里有它要看的），从状态里去掉，账里还有。只去掉这一步开始前就有的：
+        // 只裁剪的压缩会在追加了工具结果、插话的同一步里发生，那几条要记进这一步的结果
+        out.put(session.compacted(new Compaction(replacement, tailFrom)).withContext(null)
+                .dropBefore(Math.min(tailFrom, Math.max(session.windowStart(), out.historyAtStart(session.id())))));
         out.report(List.of(new ContextCompacted(run.ref(), compacting.trigger(), headUnits, keptUnits, before,
                 estimate.ofMessages(replacement), usage, trimOnly)));
         RunState resumed = run.withCompacting(null).withRetries(0);

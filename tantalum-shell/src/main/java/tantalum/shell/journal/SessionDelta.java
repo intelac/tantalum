@@ -79,6 +79,8 @@ final class SessionDelta {
                 memo.appended(message);
             }
         }
+        // 压缩完成时去掉了窗口之前的消息：记下新的起点（之前的原话照旧在这个文件的前面）
+        changed(node, "windowStart", change.windowStart());
         changed(node, "activeRun", change.activeRun());
         changed(node, "lastRun", change.lastRun());
         // 收件队列：到了、还没被模型看到的输入。变了就写整条队列，通常只有零到几条
@@ -124,6 +126,7 @@ final class SessionDelta {
                 created, created ? SessionKind.valueOf(node.required("kind").asString()) : null,
                 created && node.has("helper") ? mapper.treeToValue(node.get("helper"), HelperOf.class) : null,
                 created && node.has("dir") ? node.get("dir").asString() : null, created && node.path("offRecord").asBoolean(false), appended,
+                changed(node, "windowStart", Integer.class),
                 changed(node, "activeRun", RunId.class), changed(node, "lastRun", RunId.class),
                 changedList(node, "inbox", INBOX),
                 node.has("context") ? new SessionChange.Changed<>(context(node.get("context"), memo)) : null,

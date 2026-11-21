@@ -29,7 +29,7 @@ public final class SessionChangeFixture {
     }
 
     public static SessionChange of(SessionId id, Principal principal, boolean created, List<Message> appended, Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<InboxItem>> inbox, Changed<SessionContext> context, Changed<Compaction> compaction, Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen, Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model) {
-        return new SessionChange(id, principal, created, created ? SessionKind.REGULAR : null, null, null, false, appended, activeRun, lastRun, inbox,
+        return new SessionChange(id, principal, created, created ? SessionKind.REGULAR : null, null, null, false, appended, null, activeRun, lastRun, inbox,
                 context, compaction, anchor, omittedImages, toolsSeen, notes, model, null, null);
     }
 }

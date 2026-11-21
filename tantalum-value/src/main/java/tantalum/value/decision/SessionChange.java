@@ -20,11 +20,12 @@ import tantalum.value.state.SessionState;
 import tantalum.value.state.UsageAnchor;
 
 /**
- * 一步里一个会话的变化。{@code messages} 只追加，所以只记新增的；其余字段为 null 表示没变，
+ * 一步里一个会话的变化。{@code messages} 只追加，所以只记新增的；{@code windowStart} 变了表示这一步压缩完成、去掉了它之前的消息
+ * （只能去掉这一步开始时就有的）；其余字段为 null 表示没变，
  * {@link Changed} 里的值可以是 null（变成 null）。{@code created} 时这一步新建了它：种类、帮手的出身、目录、是不是不进记忆都在这一行里。
  */
 public record SessionChange(SessionId id, Principal principal, boolean created, SessionKind kind, HelperOf helper, String dir,
-                            boolean offRecord, List<Message> appended,
+                            boolean offRecord, List<Message> appended, Changed<Integer> windowStart,
                             Changed<RunId> activeRun, Changed<RunId> lastRun, Changed<List<InboxItem>> inbox,
                             Changed<SessionContext> context, Changed<Compaction> compaction,
                             Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
@@ -57,7 +58,13 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 || base.offRecord() != after.offRecord()) {
             throw new IllegalStateException("session " + after.id().value() + " changed what is fixed when it is created");
         }
-        List<Message> old = base.messages();
+        // 去掉的只能是这一步开始时就有的那一段的开头；之后的消息照旧只追加
+        int dropped = after.windowStart() - base.windowStart();
+        if (dropped < 0 || dropped > base.messages().size()) {
+            throw new IllegalStateException("session " + after.id().value() + " moved its window from " + base.windowStart() + " to "
+                    + after.windowStart() + " with " + base.messages().size() + " messages");
+        }
+        List<Message> old = base.messages().subList(dropped, base.messages().size());
         List<Message> now = after.messages();
         if (!startsWith(now, old)) {
             throw new IllegalStateException("session " + after.id().value() + " rewrote its history instead of appending");
@@ -65,6 +72,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         boolean created = before == null;
         return new SessionChange(after.id(), after.principal(), created, created ? after.kind() : null, created ? after.helper() : null,
                 created ? after.dir() : null, created && after.offRecord(), now.subList(old.size(), now.size()),
+                dropped == 0 ? null : new Changed<>(after.windowStart()),
                 changed(base.activeRun(), after.activeRun()), changed(base.lastRun(), after.lastRun()),
                 changed(base.inbox(), after.inbox()), changed(base.context(), after.context()),
                 changed(base.compaction(), after.compaction()), changed(base.anchor(), after.anchor()),
@@ -80,12 +88,22 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
         }
         SessionState base = before == null ? SessionState.start(id, principal, kind, helper, dir, offRecord) : before;
         List<Message> messages = base.messages();
+        int start = base.windowStart();
+        if (windowStart != null) {
+            int dropped = windowStart.value() - start;
+            if (dropped < 0 || dropped > messages.size()) {
+                throw new IllegalStateException("session " + id.value() + " moves its window from " + start + " to " + windowStart.value()
+                        + " with " + messages.size() + " messages");
+            }
+            messages = messages.subList(dropped, messages.size());
+            start = windowStart.value();
+        }
         if (!appended.isEmpty()) {
             List<Message> grown = new ArrayList<>(messages);
             grown.addAll(appended);
             messages = grown;
         }
-        return new SessionState(id, principal, base.kind(), base.helper(), messages,
+        return new SessionState(id, principal, base.kind(), base.helper(), messages, start,
                 pick(activeRun, base.activeRun()), pick(lastRun, base.lastRun()), pick(inbox, base.inbox()),
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
                 pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()),
@@ -95,7 +113,7 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
 
     /** 没有任何变化：可以不写。 */
     public boolean isEmpty() {
-        return !created && appended.isEmpty() && activeRun == null && lastRun == null && inbox == null
+        return !created && appended.isEmpty() && windowStart == null && activeRun == null && lastRun == null && inbox == null
                 && context == null && compaction == null && anchor == null && omittedImages == null && toolsSeen == null
                 && notes == null && model == null && assignments == null && withdrawn == null;
     }

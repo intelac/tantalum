@@ -41,7 +41,8 @@ public final class WithdrawSteps {
             return Decision.unchanged(context.state());
         }
         int places = 0;
-        // 历史：一段一段看，在模型现在看到的样子里还出现的才记（已经撤下过的不再记一遍）
+        // 历史：一段一段看，在模型现在看到的样子里还出现的才记（已经撤下过的不再记一遍）。压缩去掉过前面的历史时，原文可能只在
+        // 去掉的那部分里（账里还有，插件读账时按这份撤下记录换掉），所以那时只要以前没记过同样的一段就记
         List<Withdrawal> more = new ArrayList<>();
         for (Swap swap : event.swaps()) {
             TextSwap one = new TextSwap(List.of(swap));
@@ -49,11 +50,13 @@ public final class WithdrawSteps {
                 continue;
             }
             int found = 0;
-            for (int i = 0; i < session.messages().size(); i++) {
+            for (int i = session.windowStart(); i < session.historySize(); i++) {
                 found += one.places(session.said(i));
             }
-            if (found > 0) {
-                more.add(new Withdrawal(swap.original(), swap.replacement(), session.messages().size(), context.envelope().seq()));
+            boolean maybeDropped = session.windowStart() > 0 && session.withdrawn().stream()
+                    .noneMatch(each -> each.original().equals(swap.original()) && each.replacement().equals(swap.replacement()));
+            if (found > 0 || maybeDropped) {
+                more.add(new Withdrawal(swap.original(), swap.replacement(), session.historySize(), context.envelope().seq()));
                 places += found;
             }
         }
@@ -71,7 +74,7 @@ public final class WithdrawSteps {
         RunState nextRun = run == null ? null : run(swap, run);
         places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(queued)
                 + places(swap, session.context()) + (run == null ? 0 : places(swap, run));
-        if (places == 0) {
+        if (places == 0 && more.isEmpty()) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);

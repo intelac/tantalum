@@ -105,7 +105,7 @@ class SessionCodecTest {
     void theCreatingLineCarriesWhatIsFixedThen() {
         HelperOf helper = new HelperOf(SESSION, "t3-0", "reviewer", "You review code.", List.of("read"));
         SessionChange created = new SessionChange(HELPER, USER, true, SessionKind.HELPER, helper, "/home/alice/app", true,
-                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null);
+                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null, null);
         String line = records.encode(new StepRecord(0, created, List.of(), List.of(), null, null, List.of(), List.of()), RecordMemo.writer(USER, HELPER));
         assertTrue(line.contains("\"kind\":\"HELPER\"") && line.contains("\"dir\":\"/home/alice/app\"") && line.contains("\"offRecord\":true"), line);
         assertTrue(line.contains("\"kind\":\"assignment\""), "the assignment is its own block: " + line);
@@ -141,7 +141,7 @@ class SessionCodecTest {
         RunRef run = new RunRef(USER, SESSION, RunId.of(SESSION, 1));
         Assignments open = new Assignments(List.of(new OpenAssignment("t3-0", HELPER, "reviewer", "check module A", AT, AT.plusSeconds(1800),
                 new CommandId("c1"), Root.OUTSIDE)), 2, 3);
-        SessionChange change = new SessionChange(SESSION, USER, false, null, null, null, false, List.of(), null, null, null, null, null, null,
+        SessionChange change = new SessionChange(SESSION, USER, false, null, null, null, false, List.of(), null, null, null, null, null, null, null,
                 null, null, null, null, new SessionChange.Changed<>(open), null);
         StepRecord record = readsBack(new StepRecord(0, change, List.of(), List.of(), null, null,
                 List.of(new Assign(new CommandId("c2"), run, "t3-0", HELPER, "reviewer", "check module A\nand report", "/home/alice/app", false,

@@ -38,8 +38,18 @@ final class Outcome {
     private final List<Fact> facts = new ArrayList<>();
     private int nextCommand;
 
+    /** 这个会话在这一步开始时从头数有多少条消息（这一步才建的为 0）。 */
+    int historyAtStart(tantalum.value.id.SessionId session) {
+        tantalum.value.state.SessionState at = started.sessions().get(session);
+        return at == null ? 0 : at.historySize();
+    }
+
+    /** 这一步开始时的状态：压缩时只能去掉这一步开始前就有的消息。 */
+    private final KernelState started;
+
     Outcome(StepContext context) {
         this.state = context.state();
+        this.started = context.state();
         this.envelope = context.envelope();
         this.hooks = context.hooks();
         this.toolSafety = context.toolSafety();

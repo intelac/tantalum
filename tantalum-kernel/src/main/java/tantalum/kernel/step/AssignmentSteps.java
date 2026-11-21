@@ -168,10 +168,11 @@ public final class AssignmentSteps {
     /**
      * 这次交代的回答：从交代那条消息往后，不带工具调用的助手消息里的文字，按先后接起来。通常只有一条；结束前的钩子让它再答一次时
      * （比如引用核对要它改一处）就有几条，后一条往往只是更正，只带它会把原来的结论丢掉（2026-11-18 真模型测试里发现）。
-     * 边调工具边说的话是过程，不带回。
+     * 边调工具边说的话是过程，不带回。在模型看得到的内容（{@link SessionState#view()}）里找：压缩过的话，交代那条可能已经在摘要里，
+     * 那时从头收（摘要是用户消息，不收），压缩之前说的只在摘要里。
      */
     static String answers(SessionState session, String assignment) {
-        List<Message> messages = session.messages();
+        List<Message> messages = session.view();
         int from = 0;
         for (int i = messages.size() - 1; i >= 0; i--) {
             if (messages.get(i).content().stream().anyMatch(block -> block instanceof AssignmentBlock given && given.assignment().equals(assignment))) {

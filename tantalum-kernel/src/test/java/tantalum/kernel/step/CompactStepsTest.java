@@ -220,7 +220,10 @@ class CompactStepsTest {
         assertEquals(Role.ASSISTANT, view.get(1).role());
         assertEquals(text(block("a1")), view.get(1).content());
         assertEquals(Message.user(block("q2")), view.get(2));
-        assertEquals(history, loop.session().messages(), "history is untouched");
+        // history-window：边界之前的原话从状态里去掉（模型要看的都在替换段里），从头数的长度不变
+        assertEquals(List.of(), loop.session().messages(), "what the model no longer sees leaves the state");
+        assertEquals(history.size(), loop.session().windowStart());
+        assertEquals(history.size(), loop.session().historySize());
         assertEquals(history.size(), loop.session().compaction().tailFrom());
         assertNull(loop.session().anchor(), "the old measurement is void");
         assertNull(loop.run().compacting());
@@ -236,7 +239,7 @@ class CompactStepsTest {
 
         // 下一次回复后锚点重建。
         loop.feed(loop.runId(), endTurn(loop, "a2", 300));
-        assertEquals(new UsageAnchor(310, loop.session().messages().size()), loop.session().anchor());
+        assertEquals(new UsageAnchor(310, loop.session().historySize()), loop.session().anchor(), "counted from the first message");
         // 再追问，大小按新锚点算，不再触发。
         loop.prompt("q3");
         loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "system", List.of(), SETTINGS, List.of()));

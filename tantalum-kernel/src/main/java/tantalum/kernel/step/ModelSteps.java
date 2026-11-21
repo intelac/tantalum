@@ -163,7 +163,7 @@ public final class ModelSteps {
     private static void anchor(Outcome out, RunState run, TokenUsage usage) {
         SessionState session = out.session(run.ref());
         UsageAnchor anchor = usage == null ? null
-                : new UsageAnchor(usage.promptTotal() + usage.output(), session.messages().size());
+                : new UsageAnchor(usage.promptTotal() + usage.output(), session.historySize());
         out.put(session.withAnchor(anchor));
     }
 }
