@@ -77,7 +77,7 @@ class WorkspaceApiTest {
     @Test
     void theUserConfirmsANewWorkspaceAndTheModelIsToldAboutIt() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("ws")), model)) {
-            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"set up the shop\"}");
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"set up the shop\"}");
             JsonNode question = answer(server, "top", "add");
             assertTrue(question.get("id").asString().startsWith("workspace-"), question.toString());
             assertTrue(question.toString().contains("/home/alice/shop") && question.toString().contains("Shop"), "the card shows the folder and the name");
@@ -93,7 +93,7 @@ class WorkspaceApiTest {
 
             // 下一轮：上下文里有这个工作区（这一段同一个人一秒内用上一次查到的，所以等一下）
             Thread.sleep(1500);
-            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"what is there\"}");
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"what is there\"}");
             assertTrue(waitFor(server, "top", "looked").contains("looked"));
             String seen = inputs.getLast();
             assertTrue(seen.contains("- workspace \"Shop\" — /home/alice/shop") || seen.contains("- workspace \\\"Shop\\\" — /home/alice/shop"),
@@ -104,7 +104,7 @@ class WorkspaceApiTest {
     @Test
     void whenTheUserSaysNoNothingIsAdded() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data2"), Files.createDirectory(temp.resolve("ws2")), model)) {
-            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"set up the shop\"}");
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"set up the shop\"}");
             assertEquals(0, JSON.readTree(server.get("alice", "/api/projects").body()).get("projects").size(), "nothing before the answer");
             answer(server, "top", "deny");
             String messages = waitFor(server, "top", "not added");

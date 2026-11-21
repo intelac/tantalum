@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -57,7 +58,7 @@ class LoadTest {
     }
 
     private static CleanroomRing.Loaded slice(SessionId session, Principal principal) {
-        return new CleanroomRing.Loaded(new SessionSlice(SessionState.start(session, principal), List.of(), null, null, 1));
+        return new CleanroomRing.Loaded(new SessionSlice(SessionStateFixture.regular(session, principal), List.of(), null, null, 1));
     }
 
     @Test

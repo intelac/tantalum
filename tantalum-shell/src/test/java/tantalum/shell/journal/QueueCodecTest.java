@@ -33,8 +33,7 @@ class QueueCodecTest {
     @ParameterizedTest
     @EnumSource(Action.class)
     void theEventReadsBack(Action action) {
-        QueueChanged changed = new QueueChanged(new SubmissionId("s"), new RequestId("r"), action, 2, "原来的文字", List.of(),
-                action == Action.EDIT ? "新的文字" : null);
+        QueueChanged changed = new QueueChanged(new SubmissionId("s"), new RequestId("r"), action, 42, action == Action.EDIT ? "新的文字" : null);
         assertEquals(changed, codec.decode(QueueChanged.TYPE, 1, codec.encode(changed)));
     }
 

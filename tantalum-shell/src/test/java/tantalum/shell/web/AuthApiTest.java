@@ -221,18 +221,18 @@ class AuthApiTest {
         String cookie = cookieOf(server.attemptLogin("alice", "alice-password", null));
         var evil = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/sessions/s/submissions"))
                 .header("Cookie", cookie).header("Origin", "https://evil.example").header("content-type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"hi\"}")).build();
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"delivery\":\"queue\",\"text\":\"hi\"}")).build();
         HttpResponse<String> refused = server.http.send(evil, HttpResponse.BodyHandlers.ofString());
         assertEquals(403, refused.statusCode());
         assertTrue(refused.body().contains("auth/bad-origin"), "review-fixes 需求 11.5: " + refused.body());
         // 没有 Origin 但浏览器标明跨站：也拒
         var fetched = java.net.http.HttpRequest.newBuilder(evil.uri())
                 .header("Cookie", cookie).header("Sec-Fetch-Site", "cross-site").header("content-type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"hi\"}")).build();
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"delivery\":\"queue\",\"text\":\"hi\"}")).build();
         assertEquals(403, server.http.send(fetched, HttpResponse.BodyHandlers.ofString()).statusCode());
         var same = java.net.http.HttpRequest.newBuilder(evil.uri())
                 .header("Cookie", cookie).header("Origin", "http://127.0.0.1:" + server.port()).header("content-type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"hi\"}")).build();
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{\"requestId\":\"r\",\"delivery\":\"queue\",\"text\":\"hi\"}")).build();
         assertEquals(200, server.http.send(same, HttpResponse.BodyHandlers.ofString()).statusCode());
     }
 

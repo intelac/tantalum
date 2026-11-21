@@ -76,10 +76,10 @@ class RecordCodecTest {
                 List.of(new tantalum.value.question.Question.Choice("once", tantalum.value.text.LocalText.of("Allow once")),
                         new tantalum.value.question.Question.Choice("deny", tantalum.value.text.LocalText.en("Deny").zh("拒绝"))),
                 false, java.time.Instant.parse("2026-11-07T09:10:00Z"));
-        tantalum.value.state.RunState waiting = tantalum.value.state.RunState.start(RUN, new tantalum.value.state.OwnerRef.OfSession(SESSION))
+        tantalum.value.state.RunState waiting = tantalum.value.state.RunState.start(RUN, tantalum.value.state.RunCause.prompt())
                 .withPhase(new tantalum.value.state.AwaitingAnswer(question, tantalum.value.hook.HookPoint.BEFORE_TOOL_CALL, null,
                         new CommandId("s_5-0")));
-        tantalum.value.state.RunState askUser = tantalum.value.state.RunState.start(RUN, new tantalum.value.state.OwnerRef.OfSession(SESSION))
+        tantalum.value.state.RunState askUser = tantalum.value.state.RunState.start(RUN, tantalum.value.state.RunCause.prompt())
                 .withPhase(new tantalum.value.state.AwaitingAnswer(new tantalum.value.question.Question("ask-a1",
                         tantalum.value.text.LocalText.of("Delete?"), null, List.of(), true, null), null, "a1", null));
         List<tantalum.value.decision.Fact> facts = List.of(

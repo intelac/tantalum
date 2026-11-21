@@ -59,7 +59,7 @@ class WithdrawApiTest {
     private static void prompt(Engine engine, SessionId session, String text) throws InterruptedException {
         var before = engine.state().sessions().get(session);
         var previous = before == null ? null : before.lastRun();
-        assertEquals(200, engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text).status());
+        assertEquals(200, engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), tantalum.value.event.Delivery.QUEUE, text).status());
         await("run of " + session.value() + " ended", () -> {
             var current = engine.state().sessions().get(session);
             return current != null && current.lastRun() != null && !current.lastRun().equals(previous) && current.activeRun() == null;

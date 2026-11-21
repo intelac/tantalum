@@ -1,5 +1,6 @@
 package tantalum.shell.loop;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,7 +74,7 @@ class EvictorTest {
     }
 
     private static SessionState idle(SessionId id) {
-        return SessionState.start(id, ALICE);
+        return SessionStateFixture.regular(id, ALICE);
     }
 
     private static KernelState state(SessionState... sessions) {
@@ -120,7 +121,8 @@ class EvictorTest {
     @Test
     void aSessionWithAnActiveRunOrQueuedSubmissionStays() {
         Evictor evictor = evictor(NONE, 1000);
-        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).withFollowUps(List.of(Message.user("next"))));
+        KernelState state = state(idle(A).startRun(RunId.of(A, 1)), idle(B).enqueue(new tantalum.value.state.InboxItem(2, tantalum.value.event.Input.Kind.PROMPT,
+                tantalum.value.event.Root.USER, Message.user("next"), null, false, null)));
         touch(evictor, A);
         touch(evictor, B);
         KernelState after = evictor.sweep(state);
@@ -186,10 +188,10 @@ class EvictorTest {
         tantalum.value.question.Question question = new tantalum.value.question.Question("q", tantalum.value.text.LocalText.of("Go on?"), null,
                 List.of(new tantalum.value.question.Question.Choice("go", tantalum.value.text.LocalText.of("Go"))));
         tantalum.value.state.RunState waiting = tantalum.value.state.RunState.start(new tantalum.value.id.RunRef(ALICE, A, waitingRun),
-                new tantalum.value.state.OwnerRef.OfSession(A)).withPhase(new tantalum.value.state.AwaitingAnswer(question,
+                tantalum.value.state.RunCause.prompt()).withPhase(new tantalum.value.state.AwaitingAnswer(question,
                 tantalum.value.hook.HookPoint.BEFORE_TOOL_CALL, null, null));
         tantalum.value.state.RunState busy = tantalum.value.state.RunState.start(new tantalum.value.id.RunRef(ALICE, B, busyRun),
-                new tantalum.value.state.OwnerRef.OfSession(B)).withPhase(new tantalum.value.state.Awaiting(
+                tantalum.value.state.RunCause.prompt()).withPhase(new tantalum.value.state.Awaiting(
                 java.util.Set.of(new tantalum.value.id.CommandId("c")), "AwaitingTools"));
         KernelState state = state(idle(A).startRun(waitingRun), idle(B).startRun(busyRun)).with(waiting).with(busy);
         touch(evictor, A);

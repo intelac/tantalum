@@ -63,7 +63,7 @@ class MonitorOverheadTest {
                 try {
                     for (int p = 0; p < PROMPTS; p++) {
                         server.post(user, "/api/sessions/" + session + "/submissions",
-                                "{\"requestId\":\"" + session + "-" + p + "\",\"mode\":\"prompt\",\"text\":\"hi " + p + "\"}");
+                                "{\"requestId\":\"" + session + "-" + p + "\",\"delivery\":\"queue\",\"text\":\"hi " + p + "\"}");
                         String body = "";
                         int completed = 0;
                         for (int i = 0; i < 2000 && completed < p + 1; i++) {

@@ -38,7 +38,6 @@ import tantalum.value.model.TokenUsage;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.event.ContextAssembledFixture;
@@ -73,11 +72,22 @@ final class TranscriptFixture {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(hooks), (tool, args) -> concurrencySafe, Limits.DEFAULT);
+        // 会话先建好才收得到话。建会话这一条用一个不占编号的序号（之后的照旧从 0 起），这样条目编号和时间和以前一样，
+        // 给网页的样本只显出真正的变化
+        feedAt(CREATED_SEQ, now.minusSeconds(1), null, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null));
     }
 
+    /** 建会话那一条的序号：比所有别的都小，不占 0 起的编号。 */
+    static final long CREATED_SEQ = -2;
+
     Decision feed(RunId run, Event event) {
-        EventEnvelope envelope = new EventEnvelope(seq++, now, USER, SESSION, run, event);
+        Decision decision = feedAt(seq++, now, run, event);
         now = now.plusSeconds(1);
+        return decision;
+    }
+
+    private Decision feedAt(long at, Instant when, RunId run, Event event) {
+        EventEnvelope envelope = new EventEnvelope(at, when, USER, SESSION, run, event);
         befores.add(state);
         KernelState before = state;
         Decision decision = kernel.step(state, envelope);
@@ -152,7 +162,7 @@ final class TranscriptFixture {
 
     UserPrompt prompt(String text) {
         int n = submissions++;
-        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), new OwnerRef.OfSession(SESSION), text);
+        return UserPromptFixture.of(new SubmissionId("sub-" + n), new RequestId("req-" + n), text);
     }
 
     List<Command> lastCommands() {

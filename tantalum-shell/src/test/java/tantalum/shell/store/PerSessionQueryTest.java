@@ -54,7 +54,6 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -139,9 +138,14 @@ class PerSessionQueryTest {
     /** 提交并组装上下文，返回运行；钩子放行时还有一条模型调用。 */
     private record Started(RunId run, CallModel call) {}
 
+    private final java.util.Set<SessionId> created = new java.util.HashSet<>();
+
     private Started prompt(Principal principal, SessionId session, String text) throws Exception {
+        if (created.add(session)) {
+            send(principal, session, null, tantalum.value.event.SessionCreatedFixture.regular());
+        }
         Decision submitted = send(principal, session, null,
-                UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId(text), new OwnerRef.OfSession(session), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + text), new RequestId(text), text));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         Decision assembled = send(principal, session, assemble.run().run(), ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
         CallModel call = assembled.commands().isEmpty() ? null : (CallModel) assembled.commands().getFirst();

@@ -41,7 +41,7 @@ class TraceApiTest {
     }
 
     private String finishedRun() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}");
         String body = "";
         for (int i = 0; i < 500 && !body.contains("COMPLETED"); i++) {
             Thread.sleep(10);
@@ -55,7 +55,7 @@ class TraceApiTest {
     /** 提交并等这个会话里第 {@code count} 个运行结束，返回所有运行 ID（旧的在前）。 */
     private List<String> runs(String session, int count) throws Exception {
         server.post("alice", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"r" + count + "\",\"mode\":\"prompt\",\"text\":\"hi " + count + "\"}");
+                "{\"requestId\":\"r" + count + "\",\"delivery\":\"queue\",\"text\":\"hi " + count + "\"}");
         JsonNode runs = null;
         for (int i = 0; i < 500; i++) {
             runs = JSON.readTree(server.get("alice", "/api/sessions/" + session + "/runs").body()).get("runs");

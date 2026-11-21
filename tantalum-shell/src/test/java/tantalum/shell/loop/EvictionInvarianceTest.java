@@ -70,7 +70,6 @@ import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 import tantalum.shell.store.SessionReplayFixture;
@@ -264,10 +263,16 @@ class EvictionInvarianceTest {
             this.pipeline = pipeline;
         }
 
+        /** 建过的会话：第一次对它说话前先发它的创建事件，和入口一样。 */
+        private final java.util.Set<SessionId> created = new java.util.HashSet<>();
+
         void prompt(Principal principal, SessionId session, String text) throws Exception {
             String request = "req-" + requests++;
+            if (created.add(session)) {
+                pipeline.send(principal, session, null, tantalum.value.event.SessionCreatedFixture.regular());
+            }
             pipeline.send(principal, session, null,
-                    UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text));
+                    UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), text));
         }
 
         private static ToolCallBlock call(String id) {

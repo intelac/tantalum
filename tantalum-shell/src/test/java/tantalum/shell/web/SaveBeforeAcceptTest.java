@@ -45,7 +45,7 @@ class SaveBeforeAcceptTest {
     }
 
     private static HttpResponse<String> submit(TestServer server, String request) throws Exception {
-        return server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hello\"}");
+        return server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"hello\"}");
     }
 
     @Test

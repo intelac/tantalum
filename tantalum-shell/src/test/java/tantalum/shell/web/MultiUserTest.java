@@ -49,7 +49,7 @@ class MultiUserTest {
 
     private String finishedRun(String user, String session) throws Exception {
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
         String body = "";
         for (int i = 0; i < 500 && !body.contains("COMPLETED"); i++) {
             Thread.sleep(10);
@@ -70,7 +70,7 @@ class MultiUserTest {
         assertEquals(404, server.get("bob", "/api/runs/" + run + "/turns/1").statusCode());
         assertEquals(404, server.post("bob", "/api/runs/" + run + "/cancel", "{}").statusCode());
         assertEquals(404, server.post("bob", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"x\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode());
+                "{\"requestId\":\"x\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode());
 
         assertEquals(200, server.get("alice", "/api/runs/" + run + "/turns/1").statusCode());
     }

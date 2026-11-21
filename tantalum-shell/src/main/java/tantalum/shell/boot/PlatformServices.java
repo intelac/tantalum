@@ -267,16 +267,14 @@ public final class PlatformServices implements PluginServices {
             return List.of();
         }
         List<FinishedRef> found = new java.util.ArrayList<>();
-        // 哪些不该记：和实时那条路同一个判断（不进记忆的，和照表不通知个人插件的，比如帮手会话）。读不到的当作不该记，宁可少记
-        java.util.Map<SessionId, Boolean> skip = new java.util.HashMap<>();
-        java.util.function.Function<SessionId, Boolean> skipped = session -> skip.computeIfAbsent(session, id -> {
-            try {
-                return bound.queries().session(user, id).map(view -> view.state().offRecord()
-                        || !tantalum.shell.profile.SessionProfile.of(view.state().kind()).notifiesPlugins()).orElse(true);
-            } catch (RuntimeException unreadable) {
-                return true;
-            }
-        });
+        // 哪些不该记：和实时那条路同一个判断（不进记忆的，和照表不通知个人插件的，比如帮手会话）。读索引，不读会话文件
+        java.util.Set<SessionId> notable;
+        try {
+            notable = bound.queries().notable(user);
+        } catch (java.sql.SQLException unreadable) {
+            LOG.warn("cannot list the sessions of {}: {}", user.value(), unreadable.toString());
+            return List.of();
+        }
         String after = null;
         do {
             tantalum.shell.store.RunTable.Page page = bound.queries().runs().list(user, new tantalum.shell.store.RunTable.Filter(since, null,
@@ -286,7 +284,7 @@ public final class PlatformServices implements PluginServices {
                 tantalum.shell.trace.RunRow row = listed.row();
                 found.add(new FinishedRef(row.session(), row.run(), row.turn(), row.start(), row.end(),
                         row.endReason() == null ? null : row.endReason().name(),
-                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, skipped.apply(row.session())));
+                        row.trigger() == tantalum.shell.trace.TraceRecord.RunHead.Trigger.MANUAL_COMPACTION, !notable.contains(row.session())));
             }
             after = page.next();
         } while (after != null && found.size() < limit);

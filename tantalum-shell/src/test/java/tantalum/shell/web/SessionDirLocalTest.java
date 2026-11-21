@@ -84,7 +84,7 @@ class SessionDirLocalTest {
 
     private String ask(String session, String project) throws Exception {
         server.post("alice", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + session + "\",\"mode\":\"prompt\",\"text\":\"read a\",\"project\":\"" + project + "\"}");
+                "{\"requestId\":\"" + session + "\",\"delivery\":\"queue\",\"text\":\"read a\",\"project\":\"" + project + "\"}");
         String body = "";
         for (int i = 0; i < 500 && !body.contains("\"endReason\":\"COMPLETED\""); i++) {
             Thread.sleep(10);

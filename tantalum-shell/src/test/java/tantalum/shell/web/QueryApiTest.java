@@ -46,7 +46,7 @@ class QueryApiTest {
     }
 
     private String finishedRun() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}");
         String body = "";
         for (int i = 0; i < 500 && !body.contains("COMPLETED"); i++) {
             Thread.sleep(10);
@@ -79,7 +79,7 @@ class QueryApiTest {
 
     @Test
     void invalidSessionIdIsRejectedAndWritesNothing() throws Exception {
-        String submission = "{\"requestId\":\"bad\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+        String submission = "{\"requestId\":\"bad\",\"delivery\":\"queue\",\"text\":\"hi\"}";
         String tooLong = "x".repeat(129);
         for (String invalid : List.of("a.b", "a%20b", "a%2Fb", "%2E%2E", "%E4%BC%9A", "a%0A", tooLong)) {
             assertEquals(400, server.post("alice", "/api/sessions/" + invalid + "/submissions", submission).statusCode(), invalid);
@@ -123,7 +123,7 @@ class QueryApiTest {
                 // 测试结束时连接断开。
             }
         });
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}");
         String text = "";
         for (int i = 0; i < 500 && !text.contains("\"Ended\""); i++) {
             Thread.sleep(10);
@@ -134,7 +134,8 @@ class QueryApiTest {
         assertTrue(text.contains("event:PhaseChanged"), text);
         assertTrue(text.contains("event:chunk"), text);
         assertTrue(text.contains("Hel"), text);
-        assertTrue(text.contains("id:0.0"), text);
+        // 账里第 0 个事件是建会话（它没有事实和条目），提问是第 1 个
+        assertTrue(text.contains("id:1.0"), text);
         reader.interrupt();
         response.body().close();
     }

@@ -91,7 +91,7 @@ class ForgetApprovalApiTest {
     void theModelFindsTheLinesAndTheUserSeesThemBeforeAnythingIsRemoved() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("ws")), model)) {
             remember(server);
-            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"my plate is wrong, forget it\"}");
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"my plate is wrong, forget it\"}");
             JsonNode question = answer(server, "top", "forget");
             assertTrue(question.get("id").asString().startsWith("memory-forget-"), question.toString());
             assertTrue(question.toString().contains("My plate is 7Q2KD"), "the card shows the exact line: " + question);
@@ -106,7 +106,7 @@ class ForgetApprovalApiTest {
     void whenTheUserSaysKeepNothingIsRemoved() throws Exception {
         try (TestServer server = new TestServer(temp.resolve("data2"), Files.createDirectory(temp.resolve("ws2")), model)) {
             remember(server);
-            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"my plate is wrong, forget it\"}");
+            server.post("alice", "/api/sessions/top/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"my plate is wrong, forget it\"}");
             answer(server, "top", "keep");
             String messages = waitFor(server, "top", "kept it");
             assertTrue(messages.contains("kept it"), messages);

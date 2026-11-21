@@ -32,7 +32,6 @@ import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.command.AssembleContextFixture;
@@ -52,7 +51,7 @@ class BackpressureTest {
     private static EventEnvelope prompt(int i) {
         SessionId session = new SessionId("s" + i);
         return new EventEnvelope(i, Instant.EPOCH, new Principal("u"), session, null,
-                UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), "hi"));
     }
 
     @Test
@@ -69,6 +68,7 @@ class BackpressureTest {
 
         assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             for (int i = 0; i < 8; i++) {
+                cleanroom.onEvent(LoopFixtures.created(new Principal("u"), new SessionId("s" + i)), i, false);
                 CleanroomRing.Slot slot = new CleanroomRing.Slot();
                 slot.envelope = prompt(i);
                 cleanroom.onEvent(slot, i, i == 7);
@@ -102,8 +102,9 @@ class BackpressureTest {
 
         for (int i = 0; i < 8; i++) {
             SessionId session = new SessionId("s" + i);
+            assertTrue(input.tryPublish(LoopFixtures.creating(new Principal("u"), session)));
             assertTrue(input.tryPublish(new EventEnvelope(EventEnvelope.UNASSIGNED, Instant.EPOCH, new Principal("u"), session, null,
-                    UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), new OwnerRef.OfSession(session), "hi"))));
+                    UserPromptFixture.of(new SubmissionId("sub" + i), new RequestId("req" + i), "hi"))));
         }
 
         List<RunState> failed = new ArrayList<>();
@@ -161,9 +162,9 @@ class BackpressureTest {
         };
         try (TestServer server = new TestServer(temp.resolve("data"), Files.createDirectory(temp.resolve("workspace")), held,
                 "--tantalum.loop.max-active-runs=1")) {
-            String first = "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+            String first = "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hi\"}";
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", first).statusCode());
-            String second = "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"hi\"}";
+            String second = "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"hi\"}";
             assertEquals(429, server.post("bob", "/api/sessions/s2/submissions", second).statusCode());
             hold.countDown();
             // 活跃运行结束后，被拒绝的提交可以用同一个 requestId 重试，不会被去重表挡住。

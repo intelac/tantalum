@@ -195,7 +195,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                 () -> (int) queries.view().current().activeRunCount(), halted);
         SubmissionLedger ledger = new SubmissionLedger(storage::findSubmission, SubmissionLedger.DEFAULT_CAPACITY);
         Intake intake = new Intake(input, gate, ledger, queries.view(), residency, storage::claim,
-                (principal, session) -> queries.queries().session(principal, session).map(SessionQueries.SessionView::state), clock, receipts);
+                (principal, session) -> queries.queries().session(principal, session).map(SessionQueries.SessionView::state), storage::kind,
+                clock, receipts);
         intakeSlot[0] = intake;
         input.watch(probe);
         lanes.watch(probe);

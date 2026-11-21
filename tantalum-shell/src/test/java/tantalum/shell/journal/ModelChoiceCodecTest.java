@@ -21,7 +21,6 @@ import tantalum.value.decision.SessionChange;
 import tantalum.value.decision.StepRecord;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.UserPrompt;
 import tantalum.value.id.CommandId;
 import tantalum.value.id.Principal;
@@ -38,12 +37,10 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.ReasoningBlock;
 import tantalum.value.model.Role;
 import tantalum.value.model.TextBlock;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tools.jackson.databind.JsonNode;
 import tantalum.value.command.CallModelFixture;
 import tantalum.value.decision.SessionChangeFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
 import tantalum.value.event.UserPromptFixture;
 
 /**
@@ -65,11 +62,11 @@ class ModelChoiceCodecTest {
 
     @Test
     void everyNewFieldReadsBack() {
-        UserPrompt prompt = UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi",
+        UserPrompt prompt = UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), "hi",
                 List.of(), QWEN);
         assertEquals(prompt, codec.decode(UserPrompt.TYPE, 1, codec.encode(prompt)));
-        FollowUpSubmitted followUp = FollowUpSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "next", List.of(), SONNET);
-        assertEquals(followUp, codec.decode(FollowUpSubmitted.TYPE, 1, codec.encode(followUp)));
+        UserPrompt queued = UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), "next", List.of(), SONNET);
+        assertEquals(queued, codec.decode(UserPrompt.TYPE, 1, codec.encode(queued)));
         ContextAssembled context = assembled(QWEN);
         assertEquals(context, codec.decode(ContextAssembled.TYPE, 2, codec.encode(context)));
 
@@ -77,10 +74,11 @@ class ModelChoiceCodecTest {
         Message reply = new Message(Role.ASSISTANT, List.of(new ReasoningBlock("openai", new Json.Str("thinking ".repeat(20)),
                 "local", "qwen3.8"), new TextBlock("ok")), false);
         Message change = new Message(Role.SYSTEM, List.of(new ModelChangeBlock(SONNET.label(), QWEN.label())), false);
-        RunState run = RunState.start(RUN, new OwnerRef.OfSession(SESSION)).withModel(QWEN, SONNET);
+        RunState run = RunState.start(RUN, tantalum.value.state.RunCause.prompt()).withModel(QWEN, SONNET);
         StepRecord record = new StepRecord(0, SessionChangeFixture.of(SESSION, USER, true, List.of(change, reply), null, null,
-                new SessionChange.Changed<>(List.of(Message.user("next"))), null, null,
-                null, null, null, null, new SessionChange.Changed<>(QWEN), new SessionChange.Changed<>(List.of(SONNET))),
+                new SessionChange.Changed<>(List.of(new tantalum.value.state.InboxItem(3, tantalum.value.event.Input.Kind.PROMPT,
+                        tantalum.value.event.Root.USER, Message.user("next"), SONNET, false, null))), null, null,
+                null, null, null, null, new SessionChange.Changed<>(QWEN)),
                 List.of(run), List.of(), null, null,
                 List.of(new AssembleContext(new CommandId("c-0"), RUN, QWEN, SONNET),
                         CallModelFixture.of(new CommandId("c-1"), RUN, new Prompt("system", List.of(), List.of(change, reply)).withModel(QWEN))),

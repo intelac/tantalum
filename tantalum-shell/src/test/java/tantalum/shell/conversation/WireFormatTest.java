@@ -40,9 +40,7 @@ import tantalum.shell.trace.TraceJson;
 import tantalum.shell.trace.RunTree;
 import tantalum.shell.trace.Tally;
 import tantalum.shell.trace.TraceRecord;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.UserPrompt;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.attachment.ImageRef;
 import tantalum.value.attachment.FileRef;
 import tantalum.value.command.DoWork;
@@ -54,7 +52,6 @@ import tantalum.value.event.EventEnvelope;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.event.TimerFired;
 import tantalum.value.event.ToolFinished;
 import tantalum.value.event.WorkDone;
@@ -85,8 +82,6 @@ import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import tantalum.value.attachment.ImageRefFixture;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.event.UserPromptFixture;
 import tantalum.value.hook.AllowFixture;
@@ -242,7 +237,7 @@ class WireFormatTest {
         fx.feed(first, new ModelFailed(fx.callModel(), FailureReason.RATE_LIMITED, true, Duration.ofSeconds(2), "", "HTTP 429: slow down",
                 fx.now().minusMillis(900), null, OPTIONS));
         CommandId timer = fx.lastCommands().getFirst().id();
-        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
+        fx.feed(first, UserPromptFixture.join(new SubmissionId("steer"), new RequestId("steer"), "keep it short"));
         coldLoadAt = fx.envelopes.size();
         fx.feed(first, new TimerFired(timer));
         fx.feed(first, new ModelReplied(fx.callModel(), List.of(claudeThinking("plan"), call("c1", "read_file"),
@@ -480,12 +475,11 @@ class WireFormatTest {
     /** 提问带图片和 PDF；运行中插话带文件；排队的提交只有图片、没有文字，运行结束后开下一轮。 */
     private TranscriptFixture attachmentScenario() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());
-        fx.feed(null, UserPromptFixture.of(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
-                "what is this?", List.of(PHOTO, REPORT)));
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("p"), new RequestId("p"), "what is this?", List.of(PHOTO, REPORT)));
         RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, first);
-        fx.feed(first, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
-        fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
+        fx.feed(first, UserPromptFixture.join(new SubmissionId("s"), new RequestId("s"), "also this", List.of(NOTES)));
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("f"), "", List.of(SKETCH)));
         fx.feed(first, fx.reply(text("a photo and a report")));
         fx.feed(first, fx.reply(text("and the notes"))); // 插话让运行多调一次模型，这次才结束
         RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
@@ -548,11 +542,12 @@ class WireFormatTest {
 
     private TranscriptFixture skillScenario() {
         TranscriptFixture fx = new TranscriptFixture(true, List.of());
-        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), new OwnerRef.OfSession(TranscriptFixture.SESSION),
-                "/pdf-tools and /slow please", List.of(), null, null, List.of(PDF_SKILL, SLOW_SKILL)));
+        fx.feed(null, new UserPrompt(new SubmissionId("p"), new RequestId("p"), "/pdf-tools and /slow please", List.of(), null,
+                List.of(PDF_SKILL, SLOW_SKILL), List.of(), tantalum.value.event.Delivery.QUEUE));
         RunId first = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, first);
-        fx.feed(null, new FollowUpSubmitted(new SubmissionId("f"), new RequestId("f"), "/pdf-tools again", List.of(), null, List.of(PDF_SKILL)));
+        fx.feed(null, new UserPrompt(new SubmissionId("f"), new RequestId("f"), "/pdf-tools again", List.of(), null, List.of(PDF_SKILL), List.of(),
+                tantalum.value.event.Delivery.QUEUE));
         fx.feed(first, fx.reply(text("converted")));
         RunId second = RunId.of(TranscriptFixture.SESSION, fx.lastSeq());
         assembledWithoutCompaction(fx, second);

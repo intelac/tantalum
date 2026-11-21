@@ -22,7 +22,6 @@ import tantalum.shell.store.SessionStore;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.Event;
 import tantalum.value.event.EventEnvelope;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelReplied;
 import tantalum.value.event.RunInterrupted;
 import tantalum.value.event.UserPrompt;
@@ -37,9 +36,7 @@ import tantalum.value.model.Prompt;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
 import tantalum.value.event.UserPromptFixture;
 
 /** H9：用一份“进程死在工具调用途中”的文件启动真实服务，看收尾、继续提交和第二次重启。 */
@@ -76,7 +73,9 @@ class RestartInterruptTest {
     private void diedDuringTool(Event... more) throws Exception {
         Files.createDirectories(data());
         List<EventEnvelope> events = new java.util.ArrayList<>(List.of(
-                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), new OwnerRef.OfSession(S1), "hi")),
+                // 账里的第一条：建会话
+                event(0, null, tantalum.value.event.SessionCreatedFixture.regular()),
+                event(1, null, UserPromptFixture.of(new SubmissionId("sub"), new RequestId("req"), "hi")),
                 event(2, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 event(3, RUN, new ModelReplied(new CommandId("s1_2-0"),
                         List.of(new ToolCallBlock("t1", "read_file", "{}", new Json.Obj(java.util.Map.of()))), StopReason.TOOL_USE, "m", null, null, null, null))));
@@ -131,7 +130,7 @@ class RestartInterruptTest {
         diedDuringTool();
         try (TestServer server = server()) {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r2\",\"mode\":\"prompt\",\"text\":\"again\"}").statusCode());
+                    "{\"requestId\":\"r2\",\"delivery\":\"queue\",\"text\":\"again\"}").statusCode());
             for (int i = 0; i < 500 && prompts.isEmpty(); i++) {
                 Thread.sleep(10);
             }
@@ -143,7 +142,7 @@ class RestartInterruptTest {
 
     @Test
     void queuedFollowUpStillRuns() throws Exception {
-        diedDuringTool(FollowUpSubmittedFixture.of(new SubmissionId("sub2"), new RequestId("req2"), "next please"));
+        diedDuringTool(UserPromptFixture.of(new SubmissionId("sub2"), new RequestId("req2"), "next please"));
         try (TestServer server = server()) {
             for (int i = 0; i < 500 && !runs(server).contains("COMPLETED"); i++) {
                 Thread.sleep(10);
@@ -191,7 +190,8 @@ class RestartInterruptTest {
         SessionId other = new SessionId("s3");
         RunId otherRun = RunId.of(other, 20);
         ResultWriter.write(new SessionPaths(data()), List.of(
-                new EventEnvelope(20, AT, ALICE, other, null, UserPromptFixture.of(new SubmissionId("sub3"), new RequestId("req3"), new OwnerRef.OfSession(other), "hello")),
+                new EventEnvelope(19, AT, ALICE, other, null, tantalum.value.event.SessionCreatedFixture.regular()),
+                new EventEnvelope(20, AT, ALICE, other, null, UserPromptFixture.of(new SubmissionId("sub3"), new RequestId("req3"), "hello")),
                 new EventEnvelope(21, AT, ALICE, other, otherRun, ContextAssembledFixture.of(new CommandId("s3_20-0"), "s", List.of(), null, List.of()))));
         // 先让索引记下两个未结束的运行，再把 s1 的中间一行改坏：启动时索引仍说它没结束，载入时才发现坏了。
         Path s1 = new SessionPaths(data()).sessionFile(ALICE, S1);
@@ -208,7 +208,7 @@ class RestartInterruptTest {
         try (TestServer server = server()) {
             String view = server.get("alice", "/api/runs/" + otherRun.value()).body();
             assertTrue(view.contains("interrupted by restart"), view);
-            int status = server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"again\",\"mode\":\"prompt\",\"text\":\"hi\"}").statusCode();
+            int status = server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"again\",\"delivery\":\"queue\",\"text\":\"hi\"}").statusCode();
             assertEquals(500, status);
         }
     }

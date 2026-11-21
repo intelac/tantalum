@@ -35,7 +35,6 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.TokenUsage;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -94,9 +93,12 @@ final class IndexFixture {
     /** 同上，提问带工作目录。 */
     Pending prompt(Principal principal, SessionId session, Instant at, String text, String dir) throws Exception {
         String request = "req-" + requests++;
+        // 会话还不存在：和入口一样先发它的创建事件，目录在这时定下
+        if (state.sessions().get(session) == null) {
+            send(principal, session, null, at, new tantalum.value.event.SessionCreated(tantalum.value.state.SessionKind.REGULAR, dir, false, null));
+        }
         Decision submitted = send(principal, session, null, at,
-                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), new OwnerRef.OfSession(session), text, List.of(),
-                        null, dir));
+                UserPromptFixture.of(new SubmissionId("sub-" + request), new RequestId(request), text));
         AssembleContext assemble = (AssembleContext) submitted.commands().getFirst();
         RunId run = assemble.run().run();
         Decision assembled = send(principal, session, run, at, ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));

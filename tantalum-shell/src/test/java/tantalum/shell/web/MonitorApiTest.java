@@ -93,7 +93,7 @@ class MonitorApiTest {
         assertTrue(aliceOpen.await(10, TimeUnit.SECONDS));
         assertTrue(bobOpen.await(10, TimeUnit.SECONDS));
 
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"read a.txt\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"read a.txt\"}");
         for (int i = 0; i < 500 && !(stages(alice).contains("REMOTE_DONE") && endsWithAnswer(alice)); i++) {
             Thread.sleep(10);
         }
@@ -103,8 +103,12 @@ class MonitorApiTest {
             assertTrue(seen.contains(stage), stage + " missing from " + seen);
         }
         assertEquals(Set.of("s1"), Set.copyOf(alice.stream().map(message -> message.get("session").asString()).toList()));
-        // 第一个事件：入口 → 输入环 → 取号 → 内核
-        assertEquals(List.of("INTAKE", "INPUT", "LANE", "KERNEL"), seen.subList(0, 4));
+        // 新会话：建会话的事件和提问挨着进来，各自走入口 → 输入环 → 取号 → 内核
+        for (String event : List.of("SessionCreated", "UserPrompt")) {
+            List<String> path = alice.stream().filter(message -> event.equals(message.path("name").asString()))
+                    .map(message -> message.get("stage").asString()).toList();
+            assertEquals(List.of("INTAKE", "INPUT", "LANE", "KERNEL"), path.subList(0, 4), event + ": " + path);
+        }
         JsonNode lane = alice.stream().filter(message -> message.get("stage").asString().equals("LANE")).findFirst().orElseThrow();
         assertTrue(lane.get("detail").asString().startsWith("seq "));
         List<String> handlers = new ArrayList<>();

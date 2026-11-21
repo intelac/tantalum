@@ -92,7 +92,7 @@ class ViewAsApiTest {
 
     private void ask(String user, String session, String request) throws Exception {
         assertEquals(200, send(user, "POST", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"hi from " + user + "\"}").statusCode());
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"hi from " + user + "\"}").statusCode());
         for (int i = 0; i < 1000; i++) {
             JsonNode runs = JSON.readTree(send(user, "GET", "/api/sessions/" + session + "/runs", null).body()).get("runs");
             if (runs != null && runs.size() > 0 && runs.get(runs.size() - 1).has("endReason")) {
@@ -148,7 +148,7 @@ class ViewAsApiTest {
         ask("alice", "s1", "r1");
         String run = runOf("alice", "s1");
         String[][] writes = {
-                {"POST", "/api/sessions/s1/submissions", "{\"requestId\":\"x\",\"mode\":\"prompt\",\"text\":\"as alice\"}"},
+                {"POST", "/api/sessions/s1/submissions", "{\"requestId\":\"x\",\"delivery\":\"queue\",\"text\":\"as alice\"}"},
                 {"POST", "/api/sessions/s1/compact", "{}"},
                 {"POST", "/api/runs/" + run + "/cancel", "{}"},
                 {"PATCH", "/api/sessions/s1", "{\"title\":\"renamed\"}"},

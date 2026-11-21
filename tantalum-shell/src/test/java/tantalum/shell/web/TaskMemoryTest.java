@@ -16,7 +16,7 @@ import tantalum.shell.model.ModelClient;
 import tantalum.shell.model.ModelOutcome;
 import tantalum.value.json.Json;
 import tantalum.value.model.StopReason;
-import tantalum.value.model.TaskResultBlock;
+import tantalum.value.model.ReportBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.model.ToolResultBlock;
@@ -48,7 +48,7 @@ class TaskMemoryTest {
             return new ModelOutcome.Replied(List.of(new TextBlock("The user's salary is 42 and they said to remember it.")),
                     StopReason.END_TURN, "m", null);
         }
-        boolean back = prompt.messages().stream().flatMap(message -> message.content().stream()).anyMatch(TaskResultBlock.class::isInstance);
+        boolean back = prompt.messages().stream().flatMap(message -> message.content().stream()).anyMatch(ReportBlock.class::isInstance);
         boolean started = prompt.messages().stream().flatMap(message -> message.content().stream()).anyMatch(ToolResultBlock.class::isInstance);
         if (!back && !started) {
             return new ModelOutcome.Replied(List.of(new ToolCallBlock("c1", "task", "{}",
@@ -71,7 +71,7 @@ class TaskMemoryTest {
     @Test
     void theTasksSessionIsNotNotedAndWhatItBringsBackIsNotTheUsersWords() throws Exception {
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"我下周去大阪出差\"}").statusCode());
+                "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"我下周去大阪出差\"}").statusCode());
         JsonNode runs = null;
         for (int i = 0; i < 1500; i++) {
             runs = JSON.readTree(server.get("alice", "/api/sessions/s1/runs").body()).get("runs");

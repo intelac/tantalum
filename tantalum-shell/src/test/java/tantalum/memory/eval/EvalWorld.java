@@ -175,7 +175,7 @@ final class EvalWorld implements AutoCloseable {
         int before = runs(config, user, session);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("requestId", "r-" + (++counter));
-        body.put("mode", "prompt");
+        body.put("delivery", "queue");
         body.put("text", text);
         body.putAll(extra);
         HttpResponse<String> response = send(config, user, "POST", "/api/sessions/" + session + "/submissions", EvalSeed.JSON.writeValueAsString(body));

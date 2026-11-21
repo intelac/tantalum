@@ -76,7 +76,7 @@ class ColdSessionTest {
     private static void prompt(Engine engine, SessionId session, String text) throws InterruptedException {
         var before = engine.state().sessions().get(session);
         var previous = before == null ? null : before.lastRun();
-        assertEquals(200, engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text).status());
+        assertEquals(200, engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), tantalum.value.event.Delivery.QUEUE, text).status());
         await("run of " + session.value() + " ended", () -> {
             var current = engine.state().sessions().get(session);
             return current != null && current.lastRun() != null && !current.lastRun().equals(previous) && current.activeRun() == null;
@@ -141,7 +141,7 @@ class ColdSessionTest {
                 "--tantalum.residency.idle=0s", "--tantalum.residency.max-resident=1000", "--tantalum.residency.sweep-interval=0s")) {
             Engine engine = server.context.getBean(Engine.class);
             SessionId s1 = new SessionId("s1");
-            assertEquals(200, engine.intake().submit(ALICE, s1, new RequestId("r1"), "follow-up", "hello").status());
+            assertEquals(200, engine.intake().submit(ALICE, s1, new RequestId("r1"), tantalum.value.event.Delivery.QUEUE, "hello").status());
             await("evicted", () -> prompts.size() == 1 && !engine.state().sessions().containsKey(s1));
             String messages = server.get("alice", "/api/sessions/s1/messages").body();
             assertTrue(messages.contains("hello") && messages.contains("reply 1") && messages.contains("COMPLETED"), messages);

@@ -165,15 +165,15 @@ class TantalumPropertiesTest {
     /** 任务的上限（subagent 需求 5）：默认 4、10、10、不设期限；每一项都能改；没道理的值拒绝启动。 */
     @Test
     void taskLimitsHaveDefaultsAndCanBeSet() throws Exception {
-        assertEquals(tantalum.value.task.TaskLimits.DEFAULT, bind().taskLimits());
-        assertEquals(new tantalum.value.task.TaskLimits(4, 10, 10, null), bind().taskLimits());
-        assertEquals(new tantalum.value.task.TaskLimits(2, 3, 5, Duration.ofHours(2)), bind("tantalum.tasks.max-open", "2",
-                "tantalum.tasks.max-unattended-runs", "3", "tantalum.tasks.max-unattended-tasks", "5", "tantalum.tasks.deadline", "2h").taskLimits());
+        assertEquals(tantalum.value.assignment.AssignmentLimits.DEFAULT, bind().assignmentLimits());
+        assertEquals(new tantalum.value.assignment.AssignmentLimits(4, 10, 10, null), bind().assignmentLimits());
+        assertEquals(new tantalum.value.assignment.AssignmentLimits(2, 3, 5, Duration.ofHours(2)), bind("tantalum.tasks.max-open", "2",
+                "tantalum.tasks.max-unattended-runs", "3", "tantalum.tasks.max-unattended-tasks", "5", "tantalum.tasks.deadline", "2h").assignmentLimits());
         // 0 是合法的：关掉任务、或者不允许无人说话时自动继续
-        assertEquals(0, bind("tantalum.tasks.max-open", "0").taskLimits().maxOpen());
-        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.max-open", "-1").taskLimits());
-        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.deadline", "0s").taskLimits());
-        assertEquals(tantalum.value.task.TaskLimits.DEFAULT, properties("claude", 0, 0, null).taskLimits(), "no tasks section: defaults");
+        assertEquals(0, bind("tantalum.tasks.max-open", "0").assignmentLimits().maxOpen());
+        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.max-open", "-1").assignmentLimits());
+        assertThrows(IllegalArgumentException.class, () -> bind("tantalum.tasks.deadline", "0s").assignmentLimits());
+        assertEquals(tantalum.value.assignment.AssignmentLimits.DEFAULT, properties("claude", 0, 0, null).assignmentLimits(), "no tasks section: defaults");
     }
 
     private static TantalumProperties properties(String provider, long claudeWindow, long openAiWindow, TantalumProperties.Compaction compaction) {

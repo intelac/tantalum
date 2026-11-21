@@ -526,6 +526,20 @@ public final class SessionIndex implements AutoCloseable {
         return sessions;
     }
 
+    /** 一个用户的全部会话（含帮手会话、只认领过的）。 */
+    public synchronized List<Session> allOf(Principal principal) throws SQLException {
+        List<Session> sessions = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(SELECT_SESSION + " WHERE principal = ?")) {
+            select.setString(1, principal.value());
+            try (ResultSet result = select.executeQuery()) {
+                while (result.next()) {
+                    sessions.add(session(result));
+                }
+            }
+        }
+        return sessions;
+    }
+
     /** 一个用户写过事件、列进侧栏的会话；只认领还没写过的不算，帮手会话也不算（它们跟着交代它们的会话看）。 */
     public synchronized List<Session> sessions(Principal principal) throws SQLException {
         List<Session> sessions = new ArrayList<>();

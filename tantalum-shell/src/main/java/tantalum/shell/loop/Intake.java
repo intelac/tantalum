@@ -76,6 +76,14 @@ public final class Intake {
         Optional<SessionState> find(Principal principal, SessionId session);
     }
 
+    /**
+     * 不在内存的会话是哪一种：查索引，不读会话文件（每次提交都读一遍文件太贵）。这个人的、写过事件的会话返回种类，
+     * 其余（没有、只认领过、是别人的）为 null。索引可能晚一步：晚了的那几种情况内核还会按记录再挡一次。
+     */
+    public interface Kinds {
+        SessionKind kind(Principal principal, SessionId session);
+    }
+
     private final InputRing input;
     private final ExternalGate gate;
     private final SubmissionLedger ledger;
@@ -83,13 +91,15 @@ public final class Intake {
     private final Residency residency;
     private final Claims claims;
     private final Sessions sessions;
+    private final Kinds kinds;
     private final Clock clock;
     private final Receipts receipts;
     /** 需要开新运行、还没处理完的提交：处理完时多归还一个活跃运行名额。 */
     private final Set<SubmissionId> newRuns = ConcurrentHashMap.newKeySet();
 
     public Intake(InputRing input, ExternalGate gate, SubmissionLedger ledger, StateView view, Residency residency,
-                  Claims claims, Sessions sessions, Clock clock, Receipts receipts) {
+                  Claims claims, Sessions sessions, Kinds kinds, Clock clock, Receipts receipts) {
+        this.kinds = kinds;
         this.receipts = receipts;
         this.input = input;
         this.gate = gate;
@@ -113,9 +123,12 @@ public final class Intake {
         if (SessionIds.helperShaped(session)) {
             return 404;
         }
-        Optional<SessionState> existing = sessions.find(principal, session);
-        if (existing.isPresent()) {
-            return SessionProfile.of(existing.get().kind()).allows(Action.UPLOAD) ? 200 : 409;
+        Known known = known(principal, session);
+        if (known.foreign()) {
+            return 404;
+        }
+        if (known.kind() != null) {
+            return SessionProfile.of(known.kind()).allows(Action.UPLOAD) ? 200 : 409;
         }
         return claims.claim(principal, session);
     }
@@ -141,13 +154,13 @@ public final class Intake {
         if (SessionIds.helperShaped(session)) {
             return Submission.rejected(409);
         }
-        Optional<SessionState> existing = sessions.find(principal, session);
-        if (existing.isEmpty() && view.current().sessions().get(session) != null) {
+        Known known = known(principal, session);
+        if (known.foreign()) {
             return Submission.rejected(404);
         }
         SessionCreated created = null;
-        if (existing.isPresent()) {
-            if (!SessionProfile.of(existing.get().kind()).allows(Action.PROMPT)) {
+        if (known.kind() != null) {
+            if (!SessionProfile.of(known.kind()).allows(Action.PROMPT)) {
                 return Submission.rejected(409);
             }
         } else {
@@ -157,7 +170,7 @@ public final class Intake {
             }
             created = new SessionCreated(SessionIds.mainShaped(session) ? SessionKind.MAIN : SessionKind.REGULAR, dir, offRecord, null);
         }
-        boolean needsNewRun = existing.isEmpty() || existing.get().activeRun() == null;
+        boolean needsNewRun = known.resident() == null || known.resident().activeRun() == null;
         ModelChoice chosen = delivery == Delivery.JOIN ? null : model;
         return publish(principal, session, request, needsNewRun, created,
                 submission -> new UserPrompt(submission, request, text, attachments, chosen, skills, attached, delivery));
@@ -168,12 +181,14 @@ public final class Intake {
      * 返回 HTTP 状态：200 放进了环；404 会话不是这个人的（或者不存在又没说怎么建）；409 这种会话不收这种输入；429 环满了，调用方等一会儿再送。
      */
     public int deliver(Principal principal, SessionId session, SessionCreated create, Input delivered) {
-        Optional<SessionState> existing = sessions.find(principal, session);
+        Known known = known(principal, session);
         SessionKind kind;
         boolean creating = false;
-        if (existing.isPresent()) {
-            kind = existing.get().kind();
-        } else if (create == null || view.current().sessions().get(session) != null) {
+        if (known.foreign()) {
+            return 404;
+        } else if (known.kind() != null) {
+            kind = known.kind();
+        } else if (create == null) {
             return 404;
         } else {
             if (claims.claim(principal, session) != 200) {
@@ -185,7 +200,7 @@ public final class Intake {
         if (!InputPolicy.of(kind, delivered.kind(), false).accepted()) {
             return 409;
         }
-        if (creating && !input.tryPublish(envelope(principal, session, null, create))) {
+        if (creating && !publishCreation(principal, session, create)) {
             return 429;
         }
         EventEnvelope envelope = envelope(principal, session, null, delivered);
@@ -203,6 +218,17 @@ public final class Intake {
             return 404;
         }
         return input.tryPublish(envelope(principal, session, null, new AssignmentCancelled(assignment))) ? 200 : 429;
+    }
+
+    /** 一个会话在入口看来的样子：{@code resident} 是在内存的状态（不在为 null）；{@code kind} 为 null 表示还没建。 */
+    private record Known(boolean foreign, SessionState resident, SessionKind kind) {}
+
+    private Known known(Principal principal, SessionId session) {
+        SessionState resident = view.current().sessions().get(session);
+        if (resident != null) {
+            return new Known(!resident.principal().equals(principal), resident, resident.kind());
+        }
+        return new Known(false, null, kinds.kind(principal, session));
     }
 
     /** 启动时给上一个进程没结束的运行收尾。返回 HTTP 状态：200 放进了环，404 不是这个人的会话，429 环满了。 */
@@ -392,7 +418,7 @@ public final class Intake {
                 newRuns.add(claim.submission());
             }
             // 新会话：创建事件和这次提交挨着进环（同一个人的事件按进环的顺序处理）。建了而提交没进去时会话留着是空的，再提交一次照常
-            if (created != null && !input.tryPublish(envelope(principal, session, null, created))) {
+            if (created != null && !publishCreation(principal, session, created)) {
                 abandon(principal, request, claim.submission(), true);
                 return Submission.rejected(429);
             }
@@ -423,6 +449,13 @@ public final class Intake {
         if (newRuns.remove(submission)) {
             gate.releaseNewRun();
         }
+    }
+
+    /** 建会话的事件和别的一样经过入口：监视里看得到它。 */
+    private boolean publishCreation(Principal principal, SessionId session, SessionCreated created) {
+        EventEnvelope creation = envelope(principal, session, null, created);
+        Probes.event(input.probe(), Stage.INTAKE, creation, null);
+        return input.tryPublish(creation);
     }
 
     private EventEnvelope envelope(Principal principal, SessionId session, RunId run, Event event) {

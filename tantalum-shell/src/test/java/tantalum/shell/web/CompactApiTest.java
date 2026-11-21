@@ -67,7 +67,7 @@ class CompactApiTest {
 
     private static void prompt(TestServer server, String user, String session, String id, int repeat) throws Exception {
         assertEquals(200, server.post(user, "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + id + "\",\"mode\":\"prompt\",\"text\":\"question " + id + " " + ("y ").repeat(repeat) + "\"}").statusCode());
+                "{\"requestId\":\"" + id + "\",\"delivery\":\"queue\",\"text\":\"question " + id + " " + ("y ").repeat(repeat) + "\"}").statusCode());
     }
 
     private static JsonNode waitForRuns(TestServer server, String user, String session, int count) throws Exception {

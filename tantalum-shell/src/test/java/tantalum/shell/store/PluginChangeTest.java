@@ -41,7 +41,6 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -120,7 +119,7 @@ class PluginChangeTest {
     private static Decision nextToolCall(Kernel kernel, KernelState state, long lastSeq) {
         long seq = lastSeq + 1;
         Decision decision = kernel.step(state, envelope(seq++, null, UserPromptFixture.of(new SubmissionId("sub-next"),
-                new RequestId("req-next"), new OwnerRef.OfSession(ReplayScenario.TOOLS), "one more file")));
+                new RequestId("req-next"), "one more file")));
         while (true) {
             var command = decision.commands().getFirst();
             var run = command.run().run();

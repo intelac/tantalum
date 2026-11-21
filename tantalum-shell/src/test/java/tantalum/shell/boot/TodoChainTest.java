@@ -109,7 +109,7 @@ class TodoChainTest {
 
     /** {@code runs}：这次提问结束后会话里一共有几轮（手动压缩自己也算一轮）。 */
     private void ask(String text, int runs) throws Exception {
-        String body = "{\"requestId\":\"r" + runs + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}";
+        String body = "{\"requestId\":\"r" + runs + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}";
         assertEquals(200, server.post("alice", "/api/sessions/s1/submissions", body).statusCode());
         waitForRuns(runs);
     }

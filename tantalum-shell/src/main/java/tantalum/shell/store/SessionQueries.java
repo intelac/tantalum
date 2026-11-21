@@ -148,6 +148,29 @@ public final class SessionQueries {
         return found;
     }
 
+    /**
+     * 这个人哪些会话的运行可以告诉个人插件：不是“不进记忆”的，种类照表也通知（帮手会话不通知）。读索引，在内存的用当前状态；
+     * 不读会话文件（补通知时每一轮都要问）。不在里面的当作不该记，宁可少记。
+     */
+    public java.util.Set<SessionId> notable(Principal principal) throws SQLException {
+        java.util.Set<SessionId> notable = new java.util.HashSet<>();
+        for (SessionIndex.Session row : index.allOf(principal)) {
+            if (!row.offRecord() && tantalum.shell.profile.SessionProfile.of(row.kind()).notifiesPlugins()) {
+                notable.add(row.session());
+            }
+        }
+        for (SessionState session : view.current().sessions().values()) {
+            if (session.principal().equals(principal)) {
+                if (!session.offRecord() && tantalum.shell.profile.SessionProfile.of(session.kind()).notifiesPlugins()) {
+                    notable.add(session.id());
+                } else {
+                    notable.remove(session.id());
+                }
+            }
+        }
+        return notable;
+    }
+
     /** 侧栏的会话列表：读索引，在内存的会话用当前状态覆盖，因为索引可能还没写到最新。 */
     public List<SessionSummary> sessions(Principal principal) throws SQLException {
         KernelState state = view.current();

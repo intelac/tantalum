@@ -146,6 +146,17 @@ final class Storage implements AutoCloseable {
         }
     }
 
+    /** 这个人的、写过事件的会话是哪一种；没有、只认领过、是别人的、索引读不了都为 null（入口据此当作还没建，内核会再挡一次）。 */
+    tantalum.value.state.SessionKind kind(Principal principal, SessionId session) {
+        try {
+            return index.session(session).filter(row -> row.principal().equals(principal) && row.lastActivity() != null)
+                    .map(SessionIndex.Session::kind).orElse(null);
+        } catch (SQLException failure) {
+            LOG.warn("index lookup failed: {}", failure.toString());
+            return null;
+        }
+    }
+
     /** 新会话 ID 只属于第一个认领的用户。返回 HTTP 状态。 */
     int claim(Principal principal, SessionId session) {
         try {

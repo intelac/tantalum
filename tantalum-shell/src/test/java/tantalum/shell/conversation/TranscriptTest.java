@@ -1,5 +1,6 @@
 package tantalum.shell.conversation;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -22,18 +23,14 @@ import tantalum.shell.conversation.TranscriptItem.Thinking;
 import tantalum.shell.conversation.TranscriptItem.ToolStep;
 import tantalum.shell.conversation.TranscriptItem.UserMessage;
 import tantalum.value.event.Cancel;
-import tantalum.value.event.FollowUpSubmitted;
 import tantalum.value.event.ModelFailed;
 import tantalum.value.event.ModelInterrupted;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.id.RequestId;
 import tantalum.value.id.RunId;
 import tantalum.value.id.SessionId;
 import tantalum.value.id.SubmissionId;
 import tantalum.value.model.FailureReason;
 import tantalum.value.state.EndReason;
-import tantalum.value.event.FollowUpSubmittedFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.state.CompactionSettingsFixture;
 
@@ -177,7 +174,8 @@ class TranscriptTest {
         fx.feed(run, fx.reply(text("started")));
         int users = fx.items(UserMessage.class).size();
 
-        fx.feed(null, new tantalum.value.event.TaskEnded(card.task(), tantalum.value.task.TaskOutcome.COMPLETED, "Module A is fine."));
+        fx.feed(null, new tantalum.value.event.Report(card.task(), tantalum.value.assignment.AssignmentOutcome.COMPLETED, "Module A is fine.",
+                tantalum.value.event.Root.USER));
 
         TranscriptItem.Task ended = fx.items(TranscriptItem.Task.class).getFirst();
         assertEquals(card.id(), ended.id());
@@ -235,7 +233,8 @@ class TranscriptTest {
 
     @Test
     void snapshotCarriesTheLastAppliedSeqSoClientsCanMergeItWithSse() {
-        assertEquals(new Transcript.View(-1, List.of()), fx.transcript.view(SESSION));
+        // 建会话那一步之后、说第一句之前：没有条目，序号是建会话的那一条
+        assertEquals(new Transcript.View(TranscriptFixture.CREATED_SEQ, List.of()), fx.transcript.view(SESSION));
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(text("a"), call("c1", "read_file")));
 
@@ -280,7 +279,7 @@ class TranscriptTest {
     @Test
     void steerDuringRunBelongsToThatRunAndIsNotQueued() {
         RunId run = fx.start("hi");
-        fx.feed(null, SteerSubmittedFixture.of(new SubmissionId("st"), new RequestId("rs"), "also this"));
+        fx.feed(null, UserPromptFixture.join(new SubmissionId("st"), new RequestId("rs"), "also this"));
 
         UserMessage steer = fx.items(UserMessage.class).get(1);
         assertEquals("also this", steer.text());
@@ -291,7 +290,7 @@ class TranscriptTest {
     @Test
     void followUpIsQueuedUntilItsOwnRunStarts() {
         RunId first = fx.start("hi");
-        fx.feed(null, FollowUpSubmittedFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
+        fx.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("rf"), "later"));
 
         UserMessage queued = fx.items(UserMessage.class).get(1);
         assertTrue(queued.queued());

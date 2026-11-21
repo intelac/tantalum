@@ -48,7 +48,7 @@ class RunsApiTest {
 
     private void prompt(String session, String request, String text) throws Exception {
         server.post("alice", "/api/sessions/" + session + "/submissions",
-                "{\"requestId\":\"" + request + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}");
+                "{\"requestId\":\"" + request + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}");
     }
 
     /** 等运行表里有 {@code count} 个结束了的运行。 */

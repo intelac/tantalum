@@ -47,7 +47,7 @@ class HistorySearchApiTest {
     };
 
     private void ask(TestServer server, String session, String text) throws Exception {
-        server.post("alice", "/api/sessions/" + session + "/submissions", "{\"requestId\":\"" + session + "\",\"mode\":\"prompt\",\"text\":\"" + text + "\"}");
+        server.post("alice", "/api/sessions/" + session + "/submissions", "{\"requestId\":\"" + session + "\",\"delivery\":\"queue\",\"text\":\"" + text + "\"}");
         for (int i = 0; i < 1000; i++) {
             JsonNode runs = JSON.readTree(server.get("alice", "/api/sessions/" + session + "/runs").body()).get("runs");
             if (runs != null && runs.size() > 0 && runs.get(runs.size() - 1).has("endReason")) {

@@ -57,7 +57,7 @@ class EvictAndLoadTest {
     }
 
     private static Intake.Submission submit(Engine engine, SessionId session, String text) {
-        return engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), "follow-up", text);
+        return engine.intake().submit(ALICE, session, new RequestId(UUID.randomUUID().toString()), tantalum.value.event.Delivery.QUEUE, text);
     }
 
     private List<Prompt> conversation(String name, boolean evicts, String... extra) throws Exception {

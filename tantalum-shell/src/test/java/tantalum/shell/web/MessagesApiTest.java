@@ -79,7 +79,7 @@ class MessagesApiTest {
 
     @Test
     void messagesContainTheToolChainWithStatusGroupAndTimes() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"read a\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"read a\"}");
         waitFor("s1", "\"endReason\":\"COMPLETED\"");
 
         JsonNode body = JSON.readTree(server.get("alice", "/api/sessions/s1/messages").body());
@@ -105,9 +105,9 @@ class MessagesApiTest {
 
     @Test
     void queuedFollowUpIsAnItemMarkedQueued() throws Exception {
-        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"q1\",\"mode\":\"prompt\",\"text\":\"slow\"}");
+        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"q1\",\"delivery\":\"queue\",\"text\":\"slow\"}");
         waitFor("s2", "\"phase\":\"AwaitingModel\"");
-        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"q2\",\"mode\":\"follow-up\",\"text\":\"and then\"}");
+        server.post("alice", "/api/sessions/s2/submissions", "{\"requestId\":\"q2\",\"delivery\":\"queue\",\"text\":\"and then\"}");
         waitFor("s2", "\"queued\":true");
 
         JsonNode body = JSON.readTree(server.get("alice", "/api/sessions/s2/messages").body());
@@ -121,7 +121,7 @@ class MessagesApiTest {
 
     @Test
     void anotherUserAndUnknownSessionGet404() throws Exception {
-        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"read a\"}");
+        server.post("alice", "/api/sessions/s1/submissions", "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"read a\"}");
         waitFor("s1", "\"endReason\"");
         HttpResponse<String> other = server.get("bob", "/api/sessions/s1/messages");
         assertEquals(404, other.statusCode());

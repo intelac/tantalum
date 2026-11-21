@@ -65,7 +65,7 @@ class SubmitAttachmentsTest {
     }
 
     private HttpResponse<String> submit(String user, String mode, String text, String attachments) throws Exception {
-        String body = "{\"requestId\":\"" + System.nanoTime() + "\",\"mode\":\"" + mode + "\""
+        String body = "{\"requestId\":\"" + System.nanoTime() + "\",\"delivery\":\"" + mode + "\""
                 + (text == null ? "" : ",\"text\":\"" + text + "\"")
                 + (attachments == null ? "" : ",\"attachments\":" + attachments) + "}";
         return server.post(user, "/api/sessions/s-1/submissions", body);
@@ -97,7 +97,7 @@ class SubmitAttachmentsTest {
         JsonNode image = upload("alice", "cat.jpg", sample("rotated.jpg"));
         JsonNode file = upload("alice", "notes.txt", "hello".getBytes(StandardCharsets.UTF_8));
         String id = image.get("id").asString();
-        HttpResponse<String> response = submit("alice", "prompt", "look", "[{\"id\":\"" + id + "\",\"name\":\"shown.jpg\","
+        HttpResponse<String> response = submit("alice", "queue", "look", "[{\"id\":\"" + id + "\",\"name\":\"shown.jpg\","
                 + "\"bytes\":1,\"width\":9999,\"height\":1},{\"id\":\"" + file.get("id").asString() + "\",\"name\":\"n.txt\"}]");
         assertEquals(200, response.statusCode(), response.body());
 
@@ -111,9 +111,9 @@ class SubmitAttachmentsTest {
     void attachmentsAloneAreEnough() throws Exception {
         start();
         String id = upload("alice", "notes.txt", "hello".getBytes(StandardCharsets.UTF_8)).get("id").asString();
-        assertEquals(200, submit("alice", "prompt", null, "[{\"id\":\"" + id + "\",\"name\":\"notes.txt\"}]").statusCode());
+        assertEquals(200, submit("alice", "queue", null, "[{\"id\":\"" + id + "\",\"name\":\"notes.txt\"}]").statusCode());
         assertEquals(new TextBlock(""), firstUserMessage("alice").content().getFirst());
-        assertEquals(400, submit("alice", "prompt", null, "[]").statusCode());
+        assertEquals(400, submit("alice", "queue", null, "[]").statusCode());
     }
 
     @Test
@@ -121,13 +121,13 @@ class SubmitAttachmentsTest {
         start();
         String alices = upload("alice", "a.txt", "secret".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         HttpResponse<String> foreign = server.post("bob", "/api/sessions/s-2/submissions",
-                "{\"requestId\":\"r\",\"mode\":\"prompt\",\"text\":\"x\",\"attachments\":[{\"id\":\"" + alices + "\",\"name\":\"a.txt\"}]}");
+                "{\"requestId\":\"r\",\"delivery\":\"queue\",\"text\":\"x\",\"attachments\":[{\"id\":\"" + alices + "\",\"name\":\"a.txt\"}]}");
         assertEquals(400, foreign.statusCode());
         assertEquals("attachment/not-found", code(foreign));
-        assertEquals(400, submit("alice", "prompt", "x", "[{\"id\":\"sha256:" + "0".repeat(64) + "\"}]").statusCode());
-        assertEquals(400, submit("alice", "prompt", "x", "[{\"id\":\"../etc/passwd\"}]").statusCode());
-        assertEquals(400, submit("alice", "prompt", "x", "{\"id\":\"" + alices + "\"}").statusCode());
-        assertEquals(400, submit("alice", "prompt", "x", "[\"" + alices + "\"]").statusCode());
+        assertEquals(400, submit("alice", "queue", "x", "[{\"id\":\"sha256:" + "0".repeat(64) + "\"}]").statusCode());
+        assertEquals(400, submit("alice", "queue", "x", "[{\"id\":\"../etc/passwd\"}]").statusCode());
+        assertEquals(400, submit("alice", "queue", "x", "{\"id\":\"" + alices + "\"}").statusCode());
+        assertEquals(400, submit("alice", "queue", "x", "[\"" + alices + "\"]").statusCode());
     }
 
     @Test
@@ -135,13 +135,13 @@ class SubmitAttachmentsTest {
         start("--tantalum.attachments.max-images-per-message=1", "--tantalum.attachments.max-files-per-message=1");
         String a = upload("alice", "a.jpg", sample("rotated.jpg")).get("id").asString();
         String b = upload("alice", "b.png", sample("clean.png")).get("id").asString();
-        HttpResponse<String> images = submit("alice", "steer", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
+        HttpResponse<String> images = submit("alice", "join", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
         assertEquals(400, images.statusCode());
         assertEquals("attachment/too-many-images {\"count\":2,\"max\":1}", code(images));
 
         String f = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
         String g = upload("alice", "g.txt", "2".getBytes(StandardCharsets.UTF_8)).get("id").asString();
-        HttpResponse<String> files = submit("alice", "follow-up", "x", "[{\"id\":\"" + f + "\"},{\"id\":\"" + g + "\"}]");
+        HttpResponse<String> files = submit("alice", "queue", "x", "[{\"id\":\"" + f + "\"},{\"id\":\"" + g + "\"}]");
         assertEquals(400, files.statusCode());
         assertEquals("attachment/too-many-files {\"count\":2,\"max\":1}", code(files));
     }
@@ -151,7 +151,7 @@ class SubmitAttachmentsTest {
         start("--tantalum.attachments.max-image-bytes-per-message=1000");
         String a = upload("alice", "a.jpg", sample("rotated.jpg")).get("id").asString();
         String b = upload("alice", "b.jpg", sample("gps.jpg")).get("id").asString();
-        HttpResponse<String> response = submit("alice", "prompt", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
+        HttpResponse<String> response = submit("alice", "queue", "x", "[{\"id\":\"" + a + "\"},{\"id\":\"" + b + "\"}]");
         assertEquals(400, response.statusCode());
         assertEquals("attachment/images-too-large {\"limit\":1000}", code(response));
     }
@@ -162,9 +162,9 @@ class SubmitAttachmentsTest {
         start("--tantalum.provider=local", "--tantalum.openai-routes.local.base-url=http://127.0.0.1:8090/v1", "--tantalum.openai-routes.local.model=qwen3.8-flash-next-unsloth-ud-q4_k_xl", "--tantalum.openai-routes.local.context-window=131072");
         String image = upload("alice", "a.jpg", sample("rotated.jpg")).get("id").asString();
         String file = upload("alice", "f.txt", "1".getBytes(StandardCharsets.UTF_8)).get("id").asString();
-        HttpResponse<String> refused = submit("alice", "prompt", "x", "[{\"id\":\"" + image + "\"}]");
+        HttpResponse<String> refused = submit("alice", "queue", "x", "[{\"id\":\"" + image + "\"}]");
         assertEquals(400, refused.statusCode());
         assertEquals("attachment/model-no-images", code(refused), "model-picker M15");
-        assertEquals(200, submit("alice", "prompt", "x", "[{\"id\":\"" + file + "\"}]").statusCode());
+        assertEquals(200, submit("alice", "queue", "x", "[{\"id\":\"" + file + "\"}]").statusCode());
     }
 }

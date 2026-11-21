@@ -63,7 +63,7 @@ class PromptPinTest {
         };
         try {
             assertEquals(200, server.post("alice", "/api/sessions/s1/submissions",
-                    "{\"requestId\":\"r1\",\"mode\":\"prompt\",\"text\":\"hello\"}").statusCode());
+                    "{\"requestId\":\"r1\",\"delivery\":\"queue\",\"text\":\"hello\"}").statusCode());
             for (int i = 0; i < 1000 && prompts.isEmpty(); i++) {
                 Thread.sleep(10);
             }

@@ -72,7 +72,7 @@ class WebToolsWiringTest {
                 assertEquals(tantalum.shell.local.LocalTool.class, tool.getClass(), tool.name() + " runs on the user's computer");
                 assertEquals("local-workspace", tool.server());
             }
-            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), tantalum.value.event.Delivery.QUEUE, "hi").status());
             String text = system.get(30, TimeUnit.SECONDS);
             assertTrue(text.contains(WebAccess.NOTE), text);
         }
@@ -104,7 +104,7 @@ class WebToolsWiringTest {
             assertEquals(11, names(engine).size(), "the browser tools are local tools; the old browser.enabled=false does nothing");
             assertEquals(Map.of("web-fetch", false), engine.webAccess().admin());
             assertTrue(engine.egress().isEmpty(), "no egress when nothing on the server uses it");
-            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), "prompt", "hi").status());
+            assertEquals(200, engine.intake().submit(ALICE, new SessionId("s1"), new RequestId("r1"), tantalum.value.event.Delivery.QUEUE, "hi").status());
             assertTrue(system.get(30, TimeUnit.SECONDS).contains("## Web content"));
         }
         try (TestServer server = server("--tantalum.web.browser.enabled=false")) {

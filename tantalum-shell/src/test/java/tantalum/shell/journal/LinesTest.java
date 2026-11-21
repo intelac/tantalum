@@ -26,7 +26,6 @@ import tantalum.value.json.Json;
 import tantalum.value.model.Message;
 import tantalum.value.model.StopReason;
 import tantalum.value.model.ToolCallBlock;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.decision.SessionChangeFixture;
 import tantalum.value.event.UserPromptFixture;
 
@@ -44,7 +43,7 @@ class LinesTest {
 
     private static EventEnvelope prompt(long seq, String text) {
         return new EventEnvelope(seq, Instant.EPOCH, USER, SESSION, null,
-                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), new OwnerRef.OfSession(SESSION), text));
+                UserPromptFixture.of(new SubmissionId("sub-" + seq), new RequestId("req-" + seq), text));
     }
 
     private static StepRecord appended(long seq, String text) {

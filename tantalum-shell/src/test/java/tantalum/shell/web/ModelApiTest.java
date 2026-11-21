@@ -79,7 +79,7 @@ class ModelApiTest {
     }
 
     private HttpResponse<String> submit(String user, String session, String mode, String model) throws Exception {
-        String body = "{\"requestId\":\"r-" + System.nanoTime() + "\",\"mode\":\"" + mode + "\",\"text\":\"hi\""
+        String body = "{\"requestId\":\"r-" + System.nanoTime() + "\",\"delivery\":\"" + mode + "\",\"text\":\"hi\""
                 + (model == null ? "" : ",\"model\":" + model) + "}";
         return server.post(user, "/api/sessions/" + session + "/submissions", body);
     }
@@ -146,7 +146,7 @@ class ModelApiTest {
         refused.put("{\"route\":\"local\",\"model\":\"qwen3.8\"}", "model/level-required {\"levels\":[\"off\",\"on\"],\"model\":\"qwen3.8\"}");
         refused.put("{\"route\":\"local\"}", "request/invalid");
         for (Map.Entry<String, String> each : refused.entrySet()) {
-            HttpResponse<String> response = submit("alice", "s1", "prompt", each.getKey());
+            HttpResponse<String> response = submit("alice", "s1", "queue", each.getKey());
             assertEquals(400, response.statusCode(), each.getKey());
             assertEquals(each.getValue(), error(response), each.getKey());
         }
@@ -159,13 +159,13 @@ class ModelApiTest {
     void aSessionWithToolChangesRefusesModelsWithoutThem() throws Exception {
         assertEquals(200, server.http.send(server.request("alice", "/api/plugins/tool/memory_write").header("content-type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
-        assertEquals(200, submit("alice", "s2", "prompt", null).statusCode());
+        assertEquals(200, submit("alice", "s2", "queue", null).statusCode());
         awaitRuns("s2", 1);
         assertTrue(JSON.readTree(server.get("alice", "/api/sessions/s2/messages").body()).path("toolChangesInHistory").asBoolean());
-        HttpResponse<String> sonnet5 = submit("alice", "s2", "prompt", "{\"route\":\"claude\",\"model\":\"claude-sonnet-5\",\"effort\":\"low\"}");
+        HttpResponse<String> sonnet5 = submit("alice", "s2", "queue", "{\"route\":\"claude\",\"model\":\"claude-sonnet-5\",\"effort\":\"low\"}");
         assertEquals(400, sonnet5.statusCode());
         assertEquals("model/tool-changes {\"model\":\"claude-sonnet-5\"}", error(sonnet5));
-        assertEquals(200, submit("alice", "s2", "prompt", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"low\"}").statusCode());
+        assertEquals(200, submit("alice", "s2", "queue", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"low\"}").statusCode());
     }
 
     /**
@@ -177,26 +177,26 @@ class ModelApiTest {
         assertEquals(200, server.http.send(server.request("alice", "/api/plugins/tool/memory_write").header("content-type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(), HttpResponse.BodyHandlers.ofString()).statusCode());
         String sonnet5 = "{\"route\":\"claude\",\"model\":\"claude-sonnet-5\",\"effort\":\"low\"}";
-        assertEquals(200, submit("alice", "s3", "prompt", sonnet5).statusCode());
+        assertEquals(200, submit("alice", "s3", "queue", sonnet5).statusCode());
         awaitRuns("s3", 1);
         assertFalse(JSON.readTree(server.get("alice", "/api/sessions/s3/messages").body()).path("toolChangesInHistory").asBoolean());
-        assertEquals(200, submit("alice", "s3", "prompt", sonnet5).statusCode(), "the second message is accepted");
+        assertEquals(200, submit("alice", "s3", "queue", sonnet5).statusCode(), "the second message is accepted");
     }
 
     /** 需求 5.1、M13：带的选择进 UserPrompt，调到对的路线；会话视图带着现在的选择。插话带了也不进 journal。 */
     @Test
     void anAcceptedChoiceIsRecordedAndASteerIgnoresIt() throws Exception {
-        assertEquals(200, submit("alice", "s3", "prompt", "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"off\"}").statusCode());
+        assertEquals(200, submit("alice", "s3", "queue", "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"off\"}").statusCode());
         awaitRuns("s3", 1);
         assertEquals(new ModelChoice("local", "qwen3.8", "off"), localCalls.getLast().model());
         JsonNode view = JSON.readTree(server.get("alice", "/api/sessions/s3/messages").body());
         assertEquals("{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"off\"}", view.path("model").toString());
 
-        assertEquals(200, submit("alice", "s3", "steer", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"max\"}").statusCode());
+        assertEquals(200, submit("alice", "s3", "join", "{\"route\":\"claude\",\"model\":\"claude-opus-5-5\",\"effort\":\"max\"}").statusCode());
         awaitRuns("s3", 2);
         assertEquals(new ModelChoice("local", "qwen3.8", "off"), localCalls.getLast().model(), "a steer does not switch models");
         // 需求 8.4：换了选择（这里只换档位）的那一轮有一条 modelChange；没换的那轮（插话开的）没有
-        assertEquals(200, submit("alice", "s3", "prompt", "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"on\"}").statusCode());
+        assertEquals(200, submit("alice", "s3", "queue", "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":\"on\"}").statusCode());
         awaitRuns("s3", 3);
         List<JsonNode> changes = JSON.readTree(server.get("alice", "/api/sessions/s3/messages").body()).path("items").valueStream()
                 .filter(item -> item.path("kind").asString().equals("modelChange")).toList();
@@ -205,7 +205,7 @@ class ModelApiTest {
         assertEquals("on", changes.getFirst().path("effort").asString());
 
         Path file = new SessionPaths(temp.resolve("data")).sessionFile(new Principal("alice"), new SessionId("s3"));
-        String steer = Files.readAllLines(file).stream().filter(line -> line.contains("\"type\":\"SteerSubmitted\"")).findFirst().orElseThrow();
+        String steer = Files.readAllLines(file).stream().filter(line -> line.contains("\"delivery\":\"JOIN\"")).findFirst().orElseThrow();
         assertFalse(steer.contains("claude-opus-5-5"), steer);
     }
 
@@ -220,7 +220,7 @@ class ModelApiTest {
         assertTrue(absent(models("bob").path("mine")), "bob is not affected");
 
         // 新会话没带选择：用 alice 上次的
-        assertEquals(200, submit("alice", "s4", "prompt", null).statusCode());
+        assertEquals(200, submit("alice", "s4", "queue", null).statusCode());
         awaitRuns("s4", 1);
         assertEquals(new ModelChoice("claude", "claude-opus-5-5", "high"), claudeCalls.getLast().model());
 
@@ -273,7 +273,7 @@ class ModelApiTest {
             String qwen = "{\"route\":\"local\",\"model\":\"qwen3.8\",\"effort\":null}";
             for (int i = 0; i < 120; i++) {
                 for (boolean withModel : new boolean[] {false, true}) {
-                    String body = "{\"requestId\":\"p" + i + withModel + "\",\"mode\":\"prompt\",\"text\":\"hi\""
+                    String body = "{\"requestId\":\"p" + i + withModel + "\",\"delivery\":\"queue\",\"text\":\"hi\""
                             + (withModel ? ",\"model\":" + qwen : "") + "}";
                     long started = System.nanoTime();
                     HttpResponse<String> response = many.post("alice", "/api/sessions/perf-" + i + withModel + "/submissions", body);
