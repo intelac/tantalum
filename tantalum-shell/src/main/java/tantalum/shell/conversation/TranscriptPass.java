@@ -288,7 +288,19 @@ final class TranscriptPass {
     private void withdrawn(List<tantalum.value.event.TextWithdrawn.Swap> swaps) {
         tantalum.value.model.TextSwap swap = new tantalum.value.model.TextSwap(swaps);
         for (TranscriptItem item : List.copyOf(conversation.items.values())) {
-            TranscriptItem swapped = switch (item) {
+            TranscriptItem swapped = swapped(swap, item);
+            if (!swapped.equals(item)) {
+                put(swapped);
+            }
+        }
+        // 第一条提问已经不在尾巴里（live-views）：标题用的那份也换
+        if (conversation.firstUser != null && !conversation.items.containsKey(conversation.firstUser.id())) {
+            conversation.firstUser = (UserMessage) swapped(swap, conversation.firstUser);
+        }
+    }
+
+    private static TranscriptItem swapped(tantalum.value.model.TextSwap swap, TranscriptItem item) {
+        return switch (item) {
                 case UserMessage message -> new UserMessage(message.id(), message.session(), message.run(), message.at(),
                         swap.text(message.text()), message.attachments(), message.queued(), message.removed(), message.skills(),
                         message.attached().stream().map(block -> (AttachedBlock) swap.block(block)).toList());
@@ -306,10 +318,6 @@ final class TranscriptPass {
                         result.task(), result.outcome(), swap.text(result.text()), result.paused());
                 default -> item;
             };
-            if (!swapped.equals(item)) {
-                put(swapped);
-            }
-        }
     }
 
     private void put(TranscriptItem item) {

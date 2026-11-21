@@ -234,7 +234,7 @@ class TranscriptTest {
     @Test
     void snapshotCarriesTheLastAppliedSeqSoClientsCanMergeItWithSse() {
         // 建会话那一步之后、说第一句之前：没有条目，序号是建会话的那一条
-        assertEquals(new Transcript.View(TranscriptFixture.CREATED_SEQ, List.of()), fx.transcript.view(SESSION));
+        assertEquals(new Transcript.View(TranscriptFixture.CREATED_SEQ, 0, List.of(), null, null), fx.transcript.view(SESSION));
         RunId run = fx.start("hi");
         fx.feed(run, fx.reply(text("a"), call("c1", "read_file")));
 

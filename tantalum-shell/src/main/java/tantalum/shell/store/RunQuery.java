@@ -46,6 +46,30 @@ public final class RunQuery {
         return records.isEmpty() ? Optional.empty() : Optional.of(RunTree.of(run, records));
     }
 
+    /**
+     * 这个会话出现过的每一轮的最后样子，按运行号里的序号排（live-views）：内存里只留正在跑的和最近结束的，更早的从账里从头读。
+     * 被内核去掉的那一刻之前的样子就是它最后的样子。文件不存在时为空。读不了文件时抛 {@link SessionUnreadable}。
+     */
+    public List<tantalum.value.state.RunState> everyRun(Principal principal, SessionId session) {
+        Path file = paths.sessionFile(principal, session);
+        if (!Files.exists(file)) {
+            return List.of();
+        }
+        Map<RunId, tantalum.value.state.RunState> last = new LinkedHashMap<>();
+        try {
+            replay.each(principal, file, (envelope, before, decision) -> {
+                for (tantalum.value.state.RunState run : decision.newState().runs().values()) {
+                    if (run.ref().session().equals(session)) {
+                        last.put(run.ref().run(), run);
+                    }
+                }
+            });
+        } catch (Exception failure) {
+            throw new SessionUnreadable(session, failure);
+        }
+        return last.values().stream().sorted(java.util.Comparator.comparingLong(run -> run.ref().run().seq())).toList();
+    }
+
     /** 这次运行的轨迹记录（最终版本，按出现的先后）；没有时为空列表。读不了文件时抛 {@link SessionUnreadable}。 */
     public List<TraceRecord> records(Principal principal, SessionId session, RunId run) {
         Path file = paths.sessionFile(principal, session);

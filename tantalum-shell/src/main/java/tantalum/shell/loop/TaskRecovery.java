@@ -30,7 +30,7 @@ import tantalum.value.state.SessionState;
  */
 public final class TaskRecovery {
 
-    /** 一个任务自己的会话现在的样子；会话不存在为 null。 */
+    /** 一个任务自己的会话现在的样子和它出现过的每一轮（被内核去掉的也在）；会话不存在为 null。 */
     public record Child(SessionState session, List<RunState> runs) {}
 
     /** {@code settle} 是要补发给放出任务的会话的事件；{@code rearm} 是还在跑、要重新起期限的。 */

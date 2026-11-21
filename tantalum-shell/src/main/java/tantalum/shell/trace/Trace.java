@@ -107,7 +107,9 @@ public final class Trace {
         Book book = sessions.computeIfAbsent(envelope.session(), key -> new Book());
         Map<String, TraceRecord> changed = new LinkedHashMap<>();
         synchronized (book) {
-            new TracePass(book, envelope, before, decision, changed).run();
+            if (!tantalum.shell.conversation.Projection.forgotten(envelope, before, decision)) {
+                new TracePass(book, envelope, before, decision, changed).run();
+            }
             book.lastSeq = envelope.seq();
         }
         return List.copyOf(changed.values());

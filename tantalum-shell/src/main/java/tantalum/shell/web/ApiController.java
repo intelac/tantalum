@@ -122,7 +122,9 @@ public class ApiController {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
         Transcript.View view = found.get().transcript();
-        MessagePage page = MessagePage.of(view.items(), before);
+        // 内存里只留尾巴（live-views）：翻过切点时从账里取全部条目
+        MessagePage page = MessagePage.of(view.offset(), view.items(), before,
+                () -> engine.queries().turns().everyItem(WebJson.currentUser(), id.get()));
         List<Map<String, Object>> items = page.items().stream()
                 .map(item -> ItemJson.toMap(engine.codec().mapper(), item)).toList();
         Map<String, Object> response = new LinkedHashMap<>();
@@ -385,8 +387,8 @@ public class ApiController {
         if (found.isEmpty()) {
             return json.error(ErrorCode.SESSION_NOT_FOUND, "no such session");
         }
-        List<Map<String, Object>> runs = found.get().runs().stream()
-                .sorted(Comparator.comparingLong(run -> run.ref().run().seq()))
+        // 内存里只留正在跑的和最近结束的（live-views），列表要每一轮
+        List<Map<String, Object>> runs = engine.queries().everyRun(WebJson.currentUser(), id.get()).stream()
                 .map(ApiController::describe).toList();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("runs", runs);

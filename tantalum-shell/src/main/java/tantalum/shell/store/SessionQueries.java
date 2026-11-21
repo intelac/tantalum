@@ -74,8 +74,26 @@ public final class SessionQueries {
         if (resident != null) {
             return Optional.of(resident).filter(run -> run.ref().principal().equals(principal));
         }
-        return session(principal, id.session().get())
-                .flatMap(found -> found.runs().stream().filter(run -> run.ref().run().equals(id)).findFirst());
+        return everyRun(principal, id.session().get()).stream().filter(run -> run.ref().run().equals(id)).findFirst();
+    }
+
+    /**
+     * 这个会话的每一轮（live-views）：内存里只留正在跑的和最近结束的，所以从账里读全部，再用内存里的盖上（内存可能比文件新）。
+     * 会话不存在、不是本人的为空列表。
+     */
+    public List<RunState> everyRun(Principal principal, SessionId session) {
+        KernelState state = view.current();
+        SessionState resident = state.sessions().get(session);
+        if (resident != null && !resident.principal().equals(principal)) {
+            return List.of();
+        }
+        java.util.Map<RunId, RunState> all = new java.util.LinkedHashMap<>();
+        for (RunState run : runs.everyRun(principal, session)) {
+            all.put(run.ref().run(), run);
+        }
+        state.runs().values().stream().filter(run -> run.ref().session().equals(session) && run.ref().principal().equals(principal))
+                .forEach(run -> all.put(run.ref().run(), run));
+        return all.values().stream().sorted(java.util.Comparator.comparingLong(run -> run.ref().run().seq())).toList();
     }
 
     public Optional<SessionView> session(Principal principal, SessionId session) {
@@ -90,7 +108,7 @@ public final class SessionQueries {
         }
         try {
             return cold.read(principal, session).map(found -> new SessionView(found.session(), found.runs(),
-                    new Transcript.View(found.transcript().lastSeq(), found.transcript().items())));
+                    found.transcript().view()));
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
             throw new SessionUnreadable(session, stopping);
@@ -188,7 +206,7 @@ public final class SessionQueries {
             if (session.principal().equals(principal) && tantalum.shell.profile.SessionProfile.of(session.kind()).listed()) {
                 // 在内存的会话：状态和最近活动取当前的；改过的名字只记在索引里（内核不存标题）
                 SessionSummary live = SessionSummary.of(session.id(),
-                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.items(session.id()));
+                        session.activeRun() == null ? null : state.runs().get(session.activeRun()), transcript.view(session.id()));
                 summaries.put(session.id(), new SessionSummary(session.id(), renamed.getOrDefault(session.id(), live.title()),
                         live.lastActivity(), live.runStatus(), session.dir(), session.offRecord()));
             }

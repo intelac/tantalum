@@ -58,8 +58,25 @@ public record MessagePage(int start, List<TranscriptItem> items, boolean hasMore
         return new MessagePage(start, all.subList(start, end), start > 0);
     }
 
+    /**
+     * 内存里只留从 {@code offset} 起的尾巴时（live-views）：落在尾巴里就在尾巴上算（起点大于尾巴开头时和整份算的一样，
+     * 见 {@code Tail}），否则用 {@code everything} 取全部条目再算。位置都是从第一个条目数的。
+     */
+    public static MessagePage of(int offset, List<TranscriptItem> tail, Integer before, java.util.function.Supplier<List<TranscriptItem>> everything) {
+        if (offset == 0) {
+            return of(tail, before);
+        }
+        if (before == null || before > offset) {
+            MessagePage inTail = of(tail, before == null ? null : before - offset);
+            if (inTail.start() > 0) {
+                return new MessagePage(inTail.start() + offset, inTail.items(), true);
+            }
+        }
+        return of(everything.get(), before);
+    }
+
     /** 位置 i 能不能切：没有哪个运行的条目一部分在 i 之前、一部分在 i 及之后。位置 0 总能切。 */
-    private static boolean[] cuttable(List<TranscriptItem> all, int end) {
+    static boolean[] cuttable(List<TranscriptItem> all, int end) {
         Map<RunId, Integer> last = new HashMap<>();
         for (int i = 0; i < end; i++) {
             if (all.get(i).run() != null) {

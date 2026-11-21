@@ -31,7 +31,7 @@ class ColdReadsTest {
         return new ColdReads(new SessionPaths(dir), (principal, session) -> {
             reads.incrementAndGet();
             return Optional.of(new SessionSlice(SessionStateFixture.regular(session, principal), List.of(),
-                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get()), null, reads.get()));
+                    new Transcript.Saved(List.of(), List.of(), java.util.Map.of(), 0, reads.get(), 0, null, null), null, reads.get()));
         });
     }
 

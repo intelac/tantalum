@@ -82,6 +82,16 @@ final class Outcome {
         state = state.with(session);
     }
 
+    /** 这一步之后状态里不再有这个运行（记进结果的 removedRuns）。 */
+    void remove(tantalum.value.id.RunId run) {
+        state = state.without(run);
+    }
+
+    /** 这一步进行到现在的全部运行。 */
+    java.util.Collection<RunState> runs() {
+        return state.runs().values();
+    }
+
     /** 用户状态只有用量累计这一种写法，日期取事件时间。 */
     void addUsage(RunRef ref, TokenUsage usage) {
         state = UsageProjection.apply(state, ref.principal(), envelope.at(), usage);

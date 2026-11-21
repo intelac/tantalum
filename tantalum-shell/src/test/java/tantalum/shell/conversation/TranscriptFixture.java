@@ -52,7 +52,8 @@ final class TranscriptFixture {
     record Change(long seq, int index, TranscriptItem item) {}
 
     final List<Change> changes = new ArrayList<>();
-    final Transcript transcript = new Transcript();
+    /** 全留：老的测试看全部条目；只留尾巴的由 HistoryWindowEquivalenceTest 另起一个对照（live-views）。 */
+    final Transcript transcript = new Transcript().keepingEverything();
     final List<EventEnvelope> envelopes = new ArrayList<>();
     final List<Decision> decisions = new ArrayList<>();
     /** 每个事件处理前的内核状态，轨迹投影要用。 */

@@ -84,6 +84,11 @@ public final class RunEnd {
 
         SessionState session = out.session(run.ref()).endRun();
         out.put(session);
+        // 内存里每个会话只留正在跑的和刚结束的这一轮（live-views）：更早结束的去掉，账里还有，接口读索引或账
+        List<tantalum.value.id.RunId> older = out.runs().stream()
+                .filter(other -> other.ref().session().equals(session.id()) && other.isEnded() && !other.ref().run().equals(run.ref().run()))
+                .map(other -> other.ref().run()).toList();
+        older.forEach(out::remove);
         if (run.cause().owes() != null) {
             AssignmentSteps.returned(out, run, reason, detail);
         }

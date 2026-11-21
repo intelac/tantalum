@@ -371,7 +371,9 @@ public final class Engine implements AutoCloseable {
             }
             tantalum.shell.loop.TaskRecovery.Plan plan = tantalum.shell.loop.TaskRecovery.plan(outstanding,
                     (user, child) -> queries.queries().session(user, child)
-                            .map(view -> new tantalum.shell.loop.TaskRecovery.Child(view.state(), view.runs())).orElse(null),
+                            // 每一轮（被去掉的也要：收尾时那次结束就会去掉欠交代的那一轮，live-views）
+                            .map(view -> new tantalum.shell.loop.TaskRecovery.Child(view.state(), queries.queries().everyRun(user, child)))
+                            .orElse(null),
                     clock.instant());
             long deadline = System.nanoTime() + DRAIN.toNanos();
             for (EventEnvelope envelope : plan.settle()) {
