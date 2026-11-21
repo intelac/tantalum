@@ -84,8 +84,8 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
         RequestImages requestImages = new RequestImages(storage.attachments);
         // 一个事件走完全程时归还外部名额和放行名额；入口在净室之后才建，所以经一个槽位取。交代的处理器也经它送
         Intake[] intakeSlot = new Intake[1];
-        // 交代的三条命令都是往别的会话放输入，同一个处理器，经入口送
-        Handler assignments = new tantalum.shell.handler.AssignmentHandler(new tantalum.shell.handler.AssignmentHandler.Deliveries() {
+        // 会话之间的送达和回执（delivery）：往别的会话放事件，同一个处理器，经入口送
+        Handler deliveries = new tantalum.shell.handler.DeliveryHandler(new tantalum.shell.handler.DeliveryHandler.Deliveries() {
                     @Override
                     public int deliver(Principal principal, SessionId session, tantalum.value.event.SessionCreated create,
                                        tantalum.value.event.Input delivered) {
@@ -93,12 +93,11 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                     }
 
                     @Override
-                    public int cancel(Principal principal, SessionId session, String assignment) {
-                        return intakeSlot[0].cancel(principal, session, assignment);
+                    public int handOver(Principal principal, SessionId session, tantalum.value.event.Event event) {
+                        return intakeSlot[0].handOver(principal, session, event);
                     }
                 },
-                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()),
-                (user, session) -> queries.queries().session(user, session).map(found -> found.state().activeRun() != null).orElse(false));
+                new tantalum.shell.skill.SkillAgents(toolbox.localWorkspace(), toolbox.skillCatalog()));
         Map<Class<? extends Command>, Handler> byCommand = Map.of(
                 AssembleContext.class, new ContextHandler(toolbox.localWorkspace(), properties.systemPrompt(), toolbox.catalog(), toolbox.gate(),
                         contributors, new KnowledgeBase(properties.knowledge().path(), properties.knowledge().maxBytes()),
@@ -166,8 +165,7 @@ record Pipeline(Residency residency, CleanroomRing cleanroomRing, LaneDispatcher
                         session -> dirOf(queries.view().current(), session), session -> offRecordOf(queries.view().current(), session)),
                 DoWork.class, new WorkHandler(stores.workspaces(), toolbox.gate(), properties.toolTimeout(), clock),
                 StartTimer.class, new TimerHandler(),
-                tantalum.value.command.Assign.class, assignments, tantalum.value.command.ReturnReport.class, assignments,
-                tantalum.value.command.StopAssignment.class, assignments);
+                tantalum.value.command.Deliver.class, deliveries, tantalum.value.command.Acknowledge.class, deliveries);
         HandlerDispatcher handlers = new HandlerDispatcher(byCommand, inFlight, results);
         OutputRing output = new OutputRing(loop.outputRingSize(), handlers);
         Evictor evictor = new Evictor(properties.residency(), residency, queries.projections(), clock, storage.files::forget);

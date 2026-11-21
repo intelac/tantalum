@@ -85,7 +85,7 @@ class TraceTaskTest {
         TraceFixture fx = new TraceFixture();
         OpenAssignment open = startOne(fx);
 
-        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER, open.session()));
 
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
         RunHead head = fx.records(RunHead.class).stream().filter(run -> run.head().run().equals(fresh)).findFirst().orElseThrow();
@@ -107,8 +107,8 @@ class TraceTaskTest {
         OpenAssignment open = startOne(fx);
         RunId second = fx.start("anything else?");
 
-        fx.feed(null, new Report(open.id(), AssignmentOutcome.FAILED, "could not read it", Root.USER));
-        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "late", Root.USER));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.FAILED, "could not read it", Root.USER, open.session()));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "late", Root.USER, open.session()));
 
         List<TaskNote> notes = fx.records(TaskNote.class);
         assertEquals(1, notes.size());
@@ -124,7 +124,7 @@ class TraceTaskTest {
 
         fx.feed(null, new TimerFired(open.timer()));
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
-        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER, open.session()));
 
         List<TaskNote> notes = fx.records(TaskNote.class);
         assertEquals(1, notes.size());
@@ -156,7 +156,7 @@ class TraceTaskTest {
     void theRunTreeShowsATaskNodeAndAStoppedTaskAsCancelled() {
         TraceFixture fx = new TraceFixture();
         OpenAssignment open = startOne(fx);
-        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        fx.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER, open.session()));
 
         RunId fresh = RunId.of(TraceFixture.SESSION, fx.lastSeq());
         List<TraceRecord> records = fx.records().stream().filter(record -> record.head().run().equals(fresh)).toList();

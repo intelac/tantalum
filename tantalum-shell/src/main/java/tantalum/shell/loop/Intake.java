@@ -209,15 +209,17 @@ public final class Intake {
     }
 
     /**
-     * 交代的一方不要它了（{@link AssignmentCancelled}）：送到帮手会话，它正在做的就是这次交代才停。
-     * 返回 HTTP 状态：200 放进了环，404 会话不是这个人的或不是帮手，429 环满了。
+     * 会话之间送的不是输入的那几样（delivery）：叫停（{@code AssignmentCancelled}）、“送到了”“不收”、启动时的重送。
+     * 只查会话是这个人的、已经有了；不过输入表、不占名额（内核按自己的状态处理）。返回 200 放进了环，404 会话不是这个人的或还没有，429 环满。
      */
-    public int cancel(Principal principal, SessionId session, String assignment) {
-        Optional<SessionState> existing = sessions.find(principal, session);
-        if (existing.isEmpty() || existing.get().helper() == null || !existing.get().helper().assignment().equals(assignment)) {
+    public int handOver(Principal principal, SessionId session, tantalum.value.event.Event event) {
+        Known known = known(principal, session);
+        if (known.foreign() || known.kind() == null) {
             return 404;
         }
-        return input.tryPublish(envelope(principal, session, null, new AssignmentCancelled(assignment))) ? 200 : 429;
+        EventEnvelope envelope = envelope(principal, session, null, event);
+        Probes.event(input.probe(), Stage.INTAKE, envelope, null);
+        return input.tryPublish(envelope) ? 200 : 429;
     }
 
     /** 一个会话在入口看来的样子：{@code resident} 是在内存的状态（不在为 null）；{@code kind} 为 null 表示还没建。 */

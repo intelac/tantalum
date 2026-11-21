@@ -18,7 +18,7 @@ import tantalum.value.state.RunCause;
 import tantalum.value.state.SessionKind;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
-import tantalum.value.command.ReturnReport;
+import tantalum.kernel.step.AssignmentViews.ReturnReport;
 import tantalum.value.command.DoWork;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.event.WorkDone;
@@ -30,9 +30,9 @@ import tantalum.value.hook.HookContext;
 import tantalum.value.state.KernelState;
 import tantalum.value.state.SessionState;
 import tantalum.value.command.RunTool;
-import tantalum.value.command.Assign;
+import tantalum.kernel.step.AssignmentViews.Assign;
 import tantalum.value.command.StartTimer;
-import tantalum.value.command.StopAssignment;
+import tantalum.kernel.step.AssignmentViews.StopAssignment;
 import tantalum.value.decision.Decision;
 import tantalum.value.decision.ReportSettled;
 import tantalum.value.decision.AssignmentStarted;
@@ -101,8 +101,8 @@ class AssignmentStepsTest {
     }
 
     private static <T> T only(Decision decision, Class<T> type) {
-        List<T> found = decision.commands().stream().filter(type::isInstance).map(type::cast).toList();
-        assertEquals(1, found.size(), "expected one " + type.getSimpleName() + " in " + decision.commands());
+        List<T> found = AssignmentFixture.commands(decision).stream().filter(type::isInstance).map(type::cast).toList();
+        assertEquals(1, found.size(), "expected one " + type.getSimpleName() + " in " + AssignmentFixture.commands(decision));
         return found.getFirst();
     }
 
@@ -143,7 +143,7 @@ class AssignmentStepsTest {
 
         // 当场有结果，同一步里就接着调模型：没有新的等待状态，没有 RunTool
         assertEquals(ModelSteps.AWAITING_MODEL, loop.phase());
-        assertTrue(decision.commands().stream().noneMatch(RunTool.class::isInstance));
+        assertTrue(AssignmentFixture.commands(decision).stream().noneMatch(RunTool.class::isInstance));
         Assign start = only(decision, Assign.class);
         assertEquals("Check module A.\nReport what you find.", start.prompt());
         assertEquals(new SessionId("s-" + start.assignment()), start.session());
@@ -153,7 +153,7 @@ class AssignmentStepsTest {
         // 默认不设期限：不起定时器
         assertNull(open.deadline());
         assertNull(open.timer());
-        assertTrue(decision.commands().stream().noneMatch(StartTimer.class::isInstance));
+        assertTrue(AssignmentFixture.commands(decision).stream().noneMatch(StartTimer.class::isInstance));
         assertTrue(resultOf(loop, "c1").startsWith("Started task " + start.assignment()));
         assertTrue(decision.facts().stream().anyMatch(fact -> fact instanceof AssignmentStarted started && started.assignment().equals(start.assignment())));
 
@@ -199,7 +199,7 @@ class AssignmentStepsTest {
         assertTrue(resultOf(loop, "c1").startsWith("ERROR task needs a non-empty \"prompt\""));
         assertTrue(resultOf(loop, "c2").startsWith("Started task"));
         assertTrue(resultOf(loop, "c3").startsWith("ERROR Not started: 1 tasks are already running"));
-        assertEquals(1, decision.commands().stream().filter(Assign.class::isInstance).count());
+        assertEquals(1, AssignmentFixture.commands(decision).stream().filter(Assign.class::isInstance).count());
         assertEquals(1, loop.session().assignments().open().size());
     }
 
@@ -245,7 +245,7 @@ class AssignmentStepsTest {
 
         // 它自己不能再放任务
         Decision nested = reply(loop, start.session(), run, call, StopReason.TOOL_USE, task("n1", "go deeper"));
-        assertTrue(nested.commands().stream().noneMatch(Assign.class::isInstance));
+        assertTrue(AssignmentFixture.commands(nested).stream().noneMatch(Assign.class::isInstance));
         assertTrue(loop.state.sessions().get(start.session()).assignments().open().isEmpty());
         ToolResultBlock refused = (ToolResultBlock) loop.state.sessions().get(start.session()).messages().getLast().content().getFirst();
         assertTrue(refused.error());
@@ -256,7 +256,7 @@ class AssignmentStepsTest {
     void theTaskHandsBackItsLastAnswerWhenItsRunEnds() {
         LoopFixture loop = new LoopFixture();
         OpenAssignment open = startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
 
         Decision ended = reply(loop, start.session(), run, loop.onlyCommandId(), StopReason.END_TURN, LoopFixture.text("Module A is fine.").getFirst());
@@ -283,15 +283,15 @@ class AssignmentStepsTest {
         };
         LoopFixture loop = new LoopFixture(check);
         startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
 
         Decision first = reply(loop, start.session(), run, loop.onlyCommandId(), StopReason.END_TURN,
                 LoopFixture.text("Module A is fine, see a.py:9.").getFirst());
         DoWork work = only(first, DoWork.class);
-        assertTrue(first.commands().stream().noneMatch(ReturnReport.class::isInstance), "the task has not ended yet");
+        assertTrue(AssignmentFixture.commands(first).stream().noneMatch(ReturnReport.class::isInstance), "the task has not ended yet");
         Decision again = loop.feed(start.session(), run, new WorkDone(work.id(), "check", new Json.Null(), false, "a.py:9 was never read; fix it", null));
-        if (again.commands().getFirst() instanceof AssembleContext assemble) {
+        if (AssignmentFixture.commands(again).getFirst() instanceof AssembleContext assemble) {
             again = loop.feed(start.session(), run, ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
         }
         Decision ended = reply(loop, start.session(), run, modelCall(again), StopReason.END_TURN, LoopFixture.text("Correction: it is a.py:7.").getFirst());
@@ -308,7 +308,7 @@ class AssignmentStepsTest {
     private static AssignmentOutcome outcomeAfter(tantalum.value.event.Event event) {
         LoopFixture loop = new LoopFixture();
         startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
         return only(loop.feed(start.session(), run, event), ReturnReport.class).outcome();
     }
@@ -319,7 +319,7 @@ class AssignmentStepsTest {
         OpenAssignment open = startOne(loop);
         RunId before = loop.session().lastRun();
 
-        Decision decision = loop.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER));
+        Decision decision = loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER));
 
         assertTrue(loop.session().assignments().open().isEmpty());
         assertFalse(loop.session().activeRun().equals(before));
@@ -333,7 +333,7 @@ class AssignmentStepsTest {
         assertTrue(decision.facts().stream().anyMatch(fact -> fact instanceof ReportSettled settled && !settled.paused()));
 
         // 同一个结果再到一次：名单里没有它了，什么都不改
-        assertSame(loop.state, loop.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER)).newState());
+        assertSame(loop.state, loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.COMPLETED, "Module A is fine.", Root.USER)).newState());
     }
 
     @Test
@@ -345,7 +345,7 @@ class AssignmentStepsTest {
         RunId run = loop.runId();
         RunTool slow = (RunTool) loop.commands.stream().filter(RunTool.class::isInstance).findFirst().orElseThrow();
 
-        loop.feed(null, new Report(open.id(), AssignmentOutcome.FAILED, "could not read the folder", Root.USER));
+        loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.FAILED, "could not read the folder", Root.USER));
 
         // 没有开新的一轮；结果在这一轮下次调模型时并进历史
         assertEquals(run, loop.session().activeRun());
@@ -365,16 +365,16 @@ class AssignmentStepsTest {
         List<OpenAssignment> open = loop.session().assignments().open();
         done(loop, "two are out");
 
-        Decision first = loop.feed(null, new Report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        Decision first = loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
         loop.feed(loop.runId(), ContextAssembledFixture.of(only(first, tantalum.value.command.AssembleContext.class).id(), "s", List.of(), null, List.of()));
         done(loop, "noted");
         RunId last = loop.session().lastRun();
 
-        Decision paused = loop.feed(null, new Report(open.get(1).id(), AssignmentOutcome.COMPLETED, "two done", Root.USER));
+        Decision paused = loop.feed(null, AssignmentFixture.report(open.get(1).id(), AssignmentOutcome.COMPLETED, "two done", Root.USER));
 
         assertNull(loop.session().activeRun());
         assertEquals(last, loop.session().lastRun());
-        assertTrue(paused.commands().isEmpty());
+        assertTrue(AssignmentFixture.commands(paused).isEmpty());
         assertEquals(List.of(new ReportBlock(open.get(1).id(), AssignmentOutcome.COMPLETED, "two done")),
                 loop.session().messages().getLast().content());
         assertTrue(paused.facts().stream().anyMatch(fact -> fact instanceof ReportSettled settled && settled.paused()));
@@ -400,11 +400,11 @@ class AssignmentStepsTest {
         Decision decision = loop.feed(null, new TimerFired(open.timer()));
 
         assertTrue(loop.session().assignments().open().isEmpty());
-        StopAssignment stopping = only(decision, StopAssignment.class);
-        assertEquals(open.session(), stopping.session());
+        // 期限到了也送一条叫停，排在交代后面
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.id()) && each.to().equals(open.session())));
         assertEquals(List.of(new ReportBlock(open.id(), AssignmentOutcome.TIMED_OUT, null)), loop.session().messages().getLast().content());
 
-        assertSame(loop.state, loop.feed(null, new Report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER)).newState());
+        assertSame(loop.state, loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.STOPPED, null, Root.USER)).newState());
         assertSame(loop.state, loop.feed(null, new TimerFired(open.timer())).newState());
     }
 
@@ -413,7 +413,7 @@ class AssignmentStepsTest {
         LoopFixture loop = new LoopFixture(10, new AssignmentLimits(4, 10, 10, Duration.ofMinutes(30)));
         OpenAssignment open = startOne(loop);
 
-        Decision ended = loop.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "done", Root.USER));
+        Decision ended = loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.COMPLETED, "done", Root.USER));
 
         assertEquals(java.util.Set.of(open.timer()), only(ended, tantalum.value.command.AbortCommands.class).commands());
     }
@@ -422,10 +422,10 @@ class AssignmentStepsTest {
     void theOneWhoStartedATaskCanCallItOff() {
         LoopFixture loop = new LoopFixture();
         startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
 
-        Decision stopped = loop.feed(start.session(), null, new tantalum.value.event.AssignmentCancelled(start.assignment()));
+        Decision stopped = loop.feed(start.session(), null, AssignmentFixture.cancelled(start.assignment()));
 
         assertTrue(loop.state.runs().get(run).isEnded());
         assertEquals(AssignmentOutcome.STOPPED, only(stopped, ReturnReport.class).outcome());
@@ -439,17 +439,23 @@ class AssignmentStepsTest {
         List<OpenAssignment> open = loop.session().assignments().open();
 
         Decision byModel = calls(loop, stop("c3", open.get(0).id()), stop("c4", "nope"));
-        assertEquals(open.get(0).session(), only(byModel, StopAssignment.class).session());
+        // 叫停排在交代后面（delivery）：交代还没确认收到，叫停先在信箱里等，不会比交代先到
+        assertTrue(AssignmentFixture.commands(byModel).stream().noneMatch(StopAssignment.class::isInstance));
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.get(0).id()) && each.ackTimer() == null));
         assertTrue(resultOf(loop, "c3").startsWith("Stop requested for task " + open.get(0).id()));
         assertEquals("ERROR No running task \"nope\".", resultOf(loop, "c4"));
         // 名单不动：等它自己交回“已停止”
         assertEquals(2, loop.session().assignments().open().size());
 
         done(loop, "stopping one");
-        Decision byUser = loop.feed(null, new StopRequested(new RequestId("r"), null));
-        assertEquals(2, byUser.commands().stream().filter(StopAssignment.class::isInstance).count());
+        loop.feed(null, new tantalum.value.event.Delivered("assign:" + open.get(0).id()));
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + open.get(0).id()) && each.ackTimer() != null),
+                "sent once the task has arrived");
+        loop.feed(null, new StopRequested(new RequestId("r"), null));
+        // 每个交代各一条叫停，排在各自对方的信箱里
+        assertEquals(2, loop.session().outbox().stream().filter(each -> each.id().startsWith("stop:")).count());
 
-        loop.feed(null, new Report(open.get(0).id(), AssignmentOutcome.STOPPED, null, Root.USER));
+        loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.STOPPED, null, Root.USER));
         assertEquals(1, loop.session().assignments().open().size());
     }
 
@@ -462,7 +468,7 @@ class AssignmentStepsTest {
         Decision cancelled = loop.feed(loop.runId(), new Cancel(new RequestId("r")));
 
         assertTrue(loop.run().isEnded());
-        assertTrue(cancelled.commands().stream().noneMatch(StopAssignment.class::isInstance));
+        assertTrue(AssignmentFixture.commands(cancelled).stream().noneMatch(StopAssignment.class::isInstance));
         assertEquals(1, loop.session().assignments().open().size());
     }
 
@@ -470,10 +476,10 @@ class AssignmentStepsTest {
     void feedingTheSameEventsAgainGivesTheSameStateAndCommands() {
         LoopFixture loop = new LoopFixture();
         OpenAssignment open = startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
         reply(loop, start.session(), run, loop.onlyCommandId(), StopReason.END_TURN, LoopFixture.text("done").getFirst());
-        loop.feed(null, new Report(open.id(), AssignmentOutcome.COMPLETED, "done", Root.USER));
+        loop.feed(null, AssignmentFixture.report(open.id(), AssignmentOutcome.COMPLETED, "done", Root.USER));
         loop.feed(null, new TimerFired(new CommandId("late")));
 
         Replay.Result again = Replay.run(loop.kernel, loop.journal);
@@ -487,7 +493,7 @@ class AssignmentStepsTest {
     void aFailedModelCallInTheTaskComesBackAsFailed() {
         LoopFixture loop = new LoopFixture();
         startOne(loop);
-        Assign start = (Assign) loop.commands.stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
+        Assign start = (Assign) AssignmentFixture.views(loop.commands).stream().filter(Assign.class::isInstance).findFirst().orElseThrow();
         RunId run = assign(loop, start);
 
         Decision failed = loop.feed(start.session(), run,

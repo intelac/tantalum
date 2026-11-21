@@ -38,7 +38,7 @@ import tantalum.value.state.SessionKind;
 public record IndexChange(Principal principal, SessionId session, long seq, Instant at, String title, String runStatus,
                           RunId activeRun, Usage usage, Submission submission, boolean runEnded,
                           Instant answerDeadline, CommandId answerTimer, String dir, String rename, Text text, boolean offRecord,
-                          SessionKind kind, String issuer, List<OpenAssignment> assignments, List<TextWithdrawn.Swap> swaps, String retitle) {
+                          SessionKind kind, String issuer, List<OpenAssignment> assignments, int outbox, List<TextWithdrawn.Swap> swaps, String retitle) {
 
     /** 内容搜索用的文字（session-find-pin R3）：{@code role} 是 {@value #USER} 或 {@value #ASSISTANT}。推理、工具不算。 */
     public record Text(String role, String text) {}
@@ -75,6 +75,7 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
                 text != null && !text.isBlank() ? new Text(USER, text) : envelope.event() instanceof ToolFinished finished
                         ? toolText(finished, before, envelope.session()) : replyText(envelope), offRecord(after, envelope.session()),
                 kind(after, envelope.session()), issuer(after, envelope.session()), assignments(after, envelope.session()),
+                outbox(after, envelope.session()),
                 envelope.event() instanceof TextWithdrawn withdrawn ? withdrawn.swaps().stream().filter(TextWithdrawn.Swap::usable).toList() : List.of(),
                 envelope.event() instanceof TextWithdrawn ? firstWords(after, envelope.session()) : null);
     }
@@ -158,6 +159,12 @@ public record IndexChange(Principal principal, SessionId session, long seq, Inst
     }
 
     /** 这个会话交代出去还没回来的：启动时据此核对、重新起期限的定时器。 */
+    /** 信箱里还没确认的条数（delivery）：启动时给不为 0 的会话发重送。 */
+    private static int outbox(KernelState state, SessionId session) {
+        SessionState found = state.sessions().get(session);
+        return found == null ? 0 : found.outbox().size();
+    }
+
     private static List<OpenAssignment> assignments(KernelState state, SessionId session) {
         SessionState found = state.sessions().get(session);
         return found == null ? List.of() : found.assignments().open();

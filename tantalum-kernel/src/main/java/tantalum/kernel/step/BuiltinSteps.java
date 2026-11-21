@@ -36,7 +36,11 @@ public final class BuiltinSteps {
         table.register(TransitionTable.ANY_STATE, Report.TYPE, InboxSteps::arrived);
         table.register(TransitionTable.ANY_STATE, QueueChanged.TYPE, QueueSteps::changed);
         table.register(TransitionTable.ANY_STATE, Cancel.TYPE, CancelSteps::cancel);
-        table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, CancelSteps::commandDropped);
+        table.register(TransitionTable.ANY_STATE, CommandDropped.TYPE, Outbox::commandDropped);
+        // 送达（delivery）：确认、不收、启动时重送；哪个阶段都收
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Delivered.TYPE, Outbox::delivered);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Refused.TYPE, Outbox::refused);
+        table.register(TransitionTable.ANY_STATE, tantalum.value.event.Redeliver.TYPE, Outbox::redeliver);
         table.register(TransitionTable.ANY_STATE, RunInterrupted.TYPE, CancelSteps::interrupted);
         table.register(TransitionTable.ANY_STATE, ModelInterrupted.TYPE, ModelSteps::modelInterrupted);
         table.register(TransitionTable.ANY_STATE, CompactRequested.TYPE, CompactSteps::requested);

@@ -18,7 +18,7 @@ import tantalum.value.assignment.AssignmentLimits;
 import tantalum.value.assignment.AssignmentOutcome;
 import tantalum.value.assignment.OpenAssignment;
 import tantalum.value.command.AssembleContext;
-import tantalum.value.command.Assign;
+import tantalum.kernel.step.AssignmentViews.Assign;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.RunTool;
 import tantalum.value.decision.Decision;
@@ -84,7 +84,7 @@ class InboxStepsTest {
         for (int i = loop.commands.size() - 1; i >= 0; i--) {
             if (loop.commands.get(i) instanceof AssembleContext assemble && assemble.run().session().equals(LoopFixture.SESSION)) {
                 Decision decision = loop.feed(assemble.run().run(), ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
-                return decision.commands().stream().filter(CallModel.class::isInstance).map(CallModel.class::cast).findFirst().orElseThrow();
+                return AssignmentFixture.commands(decision).stream().filter(CallModel.class::isInstance).map(CallModel.class::cast).findFirst().orElseThrow();
             }
         }
         throw new AssertionError("no context was asked for");
@@ -109,7 +109,7 @@ class InboxStepsTest {
     }
 
     private static Report report(String assignment, String text) {
-        return new Report(assignment, AssignmentOutcome.COMPLETED, text, Root.USER);
+        return AssignmentFixture.report(assignment, AssignmentOutcome.COMPLETED, text, Root.USER);
     }
 
     private static List<ContentBlock> block(String assignment, String text) {
@@ -117,8 +117,8 @@ class InboxStepsTest {
     }
 
     private static <T> T only(Decision decision, Class<T> type) {
-        List<T> found = decision.commands().stream().filter(type::isInstance).map(type::cast).toList();
-        assertEquals(1, found.size(), "expected one " + type.getSimpleName() + " in " + decision.commands());
+        List<T> found = AssignmentFixture.commands(decision).stream().filter(type::isInstance).map(type::cast).toList();
+        assertEquals(1, found.size(), "expected one " + type.getSimpleName() + " in " + AssignmentFixture.commands(decision));
         return found.getFirst();
     }
 
@@ -213,7 +213,7 @@ class InboxStepsTest {
         for (SessionId session : List.of(LoopFixture.SESSION, main)) {
             Decision decision = loop.feed(session, null, new Assignment("t1-0", new SessionId("other"), Root.USER, "do this", null));
             assertSame(before, decision.newState(), session.value());
-            assertTrue(decision.commands().isEmpty(), session.value());
+            assertTrue(AssignmentFixture.commands(decision).isEmpty(), session.value());
         }
     }
 
@@ -253,7 +253,7 @@ class InboxStepsTest {
                 report(start.assignment(), "it is done"), report("t999-0", "who?"))) {
             Decision decision = loop.feed(start.session(), null, event);
             assertSame(before, decision.newState(), event.type());
-            assertTrue(decision.commands().isEmpty() && decision.facts().isEmpty(), event.type());
+            assertTrue(AssignmentFixture.commands(decision).isEmpty() && decision.facts().isEmpty(), event.type());
         }
     }
 
@@ -281,7 +281,7 @@ class InboxStepsTest {
         KernelState before = loop.state;
         assertSame(before, loop.feed(start.session(), null, prompt("hello?")).newState());
 
-        loop.feed(main, null, report(start.assignment(), "one done"));
+        loop.feed(main, null, new Report(start.assignment(), AssignmentOutcome.COMPLETED, "one done", Root.USER, start.session()));
         RunId next = loop.state.sessions().get(main).activeRun();
         assertNotEquals(run, next);
         assertEquals(BY_REPORT, loop.state.runs().get(next).cause());
@@ -300,7 +300,7 @@ class InboxStepsTest {
             Decision decision = loop.kernel.step(before,
                     new EventEnvelope(900_000, LoopFixture.AT, new Principal("mallory"), LoopFixture.SESSION, null, event));
             assertSame(before, decision.newState(), event.type());
-            assertTrue(decision.commands().isEmpty() && decision.facts().isEmpty(), event.type());
+            assertTrue(AssignmentFixture.commands(decision).isEmpty() && decision.facts().isEmpty(), event.type());
         }
     }
 
@@ -352,7 +352,7 @@ class InboxStepsTest {
         Decision failed = fail(loop);
 
         assertNull(loop.session().activeRun());
-        assertTrue(failed.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        assertTrue(AssignmentFixture.commands(failed).stream().noneMatch(AssembleContext.class::isInstance));
         assertEquals(Message.user("also this"), loop.session().messages().getLast());
         assertTrue(loop.session().inbox().isEmpty());
     }
@@ -367,7 +367,7 @@ class InboxStepsTest {
         Decision failed = fail(loop);
 
         assertNull(loop.session().activeRun());
-        assertTrue(failed.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        assertTrue(AssignmentFixture.commands(failed).stream().noneMatch(AssembleContext.class::isInstance));
         assertEquals(block(id, "one done"), loop.session().messages().getLast().content());
         assertTrue(loop.session().inbox().isEmpty());
     }
@@ -383,7 +383,7 @@ class InboxStepsTest {
 
         Decision failed = fail(loop);
 
-        assertEquals(1, failed.commands().stream().filter(AssembleContext.class::isInstance).count());
+        assertEquals(1, AssignmentFixture.commands(failed).stream().filter(AssembleContext.class::isInstance).count());
         assertEquals(BY_REPORT, loop.run().cause());
         List<Message> messages = loop.session().messages();
         assertEquals(block(ids.get(0), "one done"), messages.get(messages.size() - 2).content());
@@ -485,7 +485,7 @@ class InboxStepsTest {
 
         assertEquals(EndReason.CANCELLED, endOf(loop, compaction));
         assertNull(loop.session().activeRun());
-        assertTrue(cancelled.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        assertTrue(AssignmentFixture.commands(cancelled).stream().noneMatch(AssembleContext.class::isInstance));
         List<Message> messages = loop.session().messages();
         assertEquals(Message.user("and one more thing"), messages.get(messages.size() - 2));
         assertEquals(block(id, "one done"), messages.getLast().content());
@@ -505,7 +505,7 @@ class InboxStepsTest {
         RunTool slow = only(started, RunTool.class);
 
         // 一个追到头是外面的事引起的结果并进这一轮（外面来的事是后面的步骤；内核只管取低的）
-        loop.feed(null, new Report(first.assignment(), AssignmentOutcome.COMPLETED, "one done", Root.OUTSIDE));
+        loop.feed(null, AssignmentFixture.report(first.assignment(), AssignmentOutcome.COMPLETED, "one done", Root.OUTSIDE));
         assertEquals(Root.USER, loop.run().cause().root(), "the run has not taken it in yet");
         loop.feed(loop.runId(), ToolFinishedFixture.of(slow.id(), "c2", "ok", false, null));
         assertEquals(new RunCause(RunCause.StartedBy.PROMPT, Root.OUTSIDE, null), loop.run().cause());
@@ -519,7 +519,7 @@ class InboxStepsTest {
         done(loop, "ok");
 
         // 结果自称是你引起的：不算，照交代时的
-        loop.feed(null, new Report(second.assignment(), AssignmentOutcome.COMPLETED, "two done", Root.USER));
+        loop.feed(null, AssignmentFixture.report(second.assignment(), AssignmentOutcome.COMPLETED, "two done", Root.USER));
         assertEquals(new RunCause(RunCause.StartedBy.REPORT, Root.OUTSIDE, null), loop.run().cause());
         assembled(loop);
         done(loop, "noted");

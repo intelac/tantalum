@@ -248,7 +248,7 @@ final class TranscriptPass {
                 put(card.ended(outcome, at));
             }
         }
-        String text = envelope.event() instanceof tantalum.value.event.Report report ? report.text() : null;
+        String text = settled.text();
         put(new TaskResult(TranscriptItem.id(envelope.seq(), 0), session, settled.run().run(), at, settled.assignment(), outcome, text, settled.paused()));
     }
 

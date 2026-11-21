@@ -20,8 +20,8 @@ import tantalum.kernel.hook.KernelHook;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.RunTool;
-import tantalum.value.command.Assign;
-import tantalum.value.command.StopAssignment;
+import tantalum.kernel.step.AssignmentViews.Assign;
+import tantalum.kernel.step.AssignmentViews.StopAssignment;
 import tantalum.value.decision.Decision;
 import tantalum.value.event.Answered;
 import tantalum.value.event.Cancel;
@@ -96,7 +96,7 @@ class AssignmentEdgeStepsTest {
 
     /** 自动开的那一轮：先给上下文，再让模型说完。 */
     private static void finishAutoRun(LoopFixture loop, Decision started) {
-        AssembleContext assemble = started.commands().stream().filter(AssembleContext.class::isInstance).map(AssembleContext.class::cast)
+        AssembleContext assemble = AssignmentFixture.commands(started).stream().filter(AssembleContext.class::isInstance).map(AssembleContext.class::cast)
                 .findFirst().orElseThrow();
         loop.feed(loop.runId(), ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
         done(loop, "noted");
@@ -140,7 +140,7 @@ class AssignmentEdgeStepsTest {
         Decision decision = calls(loop, task("c1", "Check module A."));
 
         assertEquals("ERROR Tool call blocked: no tasks on this server", resultOf(loop, "c1"));
-        assertTrue(decision.commands().stream().noneMatch(Assign.class::isInstance));
+        assertTrue(AssignmentFixture.commands(decision).stream().noneMatch(Assign.class::isInstance));
         assertTrue(loop.session().assignments().open().isEmpty());
         assertEquals(0, loop.session().assignments().unattendedAssignments());
     }
@@ -155,12 +155,12 @@ class AssignmentEdgeStepsTest {
 
         // 等用户回答：还没放出
         assertInstanceOf(AwaitingAnswer.class, loop.run().phase());
-        assertTrue(asked.commands().stream().noneMatch(Assign.class::isInstance));
+        assertTrue(AssignmentFixture.commands(asked).stream().noneMatch(Assign.class::isInstance));
         assertTrue(loop.session().assignments().open().isEmpty());
 
         Decision answered = loop.feed(loop.runId(), new Answered(new SubmissionId("a"), new RequestId("a"), "start-task", Answer.of("go")));
 
-        assertEquals(1, answered.commands().stream().filter(Assign.class::isInstance).count());
+        assertEquals(1, AssignmentFixture.commands(answered).stream().filter(Assign.class::isInstance).count());
         assertEquals(1, loop.session().assignments().open().size());
         assertTrue(resultOf(loop, "c1").startsWith("Started task"));
     }
@@ -175,7 +175,7 @@ class AssignmentEdgeStepsTest {
 
         Decision answered = loop.feed(loop.runId(), new Answered(new SubmissionId("a"), new RequestId("a"), "start-task", Answer.of("no")));
 
-        assertTrue(answered.commands().stream().noneMatch(Assign.class::isInstance));
+        assertTrue(AssignmentFixture.commands(answered).stream().noneMatch(Assign.class::isInstance));
         assertTrue(loop.session().assignments().open().isEmpty());
         assertEquals("ERROR Tool call blocked: denied by the user", resultOf(loop, "c1"));
     }
@@ -190,8 +190,8 @@ class AssignmentEdgeStepsTest {
         Decision decision = calls(loop, task("c1", "one"), LoopFixture.call("c2", "safe-read"), task("c3", "two"));
 
         // 两个任务当场有结果；普通工具照常发出，这一轮等的只是它
-        assertEquals(2, decision.commands().stream().filter(Assign.class::isInstance).count());
-        assertEquals(1, decision.commands().stream().filter(RunTool.class::isInstance).count());
+        assertEquals(2, AssignmentFixture.commands(decision).stream().filter(Assign.class::isInstance).count());
+        assertEquals(1, AssignmentFixture.commands(decision).stream().filter(RunTool.class::isInstance).count());
         assertEquals(ToolSteps.AWAITING_TOOLS, loop.phase());
         List<String> ids = loop.session().assignments().open().stream().map(OpenAssignment::id).toList();
         assertEquals(2, ids.size());
@@ -208,8 +208,9 @@ class AssignmentEdgeStepsTest {
         Decision decision = calls(loop, task("c2", "two"), new ToolCallBlock("c3", AssignmentTools.TASK_STOP, "{}",
                 new Json.Obj(Map.of(AssignmentTools.ID, new Json.Str(id)))));
 
-        assertEquals(1, decision.commands().stream().filter(Assign.class::isInstance).count());
-        assertEquals(id, decision.commands().stream().filter(StopAssignment.class::isInstance).map(StopAssignment.class::cast).findFirst().orElseThrow().assignment());
+        assertEquals(1, AssignmentFixture.commands(decision).stream().filter(Assign.class::isInstance).count());
+        // 叫停排在它的交代后面（delivery）：交代还没确认，叫停在信箱里等
+        assertTrue(loop.session().outbox().stream().anyMatch(each -> each.id().equals("stop:" + id) && each.ackTimer() == null));
         assertEquals(2, loop.session().assignments().open().size());
     }
 
@@ -224,12 +225,12 @@ class AssignmentEdgeStepsTest {
         assertInstanceOf(AwaitingAnswer.class, loop.run().phase());
         RunId run = loop.runId();
 
-        Decision arrived = loop.feed(null, new Report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        Decision arrived = loop.feed(null, AssignmentFixture.report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
 
         // 没有另开一轮；这一轮还在等回答，结果先留着
         assertEquals(run, loop.session().activeRun());
         assertInstanceOf(AwaitingAnswer.class, loop.run().phase());
-        assertTrue(arrived.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        assertTrue(AssignmentFixture.commands(arrived).stream().noneMatch(AssembleContext.class::isInstance));
         assertTrue(resultsSeen(loop).isEmpty());
 
         String asked = ((AwaitingAnswer) loop.run().phase()).question().id();
@@ -246,7 +247,7 @@ class AssignmentEdgeStepsTest {
         ask(loop, "go");
         calls(loop, task("c1", "one"), LoopFixture.call("c2", "slow"));
         String id = loop.session().assignments().open().getFirst().id();
-        loop.feed(null, new Report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        loop.feed(null, AssignmentFixture.report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
         assertTrue(resultsSeen(loop).isEmpty());
 
         loop.feed(loop.runId(), new Cancel(new RequestId("stop")));
@@ -266,12 +267,12 @@ class AssignmentEdgeStepsTest {
         List<OpenAssignment> open = loop.session().assignments().open();
         done(loop, "two are out");
 
-        Decision first = loop.feed(null, new Report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        Decision first = loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
         RunId run = loop.session().activeRun();
-        Decision second = loop.feed(null, new Report(open.get(1).id(), AssignmentOutcome.FAILED, "two broke", Root.USER));
+        Decision second = loop.feed(null, AssignmentFixture.report(open.get(1).id(), AssignmentOutcome.FAILED, "two broke", Root.USER));
 
-        assertEquals(1, first.commands().stream().filter(AssembleContext.class::isInstance).count());
-        assertTrue(second.commands().stream().noneMatch(AssembleContext.class::isInstance));
+        assertEquals(1, AssignmentFixture.commands(first).stream().filter(AssembleContext.class::isInstance).count());
+        assertTrue(AssignmentFixture.commands(second).stream().noneMatch(AssembleContext.class::isInstance));
         assertEquals(run, loop.session().activeRun());
         // 自动开的只有一轮：加入的那一个不算
         assertEquals(1, loop.session().assignments().unattendedRuns());
@@ -290,7 +291,7 @@ class AssignmentEdgeStepsTest {
             calls(loop, task("c1", "one"), task("c2", "two"));
             List<OpenAssignment> open = loop.session().assignments().open();
             done(loop, "two are out");
-            Decision auto = loop.feed(null, new Report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
+            Decision auto = loop.feed(null, AssignmentFixture.report(open.get(0).id(), AssignmentOutcome.COMPLETED, "one done", Root.USER));
             assertEquals(1, loop.session().assignments().unattendedRuns(), kind);
             assertEquals(2, loop.session().assignments().unattendedAssignments(), kind);
             switch (kind) {
@@ -298,7 +299,7 @@ class AssignmentEdgeStepsTest {
                 case "follow-up" -> loop.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("f"), "and now?"));
                 case "steer" -> loop.feed(null, UserPromptFixture.join(new SubmissionId("s"), new RequestId("s"), "wait"));
                 default -> {
-                    AssembleContext assemble = auto.commands().stream().filter(AssembleContext.class::isInstance).map(AssembleContext.class::cast)
+                    AssembleContext assemble = AssignmentFixture.commands(auto).stream().filter(AssembleContext.class::isInstance).map(AssembleContext.class::cast)
                             .findFirst().orElseThrow();
                     loop.feed(loop.runId(), ContextAssembledFixture.of(assemble.id(), "s", List.of(), null, List.of()));
                     calls(loop, askUser("q1"));
@@ -325,8 +326,8 @@ class AssignmentEdgeStepsTest {
         calls(manual, task("c1", "one"));
         String id = manual.session().assignments().open().getFirst().id();
         done(manual, "out");
-        Decision back = manual.feed(null, new Report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
-        assertTrue(back.commands().isEmpty());
+        Decision back = manual.feed(null, AssignmentFixture.report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        assertTrue(AssignmentFixture.commands(back).isEmpty());
         assertNull(manual.session().activeRun());
         assertEquals(List.of(new ReportBlock(id, AssignmentOutcome.COMPLETED, "one done")), resultsSeen(manual));
     }
@@ -338,7 +339,7 @@ class AssignmentEdgeStepsTest {
         calls(loop, task("c1", "one"));
         String id = loop.session().assignments().open().getFirst().id();
         done(loop, "out");
-        Decision auto = loop.feed(null, new Report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
+        Decision auto = loop.feed(null, AssignmentFixture.report(id, AssignmentOutcome.COMPLETED, "one done", Root.USER));
         RunId autoRun = loop.session().activeRun();
 
         loop.feed(null, UserPromptFixture.of(new SubmissionId("f"), new RequestId("f"), "what did it say?"));
@@ -358,7 +359,7 @@ class AssignmentEdgeStepsTest {
     void aTasksSessionTakesNoHumanInputButCanBeToldToStop() {
         LoopFixture loop = new LoopFixture();
         ask(loop, "go");
-        Assign start = calls(loop, task("c1", "Check module A.")).commands().stream().filter(Assign.class::isInstance)
+        Assign start = AssignmentFixture.commands(calls(loop, task("c1", "Check module A."))).stream().filter(Assign.class::isInstance)
                 .map(Assign.class::cast).findFirst().orElseThrow();
         AssignmentFixture.deliver(loop, start);
         SessionId child = start.session();
@@ -370,12 +371,12 @@ class AssignmentEdgeStepsTest {
         assertTrue(loop.state.sessions().get(child).inbox().isEmpty());
 
         // 说的不是它正在做的这次交代：不动
-        assertSame(before, loop.feed(child, null, new AssignmentCancelled("t999-0")).newState());
+        assertSame(before, loop.feed(child, null, AssignmentFixture.cancelled("t999-0")).newState());
 
-        loop.feed(child, null, new AssignmentCancelled(start.assignment()));
+        loop.feed(child, null, AssignmentFixture.cancelled(start.assignment()));
         assertEquals(EndReason.CANCELLED, ((Ended) loop.state.runs().get(run).phase()).reason());
         // 已经停了：再说一次不改变什么
-        assertSame(loop.state, loop.feed(child, null, new AssignmentCancelled(start.assignment())).newState());
+        assertSame(loop.state, loop.feed(child, null, AssignmentFixture.cancelled(start.assignment())).newState());
     }
 
     // ---- 多用户：任务的事件只在同一个人的会话之间走 ----
@@ -390,18 +391,18 @@ class AssignmentEdgeStepsTest {
     void anotherPersonCannotSettleStopOrFillSomeoneElsesTasks() {
         LoopFixture loop = new LoopFixture();
         ask(loop, "go");
-        Assign start = calls(loop, task("c1", "Check module A.")).commands().stream().filter(Assign.class::isInstance)
+        Assign start = AssignmentFixture.commands(calls(loop, task("c1", "Check module A."))).stream().filter(Assign.class::isInstance)
                 .map(Assign.class::cast).findFirst().orElseThrow();
         done(loop, "out");
         AssignmentFixture.deliver(loop, start);
         KernelState before = loop.state;
 
         // 别人名下来的“任务结束”“停任务”：不是这个会话的主人，什么都不改、什么都不发
-        for (tantalum.value.event.Event event : List.of(new Report(start.assignment(), AssignmentOutcome.COMPLETED, "forged result", Root.USER),
+        for (tantalum.value.event.Event event : List.of(AssignmentFixture.report(start.assignment(), AssignmentOutcome.COMPLETED, "forged result", Root.USER),
                 new StopRequested(new RequestId("r"), null))) {
             Decision forged = feedAs(loop, "mallory", LoopFixture.SESSION, event);
             assertSame(before, forged.newState(), event.type());
-            assertTrue(forged.commands().isEmpty() && forged.facts().isEmpty(), event.type());
+            assertTrue(AssignmentFixture.commands(forged).isEmpty() && forged.facts().isEmpty(), event.type());
         }
         // 别人名下来的“建会话”“交代”送进一个已经属于这个人的会话：也不动
         assertSame(before, feedAs(loop, "mallory", start.session(), AssignmentFixture.helperFor(start)).newState());
@@ -412,7 +413,7 @@ class AssignmentEdgeStepsTest {
         assertTrue(resultsSeen(loop).isEmpty());
 
         // 主人自己的结果照常生效
-        loop.feed(null, new Report(start.assignment(), AssignmentOutcome.COMPLETED, "real result", Root.USER));
+        loop.feed(null, AssignmentFixture.report(start.assignment(), AssignmentOutcome.COMPLETED, "real result", Root.USER));
         assertEquals(List.of(new ReportBlock(start.assignment(), AssignmentOutcome.COMPLETED, "real result")), resultsSeen(loop));
     }
 
@@ -420,7 +421,7 @@ class AssignmentEdgeStepsTest {
     void aTasksSessionAndItsRunBelongToThePersonWhoStartedTheTask() {
         LoopFixture loop = new LoopFixture();
         ask(loop, "go");
-        Assign start = calls(loop, task("c1", "Check module A.")).commands().stream().filter(Assign.class::isInstance)
+        Assign start = AssignmentFixture.commands(calls(loop, task("c1", "Check module A."))).stream().filter(Assign.class::isInstance)
                 .map(Assign.class::cast).findFirst().orElseThrow();
         assertEquals(LoopFixture.USER, start.run().principal());
 
@@ -444,7 +445,7 @@ class AssignmentEdgeStepsTest {
         Decision unknown = loop.feed(null, new StopRequested(new RequestId("r"), "t999-0"));
 
         assertSame(before, unknown.newState());
-        assertTrue(unknown.commands().isEmpty());
-        assertSame(before, loop.feed(null, new Report("t999-0", AssignmentOutcome.COMPLETED, "who?", Root.USER)).newState());
+        assertTrue(AssignmentFixture.commands(unknown).isEmpty());
+        assertSame(before, loop.feed(null, AssignmentFixture.report("t999-0", AssignmentOutcome.COMPLETED, "who?", Root.USER)).newState());
     }
 }

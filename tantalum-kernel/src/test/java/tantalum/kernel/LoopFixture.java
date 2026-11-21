@@ -140,11 +140,18 @@ public final class LoopFixture {
         return run().phase().name();
     }
 
+    /** 上一步唯一的命令；送达的回执和确认定时器不算（delivery 的记账，测试另看）。 */
     public Command onlyCommand() {
-        if (last.commands().size() != 1) {
+        List<Command> work = last.commands().stream().filter(command -> !bookkeeping(command)).toList();
+        if (work.size() != 1) {
             throw new AssertionError("expected one command but got " + last.commands());
         }
-        return last.commands().getFirst();
+        return work.getFirst();
+    }
+
+    public static boolean bookkeeping(Command command) {
+        return command instanceof tantalum.value.command.Acknowledge
+                || command instanceof tantalum.value.command.StartTimer timer && timer.delay().equals(tantalum.kernel.step.Outbox.ACK_AFTER);
     }
 
     public CommandId onlyCommandId() {

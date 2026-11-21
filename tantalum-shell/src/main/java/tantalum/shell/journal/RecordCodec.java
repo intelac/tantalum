@@ -69,9 +69,8 @@ public final class RecordCodec {
         @JsonSubTypes.Type(value = DoWork.class, name = "DoWork"),
         @JsonSubTypes.Type(value = StartTimer.class, name = "StartTimer"),
         @JsonSubTypes.Type(value = AbortCommands.class, name = "AbortCommands"),
-        @JsonSubTypes.Type(value = tantalum.value.command.Assign.class, name = "Assign"),
-        @JsonSubTypes.Type(value = tantalum.value.command.ReturnReport.class, name = "ReturnReport"),
-        @JsonSubTypes.Type(value = tantalum.value.command.StopAssignment.class, name = "StopAssignment")
+        @JsonSubTypes.Type(value = tantalum.value.command.Deliver.class, name = "Deliver"),
+        @JsonSubTypes.Type(value = tantalum.value.command.Acknowledge.class, name = "Acknowledge")
     })
     private interface CommandMixin {}
 

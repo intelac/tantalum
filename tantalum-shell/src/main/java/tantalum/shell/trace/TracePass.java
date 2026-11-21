@@ -413,9 +413,7 @@ final class TracePass {
             }
             RunId run = settled.run().run();
             track(run);
-            String text = envelope.event() instanceof tantalum.value.event.Report report && report.assignment().equals(settled.assignment())
-                    ? report.text() : null;
-            task(run, TaskNote.Side.RESULT, settled.assignment(), open.session(), open.agent(), settled.outcome(), text);
+            task(run, TaskNote.Side.RESULT, settled.assignment(), open.session(), open.agent(), settled.outcome(), settled.text());
         }
     }
 

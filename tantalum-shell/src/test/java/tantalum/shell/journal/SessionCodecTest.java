@@ -10,9 +10,6 @@ import org.junit.jupiter.api.Test;
 import tantalum.value.assignment.AssignmentOutcome;
 import tantalum.value.assignment.Assignments;
 import tantalum.value.assignment.OpenAssignment;
-import tantalum.value.command.Assign;
-import tantalum.value.command.ReturnReport;
-import tantalum.value.command.StopAssignment;
 import tantalum.value.decision.AssignmentStarted;
 import tantalum.value.decision.ReportSettled;
 import tantalum.value.decision.SessionChange;
@@ -83,11 +80,11 @@ class SessionCodecTest {
         readsBack(UserPromptFixture.of(new SubmissionId("s"), new RequestId("r"), "hi", List.of(), SONNET));
         readsBack(UserPromptFixture.join(new SubmissionId("s"), new RequestId("r"), "and this"));
         readsBack(new Assignment("t3-0", SESSION, Root.USER, "Check module A.", SONNET));
-        readsBack(new Report("t3-0", AssignmentOutcome.COMPLETED, "fine", Root.OUTSIDE));
-        readsBack(new Report("t3-0", AssignmentOutcome.STOPPED, null, Root.USER));
+        readsBack(new Report("t3-0", AssignmentOutcome.COMPLETED, "fine", Root.OUTSIDE, HELPER));
+        readsBack(new Report("t3-0", AssignmentOutcome.STOPPED, null, Root.USER, HELPER));
         readsBack(new StopRequested(new RequestId("r"), null));
         readsBack(new StopRequested(new RequestId("r"), "t3-0"));
-        readsBack(new AssignmentCancelled("t3-0"));
+        readsBack(new AssignmentCancelled("t3-0", SESSION));
         readsBack(new SessionRenamed(new SubmissionId("s"), new RequestId("r"), "Quattro review"));
     }
 
@@ -105,7 +102,7 @@ class SessionCodecTest {
     void theCreatingLineCarriesWhatIsFixedThen() {
         HelperOf helper = new HelperOf(SESSION, "t3-0", "reviewer", "You review code.", List.of("read"));
         SessionChange created = new SessionChange(HELPER, USER, true, SessionKind.HELPER, helper, "/home/alice/app", true,
-                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null, null);
+                List.of(Message.assignment("t3-0", "Check module A.")), null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         String line = records.encode(new StepRecord(0, created, List.of(), List.of(), null, null, List.of(), List.of()), RecordMemo.writer(USER, HELPER));
         assertTrue(line.contains("\"kind\":\"HELPER\"") && line.contains("\"dir\":\"/home/alice/app\"") && line.contains("\"offRecord\":true"), line);
         assertTrue(line.contains("\"kind\":\"assignment\""), "the assignment is its own block: " + line);
@@ -142,14 +139,18 @@ class SessionCodecTest {
         Assignments open = new Assignments(List.of(new OpenAssignment("t3-0", HELPER, "reviewer", "check module A", AT, AT.plusSeconds(1800),
                 new CommandId("c1"), Root.OUTSIDE)), 2, 3);
         SessionChange change = new SessionChange(SESSION, USER, false, null, null, null, false, List.of(), null, null, null, null, null, null, null,
-                null, null, null, null, new SessionChange.Changed<>(open), null);
+                null, null, null, null, new SessionChange.Changed<>(open), null, null);
         StepRecord record = readsBack(new StepRecord(0, change, List.of(), List.of(), null, null,
-                List.of(new Assign(new CommandId("c2"), run, "t3-0", HELPER, "reviewer", "check module A\nand report", "/home/alice/app", false,
-                                SONNET, Root.USER),
-                        new ReturnReport(new CommandId("c3"), run, SESSION, "t3-0", AssignmentOutcome.COMPLETED, "fine", Root.USER),
-                        new StopAssignment(new CommandId("c4"), run, "t3-0", HELPER)),
+                List.of(new tantalum.value.command.Deliver(new CommandId("c2"), run, HELPER, new tantalum.value.delivery.AssignmentParcel(
+                                new Assignment("t3-0", SESSION, Root.USER, "check module A\nand report", SONNET), "reviewer", "/home/alice/app", false)),
+                        new tantalum.value.command.Deliver(new CommandId("c3"), run, SESSION, new tantalum.value.delivery.ReportParcel(
+                                new Report("t3-0", AssignmentOutcome.COMPLETED, "fine", Root.USER, HELPER))),
+                        new tantalum.value.command.Deliver(new CommandId("c4"), run, HELPER, new tantalum.value.delivery.StopParcel(
+                                new AssignmentCancelled("t3-0", SESSION))),
+                        new tantalum.value.command.Acknowledge(new CommandId("c5"), run, "report:t3-0", HELPER, null),
+                        new tantalum.value.command.Acknowledge(new CommandId("c6"), run, "assign:t3-9", SESSION, "this session was opened for another task")),
                 List.of(new AssignmentStarted(run, "t3-0", HELPER, "reviewer", "check module A", "call-1"),
-                        new ReportSettled(run, "t3-0", AssignmentOutcome.TIMED_OUT, true))));
+                        new ReportSettled(run, "t3-0", AssignmentOutcome.TIMED_OUT, "deadline", true))));
         assertTrue(records.encode(record, RecordMemo.writer(USER, SESSION)).contains("\"assignments\""));
     }
 

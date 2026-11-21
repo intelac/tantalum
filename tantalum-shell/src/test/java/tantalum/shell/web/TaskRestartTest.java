@@ -45,8 +45,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 进程死在任务的各个时间点（subagent 需求 4.1–4.3）：用一份“死在那一刻”的账启动真服务器，放出任务的会话都恰好得到一个结果，
- * 任务不重新执行，再重启一次什么都不多。
+ * 进程死在任务的各个时间点（subagent 需求 4.1–4.3，delivery 需求 4）：用一份“死在那一刻”的账启动真服务器，放出任务的会话都恰好
+ * 得到一个结果；没送到的交代重送后做一次，送到了的不重新执行；再重启一次什么都不多。
  */
 class TaskRestartTest {
 
@@ -92,8 +92,8 @@ class TaskRestartTest {
                 new EventEnvelope(2, AT, ALICE, S1, RUN, ContextAssembledFixture.of(new CommandId("s1_1-0"), "s", List.of(), null, List.of())),
                 new EventEnvelope(3, AT, ALICE, S1, RUN, new ModelReplied(new CommandId("s1_2-0"), List.of(new ToolCallBlock("c1", AssignmentTools.TASK, "{}",
                         new Json.Obj(Map.of(AssignmentTools.PROMPT, new Json.Str("Check module A."))))), StopReason.TOOL_USE, "m", null, null, null, null)),
-                // 第 3 步发出的命令：0 是 Assign，1 是接着调模型
-                new EventEnvelope(4, AT, ALICE, S1, RUN, said("s1_3-1", "started"))));
+                // 第 3 步发出的命令：0 是确认定时器，1 是送达（delivery），2 是接着调模型
+                new EventEnvelope(4, AT, ALICE, S1, RUN, said("s1_3-2", "started"))));
         long seq = 6;
         if (child.length > 0) {
             // 和交代的处理器一样：先建帮手会话
@@ -115,8 +115,13 @@ class TaskRestartTest {
         return JSON.readTree(server.get("alice", "/api/sessions/" + session.value() + "/runs").body()).get("runs");
     }
 
-    /** 等主会话的第二轮（任务的结果开的）结束，返回它看到的任务结果。 */
+    /** 等主会话的第二轮（任务的结果开的）结束，返回它看到的任务结果。任务没有重新执行：只有主会话那一轮调了模型。 */
     private ReportBlock resultSeen(TestServer server) throws Exception {
+        return resultSeen(server, 1);
+    }
+
+    /** 同上，{@code calls} 是重启以后调模型的次数（交代被重送、帮手照常做完时是 2）。 */
+    private ReportBlock resultSeen(TestServer server, int calls) throws Exception {
         for (int i = 0; i < 1500; i++) {
             JsonNode runs = runs(server, S1);
             if (runs.size() == 2 && runs.get(1).has("endReason")) {
@@ -125,8 +130,8 @@ class TaskRestartTest {
             Thread.sleep(10);
         }
         assertEquals(2, runs(server, S1).size(), runs(server, S1).toString());
-        assertEquals(1, prompts.size(), "the result started exactly one run, and the task was not run again");
-        List<ReportBlock> results = prompts.getFirst().messages().stream().flatMap(message -> message.content().stream())
+        assertEquals(calls, prompts.size(), "the result started exactly one run, and the task ran " + (calls - 1) + " time(s)");
+        List<ReportBlock> results = prompts.getLast().messages().stream().flatMap(message -> message.content().stream())
                 .filter(ReportBlock.class::isInstance).map(ReportBlock.class::cast).toList();
         assertEquals(1, results.size(), results.toString());
         JsonNode tasks = JSON.readTree(server.get("alice", "/api/sessions/s1/tasks").body()).get("tasks");
@@ -136,22 +141,23 @@ class TaskRestartTest {
         return results.getFirst();
     }
 
-    /** 再重启一次：没有任务在外面了，什么都不多发生。 */
+    /** 再重启一次：没有任务在外面了、信箱都空了，什么都不多发生。 */
     private void nothingMoreAfterAnotherRestart() throws Exception {
+        int before = prompts.size();
         try (TestServer server = server()) {
             Thread.sleep(300);
             assertEquals(2, runs(server, S1).size());
-            assertEquals(1, prompts.size());
+            assertEquals(before, prompts.size());
         }
     }
 
+    /** 交代记了账、还没送到：它根本没开始过，重启后照原编号重送，帮手照常做完（delivery 需求 4.1，有意改变：以前回“被打断”）。 */
     @Test
     void diedAfterStartingTheTaskBeforeItArrived() throws Exception {
         write();
         try (TestServer server = server()) {
-            assertEquals(new ReportBlock(TASK, AssignmentOutcome.INTERRUPTED, null), resultSeen(server));
-            // 任务的会话从来没有过
-            assertTrue(runs(server, CHILD) == null || runs(server, CHILD).isEmpty());
+            assertEquals(new ReportBlock(TASK, AssignmentOutcome.COMPLETED, "noted"), resultSeen(server, 2));
+            assertEquals("COMPLETED", runs(server, CHILD).get(0).get("endReason").asString());
         }
         nothingMoreAfterAnotherRestart();
     }

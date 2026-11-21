@@ -32,7 +32,7 @@ class LiveViewsEquivalenceTest {
             if (i == 40) {
                 // 第 5 轮交代出去的事这时才回来：卡片早就不在最新一页，但还会变，必须留在内存
                 fx.feed(null, new tantalum.value.event.Report(task[0], tantalum.value.assignment.AssignmentOutcome.COMPLETED, "Module A is fine.",
-                        tantalum.value.event.Root.USER));
+                        tantalum.value.event.Root.USER, tantalum.value.id.SessionIds.helper(TranscriptFixture.SESSION, task[0])));
                 RunId woke = fx.state().sessions().get(TranscriptFixture.SESSION).activeRun();
                 if (woke != null) {
                     WireFormatTest.assembled(fx, woke, "sys v2", List.of(WireFormatTest.memory("a\nb")));

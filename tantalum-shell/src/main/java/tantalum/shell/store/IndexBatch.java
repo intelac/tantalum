@@ -33,6 +33,8 @@ final class IndexBatch {
         String issuer;
         /** 交代出去还没回来的，写进索引的样子（{@link SessionIndex#encode}）。 */
         String assignments = "";
+        /** 信箱里还没确认的条数（delivery）。 */
+        int outbox;
         /** 这一批里最后一次改名；没改为 null，空串表示恢复自动标题。 */
         String rename;
         long lastSeq;
@@ -85,6 +87,7 @@ final class IndexBatch {
             row.issuer = change.issuer();
         }
         row.assignments = SessionIndex.encode(change.assignments());
+        row.outbox = change.outbox();
         row.runStatus = change.runStatus();
         row.activeRun = change.activeRun();
         row.answerDeadline = change.answerDeadline();

@@ -89,6 +89,15 @@ public final class EventCodec {
     })
     private interface ContentBlockMixin {}
 
+    /** 信箱里送的东西（delivery）：会话状态和送达命令里都有，按种类分。 */
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
+    @JsonSubTypes({
+        @JsonSubTypes.Type(value = tantalum.value.delivery.AssignmentParcel.class, name = "assignment"),
+        @JsonSubTypes.Type(value = tantalum.value.delivery.ReportParcel.class, name = "report"),
+        @JsonSubTypes.Type(value = tantalum.value.delivery.StopParcel.class, name = "stop")
+    })
+    private interface ParcelMixin {}
+
     /** 投影才有 deferred 的工具，journal 里的都不是：false 不写出，和加字段之前的行逐字节相同。 */
     private interface ToolSpecMixin {
         @JsonInclude(JsonInclude.Include.NON_DEFAULT)
@@ -193,6 +202,7 @@ public final class EventCodec {
         mapper = JsonMapper.builder()
                 .addModule(module)
                 .addMixIn(ContentBlock.class, ContentBlockMixin.class)
+                .addMixIn(tantalum.value.delivery.Parcel.class, ParcelMixin.class)
                 .addMixIn(AttachmentRef.class, AttachmentRefMixin.class)
                 .addMixIn(SkillUse.class, SkillUseMixin.class)
                 .addMixIn(UserPrompt.class, AttachmentsMixin.class)
@@ -235,6 +245,9 @@ public final class EventCodec {
         codec.register(RunInterrupted.TYPE, 1, RunInterrupted.class);
         codec.register(StopRequested.TYPE, 1, StopRequested.class);
         codec.register(AssignmentCancelled.TYPE, 1, AssignmentCancelled.class);
+        codec.register(tantalum.value.event.Delivered.TYPE, 1, tantalum.value.event.Delivered.class);
+        codec.register(tantalum.value.event.Refused.TYPE, 1, tantalum.value.event.Refused.class);
+        codec.register(tantalum.value.event.Redeliver.TYPE, 1, tantalum.value.event.Redeliver.class);
         codec.register(TextWithdrawn.TYPE, 1, TextWithdrawn.class);
         return codec;
     }

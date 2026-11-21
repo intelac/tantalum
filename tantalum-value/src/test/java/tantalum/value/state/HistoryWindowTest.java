@@ -82,7 +82,7 @@ class HistoryWindowTest {
         SessionState window = compacted().append(Message.user("q3")).dropBefore(4);
         SessionState back = new SessionState(window.id(), window.principal(), window.kind(), window.helper(), window.messages(), 3,
                 window.activeRun(), window.lastRun(), window.inbox(), window.context(), null, window.anchor(), window.omittedImages(),
-                window.toolsSeen(), window.notes(), window.model(), window.dir(), window.offRecord(), window.assignments(), window.withdrawn());
+                window.toolsSeen(), window.notes(), window.model(), window.dir(), window.offRecord(), window.assignments(), window.withdrawn(), window.outbox());
         assertThrows(IllegalStateException.class, () -> SessionChange.between(window, back));
     }
 

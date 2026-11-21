@@ -125,7 +125,7 @@ final class TranscriptFixture {
             all.addAll(now.from(earlier.historySize()));
             result = result.with(new tantalum.value.state.SessionState(now.id(), now.principal(), now.kind(), now.helper(), all, 0,
                     now.activeRun(), now.lastRun(), now.inbox(), now.context(), now.compaction(), now.anchor(), now.omittedImages(),
-                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn()));
+                    now.toolsSeen(), now.notes(), now.model(), now.dir(), now.offRecord(), now.assignments(), now.withdrawn(), now.outbox()));
         }
         return result;
     }

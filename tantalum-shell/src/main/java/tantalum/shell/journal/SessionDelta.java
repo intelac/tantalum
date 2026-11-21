@@ -35,6 +35,7 @@ final class SessionDelta {
     private static final TypeReference<List<InboxItem>> INBOX = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
     private static final TypeReference<List<tantalum.value.state.Withdrawal>> WITHDRAWN = new TypeReference<>() { };
+    private static final TypeReference<List<tantalum.value.delivery.Outgoing>> OUTBOX = new TypeReference<>() { };
     private static final TypeReference<Map<String, Json>> NOTES = new TypeReference<>() { };
 
     private final JsonMapper mapper;
@@ -98,6 +99,7 @@ final class SessionDelta {
         changed(node, "assignments", change.assignments());
         // 撤下的文字：历史不改，只多记这一份；没撤下过的会话不写
         changed(node, "withdrawn", change.withdrawn());
+        changed(node, "outbox", change.outbox());
         return node;
     }
 
@@ -133,7 +135,7 @@ final class SessionDelta {
                 changed(node, "compaction", Compaction.class), changed(node, "anchor", UsageAnchor.class),
                 changedList(node, "omittedImages", STRINGS), changedList(node, "toolsSeen", STRINGS), notes(node),
                 changed(node, "model", ModelChoice.class), changed(node, "assignments", Assignments.class),
-                changedList(node, "withdrawn", WITHDRAWN));
+                changedList(node, "withdrawn", WITHDRAWN), changedList(node, "outbox", OUTBOX));
     }
 
     /** 插件工作记在会话里的东西：工作类型 → 对象。 */

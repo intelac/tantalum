@@ -51,7 +51,14 @@ public final class InboxSteps {
         boolean join = input instanceof UserPrompt prompt && prompt.delivery() == Delivery.JOIN;
         InputPolicy.Rule rule = InputPolicy.of(session.kind(), input.kind(), join);
         if (!rule.accepted()) {
-            return Decision.unchanged(context.state());
+            // 送来的（交代、结果）回“不收”，送方不再重送（delivery 需求 2.2）；你说的话由入口挡，到不了这里
+            return switch (input) {
+                case Assignment assignment -> refuse(context, session, new tantalum.value.delivery.AssignmentParcel(assignment, null, null, false).id(),
+                        assignment.issuer(), "this session does not take tasks");
+                case Report report -> refuse(context, session, new tantalum.value.delivery.ReportParcel(report).id(), report.from(),
+                        "this session does not take results");
+                case UserPrompt ignored -> Decision.unchanged(context.state());
+            };
         }
         Outcome out = new Outcome(context);
         boolean taken = switch (input) {
@@ -78,16 +85,30 @@ public final class InboxSteps {
         return true;
     }
 
-    /** 帮手只收建它的那一条交代；已经为它开过一轮、或者它已经在队里，是重复送达。 */
+    private static Decision refuse(StepContext context, SessionState session, String delivery, SessionId sender, String reason) {
+        Outcome out = new Outcome(context);
+        Outbox.acknowledge(out, session, delivery, sender, reason);
+        return out.decision();
+    }
+
+    /**
+     * 帮手只收建它的那一条交代：别的交代不收。已经为它开过一轮、或者它已经在队里，是重复送达，只回“送到了”（delivery 需求 2）。
+     */
     private static boolean assignment(Outcome out, SessionState session, Assignment assignment) {
         HelperOf helper = session.helper();
-        if (helper == null || !helper.assignment().equals(assignment.id()) || !helper.issuer().equals(assignment.issuer())
-                || session.lastRun() != null || !session.inbox().isEmpty()) {
-            return false;
+        String delivery = new tantalum.value.delivery.AssignmentParcel(assignment, null, null, false).id();
+        if (helper == null || !helper.assignment().equals(assignment.id()) || !helper.issuer().equals(assignment.issuer())) {
+            Outbox.acknowledge(out, session, delivery, assignment.issuer(), "this session was opened for another task");
+            return true;
+        }
+        if (session.lastRun() != null || !session.inbox().isEmpty()) {
+            Outbox.acknowledge(out, session, delivery, assignment.issuer(), null);
+            return true;
         }
         out.put(session.enqueue(new InboxItem(out.envelope.seq(), Input.Kind.ASSIGNMENT, assignment.root(),
                 Message.assignment(assignment.id(), assignment.prompt()), assignment.model(), false, assignment.id())));
         next(out, session.id());
+        Outbox.acknowledge(out, out.state().sessions().get(session.id()), delivery, assignment.issuer(), null);
         return true;
     }
 

@@ -175,7 +175,7 @@ class TranscriptTest {
         int users = fx.items(UserMessage.class).size();
 
         fx.feed(null, new tantalum.value.event.Report(card.task(), tantalum.value.assignment.AssignmentOutcome.COMPLETED, "Module A is fine.",
-                tantalum.value.event.Root.USER));
+                tantalum.value.event.Root.USER, new SessionId(card.taskSession())));
 
         TranscriptItem.Task ended = fx.items(TranscriptItem.Task.class).getFirst();
         assertEquals(card.id(), ended.id());

@@ -26,10 +26,10 @@ import tantalum.value.state.SessionKind;
 import tantalum.value.command.AssembleContext;
 import tantalum.value.command.CallModel;
 import tantalum.value.command.Command;
-import tantalum.value.command.ReturnReport;
-import tantalum.value.command.Assign;
+import tantalum.kernel.step.AssignmentViews.ReturnReport;
+import tantalum.kernel.step.AssignmentViews.Assign;
 import tantalum.value.command.StartTimer;
-import tantalum.value.command.StopAssignment;
+import tantalum.kernel.step.AssignmentViews.StopAssignment;
 import tantalum.value.decision.Fact;
 import tantalum.value.decision.ReportSettled;
 import tantalum.value.decision.AssignmentStarted;
@@ -76,8 +76,8 @@ class AssignmentInvariantsTest {
     private void collect(LoopFixture loop) {
         for (; seen < loop.commands.size(); seen++) {
             Command command = loop.commands.get(seen);
-            if (command instanceof AssembleContext || command instanceof CallModel || command instanceof Assign
-                    || command instanceof ReturnReport || command instanceof StopAssignment || command instanceof StartTimer) {
+            if (command instanceof AssembleContext || command instanceof CallModel || command instanceof tantalum.value.command.Deliver
+                    || command instanceof tantalum.value.command.Acknowledge || command instanceof StartTimer) {
                 pending.add(command);
             }
         }
@@ -123,42 +123,45 @@ class AssignmentInvariantsTest {
                 boolean tools = content.stream().anyMatch(ToolCallBlock.class::isInstance);
                 loop.feed(session, run, new ModelReplied(call.id(), content, tools ? StopReason.TOOL_USE : StopReason.END_TURN, "m", null, null, null, null));
             }
-            // 和外壳的处理器一样：建帮手会话，放进那条交代
-            case Assign start -> {
-                loop.create(start.session(), AssignmentFixture.helperFor(start));
-                tantalum.value.event.Assignment assigned = AssignmentFixture.assignmentOf(start);
-                loop.feed(start.session(), null, assigned);
+            // 和外壳的处理器一样送达（delivery）；有时丢掉（等确认定时器重送），有时送两次
+            case tantalum.value.command.Deliver deliver -> {
+                if (random.nextInt(6) == 0) {
+                    return;
+                }
+                tantalum.value.event.Event what = switch (deliver.what()) {
+                    case tantalum.value.delivery.AssignmentParcel given -> {
+                        Assign start = (Assign) AssignmentFixture.view(deliver);
+                        loop.create(start.session(), AssignmentFixture.helperFor(start));
+                        yield AssignmentFixture.assignmentOf(start);
+                    }
+                    case tantalum.value.delivery.ReportParcel back -> back.input();
+                    case tantalum.value.delivery.StopParcel stop -> stop.input();
+                };
+                loop.feed(deliver.to(), null, what);
                 if (random.nextInt(5) == 0) {
-                    again(loop, start.session(), AssignmentFixture.helperFor(start));
-                    again(loop, start.session(), assigned);
+                    again(loop, deliver.to(), what);
                 }
             }
-            case ReturnReport back -> {
-                Report ended = new Report(back.assignment(), back.outcome(), back.text(), back.root());
-                loop.feed(back.issuer(), null, ended);
-                if (random.nextInt(5) == 0) {
-                    again(loop, back.issuer(), ended);
+            // 回执：有时丢掉（送方到时重送，收方认出重复再回）
+            case tantalum.value.command.Acknowledge ack -> {
+                if (random.nextInt(6) == 0) {
+                    return;
                 }
-            }
-            // 和外壳的处理器一样：帮手那边有一轮在跑就让它停，没有就直接给交代的会话一个“已停止”
-            case StopAssignment stop -> {
-                if (running(loop, stop.session())) {
-                    loop.feed(stop.session(), null, new AssignmentCancelled(stop.assignment()));
-                } else {
-                    loop.feed(session, null, new Report(stop.assignment(), AssignmentOutcome.STOPPED, null, Root.USER));
-                }
+                loop.feed(ack.to(), null, ack.refused() == null ? new tantalum.value.event.Delivered(ack.delivery())
+                        : new tantalum.value.event.Refused(ack.delivery(), ack.refused()));
             }
             case StartTimer timer -> loop.feed(session, run, new TimerFired(timer.id()));
             default -> throw new IllegalStateException("unexpected " + command);
         }
     }
 
-    /** 同一个事件再送一次（重复送达）：什么都不改，不发命令，不报事实。 */
+    /** 同一个事件再送一次（重复送达）：什么都不改，只回“送到了”，不报事实。 */
     private static void again(LoopFixture loop, SessionId session, tantalum.value.event.Event event) {
         tantalum.value.state.KernelState before = loop.state;
         tantalum.value.decision.Decision decision = loop.feed(session, null, event);
         assertSame(before, decision.newState(), "a repeated " + event.type() + " changed the state");
-        assertTrue(decision.commands().isEmpty() && decision.facts().isEmpty(), "a repeated " + event.type() + " did something: " + decision.commands());
+        assertTrue(decision.commands().stream().allMatch(tantalum.value.command.Acknowledge.class::isInstance) && decision.facts().isEmpty(),
+                "a repeated " + event.type() + " did something: " + decision.commands());
     }
 
     /** 不由命令引起的事：人说话（排队或并进这一轮）、人停任务、撤销主对话、重启打断主对话或一个任务。 */
@@ -253,6 +256,8 @@ class AssignmentInvariantsTest {
         settled.forEach((task, times) -> assertEquals(1, times, "seed " + seed + ": task " + task + " was settled " + times + " times"));
         for (SessionState session : loop.state.sessions().values()) {
             assertNull(session.activeRun(), "seed " + seed + ": a run is still open in " + session.id().value());
+            // 送出去的都确认了（丢了的由确认定时器重送）
+            assertTrue(session.outbox().isEmpty(), "seed " + seed + ": unconfirmed in " + session.id().value() + ": " + session.outbox());
             // 没有哪条输入还卡在收件队列里：要么被哪一轮看到了，要么记进了历史
             assertTrue(session.inbox().isEmpty(), "seed " + seed + ": left in the inbox of " + session.id().value() + ": " + session.inbox());
         }

@@ -39,7 +39,7 @@ public final class SessionIndex implements AutoCloseable {
 
     public static final String FILE = "index.db";
     /** 5：用量表多了折算后的量（qagent-align 需求 3）。6：内容搜索的文字表（session-find-pin R3）。7：运行表（run-tree 需求 3）。13：运行表里的起因多了任务的两种，旧的要重算（subagent 需求 10.5）。版本不同时删掉索引，从会话文件重建。 */
-    static final int VERSION = 15;
+    static final int VERSION = 16;
     private static final Logger LOG = LoggerFactory.getLogger(SessionIndex.class);
 
     /**
@@ -128,7 +128,8 @@ public final class SessionIndex implements AutoCloseable {
                   off_record      INTEGER NOT NULL DEFAULT 0,
                   kind            TEXT NOT NULL DEFAULT 'REGULAR',
                   issuer          TEXT,
-                  assignments     TEXT NOT NULL DEFAULT ''
+                  assignments     TEXT NOT NULL DEFAULT '',
+                  outbox          INTEGER NOT NULL DEFAULT 0
                 )""");
         statement.execute("""
                 CREATE TABLE IF NOT EXISTS submissions (
@@ -198,8 +199,8 @@ public final class SessionIndex implements AutoCloseable {
     private void writeSessions(IndexBatch batch) throws SQLException {
         try (PreparedStatement upsert = connection.prepareStatement("""
                 INSERT INTO sessions (session, principal, title, last_activity, run_status, active_run, file_offset, answer_deadline, answer_timer,
-                                      dir, renamed, off_record, kind, issuer, assignments)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?13, ?14, ?15, ?16)
+                                      dir, renamed, off_record, kind, issuer, assignments, outbox)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?13, ?14, ?15, ?16, ?17)
                 ON CONFLICT (session) DO UPDATE SET
                   title = CASE WHEN title = '' THEN excluded.title ELSE title END,
                   last_activity = COALESCE(excluded.last_activity, last_activity),
@@ -208,6 +209,7 @@ public final class SessionIndex implements AutoCloseable {
                   kind = excluded.kind,
                   issuer = COALESCE(issuer, excluded.issuer),
                   assignments = excluded.assignments,
+                  outbox = excluded.outbox,
                   renamed = CASE WHEN ?12 IS NULL THEN renamed ELSE excluded.renamed END,
                   run_status = excluded.run_status,
                   active_run = excluded.active_run,
@@ -233,6 +235,7 @@ public final class SessionIndex implements AutoCloseable {
                 upsert.setString(14, row.kind.name());
                 upsert.setString(15, row.issuer);
                 upsert.setString(16, row.assignments);
+                upsert.setInt(17, row.outbox);
                 upsert.addBatch();
             }
             upsert.executeBatch();
@@ -480,9 +483,21 @@ public final class SessionIndex implements AutoCloseable {
         return counts;
     }
 
-    /** 所有放出去还没回来的任务，按会话排。 */
-    public synchronized List<tantalum.shell.loop.TaskRecovery.Outstanding> outstandingTasks() throws SQLException {
-        List<tantalum.shell.loop.TaskRecovery.Outstanding> found = new ArrayList<>();
+    /** 信箱不空的会话（delivery）：启动时各发一条重送。 */
+    public synchronized List<SessionIndex.Session> withOutbox() throws SQLException {
+        java.util.Set<String> waiting = new java.util.HashSet<>();
+        try (PreparedStatement select = connection.prepareStatement("SELECT session FROM sessions WHERE outbox > 0");
+             ResultSet result = select.executeQuery()) {
+            while (result.next()) {
+                waiting.add(result.getString(1));
+            }
+        }
+        return sessions().stream().filter(session -> waiting.contains(session.session().value())).toList();
+    }
+
+    /** 放出去还没回来、设了期限的交代：启动时重新起期限定时器（和等用户回答的期限一样，到点按超时结算）。 */
+    public synchronized List<tantalum.shell.loop.AnswerDeadline> assignmentDeadlines() throws SQLException {
+        List<tantalum.shell.loop.AnswerDeadline> found = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement("SELECT session, principal, assignments FROM sessions WHERE assignments <> '' ORDER BY session");
                 ResultSet result = select.executeQuery()) {
             while (result.next()) {
@@ -490,9 +505,9 @@ public final class SessionIndex implements AutoCloseable {
                 Principal principal = new Principal(result.getString(2));
                 for (String line : result.getString(3).split("\n")) {
                     String[] parts = line.split("\t", -1);
-                    if (parts.length == 4) {
-                        found.add(new tantalum.shell.loop.TaskRecovery.Outstanding(session, principal, parts[0], new SessionId(parts[1]),
-                                parts[2].isEmpty() ? null : Instant.parse(parts[2]), parts[3].isEmpty() ? null : new CommandId(parts[3])));
+                    if (parts.length == 4 && !parts[2].isEmpty() && !parts[3].isEmpty()) {
+                        // 期限的定时器不属于哪一轮：信封不带运行，内核按“没人等的定时器”认出它是哪个交代的
+                        found.add(new tantalum.shell.loop.AnswerDeadline(session, principal, null, Instant.parse(parts[2]), new CommandId(parts[3])));
                     }
                 }
             }

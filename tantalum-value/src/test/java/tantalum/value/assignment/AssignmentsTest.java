@@ -11,9 +11,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import tantalum.value.command.Assign;
-import tantalum.value.command.ReturnReport;
-import tantalum.value.command.StopAssignment;
 import tantalum.value.decision.AssignmentStarted;
 import tantalum.value.decision.ReportSettled;
 import tantalum.value.decision.SessionChange;
@@ -213,34 +210,41 @@ class AssignmentsTest {
         assertEquals("Assignment", new Assignment("t", SESSION, Root.USER, "go", null).type());
         assertEquals(1, new Assignment("t", SESSION, Root.USER, "go", null).version());
         assertEquals(Input.Kind.ASSIGNMENT, new Assignment("t", SESSION, Root.OUTSIDE, "go", null).kind());
-        assertEquals("Report", new Report("t", AssignmentOutcome.COMPLETED, null, Root.USER).type());
-        assertEquals(1, new Report("t", AssignmentOutcome.COMPLETED, null, Root.USER).version());
-        assertEquals(Root.OUTSIDE, new Report("t", AssignmentOutcome.COMPLETED, null, Root.OUTSIDE).root());
+        assertEquals("Report", new Report("t", AssignmentOutcome.COMPLETED, null, Root.USER, SESSION).type());
+        assertEquals(1, new Report("t", AssignmentOutcome.COMPLETED, null, Root.USER, SESSION).version());
+        assertEquals(Root.OUTSIDE, new Report("t", AssignmentOutcome.COMPLETED, null, Root.OUTSIDE, SESSION).root());
         assertEquals("StopRequested", new StopRequested(new RequestId("r"), null).type());
         assertEquals(1, new StopRequested(new RequestId("r"), "t").version());
         assertEquals("AssignmentStarted", new AssignmentStarted(RUN, "t", SESSION, null, "go", "call-1").type());
-        assertEquals("ReportSettled", new ReportSettled(RUN, "t", AssignmentOutcome.STOPPED, false).type());
+        assertEquals("ReportSettled", new ReportSettled(RUN, "t", AssignmentOutcome.STOPPED, null, false).type());
         CommandId id = new CommandId("c");
-        assertEquals("go", new Assign(id, RUN, "t", SESSION, null, "go", null, false, null, Root.USER).prompt());
-        assertEquals(AssignmentOutcome.FAILED, new ReturnReport(id, RUN, SESSION, "t", AssignmentOutcome.FAILED, "boom", Root.USER).outcome());
-        assertEquals(SESSION, new StopAssignment(id, RUN, "t", SESSION).session());
+        // delivery：送的东西的编号由种类和交代号得出，收方不用新字段也能算出同一个
+        Assignment given = new Assignment("t", SESSION, Root.USER, "go", null);
+        assertEquals("assign:t", new tantalum.value.delivery.AssignmentParcel(given, null, null, false).id());
+        assertEquals("report:t", new tantalum.value.delivery.ReportParcel(new Report("t", AssignmentOutcome.FAILED, "boom", Root.USER, SESSION)).id());
+        assertEquals("stop:t", new tantalum.value.delivery.StopParcel(new tantalum.value.event.AssignmentCancelled("t", SESSION)).id());
+        assertEquals(SESSION, new tantalum.value.command.Deliver(id, RUN, SESSION, new tantalum.value.delivery.AssignmentParcel(given, null, null, false)).to());
+        assertEquals("Delivered", new tantalum.value.event.Delivered("assign:t").type());
+        assertEquals("Refused", new tantalum.value.event.Refused("assign:t", "no").type());
+        assertEquals("Redeliver", new tantalum.value.event.Redeliver().type());
 
         assertThrows(NullPointerException.class, () -> new Assignment(null, SESSION, Root.USER, "go", null));
         assertThrows(NullPointerException.class, () -> new Assignment("t", SESSION, null, "go", null));
-        assertThrows(NullPointerException.class, () -> new Report("t", null, null, Root.USER));
-        assertThrows(NullPointerException.class, () -> new Report("t", AssignmentOutcome.FAILED, null, null));
-        assertThrows(NullPointerException.class, () -> new Assign(id, RUN, "t", SESSION, null, null, null, false, null, Root.USER));
-        assertThrows(NullPointerException.class, () -> new ReturnReport(id, RUN, null, "t", AssignmentOutcome.FAILED, null, Root.USER));
-        assertThrows(NullPointerException.class, () -> new StopAssignment(id, RUN, "t", null));
+        assertThrows(NullPointerException.class, () -> new Report("t", null, null, Root.USER, SESSION));
+        assertThrows(NullPointerException.class, () -> new Report("t", AssignmentOutcome.FAILED, null, null, SESSION));
+        assertThrows(NullPointerException.class, () -> new Report("t", AssignmentOutcome.FAILED, null, Root.USER, null));
+        assertThrows(NullPointerException.class, () -> new tantalum.value.command.Deliver(id, RUN, null, new tantalum.value.delivery.ReportParcel(
+                new Report("t", AssignmentOutcome.FAILED, null, Root.USER, SESSION))));
+        assertThrows(NullPointerException.class, () -> new tantalum.value.event.Refused("assign:t", null));
         assertThrows(NullPointerException.class, () -> new AssignmentStarted(null, "t", SESSION, null, "go", null));
-        assertThrows(NullPointerException.class, () -> new ReportSettled(RUN, "t", null, false));
+        assertThrows(NullPointerException.class, () -> new ReportSettled(RUN, "t", null, null, false));
         assertThrows(NullPointerException.class, () -> new ReportBlock("t", null, null));
         assertThrows(NullPointerException.class, () -> new OpenAssignment("t", SESSION, null, null, AT, AT, id, Root.USER));
         // 期限和它的定时器要么都有、要么都没有
         assertNull(new OpenAssignment("t", SESSION, null, "go", AT, null, null, Root.USER).timer());
         assertThrows(IllegalArgumentException.class, () -> new OpenAssignment("t", SESSION, null, "go", AT, AT, null, Root.USER));
         assertThrows(IllegalArgumentException.class, () -> new OpenAssignment("t", SESSION, null, "go", AT, null, id, Root.USER));
-        assertEquals("AssignmentCancelled", new AssignmentCancelled("t").type());
-        assertEquals(1, new AssignmentCancelled("t").version());
+        assertEquals("AssignmentCancelled", new AssignmentCancelled("t", SESSION).type());
+        assertEquals(1, new AssignmentCancelled("t", SESSION).version());
     }
 }

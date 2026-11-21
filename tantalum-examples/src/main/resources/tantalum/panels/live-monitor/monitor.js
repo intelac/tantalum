@@ -17,7 +17,7 @@
         permit: ["放行", "LaneDispatcher"], lane: ["用户通道", "UserLane"], cring: ["净室环", "CleanroomRing"], kernel: ["净室 · 内核走一步", "状态机"],
         hooks: ["钩子插件", "beforeModelCall …"], journal: ["写 journal", "UserLane · fsync"], out: ["输出环", "OutputRing"], hub: ["推送中心", "SSE Hub"],
         index: ["索引", "会话列表、运行表"], disp: ["分发", "HandlerDispatcher"], ctx: ["组装上下文", "ContextHandler"], model: ["调模型", "ModelHandler"],
-        tool: ["执行工具", "ToolHandler"], task: ["任务", "AssignmentHandler"], work: ["插件工作", "WorkHandler"], timer: ["定时器", "TimerHandler"], after: ["工具后处理插件", "密钥遮盖 · 截断"],
+        tool: ["执行工具", "ToolHandler"], task: ["任务", "DeliveryHandler"], work: ["插件工作", "WorkHandler"], timer: ["定时器", "TimerHandler"], after: ["工具后处理插件", "密钥遮盖 · 截断"],
         links: ["本机连接", "LocalLinks"], llm: ["模型", "Claude API · 本机 qwen"], conn: ["连接程序", "tantalum-connect"],
         files: ["文件 · Git · 命令", ""], browser: ["浏览器", "Playwright → Chrome"]
       },
@@ -35,7 +35,7 @@
         permit: ["Permit", "LaneDispatcher"], lane: ["User lane", "UserLane"], cring: ["Cleanroom ring", "CleanroomRing"], kernel: ["Cleanroom · kernel step", "State machine"],
         hooks: ["Hook plugins", "beforeModelCall …"], journal: ["Write journal", "UserLane · fsync"], out: ["Output ring", "OutputRing"], hub: ["Push hub", "SSE Hub"],
         index: ["Index", "Sessions, runs"], disp: ["Dispatch", "HandlerDispatcher"], ctx: ["Context", "ContextHandler"], model: ["Model call", "ModelHandler"],
-        tool: ["Run tool", "ToolHandler"], task: ["Tasks", "AssignmentHandler"], work: ["Plugin work", "WorkHandler"], timer: ["Timer", "TimerHandler"], after: ["After-tool plugins", "Masking · truncation"],
+        tool: ["Run tool", "ToolHandler"], task: ["Tasks", "DeliveryHandler"], work: ["Plugin work", "WorkHandler"], timer: ["Timer", "TimerHandler"], after: ["After-tool plugins", "Masking · truncation"],
         links: ["Local link", "LocalLinks"], llm: ["Model", "Claude API · local qwen"], conn: ["Connector", "tantalum-connect"],
         files: ["Files · Git · shell", ""], browser: ["Browser", "Playwright → Chrome"]
       },
@@ -54,7 +54,7 @@
         permit: ["許可", "LaneDispatcher"], lane: ["ユーザーレーン", "UserLane"], cring: ["クリーンルームリング", "CleanroomRing"], kernel: ["カーネル 1 ステップ", "状態機械"],
         hooks: ["フックプラグイン", "beforeModelCall …"], journal: ["journal 書き込み", "UserLane · fsync"], out: ["出力リング", "OutputRing"], hub: ["プッシュ", "SSE Hub"],
         index: ["インデックス", "会話一覧・実行"], disp: ["振り分け", "HandlerDispatcher"], ctx: ["コンテキスト", "ContextHandler"], model: ["モデル呼び出し", "ModelHandler"],
-        tool: ["ツール実行", "ToolHandler"], task: ["タスク", "AssignmentHandler"], work: ["プラグイン処理", "WorkHandler"], timer: ["タイマー", "TimerHandler"], after: ["ツール後処理", "マスク · 切り詰め"],
+        tool: ["ツール実行", "ToolHandler"], task: ["タスク", "DeliveryHandler"], work: ["プラグイン処理", "WorkHandler"], timer: ["タイマー", "TimerHandler"], after: ["ツール後処理", "マスク · 切り詰め"],
         links: ["ローカル接続", "LocalLinks"], llm: ["モデル", "Claude API · ローカル qwen"], conn: ["コネクター", "tantalum-connect"],
         files: ["ファイル · Git · コマンド", ""], browser: ["ブラウザ", "Playwright → Chrome"]
       },
@@ -114,7 +114,7 @@
   };
   var REVERSIBLE = { "tool>links": true, "links>conn": true, "conn>files": true, "conn>browser": true };
   var PLUGIN_EDGES = { "kernel>hooks": true, "tool>after": true };
-  var HANDLER = { AssembleContext: "ctx", CallModel: "model", DoWork: "work", StartTimer: "timer", Assign: "task", StopAssignment: "task", ReturnReport: "task" };
+  var HANDLER = { AssembleContext: "ctx", CallModel: "model", DoWork: "work", StartTimer: "timer", Deliver: "task", Acknowledge: "task" };
 
   var context = null;
   var nodeEls = {};

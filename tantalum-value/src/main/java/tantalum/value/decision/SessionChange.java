@@ -30,7 +30,8 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                             Changed<SessionContext> context, Changed<Compaction> compaction,
                             Changed<UsageAnchor> anchor, Changed<List<String>> omittedImages, Changed<List<String>> toolsSeen,
                             Changed<Map<String, Json.Obj>> notes, Changed<ModelChoice> model, Changed<Assignments> assignments,
-                            Changed<List<tantalum.value.state.Withdrawal>> withdrawn) {
+                            Changed<List<tantalum.value.state.Withdrawal>> withdrawn,
+                            Changed<List<tantalum.value.delivery.Outgoing>> outbox) {
 
     /** 一个变了的字段的新值。 */
     public record Changed<T>(T value) {}
@@ -78,7 +79,8 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 changed(base.compaction(), after.compaction()), changed(base.anchor(), after.anchor()),
                 changed(base.omittedImages(), after.omittedImages()), changed(base.toolsSeen(), after.toolsSeen()),
                 changed(base.notes(), after.notes()), changed(base.model(), after.model()),
-                changed(base.assignments(), after.assignments()), changed(base.withdrawn(), after.withdrawn()));
+                changed(base.assignments(), after.assignments()), changed(base.withdrawn(), after.withdrawn()),
+                changed(base.outbox(), after.outbox()));
     }
 
     /** 套到处理前的状态上。这一步新建会话时 {@code before} 为 null。 */
@@ -108,14 +110,14 @@ public record SessionChange(SessionId id, Principal principal, boolean created, 
                 pick(context, base.context()), pick(compaction, base.compaction()), pick(anchor, base.anchor()),
                 pick(omittedImages, base.omittedImages()), pick(toolsSeen, base.toolsSeen()), pick(notes, base.notes()),
                 pick(model, base.model()), base.dir(), base.offRecord(), pick(assignments, base.assignments()),
-                pick(withdrawn, base.withdrawn()));
+                pick(withdrawn, base.withdrawn()), pick(outbox, base.outbox()));
     }
 
     /** 没有任何变化：可以不写。 */
     public boolean isEmpty() {
         return !created && appended.isEmpty() && windowStart == null && activeRun == null && lastRun == null && inbox == null
                 && context == null && compaction == null && anchor == null && omittedImages == null && toolsSeen == null
-                && notes == null && model == null && assignments == null && withdrawn == null;
+                && notes == null && model == null && assignments == null && withdrawn == null && outbox == null;
     }
     /** 先比引用：内核追加时沿用原来的消息对象，长历史不用逐条深比较。 */
     private static boolean startsWith(List<Message> now, List<Message> old) {
