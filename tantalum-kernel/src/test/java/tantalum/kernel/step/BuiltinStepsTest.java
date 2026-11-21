@@ -17,9 +17,18 @@ class BuiltinStepsTest {
             List.of("AwaitingRetry", "TimerFired"),
             List.of("AwaitingWork", "WorkDone"),
             List.of("AwaitingTools", "Cancel"),
-            List.of("AwaitingModel", "SteerSubmitted"),
+            // 建会话，和对会话说话的三种输入：哪个状态下到都有行
+            List.of("New", "SessionCreated"),
             List.of("New", "UserPrompt"),
-            List.of("New", "FollowUpSubmitted"),
+            List.of("AwaitingModel", "UserPrompt"),
+            List.of("New", "Assignment"),
+            List.of("AwaitingModel", "Report"),
+            List.of("Ended", "Report"),
+            List.of("AwaitingModel", "QueueChanged"),
+            // 交代：你要停、交代的一方不要了、期限到（没人等的定时器）
+            List.of("Ended", "StopRequested"),
+            List.of("AwaitingModel", "AssignmentCancelled"),
+            List.of("Ended", "TimerFired"),
             List.of("Ended", "ModelInterrupted"));
 
     @Test

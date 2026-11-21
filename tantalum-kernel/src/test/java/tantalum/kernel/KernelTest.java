@@ -1,5 +1,7 @@
 package tantalum.kernel;
 
+import tantalum.value.state.RunCause;
+import tantalum.value.state.SessionStateFixture;
 import tantalum.value.id.SubmissionId;
 
 import tantalum.value.event.UserPrompt;
@@ -30,7 +32,6 @@ import tantalum.value.state.Awaiting;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 import tantalum.value.event.UserPromptFixture;
@@ -44,13 +45,13 @@ class KernelTest {
     private static final CommandId WAITING = new CommandId("1-0");
 
     private static RunState awaiting(RunRef ref) {
-        return RunState.start(ref, new OwnerRef.OfSession(ref.session()))
+        return RunState.start(ref, RunCause.prompt())
                 .withPhase(new Awaiting(Set.of(WAITING), "AwaitingRetry"));
     }
 
     private static KernelState state() {
         return KernelState.empty().with(awaiting(A)).with(awaiting(B))
-                .with(SessionState.start(SESSION, USER).startRun(A.run()));
+                .with(SessionStateFixture.regular(SESSION, USER).startRun(A.run()));
     }
 
     private static EventEnvelope timer(RunRef ref, String command) {
@@ -141,7 +142,7 @@ class KernelTest {
         table.register(Kernel.NEW_RUN, "UserPrompt", context -> { throw new IllegalStateException("boom"); });
         KernelState before = KernelState.empty();
         EventEnvelope prompt = new EventEnvelope(5, Instant.EPOCH, USER, SESSION, null,
-                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("r"), new OwnerRef.OfSession(SESSION), "hi"));
+                UserPromptFixture.of(new SubmissionId("sub"), new RequestId("r"), "hi"));
         Decision decision = kernel(table).step(before, prompt);
         assertSame(before, decision.newState());
         assertEquals(List.of(new StepFailed(new RunRef(USER, SESSION, RunId.of(SESSION, 5)), "UserPrompt", "IllegalStateException")),

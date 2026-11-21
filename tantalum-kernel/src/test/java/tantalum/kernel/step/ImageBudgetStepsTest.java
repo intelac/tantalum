@@ -23,7 +23,6 @@ import tantalum.value.model.StopReason;
 import tantalum.value.model.TextBlock;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.attachment.ImageRefFixture;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.UserPromptFixture;
@@ -40,7 +39,7 @@ class ImageBudgetStepsTest {
     }
 
     private static void prompt(LoopFixture loop, String text, List<AttachmentRef> images) {
-        loop.feed(null, UserPromptFixture.of(new SubmissionId(text), new RequestId(text), new OwnerRef.OfSession(LoopFixture.SESSION), text, images));
+        loop.feed(null, UserPromptFixture.of(new SubmissionId(text), new RequestId(text), text, images));
     }
 
     private static CallModel assemble(LoopFixture loop) {

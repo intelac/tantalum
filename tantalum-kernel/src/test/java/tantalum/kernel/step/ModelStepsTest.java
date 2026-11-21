@@ -1,5 +1,6 @@
 package tantalum.kernel.step;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -20,7 +21,6 @@ import tantalum.value.event.Cancel;
 import tantalum.value.event.ContextAssembled;
 import tantalum.value.event.ModelInterrupted;
 import tantalum.value.event.ModelReplied;
-import tantalum.value.event.SteerSubmitted;
 import tantalum.value.hook.Allow;
 import tantalum.value.hook.HookContext;
 import tantalum.value.hook.HookResult;
@@ -41,7 +41,6 @@ import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
 import tantalum.value.state.KernelState;
 import tantalum.value.event.ContextAssembledFixture;
-import tantalum.value.event.SteerSubmittedFixture;
 import tantalum.value.hook.AllowFixture;
 
 class ModelStepsTest {
@@ -156,7 +155,7 @@ class ModelStepsTest {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
         CommandId waiting = loop.onlyCommandId();
-        loop.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(null, UserPromptFixture.join(new SubmissionId("s"), new RequestId("r"), "also this"));
         assertEquals(List.of(), loop.last.commands());
         loop.feed(loop.runId(), new ModelReplied(waiting, text("x"), StopReason.END_TURN, "m", null, null, null, null));
 
@@ -322,11 +321,11 @@ class ModelStepsTest {
     void pendingSteersJoinTheHistoryWhenTheRunIsCancelled() {
         LoopFixture loop = new LoopFixture();
         toModel(loop);
-        loop.feed(null, SteerSubmittedFixture.of(new SubmissionId("s"), new RequestId("r"), "also this"));
+        loop.feed(null, UserPromptFixture.join(new SubmissionId("s"), new RequestId("r"), "also this"));
         loop.feed(loop.runId(), new Cancel(new RequestId("c")));
 
         assertEquals(Message.user("also this"), loop.session().messages().getLast());
-        assertEquals(List.of(), loop.run().pendingSteers());
+        assertEquals(List.of(), loop.joining());
         loop.prompt("next");
         CallModel call = null;
         loop.feed(loop.runId(), ContextAssembledFixture.of(loop.onlyCommandId(), "s", List.of(), null, List.of()));

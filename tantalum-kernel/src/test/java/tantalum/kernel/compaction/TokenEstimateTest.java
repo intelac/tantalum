@@ -1,5 +1,6 @@
 package tantalum.kernel.compaction;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -120,7 +121,7 @@ class TokenEstimateTest {
     /** 省略过的图片按省略说明算，和实际发送的一致。 */
     @Test
     void sessionSizeCountsOmittedImagesAsTheirText() {
-        SessionState session = SessionState.start(new SessionId("s"), new Principal("u")).append(user(IMAGE));
+        SessionState session = SessionStateFixture.regular(new SessionId("s"), new Principal("u")).append(user(IMAGE));
         long full = Compactor.size(session, "", List.of());
         long omitted = Compactor.size(session.withOmittedImages(List.of(IMAGE.id())), "", List.of());
         assertEquals(TokenEstimate.LEGACY.ofImage(IMAGE), full);

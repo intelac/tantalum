@@ -23,7 +23,8 @@ import tantalum.value.model.ContentBlock;
 import tantalum.value.model.TextBlock;
 import tantalum.value.model.ToolCallBlock;
 import tantalum.value.state.KernelState;
-import tantalum.value.state.OwnerRef;
+import tantalum.value.event.SessionCreated;
+import tantalum.value.state.SessionKind;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 import tantalum.value.event.UserPromptFixture;
@@ -48,21 +49,28 @@ public final class LoopFixture {
     }
 
     public LoopFixture(int maxParallelTools, KernelHook... hooks) {
-        this(maxParallelTools, tantalum.value.task.TaskLimits.DEFAULT, hooks);
+        this(maxParallelTools, tantalum.value.assignment.AssignmentLimits.DEFAULT, hooks);
     }
 
-    public LoopFixture(int maxParallelTools, tantalum.value.task.TaskLimits tasks, KernelHook... hooks) {
+    public LoopFixture(int maxParallelTools, tantalum.value.assignment.AssignmentLimits assignments, KernelHook... hooks) {
         TransitionTable table = new TransitionTable();
         BuiltinSteps.register(table);
         kernel = new Kernel(table, new HookChain(List.of(hooks)),
-                (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds(), tasks));
+                (tool, args) -> tool.startsWith("safe"), new Limits(maxParallelTools, Limits.DEFAULT.maxWorkRounds(), assignments));
+        // 会话先建好才收得到话：账里的第一个事件就是它，回放从这里开始
+        create(SESSION, new SessionCreated(SessionKind.REGULAR, null, false, null));
+    }
+
+    /** 建一个会话（别的种类、带目录的、帮手会话）。 */
+    public Decision create(SessionId session, SessionCreated created) {
+        return feed(session, null, created);
     }
 
     public Decision feed(RunId run, Event event) {
         return feed(SESSION, run, event);
     }
 
-    /** 喂给别的会话（为任务开的会话）；序号是所有会话共用的一串。 */
+    /** 喂给别的会话（帮手会话）；序号是所有会话共用的一串。 */
     public Decision feed(SessionId session, RunId run, Event event) {
         EventEnvelope envelope = new EventEnvelope(seq++, AT,
                 USER, session, run, event);
@@ -74,8 +82,33 @@ public final class LoopFixture {
     }
 
     public Decision prompt(String text) {
-        return feed(null, UserPromptFixture.of(new SubmissionId("sub" + seq), new RequestId("req" + seq),
-                new OwnerRef.OfSession(SESSION), text));
+        return feed(null, UserPromptFixture.of(new SubmissionId("sub" + seq), new RequestId("req" + seq), text));
+    }
+
+    /** 你说的一句话，选了并进正在跑的这一轮。 */
+    public Decision join(String text) {
+        return feed(null, UserPromptFixture.join(new SubmissionId("sub" + seq), new RequestId("req" + seq), text));
+    }
+
+    /** 收件队列里排着的（不并进这一轮的），按先后。 */
+    public List<tantalum.value.model.Message> queued() {
+        return session().inbox().stream().filter(item -> !item.join()).map(tantalum.value.state.InboxItem::message).toList();
+    }
+
+    /** 收件队列里等着并进这一轮的，按先后。 */
+    public List<tantalum.value.model.Message> joining() {
+        return session().inbox().stream().filter(tantalum.value.state.InboxItem::join).map(tantalum.value.state.InboxItem::message).toList();
+    }
+
+    /** 收件队列里文字是 {@code text} 的那一条的编号；改队列按它找。 */
+    public long item(String text) {
+        return session().inbox().stream().filter(item -> item.message().content().getFirst() instanceof TextBlock first && first.text().equals(text))
+                .findFirst().orElseThrow().id();
+    }
+
+    /** 排着的那几条各自带的模型选择（没带的为 null）。 */
+    public List<tantalum.value.model.ModelChoice> queuedModels() {
+        return session().inbox().stream().filter(item -> !item.join()).map(tantalum.value.state.InboxItem::model).toList();
     }
 
     public SessionState session() {

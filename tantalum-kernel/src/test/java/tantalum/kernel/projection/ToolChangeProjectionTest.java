@@ -1,5 +1,6 @@
 package tantalum.kernel.projection;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
@@ -33,7 +34,7 @@ class ToolChangeProjectionTest {
     void toolsOffAtTheStartAreDeferredAndStaySo() {
         SessionContext context = new SessionContext("sys", List.of(GREP, WRITE), null, List.of(), List.of("grep"), List.of("grep", "write_file"),
                 List.of());
-        SessionState session = SessionState.start(new SessionId("s"), new Principal("u")).withContext(context);
+        SessionState session = SessionStateFixture.regular(new SessionId("s"), new Principal("u")).withContext(context);
         Prompt prompt = PromptProjection.project(session);
         // 中途打开了 write_file，工具列表仍和会话开始时逐字节相同：它靠历史里的工具变化出现
         assertEquals(List.of(GREP, WRITE.deferred(true)), prompt.tools());
@@ -41,7 +42,7 @@ class ToolChangeProjectionTest {
 
     @Test
     void oldSessionsHaveNothingDeferred() {
-        SessionState session = SessionState.start(new SessionId("s"), new Principal("u"))
+        SessionState session = SessionStateFixture.regular(new SessionId("s"), new Principal("u"))
                 .withContext(SessionContextFixture.of("sys", List.of(GREP, WRITE), null, List.of()));
         assertEquals(List.of(GREP, WRITE), PromptProjection.project(session).tools());
     }

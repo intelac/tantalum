@@ -1,5 +1,6 @@
 package tantalum.kernel.projection;
 
+import tantalum.value.state.SessionStateFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
@@ -24,7 +25,7 @@ class PromptProjectionTest {
     private static final ToolSpec GREP = new ToolSpec("grep", "d", new Json.Null());
 
     private static SessionState session() {
-        return SessionState.start(SESSION, USER).withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()));
+        return SessionStateFixture.regular(SESSION, USER).withContext(SessionContextFixture.of("system", List.of(GREP), null, List.of()));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package tantalum.kernel.step;
 
+import tantalum.value.event.UserPromptFixture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -51,7 +52,6 @@ import tantalum.value.state.UsageAnchor;
 import tantalum.value.event.ContextAssembledFixture;
 import tantalum.value.event.ToolFinishedFixture;
 import tantalum.value.state.CompactionSettingsFixture;
-import tantalum.value.event.FollowUpSubmittedFixture;
 
 /** 自动压缩和超长恢复的逐步断言。窗口 1000、预留 200：阈值 800，K = min(70, 200) = 70。 */
 class CompactStepsTest {
@@ -535,8 +535,8 @@ class CompactStepsTest {
         assertEquals(3, run.compacting().plan().headMessages());
 
         // 压缩期间的提交排队，压缩结束后开始。
-        loop.feed(null, FollowUpSubmittedFixture.of(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
-        assertEquals(List.of(Message.user("q3")), loop.session().followUps());
+        loop.feed(null, UserPromptFixture.of(new tantalum.value.id.SubmissionId("f"), new RequestId("f"), "q3"));
+        assertEquals(List.of(Message.user("q3")), loop.queued());
 
         loop.feed(run.ref().run(), new ModelReplied(summary.id(), text("Goal: q"), StopReason.END_TURN, "m", new TokenUsage(30, 10, 0, 0), null, null, null));
         Ended ended = assertInstanceOf(Ended.class, loop.state.runs().get(run.ref().run()).phase());
@@ -545,7 +545,7 @@ class CompactStepsTest {
         assertEquals(Compacting.Trigger.MANUAL, fact(loop, ContextCompacted.class).trigger());
         assertEquals(3, loop.session().compaction().replacement().size(), "summary, request q2, kept a2");
         assertEquals("AwaitingContext", loop.phase(), "the queued follow-up started a new run");
-        assertEquals(List.of(), loop.session().followUps());
+        assertEquals(List.of(), loop.queued());
     }
 
     @Test
@@ -569,8 +569,9 @@ class CompactStepsTest {
         assertEquals(List.of(), loop.last.commands());
 
         LoopFixture fresh = new LoopFixture();
+        KernelState created = fresh.state;
         fresh.feed(null, compactRequest(null));
-        assertEquals(KernelState.empty(), fresh.state);
+        assertEquals(created, fresh.state, "a session that has not run yet has nothing to compact");
     }
 
     @Test

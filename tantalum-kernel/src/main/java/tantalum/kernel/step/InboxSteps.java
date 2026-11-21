@@ -171,7 +171,8 @@ public final class InboxSteps {
 
     /**
      * 会话空闲了：队首是什么就开什么样的一轮。队首连着的几条结果一起带上，算一轮不是人发起的运行；
-     * 这样的轮数到了上限，结果只记进历史、不开运行，等人说话。
+     * 这样的轮数到了上限，结果只记进历史、不开运行，等人说话。开了一轮以后，队里剩下的结果照表里写的并进这一轮
+     * （它们是在上一轮没被看到、留下来的）；剩下的你排的话照旧排着。
      */
     static void next(Outcome out, SessionId id) {
         while (true) {
@@ -183,11 +184,12 @@ public final class InboxSteps {
             InboxItem head = inbox.getFirst();
             switch (head.kind()) {
                 case PROMPT -> {
-                    startRun(out, session.withInbox(inbox.subList(1, inbox.size())), RunCause.prompt(), List.of(head.message()), head.model());
+                    startRun(out, session.withInbox(joining(inbox.subList(1, inbox.size()))), RunCause.prompt(), List.of(head.message()),
+                            head.model());
                     return;
                 }
                 case ASSIGNMENT -> {
-                    startRun(out, session.withInbox(inbox.subList(1, inbox.size())),
+                    startRun(out, session.withInbox(joining(inbox.subList(1, inbox.size()))),
                             new RunCause(RunCause.StartedBy.ASSIGNMENT, head.root(), head.assignment()), List.of(head.message()), head.model());
                     return;
                 }
@@ -204,13 +206,18 @@ public final class InboxSteps {
                         messages.add(inbox.get(end).message());
                         end++;
                     }
-                    SessionState taken = session.withInbox(inbox.subList(end, inbox.size()))
+                    SessionState taken = session.withInbox(joining(inbox.subList(end, inbox.size())))
                             .withAssignments(session.assignments().ranUnattended());
                     startRun(out, taken, new RunCause(RunCause.StartedBy.REPORT, root, null), messages, null);
                     return;
                 }
             }
         }
+    }
+
+    /** 一轮刚开：队里剩下的结果标成并进这一轮。 */
+    private static List<InboxItem> joining(List<InboxItem> rest) {
+        return rest.stream().map(item -> item.kind() == Input.Kind.REPORT && !item.join() ? item.withJoin(true) : item).toList();
     }
 
     /**
