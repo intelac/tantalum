@@ -1,7 +1,7 @@
 package tantalum.value.assignment;
 
 /** 交代出去的一件事怎么结束的。每次交代恰好有一个。{@code said} 是告诉模型时的说法。 */
-public enum Outcome {
+public enum AssignmentOutcome {
     COMPLETED("completed"),
     FAILED("failed"),
     /** 被模型或用户停掉。 */
@@ -13,7 +13,7 @@ public enum Outcome {
 
     private final String said;
 
-    Outcome(String said) {
+    AssignmentOutcome(String said) {
         this.said = said;
     }
 

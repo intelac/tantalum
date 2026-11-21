@@ -1,14 +1,14 @@
 package tantalum.value.event;
 
 import java.util.Objects;
-import tantalum.value.assignment.Outcome;
+import tantalum.value.assignment.AssignmentOutcome;
 
 /**
  * 交代出去的一件事有了结果，进交代它的会话。不是人说的话：只由 {@code ReturnReport} 的处理器或启动时的核对放进来。
  * {@code text} 是最后的回答（完成时）或结束的详情，可以为 null。{@code root} 是那次交代的 {@code root}，原样带回。
  * 同一次交代的结果到第二次时名单里已经没有它，什么都不改。
  */
-public record Report(String assignment, Outcome outcome, String text, Root root) implements Input {
+public record Report(String assignment, AssignmentOutcome outcome, String text, Root root) implements Input {
 
     public static final String TYPE = "Report";
 

@@ -18,7 +18,6 @@ import tantalum.value.model.ModelChoice;
 import tantalum.value.model.Role;
 import tantalum.value.state.EndReason;
 import tantalum.value.state.Ended;
-import tantalum.value.state.OwnerRef;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
 
@@ -43,7 +42,7 @@ public final class RunEnd {
 
     /** 模型不再要工具时调用；{@code work} 是刚完成的工作，钩子据此判断是否放行；{@code detail} 随 COMPLETED 记录，如回复被截断。 */
     static void beforeEnd(Outcome out, RunState run, WorkDone work, String detail) {
-        if (!run.pendingSteers().isEmpty()) {
+        if (InboxSteps.joinable(out.session(run.ref()))) {
             ModelSteps.callModel(out, run, work);
             return;
         }
@@ -71,7 +70,8 @@ public final class RunEnd {
     }
 
     /**
-     * 结束运行。未配对的工具调用补上合成结果；模型还没看到的插话追加为用户消息，下一个运行会看到。
+     * 结束运行，运行唯一的出口。未配对的工具调用补上合成结果；队里这一轮没来得及看的输入由 {@link InboxSteps#unseen} 处理；
+     * 这一轮欠着一次交代的结果就在这里交回；然后从队首开下一轮。
      * {@code compacting} 原样保留：在等摘要时结束的运行，迟到的摘要回复据此不进历史。
      */
     static void finish(Outcome out, RunState run, EndReason reason, String detail) {
@@ -79,23 +79,14 @@ public final class RunEnd {
             List<ContentBlock> results = new ArrayList<>(ToolPairing.complete(run.tools()));
             out.append(run.ref(), new Message(Role.USER, results, false));
         }
-        for (Message steer : run.pendingSteers()) {
-            out.append(run.ref(), steer);
-        }
-        out.enter(run.withTools(null).withPendingSteers(List.of()),
-                new Ended(reason, detail));
+        InboxSteps.unseen(out, run, reason, detail);
+        out.enter(run.withTools(null), new Ended(reason, detail));
 
         SessionState session = out.session(run.ref()).endRun();
         out.put(session);
-        if (run.owner() instanceof OwnerRef.OfTask task) {
-            TaskSteps.returned(out, run, task, reason, detail);
+        if (run.cause().owes() != null) {
+            AssignmentSteps.returned(out, run, reason, detail);
         }
-        if (!session.followUps().isEmpty()) {
-            Message next = session.followUps().getFirst();
-            ModelChoice requested = session.followUpModels().getFirst();
-            int size = session.followUps().size();
-            out.put(session.withFollowUps(session.followUps().subList(1, size), session.followUpModels().subList(1, size)));
-            SubmitSteps.startRun(out, new OwnerRef.OfSession(session.id()), next, requested);
-        }
+        InboxSteps.next(out, session.id());
     }
 }

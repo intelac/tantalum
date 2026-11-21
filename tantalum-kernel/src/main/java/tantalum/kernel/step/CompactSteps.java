@@ -31,7 +31,8 @@ import tantalum.value.state.Compacting.Cause;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.CompactionSettings;
 import tantalum.value.state.EndReason;
-import tantalum.value.state.OwnerRef;
+import tantalum.value.event.Root;
+import tantalum.value.state.RunCause;
 import tantalum.value.state.Plan;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionState;
@@ -123,7 +124,7 @@ public final class CompactSteps {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        RunState run = SubmitSteps.newRun(out, session, new OwnerRef.OfSession(envelope.session()));
+        RunState run = InboxSteps.newRun(out, session, new RunCause(RunCause.StartedBy.COMPACTION, Root.USER, null));
         if (tryStart(out, run, new Compacting.Manual(event.instructions())) == Start.PROCEED) {
             RunEnd.finish(out, run, EndReason.FAILED, NOTHING_TO_COMPACT);
         }

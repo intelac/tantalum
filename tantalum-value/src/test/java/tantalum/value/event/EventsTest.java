@@ -30,7 +30,7 @@ class EventsTest {
                 UserPromptFixture.join(SUB, REQ, "hi"),
                 new SessionCreated(tantalum.value.state.SessionKind.REGULAR, null, false, null),
                 new Assignment("t1-0", SESSION, Root.USER, "do it", null),
-                new Report("t1-0", tantalum.value.assignment.Outcome.COMPLETED, "done", Root.USER),
+                new Report("t1-0", tantalum.value.assignment.AssignmentOutcome.COMPLETED, "done", Root.USER),
                 new Cancel(REQ),
                 ContextAssembledFixture.of(CMD, "system", List.of(), null, List.of()),
                 new ModelReplied(CMD, List.of(), StopReason.END_TURN, "model", null, null, null, null),

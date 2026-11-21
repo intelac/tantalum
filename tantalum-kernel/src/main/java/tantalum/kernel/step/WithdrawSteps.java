@@ -13,6 +13,7 @@ import tantalum.value.model.Message;
 import tantalum.value.model.TextSwap;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.ContextSection;
+import tantalum.value.state.InboxItem;
 import tantalum.value.state.RunState;
 import tantalum.value.state.SessionContext;
 import tantalum.value.state.SessionState;
@@ -59,17 +60,22 @@ public final class WithdrawSteps {
         TextSwap swap = new TextSwap(event.swaps());
         Compaction compaction = session.compaction() == null ? null
                 : new Compaction(swap.messages(session.compaction().replacement()), session.compaction().tailFrom());
-        List<Message> followUps = swap.messages(session.followUps());
+        List<Message> queued = session.inbox().stream().map(InboxItem::message).toList();
+        List<Message> swapped = swap.messages(queued);
+        List<InboxItem> inbox = new ArrayList<>(session.inbox().size());
+        for (int i = 0; i < swapped.size(); i++) {
+            inbox.add(session.inbox().get(i).withMessage(swapped.get(i)));
+        }
         SessionContext frozen = context(swap, session.context());
         RunState run = session.activeRun() == null ? null : context.state().runs().get(session.activeRun());
         RunState nextRun = run == null ? null : run(swap, run);
-        places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(session.followUps())
+        places += (session.compaction() == null ? 0 : swap.places(session.compaction().replacement())) + swap.places(queued)
                 + places(swap, session.context()) + (run == null ? 0 : places(swap, run));
         if (places == 0) {
             return Decision.unchanged(context.state());
         }
         Outcome out = new Outcome(context);
-        out.put(session.withdrawing(more, followUps, compaction, frozen));
+        out.put(session.withdrawing(more, inbox, compaction, frozen));
         if (nextRun != null) {
             out.put(nextRun);
         }
@@ -94,7 +100,7 @@ public final class WithdrawSteps {
     }
 
     private static int places(TextSwap swap, RunState run) {
-        int places = swap.places(run.pendingSteers());
+        int places = 0;
         if (run.tools() != null) {
             for (ToolSlot slot : run.tools().slots()) {
                 places += slot.result() == null ? 0 : swap.places(slot.result());
@@ -130,6 +136,6 @@ public final class WithdrawSteps {
                 }
             }
         }
-        return run.withPendingSteers(swap.messages(run.pendingSteers())).withTools(round);
+        return run.withTools(round);
     }
 }

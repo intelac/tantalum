@@ -26,7 +26,7 @@ import tantalum.value.json.Json;
 import tantalum.value.state.Compaction;
 import tantalum.value.state.SessionState;
 import tantalum.value.state.Withdrawal;
-import tantalum.value.assignment.Outcome;
+import tantalum.value.assignment.AssignmentOutcome;
 
 /**
  * 撤下文字的换法和会话的视图（memory-forget-by-choice R2a）：只按字面换；历史不改，视图按记下的撤下去换，
@@ -65,7 +65,7 @@ class TextSwapTest {
         assertEquals(new ToolResultBlock("c1", "saved [withdrawn]", false, null), swap.block(new ToolResultBlock("c1", "saved " + PLATE, false, null)));
         assertEquals(new HookTextBlock("h", "[withdrawn]"), swap.block(new HookTextBlock("h", PLATE)));
         assertEquals(new AttachedBlock("memory", "[withdrawn]"), swap.block(new AttachedBlock("memory", PLATE)));
-        assertEquals(new ReportBlock("t1", Outcome.COMPLETED, "[withdrawn]"), swap.block(new ReportBlock("t1", Outcome.COMPLETED, PLATE)));
+        assertEquals(new ReportBlock("t1", AssignmentOutcome.COMPLETED, "[withdrawn]"), swap.block(new ReportBlock("t1", AssignmentOutcome.COMPLETED, PLATE)));
         assertEquals(new AssignmentBlock("t1", "[withdrawn]"), swap.block(new AssignmentBlock("t1", PLATE)));
         SkillBlock skill = new SkillBlock("deploy", PLATE);
         assertSame(skill, swap.block(skill), "a skill's text is the skill file, not something said");
